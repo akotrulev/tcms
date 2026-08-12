@@ -232,6 +232,17 @@ class ContractConventionTest {
             }
         }
 
+        Set<String> wholeBodies = contract.schemasReferencedOutsideAllOf();
+        for (String exempt : BRANCH_ONLY_SCHEMAS.keySet()) {
+            if (!contract.objectSchemas().contains(exempt)) {
+                inert.add("BRANCH_ONLY_SCHEMAS  " + exempt + "  — the schema is gone");
+            } else if (wholeBodies.contains(exempt)) {
+                inert.add("BRANCH_ONLY_SCHEMAS  " + exempt
+                        + "  — something $refs it outside an allOf now, so a record does serve it "
+                        + "whole and the pairing it is excused from has become checkable");
+            }
+        }
+
         assertThat(inert)
                 .as("""
                         These exemptions no longer exempt anything.
@@ -337,8 +348,10 @@ class ContractConventionTest {
      * that "the pairing between a record and a schema is a fact only a human knows, and a check
      * that guessed it would fail on the first view whose name does not match its schema". That is
      * true of the <em>pairing</em> and says nothing about the <em>size of the set</em> — §164 named
-     * the distinction and did not act on it. The set is 79 now, and the three defects it found on
-     * its first run had been on the wire for between two and sixty-five sections.
+     * the distinction and did not act on it. ~~The set is 79 now~~ → <strong>the set is 125, and
+     * §170 is why</strong>: 79 was every schema a <em>name match</em> proposed, which is a
+     * different population from every schema, and the gap between the two was 45 schemas nothing
+     * compared at all (see {@link #everyObjectSchemaIsPairedOrExempt}).
      *
      * <p><strong>It is still hand-written, and the class literals are why.</strong> A name match is
      * how {@link #everyNameMatchedRecordIsPairedOrExplained} <em>proposes</em> a pair; a line here
@@ -349,8 +362,14 @@ class ContractConventionTest {
      *
      * <p><strong>A list value, not a single class</strong>, for {@code ContractEnumTest.OWNERS}'
      * reason: a feature module may not import another's types, so one schema can legitimately be
-     * served by two records that must stay identical to each other and to it. None does today —
-     * that is a result, not an assumption, and it is worth knowing when the first one appears.
+     * served by two records that must stay identical to each other and to it. ~~None does today —
+     * that is a result, not an assumption, and it is worth knowing when the first one appears.~~ →
+     * <strong>{@code Attachment} does, and it did on the day that sentence was written.</strong>
+     * {@code repository.CaseAttachmentView} and {@code documentation.DocPageAttachmentView} are
+     * seven identical components in two modules, neither of which may import the other, and both
+     * serve this one schema. The list value was designed for that case and the claim that nothing
+     * used it was made without looking, because the schema was outside the name-matched population
+     * this map covered — the same blind spot §170 closes. See that entry's own note.
      */
     private static final Map<String, List<Class<?>>> RESPONSE_RECORDS = Map.ofEntries(
             Map.entry("AiProposal", List.of(com.tcms.repository.AiProposalView.class)),
@@ -358,18 +377,36 @@ class ContractConventionTest {
             Map.entry("AiProposalSummary",
                     List.of(com.tcms.repository.AiProposalSummaryView.class)),
             Map.entry("ApiToken", List.of(com.tcms.identity.ApiTokenView.class)),
+            Map.entry("ApiTokenInput", List.of(com.tcms.identity.ApiTokenIssueRequest.class)),
             Map.entry("Artifact", List.of(com.tcms.documentation.ArtifactView.class)),
             Map.entry("ArtifactFileInput", List.of(com.tcms.documentation.ArtifactFileInput.class)),
             Map.entry("ArtifactInput", List.of(com.tcms.documentation.ArtifactInput.class)),
+            // THE TWO-OWNER CASE THE LIST VALUE WAS DESIGNED FOR, and it existed before the
+            // comment above said nothing did. `repository` and `documentation` may not import each
+            // other, so an attachment's wire shape is written twice; this entry is the only thing
+            // comparing the two copies to each other, and it does so through the schema rather
+            // than directly, which is the comparison that matters — a third module growing
+            // attachments adds a third owner here and inherits the same check for free.
+            Map.entry("Attachment", List.of(
+                    com.tcms.repository.CaseAttachmentView.class,
+                    com.tcms.documentation.DocPageAttachmentView.class)),
+            Map.entry("AuthResult", List.of(com.tcms.auth.AuthController.LoginResponse.class)),
             Map.entry("AutomationMapping", List.of(com.tcms.execution.AutomationMappingView.class)),
+            Map.entry("AutomationMappingInput",
+                    List.of(com.tcms.execution.AutomationMappingRequest.class)),
             Map.entry("BlockLink", List.of(com.tcms.documentation.BlockLinkView.class)),
             Map.entry("BlockLinkInput", List.of(com.tcms.documentation.BlockLinkInput.class)),
-            // BulkResult and ReportDefinition are in PACKAGE_PRIVATE_OWNERS — see there.
+            // BulkOperation, BulkPayload, BulkResult, ReportDefinition and ReportDefinitionInput
+            // are in PACKAGE_PRIVATE_OWNERS — see there.
             Map.entry("CaseConditionInput", List.of(com.tcms.repository.CaseConditionInput.class)),
             Map.entry("CaseConditionRef", List.of(com.tcms.repository.CaseConditionRefView.class)),
             Map.entry("CaseDraft", List.of(com.tcms.repository.CaseDraftView.class)),
             Map.entry("CaseDraftInput", List.of(com.tcms.repository.CaseDraftInput.class)),
             Map.entry("CaseFlake", List.of(com.tcms.repository.CaseFlakeView.class)),
+            Map.entry("CaseHistorySummary",
+                    List.of(com.tcms.execution.CaseHistoryView.SummaryView.class)),
+            Map.entry("CaseQuarantineInput",
+                    List.of(com.tcms.repository.CaseQuarantineRequest.class)),
             Map.entry("CaseStatus", List.of(com.tcms.project.CaseStatusView.class)),
             Map.entry("ClassificationDimension",
                     List.of(com.tcms.project.ClassificationDimensionView.class)),
@@ -378,10 +415,14 @@ class ContractConventionTest {
             Map.entry("ClassificationValueInput",
                     List.of(com.tcms.project.ClassificationValueInput.class)),
             Map.entry("Condition", List.of(com.tcms.repository.ConditionView.class)),
+            Map.entry("ConditionInput", List.of(com.tcms.repository.ConditionWriteRequest.class)),
             Map.entry("Configuration", List.of(com.tcms.execution.ConfigurationView.class)),
             Map.entry("Criterion", List.of(com.tcms.execution.CriterionView.class)),
             Map.entry("CriterionInput", List.of(com.tcms.execution.CriterionInput.class)),
             Map.entry("CurrentUser", List.of(com.tcms.auth.CurrentUserService.CurrentUser.class)),
+            Map.entry("DashboardBreakdown",
+                    List.of(com.tcms.repository.DashboardView.BreakdownView.class)),
+            Map.entry("DashboardTile", List.of(com.tcms.repository.DashboardView.TileView.class)),
             Map.entry("DefectLink", List.of(com.tcms.execution.DefectLinkView.class)),
             Map.entry("DocBlock", List.of(com.tcms.documentation.DocBlockView.class)),
             Map.entry("DocBlockInput", List.of(com.tcms.documentation.DocBlockInput.class)),
@@ -395,8 +436,14 @@ class ContractConventionTest {
             Map.entry("DocPageStatusInput",
                     List.of(com.tcms.documentation.DocPageStatusInput.class)),
             Map.entry("DocPageSummary", List.of(com.tcms.documentation.DocPageSummaryView.class)),
+            Map.entry("EffectivePermissions",
+                    List.of(com.tcms.auth.MeController.PermissionsResponse.class)),
             Map.entry("EntityVersion", List.of(com.tcms.repository.EntityVersionView.class)),
             Map.entry("Evidence", List.of(com.tcms.execution.EvidenceView.class)),
+            Map.entry("ExecutionHistoryEntry",
+                    List.of(com.tcms.execution.CaseHistoryView.EntryView.class)),
+            Map.entry("ExecutionResultInput",
+                    List.of(com.tcms.execution.ExecutionResultRequest.class)),
             // §169. The third record over doc_link, and the second write shape: BlockLink is the
             // row seen from the block end, DocLink from the case end, this one from the create
             // that made it. ExternalLinkView's header says why none of the three can be the other.
@@ -405,6 +452,7 @@ class ContractConventionTest {
                     List.of(com.tcms.documentation.ExternalLinkInput.class)),
             Map.entry("Facet", List.of(com.tcms.repository.FacetView.class)),
             Map.entry("HeldPermission", List.of(com.tcms.auth.MeController.HeldPermission.class)),
+            Map.entry("IngestionInput", List.of(com.tcms.execution.IngestionRequest.class)),
             Map.entry("IngestionJob", List.of(com.tcms.execution.IngestionJobView.class)),
             Map.entry("IngestionJobSummary", List.of(com.tcms.execution.IngestionJobSummary.class)),
             Map.entry("InvitationPreview",
@@ -416,7 +464,10 @@ class ContractConventionTest {
             Map.entry("PlanSection", List.of(com.tcms.execution.PlanSectionView.class)),
             Map.entry("PlanSectionInput", List.of(com.tcms.execution.PlanSectionInput.class)),
             Map.entry("PlanStatistics", List.of(com.tcms.execution.PlanStatisticsView.class)),
+            Map.entry("PlanStatusInput", List.of(com.tcms.execution.PlanStatusRequest.class)),
             Map.entry("Project", List.of(com.tcms.project.ProjectView.class)),
+            Map.entry("ProjectArchiveInput", List.of(com.tcms.project.ProjectArchiveRequest.class)),
+            Map.entry("ProjectInput", List.of(com.tcms.project.ProjectWriteRequest.class)),
             // Seven required properties, six of them primitives — so the failure this catches on
             // ProjectSettings is not an absent key but a renamed one, which reads to a client as the
             // setting having reverted to its default. §6g's opt-in defaulting to "off" is the safe
@@ -424,22 +475,47 @@ class ContractConventionTest {
             // stored in the positive and an absent key would read as the rule being ON when the
             // project turned it off.
             Map.entry("ProjectSettings", List.of(com.tcms.project.ProjectSettingsView.class)),
+            // The update body is the seven settings and nothing else — no `projectId`, no
+            // `updatedAt`, no `updatedBy`, which is why it is a schema of its own rather than the
+            // view reused. `ProjectSettingsRequest` and `project.ReviewSettings` are the same seven
+            // components; only the first is the wire type, and the second is why the entry names a
+            // class literal rather than letting a shape match decide.
+            Map.entry("ProjectSettingsUpdate",
+                    List.of(com.tcms.project.ProjectSettingsRequest.class)),
+            Map.entry("ProposalRejection",
+                    List.of(com.tcms.repository.ProposalRejectionRequest.class)),
             // Three of its seven are required-AND-nullable (§87), which is exactly the shape this
             // check is for: a poller cannot tell "the server did not send `error`" from "there is
             // no error", so the component has to exist even though the value is usually null.
             Map.entry("ReportJob", List.of(com.tcms.reporting.ReportJobView.class)),
+            Map.entry("RepositoryDashboard", List.of(com.tcms.repository.DashboardView.class)),
             Map.entry("ResultCounts", List.of(com.tcms.execution.ResultCountsView.class)),
             Map.entry("Review", List.of(com.tcms.project.ReviewView.class)),
             Map.entry("ReviewAssignee", List.of(com.tcms.project.ReviewAssigneeView.class)),
+            Map.entry("ReviewAssignmentInput",
+                    List.of(com.tcms.project.ReviewAssignmentRequest.class)),
             Map.entry("ReviewComment", List.of(com.tcms.project.ReviewCommentView.class)),
+            Map.entry("ReviewCommentInput", List.of(com.tcms.project.ReviewCommentRequest.class)),
+            Map.entry("ReviewCommentResolutionInput",
+                    List.of(com.tcms.project.ReviewCommentResolutionRequest.class)),
             Map.entry("ReviewParticipation",
                     List.of(com.tcms.project.ReviewParticipationView.class)),
+            Map.entry("ReviewParticipationInput",
+                    List.of(com.tcms.project.ReviewParticipationRequest.class)),
             Map.entry("Role", List.of(com.tcms.identity.RoleView.class)),
             Map.entry("RoleAssignment", List.of(com.tcms.identity.RoleAssignmentView.class)),
+            Map.entry("RoleAssignmentInput", List.of(com.tcms.identity.RoleGrantRequest.class)),
+            Map.entry("RunStatusInput", List.of(com.tcms.execution.RunStatusRequest.class)),
             Map.entry("SharedStep", List.of(com.tcms.repository.SharedStepView.class)),
+            Map.entry("SharedStepInput", List.of(com.tcms.repository.SharedStepWriteRequest.class)),
             Map.entry("StepResult", List.of(com.tcms.execution.StepResultView.class)),
             Map.entry("StepSuggestion", List.of(com.tcms.repository.StepSuggestionView.class)),
             Map.entry("Suite", List.of(com.tcms.repository.SuiteView.class)),
+            Map.entry("SuiteHistoryResponse", List.of(com.tcms.execution.SuiteHistoryView.class)),
+            Map.entry("SuiteInput", List.of(com.tcms.repository.SuiteWriteRequest.class)),
+            Map.entry("SuiteRunSummary",
+                    List.of(com.tcms.execution.SuiteHistoryView.EntryView.class)),
+            Map.entry("SuiteStatusInput", List.of(com.tcms.repository.SuiteStatusRequest.class)),
             Map.entry("TagUsage", List.of(com.tcms.repository.TagUsageView.class)),
             Map.entry("Team", List.of(com.tcms.identity.TeamView.class)),
             Map.entry("TeamInput", List.of(com.tcms.identity.TeamInput.class)),
@@ -451,34 +527,63 @@ class ContractConventionTest {
             // `TestCase` is an allOf of `TestCaseSummary`, and the record serving it is named for
             // being the DETAIL rather than for the schema.
             Map.entry("TestCase", List.of(com.tcms.repository.TestCaseDetailView.class)),
+            Map.entry("TestCaseCloneInput", List.of(com.tcms.repository.CaseCloneRequest.class)),
+            // The create body and the update body are one schema and one record, which is §144's
+            // subject seen from the other end: `PATCH /cases/{caseId}` takes the whole case, so
+            // there is nothing for a second shape to hold.
+            Map.entry("TestCaseInput", List.of(com.tcms.repository.CaseUpdateRequest.class)),
             Map.entry("TestCaseSummary", List.of(com.tcms.repository.TestCaseSummaryView.class)),
             Map.entry("TestExecution", List.of(com.tcms.execution.TestExecutionView.class)),
             Map.entry("TestExecutionSummary",
                     List.of(com.tcms.execution.TestExecutionSummaryView.class)),
             Map.entry("TestPlan", List.of(com.tcms.execution.TestPlanView.class)),
+            Map.entry("TestPlanCloneInput", List.of(com.tcms.execution.PlanCloneRequest.class)),
+            Map.entry("TestPlanInput", List.of(com.tcms.execution.PlanWriteRequest.class)),
+            Map.entry("TestPlanUpdateInput", List.of(com.tcms.execution.PlanUpdateRequest.class)),
             Map.entry("TestRun", List.of(com.tcms.execution.TestRunView.class)),
+            Map.entry("TestRunCloneInput", List.of(com.tcms.execution.RunCloneRequest.class)),
             Map.entry("TestRunDetail", List.of(com.tcms.execution.TestRunDetailView.class)),
+            Map.entry("TestRunInput", List.of(com.tcms.execution.RunWriteRequest.class)),
             Map.entry("TestStep", List.of(com.tcms.repository.TestStepView.class)),
+            Map.entry("TestStepInput",
+                    List.of(com.tcms.repository.CaseUpdateRequest.StepInput.class)),
             Map.entry("UnmatchedTest", List.of(com.tcms.execution.UnmatchedTestView.class)),
             Map.entry("User", List.of(com.tcms.identity.UserView.class)),
             Map.entry("UserInvitation", List.of(com.tcms.identity.UserInvitationView.class)),
+            Map.entry("UserInvitationInput",
+                    List.of(com.tcms.identity.UserInvitationRequest.class)),
             Map.entry("UserRef", List.of(com.tcms.api.UserRef.class)),
-            Map.entry("WorkItem", List.of(com.tcms.work.WorkItemView.class)));
+            Map.entry("VersionMarker",
+                    List.of(com.tcms.execution.CaseHistoryView.MarkerView.class)),
+            Map.entry("WorkItem", List.of(com.tcms.work.WorkItemView.class)),
+            Map.entry("WorkItemInput", List.of(com.tcms.work.WorkItemWriteRequest.class)),
+            Map.entry("WorkItemStatusUpdate",
+                    List.of(com.tcms.work.WorkItemStatusUpdateRequest.class)));
 
     /**
-     * The two owners this file cannot name as class literals, because they are package-private.
+     * The owners this file cannot name as class literals, because they are package-private.
      *
-     * <p><strong>The visibility was left alone on purpose.</strong> Neither record argues for being
-     * package-private — both look incidental beside their public siblings — but widening a
+     * <p><strong>The visibility was left alone on purpose.</strong> No record here argues for being
+     * package-private — they look incidental beside their public siblings — but widening a
      * production type so a test can name it is a production change made for a test, and this slice
      * is about arguments that drift, not about tidying. The cost is stated rather than hidden: these
-     * two lose the compile-time half of the guarantee the map's class literals give. A rename still
+     * lose the compile-time half of the guarantee the map's class literals give. A rename still
      * fails, as a {@code ClassNotFoundException} from the resolver below rather than as a compiler
      * error, which is later and noisier and is the whole difference.
+     *
+     * <p>§170 added three, and the list growing from two to five is the reason to say what would
+     * change the decision: at the point where the <em>majority</em> of a schema's owners are here,
+     * the compile-time guarantee is the exception rather than the rule and the visibility question
+     * is worth reopening as its own slice. Five of 125 is not that point.
      */
     private static final Map<String, List<String>> PACKAGE_PRIVATE_OWNERS = Map.of(
+            "BulkOperation", List.of("com.tcms.repository.BulkOperationRequest"),
+            "BulkPayload", List.of("com.tcms.repository.BulkPayloadInput"),
             "BulkResult", List.of("com.tcms.repository.BulkResultView"),
-            "ReportDefinition", List.of("com.tcms.reporting.ReportDefinitionView"));
+            "ReportDefinition", List.of("com.tcms.reporting.ReportDefinitionView"),
+            // Package-private inside a package-private controller, so it is doubly unnameable.
+            "ReportDefinitionInput",
+            List.of("com.tcms.reporting.ReportDefinitionController$SaveRequest"));
 
     /**
      * Object schemas whose record pairing is asserted somewhere else, and where.
@@ -495,6 +600,37 @@ class ContractConventionTest {
                     + "record-component comparison is static and ProblemDetail is Spring's type");
 
     /**
+     * Named object schemas that <strong>no single record serves</strong>, and why each is not a
+     * hole. §170's map, and the smallest of the three the slice produced.
+     *
+     * <p>Both entries are the same shape: <strong>a schema reachable only as an {@code allOf}
+     * branch</strong>. Nothing sends one on its own, so there is no record whose components are
+     * <em>its</em> members — the composed shape is what a handler returns, and that is what
+     * {@link #pairedSchemasAndRecordsNameTheSameMembers} compares, because {@code propertiesOf}
+     * collects through {@code allOf}. Pairing a branch with the record serving the composition
+     * would report every property of the <em>other</em> branches as SERVER-ONLY, which is a rule
+     * generating its own false positives.
+     *
+     * <p><strong>An entry here is falsifiable and the build checks it.</strong> The moment a branch
+     * is {@code $ref}'d as a whole body — a list endpoint answering a bare {@code PageMeta}, say —
+     * a record starts serving it alone and the entry is wrong. {@code everyExemptionStillExempts}
+     * below re-derives the branch-only property from the document rather than trusting the sentence,
+     * for §161's reason: a one-directional exemption that nothing re-derives is re-affirmed by every
+     * green run it outlives.
+     */
+    private static final Map<String, String> BRANCH_ONLY_SCHEMAS = Map.of(
+            "PageMeta",
+            "the three paging fields, $ref'd only as the first allOf branch of the two list "
+                    + "responses that page (cases, ai-proposals). CasePageView and "
+                    + "AiProposalPageView each carry all three AND the branch beside them, so they "
+                    + "serve the composition — which §170 phase 2 compares at the inline location",
+            "TestPlanSummary",
+            "$ref'd only as TestPlan's first allOf branch since §100, which widened the plan list "
+                    + "from the summary to the full plan and left the schema in place as the half "
+                    + "of TestPlan that PlanController's list and detail share. TestPlanView serves "
+                    + "the composition and is paired against `TestPlan`");
+
+    /**
      * Production records that carry a contract schema's name without serving it, and the sentence
      * that tells them apart — {@code ContractEnumTest.HOMONYMS} at the object shape.
      *
@@ -503,19 +639,25 @@ class ContractConventionTest {
      * are <strong>three</strong> types, they do not all serve the same schema, and one of them is
      * not the same shape — so the argument that moved {@code UserRef} does not transfer unchanged.
      * The named {@code TeamRef} schema has exactly one {@code $ref} ({@code ReviewAssignee.team});
-     * the other two records serve <em>inline</em> object shapes, which {@code objectSchemas()}
-     * deliberately does not cover because an anonymous shape has no name to correspond by.
+     * the other two records serve <em>inline</em> object shapes, which ~~{@code objectSchemas()}
+     * deliberately does not cover because an anonymous shape has no name to correspond by~~ →
+     * <strong>{@link #INLINE_RECORDS} now pairs both of them</strong> (§170). An entry here means
+     * "this record does not serve the schema its <em>name</em> matches", which is still true of
+     * both and is the ambiguity the map exists to resolve; it no longer means the record is
+     * compared to nothing.
      */
     private static final Map<String, String> HOMONYMS = Map.of(
             "com.tcms.identity.RoleAssignmentView.TeamRef",
             "serves RoleAssignment.team, which is an INLINE {id, name} object rather than a $ref to "
-                    + "the TeamRef schema. Identical shape, no correspondence — collapsing the two "
-                    + "would be a contract change (the inline object becoming a $ref) before it "
-                    + "was a Java one",
+                    + "the TeamRef schema. Identical shape, no correspondence BY NAME — collapsing "
+                    + "the two would be a contract change (the inline object becoming a $ref) "
+                    + "before it was a Java one. Compared at that location by INLINE_RECORDS",
             "com.tcms.auth.CurrentUserService.TeamRef",
             "serves CurrentUser.teams, also inline, and it is NOT the same shape: it carries a "
                     + "third component, isLead, which the TeamRef schema does not declare and this "
-                    + "one's inline schema does. A consolidation has to answer what happens to it");
+                    + "one's inline schema does. A consolidation has to answer what happens to it. "
+                    + "Compared at that location by INLINE_RECORDS, which is what makes the "
+                    + "difference between the two shapes a checked fact rather than this sentence");
 
     /**
      * Members one side names and the other deliberately does not, with the reason each stays.
@@ -568,6 +710,12 @@ class ContractConventionTest {
      * record serving it now agree member for member, in both directions. The next entry added here
      * inherits everything above: name the obstacle precisely enough that a later slice can tell it
      * has gone, and expect to delete the entry rather than to revise it.
+     *
+     * <p><strong>§170: it serves two rules now</strong> — the named one and
+     * {@link #inlineShapesAndTheirRecordsNameTheSameMembers}. One map because an entry is an
+     * argument about a member and that argument does not change with whether the shape around it
+     * has a name; {@link #isInlineKey} decides which rule owns a key. It is still empty, across
+     * both populations and 144 pairings, which is a larger claim than the one §169 left.
      */
     private static final Map<String, String> MEMBER_DIVERGENCE_BY_DECISION = Map.of();
 
@@ -580,6 +728,12 @@ class ContractConventionTest {
     // Deleting the entry IS the build passing again; that is the property this map exists for, and
     // it has now fired four times. Do not reinstate one to "keep the history" — the history is here
     // and in the sections, and an entry in the map is a live claim about the code.
+    //
+    // §170 added 45 named pairings and 21 inline ones and produced ONE divergence between them,
+    // `IngestionInput.branch` / `.commitSha`, which was fixed rather than recorded — so the map is
+    // still empty. That is worth reading the right way round: it is not evidence that the
+    // population was safe, it is the count of what was left after §164–§169 spent six slices
+    // closing the same defect class where the rule could see it.
 
     /**
      * Every production record whose simple name matches a named object schema, by that name.
@@ -723,6 +877,80 @@ class ContractConventionTest {
     }
 
     /**
+     * <strong>Every</strong> named object schema is paired with the record serving it, or carries
+     * a reason it has none.
+     *
+     * <p>{@link #everyNameMatchedRecordIsPairedOrExplained} above asks a narrower question than its
+     * name suggests, and §170 is the section that noticed. It reports a schema only when
+     * {@code candidatesFor} finds a record called {@code Foo} or {@code FooView} — so the
+     * population it can speak about is <em>schemas whose server type happens to share their
+     * name</em>, and every schema outside that set was invisible to it and to the member
+     * comparison below. That was <strong>45 of 129</strong>, a third of the contract's object
+     * shapes, and the pattern in the misses is not random: it is almost exactly the write side.
+     * A request body's schema is named for the wire ({@code TestCaseInput}, {@code SuiteInput},
+     * {@code TestRunInput}) and its record is named for the act ({@code CaseUpdateRequest},
+     * {@code SuiteWriteRequest}, {@code RunWriteRequest}), so <em>the naming convention this
+     * codebase uses on purpose is what hid them</em> — and the write side is where an undeclared
+     * component is not merely unnameable but silently accepted.
+     *
+     * <p>This rule asks the whole question: for each object schema, either a pairing exists, or the
+     * schema is in {@link #PAIRED_ELSEWHERE} or {@link #BRANCH_ONLY_SCHEMAS} with the reason.
+     * There is no "no record serves this" escape beyond those two, deliberately — every remaining
+     * object schema in this contract is something a handler returns or a handler binds, and if one
+     * ever genuinely is not, that is a schema nothing implements and the finding is the schema.
+     */
+    @Test
+    @DisplayName("every object schema is paired with a record, or says why it has none")
+    void everyObjectSchemaIsPairedOrExempt() {
+        Set<String> accounted = new TreeSet<>(allPairings().keySet());
+        accounted.addAll(PAIRED_ELSEWHERE.keySet());
+        accounted.addAll(BRANCH_ONLY_SCHEMAS.keySet());
+
+        List<String> unaccounted = contract.objectSchemas().stream()
+                .filter(schema -> !accounted.contains(schema))
+                .toList();
+
+        assertThat(unaccounted)
+                .as("""
+                        An object schema is paired with nothing and says nothing about why.
+
+                        A schema with no pairing is compared to no server type in either direction,
+                        so a property the record never sends and a component the schema never
+                        declares are both invisible — the two defect classes the rule below exists
+                        for, on a schema it cannot see.
+
+                        Do not reach for BRANCH_ONLY_SCHEMAS to make this pass. It means "nothing
+                        sends this shape whole", the build re-derives that from the document, and
+                        the honest answer for a request body is the record the handler binds — which
+                        is named for the act and not for the schema, which is why nothing proposed
+                        it.
+
+                        Schemas accounted for by nothing:""")
+                .isEmpty();
+
+        assertThat(accounted)
+                .as("an entry names a schema the contract does not declare as an object shape")
+                .isSubsetOf(contract.objectSchemas());
+
+        // The three ways of accounting for a schema are alternatives, and nothing above says so:
+        // `accounted` is a union, so a schema claimed twice passes this rule while the two claims
+        // contradict each other. Found by mutation `§170 PR-2` — pairing `PageMeta` with
+        // CasePageView left its BRANCH_ONLY_SCHEMAS entry (which says nothing serves it whole)
+        // standing, and only the member comparison reddened. This is the arm that names the
+        // contradiction rather than one of its consequences.
+        List<String> claimedTwice = contract.objectSchemas().stream()
+                .filter(schema -> (allPairings().containsKey(schema) ? 1 : 0)
+                        + (PAIRED_ELSEWHERE.containsKey(schema) ? 1 : 0)
+                        + (BRANCH_ONLY_SCHEMAS.containsKey(schema) ? 1 : 0) > 1)
+                .toList();
+
+        assertThat(claimedTwice)
+                .as("a schema is both paired and excused. Whatever the second claim says, one of "
+                        + "the two is false: a record either serves this shape or nothing does")
+                .isEmpty();
+    }
+
+    /**
      * The schema and the record name the same members, both ways.
      *
      * <p>Supersedes {@code requiredPropertiesHaveAComponent}, which walked the {@code required}
@@ -739,26 +967,7 @@ class ContractConventionTest {
         for (Map.Entry<String, List<Class<?>>> pairing : allPairings().entrySet()) {
             Set<String> declared = contract.propertiesOf(
                     "#/components/schemas/" + pairing.getKey());
-            for (Class<?> record : pairing.getValue()) {
-                compared++;
-                Set<String> components = Stream.of(record.getRecordComponents())
-                        .map(RecordComponent::getName)
-                        .collect(Collectors.toCollection(TreeSet::new));
-                for (String property : declared) {
-                    if (!components.contains(property)) {
-                        divergences.put(pairing.getKey() + "." + property,
-                                "CONTRACT-ONLY — declared, and " + record.getSimpleName()
-                                        + " has no component to send it");
-                    }
-                }
-                for (String component : components) {
-                    if (!declared.contains(component)) {
-                        divergences.put(pairing.getKey() + "." + component,
-                                "SERVER-ONLY — " + record.getSimpleName() + " sends it and the "
-                                        + "schema declares it nowhere");
-                    }
-                }
-            }
+            compared += compareMembers(pairing.getKey(), declared, pairing.getValue(), divergences);
         }
 
         assertThat(compared)
@@ -791,7 +1000,237 @@ class ContractConventionTest {
                         module's existence.
 
                         Divergences:""")
-                .containsExactlyInAnyOrderElementsOf(MEMBER_DIVERGENCE_BY_DECISION.keySet());
+                .containsExactlyInAnyOrderElementsOf(namedDivergencesAllowed());
+    }
+
+    /**
+     * The same comparison at an <em>inline</em> shape — §170 phase 2, and the last position in this
+     * document that no rule looked at.
+     *
+     * <p>Separate from the rule above only because the population is keyed differently: a location
+     * rather than a schema name. The comparison itself is {@link #compareMembers}, called by both,
+     * because two implementations of "do these two name the same members" is how the two answers
+     * come to differ — {@code CLAUDE.md}'s shared-layer rule, at a test.
+     *
+     * <p><strong>An inline divergence is worse than a named one, not better.</strong> A named
+     * schema becomes a named generated type a consumer imports, so a wrong member is at least
+     * <em>nameable</em>. An inline object becomes a structural type written out at the property, so
+     * the only way to notice is to read the generated file at that property — and the four
+     * {@code lastResult} / {@code coverage} / {@code relatedDocuments} defects §166–§168 spent
+     * three slices on were all at inline positions.
+     */
+    @Test
+    @DisplayName("an inline shape and the record serving it name the same members, both ways")
+    void inlineShapesAndTheirRecordsNameTheSameMembers() {
+        Map<String, String> divergences = new TreeMap<>();
+        int compared = 0;
+
+        for (Map.Entry<String, Set<String>> shape : contract.inlineObjectSchemas().entrySet()) {
+            List<Class<?>> owners = inlinePairings().get(shape.getKey());
+            if (owners == null) {
+                continue;
+            }
+            compared += compareMembers(shape.getKey(), shape.getValue(), owners, divergences);
+        }
+
+        assertThat(compared)
+                .as("no inline pairing was compared, so this rule passes vacuously")
+                .isGreaterThan(15);
+
+        assertThat(divergences.keySet())
+                .as("""
+                        An inline shape and the record serving it disagree about their members.
+
+                        Read `pairedSchemasAndRecordsNameTheSameMembers` above for what the two
+                        directions cost. The one difference here: the generated type is structural
+                        and inlined at the property, so nothing a consumer imports carries the name
+                        of what is wrong.
+
+                        Edit both sides, or add the member to MEMBER_DIVERGENCE_BY_DECISION keyed by
+                        the location this rule reports.
+
+                        Divergences:""")
+                .containsExactlyInAnyOrderElementsOf(inlineDivergencesAllowed());
+    }
+
+    /**
+     * Every inline location paired with a record, or exempt with the reason — {@code
+     * RESPONSE_RECORDS} for the anonymous half.
+     *
+     * <p>Enforced by {@link #everyInlineShapeIsPairedOrExempt} below, which is the half that makes
+     * the pairing rule a <em>population</em> rule rather than a spot check: adding an inline object
+     * to the contract fails the build until somebody says which record serves it.
+     */
+    private static final Map<String, List<Class<?>>> INLINE_RECORDS = Map.ofEntries(
+            Map.entry("AiProposal.acceptedCase",
+                    List.of(com.tcms.repository.AiProposalView.AcceptedCaseView.class)),
+            // NOT the same shape as the named `TeamRef` schema — it carries isLead, which that one
+            // does not declare. HOMONYMS has said so since §165 and drew the wrong conclusion from
+            // it ("identical shape, no correspondence" of the sibling, "no correspondence" of this
+            // one): the correspondence was there, it was just not by name.
+            Map.entry("CurrentUser.teams[]",
+                    List.of(com.tcms.auth.CurrentUserService.TeamRef.class)),
+            Map.entry("DashboardBreakdown.segments[]",
+                    List.of(com.tcms.repository.DashboardView.SegmentView.class)),
+            Map.entry("DocBlock.coverage",
+                    List.of(com.tcms.documentation.BlockCoverageView.class)),
+            Map.entry("ExecutionResultInput.stepResults[]",
+                    List.of(com.tcms.execution.ExecutionResultRequest.StepResultRequest.class)),
+            Map.entry("Facet.values[]", List.of(com.tcms.repository.FacetView.Value.class)),
+            Map.entry("PlanStatistics.byConfiguration[]",
+                    List.of(com.tcms.execution.PlanStatisticsView.ConfigurationCountsView.class)),
+            Map.entry("PlanStatistics.bySuite[]",
+                    List.of(com.tcms.execution.PlanStatisticsView.SuiteCountsView.class)),
+            Map.entry("PlanStatistics.trend[]",
+                    List.of(com.tcms.execution.PlanStatisticsView.TrendPointView.class)),
+            Map.entry("RepositoryDashboard.automationCoverage",
+                    List.of(com.tcms.repository.DashboardView.AutomationCoverageView.class)),
+            Map.entry("RepositoryDashboard.recentActivity[]",
+                    List.of(com.tcms.repository.DashboardView.ActivityPointView.class)),
+            Map.entry("RoleAssignment.team",
+                    List.of(com.tcms.identity.RoleAssignmentView.TeamRef.class)),
+            Map.entry("Team.projects[]", List.of(com.tcms.identity.TeamView.ProjectRole.class)),
+            Map.entry("TestCaseSummary.lastResult",
+                    List.of(com.tcms.repository.LastResultView.class)),
+            Map.entry("POST /auth/login (request)",
+                    List.of(com.tcms.auth.AuthController.LoginRequest.class)),
+            Map.entry("POST /auth/invitations/{token}/accept (request)",
+                    List.of(com.tcms.auth.InvitationController.AcceptRequest.class)),
+            Map.entry("GET /projects/{projectId}/cases (200)",
+                    List.of(com.tcms.repository.CasePageView.class)),
+            Map.entry("GET /projects/{projectId}/ai-proposals (200)",
+                    List.of(com.tcms.repository.AiProposalPageView.class)),
+            Map.entry("GET /projects/{projectId}/cases/{caseId}/history (200)",
+                    List.of(com.tcms.execution.CaseHistoryView.class)));
+
+    /** {@link #PACKAGE_PRIVATE_OWNERS} for the inline half — same reason, same cost. */
+    private static final Map<String, List<String>> PACKAGE_PRIVATE_INLINE_OWNERS = Map.of(
+            "BulkResult.skipped[]", List.of("com.tcms.repository.BulkResultView$SkippedCase"),
+            "POST /projects/{projectId}/reports/generate (request)",
+            List.of("com.tcms.reporting.ReportController$GenerateRequest"));
+
+    /**
+     * Inline shapes <strong>no record serves</strong>, because nothing deserializes them into one.
+     *
+     * <p>All four are {@code multipart/form-data}, and that is the whole class: Spring binds a
+     * multipart part to a {@code MultipartFile} parameter and the text parts to
+     * {@code @RequestParam}s, so the "shape" exists only as a handler's parameter list. Declaring a
+     * record for it would be a type invented to satisfy this rule.
+     *
+     * <p><strong>The check these forgo is a real one and it is worth naming rather than eliding:
+     * nothing compares a form's declared parts to the parameters the handler binds.</strong> A part
+     * renamed on one side is a 400 at runtime and nothing before it — the shape
+     * {@code ContractParameterBindingTest} already fixes for query parameters, one media type over.
+     * That test is where it would go, and it is a slice rather than a line, which is why this is a
+     * recorded gap and not a silent one.
+     */
+    private static final Map<String, String> BOUND_AS_REQUEST_PARAMETERS = Map.of(
+            "POST /projects/{projectId}/cases/{caseId}/attachments (request)",
+            "multipart — CaseAttachmentController binds MultipartFile file",
+            "POST /projects/{projectId}/doc-pages/{pageId}/attachments (request)",
+            "multipart — DocPageAttachmentController binds MultipartFile file",
+            "POST /projects/{projectId}/runs/{runId}/executions/{executionId}/evidence (request)",
+            "multipart — EvidenceController binds MultipartFile file plus @RequestParam caption "
+                    + "and stepId",
+            "POST /projects/{projectId}/artifacts/files (request)",
+            "multipart — ArtifactFileController binds MultipartFile file plus the artifact part");
+
+    @Test
+    @DisplayName("every inline shape is paired with a record, or says why it has none")
+    void everyInlineShapeIsPairedOrExempt() {
+        Set<String> locations = contract.inlineObjectSchemas().keySet();
+
+        assertThat(locations)
+                .as("no inline shape was found at all — the traversal has stopped seeing them, and "
+                        + "both rules over this population would pass over an empty set")
+                .hasSizeGreaterThan(20);
+
+        Set<String> accounted = new TreeSet<>(inlinePairings().keySet());
+        accounted.addAll(BOUND_AS_REQUEST_PARAMETERS.keySet());
+
+        assertThat(locations.stream().filter(at -> !accounted.contains(at)).toList())
+                .as("""
+                        An inline object shape is paired with nothing.
+
+                        Somebody added an anonymous object to the contract and no rule knows what
+                        serves it. Name the record — a nested one is normal here, most of this map
+                        is nested — or, for a multipart form, add it to BOUND_AS_REQUEST_PARAMETERS.
+
+                        Inline shapes accounted for by nothing:""")
+                .isEmpty();
+
+        assertThat(accounted)
+                .as("an entry names an inline location the contract no longer has — the property "
+                        + "was renamed, given a named schema, or deleted, and the pairing outlived "
+                        + "it")
+                .isSubsetOf(locations);
+    }
+
+    /** {@link #allPairings()} for the inline half. */
+    private static Map<String, List<Class<?>>> inlinePairings() {
+        Map<String, List<Class<?>>> pairings = new TreeMap<>(INLINE_RECORDS);
+        PACKAGE_PRIVATE_INLINE_OWNERS.forEach((at, owners) -> pairings.put(at, owners.stream()
+                .map(ContractConventionTest::resolve)
+                .collect(Collectors.toList())));
+        return pairings;
+    }
+
+    /**
+     * One member comparison, both directions, for one pairing — returns how many records it
+     * compared, so a caller can prove it did not pass vacuously.
+     */
+    private static int compareMembers(
+            String subject,
+            Set<String> declared,
+            List<Class<?>> owners,
+            Map<String, String> divergences) {
+        for (Class<?> record : owners) {
+            Set<String> components = Stream.of(record.getRecordComponents())
+                    .map(RecordComponent::getName)
+                    .collect(Collectors.toCollection(TreeSet::new));
+            for (String property : declared) {
+                if (!components.contains(property)) {
+                    divergences.put(subject + "." + property,
+                            "CONTRACT-ONLY — declared, and " + record.getSimpleName()
+                                    + " has no component to send it");
+                }
+            }
+            for (String component : components) {
+                if (!declared.contains(component)) {
+                    divergences.put(subject + "." + component,
+                            "SERVER-ONLY — " + record.getSimpleName() + " sends it and the "
+                                    + "contract declares it nowhere");
+                }
+            }
+        }
+        return owners.size();
+    }
+
+    /** The allowed divergences at a named schema — every key whose subject is not a location. */
+    private static Set<String> namedDivergencesAllowed() {
+        return MEMBER_DIVERGENCE_BY_DECISION.keySet().stream()
+                .filter(key -> !isInlineKey(key))
+                .collect(Collectors.toCollection(TreeSet::new));
+    }
+
+    private static Set<String> inlineDivergencesAllowed() {
+        return MEMBER_DIVERGENCE_BY_DECISION.keySet().stream()
+                .filter(ContractConventionTest::isInlineKey)
+                .collect(Collectors.toCollection(TreeSet::new));
+    }
+
+    /**
+     * Whether a {@link #MEMBER_DIVERGENCE_BY_DECISION} key belongs to the inline rule.
+     *
+     * <p>One map serves both rules because an entry is an argument about a member and the argument
+     * does not change with where the shape is declared. The two rules then have to split it, and
+     * they split on the shape of the key rather than on a second map: an inline key is a location,
+     * so it carries a {@code /} (an operation) or a {@code []} (an array item) or a second dot (a
+     * property of a named schema, plus the member) — and a named key is exactly
+     * {@code Schema.member}.
+     */
+    private static boolean isInlineKey(String key) {
+        return key.contains("/") || key.contains("[]") || key.chars().filter(c -> c == '.').count() > 1;
     }
 
     // -------------------------------------------------------------- sources ----

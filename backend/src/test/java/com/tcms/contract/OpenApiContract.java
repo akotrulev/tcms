@@ -284,6 +284,170 @@ public final class OpenApiContract {
     }
 
     /**
+     * Every <strong>anonymous</strong> object shape in the document, by a location a human can
+     * find it at, mapped to the properties it declares (through {@code allOf}).
+     *
+     * <p>{@link #objectSchemas()} is the named half and says why it stops there: <em>"an anonymous
+     * shape has no name to correspond by, so there is nothing for a pairing map to key on"</em>.
+     * That is true of the <em>name</em> and false of the <em>correspondence</em> — §170. A shape
+     * declared at {@code TestCaseSummary.lastResult} has a location, the location is as stable as
+     * the schema around it, and a record serves it exactly as if it had been named. What the
+     * generator does with it is the reason to care: an inline object becomes an anonymous inlined
+     * TypeScript type rather than a named union, so a consumer reads the shape off the property and
+     * never off a type it can import — which makes a divergence here <em>less</em> visible
+     * downstream, not more.
+     *
+     * <p>Three exclusions, each of them a shape already compared somewhere:
+     *
+     * <ul>
+     *   <li><strong>{@code allOf} branches of a named schema</strong> — folded into their parent by
+     *       {@link #propertiesOf}, so {@code TestCase}'s second branch is compared as part of
+     *       {@code TestCase}. Recording it separately would report every property of the
+     *       <em>first</em> branch as missing from a record that has them all.</li>
+     *   <li><strong>A property that is a {@code $ref}</strong> — that is the named lane.</li>
+     *   <li><strong>A shape with no {@code properties} at all</strong> — the free-form maps
+     *       ({@code AiProposal.grounding}, {@code Configuration.attributes},
+     *       {@code ReportDefinition.parameters}, the dashboard {@code filter}s). They are
+     *       {@code additionalProperties} objects, they travel as a {@code JsonNode} or a
+     *       {@code Map}, and a record-component comparison has nothing to say about one.</li>
+     * </ul>
+     *
+     * <p>An <em>inline body or response</em> is included and keyed by its operation, because that
+     * is the position with no name at all — the two paged list responses, the two auth bodies, the
+     * four multipart forms, the case history and the report request.
+     */
+    Map<String, Set<String>> inlineObjectSchemas() {
+        Map<String, Set<String>> found = new LinkedHashMap<>();
+        map(map(root, "components"), "schemas")
+                .forEach((name, schema) -> inlineFrom(asMap(schema), name, false, found));
+        for (Operation operation : operations()) {
+            asMap(asMap(operation.body().get("requestBody")).get("content"))
+                    .forEach((mediaType, node) -> inlineBody(
+                            node, operation.describe() + " (request)", found));
+            asMap(operation.body().get("responses")).forEach((code, response) ->
+                    asMap(resolve(asMap(response)).get("content")).forEach((mediaType, node) ->
+                            inlineBody(node, operation.describe() + " (" + code + ")", found)));
+        }
+        return found;
+    }
+
+    private void inlineBody(Object mediaTypeNode, String location, Map<String, Set<String>> into) {
+        Map<String, Object> schema = asMap(asMap(mediaTypeNode).get("schema"));
+        if (schema.containsKey("$ref")) {
+            return;
+        }
+        inlineFrom(schema, location, true, into);
+    }
+
+    /**
+     * @param anonymous whether {@code schema} is itself an unnamed shape to record, as opposed to a
+     *                  named one being descended into for the unnamed shapes hanging off it
+     */
+    private void inlineFrom(
+            Map<String, Object> schema,
+            String location,
+            boolean anonymous,
+            Map<String, Set<String>> into) {
+        if (anonymous && declaresPropertiesItself(schema)) {
+            Set<String> properties = new LinkedHashSet<>();
+            collectProperties(schema, properties);
+            into.put(location, properties);
+        }
+        for (Map<String, Object> part : inlineParts(schema)) {
+            if (!(part.get("properties") instanceof Map<?, ?> declared)) {
+                continue;
+            }
+            declared.forEach((name, value) -> {
+                Map<String, Object> child = asMap(value);
+                if (child.containsKey("$ref")) {
+                    return;
+                }
+                if (child.get("items") instanceof Map<?, ?> items) {
+                    Map<String, Object> item = asMap(items);
+                    if (!item.containsKey("$ref")) {
+                        inlineFrom(item, location + "." + name + "[]", true, into);
+                    }
+                    return;
+                }
+                inlineFrom(child, location + "." + name, true, into);
+            });
+        }
+    }
+
+    /**
+     * Whether a node is a shape of its own rather than a wrapper around somebody else's.
+     *
+     * <p><strong>This is the whole difference between an anonymous object and the nullable-$ref
+     * idiom</strong>, and getting it wrong is not subtle: {@code nullableRefIsWrappedInAllOf}
+     * (above) requires every nullable reference in this document to be written
+     * {@code allOf: [{$ref: UserRef}], nullable: true}, so a rule that judged by the properties a
+     * node <em>resolves</em> to would see UserRef's four members at all twenty-two of those
+     * positions and demand a record for each. They are one schema referenced twenty-two times, and
+     * {@code UserRef} is already paired.
+     *
+     * <p>So the test is what the node and its <em>inline</em> branches declare themselves. A paged
+     * response — {@code allOf: [{$ref: PageMeta}, {properties: {items, facets}}]} — passes it on
+     * the second branch, and its recorded member set is still the union through {@code allOf},
+     * because the record serving it carries the paging fields too.
+     */
+    private boolean declaresPropertiesItself(Map<String, Object> schema) {
+        return inlineParts(schema).stream()
+                .anyMatch(part -> part.get("properties") instanceof Map<?, ?> declared
+                        && !declared.isEmpty());
+    }
+
+    /** A schema and its <em>inline</em> {@code allOf} branches — never the {@code $ref}'d ones. */
+    private List<Map<String, Object>> inlineParts(Map<String, Object> schema) {
+        List<Map<String, Object>> parts = new ArrayList<>();
+        parts.add(schema);
+        if (schema.get("allOf") instanceof List<?> branches) {
+            for (Object branch : branches) {
+                Map<String, Object> node = asMap(branch);
+                if (!node.containsKey("$ref")) {
+                    parts.addAll(inlineParts(node));
+                }
+            }
+        }
+        return parts;
+    }
+
+    /**
+     * The named schemas some part of the document {@code $ref}s <strong>other than as an
+     * {@code allOf} branch</strong> — i.e. the ones something sends or accepts whole.
+     *
+     * <p>The complement is what {@code ContractConventionTest.BRANCH_ONLY_SCHEMAS} needs: a schema
+     * reached only as a branch has no record of its own, because no handler returns it — the
+     * composition is what travels. Derived here rather than asserted there so the exemption is
+     * re-checked against the document on every run instead of being taken on trust (§161).
+     *
+     * <p>The flag is recomputed per map key rather than inherited down the whole subtree, and that
+     * is the part worth reading twice: a {@code $ref} <em>inside</em> an inline {@code allOf}
+     * branch — {@code TestCase}'s branch referencing {@code TestStep}, say — is an ordinary
+     * reference and must count as one. Only the branch positions themselves are excluded.
+     */
+    Set<String> schemasReferencedOutsideAllOf() {
+        Set<String> names = new LinkedHashSet<>();
+        collectRefs(root, false, names);
+        return names;
+    }
+
+    private void collectRefs(Object node, boolean asAllOfBranch, Set<String> into) {
+        if (node instanceof Map<?, ?> raw) {
+            Map<String, Object> node0 = asMap(raw);
+            if (!asAllOfBranch
+                    && node0.get("$ref") instanceof String ref
+                    && ref.startsWith(SCHEMA_REF_PREFIX)) {
+                into.add(ref.substring(SCHEMA_REF_PREFIX.length()));
+            }
+            node0.forEach((key, value) -> collectRefs(value, "allOf".equals(key), into));
+        } else if (node instanceof List<?> list) {
+            list.forEach(element -> collectRefs(element, asAllOfBranch, into));
+        }
+    }
+
+    private static final String SCHEMA_REF_PREFIX = "#/components/schemas/";
+
+    /**
      * The named enum types — every {@code components.schemas} entry that declares an
      * {@code enum}, mapped to its members in declaration order.
      *

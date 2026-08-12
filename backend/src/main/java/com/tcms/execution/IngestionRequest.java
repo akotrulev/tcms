@@ -34,8 +34,6 @@ import java.util.UUID;
  * @param releaseVersion  what was under test. Denormalized onto every execution (V1, §6q).
  * @param buildNumber the CI build. The one field that makes an ingested run traceable back to the
  *                job that posted it, which is why it is on the request rather than left to the name.
- * @param branch  the branch under test.
- * @param commitSha the commit under test.
  */
 public record IngestionRequest(
         ReportFormat format,
@@ -44,7 +42,23 @@ public record IngestionRequest(
         String runName,
         UUID configurationId,
         String releaseVersion,
-        String buildNumber,
-        String branch,
-        String commitSha) {
+        String buildNumber) {
+
+    // ~~@param branch the branch under test. @param commitSha the commit under test.~~
+    // → REMOVED §170, as two components and nothing else. They were never declared on
+    // `IngestionInput`, so no generated client could name them, and they were read by nothing —
+    // not by IngestionService, not by IngestionEdit, and TestRun does not even map the
+    // `test_run.branch` / `test_run.commit_sha` columns V1 created for them. A CI job that set
+    // them got a 2xx and a run with no branch on it, which is the worst of the three possible
+    // behaviours: refusing would have been honest and storing would have been useful.
+    //
+    // THE COLUMNS STAY AND THIS IS NOT THE FEATURE BEING CANCELLED. Git traceability is M4 (plan
+    // §3 phase 2, and §6q's table lists `commitSha`/`branch` beside `releaseVersion` as the field
+    // that says which code ran); the ERD annotates both columns with that milestone. The slice
+    // that builds it declares the two properties on `IngestionInput`, maps the columns on
+    // `TestRun`, and adds them back here in the same commit — at which point they are read.
+    //
+    // Removing them changes no behaviour today: Spring Boot leaves FAIL_ON_UNKNOWN_PROPERTIES off,
+    // so a CI job still posting `branch` still gets its 2xx and the value is still dropped. What
+    // changes is that the drop is no longer disguised as a binding.
 }

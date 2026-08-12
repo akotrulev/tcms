@@ -2027,3 +2027,21 @@ or never.*
 > read a git host, which is an integration and not a column. Recorded so the next reader meets the
 > limit as a decision rather than as a bug: a git link pinned a year ago looks exactly as fresh as
 > one pinned this morning, and nothing on the screen says otherwise.
+
+## §170 — the population the pairing rule could not see
+
+*Four mutations. **`PR-1`…`PR-3` are checks over checks and were run** — §165's precedent: none of
+them exercises the product, so running them is not the §65 exception §72–§76 wrongly took. **`PR-4`
+is the product one and is NOT RUN.***
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `§170 PR-1` | Delete the `TestCaseInput` entry from `RESPONSE_RECORDS` | Should redden `every object schema is paired with a record, or says why it has none` naming `TestCaseInput`, and **nothing else** — in particular *not* `every schema a record is named for is paired`, because no record is called `TestCaseInput` or `TestCaseInputView`. That silence is the defect this slice found, reproduced on demand. | ✅ **RUN 2026-08-12 — red, `Expecting empty but was: ["TestCaseInput"]`, and the name-match rule stayed green exactly as predicted** |
+| `§170 PR-2` | Add `PageMeta` to `RESPONSE_RECORDS` pointing at `CasePageView`, leaving its `BRANCH_ONLY_SCHEMAS` entry | Should redden two rules at once: the member comparison with `PageMeta.items` and `PageMeta.facets` as SERVER-ONLY, and `every exemption is still exempting something`. Proves the false positives an allOf branch generates when paired with the record serving the composition — the reason the exemption exists rather than being a shortcut. | ✅ **RUN 2026-08-12 — and the first arm was WRONG, which is why it was worth running.** Red on the member comparison (`unexpected: ["PageMeta.facets", "PageMeta.items"]`) and **green on the exemption rule**: `BRANCH_ONLY_SCHEMAS` re-derives whether anything `$ref`s the schema whole, which pairing it does not change, so the contradiction went unnamed and only a consequence reddened. Fixed in the same commit — `everyObjectSchemaIsPairedOrExempt` now asserts the three accounting maps are **disjoint**, and the re-run reddens both rules |
+| `§170 PR-3` | In `openapi.yaml`, rename `TestCaseSummary.lastResult`'s `statusKind` property to `statusKindX` | Should redden `an inline shape and the record serving it name the same members, both ways` with both directions at once — `TestCaseSummary.lastResult.statusKindX` CONTRACT-ONLY and `…statusKind` SERVER-ONLY. The inline rule's first real exercise, at the exact position §166 spent a slice on. | ✅ **RUN 2026-08-12 — red, both directions: `["TestCaseSummary.lastResult.statusKind", "TestCaseSummary.lastResult.statusKindX"]`, and only that test** |
+| `§170 PR-4` | Revert `IngestionRequest` to nine components (restore `branch`, `commitSha`) and POST an ingestion body carrying both | **Not a rule mutation — the product one, and the claim it checks is "removing them changed nothing".** Expected: the same 2xx and the same stored run either way, because `FAIL_ON_UNKNOWN_PROPERTIES` is off. Run it against a real instance with the components *removed* and the fields *present* in the body; a 400 there would mean a custom `ObjectMapper` this slice did not find. | ⬜ not run |
+
+> **Not mutation-tested, and it is the same limit §165 recorded.** These rules compare a schema's
+> declared properties to a record's **components**, statically — a `@JsonIgnore`, a `@JsonProperty`
+> rename or a custom serializer satisfies them while changing the bytes. §170 widened the population
+> from 79 pairings to 144 and did not widen what a pairing can see.
