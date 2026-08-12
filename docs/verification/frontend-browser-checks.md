@@ -74,6 +74,27 @@ still says *"live only"* it is saying something narrower and still true: it need
 tick**, a **second account**, or **a database that migrated in place** — things a browser session
 alone does not produce.
 
+### Can this be driven on `shanks`? — scoped 2026-08-12, not run
+
+The homelab box is Linux with a display, so the answer is yes, with three things settled in advance
+rather than discovered at stage 1:
+
+- **The browser is scripted, not interactive.** No Playwright MCP server is connected in the session
+  that scoped this, so the shape is `npx playwright` driven from a shell script with screenshots
+  written to files and read back. `npx playwright` resolves; **no browsers are downloaded**
+  (`~/.cache/ms-playwright` is absent) — `npx playwright install chromium` is ~150 MB and
+  `--with-deps` wants `sudo`. Headless throughout; the display is irrelevant. What this shape does
+  **not** cover is the judgment rows — *"does this read as broken?"*, *"compare line by line"*,
+  *"does the copy hold up over minutes"* — which need a person on the screenshots either way.
+- **Run it against a FRESH SCRATCH STACK from the repo, on the lane-B ports** (`6432` / `9080` /
+  `6173`), decided 2026-08-12. Not the lab: `/srv/tcms` is a live deployment on this same box —
+  backend container plus **host Postgres on 5432** — and driving the queue there would write six
+  accounts, ten suites, 26 cases and a full plan/run/review trail into a deployment, on whatever
+  image it last shipped rather than on master.
+- **`L0` is spent the moment a company is provisioned.** It is the one read-only, un-re-runnable
+  lane, so which instance the pass lives on is a decision taken *before* `provision-company`, not
+  after — which is the whole reason this note exists.
+
 ### The six accounts
 
 **Invite them from the screen, not the console** — Teams & roles → People → **Invite a person**
