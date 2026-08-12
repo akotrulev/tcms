@@ -33,6 +33,21 @@ describe('HealthChip — the automation-drift pair', () => {
     expect(colorOf('UNDECLARED_AUTOMATION')).toBe('var(--color-blocked)');
   });
 
+  it('explains the spec-changed signal by the comparison the server actually makes', async () => {
+    // §178 gave this signal its first derivation, and its tooltip had described a comparison
+    // nobody makes: the block rather than the page, and only the links that claim to VERIFY.
+    // Neither error is visible on screen — both read as perfectly sensible sentences — so the
+    // regression is a "tidy" rewrite toward the wording the enum's NAME suggests. That is
+    // §158's finding on CONDITION_DRIFT one signal later, which is why it is pinned this time.
+    render(<HealthChip signal="OUTDATED_SPEC_CHANGED" testId="chip" />);
+    const help = await screen.findByTestId('chip');
+
+    expect(help).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('specification page this case links to'),
+    );
+  });
+
   it('labels the pair as two different problems', () => {
     // Not two spellings of one. The labels are what a reader triages by, and a pair
     // worded as variations on "automation" leaves them unable to tell which way the

@@ -2,12 +2,14 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-12 (**§177** — `test_run.commit_sha` / `.branch` have a writer, the git-object regex is a pinned second copy, and the clone inherits neither; **§176** — the four contract-binding rules are two questions over two populations, and a bound-and-undeclared query parameter fails the build; **§175** — one `TeamRef`, in `com.tcms.api`, with two inline schemas made `$ref`s and `isLead` off the wire; **§174** — `doc_link.relationship` is the one mutable column, `V48` records who moved it, and both ends got the endpoint; **§171** — the form parts nobody compared: the four multipart bodies are exempt from *pairing* and no longer exempt from *comparison*; **§170** — the population the pairing rule could not see: every object schema, named and inline, is paired or excused, and two ingestion inputs nothing read are gone; **§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-12 (**§178** — `case_health` has nine written signals and one left; the
+last two came off `case_doc_link`, the statement's *order* inside the recompute is load-bearing, and
+`UNLINKED` counts every relationship while the coverage sites count one; **§177** — `test_run.commit_sha` / `.branch` have a writer, the git-object regex is a pinned second copy, and the clone inherits neither; **§176** — the four contract-binding rules are two questions over two populations, and a bound-and-undeclared query parameter fails the build; **§175** — one `TeamRef`, in `com.tcms.api`, with two inline schemas made `$ref`s and `isLead` off the wire; **§174** — `doc_link.relationship` is the one mutable column, `V48` records who moved it, and both ends got the endpoint; **§171** — the form parts nobody compared: the four multipart bodies are exempt from *pairing* and no longer exempt from *comparison*; **§170** — the population the pairing rule could not see: every object schema, named and inline, is paired or excused, and two ingestion inputs nothing read are gone; **§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `9f36657` (§176 shipped; §177 is this commit) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `f387fcd` (§177 shipped; §178 is this commit) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
@@ -156,6 +158,48 @@ fail the build until they are paired.**
   pairings; `isInlineKey` splits it. `compareMembers` is the one comparison — do not write a second.
 - ~~**`IngestionRequest` lost `branch` and `commitSha`** (§170)~~ → **§177 PUT THEM BACK, with the
   columns mapped and read.** See §177 below; the map/declare/pass triple is one commit by design.
+
+---
+
+## §178 — `case_health` HAS NINE WRITTEN SIGNALS AND ONE LEFT, AND THE LAST TWO CAME OFF `case_doc_link`
+
+**Read this before touching `CaseHealthRecomputeService`, any `*Facts`/derivation class in
+`repository`, or `WRITERLESS_BY_DECISION`.**
+
+- **`SpecLinkage` derives `OUTDATED_SPEC_CHANGED` and `UNLINKED`**, from `case_doc_link` — §167's
+  mirror — and **not** from `doc_link`. It is deliberately not a `*Facts`: that suffix in this module
+  means *rows another module owns, read through one file*, and this class names only `repository`
+  tables. `DocumentationFacts` remains the single crossing.
+- **The obstacle these two waited on since §158 was real, correctly named, and had stopped
+  applying.** `HealthSignal`'s header said they "need `documentation`, which this module may not
+  depend on" — still true, never what blocked them, because §167 put the rows in this module for a
+  panel. **A sentence naming a live constraint can go stale by something else being built**, and no
+  rule in this repo asks that question.
+- **STATEMENT ORDER IS LOAD-BEARING.** `recompute()` runs `refreshCaseDocLinks()` **then**
+  `recomputeLinkageSignals(now)`, one transaction. Swap them and both signals lag one tick behind the
+  Traceability panel they must agree with. `aLinkMadeSinceTheLastTickCountsOnThisTick` is the only
+  assertion in that class that fails on position rather than content; mutation `§178 SL-M1` is its
+  other half.
+- **THE DECISION, two ways at once:** `UNLINKED` counts **any** link (any relationship, external
+  targets included) because the chip renders inches from the panel listing those links;
+  `OUTDATED_SPEC_CHANGED` counts **any relationship** too, because a case *derived from* a rewritten
+  statement is as wrong as one verifying it. `BlockCoverageView` and `CoverageMatrixReport` filter
+  `VERIFIES` and are **not** being contradicted — they answer a question about a *statement*.
+  `LINKED_BY_REFERENCE_ONLY` and `LINKED_TO_ONE_MOVED_SPEC_OF_TWO` (whose stale link is
+  `DERIVED_FROM`) are the fixtures that fail if either is narrowed.
+- **A link into a soft-deleted page, or a sibling project's page, reads as NO link** — the mirror drops
+  it, so the chip agrees with the panel. Looks like a bug, is the design, and is the strongest reason
+  the derivation reads the mirror.
+- **`WRITERLESS_BY_DECISION` is EIGHT entries and `CaseHealth.orphaned` is the last health signal in
+  it.** Four left by being written (§157, §158, §178 ×2). `orphaned` needs a *decision* first, so the
+  run of cheap exits is over. It is also the column
+  `CaseHealthRecomputeTest.Boundaries.otherSignalsAreNotClobbered` now uses — the second column that
+  test has had to move to, and there is no third.
+- **`unlinked` fires on most cases of most projects** (INFO for that reason). Any new assertion over
+  `signalsOf(...)` in `CaseHealthRecomputeTest` must name it.
+- **`StatusChip.SEVERE_SIGNALS` (frontend) disagrees with `HealthSignal.Severity` about two members** —
+  it has `FAILING_REPEATEDLY` and lacks `CONDITION_DRIFT`. Found by §178, recorded at the site, not
+  fixed: the fix is deciding whether severity goes on the wire for a bare signal.
 
 ---
 

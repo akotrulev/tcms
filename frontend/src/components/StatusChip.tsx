@@ -166,7 +166,17 @@ export function AutomationLabel({
  * explanation because the label alone can't say why it matters.
  */
 const healthHelp: Record<HealthSignal, string> = {
-  OUTDATED_SPEC_CHANGED: 'The documentation block this case verifies has changed since the case was last edited.',
+  // Rewritten in §178, the slice that gave this signal a derivation, and wrong in three ways
+  // before it — §158's correction to CONDITION_DRIFT arriving one signal later, for the same
+  // reason: a tooltip nothing could raise explains a comparison nobody makes until the day it
+  // starts appearing. "the block this case VERIFIES" (the server counts every relationship, not
+  // only VERIFIES — a case derived from a rewritten statement is as wrong as one covering it),
+  // "the BLOCK ... has changed" (the comparison is the PAGE's newest version, so editing an
+  // unrelated paragraph marks the link stale — V46 §4 states that granularity and why it is the
+  // finest the schema supports), and "last EDITED" (the newest case version, so assigning an
+  // owner or moving a suite does not forgive a spec change).
+  OUTDATED_SPEC_CHANGED:
+    'A specification page this case links to has changed since the case was last saved.',
   STALE_APPROVAL: 'This case was edited after it was approved, so the approval no longer covers what it says.',
   // "since the case was last SAVED", not "last reviewed" — corrected in §158, the slice that gave
   // this signal a derivation. The server compares the newest version's snapshot against the live
@@ -180,6 +190,12 @@ const healthHelp: Record<HealthSignal, string> = {
   STALE_AUTOMATION: 'Marked automated, but no automated result has arrived recently.',
   UNDECLARED_AUTOMATION:
     'CI has posted results for this case recently, but its automation status says it is not automated — so automation coverage does not count it.',
+  // Unchanged in §178 and checked rather than assumed: it is accurate under the derivation, and
+  // deliberately says "any documentation" rather than "any requirement it verifies" — a case linked
+  // only by REFERENCES does not raise this. It also matches the Traceability panel's own empty copy
+  // on the same screen, which is the agreement §167 built the mirror for: the chip and the panel are
+  // read off one set of rows, so a case whose only link points into a deleted page says "not linked"
+  // in both places.
   UNLINKED: 'This case is not linked to any documentation, so nothing traces it to a requirement.',
   FAILING_REPEATEDLY: 'This case has failed in several consecutive runs.',
   INCOMPLETE: 'Required fields are missing.',
@@ -202,6 +218,17 @@ const healthHelp: Record<HealthSignal, string> = {
  * because the chip has nothing to read: severity is on the wire for a `DashboardTile`
  * and not for a bare `HealthSignal`. If a signal ever renders here with a severity
  * beside it, this list should go rather than be kept in step.
+ *
+ * **AND THE TWO COPIES DISAGREE ABOUT TWO MEMBERS — found in §178 and deliberately not
+ * fixed here.** The server's ERROR set is `OUTDATED_SPEC_CHANGED`, `CONDITION_DRIFT`,
+ * `STALE_AUTOMATION` (`HealthSignal.Severity`, backend). This list has
+ * `FAILING_REPEATEDLY` instead of `CONDITION_DRIFT`, so the same case is red on a
+ * dashboard tile and amber on its own chip, or the reverse — which is precisely the
+ * "kept in step by hand" failure the paragraph above predicted, discovered by a slice
+ * that only needed to read the list. §178 stopped at recording it because changing
+ * either member alters how a signal it did not derive is rendered, and the honest fix is
+ * a comparison rather than an edit: the question is whether severity belongs on the wire
+ * for a bare signal, which deletes this list. Left as the next slice, not as a to-do.
  */
 const SEVERE_SIGNALS: HealthSignal[] = [
   'OUTDATED_SPEC_CHANGED',
