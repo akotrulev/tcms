@@ -2,14 +2,43 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-11 (**§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-12 (**§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `cde35bb` (§165; §166 is this session, uncommitted at the time of writing) (trust the
+**Baseline commit:** `8232b0a` (§167; §168 is this session, uncommitted at the time of writing) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §168 — A COMPONENT THAT HAD RENDERED AGAINST NOTHING SINCE M0 CAME ALIVE
+
+**`CoverageMarker` in `DocsPage.tsx` now receives data.** It was complete — chip, colours, tooltip,
+a `RouterLink` into the filtered case list — and `DocBlock.coverage` was served by nothing for 168
+sections, so **none of it had ever run against a real response**. §168 served the field from the
+backend; one line changed here.
+
+- **The one line: `if (!coverage)` and `if (linkedCases === 0)` are now ONE branch.** The server
+  sends `coverage: null` for a block nothing claims to verify and **never a row of zeros**, so the
+  zero arm — which carried the "Not tested" chip — was unreachable while the null arm drew an *empty
+  margin*. The marker was therefore invisible in exactly the case plan §6i built it for: the
+  statement nobody has linked. If you are tempted to restore the two-branch shape, the server's
+  contract is what makes it dead code.
+- **A heading gets no marker, and that is this file's decision rather than the server's.** The server
+  will happily send a marker for a linked heading; `DocBlockRow` declines to render one because a
+  heading is structure, not a requirement. Keep the two facts distinct — the fixture in
+  `DocPageEditorPage.test.tsx` now carries `coverage: null` on its heading for exactly this reason.
+- **`links` and `coverage` are `required` on `DocBlock` in both `schema.d.ts` copies** (required *and*
+  nullable — the server always emits both keys). This turned a stale fixture into a `tsc` error, the
+  §167 `caseBody()` mechanism a second time: `DocPageEditorPage.test.tsx`'s two `DocBlock` literals
+  gained both keys.
+- **The counts are the server's arithmetic and must not be recomputed here.**
+  `passed + failed + notRun === linkedCases` always; `notRun` is the remainder over six status kinds,
+  not "never executed". A tooltip or badge that derives a fourth number client-side would be a second
+  implementation of a roll-up the backend deliberately owns.
+- **Same refresh lag as §166/§167** — the marker reads `case_health`, so a result recorded seconds ago
+  legitimately has not reached it. No optimistic patch, no refetch loop; `§168 CV-1`…`CV-5` are in
+  the browser queue, lane A1.
 
 ## §166 — ONE OF §165'S TWO SCREENS IS FIXED, AND STILL NO FRONTEND SOURCE MOVED
 

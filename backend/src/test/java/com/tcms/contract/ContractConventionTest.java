@@ -536,10 +536,18 @@ class ContractConventionTest {
      *
      * <p>§166 took the rewritten argument and did what it named, for both {@code lastResult} keys;
      * §167 did the same for {@code relatedDocuments} one section later, through a table rather than
-     * a column. <strong>{@code DocBlock.coverage} is what remains</strong>, and it is the control
-     * group: the one of the four whose argument was <em>revised when its constraint moved</em>
-     * rather than left to expire, and the one that still needs two modules {@code documentation} may
-     * not name.
+     * a column; <strong>§168 closed the fourth and last of them</strong>, {@code DocBlock.coverage},
+     * through neither — no table and no column, because §166's mirror had <em>already</em> reduced
+     * its two-module join to one and nobody had gone back to look.
+     *
+     * <p><strong>That is the finding this map was built to produce, and it is worth stating plainly:
+     * three of the four were closed by re-reading the argument rather than by removing an
+     * obstacle.</strong> The obstacle in each case had already moved — {@code storage} shipped,
+     * {@code case_health} gained the column — and the entry went on asserting a constraint that had
+     * expired, because nothing re-reads a justification the day the thing it names changes. An entry
+     * pinned in both directions cannot outlive its gap, but it can outlive its <em>reason</em>, and
+     * the reason is what a reader acts on. When adding an entry here, name the obstacle precisely
+     * enough that a later slice can tell it has gone.
      *
      * <p><strong>The six {@code DocLink.external*} entries are a different kind and belong to §167's
      * pairing of that schema.</strong> Nothing about a module boundary blocks them — they are a
@@ -587,16 +595,12 @@ class ContractConventionTest {
                     "CONTRACT-ONLY. target_kind EXTERNAL_URL's whole payload. Plan §6i wants "
                             + "Confluence and Google Docs references in the same traceability "
                             + "graph, clearly marked as having no anchor stability; nothing builds "
-                            + "them yet"),
-            Map.entry("DocBlock.coverage",
-                    "CONTRACT-ONLY, and the control group: this is the one of the four whose "
-                            + "argument was REVISED when its constraint moved rather than left to "
-                            + "expire. DocBlockView's header strikes the old reason (\"nothing can "
-                            + "create a link\") and states the live one — passed/failed/notRun are "
-                            + "test_execution joined to test_case, two modules `documentation` may "
-                            + "not name — and all five members are required, so a partial object is "
-                            + "not available and a zeroed one would print \"Not tested\" against a "
-                            + "statement whose cases may all be green"));
+                            + "them yet"));
+    // DocBlock.coverage WAS HERE and is deleted rather than edited — §168 served the marker, and
+    // this map is pinned in both directions precisely so a closed divergence cannot keep its
+    // argument. Third time that has fired on a divergence somebody actually closed, and the last of
+    // the four this map opened with: what remains is six entries about a capability nothing builds,
+    // and no entry at all about a module boundary.
 
     /**
      * Every production record whose simple name matches a named object schema, by that name.

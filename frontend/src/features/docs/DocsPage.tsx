@@ -551,11 +551,13 @@ function CoverageMarker({
   coverage: DocBlock['coverage'];
   projectId: string;
 }) {
-  if (!coverage) return <Box sx={{ width: 132, flexShrink: 0 }} />;
-
-  const { linkedCases, passed, failed, notRun, caseKeys } = coverage;
-
-  if (linkedCases === 0) {
+  // Null and zero are ONE branch since §168, and the server only ever sends the first. It sends
+  // `coverage: null` for a block no case claims to verify and never a row of zeros — the absence of
+  // a claim is not a claim — so this component owns the wording that turns that absence into
+  // something a reader can act on. Rendering an empty margin for it instead, which is what this did
+  // while the field was served by nothing, would hide the marker in exactly the case plan §6i
+  // built it for: the statement nobody has linked.
+  if (!coverage || coverage.linkedCases === 0) {
     return (
       <Tooltip title="No test case verifies this statement. Nothing would catch it if the behaviour broke.">
         <Box sx={{ width: 132, flexShrink: 0 }}>
@@ -573,6 +575,8 @@ function CoverageMarker({
       </Tooltip>
     );
   }
+
+  const { linkedCases, passed, failed, notRun, caseKeys } = coverage;
 
   const state = failed > 0 ? 'failed' : notRun > 0 ? 'partial' : 'passed';
   const color =

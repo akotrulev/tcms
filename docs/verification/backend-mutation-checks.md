@@ -1981,3 +1981,27 @@ decides what a reader sees on the case detail's traceability panel, not a check 
 | `§167 DL-3` | Delete `AND p.project_id = c.project_id` from the mirror statement | Should redden nothing in this module's own fixtures (single-project) but is the row worth running first if this queue is ever drained partially: it is the one predicate that can only ever drop a row a defect produced, and its absence would surface as a sibling project's page title rendered on a case whose reader holds no grant on that project. | ⬜ not run |
 | `§167 DL-4` | In `HealthRecomputeOnLinksChanged`, delete the class (or gate it behind a property that defaults off) | Should redden nothing — no test asserts the outbox latency directly, the same gap `§166 LR-1`'s browser row exists to cover rather than a unit test. Recorded because "no test can catch this" here is a live gap and not a design choice, unlike `id DESC` above. | ⬜ not run |
 | `§167 DL-5` | In `CaseRenderer.docLinksFor`, change `computeIfAbsent(...).add(...)` to overwrite (`put`) instead of accumulate | Should redden a `TheDocumentationLinks` assertion on any fixture case with more than one link — the map would carry only the last link found per case instead of the full list, and `findForCases`'s `ORDER BY l.pageKey, l.blockId` is what makes "last found" deterministic rather than merely usually wrong. | ⬜ not run |
+
+## §168 — the coverage marker, computed from the mirror §166 built
+
+*Five mutations, **NONE RUN** — §65 in full, same terms as §166 and §167. This slice ships a
+derivation that decides what a reader sees against every paragraph of every specification, and the
+counts are the kind of number nobody re-derives by hand once it is on screen.*
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `§168 CV-1` | In `BlockLinks#coverage`, drop the `LinkRelationship.VERIFIES` half of the guard, so every case link counts | Should redden `a block linked only by REFERENCES has links and NO marker`, and **only** that one. The narrowness is the finding to check: every other coverage test links with `VERIFIES`, so a single test carries the whole rule that keeps this marker agreeing with `CoverageMatrixReport`'s spine about which links are coverage claims. | ⬜ not run |
+| `§168 CV-2` | Change the `LinkedHashSet` collecting a block's verifiers to an `ArrayList` — i.e. stop deduping | Should redden `one case linked to one block twice counts once`. Worth running because the dedupe looks like defensive tidiness and is not: `DocLinkRepository#findForSource` states its idempotency check cannot stop a concurrent double-submit, so the duplicate row is a state the product reaches without any defect at all. | ⬜ not run |
+| `§168 CV-3` | In `CatalogueFacts#lastResultKinds`, delete `AND c.project_id = :projectId` | Should redden **nothing**, and that is the row's whole point. The ids reaching this method were already resolved through `#resolve`, which applies the predicate — so this one is a restatement that can only ever matter to a *later* caller that skipped that path. A mutation with no killer on a predicate that is deliberately redundant is the honest shape of "belt and braces"; if it ever DOES redden, some caller has started passing unresolved ids and that is the more interesting finding. | ⬜ not run |
+| `§168 CV-4` | In the same method, change the `JOIN case_health` to a `LEFT JOIN` and drop `AND h.last_status_kind IS NOT NULL` | Should redden **nothing** — a null kind and an absent row are collapsed to the same answer by the caller on purpose, so both spellings produce identical output today. Recorded rather than skipped because the collapse is an *argument* in `lastResultKinds`' javadoc, and an argument with no check is what §166's `LR-5` row exists to name. The day a fourth count is added to the contract, this row is the one that stops being a no-op. | ⬜ not run |
+| `§168 CV-5` | In `BlockLinks#coverage`, compute `notRun` as a literal `0` instead of `keys.size() - passed - failed` | Should redden `the three counts always sum to linkedCases`, `a BLOCKED case is notRun`, `a case that has never been executed is notRun` — three tests, which is the sum property being genuinely load-bearing rather than asserted once. The failure this prevents is a marker that reads "2 cases · 1 passed" and leaves a reader to conclude the second one failed. | ⬜ not run |
+
+> **Not mutation-tested and NO TEST IS POSSIBLE HERE — the `passed` bucket versus `counts_as_pass`.**
+> This marker buckets by `StatusKind`, so a project that adds a "Passed with comment" status (kind
+> `PASSED`, `counts_as_pass = false` — the split `StatusKind`'s own javadoc designs) sees it counted
+> as a pass here, while `CoverageMatrixReport`'s Verified column, which reads `counts_as_pass`, does
+> not. **The disagreement is real, and it is not reachable from this module**: `case_health` carries
+> the *kind* and not the status id, by `V45`'s decision, and the status row lives behind
+> `execution`. No test can be written here that would not first have to build the join this slice
+> exists because it cannot make. Recorded so the next reader meets the seam rather than discovering
+> it from a client's screenshot; closing it means a second mirrored column, not a query.

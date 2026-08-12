@@ -40,8 +40,29 @@ const page: DocPage = {
   currentVersionNo: 3,
   lockVersion: 5,
   blocks: [
-    { id: 'block-heading', position: 0, blockType: 'heading', level: 2, text: 'Full refudns' },
-    { id: 'block-body', position: 1, blockType: 'paragraph', level: null, text: 'Within 5 days.' },
+    // `links` and `coverage` joined DocBlock's required set in §168, when the coverage marker
+    // stopped being a field nothing served — same mechanism as `attachments` below, one field and
+    // 119 sections later. A heading gets `coverage: null` like everything else here: the server
+    // does send a marker on a heading when one is linked, and it is the *page* that declines to
+    // render it, which is a decision DocsPage owns rather than a shape the fixture should hide.
+    {
+      id: 'block-heading',
+      position: 0,
+      blockType: 'heading',
+      level: 2,
+      text: 'Full refudns',
+      links: [],
+      coverage: null,
+    },
+    {
+      id: 'block-body',
+      position: 1,
+      blockType: 'paragraph',
+      level: null,
+      text: 'Within 5 days.',
+      links: [],
+      coverage: null,
+    },
   ],
   // Required since #49 phase 2 gave `DOC_PAGE` a writer. The editor does not render files — that
   // is phase 4's screen — but the fixture has to be a page the server could actually send, and

@@ -98,6 +98,30 @@ class DocPageEndpointTest extends IntegrationTestBase {
     /** Test Lead in Umbra only. */
     private static final UUID OUTSIDER = UUID.fromString("dc003000-0000-4000-8000-000000000005");
 
+    /**
+     * §168's coverage fixtures — real cases for the marker to count, since the existing
+     * {@link #link} helper points at a {@code gen_random_uuid()} that resolves to nothing.
+     *
+     * <p>That helper is left exactly as it is: a link to a case nobody can name is precisely what
+     * the traceability refusals are about, and the marker's own "shares its input with the bullets"
+     * test needs a resolvable case beside an unresolvable one to be worth anything.
+     */
+    private static final UUID DC_SUITE = UUID.fromString("dc004000-0000-4000-8000-000000000001");
+    private static final UUID DC_LOCKED_SUITE =
+            UUID.fromString("dc004000-0000-4000-8000-000000000002");
+    private static final UUID PASSING_CASE = UUID.fromString("dc005000-0000-4000-8000-000000000001");
+    private static final UUID FAILING_CASE = UUID.fromString("dc005000-0000-4000-8000-000000000002");
+    /** {@code BLOCKED} — a kind that is not a verdict, and the contract offers no count for it. */
+    private static final UUID BLOCKED_CASE = UUID.fromString("dc005000-0000-4000-8000-000000000003");
+    /** No {@code case_health} row at all, which is a different absence from a null kind. */
+    private static final UUID UNEXECUTED_CASE =
+            UUID.fromString("dc005000-0000-4000-8000-000000000004");
+    /** Soft-deleted, and green — so a marker that counted it would be visibly wrong. */
+    private static final UUID DELETED_CASE = UUID.fromString("dc005000-0000-4000-8000-000000000005");
+    /** In {@link #ACME_LOCKED}: this company's case, and not this project's. */
+    private static final UUID SIBLING_PROJECT_CASE =
+            UUID.fromString("dc005000-0000-4000-8000-000000000006");
+
     @Autowired
     private MockMvc mvc;
 
@@ -164,6 +188,7 @@ class DocPageEndpointTest extends IntegrationTestBase {
         seedCompanyDefaults(UMBRA);
         resetMutableRows();
         seedProjectDefaults();
+        seedCoverageFixtures();
     }
 
     /**
@@ -587,6 +612,206 @@ class DocPageEndpointTest extends IntegrationTestBase {
     // =====================================================================
 
     @Nested
+    @DisplayName("The coverage marker — §168, the last of the four module-boundary divergences")
+    class Coverage {
+
+        @Test
+        @DisplayName("a verified block carries the counts and the keys of the cases verifying it")
+        void theMarkerIsServed() throws Exception {
+            UUID block = firstBlockOf(create(LEAD, ACME_BANKING,
+                    pageWithBlocks("Refunds", block(null, "paragraph", null, "Refunds in 5 days."))));
+            verifies(PASSING_CASE, block);
+            verifies(FAILING_CASE, block);
+
+            JsonNode marker = coverageOf(read(LEAD, ACME_BANKING, pageIdOf(block)), 0);
+
+            assertThat(marker.get("linkedCases").asInt()).isEqualTo(2);
+            assertThat(marker.get("passed").asInt()).isEqualTo(1);
+            assertThat(marker.get("failed").asInt()).isEqualTo(1);
+            assertThat(marker.get("notRun").asInt()).isZero();
+            assertThat(keysOf(marker)).containsExactlyInAnyOrder("DCTC-1", "DCTC-2");
+        }
+
+        @Test
+        @DisplayName("the three counts always sum to linkedCases, whatever the kinds are")
+        void thePartsSum() throws Exception {
+            UUID block = firstBlockOf(create(LEAD, ACME_BANKING,
+                    pageWithBlocks("Refunds", block(null, "paragraph", null, "Refunds."))));
+            verifies(PASSING_CASE, block);
+            verifies(FAILING_CASE, block);
+            verifies(BLOCKED_CASE, block);
+            verifies(UNEXECUTED_CASE, block);
+
+            JsonNode marker = coverageOf(read(LEAD, ACME_BANKING, pageIdOf(block)), 0);
+
+            // The property, not the numbers: a marker whose parts do not sum is one a reader
+            // cannot subtract with, and it is what a fourth count added to the contract without a
+            // fifth arm here would silently break.
+            assertThat(marker.get("passed").asInt()
+                    + marker.get("failed").asInt()
+                    + marker.get("notRun").asInt())
+                    .isEqualTo(marker.get("linkedCases").asInt())
+                    .isEqualTo(4);
+        }
+
+        @Test
+        @DisplayName("a BLOCKED case is notRun — three counts for six kinds, and it is not a verdict")
+        void aNonVerdictIsNotRun() throws Exception {
+            UUID block = firstBlockOf(create(LEAD, ACME_BANKING,
+                    pageWithBlocks("Refunds", block(null, "paragraph", null, "Refunds."))));
+            verifies(BLOCKED_CASE, block);
+
+            JsonNode marker = coverageOf(read(LEAD, ACME_BANKING, pageIdOf(block)), 0);
+
+            // Not passed, and — the half that matters more — not failed either. §46's rule is that
+            // a roll-up which could go either way must not go the way that makes the numbers look
+            // better than the truth; counting a blocked case as failed would be the other error,
+            // reporting a failure nobody observed.
+            assertThat(marker.get("notRun").asInt()).isEqualTo(1);
+            assertThat(marker.get("passed").asInt()).isZero();
+            assertThat(marker.get("failed").asInt()).isZero();
+        }
+
+        @Test
+        @DisplayName("a case that has never been executed is notRun, not missing from the marker")
+        void aNeverExecutedCaseStillCounts() throws Exception {
+            UUID block = firstBlockOf(create(LEAD, ACME_BANKING,
+                    pageWithBlocks("Refunds", block(null, "paragraph", null, "Refunds."))));
+            verifies(UNEXECUTED_CASE, block);
+
+            JsonNode marker = coverageOf(read(LEAD, ACME_BANKING, pageIdOf(block)), 0);
+
+            // UNEXECUTED_CASE has no case_health row at all, which is a different absence from a
+            // row with a null kind and must read the same. A marker that dropped it would say a
+            // statement is verified by nobody while a bullet under it names the case.
+            assertThat(marker.get("linkedCases").asInt()).isEqualTo(1);
+            assertThat(marker.get("notRun").asInt()).isEqualTo(1);
+            assertThat(keysOf(marker)).containsExactly("DCTC-4");
+        }
+
+        @Test
+        @DisplayName("a block linked only by REFERENCES has links and NO marker")
+        void onlyVerifiesIsCoverage() throws Exception {
+            UUID block = firstBlockOf(create(LEAD, ACME_BANKING,
+                    pageWithBlocks("Refunds", block(null, "paragraph", null, "Refunds."))));
+            linkCase(PASSING_CASE, block, "REFERENCES");
+
+            JsonNode rendered = blocksOf(read(LEAD, ACME_BANKING, pageIdOf(block))).get(0);
+
+            // The coverage matrix counts a statement as covered when it carries a VERIFIES link, so
+            // a number here on a REFERENCES link would put coverage on a paragraph that the report
+            // — reading the same rows about the same statement — says nothing covers.
+            assertThat(rendered.get("links")).hasSize(1);
+            assertThat(rendered.get("coverage").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("one case linked to one block twice counts once")
+        void theCasesAreDeduped() throws Exception {
+            UUID block = firstBlockOf(create(LEAD, ACME_BANKING,
+                    pageWithBlocks("Refunds", block(null, "paragraph", null, "Refunds."))));
+            verifies(PASSING_CASE, block);
+            verifies(PASSING_CASE, block);
+
+            JsonNode rendered = blocksOf(read(LEAD, ACME_BANKING, pageIdOf(block))).get(0);
+
+            // Two bullets and one case: DocLinkRepository#findForSource states its idempotency
+            // check cannot fully prevent a concurrent double-submit, so this is a state the
+            // product can reach. A marker reading 2 would be a number nobody could reconcile
+            // against the cases named beside it.
+            assertThat(rendered.get("links")).hasSize(2);
+            assertThat(rendered.get("coverage").get("linkedCases").asInt()).isEqualTo(1);
+            assertThat(keysOf(rendered.get("coverage"))).containsExactly("DCTC-1");
+        }
+
+        @Test
+        @DisplayName("a link to a deleted case is in neither the bullets nor the marker")
+        void theMarkerAndTheBulletsShareTheirInput() throws Exception {
+            UUID block = firstBlockOf(create(LEAD, ACME_BANKING,
+                    pageWithBlocks("Refunds", block(null, "paragraph", null, "Refunds."))));
+            verifies(PASSING_CASE, block);
+            verifies(DELETED_CASE, block);
+
+            JsonNode rendered = blocksOf(read(LEAD, ACME_BANKING, pageIdOf(block))).get(0);
+
+            // The marker is computed from the SAME resolved map the bullets are rendered from, so
+            // the two cannot disagree about which links exist. A separate read would have produced
+            // "2 cases verify this" over one visible bullet.
+            assertThat(rendered.get("links")).hasSize(1);
+            assertThat(rendered.get("coverage").get("linkedCases").asInt()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a link to a sibling project's case is in neither, though RLS would allow it")
+        void theProjectPredicateHolds() throws Exception {
+            UUID block = firstBlockOf(create(LEAD, ACME_BANKING,
+                    pageWithBlocks("Refunds", block(null, "paragraph", null, "Refunds."))));
+            verifies(SIBLING_PROJECT_CASE, block);
+
+            JsonNode rendered = blocksOf(read(LEAD, ACME_BANKING, pageIdOf(block))).get(0);
+
+            // The sibling project's case is this COMPANY's, so RLS returns it happily — the
+            // project predicate in CatalogueFacts is the whole of what keeps another project's key
+            // off this page, and lastResultKinds restates it rather than trusting its caller.
+            assertThat(rendered.get("links")).isEmpty();
+            assertThat(rendered.get("coverage").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("caseKeys are in the same order as the links rendered beside them")
+        void theTwoListsReadAsOneSequence() throws Exception {
+            UUID block = firstBlockOf(create(LEAD, ACME_BANKING,
+                    pageWithBlocks("Refunds", block(null, "paragraph", null, "Refunds."))));
+            verifies(PASSING_CASE, block);
+            verifies(FAILING_CASE, block);
+            verifies(BLOCKED_CASE, block);
+
+            JsonNode rendered = blocksOf(read(LEAD, ACME_BANKING, pageIdOf(block))).get(0);
+
+            List<String> bullets = new ArrayList<>();
+            rendered.get("links").forEach(link -> bullets.add(link.get("sourceKey").asText()));
+
+            assertThat(keysOf(rendered.get("coverage"))).isEqualTo(bullets);
+        }
+
+        @Test
+        @DisplayName("the write path serves the marker too, so a save does not blank it")
+        void anEditRendersTheSameAssembly() throws Exception {
+            MvcResult created = create(LEAD, ACME_BANKING,
+                    pageWithBlocks("Refunds", block(null, "paragraph", null, "Refunds in 5 days.")));
+            UUID block = firstBlockOf(created);
+            verifies(PASSING_CASE, block);
+
+            MvcResult edited = edit(LEAD, ACME_BANKING, idOf(created),
+                    pageWithBlocks("Refunds", block(block, "paragraph", null, "Refunds in 3 days.")),
+                    null);
+
+            // The response to a save is what the SPA renders next. A write path that returned the
+            // links and dropped the marker would make every edit look like it had un-verified the
+            // statement until the next GET put it back — the same defect the attachments carried
+            // through this method for.
+            assertThat(coverageOf(edited, 0).get("passed").asInt()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a page whose links name no case costs no extra query and still renders")
+        void aSuiteLinkIsNotCoverage() throws Exception {
+            UUID block = firstBlockOf(create(LEAD, ACME_BANKING,
+                    pageWithBlocks("Refunds", block(null, "paragraph", null, "Refunds."))));
+            linkSuite(block);
+
+            JsonNode rendered = blocksOf(read(LEAD, ACME_BANKING, pageIdOf(block))).get(0);
+
+            // A suite is linkable and is not a case, so it is a bullet with no coverage meaning.
+            // The fourth query is skipped entirely on this page, which is asserted here only in the
+            // sense that it renders at all — CatalogueFacts answers an empty id set without a
+            // statement, and `IN ()` would be a syntax error rather than an empty result.
+            assertThat(rendered.get("links")).hasSize(1);
+            assertThat(rendered.get("coverage").isNull()).isTrue();
+        }
+    }
+
+    @Nested
     @DisplayName("Keys, paths and versions")
     class Identity {
 
@@ -879,15 +1104,23 @@ class DocPageEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("no block carries a `coverage` marker, because nothing can create a link yet")
-        void coverageIsAbsentRatherThanZeroed() throws Exception {
+        @DisplayName("an unverified block's `coverage` is null and never a row of zeros")
+        void coverageIsNullRatherThanZeroed() throws Exception {
             MvcResult created = create(LEAD, ACME_BANKING,
                     pageWithBlocks("Doc", block(null, "paragraph", null, "Refunds.")));
 
+            // Revised in place at §168 rather than deleted, because the claim it defends did not
+            // change — only the spelling. It used to assert the key was ABSENT, on a build where
+            // nothing served the marker; the marker is served now and this asserts the key is
+            // present and NULL, which is the same statement in the shape the contract's `required`
+            // now demands.
+            //
             // A zeroed marker does not read as "unknown" — the SPA renders it as "Not tested",
             // which is a specific and alarming claim about every paragraph in the product on the
-            // strength of a question nobody has asked. Same call as TestCase.relatedDocuments.
-            assertThat(blocksOf(created).get(0).has("coverage")).isFalse();
+            // strength of a question nobody has asked.
+            JsonNode block = blocksOf(created).get(0);
+            assertThat(block.has("coverage")).isTrue();
+            assertThat(block.get("coverage").isNull()).isTrue();
         }
 
         @Test
@@ -1607,6 +1840,155 @@ class DocPageEndpointTest extends IntegrationTestBase {
      * would otherwise be in: always returning 0, always allowing, and nobody able to tell whether it
      * works.
      */
+    /**
+     * The cases §168's coverage marker is computed over, and their mirrored results.
+     *
+     * <p>Written straight to {@code test_case} and {@code case_health} rather than driven through
+     * the case and execution endpoints, and the reason is the boundary this slice is about: the
+     * marker reads {@code case_health.last_status_kind}, a column {@code repository} maintains, and
+     * a fixture that produced it by submitting results would be testing {@code execution}'s
+     * projection on the way to testing this. {@code CaseHealthRecomputeTest} owns that projection
+     * and asserts it directly; what is under test here is what {@code documentation} does with the
+     * value once it is there — including the case that has <em>no row at all</em>, which no amount
+     * of driving the real path could produce on a case somebody had linked.
+     */
+    private void seedCoverageFixtures() throws SQLException {
+        try (Connection connection = appConnection(ACME)) {
+            suite(connection, DC_SUITE, ACME_BANKING, "DCTS-1", "Refunds");
+            suite(connection, DC_LOCKED_SUITE, ACME_LOCKED, "DCTS-2", "Internal");
+
+            testCase(connection, PASSING_CASE, ACME_BANKING, DC_SUITE, "DCTC-1", 1, false);
+            testCase(connection, FAILING_CASE, ACME_BANKING, DC_SUITE, "DCTC-2", 2, false);
+            testCase(connection, BLOCKED_CASE, ACME_BANKING, DC_SUITE, "DCTC-3", 3, false);
+            testCase(connection, UNEXECUTED_CASE, ACME_BANKING, DC_SUITE, "DCTC-4", 4, false);
+            testCase(connection, DELETED_CASE, ACME_BANKING, DC_SUITE, "DCTC-5", 5, true);
+            testCase(connection, SIBLING_PROJECT_CASE, ACME_LOCKED, DC_LOCKED_SUITE, "DCTC-6", 6,
+                    false);
+
+            health(connection, PASSING_CASE, ACME_BANKING, "PASSED");
+            health(connection, FAILING_CASE, ACME_BANKING, "FAILED");
+            health(connection, BLOCKED_CASE, ACME_BANKING, "BLOCKED");
+            // UNEXECUTED_CASE gets NO case_health row, deliberately — see #aNeverExecutedCaseStillCounts.
+            health(connection, DELETED_CASE, ACME_BANKING, "PASSED");
+            health(connection, SIBLING_PROJECT_CASE, ACME_LOCKED, "PASSED");
+        }
+    }
+
+    private void suite(Connection connection, UUID id, UUID projectId, String key, String name)
+            throws SQLException {
+
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO suite (id, company_id, project_id, key, key_seq, name, position,
+                                   lifecycle_status)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, 1, ?, 0, 'APPROVED')
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, key);
+            statement.setString(5, name);
+            statement.executeUpdate();
+        }
+    }
+
+    private void testCase(Connection connection, UUID id, UUID projectId, UUID suiteId, String key,
+            long keySeq, boolean deleted) throws SQLException {
+
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO test_case
+                    (id, company_id, project_id, suite_id, key, key_seq, title, step_format,
+                     priority, lifecycle_status, automation_status, created_at, updated_at,
+                     deleted_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
+                        ?, 'STRUCTURED', 'MEDIUM', 'APPROVED', 'MANUAL', now(), now(),
+                        CAST(? AS timestamptz))
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, suiteId.toString());
+            statement.setString(5, key);
+            statement.setLong(6, keySeq);
+            statement.setString(7, "Case " + key);
+            statement.setString(8, deleted ? "2026-01-01T00:00:00Z" : null);
+            statement.executeUpdate();
+        }
+    }
+
+    /** One case's mirrored last result — {@code V45}'s column, which is what §168 reads. */
+    private void health(Connection connection, UUID caseId, UUID projectId, String kind)
+            throws SQLException {
+
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO case_health (case_id, company_id, project_id, last_status_kind)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?)
+                ON CONFLICT (case_id) DO UPDATE SET last_status_kind = EXCLUDED.last_status_kind
+                """)) {
+            statement.setString(1, caseId.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, kind);
+            statement.executeUpdate();
+        }
+    }
+
+    /** A {@code VERIFIES} link from one real case to one block — the coverage claim itself. */
+    private void verifies(UUID caseId, UUID blockId) throws SQLException {
+        linkCase(caseId, blockId, "VERIFIES");
+    }
+
+    private void linkCase(UUID caseId, UUID blockId, String relationship) throws SQLException {
+        linkRow(blockId, "TEST_CASE", caseId, relationship);
+    }
+
+    /** A link whose source is a suite: linkable, and not a coverage claim about anything. */
+    private void linkSuite(UUID blockId) throws SQLException {
+        linkRow(blockId, "SUITE", DC_SUITE, "VERIFIES");
+    }
+
+    private void linkRow(UUID blockId, String sourceType, UUID sourceId, String relationship)
+            throws SQLException {
+
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement("""
+                     INSERT INTO doc_link
+                         (id, company_id, source_type, source_id, target_kind, target_block_id,
+                          relationship)
+                     VALUES (gen_random_uuid(), CAST(? AS uuid), ?, CAST(? AS uuid),
+                             'DOC_BLOCK', CAST(? AS uuid), ?)
+                     """)) {
+            statement.setString(1, ACME.toString());
+            statement.setString(2, sourceType);
+            statement.setString(3, sourceId.toString());
+            statement.setString(4, blockId.toString());
+            statement.setString(5, relationship);
+            statement.executeUpdate();
+        }
+    }
+
+    private UUID firstBlockOf(MvcResult created) throws Exception {
+        return UUID.fromString(blocksOf(created).get(0).get("id").asText());
+    }
+
+    /** The page a block belongs to — so a test can link first and re-read afterwards. */
+    private UUID pageIdOf(UUID blockId) throws SQLException {
+        return UUID.fromString(scalarString(
+                ACME, "SELECT page_id FROM doc_block WHERE id = CAST(? AS uuid)",
+                blockId.toString()));
+    }
+
+    private JsonNode coverageOf(MvcResult result, int block) throws Exception {
+        return blocksOf(result).get(block).get("coverage");
+    }
+
+    private List<String> keysOf(JsonNode marker) {
+        List<String> keys = new ArrayList<>();
+        marker.get("caseKeys").forEach(key -> keys.add(key.asText()));
+        return keys;
+    }
+
     private void link(UUID companyId, UUID blockId) throws SQLException {
         try (Connection connection = appConnection(companyId);
              var statement = connection.prepareStatement("""

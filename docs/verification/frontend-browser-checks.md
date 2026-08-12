@@ -2028,3 +2028,26 @@ way `§166 LR-1` did for the last result, and should run before `§165 RC-2` abo
 server-side and has its own backend coverage (`a long statement is cut at the bound, marked, and put
 on one line`); there is no SPA branch on the excerpt's length for a browser pass to exercise
 independently.
+
+### §168 — the coverage marker, on screen for the first time
+
+**The SPA has rendered this component since M0 against a field the server never sent**, so every row
+below is driving code that has never once run against real data — a different risk from §166/§167,
+where the rendering was new and the data was mirrored. The marker reads `case_health`, so it carries
+the same refresh lag those two rows measured: run `§166 LR-1` first if the lag has still not been
+timed, because a marker that "shows the wrong number" and a marker that "has not caught up yet" are
+indistinguishable without it.
+
+| # | Lane | What | Expected |
+|---|---|---|---|
+| `§168 CV-1` | **A1** — open a `DOC-1` page whose blocks are **not** linked to anything | Read the margin beside each non-heading block, and beside a heading. | Every unlinked paragraph shows the **"Not tested"** chip — not an empty margin, which is what this rendered until §168 folded null and zero into one branch. Headings show nothing at all, which is deliberate: a heading is structure, not a requirement. **An empty margin on a paragraph is the finding**, and it means the server sent something other than `null`. |
+| `§168 CV-2` | **A1** — link two cases to one block, one green and one red (the `§166 LR-1` fixture already has both), then reload the page after the recompute | Read the marker, then hover it. | The chip is in the **failed** colour — one red among two is not a verified statement — and the tooltip reads `1 passed · 1 failed · 0 not run` over both case keys. The keys must be the same two, in the same order, as the bullets rendered under the block. |
+| `§168 CV-3` | **A1** — click the marker | Follow where it goes. | The case list, filtered to the **first** linked case key. Note whether landing on one case of several reads as intended: the component links to `caseKeys[0]` because a multi-key filter is not expressible in the list's `q` parameter, and this row exists to decide whether that is acceptable or a finding. |
+| `§168 CV-4` | **A1** — link a case to a block with relationship **`REFERENCES`** rather than `VERIFIES` (the doc page's link dialog, if it offers the choice; otherwise note that it does not) | Read the block's bullets and its margin. | The bullet is listed and the margin says **"Not tested"** — a reference is not a coverage claim. **If the SPA offers no way to create anything but a `VERIFIES` link, say so in the result**: the server distinguishes three relationships and a UI that can only make one is a gap this row is the right place to discover. |
+| `§168 CV-5` | **A1** — with a block linked to a case that has never been executed | Hover the marker. | `0 passed · 0 failed · 1 not run`, chip in the partial/blocked colour. The number that matters is `linkedCases` matching the bullet count: a never-executed case must be **counted and not dropped**, which is the one arm the server computes from an absent row rather than from a value. |
+
+**Deliberately not queued:** the `Passed with comment` divergence recorded in the mutation queue.
+Reaching it needs a project whose vocabulary carries a second `PASSED`-kind status with
+`counts_as_pass = false`, and no fixture the browser charter authors has one — creating it is a
+vocabulary edit plus a result submission plus a coverage-matrix export to compare against, which is
+its own charter rather than a row here.

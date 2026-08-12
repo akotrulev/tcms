@@ -2,7 +2,6 @@ package com.tcms.documentation;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -53,20 +52,20 @@ public record DocPageView(
      * create.
      */
     static DocPageView of(DocPage page, List<DocBlock> blocks) {
-        return of(page, blocks, Map.of(), List.of());
+        return of(page, blocks, BlockLinks.PageLinks.NONE, List.of());
     }
 
     /**
-     * @param linksByBlock block id to the links targeting it. A block absent from the map has none,
-     *                     which is the ordinary case and is served as {@code []} — see
-     *                     {@link DocBlockView}, where the difference between an empty list and an
-     *                     absent {@code coverage} is the whole point.
-     * @param attachments  the page's files, oldest first, as {@link PageAttachments} assembled them.
+     * @param pageLinks   each block's links and its coverage marker, as {@link BlockLinks} assembled
+     *                    them from one read. A block absent from either map has no links — served as
+     *                    {@code []} — and no marker — served as {@code null}, and the difference
+     *                    between those two misses is the whole point; see {@link DocBlockView}.
+     * @param attachments the page's files, oldest first, as {@link PageAttachments} assembled them.
      */
     static DocPageView of(
             DocPage page,
             List<DocBlock> blocks,
-            Map<UUID, List<BlockLinkView>> linksByBlock,
+            BlockLinks.PageLinks pageLinks,
             List<DocPageAttachmentView> attachments) {
 
         DocPageSummaryView summary = DocPageSummaryView.of(page);
@@ -83,7 +82,8 @@ public record DocPageView(
                 blocks.stream()
                         .map(block -> DocBlockView.of(
                                 block,
-                                linksByBlock.getOrDefault(block.getId(), List.of())))
+                                pageLinks.of(block.getId()),
+                                pageLinks.markerOf(block.getId())))
                         .toList(),
                 attachments,
                 page.getCurrentVersionNo(),

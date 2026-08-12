@@ -21,9 +21,10 @@ import org.springframework.stereotype.Component;
  *
  * <h2>What it answers, and what it must never be asked</h2>
  *
- * <p>Existence-within-a-project, and the display key and title. Not visibility, not permissions, not
- * whether a case may be linked — those are {@code project}'s questions and the caller has already
- * answered them before reaching here.
+ * <p>Existence-within-a-project, the display key and title, and — since §168 — <strong>the newest
+ * recorded result of a case this project's specifications link to</strong>. Not visibility, not
+ * permissions, not whether a case may be linked — those are {@code project}'s questions and the
+ * caller has already answered them before reaching here.
  *
  * <h2>The project predicate is the whole point</h2>
  *
@@ -102,6 +103,67 @@ class CatalogueFacts {
             resolved.put(id, new CatalogueRef(id, (String) row[1], (String) row[2]));
         }
         return resolved;
+    }
+
+    /**
+     * The newest recorded result of each of these cases, by case id — the other half of
+     * {@link BlockCoverageView}.
+     *
+     * <h2>Read from {@code case_health}, and that is what made the marker buildable</h2>
+     *
+     * <p>{@code case_health.last_status_kind} is {@code repository}'s mirror of a fact that lives in
+     * {@code execution}, written by {@code ExecutionFacts} in the same statement that derives
+     * {@code never_executed} (§166, {@code V45}). Reading it here is one foreign table in the one
+     * module this file already names; the live join it replaces —
+     * {@code test_execution JOIN case_status} — is two modules, one of which {@code documentation}
+     * may not name at all, and was the marker's standing obstacle for five sections.
+     *
+     * <p><strong>The mirror is also the correct source rather than merely the reachable one.</strong>
+     * {@code TestCase.lastResult} is served from this same column, so a statement's marker and the
+     * case detail it links to cannot disagree about whether that case passed. A second derivation
+     * with its own {@code ORDER BY} could, and the two are rendered one click apart.
+     *
+     * <p>The freshness of the answer is the recompute's, not this query's: the value is refreshed on
+     * {@code execution.results_changed}, so it trails a just-submitted result by a projection rather
+     * than by a poll. A case with no {@code case_health} row at all — a project whose first recompute
+     * has not run — is <em>absent from the map</em>, which the caller counts as not run, exactly as it
+     * counts a null kind. Both mean "no verdict recorded", and collapsing them here is what stops the
+     * caller needing to know which of the two it met.
+     *
+     * @param ids the already-resolved live case ids of this project. The project and soft-delete
+     *            predicates are restated rather than assumed: this method is {@code public} to the
+     *            module and a later caller that has not been through {@link #resolve} would otherwise
+     *            read a sibling project's result onto this page.
+     * @return kinds by case id, as {@code case_status.kind} spells them — {@code project}'s
+     *         {@link com.tcms.project.StatusKind} names and never a project's own renameable label,
+     *         which is the same refusal {@code V45}'s column comment makes
+     */
+    Map<UUID, String> lastResultKinds(UUID projectId, Collection<UUID> ids) {
+        if (ids.isEmpty()) {
+            // `IN ()` is a syntax error rather than a predicate matching nothing — see #resolve,
+            // where this guard is the ordinary path for the same reason: most pages link to nothing.
+            return Map.of();
+        }
+
+        List<?> rows = entities.createNativeQuery("""
+                SELECT c.id, h.last_status_kind
+                  FROM test_case c
+                  JOIN case_health h ON h.case_id = c.id
+                 WHERE c.project_id = :projectId
+                   AND c.id IN (:ids)
+                   AND c.deleted_at IS NULL
+                   AND h.last_status_kind IS NOT NULL
+                """)
+                .setParameter("projectId", projectId)
+                .setParameter("ids", ids)
+                .getResultList();
+
+        Map<UUID, String> kinds = new HashMap<>();
+        for (Object each : rows) {
+            Object[] row = (Object[]) each;
+            kinds.put((UUID) row[0], (String) row[1]);
+        }
+        return kinds;
     }
 
     /**

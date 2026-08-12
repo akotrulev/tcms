@@ -9763,22 +9763,52 @@ export interface components {
              *     empty one truthfully means nobody has claimed it. `coverage` would say how those cases
              *     are **doing**, which the server cannot answer here — see below.
              */
-            links?: components["schemas"]["BlockLink"][];
+            links: components["schemas"]["BlockLink"][];
             /**
              * @description Inline coverage marker — what makes people maintain links (plan §6i).
              *
-             *     **Still absent, and the reason has moved.** Until links could be created, no block had
-             *     one to price. Now they can be, and the obstacle is the other half: `passed` / `failed` /
-             *     `notRun` are `test_execution` joined to `test_case` — two modules `documentation` may not
-             *     name — while `linkedCases` and `caseKeys` are answerable and are served on `links`
-             *     instead. All five fields are required here, so a partial object is not available, and a
-             *     zeroed one would print "Not tested" against a statement whose cases may all be green.
+             *     ~~Still absent … `passed` / `failed` / `notRun` are `test_execution` joined to
+             *     `test_case`, two modules `documentation` may not name~~ → **superseded (§168): it is
+             *     served.** §166 mirrored each case's newest recorded result onto
+             *     `case_health.last_status_kind`, which is one table in `repository` — the module this one
+             *     already reads keys and titles from — so the join the argument named no longer has to
+             *     happen here.
+             *
+             *     **Null on a block nothing claims to verify, and never a row of zeros.** A zeroed marker
+             *     does not read as "unknown", it reads as "no test case verifies this statement" — the SPA
+             *     renders those words — so a zero fallback would put a specific and alarming claim on every
+             *     paragraph of every specification. An absent marker is the absence of a claim; `links`,
+             *     which is present and possibly empty, is where "nobody has claimed this" is stated.
+             *
+             *     **`VERIFIES` links only**, which is the coverage matrix report's rule over the same rows:
+             *     a block linked only by `REFERENCES` or `DERIVED_FROM` has links and no marker, because
+             *     neither is a claim to verify anything.
+             *
+             *     The counts are by `StatusKind` and **always sum to `linkedCases`**. `notRun` is wider
+             *     than "never executed": `BLOCKED`, `SKIPPED`, `RETEST`, `UNTESTED` and `WIP` land there
+             *     too. Three counts for six kinds, and the three that are not a verdict belong with the
+             *     ones never asked for — a roll-up that could go either way must not go the way that makes
+             *     the numbers look better than the truth.
+             *
+             *     Freshness is the health recompute's, not this request's: the mirrored result is
+             *     refreshed on `execution.results_changed`, so a just-submitted result reaches this marker
+             *     a projection later. That is also what makes this marker and `TestCase.lastResult`
+             *     incapable of disagreeing — they read the same column.
              */
-            coverage?: {
+            coverage: {
+                /**
+                 * @description Distinct live cases of this project claiming to verify this block. Never `0` — a
+                 *     block with none has no marker at all. One case linked twice (two relationships, or a
+                 *     double-submit) counts once.
+                 */
                 linkedCases: number;
                 passed: number;
                 failed: number;
                 notRun: number;
+                /**
+                 * @description In the same order as `links`, so the marker and the bullets under it read as one
+                 *     sequence. Not sorted: `TC-9` sorts after `TC-10` as text.
+                 */
                 caseKeys: string[];
             } | null;
         };
