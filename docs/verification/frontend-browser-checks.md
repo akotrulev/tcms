@@ -1485,6 +1485,21 @@ external link, which `§169`'s rows author).
 | `§173 UL-2` | On the case at the other end of a **git** link, Traceability → **Remove**. Read the dialog | The same title, the same button, and the target named as **one line of text** — `acme/checkout-service · src/Refund.java:40–58 at 4f9c2b1`, pin included — and **not** as a clickable link. A confirmation you can navigate away from is a control the reader did not mean to use. The consequence sentence here says the **code and the case are untouched**, and does *not* mention coverage: an external link feeds no marker. |
 | `§173 UL-3` | Both ends, side by side: compare the two dialogs | Same title, same button label, same danger colour, same Cancel — **differing only in the named object and the consequence sentence**. That is the whole slice: one act must not have two behaviours depending on which screen reached it. A difference in the title or the button is a regression, not a variation. |
 
+## §174 — the claim corrected in place, at both ends
+
+**Five rows.** `M6-38` in the reports lane has asked for this since §115 and named its own fallback
+while waiting; **that row's primary reading is now executable** and it should be re-read against
+these rather than against the fallback. `RL-1`…`RL-3` are `A2` (need `DOC-1`'s links), `RL-4` is
+`A1` (needs a case with an external link), `RL-5` is `L1` (needs two personas).
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§174 RL-1` | On `DOC-1`, click the relationship control on a bullet's link | A menu of the three, each with **its own sentence beneath it** — *"Counted as coverage"* against *"context, not coverage"* — and the current one marked. The words alone do not carry the difference, which is why the menu shows the help and the create dialog does too. |
+| `§174 RL-2` | Choose a different one, Network tab open | **One `PATCH`** on `.../doc-pages/{pageId}/links/{linkId}` carrying `{relationship}` alone — **not** a POST on the block, and **not** a DELETE followed by a POST. Then reload: the new claim survives, **and the link's identity did too** — check `psql` if you can reach it, `created_by` and `created_at` must be unchanged and `updated_by` must now be your user. That pair is the whole point of `V48`; the old workaround rewrote both. |
+| `§174 RL-3` | Re-open the menu and choose **the value it already has** | **No request at all** in the Network tab. The server would answer 200 and write nothing, which is right of the server and pointless from the client — a round trip that cannot change anything still invalidates the page. |
+| `§174 RL-4` | On a case with an **external** link, Traceability → the relationship control. Then look at a **block** link's control in the same panel | The external one is live and its `PATCH` goes to `.../external-links/{linkId}`. The block one is **disabled, not absent** (§31) — that claim is corrected on the documentation page, the same split that gives a block link no Remove here. Two verdicts in one panel is the check. |
+| `§174 RL-5` | As **`viewer`** open both screens | The control is **visibly disabled on both**, and hovering still gives the current value's meaning. This is the row that would have failed silently before the control became a real `<button>`: as a MUI `Chip` it rendered a `div`, so `disabled` was a CSS class and the gate was decorative — it looked right on screen and exposed nothing to a screen reader or a test. |
+
 ### F — the transport lane
 
 | Row | Drive | Expect |

@@ -12,6 +12,7 @@ import {
   useDocPages,
   useProject,
   useSetDocPageStatus,
+  useRelabelBlockLink,
   useUnlinkBlock,
 } from '../../api/queries';
 import { AttachmentsPanel } from '../../components/AttachmentList';
@@ -19,10 +20,11 @@ import { DocBlockBody } from '../../components/DocBlockBody';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
+import { LinkRelationshipControl } from '../../components/LinkRelationshipControl';
 import { PermissionGate } from '../../components/PermissionGate';
 import { UnlinkDialog } from '../../components/UnlinkDialog';
 import { formatCount, formatDateTime } from '../../lib/format';
-import { docPageStatusLabel, linkRelationshipLabels } from '../../lib/labels';
+import { docPageStatusLabel } from '../../lib/labels';
 import { CreateDocPageDialog, DeleteDocPageDialog } from './DocPageDialogs';
 import { LinkBlockDialog } from './LinkBlockDialog';
 
@@ -589,6 +591,7 @@ function BlockLinks({
   // per row. A boolean would confirm "a link" and remove whichever one was clicked last.
   const [withdrawing, setWithdrawing] = useState<BlockLink | null>(null);
   const remove = useUnlinkBlock(projectId, pageId);
+  const relabel = useRelabelBlockLink(projectId, pageId);
 
   return (
     <Stack
@@ -619,16 +622,27 @@ function BlockLinks({
             }
             label={
               <>
-                <Identifier variant="muted">{link.sourceKey}</Identifier>{' '}
-                {link.sourceTitle}
-                <Box component="span" sx={{ color: 'text.secondary' }}>
-                  {' · '}
-                  {linkRelationshipLabels[link.relationship]}
-                </Box>
+                <Identifier variant="muted">{link.sourceKey}</Identifier> {link.sourceTitle}
               </>
             }
             data-testid="Docs.Block.Links.Item.Source"
           />
+          {/*
+            Beside the chip and not inside its label (§174). The source chip is a router link, and
+            an interactive control nested in an anchor is invalid markup whose click target depends
+            on the browser — so the claim gets its own element the moment it stops being text.
+          */}
+          <PermissionGate projectId={projectId} permission="doc:edit">
+            {({ allowed }) => (
+              <LinkRelationshipControl
+                value={link.relationship}
+                onChange={(relationship) => relabel.mutate({ linkId: link.id, relationship })}
+                disabled={!allowed}
+                pending={relabel.isPending}
+                testId="Docs.Block.Links.Relationship"
+              />
+            )}
+          </PermissionGate>
           <PermissionGate projectId={projectId} permission="doc:edit">
             {({ allowed }) =>
               allowed ? (

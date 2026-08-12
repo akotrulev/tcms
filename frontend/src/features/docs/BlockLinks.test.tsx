@@ -14,9 +14,10 @@ import { DocsPage } from './DocsPage'
  * existed with **no caller anywhere in `src/`**, so `doc_link` had an endpoint, a read model, a
  * coverage marker and a case-end panel, and no way to create one from the documentation side.
  *
- * Three of the five tests here are about the payload rather than the rendering, because the
- * rendering is the half a green build already covers: the component compiled and typechecked while
- * the hook it should have called had no caller at all.
+ * Most of the tests here are about the payload rather than the rendering, because the rendering is
+ * the half a green build already covers: the component compiled and typechecked while the hook it
+ * should have called had no caller at all. §173 added the withdrawal confirmation and §174 the
+ * in-place correction of the claim; both live here because both are this screen's.
  */
 
 const PROJECT = 'p1'
@@ -231,6 +232,61 @@ describe('a block carries the links that claim to verify it', () => {
     )
     // The dialog is open and NOTHING has been sent. This is the assertion the slice exists for.
     expect(del).not.toHaveBeenCalled()
+  })
+
+  /**
+   * §174. The claim is the field the coverage matrix counts, and until now the only way to fix one
+   * was to withdraw the link and make another — which rewrote createdBy to whoever noticed.
+   */
+  it('corrects the claim in place, on the link rather than the block', async () => {
+    const user = userEvent.setup()
+    mockReads(['project:read', 'doc:edit'])
+    served = [link]
+    const patch = vi.spyOn(api, 'patch').mockImplementation((async () => {
+      served = [{ ...link, relationship: 'VERIFIES' }]
+      return served[0]
+    }) as never)
+    const post = vi.spyOn(api, 'post')
+    renderPage()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('Docs.Block.Links.Relationship')).toBeEnabled(),
+    )
+    await user.click(screen.getByTestId('Docs.Block.Links.Relationship'))
+    await user.click(await screen.findByTestId('Docs.Block.Links.Relationship.VERIFIES'))
+
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith(
+        `/projects/${PROJECT}/doc-pages/page-1/links/link-1`,
+        { relationship: 'VERIFIES' },
+      ),
+    )
+    // PATCH on the link, not a second POST on the block: the create is keyed on (block, source)
+    // and answers 200 without writing when that pair is already linked, so re-posting a different
+    // relationship changes nothing at all.
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('does not spend a request on choosing the value it already has', async () => {
+    const user = userEvent.setup()
+    mockReads(['project:read', 'doc:edit'])
+    served = [link]
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue(link as never)
+    renderPage()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('Docs.Block.Links.Relationship')).toBeEnabled(),
+    )
+    await user.click(screen.getByTestId('Docs.Block.Links.Relationship'))
+    // REFERENCES is what the fixture link already claims. The server answers 200 and writes
+    // nothing, which is right of the server and pointless from here — the round trip also
+    // invalidates the page.
+    await user.click(await screen.findByTestId('Docs.Block.Links.Relationship.REFERENCES'))
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('Docs.Block.Links.Relationship.REFERENCES')).not.toBeInTheDocument(),
+    )
+    expect(patch).not.toHaveBeenCalled()
   })
 
   it('sends nothing when the confirmation is cancelled', async () => {

@@ -321,6 +321,46 @@ describe('The Traceability panel renders all three target kinds', () => {
     expect(del).not.toHaveBeenCalled()
   })
 
+  /**
+   * §174 — the case end of the correction, and the one asymmetry that survives on purpose.
+   */
+  it('corrects an external link\u2019s claim in place', async () => {
+    mockReads([gitLink])
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue(
+      { ...gitLink, relationship: 'VERIFIES' } as never,
+    )
+    renderPage()
+
+    const user = userEvent.setup()
+    // Re-queried inside the waitFor rather than captured once: the control renders immediately
+    // (disabled, because `useCan` is fail-closed while pending) and React replaces the node when
+    // the answer lands, so a captured reference is a detached element that stays disabled for ever.
+    await waitFor(() =>
+      expect(screen.getByTestId('CaseDetail.DocLinks.Relationship')).toBeEnabled(),
+    )
+    await user.click(screen.getByTestId('CaseDetail.DocLinks.Relationship'))
+    await user.click(await screen.findByTestId('CaseDetail.DocLinks.Relationship.VERIFIES'))
+
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith(
+        `/projects/${PROJECT}/cases/c1/external-links/l-git`,
+        { relationship: 'VERIFIES' },
+      ),
+    )
+  })
+
+  it('leaves a block link\u2019s claim to the documentation page', async () => {
+    // The surviving asymmetry, and it is the same one that gives a block link no Remove here: the
+    // block end is gated on doc:edit and this panel holds case:edit, so the control is disabled
+    // rather than absent (§31) and the reader is told the claim is editable somewhere.
+    mockReads([blockLink])
+    renderPage()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('CaseDetail.DocLinks.Relationship')).toBeDisabled(),
+    )
+  })
+
   it('sends nothing when the confirmation is cancelled, and keeps the row', async () => {
     mockReads([urlLink])
     const del = vi.spyOn(api, 'del').mockResolvedValue(undefined as never)

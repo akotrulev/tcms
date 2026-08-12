@@ -26,12 +26,14 @@ import {
   useCase,
   useDeleteCaseFile,
   useProject,
+  useRelabelCaseExternalLink,
   useUnlinkCaseExternal,
 } from '../../api/queries';
 import { AttachmentsPanel } from '../../components/AttachmentList';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
+import { LinkRelationshipControl } from '../../components/LinkRelationshipControl';
 import { PermissionGate } from '../../components/PermissionGate';
 import { UnlinkDialog } from '../../components/UnlinkDialog';
 import { CaseCloneDialog } from './CaseCloneDialog';
@@ -42,7 +44,7 @@ import { ExternalLinkDialog } from './ExternalLinkDialog';
 import { FlakePanel } from './FlakePanel';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusChip } from '../../components/StatusChip';
 import { formatAge, formatDateTime, formatSeconds } from '../../lib/format';
-import { linkRelationshipLabels, stepFormatLabels } from '../../lib/labels';
+import { stepFormatLabels } from '../../lib/labels';
 import { describeLinkTarget } from '../../lib/links';
 import { ScrollX } from '../../components/ScrollX';
 
@@ -740,6 +742,7 @@ function DocLinksPanel({
   // Remove per row. See `UnlinkDialog`'s header for why the confirmation exists at all (§173).
   const [withdrawing, setWithdrawing] = useState<DocLink | null>(null);
   const remove = useUnlinkCaseExternal(projectId, caseId);
+  const relabel = useRelabelCaseExternalLink(projectId, caseId);
 
   return (
     <Panel
@@ -789,7 +792,23 @@ function DocLinksPanel({
           {links.map((link) => (
             <Box key={link.id} data-testid="CaseDetail.DocLinks.Item">
               <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
-                <Chip size="small" variant="outlined" label={linkRelationshipLabels[link.relationship]} />
+                {/* The claim, correctable in place since §174 — `case:edit`, this panel's own
+                    key and the one the endpoint charges. */}
+                <PermissionGate projectId={projectId} permission="case:edit">
+                  {({ allowed }) => (
+                    <LinkRelationshipControl
+                      value={link.relationship}
+                      onChange={(relationship) =>
+                        relabel.mutate({ linkId: link.id, relationship })
+                      }
+                      // A block link's claim is corrected on the documentation page, where the
+                      // block is — the same split that gives it no Remove here.
+                      disabled={!allowed || link.targetKind === 'DOC_BLOCK'}
+                      pending={relabel.isPending}
+                      testId="CaseDetail.DocLinks.Relationship"
+                    />
+                  )}
+                </PermissionGate>
                 <DocLinkTarget link={link} projectId={projectId} />
                 {link.pageKey && <Identifier variant="muted">{link.pageKey}</Identifier>}
                 {link.targetKind !== 'DOC_BLOCK' && (

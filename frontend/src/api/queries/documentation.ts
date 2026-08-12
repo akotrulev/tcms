@@ -12,6 +12,7 @@ import type {
   DocPageInput,
   DocPageStatus,
   DocPageSummary,
+  LinkRelationship,
 } from '../types';
 import { base, keys } from './keys';
 
@@ -404,6 +405,32 @@ export function useLinkBlock(projectId: string, pageId: string) {
       api.post<BlockLink>(
         `${base(projectId)}/doc-pages/${pageId}/blocks/${blockId}/links`,
         input,
+      ),
+    meta: { handled: true },
+    onSuccess: () => invalidatePageEverywhere(client, projectId, pageId),
+  });
+}
+
+/**
+ * Corrects what a block link claims (§174).
+ *
+ * Invalidates the page, for `useLinkBlock`'s reason: `DocBlock.links` is assembled off `doc_link`
+ * inside the same GET, so the refetch returns the corrected row. This is the opposite call from
+ * `useRelabelCaseExternalLink` one file over, and the difference is the read model rather than the
+ * act — the case end reads a projection an event refreshes, and a refetch there would put the old
+ * claim back.
+ *
+ * The coverage marker is why the invalidate matters here beyond the row itself: `VERIFIES` counts
+ * and the other two do not, so a correction the page keeps rendering as coverage is a false number
+ * that looks exactly like a correct one.
+ */
+export function useRelabelBlockLink(projectId: string, pageId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ linkId, relationship }: { linkId: string; relationship: LinkRelationship }) =>
+      api.patch<BlockLink>(
+        `${base(projectId)}/doc-pages/${pageId}/links/${linkId}`,
+        { relationship },
       ),
     meta: { handled: true },
     onSuccess: () => invalidatePageEverywhere(client, projectId, pageId),

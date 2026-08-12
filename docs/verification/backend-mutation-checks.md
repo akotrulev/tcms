@@ -2066,3 +2066,14 @@ only side of this comparison that lives in `src/main`.*
 > `type: string, format: uuid` agrees, and so would `type: integer`. So does a part the handler
 > binds and then ignores. The one direction that is genuinely closed is the one that used to fail
 > silently: a name that exists on one side and not the other.
+
+## §174 — the claim corrected in place
+
+Three rows, all against `backend/`. Each names a one-line edit, the test that must redden, and what
+a green build after the edit would have meant. Revert each in the same command.
+
+| Row | Mutate | Must redden | What a green build would mean |
+|---|---|---|---|
+| `§174 RL-1` | In `DocLink.relabel`, drop the `if (relationship == next) return false;` guard so it always stamps and returns `true` | `ExternalLinkEndpointTest.Relabelling.reStatingTheSameClaimWritesNothing` | A correction nobody made is recorded against a user and raises a company-wide recompute, once per duplicate click. The response is identical either way — 200 with the row — so no client and no other test can see it. |
+| `§174 RL-2` | In `DocLink`, restore `updatable = false` on the `relationship` column | `…Relabelling.theClaimIsCorrectedAndStamped` and `PlanDocumentEndpointTest.Links.theClaimIsCorrectable` | The endpoint answers **200 with the corrected view**, the audit row is written, the event fires, and **the database never moves** — Hibernate silently drops the column from the UPDATE. The response is a lie the whole way down, and only a read-back of the row catches it, which is why both tests re-read rather than trusting the body. |
+| `§174 RL-3` | In `BlockLinkService.relabel`, default an unparseable relationship to `VERIFIES` instead of returning `Invalid` (the create's line, copied) | `…Relabelling.thereIsNoDefaultOnACorrection` and `PlanDocumentEndpointTest.Links.relabelIsGatedAndValidated` | A typo'd or absent relationship silently **promotes the link to coverage**. The one direction of this field that inflates a coverage number is the one a copied default would take, on the endpoint whose reason for existing is that the field was wrong. |

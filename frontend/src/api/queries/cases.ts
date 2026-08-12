@@ -23,6 +23,7 @@ import type {
   ExecutionHistoryEntry,
   ExternalLink,
   ExternalLinkInput,
+  LinkRelationship,
   Paged,
   TagUsage,
   TestCase,
@@ -413,6 +414,42 @@ export function useLinkCaseExternally(projectId: string, caseId: string) {
       // the next ordinary refetch — a remount, a focus, a stale read — by which time the mirror
       // has moved. This was found by a test, not by reasoning: the patch and the invalidate were
       // both written here first, and the panel lost the link a millisecond after showing it.
+    },
+  });
+}
+
+/**
+ * Corrects what one of this case's links claims (§174).
+ *
+ * **Patches the cache and does not invalidate**, for `useLinkCaseExternally`'s reason and not by
+ * imitation of it: `relatedDocuments` is served from `case_doc_link`, a projection an outbox event
+ * refreshes, so a refetch here returns the row still carrying the relationship that was just
+ * corrected — a 200 that reads as a change which did not take. The server's answer is the whole
+ * link, so what goes into the list is the row it just described rather than a guess.
+ *
+ * The map replaces by id rather than appending: the endpoint answers 200 whether the value moved or
+ * already said this, and both arms return the same row.
+ */
+export function useRelabelCaseExternalLink(projectId: string, caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ linkId, relationship }: { linkId: string; relationship: LinkRelationship }) =>
+      api.patch<ExternalLink>(
+        `${base(projectId)}/cases/${caseId}/external-links/${linkId}`,
+        { relationship },
+      ),
+    meta: { handled: true },
+    onSuccess: (updated) => {
+      client.setQueryData<TestCase>(keys.case(projectId, caseId), (previous) =>
+        previous
+          ? {
+              ...previous,
+              relatedDocuments: (previous.relatedDocuments ?? []).map((link) =>
+                link.id === updated.id ? asDocLink(updated) : link,
+              ),
+            }
+          : previous,
+      );
     },
   });
 }
