@@ -2,14 +2,41 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-12 (**§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-12 (**§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `97ada0c` (§171; §172 is this session, uncommitted at the time of writing) (trust the
-body over the header and re-grep what a later commit could have moved).
+**Baseline commit:** `96db66f` (§172 + the browser-pass scoping note; §173 is this session,
+uncommitted at the time of writing) (trust the body over the header and re-grep what a later commit
+could have moved).
+
+## §173 — ONE CONFIRMATION, RAISED BY BOTH LINK SCREENS
+
+**Withdrawing a `doc_link` confirms, at both ends, through one component**
+(`components/UnlinkDialog.tsx`). Read this before adding a third link surface or touching either
+Remove.
+
+- **`UnlinkDialog` is shared on purpose and the sharing is the fix.** A link is withdrawn from
+  `CaseDetailPage`'s Traceability panel and from `DocsPage`'s block row, under two permission keys
+  through two hooks — one act, and `ui-rules` §6 forbids it having two behaviours depending on which
+  screen reached it. Until §173 neither end confirmed; §172 matched §169 deliberately rather than
+  spot-fixing one side. A third surface now inherits the behaviour by construction.
+- **Exactly two things are the caller's**: the **named object** (the case end passes
+  `describeLinkTarget`, the block end passes `sourceKey — sourceTitle`) and the **consequence
+  sentence**, which differs because the block end recounts a coverage marker on the screen the reader
+  is looking at and the case end changes nothing but the record. Title, button label, danger colour,
+  Cancel, reset-on-open and error-stays-on-the-dialog are shared and must stay shared.
+- **`lib/links.ts`'s `describeLinkTarget` is the TEXT form of `DocLinkTarget`'s markup**, and it
+  exists because a link that navigates away does not belong inside a confirmation. It is a **second
+  implementation of one rule** — switch on `targetKind`, never on which field is populated (§169's
+  seventy-section defect) — so `links.test.ts` feeds an `EXTERNAL_URL` row **with git fields
+  populated**, which is the only assertion that can tell the two implementations apart.
+- **The state is the link, never a boolean.** Both lists render one Remove per row; a boolean would
+  confirm "a link" and withdraw whichever was clicked last.
+- Test-id shape: `<Panel>.Unlink`, `.Unlink.Target`, `.Unlink.Confirm`, `.Unlink.Cancel` — the
+  caller passes the prefix, the dialog composes the suffixes.
 
 ## §172 — THE BLOCK-LINK SCREEN, AND WHY THIS HALF *DOES* INVALIDATE
 
@@ -1722,6 +1749,16 @@ directly above the switcher) and the wordmark links there too.
 
 ## Session log
 
+- 2026-08-12 · EXTEND · **One confirmation, two ends of one act** (§173) — §172's own recorded gap,
+  taken as the **pair** rather than one side. New: `components/UnlinkDialog.tsx`, `lib/links.ts` +
+  its pure test; both link screens route Remove through the dialog. **No contract change.** The
+  decision worth carrying is why §172 left it: a confirmed Remove on one screen beside an
+  unconfirmed one on the other is a *worse* state than two unconfirmed ones, so `ui-rules` §4 was
+  satisfied at §8's altitude — one component — rather than at the site. `describeLinkTarget` is a
+  second implementation of §169's switch-on-`targetKind` rule, and its test feeds an `EXTERNAL_URL`
+  row with git fields populated because that is the only assertion that separates the two.
+  **1243/1243 across 96 files** (+10, one new test file, from 1233/95), build and lint clean.
+  Browser rows `§173 UL-1`…`UL-3` recorded and **not run**; `§172 XM-5` corrected, not appended to.
 - 2026-08-12 · EXTEND · **The block-link screen** (§172) — §169's recorded gap: `useLinkBlock` and
   `useUnlinkBlock` had **no caller anywhere in `src/`** since §97, so the documentation side could
   not create a `doc_link` at all and every block read *"Not tested"* with no affordance behind it.

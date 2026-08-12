@@ -201,11 +201,54 @@ describe('a block carries the links that claim to verify it', () => {
 
     await waitFor(() => expect(screen.getByTestId('Docs.Block.Links.Remove')).toBeInTheDocument())
     await user.click(screen.getByTestId('Docs.Block.Links.Remove'))
+    await user.click(await screen.findByTestId('Docs.Block.Links.Unlink.Confirm'))
 
     // `.../doc-pages/{pageId}/links/{linkId}` — the block id is not in the path, because a link
     // row is unique in the page and the delete names the row rather than re-deriving it.
     await waitFor(() =>
       expect(del).toHaveBeenCalledWith(`/projects/${PROJECT}/doc-pages/page-1/links/link-1`),
     )
+  })
+
+  /**
+   * §173. The two rows below are the ones a "does the button call the hook?" test cannot make: the
+   * click used to BE the delete, and the whole change is that it is no longer.
+   */
+  it('names the case in the confirmation and sends nothing until it is confirmed', async () => {
+    const user = userEvent.setup()
+    mockReads(['project:read', 'doc:edit'])
+    served = [link]
+    const del = vi.spyOn(api, 'del').mockResolvedValue(undefined as never)
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('Docs.Block.Links.Remove')).toBeInTheDocument())
+    await user.click(screen.getByTestId('Docs.Block.Links.Remove'))
+
+    // The object by name, not "this link" — `ui-rules` §4. The key alone would not do it either:
+    // a page can carry the same key twice under different blocks.
+    expect(await screen.findByTestId('Docs.Block.Links.Unlink.Target')).toHaveTextContent(
+      'TC-42 — Refund is refused after 30 days',
+    )
+    // The dialog is open and NOTHING has been sent. This is the assertion the slice exists for.
+    expect(del).not.toHaveBeenCalled()
+  })
+
+  it('sends nothing when the confirmation is cancelled', async () => {
+    const user = userEvent.setup()
+    mockReads(['project:read', 'doc:edit'])
+    served = [link]
+    const del = vi.spyOn(api, 'del').mockResolvedValue(undefined as never)
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('Docs.Block.Links.Remove')).toBeInTheDocument())
+    await user.click(screen.getByTestId('Docs.Block.Links.Remove'))
+    await user.click(await screen.findByTestId('Docs.Block.Links.Unlink.Cancel'))
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('Docs.Block.Links.Unlink')).not.toBeInTheDocument(),
+    )
+    expect(del).not.toHaveBeenCalled()
+    // The chip survives — a cancelled confirmation must not have removed the row optimistically.
+    expect(screen.getByTestId('Docs.Block.Links.Item')).toHaveTextContent('TC-42')
   })
 })

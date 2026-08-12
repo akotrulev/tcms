@@ -287,11 +287,56 @@ describe('The Traceability panel renders all three target kinds', () => {
     const remove = await screen.findByTestId('CaseDetail.DocLinks.Remove')
     await waitFor(() => expect(remove).toBeEnabled())
     await user.click(remove)
+    // §173 — the click raises the confirmation; the withdrawal is the confirm.
+    await user.click(await screen.findByTestId('CaseDetail.DocLinks.Unlink.Confirm'))
 
     await waitFor(() => expect(del).toHaveBeenCalledWith(
       `/projects/${PROJECT}/cases/c1/external-links/l-url`,
     ))
     await waitFor(() => expect(screen.queryByTestId('CaseDetail.DocLinks.ExternalUrl')).toBeNull())
+  })
+
+  /**
+   * §173 — the same confirmation as the documentation end, from the other side of one act.
+   *
+   * The pair of assertions that matters is *which words* each end shows: the dialog is shared and
+   * the naming is the caller's, so a screen that passed the wrong thing would still render a
+   * perfectly well-formed confirmation about the wrong object.
+   */
+  it('names the git target in words and sends nothing until it is confirmed', async () => {
+    mockReads([gitLink])
+    const del = vi.spyOn(api, 'del').mockResolvedValue(undefined as never)
+    renderPage()
+
+    const user = userEvent.setup()
+    const remove = await screen.findByTestId('CaseDetail.DocLinks.Remove')
+    await waitFor(() => expect(remove).toBeEnabled())
+    await user.click(remove)
+
+    // The text form of what the row renders as markup — one identifier, pin included. A link that
+    // navigates away does not belong inside a confirmation, which is why this is not the anchor.
+    expect(await screen.findByTestId('CaseDetail.DocLinks.Unlink.Target')).toHaveTextContent(
+      'acme/checkout-service · src/Refund.java:40–58 at 4f9c2b1',
+    )
+    expect(del).not.toHaveBeenCalled()
+  })
+
+  it('sends nothing when the confirmation is cancelled, and keeps the row', async () => {
+    mockReads([urlLink])
+    const del = vi.spyOn(api, 'del').mockResolvedValue(undefined as never)
+    renderPage()
+
+    const user = userEvent.setup()
+    const remove = await screen.findByTestId('CaseDetail.DocLinks.Remove')
+    await waitFor(() => expect(remove).toBeEnabled())
+    await user.click(remove)
+    await user.click(await screen.findByTestId('CaseDetail.DocLinks.Unlink.Cancel'))
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('CaseDetail.DocLinks.Unlink')).not.toBeInTheDocument(),
+    )
+    expect(del).not.toHaveBeenCalled()
+    expect(screen.getByTestId('CaseDetail.DocLinks.ExternalUrl')).toBeInTheDocument()
   })
 
   it('shows the new link straight away, without waiting for the projection', async () => {

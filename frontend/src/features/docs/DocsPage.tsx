@@ -4,7 +4,7 @@ import AddLinkIcon from '@mui/icons-material/AddLinkOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
-import type { DocPage, DocBlock, DocPageStatus, DocPageSummary } from '../../api/types';
+import type { BlockLink, DocPage, DocBlock, DocPageStatus, DocPageSummary } from '../../api/types';
 import {
   useAttachDocPageFile,
   useDeleteDocPageFile,
@@ -20,6 +20,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
+import { UnlinkDialog } from '../../components/UnlinkDialog';
 import { formatCount, formatDateTime } from '../../lib/format';
 import { docPageStatusLabel, linkRelationshipLabels } from '../../lib/labels';
 import { CreateDocPageDialog, DeleteDocPageDialog } from './DocPageDialogs';
@@ -565,12 +566,14 @@ function BlockView({
  * Remove makes the same argument one file over). Withholding it would also make an existing
  * heading link unremovable: `links` renders on every block precisely so nothing can be stranded.
  *
- * ## Remove does not confirm, and that is a match rather than an omission
+ * ## Remove confirms, and so does the case end — §173
  *
- * `ui-rules` §4 wants a named-object confirmation on every destructive action, and the case end's
- * Remove — the same `doc_link` row withdrawn from the other side — fires immediately. One act must
- * not have two behaviours depending on which screen it is reached from, so this half matches the
- * half that already shipped; the pair is recorded as one follow-up rather than spot-fixed here.
+ * ~~`ui-rules` §4 wants a named-object confirmation … so this half matches the half that already
+ * shipped; the pair is recorded as one follow-up rather than spot-fixed here.~~ → **the follow-up
+ * landed.** Both ends now raise the same {@link UnlinkDialog}, which is the fix at the level the
+ * defect lived at: one act, one behaviour, one component, so a third link surface inherits it.
+ * The consequence sentence is this screen's own, because withdrawing a link here changes what the
+ * block's coverage marker says and withdrawing one from the case end does not.
  */
 function BlockLinks({
   block,
@@ -582,6 +585,9 @@ function BlockLinks({
   pageId: string;
 }) {
   const [linking, setLinking] = useState(false);
+  // The link being withdrawn, not a boolean: the dialog names it, and the list mounts one control
+  // per row. A boolean would confirm "a link" and remove whichever one was clicked last.
+  const [withdrawing, setWithdrawing] = useState<BlockLink | null>(null);
   const remove = useUnlinkBlock(projectId, pageId);
 
   return (
@@ -632,7 +638,7 @@ function BlockLinks({
                       aria-label={`Remove the link to ${link.sourceKey}`}
                       size="small"
                       disabled={remove.isPending}
-                      onClick={() => remove.mutate(link.id)}
+                      onClick={() => setWithdrawing(link)}
                       data-testid="Docs.Block.Links.Remove"
                     >
                       <DeleteOutlineIcon fontSize="small" />
@@ -672,6 +678,25 @@ function BlockLinks({
           projectId={projectId}
           pageId={pageId}
           block={block}
+        />
+      )}
+
+      {withdrawing && (
+        <UnlinkDialog
+          open
+          onClose={() => setWithdrawing(null)}
+          target={`${withdrawing.sourceKey} — ${withdrawing.sourceTitle}`}
+          // This screen's own sentence: the marginal marker is computed from these rows, so a
+          // withdrawal here has a visible effect on the page the reader is looking at. The `OWN`
+          // of the two consequences that is worth spending a line on.
+          consequence="The link is withdrawn and this block's coverage is recounted. The case itself is not touched."
+          onConfirm={() =>
+            remove.mutate(withdrawing.id, { onSuccess: () => setWithdrawing(null) })
+          }
+          pending={remove.isPending}
+          error={remove.isError ? remove.error : null}
+          reset={remove.reset}
+          testId="Docs.Block.Links.Unlink"
         />
       )}
     </Stack>

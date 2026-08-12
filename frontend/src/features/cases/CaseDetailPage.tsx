@@ -33,6 +33,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
+import { UnlinkDialog } from '../../components/UnlinkDialog';
 import { CaseCloneDialog } from './CaseCloneDialog';
 import { CaseDeleteDialog } from './CaseDeleteDialog';
 import { ReviewPanel } from '../review/ReviewPanel';
@@ -42,6 +43,7 @@ import { FlakePanel } from './FlakePanel';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusChip } from '../../components/StatusChip';
 import { formatAge, formatDateTime, formatSeconds } from '../../lib/format';
 import { linkRelationshipLabels, stepFormatLabels } from '../../lib/labels';
+import { describeLinkTarget } from '../../lib/links';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -734,6 +736,9 @@ function DocLinksPanel({
 }) {
   const staleCount = links.filter((l) => l.stale).length;
   const [linking, setLinking] = useState(false);
+  // The link being withdrawn, not a boolean — the dialog names it, and this panel renders one
+  // Remove per row. See `UnlinkDialog`'s header for why the confirmation exists at all (§173).
+  const [withdrawing, setWithdrawing] = useState<DocLink | null>(null);
   const remove = useUnlinkCaseExternal(projectId, caseId);
 
   return (
@@ -796,7 +801,7 @@ function DocLinksPanel({
                           color="inherit"
                           startIcon={<DeleteOutlineIcon />}
                           disabled={remove.isPending}
-                          onClick={() => remove.mutate(link.id)}
+                          onClick={() => setWithdrawing(link)}
                           sx={{ ml: 'auto', color: 'text.secondary' }}
                           data-testid="CaseDetail.DocLinks.Remove"
                         >
@@ -833,6 +838,28 @@ function DocLinksPanel({
         projectId={projectId}
         caseId={caseId}
       />
+
+      {withdrawing && (
+        <UnlinkDialog
+          open
+          onClose={() => setWithdrawing(null)}
+          // The text form of what `DocLinkTarget` renders as markup, so the dialog names the same
+          // object the row does without putting a link that navigates away inside a confirmation.
+          target={describeLinkTarget(withdrawing)}
+          // This end's own sentence, and deliberately not the block end's: nothing here is
+          // recounted, because an external link contributes to no coverage marker. What the reader
+          // needs to know is that the thing at the other end survives — the panel's Remove sits
+          // beside a file path, and "remove" beside a file path invites the wrong reading.
+          consequence="Only the record of the link is removed. The code and the case are untouched."
+          onConfirm={() =>
+            remove.mutate(withdrawing.id, { onSuccess: () => setWithdrawing(null) })
+          }
+          pending={remove.isPending}
+          error={remove.isError ? remove.error : null}
+          reset={remove.reset}
+          testId="CaseDetail.DocLinks.Unlink"
+        />
+      )}
     </Panel>
   );
 }
