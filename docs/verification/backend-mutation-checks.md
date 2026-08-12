@@ -2104,3 +2104,24 @@ the rule matches on shape: rename it and it compiles fine, which is exactly what
 > is nothing left to disagree. That is the intended end state and it is also a loss: the day
 > `ReviewAssignee.team` genuinely needs a member the other two must not have, the rules will report
 > nothing and the decision is a human's. `TeamRef`'s own schema comment carries that warning.
+
+## §176 — the query parameter nobody declared
+
+Three mutations, **all three run** — §165's, §170's and §171's precedent, and the same argument:
+the slice ships one test method and nothing else, so an unrun row here is the whole slice taken on
+trust. `QP-2` is the ownership row and is deliberately an **expected-green** one on the rule this
+slice added; reading it beside `QP-1` is what shows the media-type skip is a boundary rather than a
+hole. Revert each in the same command.
+
+| Row | Mutate | Must redden | What a green build would mean |
+|---|---|---|---|
+| `§176 QP-1` | In `WorkItemController.list`, add a parameter no schema declares: `@RequestParam(name = "assignedBefore", required = false) String assignedBefore` | `ContractParameterBindingTest.noHandlerBindsAnUndeclaredQueryParameter` | The defect the rule exists for, in the form it actually arrives in — somebody adds a filter to a handler and forgets `openapi.yaml`. **Nothing else in the repo can see it**: the code compiles, every existing test passes, and the parameter is simply unreachable, because no generated client can name a key the contract does not declare. → ✅ **RUN 2026-08-12 — red on exactly that test, message `GET /work-items  binds [assignedBefore]  (contract declares [projectId, teamId, mine])`; the other six tests in the class green** |
+| `§176 QP-2` | The same undeclared parameter, added instead to `EvidenceController.attach` — a `multipart/form-data` operation | `noHandlerBindsAnUndeclaredFormPart`, and **`noHandlerBindsAnUndeclaredQueryParameter` must stay GREEN** | Both halves matter. If the query rule reds, `@RequestParam` on a form is being read as a query key and the two rules report one name under two diagnoses — the ambiguity §171 recorded and refused to guess at. If the *form* rule stays green, the skip has become a hole and a dropped part on the four upload paths is unobserved again. → ✅ **RUN 2026-08-12 — red on `no multipart handler binds a part the contract does not declare` alone; the query rule green, so each name has exactly one owner** |
+| `§176 QP-3` | In `openapi.yaml`, rename the `GET /work-items` query parameter `mine` → `mineOnly`, leaving the handler alone | **both** membership rules: `everyDeclaredQueryParameterIsBound` and `noHandlerBindsAnUndeclaredQueryParameter` | The rename case, and it is the row that shows what was and was not already covered. A rename produces a declared-and-unbound name *and* a bound-and-undeclared one, so the old rule was already red on half of it — this slice's rule is what makes an **addition** visible, where the old rule has nothing to say at all. → ✅ **RUN 2026-08-12 — red on both, as predicted; the four form/handler rules green** |
+
+**The floor was measured rather than guessed.** Temporarily raising
+`assertThat(compared).isGreaterThan(5)` to `500` printed **13** — thirteen non-multipart operations
+bind at least one query parameter — so the floor is a live tripwire against the mapping lookup
+silently matching nothing, which is the failure mode `patternsOf`'s javadoc names. It is left at 5
+rather than 13 for the same reason the sibling rule's is: a floor that tracks the exact count fails
+on every legitimate deletion of a filter and teaches the next author to edit the number.

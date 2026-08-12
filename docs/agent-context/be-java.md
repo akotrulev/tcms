@@ -2,12 +2,12 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-12 (**§175** — one `TeamRef`, in `com.tcms.api`, with two inline schemas made `$ref`s and `isLead` off the wire; **§174** — `doc_link.relationship` is the one mutable column, `V48` records who moved it, and both ends got the endpoint; **§171** — the form parts nobody compared: the four multipart bodies are exempt from *pairing* and no longer exempt from *comparison*; **§170** — the population the pairing rule could not see: every object schema, named and inline, is paired or excused, and two ingestion inputs nothing read are gone; **§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-12 (**§176** — the four contract-binding rules are two questions over two populations, and a bound-and-undeclared query parameter fails the build; **§175** — one `TeamRef`, in `com.tcms.api`, with two inline schemas made `$ref`s and `isLead` off the wire; **§174** — `doc_link.relationship` is the one mutable column, `V48` records who moved it, and both ends got the endpoint; **§171** — the form parts nobody compared: the four multipart bodies are exempt from *pairing* and no longer exempt from *comparison*; **§170** — the population the pairing rule could not see: every object schema, named and inline, is paired or excused, and two ingestion inputs nothing read are gone; **§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `65aa59f` (§175) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `aa521a6` (§175 shipped; §176 is this commit) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
@@ -71,6 +71,31 @@ Read this before adding a write to `documentation`'s link services or widening t
 - **`updated_at`/`updated_by` are written and read by nothing** — a deliberate absence, recorded in
   the handoff. `audit_event`'s `doc_link.relabelled` is the readable half.
 
+## §176 — FOUR BINDING RULES, TWO QUESTIONS, AND ONE OWNER PER NAME
+
+Read this before adding a `@RequestParam` to any handler, or a query parameter to `openapi.yaml`.
+
+- **`ContractParameterBindingTest` now asks both directions of both populations.** Declared-and-unbound:
+  `everyDeclaredQueryParameterIsBound` / `everyDeclaredFormPartIsBound`. Bound-and-undeclared:
+  **`noHandlerBindsAnUndeclaredQueryParameter`** (§176) / `noHandlerBindsAnUndeclaredFormPart`. The
+  grid is a table in the class javadoc.
+- **A handler binding a key `openapi.yaml` does not declare now FAILS THE BUILD.** Nothing fails at
+  runtime — both copies of `schema.d.ts` lack the key, so no generated client can send it and the
+  argument is its default forever. Two repairs: declare it (regenerating **both** copies) or delete
+  the parameter. **There is no ignore list and adding one is not a third repair.**
+- **The query rule SKIPS any operation with a `multipart/form-data` body**, and that is a boundary
+  rather than a hole: on a form, every bound name is the form rule's, declared or not. Do not
+  "improve" it into subtracting the declared parts — that reports an undeclared name from both rules
+  under two diagnoses. Mutation `§176 QP-2` is the pin (expected **green** on the query rule, red on
+  the form rule).
+- **The floor is `isGreaterThan(5)` against a measured 13.** It guards the mapping lookup silently
+  matching nothing; it is deliberately not 13, or every legitimate deletion of a filter reddens it.
+- **Green on arrival, like §171.** No handler in this codebase binds an undeclared parameter today.
+  What the rule buys is the next edit — an *addition*, which had no observer at all; a *rename* was
+  already half-covered by the declared-and-unbound rule from either side.
+
+---
+
 ## §171 — A MULTIPART FORM'S PARTS ARE COMPARED TO THE HANDLER'S SIGNATURE
 
 Read this before adding a `multipart/form-data` body or touching one of the four handlers
@@ -91,8 +116,9 @@ Read this before adding a `multipart/form-data` body or touching one of the four
 - **`@RequestParam` binds a query key and a text form field identically.** The only thing separating
   them is which side of the contract declares the name, so `noHandlerBindsAnUndeclaredFormPart`
   subtracts the operation's declared query parameters. It removes nothing today (none of the four
-  paths declares one) and it is why the *bound-and-undeclared query parameter* direction is still
-  unwritten — that rule needs the media type in hand.
+  paths declares one) and ~~it is why the *bound-and-undeclared query parameter* direction is still
+  unwritten — that rule needs the media type in hand~~ → **§176 wrote that rule**; see the §176
+  section below for how the two halves divide the population.
 - **The floor is `isEqualTo(4)`**, not a `>`: the contract has exactly four multipart bodies, and a
   fifth is a deliberate act that should re-read this section.
 - **The rules compare names and requiredness, statically.** A part bound to the right name with the
@@ -3502,6 +3528,13 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Session log
 
+- 2026-08-12 · CHECK · **the query parameter nobody declared** (§176, one phase, `backend/` test code
+  only; no migration, no contract change, nothing in `src/main`). §171's recorded gap, closed with one
+  test method: `noHandlerBindsAnUndeclaredQueryParameter`. §171's stated reason for deferring was true
+  and still is — `@RequestParam` cannot tell a form field from a query key — so the rule **skips**
+  multipart operations rather than subtracting their declared parts, giving every bound name exactly
+  one owner. Green on arrival; floor measured at 13 and left at 5. Three mutations, all run, `QP-2` an
+  expected-green ownership row. Gates 2539/516/0 (+1 test).
 - 2026-08-12 · EXTEND · **three declarations of one team** (§175, one phase, `backend/` + contract +
   both `schema.d.ts` copies; no migration, no frontend or `packages/` source). §147's oldest standing
   candidate, taken. `RoleAssignment.team` and `CurrentUser.teams[]` become `$ref`s to `TeamRef`

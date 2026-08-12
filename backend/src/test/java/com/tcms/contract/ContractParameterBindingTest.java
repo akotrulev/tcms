@@ -27,7 +27,8 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 
 /**
  * The other half of the undeclared-parameter defect: a parameter the contract declares and no
- * handler binds.
+ * handler binds — <strong>and, since §176, the half after that: a parameter the handler binds and
+ * the contract never declared.</strong>
  *
  * <p>{@link ContractConventionTest} and {@code DashboardEndpointTest} both check the SPA's side
  * of this — that a key something sends is a key the contract declares. That leaves the far end
@@ -81,6 +82,30 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
  * here now: {@link #everyDeclaredFormPartIsBound}, {@link #noHandlerBindsAnUndeclaredFormPart} and
  * {@link #formPartRequirednessAgrees}, the same three questions the named lane asks of a record's
  * components.
+ *
+ * <h2>The four rules are two questions asked of two populations (§176)</h2>
+ *
+ * <p>§171 closed the multipart pair and <em>recorded</em> the one position left open — the query
+ * string's undeclared direction — because {@code @RequestParam} cannot tell a form field from a
+ * query key, so the rule needed the media type in hand rather than the signature alone.
+ * {@link #noHandlerBindsAnUndeclaredQueryParameter} is that rule, and the grid it completes is the
+ * argument for reading all four together:
+ *
+ * <table border="1">
+ *   <caption>Which rule owns which direction</caption>
+ *   <tr><th></th><th>query string</th><th>{@code multipart/form-data}</th></tr>
+ *   <tr><td>declared, unbound</td>
+ *       <td>{@link #everyDeclaredQueryParameterIsBound} — a 200 answering a broader question</td>
+ *       <td>{@link #everyDeclaredFormPartIsBound} — a 201 describing a dropped part</td></tr>
+ *   <tr><td>bound, undeclared</td>
+ *       <td>{@link #noHandlerBindsAnUndeclaredQueryParameter} — unreachable code</td>
+ *       <td>{@link #noHandlerBindsAnUndeclaredFormPart} — unreachable code</td></tr>
+ * </table>
+ *
+ * <p><strong>Each name has exactly one owner and the media type is what assigns it.</strong> The
+ * query rule skips an operation with a multipart body outright; the form rule subtracts that
+ * operation's declared query parameters. Those are the same decision written from both ends, and
+ * without it the two rules report the same {@code caption} under two different diagnoses.
  */
 @DisplayName("Contract bindings — every declared query parameter and form part reaches a handler")
 class ContractParameterBindingTest extends IntegrationTestBase {
@@ -164,6 +189,93 @@ class ContractParameterBindingTest extends IntegrationTestBase {
                         server genuinely answers identically with and without the parameter.
 
                         Operations ignoring a declared parameter:""")
+                .isEmpty();
+    }
+
+    /**
+     * The reverse: a query parameter the handler binds and the contract never declared.
+     *
+     * <p>{@link #everyDeclaredQueryParameterIsBound} is the half that fails at runtime — the server
+     * silently answers a broader question than the caller asked. This half never fails at runtime
+     * at all, and that is what makes it the harder one to find: the parameter is absent from both
+     * copies of {@code schema.d.ts}, so <strong>no generated client can send it</strong>, the
+     * handler's argument is its default on every request that has ever been made, and the branch
+     * behind it has never executed. A filter nobody can reach reads, from inside the code, exactly
+     * like a filter nobody happens to use.
+     *
+     * <p>It is the writerless shape this repo keeps finding — §116's tables, §121's seam, §152's
+     * repository methods, §172's hook — arriving at a request parameter. And it is §171's own
+     * recorded gap, quoted from the section that could not close it: <em>"a bound-and-undeclared
+     * query rule is a real check and it needs the media type in hand; it is a slice, not a
+     * line"</em>.
+     *
+     * <h2>The media type is the whole of why this could not be one line</h2>
+     *
+     * <p>{@code @RequestParam("caption")} binds the query string key {@code caption} and the text
+     * form field {@code caption} identically — the annotation carries nothing that tells them
+     * apart, and neither does the handler. So on the four {@code multipart/form-data} operations
+     * every bound name is a <em>part</em>, and a rule that read the signature alone would report
+     * {@code caption} and {@code stepId} as undeclared query parameters while
+     * {@link #noHandlerBindsAnUndeclaredFormPart} was reporting them correctly as parts, or not at
+     * all because the contract declares them.
+     *
+     * <p>Hence the skip rather than a subtraction: <strong>a multipart operation's bound names
+     * belong to the form rule entirely</strong>, declared or not, so each name has exactly one
+     * owner and a failure names the side a human has to edit. The mirror of this decision is
+     * already in that rule, which subtracts the declared query parameters for the same reason
+     * pointing the other way.
+     */
+    @Test
+    @DisplayName("no handler binds a query parameter the contract does not declare")
+    void noHandlerBindsAnUndeclaredQueryParameter() {
+        OpenApiContract contract = OpenApiContract.load();
+        List<String> offenders = new ArrayList<>();
+        int compared = 0;
+
+        for (OpenApiContract.Operation operation : contract.operations()) {
+            if (!contract.formPartsOf(operation).isEmpty()) {
+                // A multipart operation's @RequestParams are form fields, and
+                // noHandlerBindsAnUndeclaredFormPart owns every one of them — see above.
+                continue;
+            }
+            Set<String> bound = boundParametersOf(operation);
+            if (bound == null || bound.isEmpty()) {
+                // Unmapped is everyDeclaredOperationHasAHandler's finding, not this one; binding
+                // nothing is the normal state of most operations here.
+                continue;
+            }
+            compared++;
+
+            Set<String> undeclared = new TreeSet<>(bound);
+            undeclared.removeAll(contract.queryParametersOf(operation));
+            if (!undeclared.isEmpty()) {
+                offenders.add(operation.describe() + "  binds " + undeclared
+                        + "  (contract declares " + contract.queryParametersOf(operation) + ")");
+            }
+        }
+
+        assertThat(compared)
+                .as("no operation outside the multipart four binds a query parameter at all, which "
+                        + "cannot be true of this contract — the mapping lookup has probably stopped "
+                        + "matching the contract's paths")
+                .isGreaterThan(5);
+
+        assertThat(offenders)
+                .as("""
+                        These handlers bind a query parameter openapi.yaml does not declare.
+
+                        Nothing fails at runtime, which is the problem: the key is absent from both
+                        copies of schema.d.ts, so no generated client can send it, the argument is its
+                        default on every request ever made, and the code behind it has never run. The
+                        SPA, the CLI and the MCP server are all generated from this document.
+
+                        Two honest repairs, and picking between them is the point:
+                          * declare it in openapi.yaml — regenerate BOTH copies of schema.d.ts — if a
+                            caller should be able to send it; or
+                          * delete the parameter, along with the filtering it implies. A parameter no
+                            declared client can send is dead code with a plausible name.
+
+                        Handlers binding an undeclared parameter:""")
                 .isEmpty();
     }
 
@@ -324,6 +436,15 @@ class ContractParameterBindingTest extends IntegrationTestBase {
      * forms declare no query parameter today, so the subtraction removes nothing; it is here so
      * that the day one does, this rule reports it as a query parameter rather than as an
      * undeclared part.
+     *
+     * <p>~~The mirror of this — bound and undeclared on the <em>query</em> side — stays unwritten
+     * on purpose: on these four operations it would report {@code caption} and {@code stepId},
+     * which are form fields.~~ → <strong>written in §176</strong> as
+     * {@link #noHandlerBindsAnUndeclaredQueryParameter}, which resolves that by skipping any
+     * operation with a multipart body: on a form, <em>every</em> bound name is this rule's,
+     * declared or not. Verified in both directions — mutation {@code §176 QP-2} binds an undeclared
+     * name on this rule's own {@code POST …/evidence} and reds <em>this</em> rule while the query
+     * rule stays green.
      */
     @Test
     @DisplayName("no multipart handler binds a part the contract does not declare")
