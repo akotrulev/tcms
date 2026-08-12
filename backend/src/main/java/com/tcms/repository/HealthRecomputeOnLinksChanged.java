@@ -28,6 +28,13 @@ import org.springframework.stereotype.Component;
  * is precisely how those two start disagreeing. The extra cost is the four statements this event
  * did not strictly need, on a job that already runs hourly.
  *
+ * <p><strong>The paragraph above was written one slice ahead of being true, and §178 is where it
+ * became so.</strong> Until then the chip it names had no writer at all, so "refreshing the rows
+ * without re-deriving the signal" described a risk rather than a mechanism. Both signals are
+ * {@code SpecLinkage}'s now, derived from the rows this handler causes to be rewritten, in the
+ * statement immediately after them — which is the arrangement this header asked for and did not yet
+ * have.
+ *
  * <p>Idempotent for its sibling's reason — the recompute rewrites the mirror and every signal from
  * the current facts — so at-least-once delivery costs a repeated statement and never a wrong answer.
  *

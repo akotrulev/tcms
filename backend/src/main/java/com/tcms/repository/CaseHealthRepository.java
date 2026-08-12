@@ -38,8 +38,11 @@ public interface CaseHealthRepository extends JpaRepository<CaseHealth, UUID> {
      *
      * <p>The dashboard's one job for it is telling those two apart. An empty "Needs attention" panel
      * with a timestamp means the project is clean; the same panel with nothing behind it means
-     * nobody has looked, and rendering them identically is the reassuring-but-false screen. Null is
-     * the answer in every deployment today, because no writer for this read model exists yet.
+     * nobody has looked, and rendering them identically is the reassuring-but-false screen.
+     * <del>Null is the answer in every deployment today, because no writer for this read model
+     * exists yet.</del> <strong>→ stale since §53 and struck 2026-08-12 (§178)</strong>: five
+     * statements in two modules write this table, so null now means what it says — this project has
+     * never been recomputed, which for a live company means the scheduler is off.
      *
      * <p>{@code MAX} rather than a row count, so the panel can eventually say <em>when</em> — and so
      * a project whose health is computed per case does not report a moment that belongs to one row.

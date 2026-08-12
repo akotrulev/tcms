@@ -374,10 +374,17 @@ class BoardFacts {
      *
      * <p><strong>§158 was the second such day, and this file is unchanged again.</strong>
      * {@code repository.ConditionDrift} derives {@code condition_drift}, so <strong>six of the nine
-     * are real</strong> and the board gains ERROR-severity drift cards; {@code outdated_spec_changed},
-     * {@code unlinked} and {@code orphaned} are still waiting on the same bet. Two for two is worth
+     * are real</strong> and the board gains ERROR-severity drift cards; <del>{@code outdated_spec_changed},
+     * {@code unlinked} and {@code orphaned} are still waiting on the same bet.</del> Two for two is worth
      * recording rather than restating: the bet was that reading a column with no writer is cheap
      * when the read is generic, and both payouts arrived with a diff of zero here.
+     *
+     * <p><strong>§178 was the third day and it paid twice.</strong> {@code repository.SpecLinkage}
+     * derives {@code outdated_spec_changed} and {@code unlinked} from {@code case_doc_link}, so
+     * <strong>eight of the nine are real</strong> and this file is unchanged for the third time —
+     * four payouts, diff of zero on every one. Only {@code orphaned} is left, and it is the one
+     * waiting on a decision rather than on a statement, so the bet is settled: the last card this
+     * generator gains will arrive the same way, with nothing to change here.
      *
      * <p>{@code incomplete} is deliberately not among them, matching {@code HealthSignal}: it exists
      * in the schema, has no counterpart in the contract's enum, and putting it on a card would be

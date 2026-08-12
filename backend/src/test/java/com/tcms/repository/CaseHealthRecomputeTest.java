@@ -33,7 +33,16 @@ import org.springframework.beans.factory.annotation.Autowired;
  * here that is not about running anything, and the first of the five §156 found writerless to get
  * a derivation. <strong>Six since §158</strong>, which added §6f's condition drift: the second of
  * the five, and the first whose cause is neither an execution nor another module's table but this
- * module's own version history read against its own library.
+ * module's own version history read against its own library. <strong>Eight since §178</strong>,
+ * which added §6i's spec-changed marker and §6o's unlinked one together — the third and fourth of
+ * the five, taken in one slice because both are read off {@code case_doc_link}, the mirror §167
+ * built for a panel.
+ *
+ * <p>That last pair is why this class's assertions grew rather than merely gained a group:
+ * <strong>{@code unlinked} fires on every case nobody has linked</strong>, which here is nearly all
+ * of them. Every {@code containsExactly} names it, for the reason the stale-approval fixtures give
+ * about {@code never_executed} — an assertion that filtered a sibling signal out would pass against
+ * an implementation raising it wrongly.
  *
  * <h2>What this class is really guarding</h2>
  *
@@ -58,11 +67,20 @@ import org.springframework.beans.factory.annotation.Autowired;
  *       {@code ExecutionFacts} reads the newest result of any kind. A case CI abandoned but a
  *       person still runs by hand satisfies one and not the other, and copying the neighbouring
  *       lateral — the likeliest edit anybody makes here — reports it as healthy.</li>
- *   <li><strong>The job asserting signals it did not compute.</strong> <del>Five</del> four of the
- *       ten signals have no writer, and one more ({@code failing_repeatedly}) has a writer in
+ *   <li><strong>The job asserting signals it did not compute.</strong> <del>Five</del> <del>four</del>
+ *       <strong>one</strong> of the
+ *       ten signals has no writer, and one more ({@code failing_repeatedly}) has a writer in
  *       another module writing the same rows on its own schedule. An {@code ON CONFLICT} that set every column would make this job the author
  *       of claims it has no evidence for, and would blank a future approval computation's work on
- *       every tick. The columns are owned individually even though the row is shared.</li>
+ *       every tick. The columns are owned individually even though the row is shared. <strong>The
+ *       column {@code Boundaries.otherSignalsAreNotClobbered} uses to prove it has had to move
+ *       twice</strong> — §157 took {@code stale_approval} and §178 took {@code unlinked} — and
+ *       {@code orphaned} is the last one available.</li>
+ *   <li><strong>A signal derived from a table this job rewrote a statement earlier.</strong> §178's
+ *       two are read off {@code case_doc_link}, so they are the only signals here whose correctness
+ *       depends on where their statement <em>sits</em> rather than on what it says. One test asserts
+ *       the ordering directly, because with the two statements swapped every other assertion in this
+ *       class still passes.</li>
  *   <li><strong>Writing across companies.</strong> The statement carries no company predicate — it
  *       relies entirely on {@code FORCE ROW LEVEL SECURITY} applying to both the {@code SELECT} and
  *       the {@code INSERT}. That is a correct design and an untested one is indistinguishable from
@@ -312,6 +330,46 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     private static final UUID LINKED_OUTSIDE_AND_REMOVED =
             UUID.fromString("ce004000-0000-4000-8000-000000000028");
 
+    // ---- the two linkage signals (§178, plan §6i and §6o) -----------------------------------
+    //
+    // Three fixtures, and every other case in this class is already one of the two inputs: a case
+    // with no link at all is UNLINKED, and the mirror block above supplies "linked and clean",
+    // "linked and moved", "linked into a page nobody can see" and "linked from a suite". These
+    // three are the discriminations no existing fixture can make.
+
+    /**
+     * Two links, one into a page that moved and one into a page that did not.
+     *
+     * <p>The {@code bool_or} fixture. {@code LINKED_TWICE} has two clean links and
+     * {@code LINKED_TO_A_MOVED_SPEC} has one dirty one, so between them they cannot tell "any link
+     * moved" from "the case's link moved" — an implementation reading one row, or folding with
+     * {@code bool_and}, reports this case clean while its own panel marks a link stale.
+     */
+    private static final UUID LINKED_TO_ONE_MOVED_SPEC_OF_TWO =
+            UUID.fromString("ce004000-0000-4000-8000-000000000029");
+    /**
+     * One {@code EXTERNAL_URL} link and nothing else.
+     *
+     * <p>{@code LINKED_OUTSIDE} carries a block link as well — deliberately, for the {@code UNION
+     * ALL} — so it cannot show that an external target <em>alone</em> takes a case out of
+     * {@code UNLINKED}. Its newest version is old enough that a staleness comparison wrongly applied
+     * to this arm would fire.
+     */
+    private static final UUID LINKED_ONLY_OUTSIDE =
+            UUID.fromString("ce004000-0000-4000-8000-00000000002a");
+    /**
+     * One link, and its relationship is {@code REFERENCES} — context, not coverage.
+     *
+     * <p>THE decision's fixture. This case contributes to no coverage marker and no matrix cell
+     * ({@code BlockCoverageView} and {@code CoverageMatrixReport} both count {@code VERIFIES} only),
+     * and it is <strong>not</strong> {@code UNLINKED} — because the chip renders inches from the
+     * panel listing the link it would be denying. Argued at
+     * {@code SpecLinkage.recomputeLinkageSignals}; a later "consistency" edit that filters the
+     * relationship here fails on this case alone.
+     */
+    private static final UUID LINKED_BY_REFERENCE_ONLY =
+            UUID.fromString("ce004000-0000-4000-8000-00000000002b");
+
     private static final UUID ACME_OTHER_PROJECT =
             UUID.fromString("ce001000-0000-4000-8000-000000000003");
     private static final UUID ACME_SPACE = UUID.fromString("ce007000-0000-4000-8000-000000000001");
@@ -343,6 +401,17 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
 
     /** The link ids, so a test can withdraw one by naming it. */
     private static final UUID LINKED_LINK = UUID.fromString("ce007003-0000-4000-8000-000000000001");
+    /**
+     * The link {@code LinkageSignals} creates <em>during</em> a test, to prove the signal sees it on
+     * the same tick.
+     *
+     * <p>A constant rather than a random id, and that is not tidiness: nothing in this class rolls
+     * back between tests — {@link #seed()} re-inserts with {@code ON CONFLICT DO NOTHING} — so a link
+     * made by one test with an unnamed id would still be there for the next one, and every assertion
+     * about an unlinked case would then depend on JUnit's method order. {@code seed()} deletes this
+     * id explicitly for that reason.
+     */
+    private static final UUID LATE_LINK = UUID.fromString("ce007003-0000-4000-8000-000000000004");
     private static final UUID GIT_LINK = UUID.fromString("ce007003-0000-4000-8000-000000000002");
     private static final UUID URL_LINK = UUID.fromString("ce007003-0000-4000-8000-000000000003");
 
@@ -656,6 +725,29 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             testCase(acme, LINKED_OUTSIDE_AND_REMOVED, ACME, ACME_PROJECT, ACME_SUITE, "TC-38", 38,
                     true, "MANUAL");
             urlLink(acme, UUID.randomUUID(), ACME, "TEST_CASE", LINKED_OUTSIDE_AND_REMOVED);
+
+            // ---- the linkage signals (§178) --------------------------------------------------
+            authoredCase(acme, LINKED_TO_ONE_MOVED_SPEC_OF_TWO, ACME_PROJECT, "TC-39", 39,
+                    "DRAFT", 1);
+            datedVersion(acme, LINKED_TO_ONE_MOVED_SPEC_OF_TWO, now.minus(WELL_INSIDE));
+            link(acme, UUID.randomUUID(), ACME, LINKED_TO_ONE_MOVED_SPEC_OF_TWO, SPEC_BLOCK,
+                    "VERIFIES");
+            // DERIVED_FROM, and that is the second half of THE decision rather than variety: the
+            // stale link is the one whose relationship is NOT a coverage claim, so this fixture
+            // fails if somebody narrows the OUTDATED_SPEC_CHANGED term to VERIFIES — the mirror of
+            // the edit LINKED_BY_REFERENCE_ONLY guards on the UNLINKED term. Written this way
+            // because the first draft made both links VERIFIES, at which point that mutation could
+            // not fail and the queue row for it would have been unfalsifiable.
+            link(acme, UUID.randomUUID(), ACME, LINKED_TO_ONE_MOVED_SPEC_OF_TWO, MOVED_BLOCK,
+                    "DERIVED_FROM");
+
+            authoredCase(acme, LINKED_ONLY_OUTSIDE, ACME_PROJECT, "TC-40", 40, "DRAFT", 1);
+            datedVersion(acme, LINKED_ONLY_OUTSIDE, now.minus(WELL_INSIDE));
+            urlLink(acme, UUID.randomUUID(), ACME, "TEST_CASE", LINKED_ONLY_OUTSIDE);
+
+            authoredCase(acme, LINKED_BY_REFERENCE_ONLY, ACME_PROJECT, "TC-41", 41, "DRAFT", 1);
+            datedVersion(acme, LINKED_BY_REFERENCE_ONLY, now.minus(WELL_INSIDE));
+            link(acme, UUID.randomUUID(), ACME, LINKED_BY_REFERENCE_ONLY, SPEC_BLOCK, "REFERENCES");
         }
 
         try (Connection umbra = appConnection(UMBRA)) {
@@ -674,6 +766,12 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             block(umbra, UMBRA_BLOCK, UMBRA, UMBRA_PAGE, 0, "Umbra's statement.");
             link(umbra, UUID.randomUUID(), UMBRA, FOREIGN_LINKED, UMBRA_BLOCK, "VERIFIES");
         }
+
+        // Nothing here rolls back, so a link one test MAKES outlives it. LATE_LINK is the only such
+        // row and this is what keeps every "this case is unlinked" assertion independent of the
+        // order JUnit happens to run the methods in — §19's fixture-collision failure arriving
+        // through time rather than through an id.
+        withdrawLink(ACME, LATE_LINK);
     }
 
     // =====================================================================
@@ -686,7 +784,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         @DisplayName("a case with no execution row at all is NEVER_EXECUTED")
         void noExecutionsAtAll() {
             recomputeFor(ACME);
-            assertThat(signalsOf(NEVER)).containsExactly("never_executed");
+            assertThat(signalsOf(NEVER)).containsExactly("never_executed", "unlinked");
         }
 
         @Test
@@ -699,14 +797,17 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             recomputeFor(ACME);
             assertThat(signalsOf(PLANNED))
                     .as("an execution with status_id NULL is work outstanding, not history")
-                    .containsExactly("never_executed");
+                    .containsExactly("never_executed", "unlinked");
         }
 
         @Test
-        @DisplayName("a recently recorded case raises nothing")
+        @DisplayName("a recently recorded case raises nothing this group owns")
         void recentlyExecuted() {
+            // "raises nothing" until §178, and the change is the fixture's rather than the
+            // statement's: this case is linked to no specification, which is now a signal. Written
+            // out rather than filtered, for the reason at the class's UNLINKED note.
             recomputeFor(ACME);
-            assertThat(signalsOf(RECENT)).isEmpty();
+            assertThat(signalsOf(RECENT)).containsExactly("unlinked");
         }
 
         @Test
@@ -716,7 +817,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // lately" are one predicate away from each other, and a case that HAS been run is not
             // one that never has. The panel would show the same case under two headings.
             recomputeFor(ACME);
-            assertThat(signalsOf(ANCIENT)).containsExactly("long_unexecuted");
+            assertThat(signalsOf(ANCIENT)).containsExactly("long_unexecuted", "unlinked");
         }
 
         @Test
@@ -726,7 +827,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // reports the actively-maintained case as stale — inverting the signal for exactly the
             // cases somebody is looking after.
             recomputeFor(ACME);
-            assertThat(signalsOf(REVISITED)).isEmpty();
+            assertThat(signalsOf(REVISITED)).containsExactly("unlinked");
         }
 
         @Test
@@ -906,14 +1007,14 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // test — a containsExactly that quietly ignored a sibling signal would pass against an
             // implementation that raised it wrongly.
             assertThat(signalsOf(CI_STOPPED))
-                    .containsExactlyInAnyOrder("stale_automation", "long_unexecuted");
+                    .containsExactlyInAnyOrder("stale_automation", "long_unexecuted", "unlinked");
         }
 
         @Test
         @DisplayName("AUTOMATED, and CI reported inside the window, raises nothing")
         void ciReporting() {
             recomputeFor(ACME);
-            assertThat(signalsOf(CI_REPORTING)).isEmpty();
+            assertThat(signalsOf(CI_REPORTING)).containsExactly("unlinked");
         }
 
         @Test
@@ -927,7 +1028,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             recomputeFor(ACME);
             assertThat(signalsOf(CI_STOPPED_RUN_BY_HAND))
                     .as("the predicate is the newest INGESTED result, not the newest result")
-                    .containsExactly("stale_automation");
+                    .containsExactly("stale_automation", "unlinked");
         }
 
         @Test
@@ -941,14 +1042,14 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             assertThat(signalsOf(CI_NEVER_REPORTED))
                     .as("'stopped reporting' presupposes started; no results at all is "
                             + "NEVER_EXECUTED's question, and only manual ones is nobody's yet")
-                    .containsExactly("long_unexecuted");
+                    .containsExactly("long_unexecuted", "unlinked");
         }
 
         @Test
         @DisplayName("a MANUAL case taking CI results is UNDECLARED_AUTOMATION")
         void undeclaredAutomation() {
             recomputeFor(ACME);
-            assertThat(signalsOf(UNDECLARED)).containsExactly("undeclared_automation");
+            assertThat(signalsOf(UNDECLARED)).containsExactly("unlinked", "undeclared_automation");
         }
 
         @Test
@@ -959,7 +1060,8 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // NOT_AUTOMATABLE), so this case is subtracted from the denominator of the very number
             // the signal family exists to keep honest.
             recomputeFor(ACME);
-            assertThat(signalsOf(UNDECLARED_IMPOSSIBLE)).containsExactly("undeclared_automation");
+            assertThat(signalsOf(UNDECLARED_IMPOSSIBLE))
+                    .containsExactly("unlinked", "undeclared_automation");
         }
 
         @Test
@@ -972,7 +1074,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             recomputeFor(ACME);
             assertThat(signalsOf(UNDECLARED_LAPSED))
                     .as("CI last posted 120 days ago; whatever was automating this has stopped too")
-                    .containsExactly("long_unexecuted");
+                    .containsExactly("long_unexecuted", "unlinked");
         }
 
         @Test
@@ -1006,14 +1108,15 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         void approvedThenEdited() {
             recomputeFor(ACME);
             assertThat(signalsOf(APPROVED_THEN_EDITED))
-                    .containsExactlyInAnyOrder("stale_approval", "never_executed");
+                    .containsExactlyInAnyOrder("stale_approval", "never_executed", "unlinked");
         }
 
         @Test
         @DisplayName("APPROVED at the version it is still on raises nothing")
         void approvedAndUntouched() {
             recomputeFor(ACME);
-            assertThat(signalsOf(APPROVED_AND_UNTOUCHED)).containsExactly("never_executed");
+            assertThat(signalsOf(APPROVED_AND_UNTOUCHED))
+                    .containsExactly("never_executed", "unlinked");
         }
 
         @Test
@@ -1026,7 +1129,8 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // that uses the status ladder without the reviewer apparatus, which §6g explicitly
             // permits. There is nothing to be stale.
             recomputeFor(ACME);
-            assertThat(signalsOf(APPROVED_WITHOUT_A_REVIEW)).containsExactly("never_executed");
+            assertThat(signalsOf(APPROVED_WITHOUT_A_REVIEW))
+                    .containsExactly("never_executed", "unlinked");
         }
 
         @Test
@@ -1036,7 +1140,8 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // is a record of something that happened — but the case is no longer claiming to be
             // approved, so there is no claim to be out of date.
             recomputeFor(ACME);
-            assertThat(signalsOf(DEMOTED_AFTER_APPROVAL)).containsExactly("never_executed");
+            assertThat(signalsOf(DEMOTED_AFTER_APPROVAL))
+                    .containsExactly("never_executed", "unlinked");
         }
 
         @Test
@@ -1046,7 +1151,8 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // version". Dropping that clause is the likeliest edit here, and it reports a case
             // somebody REFUSED to sign as one whose sign-off has aged.
             recomputeFor(ACME);
-            assertThat(signalsOf(REJECTED_AT_AN_OLD_VERSION)).containsExactly("never_executed");
+            assertThat(signalsOf(REJECTED_AT_AN_OLD_VERSION))
+                    .containsExactly("never_executed", "unlinked");
         }
 
         @Test
@@ -1057,7 +1163,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // signed off as stale — and it self-heals only if re-approval is what clears the
             // signal, which is the whole "no button for lying" property.
             recomputeFor(ACME);
-            assertThat(signalsOf(APPROVED_TWICE)).containsExactly("never_executed");
+            assertThat(signalsOf(APPROVED_TWICE)).containsExactly("never_executed", "unlinked");
         }
 
         @Test
@@ -1071,7 +1177,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             assertThat(signalsOf(APPROVED_AND_UNTOUCHED))
                     .as("the case's status is a term in the expression, not a filter in the WHERE "
                             + "— a filter would skip the row and leave the stale flag for ever")
-                    .containsExactly("never_executed");
+                    .containsExactly("never_executed", "unlinked");
         }
     }
 
@@ -1084,14 +1190,15 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         void aLibraryEditReachesTheCase() {
             recomputeFor(ACME);
             assertThat(signalsOf(CONDITION_EDITED))
-                    .containsExactlyInAnyOrder("condition_drift", "never_executed");
+                    .containsExactlyInAnyOrder("condition_drift", "never_executed", "unlinked");
         }
 
         @Test
         @DisplayName("an entry still saying what the snapshot recorded raises nothing")
         void anUnchangedEntryIsClean() {
             recomputeFor(ACME);
-            assertThat(signalsOf(CONDITION_UNCHANGED)).containsExactly("never_executed");
+            assertThat(signalsOf(CONDITION_UNCHANGED))
+                    .containsExactly("never_executed", "unlinked");
         }
 
         @Test
@@ -1103,7 +1210,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // much as editing the body does, and a comparison over body alone calls it clean.
             recomputeFor(ACME);
             assertThat(signalsOf(CONDITION_RETITLED))
-                    .containsExactlyInAnyOrder("condition_drift", "never_executed");
+                    .containsExactlyInAnyOrder("condition_drift", "never_executed", "unlinked");
         }
 
         @Test
@@ -1118,7 +1225,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             recomputeFor(ACME);
             assertThat(signalsOf(CONDITION_DELETED))
                     .as("lib.id IS NULL is a term in the expression, not an accident of LEFT JOIN")
-                    .containsExactlyInAnyOrder("condition_drift", "never_executed");
+                    .containsExactlyInAnyOrder("condition_drift", "never_executed", "unlinked");
         }
 
         @Test
@@ -1129,7 +1236,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // cleanup a tester is told to perform; drifting silently is the same defect.
             recomputeFor(ACME);
             assertThat(signalsOf(POSTCONDITION_EDITED))
-                    .containsExactlyInAnyOrder("condition_drift", "never_executed");
+                    .containsExactlyInAnyOrder("condition_drift", "never_executed", "unlinked");
         }
 
         @Test
@@ -1140,7 +1247,8 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // signal in the same transaction with it. The safe direction, and invisible until
             // something asserts it.
             recomputeFor(ACME);
-            assertThat(signalsOf(CASE_WITHOUT_CONDITIONS)).containsExactly("never_executed");
+            assertThat(signalsOf(CASE_WITHOUT_CONDITIONS))
+                    .containsExactly("never_executed", "unlinked");
         }
 
         @Test
@@ -1150,7 +1258,8 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // drift here would raise an ERROR on the oldest half of a real repository on the day
             // this shipped, for a comparison that was never taken.
             recomputeFor(ACME);
-            assertThat(signalsOf(CASE_WITHOUT_A_VERSION)).containsExactly("never_executed");
+            assertThat(signalsOf(CASE_WITHOUT_A_VERSION))
+                    .containsExactly("never_executed", "unlinked");
         }
 
         @Test
@@ -1161,7 +1270,8 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // after a library change — inverting the signal for exactly the cases somebody has
             // just brought up to date, which is theNewestResultWins()'s defect one table over.
             recomputeFor(ACME);
-            assertThat(signalsOf(DRIFT_IN_AN_OLD_VERSION)).containsExactly("never_executed");
+            assertThat(signalsOf(DRIFT_IN_AN_OLD_VERSION))
+                    .containsExactly("never_executed", "unlinked");
         }
 
         @Test
@@ -1178,7 +1288,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
 
             assertThat(signalsOf(CONDITION_UNCHANGED))
                     .as("the comparison is content, so reverting the library reverts the signal")
-                    .containsExactly("never_executed");
+                    .containsExactly("never_executed", "unlinked");
         }
     }
 
@@ -1464,6 +1574,186 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         }
     }
 
+    /**
+     * The two linkage signals — §178, and the first group here whose subject is derived from the
+     * group above rather than from a table anything else writes.
+     *
+     * <p>{@code UNLINKED} and {@code OUTDATED_SPEC_CHANGED} are read off {@code case_doc_link}, which
+     * the mirror statement rewrote earlier in the same transaction. So these tests are the only ones
+     * in this class that can fail because of a statement's <em>position</em>, and
+     * {@link #aLinkMadeSinceTheLastTickCountsOnThisTick} is the assertion that pins it: with the two
+     * statements in the other order every other test here still passes, because the fixture's links
+     * exist before the first tick.
+     *
+     * <p>The mirror's four predicates are inherited rather than restated, which is the whole reason
+     * the derivation reads the mirror — and the three tests that look most like duplicates of the
+     * group above ({@link #aLinkIntoADeletedPageIsNoLinkAtAll},
+     * {@link #aSiblingProjectsPageIsNoLinkEither}, {@link #aSuitesLinkDoesNotCoverItsCases}) are what
+     * make "inherited" a fact rather than a claim: they assert the <em>signal</em>, so the day
+     * somebody rewrites the derivation against {@code doc_link} to save a join, all three go red.
+     */
+    @Nested
+    @DisplayName("The linkage signals — §6i and §6o, and §178's derivation of both")
+    class LinkageSignals {
+
+        @Test
+        @DisplayName("a case linked to nothing is UNLINKED")
+        void noLinksAtAll() {
+            // The common case, and in a young project the majority of cases — which is why the
+            // signal is INFO and why nearly every assertion in this class now names it.
+            recomputeFor(ACME);
+            assertThat(signalsOf(NEVER)).contains("unlinked");
+        }
+
+        @Test
+        @DisplayName("a case linked to an unmoved spec raises neither")
+        void linkedAndClean() {
+            recomputeFor(ACME);
+            assertThat(signalsOf(LINKED))
+                    .as("one VERIFIES link into a page last edited before the case was authored")
+                    .containsExactly("never_executed");
+        }
+
+        @Test
+        @DisplayName("a case whose linked spec moved is OUTDATED_SPEC_CHANGED, and not unlinked")
+        void aMovedSpecRaisesTheErrorAndNotTheInfo() {
+            // The two are independent and one fixture proves it: this case has a link, so it is not
+            // unlinked, and that link is stale, so it is outdated. An implementation deriving one
+            // from the other — "no usable link" — would collapse them into one chip.
+            recomputeFor(ACME);
+            assertThat(signalsOf(LINKED_TO_A_MOVED_SPEC))
+                    .containsExactlyInAnyOrder("outdated_spec_changed", "never_executed");
+        }
+
+        @Test
+        @DisplayName("ONE stale link among several raises it, whatever that link claims")
+        void anyStaleLinkIsEnough() {
+            // bool_or, not the first row and not bool_and. A case verifying two statements is wrong
+            // the moment either of them is rewritten, and the panel already marks that one link
+            // stale — so an implementation that needed all of them to move would put a clean chip
+            // above a panel with a stale marker in it.
+            //
+            // The moved link here is DERIVED_FROM, which makes this the OTHER half of the
+            // relationship decision: a case written from a statement that has since been rewritten
+            // is as wrong as one claiming to verify it, so narrowing THIS term to VERIFIES — the
+            // edit everyRelationshipCountsAsALink refuses on the unlinked term — fails here.
+            recomputeFor(ACME);
+            assertThat(signalsOf(LINKED_TO_ONE_MOVED_SPEC_OF_TWO))
+                    .containsExactlyInAnyOrder("outdated_spec_changed", "never_executed");
+        }
+
+        @Test
+        @DisplayName("a case linked only by REFERENCES is NOT unlinked, though it covers nothing")
+        void everyRelationshipCountsAsALink() {
+            // THE decision, and the one edit most likely to be proposed as a consistency fix:
+            // BlockCoverageView and CoverageMatrixReport both count VERIFIES only. They answer a
+            // question about a STATEMENT — does anything claim to verify this paragraph — and this
+            // signal answers one about a CASE, rendered inches from the list of its links. A chip
+            // reading "Unlinked" above a panel showing a link is the product disagreeing with itself
+            // on one screen, which is the defect §157 found and §167's arrangement exists against.
+            recomputeFor(ACME);
+            assertThat(signalsOf(LINKED_BY_REFERENCE_ONLY))
+                    .as("\"linked, and nothing claims coverage\" is a narrower gap with no member "
+                            + "in this enum — lending it UNLINKED's is what is refused")
+                    .containsExactly("never_executed");
+        }
+
+        @Test
+        @DisplayName("an external target clears UNLINKED and can never raise the other")
+        void anExternalLinkIsALink() {
+            // A case pinned to a file at a commit is not invisible to traceability. It also cannot
+            // be outdated by anything this database can see: DocumentationFacts writes the literal
+            // false into stale on that arm (V47 §3), so both halves of the asymmetry are asserted
+            // here on one case whose only link is external.
+            recomputeFor(ACME);
+            assertThat(signalsOf(LINKED_ONLY_OUTSIDE)).containsExactly("never_executed");
+        }
+
+        @Test
+        @DisplayName("a link into a soft-deleted page is no link at all")
+        void aLinkIntoADeletedPageIsNoLinkAtAll() {
+            // The strongest argument for deriving from the mirror, and it looks like a bug. This
+            // case HAS a doc_link row; the mirror drops it because the page is gone, so nothing
+            // renders on the panel — and the chip agrees with the panel. The alternative is a case
+            // the product says is traced, to a destination it will not show you.
+            recomputeFor(ACME);
+            assertThat(signalsOf(LINKED_TO_A_DELETED_PAGE))
+                    .as("the panel shows nothing, so the chip must say nothing is linked")
+                    .containsExactlyInAnyOrder("never_executed", "unlinked");
+        }
+
+        @Test
+        @DisplayName("a page of a sibling project is no link either")
+        void aSiblingProjectsPageIsNoLinkEither() {
+            recomputeFor(ACME);
+            assertThat(signalsOf(LINKED_ACROSS_PROJECTS))
+                    .containsExactlyInAnyOrder("never_executed", "unlinked");
+        }
+
+        @Test
+        @DisplayName("a suite's link does not cover the cases in it")
+        void aSuitesLinkDoesNotCoverItsCases() {
+            // source_type = 'TEST_CASE'. A suite-level link is a claim about the suite, and
+            // inheriting it would silence this signal for every case under a suite somebody linked
+            // once — the traceability gap the signal exists to report, hidden by a single row.
+            recomputeFor(ACME);
+            assertThat(signalsOf(EXTERNALLY_LINKED_SUITE))
+                    .containsExactlyInAnyOrder("never_executed", "unlinked");
+        }
+
+        @Test
+        @DisplayName("a link made since the last tick counts on THIS tick, not the next one")
+        void aLinkMadeSinceTheLastTickCountsOnThisTick() throws SQLException {
+            // THE ordering test, and the only one in this class that can fail on a statement's
+            // position rather than its content. SpecLinkage must run AFTER the mirror refresh and in
+            // the same transaction; ordered before it, this assertion sees the previous tick's rows
+            // and the case stays flagged for an hour while its own Traceability panel — refreshed by
+            // the statement that ran after — already lists the link.
+            recomputeFor(ACME);
+            assertThat(signalsOf(NEVER)).contains("unlinked");
+
+            linkTo(ACME, NEVER, SPEC_BLOCK);
+            recomputeFor(ACME);
+
+            assertThat(signalsOf(NEVER))
+                    .as("one recompute, not two: the mirror and the signal are one transaction in "
+                            + "one order")
+                    .containsExactly("never_executed");
+        }
+
+        @Test
+        @DisplayName("withdrawing the last link raises UNLINKED again on the next tick")
+        void bothSignalsSelfHeal() throws SQLException {
+            // The other direction of the same property, and the one the delete-then-insert mirror
+            // makes possible: an upsert would leave the withdrawn row standing, so this case would
+            // go on reporting itself linked to a claim somebody explicitly retracted.
+            recomputeFor(ACME);
+            assertThat(signalsOf(LINKED)).doesNotContain("unlinked");
+
+            withdrawLink(ACME, LINKED_LINK);
+            recomputeFor(ACME);
+
+            assertThat(signalsOf(LINKED)).contains("unlinked");
+        }
+
+        @Test
+        @DisplayName("a flag left behind by an earlier tick is cleared, not merely not set")
+        void aStaleFlagIsCleared() throws SQLException {
+            // Both columns are in the ON CONFLICT's SET list, so a false is written and not merely
+            // omitted. Set by hand because no fixture can produce a wrong flag: the only writer is
+            // the statement under test, which is exactly why nothing would notice it never clearing.
+            recomputeFor(ACME);
+            setSignal(ACME, LINKED, "outdated_spec_changed", true);
+            setSignal(ACME, LINKED, "unlinked", true);
+
+            recomputeFor(ACME);
+
+            assertThat(signalsOf(LINKED))
+                    .as("a spec restored, or a link made, must clear the chip it raised")
+                    .containsExactly("never_executed");
+        }
+    }
+
     @Nested
     @DisplayName("What the job must not touch")
     class Boundaries {
@@ -1471,25 +1761,31 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         @Test
         @DisplayName("signals this job does not compute survive a recompute")
         void otherSignalsAreNotClobbered() throws SQLException {
-            // The three ON CONFLICT clauses name two or three columns each. If any named all of
+            // The five ON CONFLICT clauses name two or three columns each. If any named all of
             // them, this job would blank a sibling's work on every tick — a defect that appears an
             // hour after the other feature ships and looks like the other feature's bug.
             //
             // The column asserted here was stale_approval until §157, which gave that one a writer
-            // in this very service and so had to move the assertion. unlinked is the replacement
-            // and is the same shape: read by the facet, the chip and the board, written by nothing
-            // in any module (ArchitectureRulesTest.WRITERLESS_BY_DECISION). failing_repeatedly
-            // would be the stronger choice — it has a real writer in reporting — and it is not
-            // used, because setting it here would be this test asserting over another module's
-            // schedule.
+            // in this very service and so had to move the assertion. unlinked was the replacement
+            // — and §178 gave THAT one a writer, in this very service again, so this is the second
+            // move and the same cause both times. failing_repeatedly would be the stronger choice —
+            // it has a real writer in reporting — and it is not used, because setting it here would
+            // be this test asserting over another module's schedule.
+            //
+            // THE POPULATION THIS TEST DRAWS FROM IS NOW ONE. orphaned is the last case_health
+            // column that is read and written by nothing (ArchitectureRulesTest's
+            // WRITERLESS_BY_DECISION), so the slice that derives it has to replace this assertion
+            // with something structurally different rather than with a third column — most likely
+            // reporting's failing_repeatedly plus the schedule problem that argument dodges twice
+            // above. Written down here because the next author meets the shortage, not the history.
             recomputeFor(ACME);
-            setSignal(ACME, RECENT, "unlinked", true);
+            setSignal(ACME, RECENT, "orphaned", true);
 
             recomputeFor(ACME);
 
             assertThat(signalsOf(RECENT))
-                    .as("unlinked belongs to a computation this job knows nothing about")
-                    .containsExactly("unlinked");
+                    .as("orphaned belongs to a computation this job knows nothing about")
+                    .containsExactly("unlinked", "orphaned");
         }
 
         @Test
@@ -1875,6 +2171,16 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             String pageKey, String pageTitle, UUID blockId, String blockExcerpt,
             String externalRepo, String externalPath, Integer externalLineStart,
             Integer externalLineEnd, String externalCommitSha, String externalUrl, boolean stale) {
+    }
+
+    /**
+     * Link a case to a block on its own connection, so a test can make a link <em>between</em> two
+     * recomputes. Always {@link #LATE_LINK}'s id — see that constant for why it is not random.
+     */
+    private void linkTo(UUID companyId, UUID caseId, UUID blockId) throws SQLException {
+        try (Connection connection = appConnection(companyId)) {
+            link(connection, LATE_LINK, companyId, caseId, blockId, "VERIFIES");
+        }
     }
 
     private void withdrawLink(UUID companyId, UUID linkId) throws SQLException {

@@ -866,25 +866,33 @@ class ArchitectureRulesTest {
      * lives at the field, like {@link #READERLESS_BY_DECISION}'s.
      *
      * <p><del>Fourteen</del> <del>thirteen since §157</del> <del>twelve since §158</del> <del>eleven since §159</del>
-     * <strong>ten since §160</strong>. Four members have now left by being <em>written</em>
+     * <del>ten since §160</del> <strong>eight since §178</strong>. <strong>Six</strong> members have now left by being <em>written</em>
      * rather than deleted — {@code CaseHealth.staleApproval} (§157), {@code CaseHealth.conditionDrift}
-     * (§158), {@code Project.archivedAt} (§159) and {@code IngestionJob.rawStorageKey} (§160) — and
+     * (§158), {@code Project.archivedAt} (§159), {@code IngestionJob.rawStorageKey} (§160) and
+     * {@code CaseHealth.outdatedSpecChanged} + {@code CaseHealth.unlinked} (§178, the first slice to
+     * take <em>two</em> out at once, because both are read off one statement over one table) — and
      * the rule itself has not moved for any of them, which is what makes "an entry here is a
      * decision to leave a column empty, not a permit to keep it that way" a description rather than
      * a hope. <strong>This javadoc's own count was stale by one from §158 to §159</strong>, while
      * the comment inside the test method below said twelve: two tallies, four lines apart, in the
      * file whose subject is tallies kept by hand.
      *
+     * <p><strong>§178 is also where the exit stopped being cheap for the remainder.</strong> Four of
+     * the five {@code case_health} members left in five slices, and the fifth
+     * ({@code CaseHealth.orphaned}) is the one every one of those slices named as needing a decision
+     * first. An entry list that empties by a run of easy members ends on the hard one, so a flat
+     * count going down is not evidence the next one is like the last.
+     *
      * <p>§160 is the first member to leave <em>both</em> this rule and
      * {@link #READERLESS_BY_DECISION} in one slice, and that is not a coincidence: its entry in each
      * argued for the other half's absence, so writing one alone would have been the two-states-at-once
      * shape {@code IngestionJob}'s own field javadoc warned about.
      *
-     * <p>Five of the ten are already in {@link #READERLESS_BY_DECISION} — the four §154 called
+     * <p>Five of the eight are already in {@link #READERLESS_BY_DECISION} — the four §154 called
      * "writerless as well" plus {@code CaseHealth.incomplete},
      * whose classification §154 got wrong in this exact direction. That overlap is the point of
      * running both rules rather than one: a column can be dead at either end, and only the pair says
-     * <em>which</em>. The five this rule sees alone are the ones §154 structurally could not,
+     * <em>which</em>. The <del>five</del> three this rule sees alone are the ones §154 structurally could not,
      * because a column with a reader is invisible to a rule about readers — and read-but-never-written
      * is the worse half, since something downstream is drawing a conclusion from a value nothing
      * produces.
@@ -914,15 +922,13 @@ class ArchitectureRulesTest {
                             + "by whichever attempt writes a row, so a failed row would make the "
                             + "corrected retry replay the failure. A report that cannot be parsed "
                             + "leaves no row at all"),
-            Map.entry("CaseHealth.outdatedSpecChanged",
-                    "one of the three HealthSignal members no recompute writes (five until §157, "
-                            + "four until §158) — argued once at "
-                            + "CaseHealth's header, which is where the state that makes them "
-                            + "misleading is described"),
-            Map.entry("CaseHealth.orphaned", "outdatedSpecChanged's case exactly"),
-            Map.entry("CaseHealth.unlinked",
-                    "outdatedSpecChanged's case, and the member the first draft of this rule "
-                            + "MISSED — see writesInLiterals for the corpus bug that hid it"),
+            Map.entry("CaseHealth.orphaned",
+                    "the LAST HealthSignal member no recompute writes (five until §157, four until "
+                            + "§158, three until §178 derived outdatedSpecChanged and unlinked "
+                            + "together) — argued once at CaseHealth's header, which is where the "
+                            + "state that makes it misleading is described. Unlike the four that "
+                            + "left, this one needs a DECISION about what \"left the project\" "
+                            + "means before it can need a statement"),
             Map.entry("CaseHealth.incomplete",
                     "writerless AND readerless — the reference entry in READERLESS_BY_DECISION, "
                             + "mapped so ddl-auto: validate has the whole row in view and absent "
@@ -939,19 +945,22 @@ class ArchitectureRulesTest {
         // question. §116's phrasing — "three V1 tables had never had a writer" — is this rule at
         // table granularity, answered by a person who happened to be looking.
         //
-        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. Five of these ten are in
+        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. Five of these eight are in
         // READERLESS_BY_DECISION too, which is the harmless half: a column nobody fills and nobody
-        // consults costs a javadoc describing a state the database has never been in. The FIVE
+        // consults costs a javadoc describing a state the database has never been in. The THREE
         // this rule sees alone are the expensive half, and they are invisible to §154 by
         // construction — a column with a reader passes that rule no matter what fills it. Something
         // downstream is drawing a conclusion from a value nothing produces: five HealthSignal
         // members were rendered as chips and counted in facets while no recompute wrote them, and
         // ProjectView.archived was required by the contract and false in every deployment there had
         // ever been. Both examples are past tense now — FOUR health signals since §157, THREE since
-        // §158, and Project.archivedAt left this map in §159 when the archive operation was built.
-        // That is the intended exit from this list, it has now been taken three times, and each
-        // time the rule's population fell by one without the rule changing: an entry here is a
-        // decision to leave a column empty, not a permit to keep it that way.
+        // §158, ONE since §178, and Project.archivedAt left this map in §159 when the archive
+        // operation was built.
+        // That is the intended exit from this list, it has now been taken FIVE times, and each
+        // time the rule's population fell without the rule changing: an entry here is a
+        // decision to leave a column empty, not a permit to keep it that way. §178 took two in one
+        // slice, which is the same fact one level up — both were read off one statement, so
+        // deriving one alone would have left a chip and a panel on one screen disagreeing.
         //
         // IT ALSO CORRECTED §154 RATHER THAN ONLY EXTENDING IT. That rule's javadoc sorted its
         // thirteen into "written and readerless" and "writerless as well" BY HAND, one slice after

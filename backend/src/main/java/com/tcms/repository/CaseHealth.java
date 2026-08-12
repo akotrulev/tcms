@@ -34,9 +34,10 @@ import org.hibernate.annotations.Filter;
  * one grid row, and one statement deriving all five is the only arrangement in which they cannot
  * contradict each other. The honest alternative was renaming the table, not splitting it.
  *
- * <h2><del>Nothing writes this yet, and the endpoint is correct anyway</del> → <del>FIVE</del> SIX OF
- * THE TEN SIGNALS ARE WRITTEN NOW, AND THAT IS WHAT MAKES THE OTHER <del>FIVE</del> FOUR
- * MISLEADING</h2>
+ * <h2><del>Nothing writes this yet, and the endpoint is correct anyway</del> → <del>FIVE</del>
+ * <del>SIX</del> NINE OF
+ * THE TEN SIGNALS ARE WRITTEN NOW, AND THAT IS WHAT MAKES THE <del>OTHER FIVE</del> <del>FOUR</del>
+ * LAST ONE MISLEADING</h2>
  *
  * <p><del>The signals are computed from executions and documentation links, and neither module
  * exists. So the table is empty, every case reports no signals, and every health facet counts zero.
@@ -51,20 +52,24 @@ import org.hibernate.annotations.Filter;
  *
  * <p><strong>What changed is what a {@code false} means.</strong> On an absent row, every signal
  * reads "not computed", which is honest. On a row that exists,
- * {@link #outdatedSpecChanged}, <del>{@link #staleApproval}</del>, <del>{@link #conditionDrift}</del>,
- * {@link #unlinked} and {@link #orphaned} are {@code NOT NULL} columns holding their default, and
+ * <del>{@link #outdatedSpecChanged}</del>, <del>{@link #staleApproval}</del>, <del>{@link #conditionDrift}</del>,
+ * <del>{@link #unlinked}</del> and {@link #orphaned} are {@code NOT NULL} columns holding their default, and
  * the read path cannot tell that from a computation that ran and found nothing wrong.
  * <strong>§157 closed the first of them</strong> — {@code ApprovalFacts} derives
- * {@link #staleApproval} now — <strong>and §158 the second</strong>, {@code ConditionDrift} for
- * {@link #conditionDrift}, so three are left and this paragraph is three-fifths as true as it was.
- * The chip list omits them,
- * the facet counts them zero, and {@code computedAt} — the column mapped precisely so
+ * {@link #staleApproval} now — <strong>§158 the second</strong>, {@code ConditionDrift} for
+ * {@link #conditionDrift}, <strong>and §178 the third and fourth together</strong>,
+ * {@code SpecLinkage} for the two documentation signals — so <strong>{@link #orphaned} is the only
+ * one left</strong> and this paragraph is one-fifth as true as it was.
+ * The chip list omits it,
+ * the facet counts it zero, and {@code computedAt} — the column mapped precisely so
  * "nothing is wrong" and "nobody has looked" render as different sentences — now says
  * <em>looked</em> for the whole row. The distinction it was added for survives per row and has been
- * lost per signal. {@code ArchitectureRulesTest.everyMappedColumnHasAWriter} is what names the
- * remainder; closing it is three derivations, not a schema change, and each needs the module that
- * owns its cause — or, for {@link #orphaned}, a decision about what "left the project" means before
- * any module can be asked.
+ * lost for that one signal. {@code ArchitectureRulesTest.everyMappedColumnHasAWriter} is what names
+ * the remainder; closing it is <del>three derivations</del> <strong>one</strong>, not a schema
+ * change, and it needs
+ * a decision about what "left the project" means before any module can be asked. <strong>The four
+ * that closed cost one class each and not one migration between them</strong>, which is what the
+ * paragraph above predicted and is worth having on the record now that the prediction is spent.
  *
  * <p>Which is also why there is no factory here and no mutator anywhere: a signal that a human can
  * set is a signal that can be set to false while its cause is still true, and the self-healing
@@ -90,7 +95,7 @@ import org.hibernate.annotations.Filter;
  * freshness.
  *
  * <p><strong>And the sentence above with "no writer for this table" in it is the one §156
- * falsified</strong> — there are four writers now (§158 added the fourth), so {@code computed_at}
+ * falsified</strong> — there are five writers now (§178 added the fifth), so {@code computed_at}
  * is non-null wherever a recompute has run, the dashboard stops saying "not computed yet", and the
  * signals nothing derives are covered by that answer without being part of it. Which is the section
  * above, and the reason it is above this one.
@@ -112,13 +117,21 @@ public class CaseHealth {
     private UUID projectId;
 
     /**
-     * <strong>No writer</strong> (§156, {@code ArchitectureRulesTest.WRITERLESS_BY_DECISION}), like
-     * {@link #unlinked} and {@link #orphaned} below it — <del>four</del> two, after §157 and §158
+     * <del><strong>No writer</strong> (§156, {@code ArchitectureRulesTest.WRITERLESS_BY_DECISION}), like
+     * {@link #unlinked} and {@link #orphaned} below it — two, after §157 and §158
      * each took one out of that map by deriving it. Its cause is a document change under a linked
      * specification, which is
      * {@code documentation}'s to see and {@code repository}'s to record — so it is an event and a
-     * derivation, not a column to fill in here. See the class header for why {@code false} on an
-     * existing row is now a claim rather than a silence.
+     * derivation, not a column to fill in here.</del>
+     *
+     * <p><strong>→ §178 gave it one</strong>, the fourth of the five and the first of the two the map
+     * had held longest: {@code SpecLinkage} reads {@code case_doc_link.stale} — the mirror §167
+     * built for the Traceability panel — so it is <em>both</em> an event and a derivation, exactly as
+     * the struck sentence said, and neither of them had to cross a module boundary. Every
+     * relationship counts, not only {@code VERIFIES}; the reason is at the statement.
+     *
+     * <p><strong>A zero here is a check that ran.</strong> See the class header for the state that
+     * made the other reading possible, and {@link #orphaned} for the one column it still describes.
      */
     @Column(name = "outdated_spec_changed", nullable = false)
     private boolean outdatedSpecChanged;
@@ -159,11 +172,21 @@ public class CaseHealth {
     private boolean longUnexecuted;
 
     /**
-     * No writer (§156) — outdatedSpecChanged's case, and <strong>the one the first draft of that
+     * <del>No writer (§156) — outdatedSpecChanged's case, and <strong>the one the first draft of that
      * rule reported as live</strong>: a fixture's unterminated {@code UPDATE} swallowed the rest of
      * its file's string literals, and an {@code @DisplayName} containing the word "unlinked" stood
      * in for a writer. The cause is a case with no {@code doc_link}, which {@code BlockLinks} can
-     * see and nothing derives.
+     * see and nothing derives.</del>
+     *
+     * <p><strong>→ §178 gave it one</strong>, in the same statement as
+     * {@link #outdatedSpecChanged} — one lateral aggregate over {@code case_doc_link}, because "does
+     * this case link to anything" and "has anything it links to moved" are two readings of one row
+     * set.
+     *
+     * <p>It is also the column that made §178's test rewrite large rather than additive: <strong>this
+     * signal fires on every case nobody has linked</strong>, which in {@code CaseHealthRecomputeTest}
+     * is nearly all of them, and in a young project is nearly all of a company's. Argued at
+     * {@link HealthSignal#UNLINKED}, where the severity is INFO for that exact reason.
      */
     @Column(name = "unlinked", nullable = false)
     private boolean unlinked;

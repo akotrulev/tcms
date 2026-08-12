@@ -12,16 +12,19 @@ import org.springframework.transaction.annotation.Transactional;
  * Re-derives the health signals this module can see for the company currently in context — two
  * since §53, <strong>four since M3 slice 5</strong>, which added §6c's automation-drift pair now
  * that ingestion exists to make "no ingested result in N days" mean something, <strong>five since
- * §157</strong>, which added §6g's stale approval, and <strong>six since §158</strong>, which added
- * §6f's condition drift.
+ * §157</strong>, which added §6g's stale approval, <strong>six since §158</strong>, which added
+ * §6f's condition drift, and <strong>eight since §178</strong>, which added §6i's spec-changed
+ * marker and §6o's unlinked one.
  *
  * <p>The word "execution-driven" was in this sentence until §157 and is gone rather than qualified:
  * {@code STALE_APPROVAL} is derived from {@code review} and {@code test_case.current_version_no}
  * and has nothing to do with running anything. What the signals here have in common is that
  * <em>this module can see their cause</em> — through {@code ExecutionFacts} for the four that live
  * behind a forbidden module edge, through {@code ApprovalFacts} for the one that lives behind a
- * permitted one, and through {@code ConditionDrift} for the one whose cause is in this module
- * outright.
+ * permitted one, through {@code ConditionDrift} for the one whose cause is in this module
+ * outright, and through {@code SpecLinkage} for the two whose cause reached this module as a
+ * <em>table</em> — {@code case_doc_link}, which §167 built for the case detail's panel and which
+ * turned out to be everything the two documentation signals had been waiting for.
  *
  * <h2>Why this exists at all, and what it stops the dashboard from claiming</h2>
  *
@@ -35,7 +38,8 @@ import org.springframework.transaction.annotation.Transactional;
  * real; the other seven keep their honest zero, because approvals, documentation links and
  * ingestion still have no writer of their own~~ → <strong>four of the ten, and ingestion is no
  * longer on the list</strong>: §117 gave {@code test_run.source = 'INGESTED'} a writer, which is the
- * whole predicate {@code STALE_AUTOMATION} was blocked on. <del>Approvals</del>, documentation links and the
+ * whole predicate {@code STALE_AUTOMATION} was blocked on. <del>Approvals</del>, <del>documentation
+ * links</del> and the
  * owner check keep their <del>honest</del> zero (see {@code ExecutionFacts}' note on why this job
  * must not touch their columns), as does {@code FAILING_REPEATEDLY}, which is a sibling job's and
  * not absent.
@@ -44,17 +48,25 @@ import org.springframework.transaction.annotation.Transactional;
  * derivation, and the cheapest of the five, because {@code review} belongs to {@code project} and
  * {@code project} is a module this one may simply depend on. <strong>§158 took condition drift off
  * it too</strong>, and that one crossed no module boundary at all: {@code test_case_version} and
- * {@code condition} are both this module's. <strong>Three are left</strong>, and each needs a
+ * {@code condition} are both this module's. <del><strong>Three are left</strong>, and each needs a
  * module this one may not depend on or a decision nobody has taken — documentation links
  * ({@code UNLINKED} and {@code OUTDATED_SPEC_CHANGED}) and the owner check behind
- * {@code ORPHANED}.
+ * {@code ORPHANED}.</del>
+ *
+ * <p><strong>→ §178 took both documentation signals, and the module edge it names had stopped being
+ * the obstacle a slice earlier.</strong> {@code SpecLinkage} derives them from {@code case_doc_link}
+ * — a table in <em>this</em> module, which §167 created to serve the case detail's Traceability
+ * panel and which happens to hold, per case, both facts these two signals ask for. So the sentence
+ * above was right about the boundary and wrong about what it blocked: nothing had to cross. <strong>
+ * {@link HealthSignal#ORPHANED} is the last one</strong>, and it is the one that needs a decision
+ * before it needs any code.
  *
  * <p><strong>§156: the word "honest" was load-bearing and this service is what took it away.</strong>
  * A zero is honest while the row is absent — the dashboard's whole three-state design rests on
  * that. The first run of this job writes a row and a {@code computed_at} for every live case, so
  * from then on the signals nobody derives report a zero the read path cannot tell from a check
- * that passed — five when §156 wrote that sentence, three now, and none of the three is any less
- * misleading for the count having come down. Nothing here is wrong; the consequence just belongs written down at the thing that
+ * that passed — five when §156 wrote that sentence, <del>three</del> <strong>one</strong> now, and
+ * that one is no less misleading for the count having come down. Nothing here is wrong; the consequence just belongs written down at the thing that
  * causes it. {@code CaseHealth}'s header has the account.
  *
  * <h2>Why a scheduled recompute and not an event handler</h2>
@@ -82,6 +94,7 @@ public class CaseHealthRecomputeService {
     private final ApprovalFacts approvalFacts;
     private final ConditionDrift conditionDrift;
     private final DocumentationFacts documentationFacts;
+    private final SpecLinkage specLinkage;
     private final CaseHealthProperties thresholds;
     private final Clock clock;
 
@@ -90,12 +103,14 @@ public class CaseHealthRecomputeService {
             ApprovalFacts approvalFacts,
             ConditionDrift conditionDrift,
             DocumentationFacts documentationFacts,
+            SpecLinkage specLinkage,
             CaseHealthProperties thresholds,
             Clock clock) {
         this.executionFacts = executionFacts;
         this.approvalFacts = approvalFacts;
         this.conditionDrift = conditionDrift;
         this.documentationFacts = documentationFacts;
+        this.specLinkage = specLinkage;
         this.thresholds = thresholds;
         this.clock = clock;
     }
@@ -145,8 +160,16 @@ public class CaseHealthRecomputeService {
         // read by another is the case detail's traceability panel disagreeing with the chip beside
         // it about whether a spec moved.
         int links = documentationFacts.refreshCaseDocLinks();
-        log.debug("Recomputed execution, automation-drift, approval and condition-drift health "
-                + "signals for {} cases, and mirrored {} documentation links", cases, links);
+        // Sixth statement, same transaction, and it MUST come after the pair above rather than
+        // beside them: it derives both documentation signals from the rows that pair just wrote.
+        // Ordered earlier it would read the previous tick's mirror, so a case linked a minute ago
+        // would keep its UNLINKED chip while the panel an inch away already listed the link — the
+        // two-answers-one-screen defect this whole arrangement is against, arriving from the one
+        // direction one transaction does not close. SpecLinkage's header has the account.
+        specLinkage.recomputeLinkageSignals(now);
+        log.debug("Recomputed execution, automation-drift, approval, condition-drift and "
+                + "documentation-linkage health signals for {} cases, and mirrored {} "
+                + "documentation links", cases, links);
         return cases;
     }
 }

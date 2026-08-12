@@ -29,8 +29,9 @@ package com.tcms.repository;
  * its own constant.</strong> {@code NEVER_EXECUTED} and {@code LONG_UNEXECUTED} got a writer in §53
  * ({@code ExecutionFacts}), {@code FAILING_REPEATEDLY} in {@code reporting.ExecutionSource},
  * {@code STALE_AUTOMATION} + {@code UNDECLARED_AUTOMATION} in M3 slice 5,
- * {@link #STALE_APPROVAL} in §157 ({@code ApprovalFacts}) and {@link #CONDITION_DRIFT} in §158
- * ({@code ConditionDrift}) — <strong><del>five</del><del>six</del> seven of the ten
+ * {@link #STALE_APPROVAL} in §157 ({@code ApprovalFacts}), {@link #CONDITION_DRIFT} in §158
+ * ({@code ConditionDrift}) and {@link #UNLINKED} + {@link #OUTDATED_SPEC_CHANGED} in §178
+ * ({@code SpecLinkage}) — <strong><del>five</del><del>six</del><del>seven</del> nine of the ten
  * are real</strong>. <del>The other five still report an honest zero</del> → <strong>and §156 is
  * where "honest" stopped being the right word.</strong> A zero is honest on an <em>absent</em> row,
  * which is what this sentence was written against; the recompute that made the five real also
@@ -39,14 +40,21 @@ package com.tcms.repository;
  * that conclusion until §156 narrowed its copy. See {@code CaseHealth}'s header for the full
  * account and for why nullable columns are not the fix.
  *
- * <p><strong><del>Four, since §157</del> Three, since §158.</strong> {@link #STALE_APPROVAL} is
+ * <p><strong><del>Four, since §157</del> <del>Three, since §158</del> One, since §178.</strong>
+ * {@link #STALE_APPROVAL} is
  * derived from {@code review} and the case's current version number, {@link #CONDITION_DRIFT} from
  * the newest version's snapshot against the live library, and each derivation cost one class —
- * which is the shape the remaining three are expected to have, one module at a time, rather than a
- * schema change. Two of the three ({@link #UNLINKED}, {@link #OUTDATED_SPEC_CHANGED}) need
+ * which is the shape the remaining three <del>are expected to have</del> <strong>two of the three
+ * turned out to have</strong>, one module at a time, rather than a
+ * schema change. <del>Two of the three ({@link #UNLINKED}, {@link #OUTDATED_SPEC_CHANGED}) need
  * {@code documentation}, which this module may not depend on, so those two are a seam and not
- * merely a statement; {@link #ORPHANED} needs a decision about what "left the project" means
- * before it needs any code.
+ * merely a statement</del> — <strong>and that prediction was wrong in the direction worth
+ * recording.</strong> Both are one class ({@code SpecLinkage}) and <em>no</em> seam: §167 built
+ * {@code case_doc_link} in this module for the case detail's panel, so by §178 the rows the two
+ * signals need were already here and the module edge had stopped being the obstacle. A sentence
+ * naming a real constraint can go stale by something else being built.
+ * {@link #ORPHANED} needs a decision about what "left the project" means
+ * before it needs any code, and it is the last.
  *
  * <h2>{@code incomplete} is on the table and not in this enum</h2>
  *
@@ -82,6 +90,20 @@ public enum HealthSignal {
     // Declaration order is unchanged and load-bearing: CaseSearch.tallyHealth selects one
     // aggregate per constant and reads the results back BY POSITION. Sorting for display is
     // severity()'s job and happens where the tiles are built.
+    /**
+     * §6i's linked-spec marker — {@code SpecLinkage} since §178, derived from
+     * {@code case_doc_link.stale} rather than from {@code doc_link} a second time.
+     *
+     * <p><strong>ERROR, and the first constant here whose severity was decided before anything could
+     * raise it and holds up unchanged.</strong> A statement the case was written against has been
+     * rewritten: whoever runs the case today is testing what the spec said last quarter, and no
+     * amount of reading the case reveals it. {@link #CONDITION_DRIFT}'s argument, one table further
+     * out.
+     *
+     * <p><strong>Every relationship counts, unlike the two coverage sites</strong> — a case
+     * {@code DERIVED_FROM} a moved statement is as wrong as one claiming to verify it. Argued at
+     * {@code SpecLinkage.recomputeLinkageSignals}, beside the opposite call for {@link #UNLINKED}.
+     */
     OUTDATED_SPEC_CHANGED("outdatedSpecChanged", Severity.ERROR, "Outdated — spec changed"),
     /**
      * §6g's edit-after-approval marker, and since §157 the one signal here derived from neither an
@@ -110,6 +132,22 @@ public enum HealthSignal {
     STALE_AUTOMATION("staleAutomation", Severity.ERROR, "Stale automation"),
     NEVER_EXECUTED("neverExecuted", Severity.WARNING, "Never executed"),
     LONG_UNEXECUTED("longUnexecuted", Severity.WARNING, "Not run in 90 days"),
+    /**
+     * §6o's traceability gap — {@code SpecLinkage} since §178, and the only signal here that will
+     * fire on <em>most</em> cases of a project that has not started linking. Plan §6o's own layout
+     * mock-up says as much: {@code Unlinked 156} beside {@code Approved 891}.
+     *
+     * <p><strong>INFO, and the volume is why.</strong> Nothing is broken and nothing is decaying; a
+     * case with no link is a case whose coverage cannot be reported on, which is a project-level
+     * omission rather than a fault in the case. A WARNING on 156 cases is a panel people learn to
+     * ignore, and then the two ERROR signals go with it.
+     *
+     * <p><strong>Any link clears it, including an external one</strong> — and a case linked only by
+     * {@code REFERENCES} is therefore not unlinked, though it covers nothing. That is the one place
+     * this enum deliberately says less than the coverage matrix does; the argument is at
+     * {@code SpecLinkage.recomputeLinkageSignals} and it turns on the chip being rendered inches
+     * from the list of the very links it would be denying.
+     */
     UNLINKED("unlinked", Severity.INFO, "Unlinked"),
     FAILING_REPEATEDLY("failingRepeatedly", Severity.WARNING, "Failing repeatedly"),
     ORPHANED("orphaned", Severity.INFO, "Orphaned"),
