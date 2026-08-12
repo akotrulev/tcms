@@ -65,16 +65,20 @@ public class CaseDocLink {
     @Column(name = "relationship", nullable = false, updatable = false)
     private String relationship;
 
-    @Column(name = "page_id", nullable = false, updatable = false)
+    /**
+     * Null for an external target, and {@code NOT NULL} until {@code V47} — see that migration's
+     * §1, and {@link #targetKind} for what tells the two apart.
+     */
+    @Column(name = "page_id", updatable = false)
     private UUID pageId;
 
-    @Column(name = "page_key", nullable = false, updatable = false)
+    @Column(name = "page_key", updatable = false)
     private String pageKey;
 
-    @Column(name = "page_title", nullable = false, updatable = false)
+    @Column(name = "page_title", updatable = false)
     private String pageTitle;
 
-    @Column(name = "block_id", nullable = false, updatable = false)
+    @Column(name = "block_id", updatable = false)
     private UUID blockId;
 
     /** Null when the block has no text — see {@code V46}'s comment on the column. */
@@ -82,7 +86,37 @@ public class CaseDocLink {
     private String blockExcerpt;
 
     /**
+     * The six coordinates of an external target, null on a block link and mirrored exactly.
+     *
+     * <p>Unlike {@link #pageKey}, {@link #pageTitle} and {@link #blockExcerpt}, these are copies
+     * that <em>cannot</em> go stale: {@code doc_link} has no update path at all, so what they mirror
+     * is immutable for the life of the row ({@code V47} §2). A refresh rewrites them because it
+     * rewrites the table, not because they could have changed.
+     */
+    @Column(name = "external_repo", updatable = false)
+    private String externalRepo;
+
+    @Column(name = "external_path", updatable = false)
+    private String externalPath;
+
+    @Column(name = "external_line_start", updatable = false)
+    private Integer externalLineStart;
+
+    @Column(name = "external_line_end", updatable = false)
+    private Integer externalLineEnd;
+
+    @Column(name = "external_commit_sha", updatable = false)
+    private String externalCommitSha;
+
+    @Column(name = "external_url", updatable = false)
+    private String externalUrl;
+
+    /**
      * The linked page's content changed after this case's content last changed.
+     *
+     * <p>Always false for an external target — {@code V47} §3 argues that this is an answer and not
+     * a default: the commit sha pins the lines, so what could fall behind is the pin, and this
+     * column must not be read as saying anything about that.
      *
      * <p>Stored rather than compared at read time, which is the decision {@code V46} §4 argues: a
      * read-time comparison would be fresher and would disagree with the {@code OUTDATED_SPEC_CHANGED}
@@ -139,5 +173,29 @@ public class CaseDocLink {
 
     boolean isStale() {
         return stale;
+    }
+
+    String getExternalRepo() {
+        return externalRepo;
+    }
+
+    String getExternalPath() {
+        return externalPath;
+    }
+
+    Integer getExternalLineStart() {
+        return externalLineStart;
+    }
+
+    Integer getExternalLineEnd() {
+        return externalLineEnd;
+    }
+
+    String getExternalCommitSha() {
+        return externalCommitSha;
+    }
+
+    String getExternalUrl() {
+        return externalUrl;
     }
 }

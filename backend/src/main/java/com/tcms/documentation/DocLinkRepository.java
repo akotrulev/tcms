@@ -56,6 +56,40 @@ public interface DocLinkRepository extends JpaRepository<DocLink, UUID> {
             @Param("sourceId") UUID sourceId);
 
     /**
+     * Every external link of one source — the read {@link ExternalLinkService} decides both
+     * idempotency and deletion on.
+     *
+     * <p><strong>Deliberately not a predicate per target.</strong> The identity of an external
+     * target is four nullable columns (repo, path and two line numbers) and {@code = :param} is
+     * <em>unknown</em> rather than true when both sides are null, so the query spelling of "is this
+     * already linked" would fail to match a whole-file link against itself and write a duplicate on
+     * every second click. The comparison is Java's, over this list; {@code ExternalLinkService#
+     * sameTarget} carries the argument.
+     *
+     * <p>The list is a case's external links, which is a handful — bounded by the shape of the thing
+     * rather than by a limit somebody has to remember. {@code findForPage} above is the batched read
+     * and it is batched because a page renders every block's links at once; nothing renders every
+     * case's.
+     *
+     * <p>Ordered oldest-first so that two reads of an unchanged case agree, and by id after that:
+     * the timestamp comes from one {@code Clock#instant} per request, so two links created in one
+     * transaction would otherwise be free to swap places between reads.
+     *
+     * <p>The predicate is the kind and not {@code targetBlockId IS NULL}. The two select the same
+     * rows — {@code ck_doc_link_target} makes a block id mandatory for {@code DOC_BLOCK} and there
+     * is no arm that permits one otherwise — and only one of them says what is being asked for.
+     */
+    @Query("""
+            SELECT l FROM DocLink l
+             WHERE l.sourceType = :sourceType
+               AND l.sourceId = :sourceId
+               AND l.targetKind <> 'DOC_BLOCK'
+             ORDER BY l.createdAt ASC, l.id ASC
+            """)
+    List<DocLink> findExternalForSource(
+            @Param("sourceType") LinkSourceType sourceType, @Param("sourceId") UUID sourceId);
+
+    /**
      * One link of one page, by id — the read the delete gates on.
      *
      * <p>Scoped to the page rather than fetched by primary key, for {@code findLiveInProject}'s

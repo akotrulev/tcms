@@ -109,6 +109,26 @@ class DocumentationFacts {
      *       defect produced — which is the direction to fail in.</li>
      * </ul>
      *
+     * <h2>Two arms, because an external target has no page to join to</h2>
+     *
+     * <p>Since §169 the second {@code SELECT} mirrors {@code EXTERNAL_GIT} and {@code EXTERNAL_URL}
+     * rows — the kinds {@code V1} designed and {@code ExternalLinkService} finally writes. It joins
+     * {@code test_case} and nothing else, so <strong>three of the four predicates above are absent
+     * rather than relaxed</strong>: there is no page to be deleted, and no page project to compare
+     * against, which means the sibling-project leak the fourth predicate guards cannot arise on this
+     * arm — the target is not a row in this database at all. What it keeps is the case's soft-delete
+     * check, which is the one predicate that is about the source.
+     *
+     * <p>{@code UNION ALL} and not {@code UNION}: the two arms are disjoint by their own
+     * {@code target_kind} predicates, so deduplication would be a sort over every link in the
+     * company to remove nothing. A row appearing twice here would be a defect in these predicates,
+     * and {@code case_doc_link}'s primary key is what would report it — loudly, rather than by
+     * quietly collapsing the duplicate.
+     *
+     * <p>{@code stale} is the literal {@code false} on that arm, which {@code V47} §3 argues is an
+     * answer rather than a default: the commit sha pins the lines, so nothing about the target can
+     * change, and what could fall behind — the pin itself — is a question this column does not ask.
+     *
      * <h2>{@code stale} is a version comparison on both sides, never {@code updated_at}</h2>
      *
      * <p>The newest {@code doc_page_version} against the newest {@code test_case_version}, falling
@@ -141,12 +161,15 @@ class DocumentationFacts {
         return entities.createNativeQuery("""
                 INSERT INTO case_doc_link (
                         id, company_id, case_id, target_kind, relationship,
-                        page_id, page_key, page_title, block_id, block_excerpt, stale)
+                        page_id, page_key, page_title, block_id, block_excerpt,
+                        external_repo, external_path, external_line_start, external_line_end,
+                        external_commit_sha, external_url, stale)
                 SELECT l.id, c.company_id, c.id, l.target_kind, l.relationship,
                        p.id, p.key, p.title, b.id,
                        CASE WHEN length(flat.text) > :limit
                             THEN btrim(left(flat.text, :cut)) || '…'
                             ELSE flat.text END,
+                       NULL, NULL, NULL, NULL, NULL, NULL,
                        coalesce(page_content.at, p.created_at)
                            > coalesce(case_content.at, c.created_at)
                   FROM doc_link l
@@ -174,6 +197,19 @@ class DocumentationFacts {
                    AND c.deleted_at IS NULL
                    AND p.deleted_at IS NULL
                    AND p.project_id = c.project_id
+
+                UNION ALL
+
+                SELECT l.id, c.company_id, c.id, l.target_kind, l.relationship,
+                       NULL, NULL, NULL, NULL, NULL,
+                       l.external_repo, l.external_path, l.external_line_start,
+                       l.external_line_end, l.external_commit_sha, l.external_url,
+                       false
+                  FROM doc_link l
+                  JOIN test_case c ON c.id = l.source_id
+                 WHERE l.source_type = 'TEST_CASE'
+                   AND l.target_kind <> 'DOC_BLOCK'
+                   AND c.deleted_at IS NULL
                 """)
                 // Two parameters rather than `:limit - 1` in the statement: arithmetic on a bind
                 // parameter leaves Postgres inferring the type of an operand it has not been given

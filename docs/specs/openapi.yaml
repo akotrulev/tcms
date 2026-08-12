@@ -1880,6 +1880,101 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /projects/{projectId}/cases/{caseId}/external-links:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/CaseId' }
+    post:
+      # Served by `documentation`, under `repository`'s aggregate — the row is a doc_link. Same
+      # split as /plans/{planId}/document, and ExternalLinkController's header carries it.
+      tags: [repository, documentation]
+      summary: Link this case to code or to a URL
+      description: |
+        Records that this case verifies a range of lines in a repository, or a document published
+        somewhere else — the two `targetKind`s `V1` designed and nothing wrote until §169 (plan
+        §6m; open question #26, resolved *build it* on 2026-08-02).
+
+        **Requires `case:edit`, not `doc:edit`** — which is the opposite of the block link one path
+        over, and deliberately. That one gates on documentation rights because the link renders on
+        a documentation page. An external link renders in exactly one place, the case's
+        Traceability panel, so the act writes into a case and nothing else: charging documentation
+        rights for it would let a docs author annotate a case they may not edit, and would make
+        this impossible in a project that keeps no documentation at all.
+
+        **The commit sha is mandatory for `EXTERNAL_GIT`.** Not optional metadata: an unpinned line
+        range silently points at different code after the next push, which is a link that lies
+        rather than a link that breaks. A branch or tag name is refused for the same reason.
+
+        **The line range is optional as a whole** — a link to a whole file is a legitimate claim —
+        **and ordered when present.** An end without a start is refused rather than rendered as
+        `Checkout.java:null–120`.
+
+        **`EXTERNAL_URL` accepts `http` and `https` only.** The SPA renders the value as an
+        anchor's `href`, so this is a security bound: a `javascript:` URL executes in the reader's
+        session and a `data:` URL renders attacker-authored HTML on this product's origin. It is
+        refused at the write because that is the one place it can be refused once — four renderers
+        read this value back.
+
+        **Linking the same target twice writes nothing and answers `200`** with the link already
+        there, exactly as the block link does, and for the same reason: re-asserting a recorded
+        fact is agreement, not conflict. Identity includes the line range, so two ranges in one
+        file at one commit are two links.
+
+        The created link reaches `TestCase.relatedDocuments` through the `case_doc_link` mirror,
+        which refreshes on the `documentation.links_changed` event this write raises — so the
+        case's panel updates on the next fetch rather than within this response. There is no `GET`
+        here on purpose; the case is where a case's links are read.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExternalLinkInput' }
+      responses:
+        '200':
+          description: The identical target was already linked. Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExternalLink' }
+        '201':
+          description: |
+            Linked. **No `Location` header** — there is no operation that would serve it, and §119
+            is the standing account of what answering 201 with a `Location` that 404s costs.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExternalLink' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: |
+            The project or the case is not visible here. One bodiless response for both (§6t), and
+            the case check is against **this project** rather than merely this company — a sibling
+            project's case lands here rather than being linked.
+
+  /projects/{projectId}/cases/{caseId}/external-links/{linkId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/CaseId' }
+      - name: linkId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [repository, documentation]
+      summary: Remove one of this case's external links
+      description: |
+        Requires `case:edit`. **A hard delete** — a withdrawn claim left in the table still reads as
+        one to every count over it, which is the call `BlockLinkService` makes for the same table.
+
+        A link id belonging to another case is a `404` rather than a delete, and so is one that
+        does not exist: unlike the `POST`, there is no fact here that is already true.
+      responses:
+        '204':
+          description: Removed. No body.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /projects/{projectId}/ai-proposals:
     # Only the path variable is shared — the paging and status filter belong to the GET. See the
     # comment on /projects/{projectId}/cases for what a filter declared here would have done to the
@@ -9372,17 +9467,93 @@ components:
             Defaults to `VERIFIES`, which is what a test case linked to a scenario means and what
             the column already defaults to.
 
+    ExternalLinkInput:
+      type: object
+      # One body for both external kinds rather than two schemas or a discriminated union. The
+      # field that decides is on the wire regardless — targetKind is what the row stores — and a
+      # union would surface in the generated TypeScript as an either the caller has to narrow.
+      # The invalid combinations are refused per field by the server, which is where a form can act
+      # on them; this shape is the wire and not the rule.
+      required: [targetKind]
+      properties:
+        targetKind:
+          type: string
+          enum: [EXTERNAL_GIT, EXTERNAL_URL]
+          description: |
+            Required, with no default. Inferring it from which fields are populated is how a
+            request carrying both a URL and a path gets silently interpreted rather than refused.
+        relationship:
+          type: string
+          enum: [VERIFIES, DERIVED_FROM, REFERENCES]
+          default: VERIFIES
+        repo:
+          type: string
+          example: acme/checkout-service
+          description: |
+            `EXTERNAL_GIT` only, and **required** for it — which is narrower than the column, whose
+            CHECK asks only for a path and a sha. A path with no repository names a file in an
+            unnamed project, which is a link nobody can follow.
+        path:
+          type: string
+          example: src/main/java/com/acme/Checkout.java
+          description: '`EXTERNAL_GIT` only, and required for it.'
+        lineStart:
+          type: integer
+          minimum: 1
+          description: |
+            Optional. Both line numbers absent is a link to a whole file, which is a legitimate
+            claim; an end without a start is refused.
+        lineEnd:
+          type: integer
+          minimum: 1
+          description: 'Optional, and never less than `lineStart`.'
+        commitSha:
+          type: string
+          example: 4f9c2b1
+          description: |
+            **Required for `EXTERNAL_GIT`** — 7 to 40 hexadecimal characters. A branch or tag name
+            is refused: it moves, and an unpinned range points at different code after the next
+            push (open question #26, plan §6m). Abbreviated shas are accepted because that is what
+            people paste.
+        url:
+          type: string
+          format: uri
+          description: |
+            **Required for `EXTERNAL_URL`**, `http` or `https` only. The scheme is a security bound
+            rather than tidiness — this value is rendered as an anchor's `href`, and a
+            `javascript:` URL there runs in the reader's session.
+
+    ExternalLink:
+      type: object
+      # The create's answer, and neither of the other two link records can be it: BlockLink has no
+      # external columns (a link with no block never renders on a page) and DocLink is assembled in
+      # `repository`, off a mirror that has not been refreshed yet at the moment this is written.
+      # It deliberately does not echo the case — the caller named it in the path (§163).
+      required: [id, targetKind, relationship]
+      properties:
+        id: { type: string, format: uuid }
+        targetKind: { type: string, enum: [EXTERNAL_GIT, EXTERNAL_URL] }
+        relationship: { type: string, enum: [VERIFIES, DERIVED_FROM, REFERENCES] }
+        externalRepo: { type: string, nullable: true }
+        externalPath: { type: string, nullable: true }
+        externalLineStart: { type: integer, nullable: true }
+        externalLineEnd: { type: integer, nullable: true }
+        externalCommitSha: { type: string, nullable: true }
+        externalUrl: { type: string, nullable: true }
+
     DocLink:
       type: object
-      # SERVED SINCE §167 by repository.DocLinkView, off the case_doc_link read model. The six
-      # external* properties below are NOT served and no writer exists for them: doc_link's CHECK
-      # designs three target kinds and only DOC_BLOCK has one, which is why documentation.DocLink
-      # leaves those columns unmapped rather than mapped as permanently-null fields. Each of the six
-      # is pinned CONTRACT-ONLY in ContractConventionTest.MEMBER_DIVERGENCE_BY_DECISION, in both
-      # directions, so building an external target means deleting six entries to make the build pass
-      # again. Kept declared rather than deleted because the SPA already renders that branch and
-      # because a declared property nothing sends costs a dead branch, where the reverse costs a
-      # value no generated type can name (§165's asymmetry).
+      # SERVED SINCE §167 by repository.DocLinkView, off the case_doc_link read model — and the six
+      # external* properties are served too SINCE §169, which gave the other two target kinds their
+      # first writer (POST .../cases/{caseId}/external-links). They were pinned CONTRACT-ONLY in
+      # ContractConventionTest.MEMBER_DIVERGENCE_BY_DECISION in both directions precisely so that
+      # building the capability would fail the build until the entries were deleted; that is what
+      # happened, and all six are gone.
+      #
+      # A row is one kind. A DOC_BLOCK link carries the four page/block properties and nulls the
+      # six; an external link does the reverse. `targetKind` is what says which half is populated —
+      # never the presence of a value, which is how a client comes to render a git link as an empty
+      # page reference.
       required: [id, targetKind, relationship, stale]
       properties:
         id: { type: string, format: uuid }
@@ -9406,6 +9577,14 @@ components:
           type: boolean
           description: |
             True when the target changed after the case was last touched (plan §6i).
+
+            **Always `false` for an external target, and that is an answer rather than a default.**
+            An `EXTERNAL_GIT` link is pinned to a commit, so the lines it names cannot change under
+            it — that is what the mandatory sha buys. What can fall behind is the pin, and this
+            field does not mean that: a marker saying "the spec changed, re-read it" on an
+            immutable target would train readers to ignore it where it *is* computed. Answering
+            "is the pin current" needs the product to talk to a git host, which is an integration
+            and not a column.
 
             **Both halves are content versions, never `updated_at`** — the newest
             `doc_page_version` against the newest `test_case_version`. `ApprovalFacts` refused the

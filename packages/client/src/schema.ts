@@ -2642,6 +2642,194 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/cases/{caseId}/external-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link this case to code or to a URL
+         * @description Records that this case verifies a range of lines in a repository, or a document published
+         *     somewhere else — the two `targetKind`s `V1` designed and nothing wrote until §169 (plan
+         *     §6m; open question #26, resolved *build it* on 2026-08-02).
+         *
+         *     **Requires `case:edit`, not `doc:edit`** — which is the opposite of the block link one path
+         *     over, and deliberately. That one gates on documentation rights because the link renders on
+         *     a documentation page. An external link renders in exactly one place, the case's
+         *     Traceability panel, so the act writes into a case and nothing else: charging documentation
+         *     rights for it would let a docs author annotate a case they may not edit, and would make
+         *     this impossible in a project that keeps no documentation at all.
+         *
+         *     **The commit sha is mandatory for `EXTERNAL_GIT`.** Not optional metadata: an unpinned line
+         *     range silently points at different code after the next push, which is a link that lies
+         *     rather than a link that breaks. A branch or tag name is refused for the same reason.
+         *
+         *     **The line range is optional as a whole** — a link to a whole file is a legitimate claim —
+         *     **and ordered when present.** An end without a start is refused rather than rendered as
+         *     `Checkout.java:null–120`.
+         *
+         *     **`EXTERNAL_URL` accepts `http` and `https` only.** The SPA renders the value as an
+         *     anchor's `href`, so this is a security bound: a `javascript:` URL executes in the reader's
+         *     session and a `data:` URL renders attacker-authored HTML on this product's origin. It is
+         *     refused at the write because that is the one place it can be refused once — four renderers
+         *     read this value back.
+         *
+         *     **Linking the same target twice writes nothing and answers `200`** with the link already
+         *     there, exactly as the block link does, and for the same reason: re-asserting a recorded
+         *     fact is agreement, not conflict. Identity includes the line range, so two ranges in one
+         *     file at one commit are two links.
+         *
+         *     The created link reaches `TestCase.relatedDocuments` through the `case_doc_link` mirror,
+         *     which refreshes on the `documentation.links_changed` event this write raises — so the
+         *     case's panel updates on the next fetch rather than within this response. There is no `GET`
+         *     here on purpose; the case is where a case's links are read.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    /**
+                     * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                     *     sequential per company and therefore trivially guessable, so allowing one as a
+                     *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                     *     user typed or pasted through the search endpoint, which returns not-found —
+                     *     never forbidden — for a key in a project the caller cannot reach.
+                     */
+                    caseId: components["parameters"]["CaseId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ExternalLinkInput"];
+                };
+            };
+            responses: {
+                /** @description The identical target was already linked. Nothing was written. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ExternalLink"];
+                    };
+                };
+                /**
+                 * @description Linked. **No `Location` header** — there is no operation that would serve it, and §119
+                 *     is the standing account of what answering 201 with a `Location` that 404s costs.
+                 */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ExternalLink"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                /**
+                 * @description The project or the case is not visible here. One bodiless response for both (§6t), and
+                 *     the case check is against **this project** rather than merely this company — a sibling
+                 *     project's case lands here rather than being linked.
+                 */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/cases/{caseId}/external-links/{linkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+                linkId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove one of this case's external links
+         * @description Requires `case:edit`. **A hard delete** — a withdrawn claim left in the table still reads as
+         *     one to every count over it, which is the call `BlockLinkService` makes for the same table.
+         *
+         *     A link id belonging to another case is a `404` rather than a delete, and so is one that
+         *     does not exist: unlike the `POST`, there is no fact here that is already true.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    /**
+                     * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                     *     sequential per company and therefore trivially guessable, so allowing one as a
+                     *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                     *     user typed or pasted through the search endpoint, which returns not-found —
+                     *     never forbidden — for a key in a project the caller cannot reach.
+                     */
+                    caseId: components["parameters"]["CaseId"];
+                    linkId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Removed. No body. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/ai-proposals": {
         parameters: {
             query?: never;
@@ -9947,6 +10135,67 @@ export interface components {
              */
             relationship: "VERIFIES" | "DERIVED_FROM" | "REFERENCES";
         };
+        ExternalLinkInput: {
+            /**
+             * @description Required, with no default. Inferring it from which fields are populated is how a
+             *     request carrying both a URL and a path gets silently interpreted rather than refused.
+             * @enum {string}
+             */
+            targetKind: "EXTERNAL_GIT" | "EXTERNAL_URL";
+            /**
+             * @default VERIFIES
+             * @enum {string}
+             */
+            relationship: "VERIFIES" | "DERIVED_FROM" | "REFERENCES";
+            /**
+             * @description `EXTERNAL_GIT` only, and **required** for it — which is narrower than the column, whose
+             *     CHECK asks only for a path and a sha. A path with no repository names a file in an
+             *     unnamed project, which is a link nobody can follow.
+             * @example acme/checkout-service
+             */
+            repo?: string;
+            /**
+             * @description `EXTERNAL_GIT` only, and required for it.
+             * @example src/main/java/com/acme/Checkout.java
+             */
+            path?: string;
+            /**
+             * @description Optional. Both line numbers absent is a link to a whole file, which is a legitimate
+             *     claim; an end without a start is refused.
+             */
+            lineStart?: number;
+            /** @description Optional, and never less than `lineStart`. */
+            lineEnd?: number;
+            /**
+             * @description **Required for `EXTERNAL_GIT`** — 7 to 40 hexadecimal characters. A branch or tag name
+             *     is refused: it moves, and an unpinned range points at different code after the next
+             *     push (open question #26, plan §6m). Abbreviated shas are accepted because that is what
+             *     people paste.
+             * @example 4f9c2b1
+             */
+            commitSha?: string;
+            /**
+             * Format: uri
+             * @description **Required for `EXTERNAL_URL`**, `http` or `https` only. The scheme is a security bound
+             *     rather than tidiness — this value is rendered as an anchor's `href`, and a
+             *     `javascript:` URL there runs in the reader's session.
+             */
+            url?: string;
+        };
+        ExternalLink: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            targetKind: "EXTERNAL_GIT" | "EXTERNAL_URL";
+            /** @enum {string} */
+            relationship: "VERIFIES" | "DERIVED_FROM" | "REFERENCES";
+            externalRepo?: string | null;
+            externalPath?: string | null;
+            externalLineStart?: number | null;
+            externalLineEnd?: number | null;
+            externalCommitSha?: string | null;
+            externalUrl?: string | null;
+        };
         DocLink: {
             /** Format: uuid */
             id: string;
@@ -9970,6 +10219,14 @@ export interface components {
             externalUrl?: string | null;
             /**
              * @description True when the target changed after the case was last touched (plan §6i).
+             *
+             *     **Always `false` for an external target, and that is an answer rather than a default.**
+             *     An `EXTERNAL_GIT` link is pinned to a commit, so the lines it names cannot change under
+             *     it — that is what the mandatory sha buys. What can fall behind is the pin, and this
+             *     field does not mean that: a marker saying "the spec changed, re-read it" on an
+             *     immutable target would train readers to ignore it where it *is* computed. Answering
+             *     "is the pin current" needs the product to talk to a git host, which is an integration
+             *     and not a column.
              *
              *     **Both halves are content versions, never `updated_at`** — the newest
              *     `doc_page_version` against the newest `test_case_version`. `ApprovalFacts` refused the

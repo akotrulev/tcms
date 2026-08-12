@@ -397,6 +397,12 @@ class ContractConventionTest {
             Map.entry("DocPageSummary", List.of(com.tcms.documentation.DocPageSummaryView.class)),
             Map.entry("EntityVersion", List.of(com.tcms.repository.EntityVersionView.class)),
             Map.entry("Evidence", List.of(com.tcms.execution.EvidenceView.class)),
+            // §169. The third record over doc_link, and the second write shape: BlockLink is the
+            // row seen from the block end, DocLink from the case end, this one from the create
+            // that made it. ExternalLinkView's header says why none of the three can be the other.
+            Map.entry("ExternalLink", List.of(com.tcms.documentation.ExternalLinkView.class)),
+            Map.entry("ExternalLinkInput",
+                    List.of(com.tcms.documentation.ExternalLinkInput.class)),
             Map.entry("Facet", List.of(com.tcms.repository.FacetView.class)),
             Map.entry("HeldPermission", List.of(com.tcms.auth.MeController.HeldPermission.class)),
             Map.entry("IngestionJob", List.of(com.tcms.execution.IngestionJobView.class)),
@@ -549,58 +555,31 @@ class ContractConventionTest {
      * the reason is what a reader acts on. When adding an entry here, name the obstacle precisely
      * enough that a later slice can tell it has gone.
      *
-     * <p><strong>The six {@code DocLink.external*} entries are a different kind and belong to §167's
-     * pairing of that schema.</strong> Nothing about a module boundary blocks them — they are a
-     * capability {@code V1} designed and no slice has built, so the divergence records a decision
-     * not to fabricate values rather than an obstacle. They are what a schema paired for the first
-     * time turns up, which is the population argument {@code everyNameMatchedRecordIsPairedOrExplained}
-     * makes: a shape nothing compares can diverge in both directions for free.
+     * <p>~~<strong>The six {@code DocLink.external*} entries are a different kind</strong>…~~ →
+     * <strong>they are gone too, and this map is now EMPTY.</strong> They were not a module-boundary
+     * gap: they were a capability {@code V1} designed and no slice had built, so the divergence
+     * recorded a decision not to fabricate values. §169 built it — {@code ExternalLinkService} writes
+     * both target kinds — and the entries had to be deleted for the build to pass, which is the
+     * mechanism they were pinned in both directions for. <strong>Seven of the ten entries this map
+     * has ever held were removed by somebody closing the gap rather than by editing the argument</strong>,
+     * and the remaining three were §166's, §167's and §168's, which is the same thing.
+     *
+     * <p><strong>An empty map is a result and not a hole.</strong> Every named object schema and the
+     * record serving it now agree member for member, in both directions. The next entry added here
+     * inherits everything above: name the obstacle precisely enough that a later slice can tell it
+     * has gone, and expect to delete the entry rather than to revise it.
      */
-    private static final Map<String, String> MEMBER_DIVERGENCE_BY_DECISION = Map.ofEntries(
-            // TestCaseSummary.lastResult and TestCase.lastResult WERE HERE and are deleted rather
-            // than edited — §166 served the field, and this map is pinned in both directions
-            // precisely so a closed divergence cannot keep its argument. Deleting them IS the
-            // build passing again; that is the property, exercised.
-            // TestCase.relatedDocuments WAS HERE and is deleted rather than edited — §167 served
-            // the field, and this map is pinned in both directions precisely so a closed divergence
-            // cannot keep its argument. Second time that has fired on a divergence somebody
-            // actually closed; §166's two lastResult entries were the first.
-            //
-            // THE SIX BELOW ARRIVED WITH IT, and they are the other side of the same slice: pairing
-            // `DocLink` with the record that finally serves it is what made them visible. They are
-            // the two target kinds this product designs and does not build. documentation.DocLink
-            // leaves the columns UNMAPPED for the reason its header gives — "a mapped null suggests
-            // a value somebody could set" — and DocLinkView makes the same call one layer up, so
-            // the divergence is the honest record of a designed-but-unbuilt capability rather than
-            // six components that are null in every response there has ever been.
-            //
-            // They go together and they leave together: an external target needs a writer, a
-            // second arm in the mirror statement and a `targetKind` this SPA branch can reach, and
-            // on that day all six entries have to be deleted for the build to pass.
-            Map.entry("DocLink.externalRepo",
-                    "CONTRACT-ONLY. doc_link.external_repo belongs to target_kind EXTERNAL_GIT, "
-                            + "which V1's ck_doc_link_target designs and nothing writes — "
-                            + "BlockLinkService creates DOC_BLOCK links only"),
-            Map.entry("DocLink.externalPath",
-                    "CONTRACT-ONLY. EXTERNAL_GIT's path, same absent writer as externalRepo"),
-            Map.entry("DocLink.externalLineStart",
-                    "CONTRACT-ONLY. EXTERNAL_GIT's line range, same absent writer"),
-            Map.entry("DocLink.externalLineEnd",
-                    "CONTRACT-ONLY. EXTERNAL_GIT's line range, same absent writer"),
-            Map.entry("DocLink.externalCommitSha",
-                    "CONTRACT-ONLY. EXTERNAL_GIT's commit — the CHECK makes it mandatory for that "
-                            + "kind, because a line number without one points confidently at the "
-                            + "wrong code six months later (plan §6m). No writer"),
-            Map.entry("DocLink.externalUrl",
-                    "CONTRACT-ONLY. target_kind EXTERNAL_URL's whole payload. Plan §6i wants "
-                            + "Confluence and Google Docs references in the same traceability "
-                            + "graph, clearly marked as having no anchor stability; nothing builds "
-                            + "them yet"));
-    // DocBlock.coverage WAS HERE and is deleted rather than edited — §168 served the marker, and
-    // this map is pinned in both directions precisely so a closed divergence cannot keep its
-    // argument. Third time that has fired on a divergence somebody actually closed, and the last of
-    // the four this map opened with: what remains is six entries about a capability nothing builds,
-    // and no entry at all about a module boundary.
+    private static final Map<String, String> MEMBER_DIVERGENCE_BY_DECISION = Map.of();
+
+    // WHAT WAS HERE, ALL OF IT DELETED RATHER THAN EDITED, in the order it left:
+    //   TestCaseSummary.lastResult, TestCase.lastResult   §166 — served through case_health
+    //   TestCase.relatedDocuments                         §167 — served through case_doc_link
+    //   DocBlock.coverage                                 §168 — served with no new storage at all
+    //   DocLink.external{Repo,Path,LineStart,LineEnd,     §169 — the capability got a writer
+    //                    CommitSha,Url}
+    // Deleting the entry IS the build passing again; that is the property this map exists for, and
+    // it has now fired four times. Do not reinstate one to "keep the history" — the history is here
+    // and in the sections, and an entry in the map is a live claim about the code.
 
     /**
      * Every production record whose simple name matches a named object schema, by that name.

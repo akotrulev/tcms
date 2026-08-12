@@ -30,11 +30,19 @@ public interface CaseDocLinkRepository extends JpaRepository<CaseDocLink, UUID> 
      * table cannot distinguish, argued at {@code V46} §5. Ordered so that two renders of one case
      * agree: the version snapshot is this same render serialized, and an unstable order would make
      * a case's recorded history differ from itself with nothing having changed.
+     *
+     * <p><strong>{@code targetKind} leads and {@code id} closes, both since §169.</strong> The
+     * original {@code pageKey, blockId} was total while every row was a block link and stopped being
+     * so the moment external targets got a writer: both columns are null on those rows, so the whole
+     * external half of a case's panel was left in whatever order a plan produced — the instability
+     * this clause exists to prevent, arriving through the clause itself. Leading with the kind also
+     * groups the panel the way it reads (specifications, then code, then links out), which falls out
+     * of the enum's own alphabet rather than being imposed by a {@code CASE}.
      */
     @Query("""
             SELECT l FROM CaseDocLink l
              WHERE l.caseId IN :caseIds
-             ORDER BY l.pageKey, l.blockId
+             ORDER BY l.targetKind, l.pageKey, l.blockId, l.externalPath, l.externalUrl, l.id
             """)
     List<CaseDocLink> findForCases(@Param("caseIds") Collection<UUID> caseIds);
 }

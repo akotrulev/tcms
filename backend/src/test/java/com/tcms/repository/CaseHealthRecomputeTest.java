@@ -296,6 +296,21 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     /** Umbra's case, linked to Umbra's page. The company the DELETE must not reach. */
     private static final UUID FOREIGN_LINKED =
             UUID.fromString("ce004000-0000-4000-8000-000000000025");
+    /**
+     * §169's second arm — one {@code EXTERNAL_GIT} link and one {@code EXTERNAL_URL} link, on a
+     * case that has a block link too.
+     *
+     * <p>All three on one case deliberately: the arms are a {@code UNION ALL}, and a case carrying
+     * only external links could not tell "both arms ran" from "the first arm matched nothing".
+     */
+    private static final UUID LINKED_OUTSIDE =
+            UUID.fromString("ce004000-0000-4000-8000-000000000026");
+    /** A suite's external link. Mirrored by neither arm — {@code case_doc_link} is per case. */
+    private static final UUID EXTERNALLY_LINKED_SUITE =
+            UUID.fromString("ce004000-0000-4000-8000-000000000027");
+    /** Soft-deleted, with an external link: the one predicate the second arm keeps. */
+    private static final UUID LINKED_OUTSIDE_AND_REMOVED =
+            UUID.fromString("ce004000-0000-4000-8000-000000000028");
 
     private static final UUID ACME_OTHER_PROJECT =
             UUID.fromString("ce001000-0000-4000-8000-000000000003");
@@ -328,6 +343,8 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
 
     /** The link ids, so a test can withdraw one by naming it. */
     private static final UUID LINKED_LINK = UUID.fromString("ce007003-0000-4000-8000-000000000001");
+    private static final UUID GIT_LINK = UUID.fromString("ce007003-0000-4000-8000-000000000002");
+    private static final UUID URL_LINK = UUID.fromString("ce007003-0000-4000-8000-000000000003");
 
     /**
      * The text of the block every excerpt assertion reads, and it is over the 160-character bound
@@ -621,6 +638,24 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // case's created_at, which is now() and therefore newer than every page above.
             authoredCase(acme, LINKED_WITHOUT_A_VERSION, ACME_PROJECT, "TC-35", 35, "DRAFT", 1);
             link(acme, UUID.randomUUID(), ACME, LINKED_WITHOUT_A_VERSION, SPEC_BLOCK, "VERIFIES");
+
+            // §169 — the two kinds V1 designed and ExternalLinkService finally writes. Written as
+            // rows rather than driven through the endpoint for seedCoverageFixtures' reason one
+            // class over: what is under test here is the statement that mirrors them.
+            authoredCase(acme, LINKED_OUTSIDE, ACME_PROJECT, "TC-36", 36, "DRAFT", 1);
+            datedVersion(acme, LINKED_OUTSIDE, now.minus(WELL_INSIDE));
+            link(acme, UUID.randomUUID(), ACME, LINKED_OUTSIDE, SPEC_BLOCK, "VERIFIES");
+            gitLink(acme, GIT_LINK, ACME, "TEST_CASE", LINKED_OUTSIDE);
+            urlLink(acme, URL_LINK, ACME, "TEST_CASE", LINKED_OUTSIDE);
+
+            authoredCase(acme, EXTERNALLY_LINKED_SUITE, ACME_PROJECT, "TC-37", 37, "DRAFT", 1);
+            // The source is the SUITE, not the case above — that case exists only so the assertion
+            // has something to be empty about.
+            gitLink(acme, UUID.randomUUID(), ACME, "SUITE", ACME_SUITE);
+
+            testCase(acme, LINKED_OUTSIDE_AND_REMOVED, ACME, ACME_PROJECT, ACME_SUITE, "TC-38", 38,
+                    true, "MANUAL");
+            urlLink(acme, UUID.randomUUID(), ACME, "TEST_CASE", LINKED_OUTSIDE_AND_REMOVED);
         }
 
         try (Connection umbra = appConnection(UMBRA)) {
@@ -1272,6 +1307,102 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("an external git link carries its repository, path, range and commit")
+        void aGitLinkIsMirroredWhole() {
+            // §169's second arm. Every one of these renders: the repo and path as the label, the
+            // range beside it, the sha as the pin. Asserting the row rather than a count is what
+            // makes a UNION arm that copies the wrong column fail here instead of on a screen.
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED_OUTSIDE))
+                    .filteredOn(link -> link.targetKind().equals("EXTERNAL_GIT"))
+                    .singleElement()
+                    .satisfies(link -> {
+                        assertThat(link.id()).isEqualTo(GIT_LINK);
+                        assertThat(link.externalRepo()).isEqualTo("acme/checkout");
+                        assertThat(link.externalPath()).isEqualTo("src/Refund.java");
+                        assertThat(link.externalLineStart()).isEqualTo(40);
+                        assertThat(link.externalLineEnd()).isEqualTo(58);
+                        assertThat(link.externalCommitSha()).isEqualTo("4f9c2b1");
+                        assertThat(link.externalUrl()).isNull();
+                        assertThat(link.pageId()).as("no page — there is no page").isNull();
+                        assertThat(link.pageKey()).isNull();
+                        assertThat(link.pageTitle()).isNull();
+                        assertThat(link.blockId()).isNull();
+                        assertThat(link.blockExcerpt()).isNull();
+                    });
+        }
+
+        @Test
+        @DisplayName("an external URL link carries the URL and nothing else")
+        void aUrlLinkIsMirroredWhole() {
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED_OUTSIDE))
+                    .filteredOn(link -> link.targetKind().equals("EXTERNAL_URL"))
+                    .singleElement()
+                    .satisfies(link -> {
+                        assertThat(link.id()).isEqualTo(URL_LINK);
+                        assertThat(link.externalUrl()).isEqualTo("https://specs.acme.test/refunds");
+                        assertThat(link.relationship()).isEqualTo("REFERENCES");
+                        assertThat(link.externalRepo()).isNull();
+                        assertThat(link.externalPath()).isNull();
+                        assertThat(link.externalCommitSha()).isNull();
+                    });
+        }
+
+        @Test
+        @DisplayName("both arms run — a case's block link and its external links are all mirrored")
+        void bothArmsContribute() {
+            // The UNION ALL, asserted as one thing. A case carrying only external links could not
+            // tell "both arms ran" from "the first arm matched nothing", which is why this fixture
+            // has all three kinds on one case.
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED_OUTSIDE))
+                    .extracting(MirroredLink::targetKind)
+                    .containsExactly("DOC_BLOCK", "EXTERNAL_GIT", "EXTERNAL_URL");
+        }
+
+        @Test
+        @DisplayName("an external link is never stale, however old the case's newest version is")
+        void anExternalLinkIsNeverStale() {
+            // V47 §3. The sha pins the lines, so nothing about the target can have changed; what
+            // could fall behind is the pin, and this column does not mean that. The fixture's case
+            // is dated well inside, so a comparison accidentally left on this arm would still read
+            // false — the assertion that earns its keep is the URL link, which has no version on
+            // either side and would be NULL, and NULL into a NOT NULL boolean aborts the refresh.
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED_OUTSIDE))
+                    .filteredOn(link -> !link.targetKind().equals("DOC_BLOCK"))
+                    .isNotEmpty()
+                    .allSatisfy(link -> assertThat(link.stale()).isFalse());
+        }
+
+        @Test
+        @DisplayName("a suite's external link is mirrored onto no case")
+        void aSuitesExternalLinkIsNotMirrored() {
+            // source_type = 'TEST_CASE' is on BOTH arms. Dropping it from the second would insert a
+            // row whose case_id is a suite id — a foreign key violation against test_case, so the
+            // whole refresh would abort rather than mis-render, which is the direction to fail in.
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, EXTERNALLY_LINKED_SUITE)).isEmpty();
+            assertThat(mirrored(ACME, ACME_SUITE)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a soft-deleted case keeps no external links either")
+        void aRemovedCaseKeepsNoExternalLinks() {
+            // The one predicate the second arm keeps from the first. The other three are about a
+            // page, and this arm joins none.
+            recomputeFor(ACME);
+
+            assertThat(mirrored(ACME, LINKED_OUTSIDE_AND_REMOVED)).isEmpty();
+        }
+
+        @Test
         @DisplayName("a soft-deleted case keeps no links")
         void aRemovedCaseIsNotMirrored() {
             recomputeFor(ACME);
@@ -1635,6 +1766,45 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         }
     }
 
+    /** One {@code EXTERNAL_GIT} link — the kind whose sha is what makes the pin worth having. */
+    private void gitLink(Connection connection, UUID id, UUID companyId, String sourceType,
+            UUID sourceId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO doc_link
+                    (id, company_id, source_type, source_id, target_kind, external_repo,
+                     external_path, external_line_start, external_line_end, external_commit_sha,
+                     relationship)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), ?, CAST(? AS uuid), 'EXTERNAL_GIT',
+                        'acme/checkout', 'src/Refund.java', 40, 58, '4f9c2b1', 'VERIFIES')
+                    ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, companyId.toString());
+            statement.setString(3, sourceType);
+            statement.setString(4, sourceId.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /** One {@code EXTERNAL_URL} link. */
+    private void urlLink(Connection connection, UUID id, UUID companyId, String sourceType,
+            UUID sourceId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO doc_link
+                    (id, company_id, source_type, source_id, target_kind, external_url,
+                     relationship)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), ?, CAST(? AS uuid), 'EXTERNAL_URL',
+                        'https://specs.acme.test/refunds', 'REFERENCES')
+                    ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, companyId.toString());
+            statement.setString(3, sourceType);
+            statement.setString(4, sourceId.toString());
+            statement.executeUpdate();
+        }
+    }
+
     /** Re-dates a case's v1, so the staleness comparison has a stated left and right. */
     private void datedVersion(Connection connection, UUID caseId, Instant createdAt)
             throws SQLException {
@@ -1659,10 +1829,12 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         try (Connection connection = appConnection(companyId);
                 PreparedStatement statement = connection.prepareStatement("""
                         SELECT id, target_kind, relationship, page_id, page_key, page_title,
-                               block_id, block_excerpt, stale
+                               block_id, block_excerpt, external_repo, external_path,
+                               external_line_start, external_line_end, external_commit_sha,
+                               external_url, stale
                           FROM case_doc_link
                          WHERE case_id = CAST(? AS uuid)
-                         ORDER BY page_key, block_id
+                         ORDER BY target_kind, page_key, block_id
                         """)) {
             statement.setString(1, caseId.toString());
             try (ResultSet rows = statement.executeQuery()) {
@@ -1672,11 +1844,20 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
                             UUID.fromString(rows.getString("id")),
                             rows.getString("target_kind"),
                             rows.getString("relationship"),
-                            UUID.fromString(rows.getString("page_id")),
+                            // Null since §169 — an external link has no page and no block, and
+                            // reading these through UUID.fromString unconditionally is what made
+                            // this helper throw before the second arm had a test.
+                            uuidOrNull(rows.getString("page_id")),
                             rows.getString("page_key"),
                             rows.getString("page_title"),
-                            UUID.fromString(rows.getString("block_id")),
+                            uuidOrNull(rows.getString("block_id")),
                             rows.getString("block_excerpt"),
+                            rows.getString("external_repo"),
+                            rows.getString("external_path"),
+                            (Integer) rows.getObject("external_line_start"),
+                            (Integer) rows.getObject("external_line_end"),
+                            rows.getString("external_commit_sha"),
+                            rows.getString("external_url"),
                             rows.getBoolean("stale")));
                 }
                 return found;
@@ -1686,8 +1867,14 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         }
     }
 
+    private static UUID uuidOrNull(String value) {
+        return value == null ? null : UUID.fromString(value);
+    }
+
     private record MirroredLink(UUID id, String targetKind, String relationship, UUID pageId,
-            String pageKey, String pageTitle, UUID blockId, String blockExcerpt, boolean stale) {
+            String pageKey, String pageTitle, UUID blockId, String blockExcerpt,
+            String externalRepo, String externalPath, Integer externalLineStart,
+            Integer externalLineEnd, String externalCommitSha, String externalUrl, boolean stale) {
     }
 
     private void withdrawLink(UUID companyId, UUID linkId) throws SQLException {

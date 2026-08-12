@@ -25,7 +25,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The documentation space (plan §6i) — the {@code documentation} module's only controller.
+ * The documentation space (plan §6i) — ~~the {@code documentation} module's only controller~~.
+ *
+ * <p><strong>It has not been the only one since #49</strong>, and the sentence went on saying so
+ * through four arrivals: {@link DocPageAttachmentController}, {@link ArtifactController},
+ * {@link PlanDocumentController} and, in §169, {@link ExternalLinkController}. Corrected where it
+ * was found rather than deleted, because "the only X" is the class of claim that is true when
+ * written, false the moment somebody adds a second, and checked by nothing — §152's finding, and
+ * the reason the envelope helpers at the bottom of this file are package-private.
  *
  * <p>The caller comes from the token and the company from the context, neither as a parameter, for
  * the reasons {@code ProjectController} sets out: a {@code userId} parameter answers "what may
