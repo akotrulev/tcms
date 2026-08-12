@@ -225,8 +225,11 @@ export function CaseDetailPage() {
 
             {data.healthSignals.length > 0 && (
               <Stack direction="row" sx={{ gap: 0.75, flexWrap: 'wrap', mb: 2 }} data-testid="CaseDetail.Health">
-                {data.healthSignals.map((signal) => (
-                  <HealthChip key={signal} signal={signal} />
+                {/* In the order the server sent them, which is worst first (§179) — the same
+                    ranking the grid's single chip is chosen by, so the two screens agree about
+                    which of a case's problems is the one to read first. */}
+                {data.healthSignals.map((raised) => (
+                  <HealthChip key={raised.signal} signal={raised.signal} severity={raised.severity} />
                 ))}
               </Stack>
             )}

@@ -161,9 +161,13 @@ note that #30 would make these a fallback rather than a decision; both stand unc
 ## Phase 2 — frontend
 
 `npm run gen:api`, then the two records a new member makes a compile error until they are filled:
-`healthLabels` and `healthHelp`. `SEVERE_SIGNALS` is a **decision, not a default** — the new signal
+`healthLabels` and `healthHelp`. ~~`SEVERE_SIGNALS` is a **decision, not a default** — the new signal
 stays out of it, per D4's severity argument, and the dashboard tile inherits its position from
-`HealthSignal.Severity` on the server.
+`HealthSignal.Severity` on the server.~~ → **superseded 2026-08-12 (§179): `SEVERE_SIGNALS` is
+deleted.** The severity is on the wire beside each raised signal, so D4's argument is recorded once, on
+the enum, and the chip inherits its colour the same way the tile inherits its position. A new signal is
+now **two** records rather than three, and its severity is one line in `HealthSignal` plus one in
+`RaisedSignalTest.DECIDED` — which is where the decision has to be typed twice on purpose.
 
 No new screen. The dashboard's "Needs attention" panel and the case grid's health facet are generic
 over the enum and gain the tile and the chip with no edit — which is what `HealthSignal`'s header

@@ -2,14 +2,44 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-12 (**§178** — two health chips start appearing and `SEVERE_SIGNALS` disagrees with the server about two members; **§177** — the run's git coordinate: a third header line, two dialog fields, and `describeRunCode` beside `describeLinkTarget`; **§175** — `TeamRef` is one generated type and `CurrentUser.teams[].isLead` is gone; no `src/` change; **§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-12 (**§179** — `SEVERE_SIGNALS` is deleted: a chip's colour comes off the wire, and the grid's one visible chip is the worst one; **§178** — two health chips start appearing and `SEVERE_SIGNALS` disagrees with the server about two members; **§177** — the run's git coordinate: a third header line, two dialog fields, and `describeRunCode` beside `describeLinkTarget`; **§175** — `TeamRef` is one generated type and `CurrentUser.teams[].isLead` is gone; no `src/` change; **§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `f387fcd` (§177 shipped; §178 is this commit) (trust the body over the header and re-grep what a later commit
+**Baseline commit:** `6e74c9e` (§178 shipped; §179 is this commit) (trust the body over the header and re-grep what a later commit
 could have moved).
+
+## §179 — THE CHIP NO LONGER DECIDES HOW LOUD IT IS
+
+**Read this before touching `components/StatusChip.tsx`'s health half, `CaseGrid`'s Health cell, or
+anything that renders a `HealthSignal`.**
+
+- **`HealthChip` takes `{signal, severity}` and both come off ONE `RaisedSignal`.** The wire carries
+  the pair (`TestCaseSummary.healthSignals` is `RaisedSignal[]`), and `severityColors` maps the four
+  severities to colours — `satisfies Record<HealthSignalSeverity, string>`, so a new severity is a
+  compile error where a new *signal* used to be silently absent from a list.
+- **`SEVERE_SIGNALS` IS DELETED. Do not reintroduce a table keyed on `HealthSignal`.** It was a hand
+  copy of `HealthSignal.Severity` that had drifted about two of the ten members (it carried
+  `FAILING_REPEATEDLY`, lacked `CONDITION_DRIFT`), so one case read red on a dashboard tile and amber
+  on its own chip. Anything that needs to know how bad a signal is reads the wire value.
+- **THE SERVER SENDS THEM WORST FIRST. DO NOT SORT.** `CaseGrid` renders `healthSignals[0]` and hides
+  the rest behind `+n`; a client-side sort would be the second copy of the ranking this slice deleted.
+  Before §179 the order was the enum's declaration order, so a case that was both unlinked and failing
+  showed the missing link and hid the failure — the defect §178 created by giving `UNLINKED` a writer.
+- **The `+n` tooltip shows LABELS.** It printed raw enum codes until §179, invisible unless a case
+  raises two signals. `lib/labels.ts` owns every word a reader sees.
+- **`healthLabels` STAYS on this side** and is deliberately not on the wire: the filter bar needs a
+  label for every member of the enum, including `INCOMPLETE`, which the server can never send. But
+  **the dashboard's tiles render the SERVER's labels (`tile.label`) and six of the ten disagree with
+  `healthLabels`** — so a tile reading "Outdated — spec changed" drills into a grid saying "Linked spec
+  changed". Measured in §179, left as the next slice. `BoardPage.describeCard`'s comment claiming the
+  panel uses `healthLabels` is **wrong**.
+- **INFO renders in the same amber as WARNING**, which since §178 means most rows carry an amber chip.
+  Quietening it is a reading-plan decision, pinned by a test so it has to be taken on purpose.
+
+---
 
 ## §178 — TWO HEALTH CHIPS START APPEARING, AND `SEVERE_SIGNALS` DISAGREES WITH THE SERVER
 
@@ -28,11 +58,8 @@ could have moved).
   Traceability copy: the chip and the panel are two renderings of **one row set** (`case_doc_link`), so
   a case whose only link points into a deleted page says "not linked" in both places. Changing one and
   not the other is the finding.
-- **`SEVERE_SIGNALS` IS A HAND-KEPT COPY OF THE SERVER'S SEVERITY AND TWO MEMBERS DISAGREE** — it
-  carries `FAILING_REPEATEDLY` (server: WARNING) and lacks `CONDITION_DRIFT` (server: ERROR). So one
-  case can be red on a dashboard tile and amber on its own chip. Recorded at the site by §178 and
-  **not fixed**: the honest fix is putting severity on the wire for a bare signal, which deletes the
-  list. Do not "correct" one member in passing.
+- ~~**`SEVERE_SIGNALS` IS A HAND-KEPT COPY OF THE SERVER'S SEVERITY AND TWO MEMBERS DISAGREE**~~ →
+  **§179 deleted the list; severity is on the wire.** See the §179 entry above.
 - **Expect the Unlinked tile to be large** — most of a young project. That is the reading plan §6o
   designed (`Unlinked 156` beside `Approved 891`), and the severity is INFO so the panel stays
   readable.

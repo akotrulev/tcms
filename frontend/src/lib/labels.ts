@@ -452,6 +452,21 @@ export const stepFormatLabels = {
 /**
  * Health signals are the dashboard's vocabulary, so the label has to say what's wrong in
  * the reader's terms — "Automation stopped reporting", not "STALE_AUTOMATION".
+ *
+ * **These words stay on this side and the severity does not (§179).** `CaseService.facets` argues
+ * the split from the server: enum *words* belong to this catalogue, because it is the one place a
+ * new member is a compile error until it is labelled. And the wire structurally cannot own them —
+ * this map must label `INCOMPLETE`, which no server constant can ever send, and a per-case payload
+ * carries only the signals that were raised.
+ *
+ * **BUT THE SERVER SENDS A SECOND SET ANYWAY, and six of the ten disagree with this one.**
+ * `HealthSignal.label()` reaches the SPA as `DashboardTile.label`, which the dashboard renders
+ * verbatim, so the "Needs attention" tile reads *"Outdated — spec changed"* and the case list it
+ * drills into reads *"Linked spec changed"* — one navigation, two vocabularies. The four that agree
+ * are `NEVER_EXECUTED`, `LONG_UNEXECUTED`, `FAILING_REPEATEDLY` and `UNDECLARED_AUTOMATION`.
+ * Measured in §179 and left as the next slice: the tiles are generic over kinds, so the repair takes
+ * `LifecycleStatus.label()` with it and needs the SPA to label a tile from its `key`. **Do not close
+ * it by editing one word here** — that makes the two agree about one signal and leaves the mechanism.
  */
 export const healthLabels = {
   OUTDATED_SPEC_CHANGED: 'Linked spec changed',

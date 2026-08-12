@@ -2215,3 +2215,25 @@ one transaction). It is observable only as a one-tick lag, and the refresh lag `
 already makes a short lag the expected reading — so a browser row could not tell the two apart. It is
 pinned by a test instead (`aLinkMadeSinceTheLastTickCountsOnThisTick`) and by mutation `§178 SL-M1`,
 which is where an unfalsifiable browser row belongs.
+
+## §179 — the chip that stopped deciding how loud it is
+
+**Four rows, all in `L4`**, immediately after §178's `SL-1`…`SL-6` — same preconditions (`A1`'s
+documentation links plus `L4`'s health tick), because every row here needs a case that raises *at
+least two* signals of *different* severities, which is exactly what §178's fixtures produce.
+
+**`RS-2` is the row worth the block.** It is the only one that shows the defect this slice was named
+for from the reader's side: before §179 the case grid's one visible chip was chosen by enum
+declaration order, so a case whose automation had stopped reporting rendered "Not linked to any spec"
+and hid the failure behind a `+1`. Nothing on either stack could see that — the wire was right, the
+component was right, and the *order* was wrong.
+
+`RS-1` and `RS-3` are the two halves of the drift §178 found and did not fix: the same case, on the
+dashboard tile and on its own chip, must now agree about colour.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§179 RS-1` | **L4**, after `§178 SL-1`: open the dashboard for `OLB`, note the colour of the **"Condition drift"** tile, then open a case that raises it | Tile and chip are **both red**. Before §179 the tile was red (server severity) and the chip amber (the SPA's list lacked `CONDITION_DRIFT`), on two screens one tile links between. Check `FAILING_REPEATEDLY` the same way in the other direction: **both amber**, where the chip used to be the red one. This is the pair of members the two copies disagreed about, and the whole reason the copy is gone. |
+| `§179 RS-2` | **L4**: in the case grid, find a case raising both an ERROR signal and `UNLINKED` (`§178 SL-3`'s moved-spec case will do once the tick has run) and read the **Health** cell | The chip is the **ERROR** one — "Linked spec changed" — and the `+1` covers `UNLINKED`, never the other way round. Then hover the `+1`: it must read the **labels** ("Not linked to any spec"), not `UNLINKED`. That tooltip printed raw enum codes until §179 and is invisible without two signals on one case; it is the only place in the SPA a reader could meet a constant. |
+| `§179 RS-3` | **L4**: open the same case's detail page and compare its chip row against the grid row | Same chips, same colours, **same order** — worst first on both, because both render the server's list in the order it arrived. A detail page whose first chip differs from the grid's means one of the two is sorting, which is the second copy of the ranking this slice deleted. |
+| `§179 RS-4` | **L4**: with the case list open, use the browser console to serve one row a signal whose severity is a string the SPA has never seen (`tcmsFaults.drift()` scoped to `/cases`, or edit the response) | The row **fails or renders no colour — it must not render a chip in a default colour as though nothing were wrong.** `severityColors` is a closed map over four values and an unknown key is `undefined`, so this row is about which of the two failure modes the grid actually shows. It is the §148/§149 shape — a client compensating silently for a shape the server cannot produce — and the answer decides whether the map needs a fallback or the boundary needs to be louder. Not driveable without the fault switch, which is why it is here rather than as a unit test. |

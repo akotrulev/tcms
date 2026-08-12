@@ -2,35 +2,58 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { HealthChip } from './StatusChip';
 import { healthLabels } from '../lib/labels';
-import type { HealthSignal } from '../api/types';
+import type { HealthSignalSeverity } from '../api/types';
 
 /**
- * The automation-drift pair, and the one thing about it that a refactor destroys.
+ * What the chip decides, and what it no longer decides.
  *
- * The two signals are mirrors and read as a matched set, so the tidy change is to give
- * them a matched appearance. That erases the only distinction between them that a
- * reader acts on: stale automation is a result the team believes it is getting and is
- * not — a red test can be invisible — while undeclared automation is a result arriving
- * that no coverage number counts, which is wrong in the direction that costs nobody a
- * missed defect. The server draws the same line in `HealthSignal.Severity` and it is
- * not on the wire for a chip, so nothing but this test holds the two sides together.
+ * ~~The automation-drift pair, and the one thing about it that a refactor destroys.~~ → **§179
+ * moved that assertion to the server**, where the decision is. This file used to hold the only
+ * check that `STALE_AUTOMATION` renders as severe and `UNDECLARED_AUTOMATION` does not, because the
+ * chip's colour came from a hand-written `SEVERE_SIGNALS` list in `StatusChip.tsx` and severity was
+ * not on the wire. That list had drifted from `HealthSignal.Severity` about two of the ten members
+ * by the time §178 read it, so a case rendered red on a dashboard tile and amber on its own chip.
  *
- * §118's `IssueTokenDialog` has one test for the same reason: a rule whose violation is
- * indistinguishable from a tidy-up needs a test that says so out loud.
+ * The severity arrives with the signal now, so the pair's asymmetry is
+ * `RaisedSignalTest.theAutomationPairStaysAsymmetric` in the backend and the tests here are about
+ * the only thing left on this side: **that the chip renders what it was handed.** Deleting the list
+ * without moving its test would have been §153's finding — a decision moved to the side that owns
+ * it and its only coverage left behind.
  */
-describe('HealthChip — the automation-drift pair', () => {
-  const colorOf = (signal: HealthSignal) => {
-    render(<HealthChip signal={signal} testId="chip" />);
+describe('HealthChip — renders the severity it is given, and decides nothing', () => {
+  const colorOf = (severity: HealthSignalSeverity) => {
+    render(<HealthChip signal="STALE_AUTOMATION" severity={severity} testId="chip" />);
     const chip = screen.getByTestId('chip');
     return getComputedStyle(chip).color;
   };
 
-  it('renders stale automation as severe', () => {
-    expect(colorOf('STALE_AUTOMATION')).toBe('var(--color-failed)');
+  it('renders an ERROR signal as severe', () => {
+    expect(colorOf('ERROR')).toBe('var(--color-failed)');
   });
 
-  it('renders undeclared automation as a warning, NOT as severe', () => {
-    expect(colorOf('UNDECLARED_AUTOMATION')).toBe('var(--color-blocked)');
+  it('renders a WARNING signal as a warning, NOT as severe', () => {
+    // The pair's asymmetry read from this side: the same signal name with the other severity has
+    // to come out a different colour, or the chip is ignoring the server and this file is back to
+    // holding an opinion of its own.
+    expect(colorOf('WARNING')).toBe('var(--color-blocked)');
+  });
+
+  it('renders an INFO signal in the same amber as a WARNING, deliberately', () => {
+    // Not an oversight: since §178 gave UNLINKED a writer, INFO is most rows of a young project.
+    // Quietening it is a change to the grid's reading plan and is recorded rather than made here —
+    // this test exists so that change is a decision somebody takes on purpose.
+    expect(colorOf('INFO')).toBe('var(--color-blocked)');
+  });
+
+  it('takes the label from the signal and the colour from the severity', () => {
+    // The failure this guards is a chip showing one signal's name in another's colour, which is
+    // what an off-by-one over two separately-assembled lists produces. Both values come off one
+    // `RaisedSignal`; nothing here may derive one from the other.
+    render(<HealthChip signal="UNDECLARED_AUTOMATION" severity="WARNING" testId="chip" />);
+    const chip = screen.getByTestId('chip');
+
+    expect(chip).toHaveTextContent(healthLabels.UNDECLARED_AUTOMATION);
+    expect(getComputedStyle(chip).color).toBe('var(--color-blocked)');
   });
 
   it('explains the spec-changed signal by the comparison the server actually makes', async () => {
@@ -39,7 +62,7 @@ describe('HealthChip — the automation-drift pair', () => {
     // Neither error is visible on screen — both read as perfectly sensible sentences — so the
     // regression is a "tidy" rewrite toward the wording the enum's NAME suggests. That is
     // §158's finding on CONDITION_DRIFT one signal later, which is why it is pinned this time.
-    render(<HealthChip signal="OUTDATED_SPEC_CHANGED" testId="chip" />);
+    render(<HealthChip signal="OUTDATED_SPEC_CHANGED" severity="ERROR" testId="chip" />);
     const help = await screen.findByTestId('chip');
 
     expect(help).toHaveAttribute(
@@ -51,7 +74,8 @@ describe('HealthChip — the automation-drift pair', () => {
   it('labels the pair as two different problems', () => {
     // Not two spellings of one. The labels are what a reader triages by, and a pair
     // worded as variations on "automation" leaves them unable to tell which way the
-    // error runs.
+    // error runs. The words stay this side of the wire on purpose: `CaseService.facets`
+    // argues that a second set of enum labels on the server is the one that goes stale.
     expect(healthLabels.STALE_AUTOMATION).not.toBe(healthLabels.UNDECLARED_AUTOMATION);
     expect(healthLabels.UNDECLARED_AUTOMATION).toBe('Automated, but not marked so');
   });

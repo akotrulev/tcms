@@ -192,8 +192,15 @@ export function BoardPage() {
  * `repository.HealthSignal`, and inventing a second set of words there is exactly how one value
  * comes to read three different ways across the grid, the dashboard and the board.
  *
- * So the labelling happens here, through the **same `healthLabels` map the dashboard's "Needs
- * attention" panel uses**. An unrecognised code falls through as itself rather than being dropped:
+ * So the labelling happens here, through `healthLabels` — ~~the **same map the dashboard's "Needs
+ * attention" panel uses**~~ → **false, and measured in §179: that panel renders `tile.label`, which
+ * is `HealthSignal.label()` on the server, and six of the ten disagree with this map.** So a tile
+ * reading "Outdated — spec changed" drills into a grid saying "Linked spec changed", and a board card
+ * says the second. `CaseService.facets` argues the words belong here; `DashboardTile.label` is the
+ * copy that has to go, and it is generic over tile kinds so closing it takes `LifecycleStatus.label()`
+ * with it. Left as §179's named next slice — this comment is corrected rather than acted on, because a
+ * sentence claiming coverage it does not have is the thing that made the divergence invisible.
+ * An unrecognised code falls through as itself rather than being dropped:
  * a signal the SPA has no word for yet is still a reason, and silently discarding it would put the
  * card back in the state this function exists to fix.
  *

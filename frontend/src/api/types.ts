@@ -329,6 +329,16 @@ export type Priority = S['Priority'];
 export type StepFormat = S['StepFormat'];
 export type StatusKind = S['StatusKind'];
 export type HealthSignal = S['HealthSignal'];
+/**
+ * How loudly a signal reads — **the server's judgement, and never reconstructed here.**
+ *
+ * A signal arrives with its severity beside it (`RaisedSignal`) as of §179, which is what deleted
+ * `StatusChip`'s hand-kept `SEVERE_SIGNALS` list. That list had drifted about two of the ten members,
+ * so one case rendered red on a dashboard tile and amber on its own chip. Anything that needs to know
+ * how bad a signal is reads this value; a second table keyed on `HealthSignal` is the defect.
+ */
+export type HealthSignalSeverity = S['HealthSignalSeverity'];
+export type RaisedSignal = S['RaisedSignal'];
 export type AggregationPolicy = S['AggregationPolicy'];
 
 export interface Paged<T> {

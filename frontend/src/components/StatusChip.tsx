@@ -1,5 +1,12 @@
 import { Box, Chip, Tooltip } from '@mui/material';
-import type { AutomationStatus, HealthSignal, LifecycleStatus, Priority, StatusKind } from '../api/types';
+import type {
+  AutomationStatus,
+  HealthSignal,
+  HealthSignalSeverity,
+  LifecycleStatus,
+  Priority,
+  StatusKind,
+} from '../api/types';
 import {
   automationLabels,
   healthLabels,
@@ -203,42 +210,55 @@ const healthHelp: Record<HealthSignal, string> = {
 };
 
 /**
- * Signals that mean something is wrong right now, rather than merely worth a look.
+ * How loudly each severity reads — **a map over the server's four values, not over the
+ * signals.**
  *
- * **`UNDECLARED_AUTOMATION` is deliberately not here, though its mirror is.** Stale
- * automation means a result the team believes it is getting is not arriving — a red
- * test can stay invisible for as long as it lasts. Undeclared automation means results
- * are arriving that no coverage number counts: the percentage is understated, which is
- * wrong in the direction that costs nobody a missed defect. The server draws the same
- * line (`HealthSignal.Severity`: ERROR vs WARNING), and adding the new signal here
- * "for consistency with the pair" is the tidy change that erases the distinction —
- * `HealthChip.test.tsx` exists to catch exactly that.
+ * ~~`const SEVERE_SIGNALS: HealthSignal[]`~~ **is gone (§179), and what it was is worth
+ * keeping.** It was a hand-written list of the signals that mean something is wrong *now*,
+ * with a comment saying out loud that it was a second copy of `HealthSignal.Severity` and
+ * that "if a signal ever renders here with a severity beside it, this list should go rather
+ * than be kept in step". By §178 **the two copies disagreed about two of the ten members** —
+ * the list carried `FAILING_REPEATEDLY` (the server: WARNING) and lacked `CONDITION_DRIFT`
+ * (the server: ERROR) — so the same case rendered red on a dashboard tile and amber on its
+ * own chip, and no gate on either side could see it. The wire carries the severity now, so
+ * this file no longer holds an opinion about which signals are severe; it only decides what
+ * a severity *looks like*.
  *
- * This list is a second copy of that server-side severity, which is only defensible
- * because the chip has nothing to read: severity is on the wire for a `DashboardTile`
- * and not for a bare `HealthSignal`. If a signal ever renders here with a severity
- * beside it, this list should go rather than be kept in step.
+ * `satisfies Record<HealthSignalSeverity, string>` is the difference between the two shapes:
+ * a new severity on the wire is a compile error here, where a new *signal* was silently
+ * absent from the old list and rendered as merely worth a look.
  *
- * **AND THE TWO COPIES DISAGREE ABOUT TWO MEMBERS — found in §178 and deliberately not
- * fixed here.** The server's ERROR set is `OUTDATED_SPEC_CHANGED`, `CONDITION_DRIFT`,
- * `STALE_AUTOMATION` (`HealthSignal.Severity`, backend). This list has
- * `FAILING_REPEATEDLY` instead of `CONDITION_DRIFT`, so the same case is red on a
- * dashboard tile and amber on its own chip, or the reverse — which is precisely the
- * "kept in step by hand" failure the paragraph above predicted, discovered by a slice
- * that only needed to read the list. §178 stopped at recording it because changing
- * either member alters how a signal it did not derive is rendered, and the honest fix is
- * a comparison rather than an edit: the question is whether severity belongs on the wire
- * for a bare signal, which deletes this list. Left as the next slice, not as a to-do.
+ * **INFO reads the same as WARNING today and that is not an oversight.** It is the amber
+ * treatment, which since §178 means most rows of a young project carry an amber chip
+ * (`UNLINKED` fires on any case with no spec link). Quietening INFO is a design change to
+ * the grid's reading plan, not a mapping fix, so it is recorded rather than smuggled in
+ * here. `NEUTRAL` never reaches a chip — it is for the dashboard tiles that are not signals
+ * — and is mapped so the exhaustiveness check has something to be exhaustive about.
  */
-const SEVERE_SIGNALS: HealthSignal[] = [
-  'OUTDATED_SPEC_CHANGED',
-  'STALE_AUTOMATION',
-  'FAILING_REPEATEDLY',
-];
+const severityColors = {
+  ERROR: 'var(--color-failed)',
+  WARNING: 'var(--color-blocked)',
+  INFO: 'var(--color-blocked)',
+  NEUTRAL: 'var(--color-text-muted)',
+} as const satisfies Record<HealthSignalSeverity, string>;
 
-export function HealthChip({ signal, testId }: { signal: HealthSignal; testId?: string }) {
-  const severe = SEVERE_SIGNALS.includes(signal);
-  const color = severe ? 'var(--color-failed)' : 'var(--color-blocked)';
+/**
+ * One raised signal, in the colour the server says it deserves.
+ *
+ * Both props come off one `RaisedSignal` and must keep coming off the *same* one: the pair is
+ * assembled server-side from one enum in one expression precisely so a chip cannot show one
+ * signal's name in another's colour.
+ */
+export function HealthChip({
+  signal,
+  severity,
+  testId,
+}: {
+  signal: HealthSignal;
+  severity: HealthSignalSeverity;
+  testId?: string;
+}) {
+  const color = severityColors[severity];
   return (
     <Tooltip title={healthHelp[signal]}>
       <Chip

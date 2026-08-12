@@ -10,6 +10,7 @@ import type { TestCaseSummary } from '../../api/types';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusDot } from '../../components/StatusChip';
 import { Identifier } from '../../components/Identifier';
 import { formatAge, formatDateTime } from '../../lib/format';
+import { healthLabels } from '../../lib/labels';
 import { DEFAULT_SORT } from './useCaseFilters';
 
 /**
@@ -186,10 +187,30 @@ export function CaseGrid({
         ) : (
           <Stack direction="row" sx={{ gap: 0.5, overflow: 'hidden' }} data-testid={`${TestIdPrefix}.Row.Health`}>
             {/* One chip plus an overflow count: three chips per row turns the column into
-                noise, and the detail page carries the full list. */}
-            <HealthChip signal={row.healthSignals[0]} />
+                noise, and the detail page carries the full list.
+
+                THE FIRST ONE IS THE WORST ONE, and that is the server's doing rather than
+                this component's — `CaseHealth.signals()` sorts by severity (§179). It used
+                to arrive in enum-declaration order, which put `UNLINKED` (INFO, and true of
+                most cases since §178 gave it a writer) ahead of a case whose automation had
+                stopped reporting: the row showed the missing link and hid the failure behind
+                a +1. Do not sort here — a client-side sort would be the second copy of a
+                severity ranking that §179 deleted from this file. */}
+            <HealthChip
+              signal={row.healthSignals[0].signal}
+              severity={row.healthSignals[0].severity}
+            />
             {row.healthSignals.length > 1 && (
-              <Tooltip title={row.healthSignals.slice(1).join(', ')}>
+              /* The LABELS, not the codes. This tooltip read `STALE_AUTOMATION, UNLINKED`
+                 until §179 — the one place in the SPA that showed a reader a raw enum
+                 constant, which is what `lib/labels.ts` exists to prevent, and invisible
+                 because it needs two signals on one case to appear at all. */
+              <Tooltip
+                title={row.healthSignals
+                  .slice(1)
+                  .map((raised) => healthLabels[raised.signal])
+                  .join(', ')}
+              >
                 <Box component="span" sx={{ color: 'text.secondary', fontSize: '0.75rem', alignSelf: 'center' }}>
                   +{row.healthSignals.length - 1}
                 </Box>
