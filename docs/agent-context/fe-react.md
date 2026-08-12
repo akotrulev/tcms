@@ -2,14 +2,51 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-12 (**§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-12 (**§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `8232b0a` (§167; §168 is this session, uncommitted at the time of writing) (trust the
+**Baseline commit:** `2bdf427` (§169 phase 1; phase 2 is this session, uncommitted at the time of writing) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §169 — THE TRACEABILITY PANEL'S OTHER TWO BRANCHES, AND THE HOOK THAT MUST NOT INVALIDATE
+
+**A case can be linked to code or to a URL from the SPA** (`CaseDetailPage` → `DocLinksPanel` →
+`ExternalLinkDialog`). Read this before touching that panel, `lib/labels.ts`'s link vocabulary, or
+any write whose read model is a projection.
+
+- **`useLinkCaseExternally` and `useUnlinkCaseExternal` PATCH THE CACHE AND DO NOT INVALIDATE**, and
+  that is the opposite of every other write in `api/queries/`. `relatedDocuments` is served from
+  `case_doc_link`, refreshed on an outbox event up to a minute later, so `invalidateQueries` refetches
+  a projection that has not moved and **erases the link the server just created** — a 201 that reads
+  as a failure. What is inserted is the create's own answer re-spelled into `DocLink` (`asDocLink`),
+  not an optimistic guess: the mirror's external arm copies those columns verbatim and stores
+  `stale: false`. **Found by a test, not by reasoning** — `DocLinksPanel.test.tsx`'s
+  *"shows the new link straight away"* went red with both the patch and the invalidate in place.
+- **`DocLinkTarget` switches on `targetKind` and never on which field is populated.** A row is one
+  kind and the other kind's properties are null. The old code branched on `link.externalRepo` and
+  rendered a URL link as a blank line and a git link with its commit demoted to a caption — two dead
+  branches that typechecked for seventy sections, §168's `CoverageMarker` one panel over.
+- **A git link is ONE identifier**: `repo · path:40–58 at 4f9c2b1`, in one element. The pin is what
+  makes the range mean anything six months later (#26); a caption reads as a footnote. A single-line
+  range renders as one number, and a whole-file link renders no range at all.
+- **`rel="noopener"` on the URL anchor is not optional.** The `href` is a value somebody typed into a
+  form, and without it the opened page can navigate this tab through `window.opener`. The server's
+  `http`/`https`-only check is the other half of the same gate.
+- **Remove appears on external links only.** A block link is withdrawn on the documentation page
+  under `doc:edit`; no endpoint withdraws one from the case end, and a control that would fail is
+  worse than none. The Link button is **disabled, not hidden** (§31) and gates on `case:edit`.
+- **`linkRelationshipLabels` / `linkRelationshipHelp` are in `lib/labels.ts`** — the panel used to
+  lower-case the wire value inline. The dialog **offers** the relationship rather than sending the
+  server's default, because a form that always sent `VERIFIES` makes the other two unreachable.
+- **`useLinkBlock` / `useUnlinkBlock` STILL HAVE NO CALLER ANYWHERE IN `src/`.** The documentation
+  page renders a block's links and offers no way to create or remove one — the only way to make a
+  `DOC_BLOCK` link is the API. Recorded in the browser queue; §169 gave the *case* end a screen and
+  left the block end where it was.
+
+---
 
 ## §168 — A COMPONENT THAT HAD RENDERED AGAINST NOTHING SINCE M0 CAME ALIVE
 

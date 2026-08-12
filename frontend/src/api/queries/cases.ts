@@ -19,7 +19,10 @@ import type {
   CaseFlake,
   CaseHistorySummary,
   EntityVersion,
+  DocLink,
   ExecutionHistoryEntry,
+  ExternalLink,
+  ExternalLinkInput,
   Paged,
   TagUsage,
   TestCase,
@@ -362,6 +365,113 @@ export function useDeleteCase(projectId: string) {
  * The case's own cache entry is written from the response, so the panel re-renders from the server's
  * account of the decision rather than from the client's.
  */
+/**
+ * Links this case to a range of lines in a repository, or to a URL (§169).
+ *
+ * ## The response is patched into the case, and it is not an optimistic guess
+ *
+ * `relatedDocuments` is served from `case_doc_link`, a read model refreshed on an event — so a
+ * plain invalidate refetches the case and gets **the same list back**, without the link somebody
+ * just made, for up to the outbox interval. The panel would sit there looking as though the
+ * request had failed with a success code on top.
+ *
+ * What is inserted is the server's own answer to the create, re-spelled into the shape the panel
+ * reads: the id it minted, the kind and relationship it stored, the six coordinates it accepted.
+ * The mirror's external arm copies those columns verbatim and stores `stale: false` (`V47` §3), so
+ * this is not a second implementation of a server rule — it is the row the server described,
+ * rendered a minute before the projection catches up with it. Anything the mirror decides
+ * differently wins at the next refetch, which is the direction that self-corrects.
+ *
+ * The case key is invalidated too, so the eventual refetch reconciles rather than trusting this
+ * forever.
+ */
+export function useLinkCaseExternally(projectId: string, caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ExternalLinkInput) =>
+      api.post<ExternalLink>(`${base(projectId)}/cases/${caseId}/external-links`, input),
+    // The dialog lands per-field errors on its inputs — the endpoint reports `commitSha`, `url`,
+    // `lineStart` and the rest by name precisely so a form can — and a corner toast would show
+    // them detached from the fields they are about.
+    meta: { handled: true },
+    onSuccess: (created) => {
+      client.setQueryData<TestCase>(keys.case(projectId, caseId), (previous) => {
+        if (!previous) return previous;
+        const already = (previous.relatedDocuments ?? []).some((link) => link.id === created.id);
+        // A re-assert answers 200 with the link that was already there. Appending it again would
+        // put the same claim in the panel twice on the strength of a request that wrote nothing.
+        if (already) return previous;
+        return {
+          ...previous,
+          relatedDocuments: [...(previous.relatedDocuments ?? []), asDocLink(created)],
+        };
+      });
+      // AND NO INVALIDATE. That is the whole difference between this write and every other one in
+      // this file, and it is the projection's: an immediate refetch asks for a read model the
+      // event has not reached yet and gets the list WITHOUT this link, which erases the row the
+      // server just described and reads as a create that failed with a 201. The reconciliation is
+      // the next ordinary refetch — a remount, a focus, a stale read — by which time the mirror
+      // has moved. This was found by a test, not by reasoning: the patch and the invalidate were
+      // both written here first, and the panel lost the link a millisecond after showing it.
+    },
+  });
+}
+
+/** Removes one of this case's external links. Hard delete on the server. */
+export function useUnlinkCaseExternal(projectId: string, caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (linkId: string) =>
+      api.del<void>(`${base(projectId)}/cases/${caseId}/external-links/${linkId}`),
+    meta: { handled: true },
+    onSuccess: (_removed, linkId) => {
+      // Dropped from the cached list for the same reason the create adds to it: the mirror will
+      // agree within the interval, and until it does a withdrawn claim left on the screen reads as
+      // a delete that did not work.
+      client.setQueryData<TestCase>(keys.case(projectId, caseId), (previous) =>
+        previous
+          ? {
+              ...previous,
+              relatedDocuments: (previous.relatedDocuments ?? []).filter(
+                (link) => link.id !== linkId,
+              ),
+            }
+          : previous,
+      );
+      // No invalidate, for the create's reason in the other direction: the mirror still holds the
+      // row for up to the outbox interval, so a refetch now would put the withdrawn claim straight
+      // back on the screen.
+    },
+  });
+}
+
+/**
+ * The create's answer in the shape the panel reads.
+ *
+ * The four page properties are null and `stale` is false — which is what the mirror writes for an
+ * external target, at the column, in SQL. Spelled out rather than spread, so a property added to
+ * `DocLink` is a compile error here instead of an `undefined` in a rendered panel.
+ */
+function asDocLink(created: ExternalLink): DocLink {
+  return {
+    id: created.id,
+    targetKind: created.targetKind,
+    relationship: created.relationship,
+    pageId: null,
+    pageKey: null,
+    pageTitle: null,
+    blockId: null,
+    blockExcerpt: null,
+    externalRepo: created.externalRepo ?? null,
+    externalPath: created.externalPath ?? null,
+    externalLineStart: created.externalLineStart ?? null,
+    externalLineEnd: created.externalLineEnd ?? null,
+    externalCommitSha: created.externalCommitSha ?? null,
+    externalUrl: created.externalUrl ?? null,
+    stale: false,
+  };
+}
+
 export function useQuarantineCase(projectId: string, caseId: string) {
   const client = useQueryClient();
   return useMutation({

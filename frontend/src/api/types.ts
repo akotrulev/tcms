@@ -298,6 +298,12 @@ export type BlockLinkInput = S['BlockLinkInput'];
 /** What a page documents, when it documents anything. Null on nearly every page. */
 export type DocSubjectType = NonNullable<S['DocPageSummary']['subjectType']>;
 export type DocLink = S['DocLink'];
+/** What a link claims. One vocabulary, shared by all three link shapes. */
+export type LinkRelationship = S['DocLink']['relationship'];
+/** A case's link to code or to a URL — the body of the create (§169). */
+export type ExternalLinkInput = S['ExternalLinkInput'];
+/** What that create answers with. NOT `DocLink`: the case end is served off the mirror. */
+export type ExternalLink = S['ExternalLink'];
 export type Artifact = S['Artifact'];
 export type ArtifactInput = S['ArtifactInput'];
 /**

@@ -2051,3 +2051,26 @@ Reaching it needs a project whose vocabulary carries a second `PASSED`-kind stat
 `counts_as_pass = false`, and no fixture the browser charter authors has one — creating it is a
 vocabulary edit plus a result submission plus a coverage-matrix export to compare against, which is
 its own charter rather than a row here.
+
+### §169 — linking a case to code, and to a URL
+
+**Two of this panel's three branches had never run against data** — the same shape as §168's marker
+one panel over, and the reason every row below is about what is *rendered* rather than about what is
+stored. The panel is served from `case_doc_link`, which refreshes on an event: a link made **here**
+appears immediately, from the create's own answer, while one made elsewhere waits for the tick.
+`§169 XL-3` is the row that tells those two apart, and it is the one to run first.
+
+| # | Lane | What | Expected |
+|---|---|---|---|
+| `§169 XL-1` | **A1** — open a case, use **Link code or a URL**, choose **Code**, and fill in a repository, a file, lines 40–58 and a **branch name** where the commit goes | Submit. | Refused in place, with the message under the **Commit** field saying a branch or tag moves — not a corner toast, and not a generic "check the highlighted fields" with nothing highlighted. Then correct it to a real short sha and submit again: the link appears in the panel **immediately**, rendered as one identifier — `repo · path:40–58 at sha` — with the relationship chip beside it. |
+| `§169 XL-2` | **A1** — link a URL, then click it | Watch where it opens. | A new tab, and the original tab is still on the case. Then paste `javascript:alert(1)` into the same dialog and submit: refused under the field. The two halves are one gate — the scheme is refused at the write and the anchor carries `rel="noopener"` — and this row is the only place both are observable. |
+| `§169 XL-3` | **A1** — with the case detail open in **two tabs**, link something in tab 1, then reload tab 2 immediately, then again after a minute | Compare the panels. | Tab 1 shows the link at once. **Tab 2 does not, until the outbox tick lands** — that is the projection, not a bug, and this row exists to measure the window on a real instance the way `§166 LR-1` measured it for the last-result column. Record the actual delay; if the link never arrives, the finding is the recompute, not the panel. |
+| `§169 XL-4` | **A1** — as a **Viewer**, open a case that has an external link | Read the panel. | The **Link code or a URL** button is visible and disabled (§31), and **no Remove appears on any link**. Then as an engineer: Remove appears on external links only — a block link has no Remove, because no endpoint withdraws one from the case end. |
+| `§169 XL-5` | **A1** — link the same file, same commit, same range twice, then the same file at a different range | Read the panel and the count. | The second identical submit adds **nothing** (the panel does not grow, and no duplicate bullet appears); the different range adds a second link. This is the idempotency rule and its bound, and the SPA is where a double-click actually happens. |
+
+**A gap this slice found and did not close, worth stating where it will be met:** `useLinkBlock` and
+`useUnlinkBlock` have **no caller anywhere in `src/`**. The documentation page renders a block's
+links and offers no way to create or remove one — so `§168 CV-4`'s parenthetical ("the doc page's
+link dialog, if it offers the choice") resolves to *there is no dialog at all*, and the only way to
+make a `DOC_BLOCK` link in this product is the API. Every row above is about the **case** end, which
+§169 gave a screen; the block end still has hooks and no UI.

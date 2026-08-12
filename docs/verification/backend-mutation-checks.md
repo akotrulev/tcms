@@ -2005,3 +2005,25 @@ counts are the kind of number nobody re-derives by hand once it is on screen.*
 > `execution`. No test can be written here that would not first have to build the join this slice
 > exists because it cannot make. Recorded so the next reader meets the seam rather than discovering
 > it from a client's screenshot; closing it means a second mirrored column, not a query.
+
+## §169 — the two external target kinds, and the mirror's second arm
+
+*Six mutations, **NONE RUN** — §65 in full. Two of them (`XL-1`, `XL-2`) guard values this product
+cannot check against reality: nothing here talks to a git host, so a bad pin is caught at the write
+or never.*
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `§169 XL-1` | In `ExternalLinkService.SHA`, widen the pattern to `.+` | Should redden `a branch name where a commit belongs is refused`, and **only** that one. Worth running because the field is a `TEXT` column, a `String` field and a free-text input end to end: this regex is the entire distance between #26's decision and a link that lies. | ⬜ not run |
+| `§169 XL-2` | In `urlErrors`, delete the scheme check (keep the parse and the host check) | Should redden `a javascript: URL is refused` and `a data: URL is refused for the same reason`. This is a stored-XSS gate, not a tidiness rule — the value is rendered as an anchor's `href` on the case detail, and `rel="noopener"` in the SPA is the other half of the same problem. | ⬜ not run |
+| `§169 XL-3` | In `sameTarget`, drop the line-range comparison (keep repo, path, sha) | Should redden `a different range in the same file at the same commit is a second link`. The mutation is the *cheap* way to write that method, which is why it is queued: it fails by answering the author's request with somebody else's link and a 200 on top. | ⬜ not run |
+| `§169 XL-4` | Replace `sameTarget`'s Java comparison with a JPQL predicate using `=` on all six columns | Should redden `a whole-file link matches itself — the null comparison SQL gets wrong`, and nothing else. **The one mutation here that reproduces a defect nobody would find by reading**: `external_line_start = :start` is UNKNOWN, not true, when both sides are null, so a double-clicked whole-file link writes two rows while every other test stays green. | ⬜ not run |
+| `§169 XL-5` | In `DocumentationFacts.refreshCaseDocLinks`, delete `AND c.deleted_at IS NULL` from the **second** arm only | Should redden `a soft-deleted case keeps no external links either`. It is the one predicate the external arm keeps from the block arm, and the only one it *can* keep — the other three are about a page this arm does not join. | ⬜ not run |
+| `§169 XL-6` | In the same arm, replace the literal `false` for `stale` with the block arm's version comparison | Should redden **nothing today**, and that is the row's point: an external link has no page, so the comparison's left side is NULL, and NULL into a `NOT NULL boolean` aborts the whole refresh rather than writing a wrong value. Expected outcome is therefore a *broken recompute*, not a failed assertion — run it to confirm the failure mode is loud, because a silently-false column and a loudly-aborted refresh are very different things to inherit. | ⬜ not run |
+
+> **Not mutation-tested and no test is possible here — the pin going out of date.** `stale` is false
+> for an external link by decision (`V47` §3): the sha pins the lines, so the target cannot change,
+> and what *can* fall behind is the pin itself. Answering "is this pin current" needs the product to
+> read a git host, which is an integration and not a column. Recorded so the next reader meets the
+> limit as a decision rather than as a bug: a git link pinned a year ago looks exactly as fresh as
+> one pinned this morning, and nothing on the screen says otherwise.

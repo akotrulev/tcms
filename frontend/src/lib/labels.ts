@@ -20,6 +20,7 @@ import type {
   IngestionFormat,
   IngestionStatus,
   LifecycleStatus,
+  LinkRelationship,
   PlanStatus,
   Priority,
   ProposalStatus,
@@ -489,6 +490,27 @@ export const aggregationHelp = {
     'Each case counts once, using its worst result across every run: a case that failed anywhere counts as failed.',
   ALL: 'Every execution is counted separately, so a case retried four times contributes four results.',
 } as const satisfies Record<AggregationPolicy, string>;
+
+/**
+ * What a traceability link claims — `doc_link.relationship`, rendered as the chip on every link.
+ *
+ * Sentence case rather than the wire value lower-cased, which is what the case detail did inline
+ * until §169 and what a second screen would have done slightly differently. The three are not
+ * synonyms and the difference is the whole value of the field: a link recorded as *verifies* when
+ * the case merely *references* the statement is what turns a coverage number into a false claim.
+ */
+export const linkRelationshipLabels = {
+  VERIFIES: 'Verifies',
+  DERIVED_FROM: 'Derived from',
+  REFERENCES: 'References',
+} as const satisfies Record<LinkRelationship, string>;
+
+/** The sentence beside each choice in the picker — the distinction, not the word again. */
+export const linkRelationshipHelp = {
+  VERIFIES: 'This case proves the statement. Counted as coverage.',
+  DERIVED_FROM: 'The case was written from the statement without claiming to cover it.',
+  REFERENCES: 'The case mentions it — context, not coverage.',
+} as const satisfies Record<LinkRelationship, string>;
 
 /**
  * Fallback for values that arrive without a map — an unrecognized classification value,

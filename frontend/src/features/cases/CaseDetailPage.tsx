@@ -13,6 +13,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import AddLinkIcon from '@mui/icons-material/AddLinkOutlined';
 import ContentCopyIcon from '@mui/icons-material/ContentCopyOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import EditIcon from '@mui/icons-material/Edit';
@@ -20,7 +21,13 @@ import HistoryIcon from '@mui/icons-material/History';
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import type { CaseConditionRef, DocLink, TestCase, TestStep } from '../../api/types';
-import { useAttachCaseFile, useCase, useDeleteCaseFile, useProject } from '../../api/queries';
+import {
+  useAttachCaseFile,
+  useCase,
+  useDeleteCaseFile,
+  useProject,
+  useUnlinkCaseExternal,
+} from '../../api/queries';
 import { AttachmentsPanel } from '../../components/AttachmentList';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
@@ -30,10 +37,11 @@ import { CaseCloneDialog } from './CaseCloneDialog';
 import { CaseDeleteDialog } from './CaseDeleteDialog';
 import { ReviewPanel } from '../review/ReviewPanel';
 import { CaseVersionPanel } from './CaseVersionPanel';
+import { ExternalLinkDialog } from './ExternalLinkDialog';
 import { FlakePanel } from './FlakePanel';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusChip } from '../../components/StatusChip';
 import { formatAge, formatDateTime, formatSeconds } from '../../lib/format';
-import { stepFormatLabels } from '../../lib/labels';
+import { linkRelationshipLabels, stepFormatLabels } from '../../lib/labels';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -254,7 +262,11 @@ export function CaseDetailPage() {
                 */}
                 <CaseAttachments projectId={projectId} caseId={caseId} attachments={data.attachments} />
 
-                <DocLinksPanel links={data.relatedDocuments ?? []} projectId={projectId} />
+                <DocLinksPanel
+                  links={data.relatedDocuments ?? []}
+                  projectId={projectId}
+                  caseId={caseId}
+                />
               </Stack>
 
               {/* Metadata sidebar. */}
@@ -689,31 +701,78 @@ function StructuredSteps({ steps }: { steps: TestStep[] }) {
 }
 
 /**
- * Traceability. Requirements are documentation blocks rather than a separate entity, so a
- * link points at a specific block anchor — and a **stale** link is called out, because a
- * link to a spec paragraph that has since changed is worse than no link: it looks like
- * coverage while covering the old text.
+ * Traceability — what this case says it covers, and where.
+ *
+ * Requirements are documentation blocks rather than a separate entity, so a link points at a
+ * specific block anchor — and a **stale** link is called out, because a link to a spec paragraph
+ * that has since changed is worse than no link: it looks like coverage while covering the old text.
+ *
+ * ## Three kinds, and only one of them was ever renderable
+ *
+ * The external branches this panel used to carry were written when the panel was, and until §169
+ * **no response could populate them**: `doc_link` designed `EXTERNAL_GIT` and `EXTERNAL_URL` from
+ * M0 and nothing wrote either. What was here rendered `externalRepo` as a bare label for both
+ * kinds — a blank line for a URL link, and for a git link a repository name with the file, the
+ * range and the pin dropped into a caption below it. It is §168's `CoverageMarker` one panel over:
+ * a branch that typechecked for seventy sections against a field nothing sent.
+ *
+ * ## Only external links carry a Remove
+ *
+ * A block link is withdrawn on the documentation page under `doc:edit`, and no endpoint removes one
+ * from the case end — offering a control here that would fail is worse than not offering it. The
+ * asymmetry is the permission split §169 argues at the service: a link to a paragraph belongs to
+ * the documentation, a link to a file belongs to the case.
  */
-function DocLinksPanel({ links, projectId }: { links: DocLink[]; projectId: string }) {
+function DocLinksPanel({
+  links,
+  projectId,
+  caseId,
+}: {
+  links: DocLink[];
+  projectId: string;
+  caseId: string;
+}) {
   const staleCount = links.filter((l) => l.stale).length;
+  const [linking, setLinking] = useState(false);
+  const remove = useUnlinkCaseExternal(projectId, caseId);
 
   return (
     <Panel
       title="Traceability"
       testId="CaseDetail.DocLinks"
       actions={
-        staleCount > 0 && (
-          <Chip
-            size="small"
-            label={`${staleCount} stale`}
-            data-testid="CaseDetail.DocLinks.StaleCount"
-            sx={{
-              bgcolor: 'transparent',
-              color: 'var(--color-failed)',
-              border: '1px solid color-mix(in srgb, var(--color-failed) 45%, transparent)',
-            }}
-          />
-        )
+        <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
+          {staleCount > 0 && (
+            <Chip
+              size="small"
+              label={`${staleCount} stale`}
+              data-testid="CaseDetail.DocLinks.StaleCount"
+              sx={{
+                bgcolor: 'transparent',
+                color: 'var(--color-failed)',
+                border: '1px solid color-mix(in srgb, var(--color-failed) 45%, transparent)',
+              }}
+            />
+          )}
+          {/*
+            Disabled rather than hidden (§31): a Viewer should be able to see that the product can
+            do this. `case:edit` and not `doc:edit` — the endpoint's gate, because this link renders
+            here and on no documentation page.
+          */}
+          <PermissionGate projectId={projectId} permission="case:edit">
+            {({ allowed }) => (
+              <Button
+                size="small"
+                startIcon={<AddLinkIcon />}
+                disabled={!allowed}
+                onClick={() => setLinking(true)}
+                data-testid="CaseDetail.DocLinks.AddButton"
+              >
+                Link code or a URL
+              </Button>
+            )}
+          </PermissionGate>
+        </Stack>
       }
     >
       {links.length === 0 ? (
@@ -725,36 +784,33 @@ function DocLinksPanel({ links, projectId }: { links: DocLink[]; projectId: stri
           {links.map((link) => (
             <Box key={link.id} data-testid="CaseDetail.DocLinks.Item">
               <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
-                <Chip size="small" variant="outlined" label={link.relationship.toLowerCase().replace(/_/g, ' ')} />
-                {link.targetKind === 'DOC_BLOCK' && link.pageId ? (
-                  <RouterLink
-                    to={`/projects/${projectId}/docs/${link.pageId}#${link.blockId}`}
-                    data-testid="CaseDetail.DocLinks.PageLink"
-                  >
-                    <Typography variant="body2" component="span" sx={{ fontWeight: 500 }}>
-                      {link.pageTitle}
-                    </Typography>
-                  </RouterLink>
-                ) : (
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                    {link.externalRepo}
-                  </Typography>
-                )}
+                <Chip size="small" variant="outlined" label={linkRelationshipLabels[link.relationship]} />
+                <DocLinkTarget link={link} projectId={projectId} />
                 {link.pageKey && <Identifier variant="muted">{link.pageKey}</Identifier>}
+                {link.targetKind !== 'DOC_BLOCK' && (
+                  <PermissionGate projectId={projectId} permission="case:edit">
+                    {({ allowed }) =>
+                      allowed ? (
+                        <Button
+                          size="small"
+                          color="inherit"
+                          startIcon={<DeleteOutlineIcon />}
+                          disabled={remove.isPending}
+                          onClick={() => remove.mutate(link.id)}
+                          sx={{ ml: 'auto', color: 'text.secondary' }}
+                          data-testid="CaseDetail.DocLinks.Remove"
+                        >
+                          Remove
+                        </Button>
+                      ) : null
+                    }
+                  </PermissionGate>
+                )}
               </Stack>
 
               {link.blockExcerpt && (
                 <Typography variant="body2" sx={{ color: 'text.secondary', pl: 1.5, borderLeft: '2px solid', borderColor: 'divider' }}>
                   {link.blockExcerpt}
-                </Typography>
-              )}
-
-              {link.externalPath && (
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  <Identifier variant="muted">
-                    {link.externalPath}:{link.externalLineStart}–{link.externalLineEnd}
-                  </Identifier>{' '}
-                  at <Identifier variant="muted">{link.externalCommitSha}</Identifier>
                 </Typography>
               )}
 
@@ -770,6 +826,83 @@ function DocLinksPanel({ links, projectId }: { links: DocLink[]; projectId: stri
           ))}
         </Stack>
       )}
+
+      <ExternalLinkDialog
+        open={linking}
+        onClose={() => setLinking(false)}
+        projectId={projectId}
+        caseId={caseId}
+      />
     </Panel>
   );
 }
+
+/**
+ * What the link points at, by kind — one place, so the three cannot be rendered three ways.
+ *
+ * The switch is on `targetKind` and never on which field happens to be populated. A row is one kind
+ * and the other kind's properties are null, which the contract states at the schema: a renderer
+ * branching on `link.externalRepo` draws a git link as an empty page reference the day a repository
+ * is left unnamed, and the server refuses that combination precisely so nothing has to guess.
+ */
+function DocLinkTarget({ link, projectId }: { link: DocLink; projectId: string }) {
+  if (link.targetKind === 'DOC_BLOCK' && link.pageId) {
+    return (
+      <RouterLink
+        to={`/projects/${projectId}/docs/${link.pageId}#${link.blockId}`}
+        data-testid="CaseDetail.DocLinks.PageLink"
+      >
+        <Typography variant="body2" component="span" sx={{ fontWeight: 500 }}>
+          {link.pageTitle}
+        </Typography>
+      </RouterLink>
+    );
+  }
+
+  if (link.targetKind === 'EXTERNAL_URL') {
+    return (
+      // `noopener` with `_blank` is not optional: without it the opened page can navigate this tab
+      // through `window.opener`, and this href is a value somebody typed. The scheme is refused at
+      // the write, which is the other half of the same problem.
+      <Typography
+        component="a"
+        href={link.externalUrl ?? undefined}
+        target="_blank"
+        rel="noopener noreferrer"
+        variant="body2"
+        sx={{ fontWeight: 500 }}
+        data-testid="CaseDetail.DocLinks.ExternalUrl"
+      >
+        {link.externalUrl}
+      </Typography>
+    );
+  }
+
+  // EXTERNAL_GIT. The path, the range and the pin are ONE identifier and render as one:
+  // `acme/checkout · src/Refund.java:40–58 at 4f9c2b1`. Splitting the sha into a caption, as this
+  // panel used to, presents the pin as a footnote — and the pin is what makes the range mean
+  // anything six months later (#26).
+  return (
+    <Stack
+      direction="row"
+      sx={{ alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}
+      data-testid="CaseDetail.DocLinks.ExternalGit"
+    >
+      <Typography variant="body2" component="span" sx={{ fontWeight: 500 }}>
+        {link.externalRepo}
+      </Typography>
+      <Identifier variant="muted">
+        {link.externalPath}
+        {link.externalLineStart != null && `:${link.externalLineStart}`}
+        {link.externalLineEnd != null &&
+          link.externalLineEnd !== link.externalLineStart &&
+          `–${link.externalLineEnd}`}
+      </Identifier>
+      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+        at
+      </Typography>
+      <Identifier variant="muted">{link.externalCommitSha}</Identifier>
+    </Stack>
+  );
+}
+

@@ -2,13 +2,59 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-12 (**§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
+**Last verified:** 2026-08-12 (**§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `8232b0a` (§167; §168 is this session, uncommitted at the time of writing) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `2bdf427` (§169 phase 1; phase 2 is this session, uncommitted at the time of writing) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
+
+---
+
+## §169 — `doc_link` HAS TWO WRITERS AND TWO GATES, AND THE DIVERGENCE MAP IS EMPTY
+
+**`EXTERNAL_GIT` and `EXTERNAL_URL` are written** — `V1` designed both and only `DOC_BLOCK` had a
+writer (open question #26, resolved *build it* 2026-08-02, plan §6m). Read this before touching
+`DocLink`, either link service, `case_doc_link` or the case detail's Traceability panel.
+
+- **THE GATE IS `case:edit`, NOT `doc:edit`, AND THAT IS A REVERSAL RATHER THAN AN INCONSISTENCY.**
+  `BlockLinkService`'s argument — *"a link is a property of the documentation"* — turns entirely on
+  the target being a doc block. An external link renders on the case's Traceability panel and on **no
+  page** (`BlockLinks` reads by `target_block_id`), so `doc:edit` would let a docs author annotate a
+  case they may not edit, and would make the act impossible in a project keeping no documentation.
+  The cost is recorded at `ExternalLinkService`: two writers, two gates, and the rule that remains is
+  *whoever may edit the thing the link renders on*. **Do not "unify" them.**
+- **`ExternalLinkController` serves `/projects/{id}/cases/{caseId}/external-links` from
+  `documentation`.** `PlanDocumentController` is the precedent — a path under another module's
+  aggregate, served by the module that owns the row. **It must never grow a `GET`**: a case's links
+  are already served on the case, off `case_doc_link`, and a second answer from the other side of
+  the boundary would disagree for as long as the mirror lagged.
+- **Idempotency is a Java comparison (`ExternalLinkService#sameTarget`), never a query predicate.**
+  Four identifying columns are nullable and `external_line_start = :start` is **UNKNOWN, not true**,
+  when both sides are null — the SQL spelling writes a duplicate for every double-clicked whole-file
+  link with every other test green. The line range **is** part of the identity.
+- **Validation is narrower than `ck_doc_link_target` in two places, deliberately**: `repo` is
+  required (a path with no repository is a link nobody can follow) and the sha is 7–40 hex (a branch
+  name moves; SHA-256's 64 characters are a known, refused limit). `http`/`https` only on a URL —
+  the value is rendered as an `href`, so it is a stored-XSS gate refused at the one place it can be
+  refused once.
+- **`V47` widens `case_doc_link`** (four `NOT NULL`s dropped, `ck_case_doc_link_target` in their
+  place, six columns copied) and `DocumentationFacts` grows a **`UNION ALL` second arm** joining
+  `test_case` alone — three of the four predicates are *absent rather than relaxed*, because there is
+  no page. `source_type = 'TEST_CASE'` is on **both** arms; dropping it from the second inserts a
+  suite id into `case_id` and the FK aborts the refresh. **`stale` is the literal `false` there**
+  (`V47` §3): the sha pins the lines, so what could fall behind is the pin, and that is a different
+  question. Putting the block arm's comparison on this arm yields NULL into a `NOT NULL boolean` and
+  aborts the whole recompute.
+- **The external copies cannot go stale**, unlike the page title and block excerpt beside them:
+  `doc_link` has no update path at all, so a row is right or the link was deleted.
+- **`MEMBER_DIVERGENCE_BY_DECISION` is now `Map.of()`.** Ten entries, all removed by deletion, four
+  of them in §166–§169. An empty map is a result: every named object schema and its record agree
+  both ways. `ExternalLink` and `ExternalLinkInput` are both **named** schemas paired in
+  `RESPONSE_RECORDS` — the build failed until they were, which is the rule working.
+- `CaseDocLinkRepository`'s `ORDER BY` leads with `targetKind` and closes with `id`; the old
+  `pageKey, blockId` was total only while every row was a block link.
 
 ---
 
