@@ -2,14 +2,51 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-12 (**§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-12 (**§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `2bdf427` (§169 phase 1; phase 2 is this session, uncommitted at the time of writing) (trust the
+**Baseline commit:** `97ada0c` (§171; §172 is this session, uncommitted at the time of writing) (trust the
 body over the header and re-grep what a later commit could have moved).
+
+## §172 — THE BLOCK-LINK SCREEN, AND WHY THIS HALF *DOES* INVALIDATE
+
+**A case or a suite is linked to one documentation block from the documentation page**
+(`DocsPage` → `BlockLinks` → `LinkBlockDialog`). Read this before touching that page, the coverage
+margin, or anything that reasons about which end of a `doc_link` is being written.
+
+- **`useLinkBlock` and `useUnlinkBlock` had NO CALLER anywhere in `src/`** until this slice — since
+  §97. The endpoint, the read model, `CoverageMarker` and the case-end panel were all built, and
+  the one screen that could create a link from the documentation side was never written, so every
+  block on every page read *"Not tested"* with no affordance to say otherwise. §169 recorded it;
+  this closed it. Grep for hooks with no caller before assuming a capability is reachable.
+- **This half invalidates and §169's half must not**, and the difference is the read model, not
+  taste: `DocBlock.links` is assembled off `doc_link` inside the same GET (`DocPageService` →
+  `BlockLinks.forPage`), so invalidating the page returns the row that was just written.
+  `TestCase.relatedDocuments` is served from `case_doc_link`, a projection an outbox event refreshes
+  up to a minute later, so invalidating there **erases** the link the server just created. Two hooks
+  over one table, opposite cache rules. `invalidatePageEverywhere` also hits the plan key by prefix,
+  because a page reached as a plan's document must not go stale behind a link written from the other.
+- **The links list is below the block body; the coverage marker stays in the 132px margin.** One is
+  *who claims this* (present, possibly empty), the other is *how those claims are doing* (null when
+  nobody claims it) — the same split the two fields make on the wire.
+- **The Link button is offered on a heading too**, though a heading gets no coverage marker. The
+  server accepts a link to any block; withholding the control on the client's own authority is the
+  client holding a second, staler copy of the rule, and it would strand an existing heading link
+  with no way to remove it.
+- **`sourceType` comes from the toggle, never from which picker was touched.** Pick a case, change
+  your mind, pick a suite: an inferring form would send `TEST_CASE` with a suite's id — a real row
+  of the wrong table, so the server's project check passes and the link points at nothing anyone
+  chose. `BlockLinks.test.tsx` pins exactly that sequence.
+- **The case picker is `BindTestDialog`'s server-side type-ahead** (open on the first twenty,
+  `filterOptions={(all) => all}` so the answer is never re-filtered client-side); the suite picker
+  is a plain select, because a project has thousands of the first and a handful of the second.
+- **Two test-id prefixes one character apart were renamed away**: the list is `Docs.Block.Links.*`
+  and the dialog is `Docs.Block.LinkDialog.*`, not `Docs.Block.Link.*`.
+- **`linkSourceTypeLabels`** (`lib/labels.ts`) is the shared map for `BlockLink.sourceType`, keyed
+  off the contract's two-value enum rather than the column's four.
 
 ## §169 — THE TRACEABILITY PANEL'S OTHER TWO BRANCHES, AND THE HOOK THAT MUST NOT INVALIDATE
 
@@ -1685,6 +1722,17 @@ directly above the switcher) and the wordmark links there too.
 
 ## Session log
 
+- 2026-08-12 · EXTEND · **The block-link screen** (§172) — §169's recorded gap: `useLinkBlock` and
+  `useUnlinkBlock` had **no caller anywhere in `src/`** since §97, so the documentation side could
+  not create a `doc_link` at all and every block read *"Not tested"* with no affordance behind it.
+  New: `features/docs/LinkBlockDialog.tsx` + `features/docs/BlockLinks.test.tsx`; `DocsPage`'s
+  `BlockView` gains a `BlockLinks` row under every block and a `pageId` prop; `lib/labels.ts` gains
+  `linkSourceTypeLabels`. **No contract change** — the endpoints, `DocBlock.links` and the two hooks
+  all predate this. The one thing to carry forward: **this half invalidates the page and §169's half
+  must not**, because `DocBlock.links` is assembled inside the same GET while
+  `TestCase.relatedDocuments` is a projection an event refreshes. **1233/1233 across 95 files**
+  (+5, one new file, from 1228/94), build and lint clean. Browser rows `§172 XM-1`…`XM-5` recorded
+  and **not run** (§65); no mutation rows — nothing in `backend/` moved.
 - 2026-08-07 · EXTEND · **The three attachment surfaces** (§126 phase 4) — case files, page files,
   and `ArtifactKind.FILE` becoming registrable, over endpoints phases 1–3 had already shipped.
   **No contract change**: `schema.d.ts` was regenerated by the backend phases and every shape was

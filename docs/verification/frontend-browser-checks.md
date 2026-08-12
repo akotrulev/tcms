@@ -1428,6 +1428,29 @@ new file has to be authored for this slice.
 | `M3-77` | In the editor, change the **Image** block's type to **Paragraph** and Save | Accepted, with no 400. Every type-specific field is dropped at submit based on the type, so the file reference does not travel with it — and switching type while writing is ordinary. Do the same from **Table** to **Paragraph**: the cells go and the caption stays as the text. |
 | `M3-78` | On a page with **no** attachments, add an **Image** block | The File control is replaced by a message pointing at the page itself, not an empty dropdown. Then try to Save with the alt text blank on a page that *does* have a file: refused on the **Alt text** field (*"Describe what this image shows…"*), landing on that block's row rather than as a banner. An empty **paragraph** stays legal — that rule is one `else if` away and must not be made to agree. |
 
+## §172 — the block-link screen, and the affordance this file's own charter already assumed
+
+**Five rows, all in `A2`, and they should be driven BEFORE the charter's `DOC-1` fixture is finished
+rather than after.** The fixture note at the top of this file (`Doc pages, OLB`) instructs the pass
+to *"link cases to the bullets from the documentation editor (`M3-19`'s affordance)"* — and until
+§172 **there was no such affordance anywhere in the SPA**: `useLinkBlock` and `useUnlinkBlock` had no
+caller in `src/`, so `M3-19`'s chip, `§165 RC-2`'s pair, `M6-36`'s ladder and `M6-38`'s relationship
+change all read a link the pass had no way to create through the product. That is the finding these
+rows exist beside: **the charter described a screen the build did not have, and no gate could see
+it** — the hooks typechecked, and nothing asserts that a hook is called.
+
+`M6-38` is now executable by its own fallback (*"record it as a new link and delete the old"*) and
+still not by its primary reading: **a link's relationship cannot be edited in place**, only created
+and withdrawn. If that reads as a defect, it is one about this screen and not about the report.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§172 XM-1` | On `DOC-1` in `/docs`, under the **Refunds** heading's first bullet, press **Link a case** | A dialog opens naming the block it was opened from — *"List — <the bullet's words>"*, cut to a line. **Two toggles**, Test case and Suite, with Test case selected. The case picker **opens on the first twenty cases before anything is typed**; a control that is empty until two characters are typed reads as broken to someone who does not know a key. Relationship defaults to **Verifies** with its own sentence beneath it. |
+| `§172 XM-2` | Pick a case that **passed**, leave Verifies, press **Link** — Network tab open | One `POST .../doc-pages/{pageId}/blocks/{blockId}/links` carrying **exactly** `sourceType`, `sourceId`, `relationship`. **201.** The chip appears under that bullet immediately — `KEY — Title · Verifies` — and the margin's **Not tested** marker is replaced by the coverage readout on the next read. Then **press Link again and choose the same case**: **200**, no second chip, no error dialog. Re-asserting a recorded fact is not a conflict, and a duplicate row would double every count drawn off `doc_link`. |
+| `§172 XM-3` | Open the dialog on bullet 2, pick a **case**, then switch the toggle to **Suite** and pick a suite. Submit with the Network tab open | The payload says `sourceType: 'SUITE'` with the **suite's** id — never `TEST_CASE` with it. This is the one failure the toggle exists to prevent and it is invisible from the response: a suite id is a real row of the wrong table, so the server's project check passes and the link points at something nobody chose. Then read the chip: it links to `/cases?suiteId=…`, and the case chip beside it links to the case's own detail route. |
+| `§172 XM-4` | As **`viewer`** open `DOC-1`; then as **`engineer`** (holds `doc:edit`) | Viewer: every chip is **readable and clickable**, **Link a case** is **disabled with a reason on hover** (§31), and there is **no Remove** on any chip. Engineer: both live. The two verdicts must appear in the same page for the check to mean anything — a control disabled for everybody passes every "is it disabled?" row. |
+| `§172 XM-5` | On the **Disputes heading** (a heading, which carries no coverage marker), press **Link a case** and link one; then **Remove** it | Both work. The heading has no coverage margin *and* has the link control, on purpose: the server accepts a link to any block, so withholding the control here would be the client holding a staler copy of the rule — and it would strand an existing heading link with no way to withdraw it. **Remove does not confirm**, matching the case end's half of the same act; if that reads as wrong, it is one finding about **both** screens and not this one. |
+
 ### F — the transport lane
 
 | Row | Drive | Expect |

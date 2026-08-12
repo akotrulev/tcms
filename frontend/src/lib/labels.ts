@@ -11,6 +11,7 @@
 import type {
   AggregationPolicy,
   AutomationStatus,
+  BlockLink,
   CriterionMetric,
   DocBlockType,
   DocPageStatus,
@@ -511,6 +512,19 @@ export const linkRelationshipHelp = {
   DERIVED_FROM: 'The case was written from the statement without claiming to cover it.',
   REFERENCES: 'The case mentions it — context, not coverage.',
 } as const satisfies Record<LinkRelationship, string>;
+
+/**
+ * What is at the *other* end of a block's link — `BlockLink.sourceType`.
+ *
+ * Two values and not four. `doc_link.source_type` also permits `DEFECT` and `DOC_PAGE`; the
+ * contract's enum omits both because neither has a writer, and this map is keyed off the contract's
+ * enum rather than the column's so a value nothing can produce cannot get a label that implies it
+ * can. `satisfies` makes the day one of them gains a writer a compile error here.
+ */
+export const linkSourceTypeLabels = {
+  TEST_CASE: 'Test case',
+  SUITE: 'Suite',
+} as const satisfies Record<BlockLink['sourceType'], string>;
 
 /**
  * Fallback for values that arrive without a map — an unrecognized classification value,

@@ -1,5 +1,7 @@
-import { Box, Button, Chip, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, Button, Chip, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/AddOutlined';
+import AddLinkIcon from '@mui/icons-material/AddLinkOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import type { DocPage, DocBlock, DocPageStatus, DocPageSummary } from '../../api/types';
@@ -10,6 +12,7 @@ import {
   useDocPages,
   useProject,
   useSetDocPageStatus,
+  useUnlinkBlock,
 } from '../../api/queries';
 import { AttachmentsPanel } from '../../components/AttachmentList';
 import { DocBlockBody } from '../../components/DocBlockBody';
@@ -18,8 +21,9 @@ import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { formatCount, formatDateTime } from '../../lib/format';
-import { docPageStatusLabel } from '../../lib/labels';
+import { docPageStatusLabel, linkRelationshipLabels } from '../../lib/labels';
 import { CreateDocPageDialog, DeleteDocPageDialog } from './DocPageDialogs';
+import { LinkBlockDialog } from './LinkBlockDialog';
 
 /**
  * The documentation space (plan §6i).
@@ -353,6 +357,7 @@ function PageView({
                 key={block.id}
                 block={block}
                 projectId={projectId}
+                pageId={page.id}
                 attachments={page.attachments}
               />
             ))}
@@ -495,10 +500,12 @@ function PageActions({
 function BlockView({
   block,
   projectId,
+  pageId,
   attachments,
 }: {
   block: DocBlock;
   projectId: string;
+  pageId: string;
   attachments: DocPage['attachments'];
 }) {
   const isHeading = block.blockType === 'heading';
@@ -534,7 +541,140 @@ function BlockView({
           <CoverageMarker coverage={block.coverage} projectId={projectId} />
         </Stack>
       )}
+      <BlockLinks block={block} projectId={projectId} pageId={pageId} />
     </Box>
+  );
+}
+
+/**
+ * What claims to verify this block, and the only way in the product to say so (§172).
+ *
+ * ## Below the body and outside the coverage margin
+ *
+ * The margin is 132px of annotation and a case reads `TC-1284 — Refund is refused after 30 days`;
+ * one does not fit in the other. So the links sit under the block at full width, and the margin
+ * keeps saying how the linked cases are *doing* — two different questions, which is the same split
+ * `DocBlock.links` and `DocBlock.coverage` make on the wire: `links` is present and possibly empty
+ * because the server knows exactly who claims this, `coverage` is null when nobody does.
+ *
+ * ## Offered on a heading too
+ *
+ * A heading gets no coverage marker — it is structure, not a requirement — and it gets a Link
+ * button anyway, because the server accepts a link to any block and a control the client withholds
+ * on its own authority is the client holding a second, staler copy of the rule (the block editor's
+ * Remove makes the same argument one file over). Withholding it would also make an existing
+ * heading link unremovable: `links` renders on every block precisely so nothing can be stranded.
+ *
+ * ## Remove does not confirm, and that is a match rather than an omission
+ *
+ * `ui-rules` §4 wants a named-object confirmation on every destructive action, and the case end's
+ * Remove — the same `doc_link` row withdrawn from the other side — fires immediately. One act must
+ * not have two behaviours depending on which screen it is reached from, so this half matches the
+ * half that already shipped; the pair is recorded as one follow-up rather than spot-fixed here.
+ */
+function BlockLinks({
+  block,
+  projectId,
+  pageId,
+}: {
+  block: DocBlock;
+  projectId: string;
+  pageId: string;
+}) {
+  const [linking, setLinking] = useState(false);
+  const remove = useUnlinkBlock(projectId, pageId);
+
+  return (
+    <Stack
+      direction="row"
+      sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap', mt: 0.5 }}
+      data-testid="Docs.Block.Links"
+    >
+      {block.links.map((link) => (
+        <Stack
+          // A static row locator: the set is addressed by index, never by the link's id.
+          key={link.id}
+          direction="row"
+          sx={{ gap: 0.5, alignItems: 'center' }}
+          data-testid="Docs.Block.Links.Item"
+        >
+          <Chip
+            size="small"
+            variant="outlined"
+            component={RouterLink}
+            clickable
+            // The source's own screen, not a filtered list: a case has a detail route and a suite
+            // does not, so the suite arm lands on the case list narrowed to it — the same two
+            // destinations the board and the plan statistics page already use for the same pair.
+            to={
+              link.sourceType === 'TEST_CASE'
+                ? `/projects/${projectId}/cases/${link.sourceId}`
+                : `/projects/${projectId}/cases?suiteId=${link.sourceId}`
+            }
+            label={
+              <>
+                <Identifier variant="muted">{link.sourceKey}</Identifier>{' '}
+                {link.sourceTitle}
+                <Box component="span" sx={{ color: 'text.secondary' }}>
+                  {' · '}
+                  {linkRelationshipLabels[link.relationship]}
+                </Box>
+              </>
+            }
+            data-testid="Docs.Block.Links.Item.Source"
+          />
+          <PermissionGate projectId={projectId} permission="doc:edit">
+            {({ allowed }) =>
+              allowed ? (
+                <Tooltip title={`Withdraw ${link.sourceKey}'s claim on this block`}>
+                  <span>
+                    <IconButton
+                      aria-label={`Remove the link to ${link.sourceKey}`}
+                      size="small"
+                      disabled={remove.isPending}
+                      onClick={() => remove.mutate(link.id)}
+                      data-testid="Docs.Block.Links.Remove"
+                    >
+                      <DeleteOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              ) : null
+            }
+          </PermissionGate>
+        </Stack>
+      ))}
+
+      {/* Disabled rather than hidden (§31) — a Viewer should be able to see that this is a thing
+          the product does. `doc:edit`, which is the endpoint's own gate on both verbs: a link is a
+          property of the documentation, so its holder is everyone who writes docs. */}
+      <PermissionGate projectId={projectId} permission="doc:edit">
+        {({ allowed }) => (
+          <Button
+            size="small"
+            startIcon={<AddLinkIcon />}
+            disabled={!allowed}
+            onClick={() => setLinking(true)}
+            sx={{ color: 'text.secondary' }}
+            data-testid="Docs.Block.Links.AddButton"
+          >
+            {block.links.length === 0 ? 'Link a case' : 'Link'}
+          </Button>
+        )}
+      </PermissionGate>
+
+      {/* Mounted only while open, so the dialog's reset-on-open effect starts from a fresh mount
+          rather than from whatever the last block left in it. */}
+      {linking && (
+        <LinkBlockDialog
+          open
+          onClose={() => setLinking(false)}
+          projectId={projectId}
+          pageId={pageId}
+          block={block}
+        />
+      )}
+    </Stack>
   );
 }
 
