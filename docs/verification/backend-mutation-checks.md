@@ -2045,3 +2045,24 @@ is the product one and is NOT RUN.***
 > declared properties to a record's **components**, statically — a `@JsonIgnore`, a `@JsonProperty`
 > rename or a custom serializer satisfies them while changing the bytes. §170 widened the population
 > from 79 pairings to 144 and did not widen what a pairing can see.
+
+## §171 — the form parts nobody compared
+
+*Four mutations, **all four run**, §165's and §170's precedent: every one is a check over a check,
+so running them is not the §65 exception §72–§76 wrongly took. Two of them touch a production file
+and are reverted in the same command — the mutation is of the **handler's signature**, which is the
+only side of this comparison that lives in `src/main`.*
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| `§171 FP-1` | In `openapi.yaml`, delete the `caption` property from the evidence form (leaving `stepId` and `file`) | Should redden `no multipart handler binds a part the contract does not declare`, and **only** that one — the reverse direction has nothing to say, because every remaining declared part is still bound. The direction that matters least to the server and most to a reader: the field vanishes from both copies of `schema.d.ts`, so no generated client can send it and the handler's argument is null forever. | ✅ **RUN 2026-08-12 — red on exactly that test, every other rule in the class green** |
+| `§171 FP-2` | In `openapi.yaml`, move `caption` into the evidence form's `required` array | Should redden `a form part is required on both sides or optional on both` and nothing else. The mutation is the cheap contract edit somebody makes when a caption starts feeling mandatory, and it ships a document promising a 400 the handler will never give. | ✅ **RUN 2026-08-12 — red on exactly that test; the two membership rules stayed green, which is the point of keeping requiredness a separate rule rather than folding it into the set comparison** |
+| `§171 FP-3` | In `EvidenceController`, rename the bound part — `@RequestParam(value = "caption")` → `"legend"` — leaving the Java field name alone | Should redden **both** membership rules at once: `caption` declared and unbound, `legend` bound and undeclared. **The row worth reading**: this is the actual defect the whole slice exists for, and before this commit it was a 201 with a silently dropped caption and no test anywhere that could see it. | ✅ **RUN 2026-08-12 — red on both, as predicted; requiredness stayed green because the disagreement is about the name, not the flag** |
+| `§171 FP-4` | In `CaseAttachmentController`, delete the `@RequestPart("file")` annotation entirely, leaving a bare `MultipartFile file` parameter | Should stay **GREEN**, and that is the assertion — Spring binds an unannotated `MultipartFile` by parameter name, so `formPartsBoundBy`'s third arm is the difference between reading the running server and reading two annotations. Without it a handler rewritten this way would read as binding *nothing* and both membership rules would go quiet on the one endpoint somebody had just touched. | ✅ **RUN 2026-08-12 — green, all six tests; the arm is load-bearing rather than defensive** |
+
+> **What these rules still cannot see, and it is the multipart mirror of §165's limit.** The
+> comparison is *names and requiredness*, both read statically. A part bound to the right name with
+> the wrong **type** passes — `@RequestParam UUID stepId` against a contract saying
+> `type: string, format: uuid` agrees, and so would `type: integer`. So does a part the handler
+> binds and then ignores. The one direction that is genuinely closed is the one that used to fail
+> silently: a name that exists on one side and not the other.

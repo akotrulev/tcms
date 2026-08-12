@@ -260,6 +260,34 @@ public final class OpenApiContract {
     }
 
     /**
+     * The parts a {@code multipart/form-data} request body declares, each mapped to whether the
+     * schema <strong>requires</strong> it. Empty for an operation with no multipart body, which is
+     * every operation but four.
+     *
+     * <p>This is the one body position with no record behind it, and
+     * {@code ContractConventionTest.BOUND_AS_FORM_PARTS} says why: Spring binds a form to a
+     * handler's parameter list, so the "shape" is the signature. That left the parts themselves
+     * compared to nothing until §171 — the gap that map recorded — and the required flag travels
+     * with them because it is half the comparison: a part the contract calls optional and the
+     * handler demands is a 400 on a legal request, and the reverse is a null reaching code written
+     * for a value.
+     */
+    Map<String, Boolean> formPartsOf(Operation operation) {
+        Map<String, Object> schema = asMap(asMap(asMap(asMap(operation.body().get("requestBody"))
+                .get("content")).get("multipart/form-data")).get("schema"));
+        if (schema.isEmpty()) {
+            return Map.of();
+        }
+        Set<String> declared = new LinkedHashSet<>();
+        collectProperties(schema, declared);
+        Set<String> required = new LinkedHashSet<>();
+        collectRequired(schema, required);
+        Map<String, Boolean> parts = new LinkedHashMap<>();
+        declared.forEach(name -> parts.put(name, required.contains(name)));
+        return parts;
+    }
+
+    /**
      * The {@code components.schemas} entries that declare an object shape — anything with
      * {@code properties} of its own or an {@code allOf} that reaches some.
      *

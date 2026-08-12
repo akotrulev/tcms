@@ -1117,23 +1117,37 @@ class ContractConventionTest {
      * {@code @RequestParam}s, so the "shape" exists only as a handler's parameter list. Declaring a
      * record for it would be a type invented to satisfy this rule.
      *
-     * <p><strong>The check these forgo is a real one and it is worth naming rather than eliding:
+     * <p>~~<strong>The check these forgo is a real one and it is worth naming rather than eliding:
      * nothing compares a form's declared parts to the parameters the handler binds.</strong> A part
      * renamed on one side is a 400 at runtime and nothing before it — the shape
      * {@code ContractParameterBindingTest} already fixes for query parameters, one media type over.
      * That test is where it would go, and it is a slice rather than a line, which is why this is a
-     * recorded gap and not a silent one.
+     * recorded gap and not a silent one.~~ → <strong>closed 2026-08-12 (§171), in the class that
+     * paragraph named.</strong>
+     *
+     * <p>{@code ContractParameterBindingTest} now asks these four forms the three questions the
+     * named lane asks of a record: every declared part is bound, no bound part is undeclared, and
+     * the two sides agree on {@code required}. So an entry here still excuses a <em>pairing</em> —
+     * there is genuinely no record — and it no longer excuses the parts from being compared. Which
+     * is the whole difference between an exemption and a hole.
+     *
+     * <p>~~{@code BOUND_AS_REQUEST_PARAMETERS}~~: the old name was wrong about all four of them.
+     * Every {@code file} part is a {@code @RequestPart}, as is {@code artifact}; only
+     * {@code caption} and {@code stepId} are {@code @RequestParam}s, and writing the rule made the
+     * mechanism worth spelling correctly, because the rule has to read both annotations and a
+     * reader of this map would have looked for one.
      */
-    private static final Map<String, String> BOUND_AS_REQUEST_PARAMETERS = Map.of(
+    private static final Map<String, String> BOUND_AS_FORM_PARTS = Map.of(
             "POST /projects/{projectId}/cases/{caseId}/attachments (request)",
-            "multipart — CaseAttachmentController binds MultipartFile file",
+            "multipart — CaseAttachmentController binds @RequestPart MultipartFile file",
             "POST /projects/{projectId}/doc-pages/{pageId}/attachments (request)",
-            "multipart — DocPageAttachmentController binds MultipartFile file",
+            "multipart — DocPageAttachmentController binds @RequestPart MultipartFile file",
             "POST /projects/{projectId}/runs/{runId}/executions/{executionId}/evidence (request)",
-            "multipart — EvidenceController binds MultipartFile file plus @RequestParam caption "
-                    + "and stepId",
+            "multipart — EvidenceController binds @RequestPart MultipartFile file plus "
+                    + "@RequestParam caption and stepId",
             "POST /projects/{projectId}/artifacts/files (request)",
-            "multipart — ArtifactFileController binds MultipartFile file plus the artifact part");
+            "multipart — ArtifactFileController binds @RequestPart MultipartFile file and "
+                    + "@RequestPart ArtifactFileInput artifact");
 
     @Test
     @DisplayName("every inline shape is paired with a record, or says why it has none")
@@ -1146,7 +1160,7 @@ class ContractConventionTest {
                 .hasSizeGreaterThan(20);
 
         Set<String> accounted = new TreeSet<>(inlinePairings().keySet());
-        accounted.addAll(BOUND_AS_REQUEST_PARAMETERS.keySet());
+        accounted.addAll(BOUND_AS_FORM_PARTS.keySet());
 
         assertThat(locations.stream().filter(at -> !accounted.contains(at)).toList())
                 .as("""
@@ -1154,7 +1168,7 @@ class ContractConventionTest {
 
                         Somebody added an anonymous object to the contract and no rule knows what
                         serves it. Name the record — a nested one is normal here, most of this map
-                        is nested — or, for a multipart form, add it to BOUND_AS_REQUEST_PARAMETERS.
+                        is nested — or, for a multipart form, add it to BOUND_AS_FORM_PARTS.
 
                         Inline shapes accounted for by nothing:""")
                 .isEmpty();
