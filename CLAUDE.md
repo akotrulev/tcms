@@ -118,10 +118,60 @@ npm run dev          # http://localhost:5173 — proxies /api to localhost:8080
                      # sign in by redeeming the /accept-invitation link provision-company prints
 npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
-npm run test:run     # Vitest + RTL, 1203 tests — also a gate
+npm run test:run     # Vitest + RTL, ~~1203~~ 1251 tests (measured 2026-08-12) — also a gate
 npm run gen:api      # regenerate src/api/schema.d.ts after ANY openapi.yaml change
                      # — AND packages/client's copy; the two are byte-identical and a test compares them
 ```
+
+### Running the gates on `shanks` instead of locally (set up 2026-08-12)
+
+**Write the code here, run the builds and tests on `shanks`.** There is no Claude Code setting for
+this — the Bash tool always runs on the Mac — so it is a sync-and-run wrapper, `~/bin/tcms-remote`
+**on the MacBook** (machine-local personal tooling, not in this repo; recreate it from this section
+if it is missing). It rsyncs the local working tree — **uncommitted changes included** — to
+`shanks:/home/akotrulev/builds/tcms`, then runs the command there over SSH.
+
+```bash
+~/bin/tcms-remote sync                        # sync only
+~/bin/tcms-remote backend ./gradlew build     # sync, then run in backend/
+~/bin/tcms-remote frontend npm run test:run
+~/bin/tcms-remote packages npm run build
+~/bin/tcms-remote shell                       # interactive shell in the remote tree
+```
+
+Verified end-to-end on 2026-08-12: `./gradlew build -x test` **6s** (the Gradle cache is warm from
+the Actions runner), `./gradlew test --tests RlsIsolationTest` **44s** — so Testcontainers and
+Docker 29.7.2 work there, GUC-recycling trap included — and the frontend suite **1251 tests green**
+in 231s after an `npm ci`.
+
+This is a **differently-shaped observer, and that is the point**: gates run on shanks are the same
+Linux shape as `tests.yml`, so the microsecond-vs-nanosecond class of defect that kept master red
+for seven CI runs on 2026-08-01 — and *cannot* fail on macOS — is now catchable before the push
+rather than the next morning. It does not replace the nightly; it front-runs it.
+
+Four things that bite:
+
+- **It uses a build-only tree, deliberately: `~/builds/tcms`, never `~/projects/tcms`.** That second
+  path is the Remote Control lane's checkout and is usually live on its own branch (on 2026-08-12 it
+  was `docs/multi-app-hosting-plan` at `7ba9255`, ahead of local master). Building into it is exactly
+  the two-writers-one-tree failure that ended parallel lanes. **Never edit anything under
+  `~/builds/tcms`** — the sync is `--delete` and will overwrite it.
+- **Sync is one-way, Mac → shanks.** `backend/build/`, `dist/` and every `node_modules/` are excluded,
+  so outputs stay on shanks and nothing comes back. Pull an artifact explicitly when you need one.
+- **`docker compose` from that tree collides.** Compose derives its project name from the directory,
+  so it would be `tcms` — the same name as the stack already running on shanks. Use
+  `docker compose -p tcms-build`, or keep compose local.
+- **`~/bin` is not on the Mac's PATH.** Invoke it by absolute path.
+
+The whole wrapper is `rsync -az --delete` plus one `ssh`, so it is a few lines to rebuild on a new
+machine. What it excludes — and must keep excluding, or the sync clobbers the remote's caches and
+takes minutes instead of seconds — is `.git/`, `.gradle/`, `.idea/`, `.DS_Store`, `backend/build/`,
+`frontend/node_modules/`, `frontend/dist/`, `packages/node_modules/`, `packages/*/node_modules/`
+and `packages/*/dist/`. `.env` is **not** excluded: compose on the remote needs it. Host, local dir
+and remote dir are overridable via `TCMS_REMOTE_HOST` / `TCMS_LOCAL_DIR` / `TCMS_REMOTE_DIR`.
+
+`shanks` is also the `tcms-lab` Actions runner, so a heavy local gate can land on top of a CI job.
+Both fit (6 cores / 14 GB), but a slow run is not necessarily a hung one.
 
 > **CI runs no backend tests** (changed 2026-08-02, for push-feedback speed: ~327s → ~60s).
 > `.github/workflows/ci.yml` runs `./gradlew build -x test`, so `-Werror` and the Modulith wiring
