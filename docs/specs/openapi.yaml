@@ -6419,6 +6419,48 @@ components:
         - INCOMPLETE
         - UNDECLARED_AUTOMATION
 
+    HealthSignalSeverity:
+      type: string
+      description: |
+        How loudly a health signal reads — the server's judgement about how wrong a case is, not a
+        client's.
+
+        **ERROR** is "the case is now wrong": its spec moved, a shared condition changed under it,
+        or its automation stopped reporting. **WARNING** is "this is decaying" — an approval or an
+        execution old enough to stop meaning anything. **INFO** is "something is missing but nothing
+        is broken", which is why `UNLINKED` is INFO and fires on most of a young project.
+        **NEUTRAL** is for the tiles that are not signals at all (a lifecycle count).
+
+        **This schema exists because the vocabulary is now declared twice and was declared inline
+        once.** It was an anonymous enum on `DashboardTile.severity` alone until §179, so nothing
+        compared it to the server's `HealthSignal.Severity` — §170's finding about inline shapes, at
+        an enum. `ContractEnumTest` pairs it now.
+
+        A client must not keep its own signal→severity table. That is exactly what §179 deleted:
+        the SPA's copy had drifted about two of the ten members, so one case read red on a dashboard
+        tile and amber on its own chip, and nothing on either side could see it.
+      enum:
+        - ERROR
+        - WARNING
+        - INFO
+        - NEUTRAL
+
+    RaisedSignal:
+      type: object
+      description: |
+        One health signal raised on one case, with how loudly it reads.
+
+        **`severity` is on the wire because the alternative was a second copy of it**, and the copy
+        drifted (§179). Both members are derived from the same server enum in the same expression,
+        so a case cannot arrive with a signal and the wrong severity beside it.
+
+        It is repeated per case rather than sent once as a catalogue on purpose: a chip renders where
+        the row is, and a catalogue would make a colour depend on a second request completing.
+      required: [signal, severity]
+      properties:
+        signal: { $ref: '#/components/schemas/HealthSignal' }
+        severity: { $ref: '#/components/schemas/HealthSignalSeverity' }
+
     AggregationPolicy:
       type: string
       description: |
@@ -6828,7 +6870,14 @@ components:
           items: { type: string }
         healthSignals:
           type: array
-          items: { $ref: '#/components/schemas/HealthSignal' }
+          # WORST FIRST, and the order is part of the answer rather than a convenience. The grid
+          # renders the FIRST signal and an overflow count, so a list in enum-declaration order put
+          # `UNLINKED` (INFO, and true of most of a young project since §178) in front of
+          # `STALE_AUTOMATION` (ERROR) and showed the missing link while hiding the broken case.
+          # `DashboardService.health` sorts its tiles for the same reason and says so in the same
+          # words; a client that re-sorted would be holding a second copy of a severity ranking,
+          # which is the copy §179 deleted.
+          items: { $ref: '#/components/schemas/RaisedSignal' }
         lastResult:
           type: object
           nullable: true
@@ -9046,7 +9095,10 @@ components:
         key: { type: string }
         label: { type: string }
         count: { type: integer }
-        severity: { type: string, enum: [NEUTRAL, INFO, WARNING, ERROR] }
+        # A $ref since §179 rather than this schema's own inline enum: the same vocabulary is on the
+        # wire for a bare signal now, and two inline copies of a closed set is the shape nothing
+        # compares.
+        severity: { $ref: '#/components/schemas/HealthSignalSeverity' }
         filter:
           type: object
           additionalProperties: true

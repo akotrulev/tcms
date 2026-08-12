@@ -80,6 +80,25 @@ package com.tcms.repository;
  * is a second list to keep in step and the symptom of missing an entry would be a genuinely broken
  * case tiled as neutral.
  *
+ * <p><strong>"Nothing anywhere else" was false for as long as there was a chip, and §179 is what
+ * made it true.</strong> The second severity map was not in {@code DashboardService}; it was
+ * {@code SEVERE_SIGNALS} in {@code StatusChip.tsx}, one stack over, where this file could not see it
+ * and no gate on either side compared them — and by §178 the two disagreed about
+ * {@link #CONDITION_DRIFT} and {@link #FAILING_REPEATEDLY}, so one case read red on a tile and amber
+ * on its own chip. {@link #severity()} is on the wire beside every raised signal now
+ * ({@link RaisedSignalView}), the SPA's list is deleted, and the sentence above describes the code.
+ * <strong>The label is the one that is still copied</strong>, and deliberately so from the other
+ * side: {@code CaseService.facets} argues that enum <em>words</em> belong to the SPA's catalogue and
+ * that a second set here is the one that goes stale. That leaves {@link #label} on the wire through
+ * {@code DashboardTile.label} as exactly the second set that argument refuses — six of the ten
+ * disagree with {@code lib/labels.ts}, on two screens a tile links between. §179 measured it and left
+ * it; the tiles are not all signals, so it is a change to how a tile is built.
+ *
+ * <p><strong>{@link Severity}'s declaration order is load-bearing</strong> — a {@code Comparator}
+ * over an enum orders by ordinal, and both {@code DashboardService.health} and
+ * {@link CaseHealth#signals()} sort by it. Alphabetising the four constants inverts both and fails
+ * nothing else; {@code RaisedSignalTest} is what says so.
+ *
  * <p>The split: <strong>ERROR</strong> is "the case is now wrong" — its spec moved, or its
  * automation is failing against a case that has since changed. <strong>WARNING</strong> is "this is
  * decaying" — an approval or an execution old enough to stop meaning anything. <strong>INFO</strong>

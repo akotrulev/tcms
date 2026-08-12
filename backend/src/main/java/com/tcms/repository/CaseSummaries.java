@@ -210,7 +210,7 @@ public class CaseSummaries {
      * about. It is answered per project by the dashboard's {@code healthComputedAt}, deliberately
      * not per row here.
      */
-    private static List<HealthSignal> signalsOf(CaseHealth row) {
+    private static List<RaisedSignalView> signalsOf(CaseHealth row) {
         return row == null ? List.of() : row.signals();
     }
 

@@ -494,6 +494,7 @@ class ContractConventionTest {
             // Three of its seven are required-AND-nullable (§87), which is exactly the shape this
             // check is for: a poller cannot tell "the server did not send `error`" from "there is
             // no error", so the component has to exist even though the value is usually null.
+            Map.entry("RaisedSignal", List.of(com.tcms.repository.RaisedSignalView.class)),
             Map.entry("ReportJob", List.of(com.tcms.reporting.ReportJobView.class)),
             Map.entry("RepositoryDashboard", List.of(com.tcms.repository.DashboardView.class)),
             Map.entry("ResultCounts", List.of(com.tcms.execution.ResultCountsView.class)),

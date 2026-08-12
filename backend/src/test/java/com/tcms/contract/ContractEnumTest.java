@@ -100,6 +100,12 @@ class ContractEnumTest {
                     List.of("com.tcms.repository.StepFormat", "com.tcms.execution.StepFormat")),
             Map.entry("StatusKind", List.of("com.tcms.project.StatusKind")),
             Map.entry("HealthSignal", List.of("com.tcms.repository.HealthSignal")),
+            // Nested in the enum whose property it is, like ReviewVerdict above. It was an
+            // ANONYMOUS enum on DashboardTile.severity until §179 and therefore in no population
+            // this rule can see — §170's inline-shape finding, arriving at an enum. Naming the
+            // schema is what put it here.
+            Map.entry("HealthSignalSeverity",
+                    List.of("com.tcms.repository.HealthSignal$Severity")),
             Map.entry("AggregationPolicy",
                     List.of("com.tcms.reporting.AggregationPolicy",
                             "com.tcms.execution.AggregationPolicy")),

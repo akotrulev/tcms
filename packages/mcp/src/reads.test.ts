@@ -128,6 +128,33 @@ describe('tcms_search_cases', () => {
     expect(answer['total']).toBe(812);
     expect(answer['more']).toBe(true);
   });
+
+  it('flattens a health signal to its code, keeping the order the server sent', async () => {
+    // The wire carries {signal, severity} pairs since §179 and this surface sends the codes: the
+    // severity is a word per signal per case for a ranking the ORDER already carries (the server
+    // sorts worst first), and this block's whole rule is that a field costing tokens on every case
+    // has to earn them. The failure it guards is the one §140 found on `whoami` — an object where a
+    // string was meant reaches a model as `[object Object]` and nothing throws.
+    const stub = api(agentRoutes({
+      '/cases': {
+        status: 200,
+        body: {
+          items: [{
+            ...CASE_ROW,
+            healthSignals: [
+              { signal: 'STALE_AUTOMATION', severity: 'ERROR' },
+              { signal: 'UNLINKED', severity: 'INFO' },
+            ],
+          }],
+          page: 0, size: 25, total: 1,
+        },
+      },
+    }));
+
+    const answer = await run(stub, 'tcms_search_cases', {});
+    expect((answer['cases'] as { healthSignals: string[] }[])[0]?.healthSignals)
+      .toEqual(['STALE_AUTOMATION', 'UNLINKED']);
+  });
 });
 
 describe('tcms_open_case', () => {

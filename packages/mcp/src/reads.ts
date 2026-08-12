@@ -174,7 +174,14 @@ const searchCases: ToolDefinition = {
         priority: row.priority,
         automationStatus: row.automationStatus,
         tags: row.tags,
-        healthSignals: row.healthSignals,
+        // THE CODES, not the {signal, severity} pairs the wire carries since §179. Two reasons,
+        // and the first is this block's own rule: a pair doubles the tokens of a field that fires
+        // on most cases of a young project (`unlinked`), for a word a model already knows how to
+        // rank. The second is that the ranking is not lost — the server sends them WORST FIRST, so
+        // position carries what the severity would have said. A tool that starts needing the
+        // severity itself should send the pair rather than reintroduce a table of them here; that
+        // table is exactly what §179 deleted from the SPA.
+        healthSignals: row.healthSignals.map((raised) => raised.signal),
         updatedAt: row.updatedAt,
       })),
       page: result.page,

@@ -7870,6 +7870,41 @@ export interface components {
          */
         HealthSignal: "OUTDATED_SPEC_CHANGED" | "STALE_APPROVAL" | "CONDITION_DRIFT" | "STALE_AUTOMATION" | "NEVER_EXECUTED" | "LONG_UNEXECUTED" | "UNLINKED" | "FAILING_REPEATEDLY" | "ORPHANED" | "INCOMPLETE" | "UNDECLARED_AUTOMATION";
         /**
+         * @description How loudly a health signal reads — the server's judgement about how wrong a case is, not a
+         *     client's.
+         *
+         *     **ERROR** is "the case is now wrong": its spec moved, a shared condition changed under it,
+         *     or its automation stopped reporting. **WARNING** is "this is decaying" — an approval or an
+         *     execution old enough to stop meaning anything. **INFO** is "something is missing but nothing
+         *     is broken", which is why `UNLINKED` is INFO and fires on most of a young project.
+         *     **NEUTRAL** is for the tiles that are not signals at all (a lifecycle count).
+         *
+         *     **This schema exists because the vocabulary is now declared twice and was declared inline
+         *     once.** It was an anonymous enum on `DashboardTile.severity` alone until §179, so nothing
+         *     compared it to the server's `HealthSignal.Severity` — §170's finding about inline shapes, at
+         *     an enum. `ContractEnumTest` pairs it now.
+         *
+         *     A client must not keep its own signal→severity table. That is exactly what §179 deleted:
+         *     the SPA's copy had drifted about two of the ten members, so one case read red on a dashboard
+         *     tile and amber on its own chip, and nothing on either side could see it.
+         * @enum {string}
+         */
+        HealthSignalSeverity: "ERROR" | "WARNING" | "INFO" | "NEUTRAL";
+        /**
+         * @description One health signal raised on one case, with how loudly it reads.
+         *
+         *     **`severity` is on the wire because the alternative was a second copy of it**, and the copy
+         *     drifted (§179). Both members are derived from the same server enum in the same expression,
+         *     so a case cannot arrive with a signal and the wrong severity beside it.
+         *
+         *     It is repeated per case rather than sent once as a catalogue on purpose: a chip renders where
+         *     the row is, and a catalogue would make a colour depend on a second request completing.
+         */
+        RaisedSignal: {
+            signal: components["schemas"]["HealthSignal"];
+            severity: components["schemas"]["HealthSignalSeverity"];
+        };
+        /**
          * @description How a case executed many times resolves to one result (plan §6e).
          *
          *     **`BEST` was removed on 2026-08-07** (plan §8 #17, applied as #47). "A case that passed
@@ -8176,7 +8211,7 @@ export interface components {
             testLevel?: string | null;
             features: string[];
             tags: string[];
-            healthSignals: components["schemas"]["HealthSignal"][];
+            healthSignals: components["schemas"]["RaisedSignal"][];
             lastResult: {
                 statusKind: components["schemas"]["StatusKind"];
                 /** Format: date-time */
@@ -9845,8 +9880,7 @@ export interface components {
             key: string;
             label: string;
             count: number;
-            /** @enum {string} */
-            severity: "NEUTRAL" | "INFO" | "WARNING" | "ERROR";
+            severity: components["schemas"]["HealthSignalSeverity"];
             filter: {
                 [key: string]: unknown;
             };

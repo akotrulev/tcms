@@ -248,14 +248,19 @@ class CaseListEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("healthSignals is [] for every case — derived, and nothing computes it yet")
+        @DisplayName("healthSignals is [] for every case — this fixture never runs the recompute")
         void healthIsEmptyAndPresent() throws Exception {
-            // The honest answer rather than a stub: no signal HAS been computed, because
-            // case_health is fed by execution and documentation and neither module exists. Never
-            // null — the contract marks it required, so the SPA cannot null-check it.
+            // ~~The honest answer rather than a stub: no signal HAS been computed, because
+            // case_health is fed by execution and documentation and neither module exists.~~ →
+            // both modules exist and NINE OF THE TEN SIGNALS have a derivation (§53 … §178). What
+            // is true is narrower and is a property of THIS fixture: nothing here triggers
+            // CaseHealthRecomputeService, so case_health has no rows and every case answers with an
+            // empty list. Never null — the contract marks it required, so the SPA cannot
+            // null-check it.
             //
-            // WHEN THIS TEST FAILS: something now writes case_health. That is the feature working,
-            // and the fix is to assert the real signals rather than to delete the field.
+            // The real signals, their severities and their ORDER are asserted where the rows exist:
+            // CaseHealthRecomputeTest for the derivations and RaisedSignalTest for what
+            // CaseHealth.signals() makes of a row. This one is about the key being present.
             for (JsonNode row : itemsAs(LEAD, ACME, ACME_BANKING, "")) {
                 assertThat(row.get("healthSignals").isArray()).isTrue();
                 assertThat(row.get("healthSignals")).isEmpty();

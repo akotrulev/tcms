@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import org.hibernate.annotations.Filter;
@@ -322,15 +323,33 @@ public class CaseHealth {
     }
 
     /**
-     * The signals this row asserts, in the enum's declaration order.
+     * The signals this row asserts, <strong>worst first</strong>, each with its severity.
      *
      * <p>Reflection-free on purpose even though {@link HealthSignal} names an attribute: that name
      * exists for Criteria, which needs a string, and a second string-driven path here would turn a
      * typo into a silently missing chip instead of the startup failure the mapped field already
      * gives. The switch is exhaustive over the enum, so a new signal is a compile error until it is
      * handled — which is the property that keeps the three uses in step.
+     *
+     * <h2>The order is part of the answer, and it used to be the declaration's</h2>
+     *
+     * <p><del>in the enum's declaration order</del> — which was harmless while it was, and stopped
+     * being so in §178. {@code CaseGrid} renders the <em>first</em> signal as the row's chip and the
+     * rest as a {@code +n} count, and the declaration order puts {@link HealthSignal#UNLINKED}
+     * (INFO, and true of most cases of a project that has not started linking) five places ahead of
+     * {@link HealthSignal#FAILING_REPEATEDLY} and one ahead of nothing that matters. So a case that
+     * was both unlinked and failing repeatedly showed <em>the missing link</em> and hid the
+     * failure — a broken case rendered below a missing one, which is the exact sentence
+     * {@code DashboardService.health} writes to explain why <em>it</em> sorts its tiles here rather
+     * than leaving the order to the SPA. Same enum, same module, opposite behaviour, and §178 made
+     * the difference visible by giving {@code UNLINKED} its first writer.
+     *
+     * <p>Sorted by severity and then by declaration order, so the tie-break is stable and remains
+     * the enum's own — {@code Comparator} on an enum orders by ordinal, and
+     * {@link HealthSignal.Severity} is declared worst first for exactly this. A client that re-sorted
+     * would be holding the second copy of a severity ranking that §179 deleted.
      */
-    List<HealthSignal> signals() {
+    List<RaisedSignalView> signals() {
         List<HealthSignal> raised = new ArrayList<>();
         for (HealthSignal signal : HealthSignal.values()) {
             boolean set = switch (signal) {
@@ -349,6 +368,7 @@ public class CaseHealth {
                 raised.add(signal);
             }
         }
-        return raised;
+        raised.sort(Comparator.comparing(HealthSignal::severity));
+        return raised.stream().map(RaisedSignalView::of).toList();
     }
 }

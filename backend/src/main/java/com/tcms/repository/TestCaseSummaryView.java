@@ -43,9 +43,18 @@ import java.util.UUID;
  * @param testType nullable — a case need not be classified, and nothing forces it to be
  * @param features every Feature value on the case, by name. A list because Feature is the one
  *               MULTI-cardinality dimension (plan §6d).
- * @param healthSignals derived, never authored, and <strong>empty for every case today</strong>
- *               because nothing computes them yet — see {@link HealthSignal}. Never null: the
- *               contract marks it required, so the SPA cannot null-check it.
+ * @param healthSignals derived, never authored, <del>and <strong>empty for every case
+ *               today</strong> because nothing computes them yet</del> — nine of the ten have a
+ *               derivation as of §178, and {@code unlinked} is raised on most cases of a project
+ *               that has not started linking. See {@link HealthSignal}. Never null: the contract
+ *               marks it required, so the SPA cannot null-check it.
+ *
+ *               <p><strong>Each entry carries its severity (§179) and the list is worst
+ *               first.</strong> Both are here because the SPA had them, and had them wrong: a
+ *               hand-kept {@code SEVERE_SIGNALS} list that disagreed with {@link HealthSignal} about
+ *               two members, and a grid that renders {@code healthSignals[0]} as the row's chip —
+ *               so a case both unlinked and failing showed the missing link and hid the failure.
+ *               See {@link RaisedSignalView} and {@link CaseHealth#signals()}.
  * @param lastResult the case's newest recorded execution, or <strong>null when it has never been
  *               executed</strong>. Nullable rather than a fabricated {@code UNTESTED} result: the
  *               latter would invent an execution that never happened, and the SPA already has a
@@ -98,7 +107,7 @@ public record TestCaseSummaryView(
         String testLevel,
         List<String> features,
         List<String> tags,
-        List<HealthSignal> healthSignals,
+        List<RaisedSignalView> healthSignals,
         // Positioned where the contract positions it — after healthSignals, before updatedAt.
         // Jackson serializes a record in declaration order, so a component out of place produces a
         // response whose key order does not match the schema it claims to implement. Nothing breaks;

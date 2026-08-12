@@ -152,7 +152,7 @@ public record TestCaseDetailView(
         // never disagree about what the case is classified as.
         List<UUID> classificationValueIds,
         List<String> tags,
-        List<HealthSignal> healthSignals,
+        List<RaisedSignalView> healthSignals,
         // Carried from the summary, in the contract's position. It lands in the version snapshot
         // (see `flake` below for the full account) on the same terms `healthSignals` has since M1:
         // a v7 row records the case's last result as it stood when somebody saved. Derived, not
