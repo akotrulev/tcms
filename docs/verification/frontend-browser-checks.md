@@ -4,6 +4,37 @@
 be driven, and this file is executed later as one session. Nothing here is optional — each row is a
 defect nobody has looked for yet, and **a slice in an unrun lane is *built and unverified***.
 
+## What has actually been driven — read this before starting a sitting
+
+**Two sittings, both partial, both with their findings in their own file.** Neither marked rows in
+place, so **do not read an unmarked row as unrun** — read these instead:
+
+| Sitting | Lanes reached | Findings |
+|---|---|---|
+| 2026-08-06 (§110) | ~60 rows, ordered | [`2026-08-06-live-pass-findings.md`](2026-08-06-live-pass-findings.md) — six product findings, **none reachable by any gate** |
+| 2026-08-12 | `L0`, `A0` complete, `A1` partial — stopped after `A1` at the user's direction | [`2026-08-12-live-pass-findings.md`](2026-08-12-live-pass-findings.md) — two 🔴, one stale expectation in this file |
+
+**The next sitting resumes at `A2 — plans`.** The 2026-08-12 company (`v179`) and its fixture — 10
+suites, 29 cases, tags, two conditions — were left in place for exactly that, along with a live
+`Fixture seeding (temp)` API token; **revoke it before that instance is shown to anyone.** What that
+fixture does *not* cover is recorded in its own file and is worth reading first: the 29 cases were
+bulk-authored through one token, so `L1-6`'s author-based `OWN` check still needs a fixture of its
+own, and the case-editor behaviours were driven on `TC-30` alone.
+
+**Both sittings died on the same defect, six days apart** — an `AccessDeniedException` on the first
+blob write, because nothing created `/var/lib/tcms`. §110 fixed `deploy/compose.prod.yaml`, wrote
+*"production is unaffected"*, and left the local stack this queue is driven against. **§185 fixed
+the class**: the image creates the roots, `compose.yaml` mounts a named volume, three
+`ConfigConventionTest` rules derive the roots from `application.yml` and ask each artifact, and the
+application now refuses to start rather than 500ing at the first upload. A sitting from
+2026-08-13 onward should not meet it; **if it does, that is a finding about the fix and not a
+workaround to apply.**
+
+**The other 🔴 is still open and is a product gap, not a UI one**: nothing in the backend can write
+a suite-level condition — no `conditions` on `SuiteInput`, no route on `SuiteController`, no
+construction of `SuiteCondition` anywhere — while the read path resolves them in detail. `A1-2` and
+`M2-22` are **undriveable rather than undriven**, and `L4-19`/`L4-20`'s suite sides go with them.
+
 ## What this file is now — §109, 2026-08-06
 
 **There is one pass, and it is live.** §107 deleted `src/mocks/` — MSW, its handlers, its fixtures
@@ -256,7 +287,7 @@ the `curl` in `A0-12`, then discard it — it is not needed again, and `A0-13` r
 | A0-10 | Same dialog: leave **Expires** empty; read the two hints | *Where it works* reads *"Every project you can reach, including ones created later"* until a project is picked, then *"A hard limit: the token is inert on every other project."* Expires reads *"Optional. Leave it empty and the token lasts until it is revoked."* — never a blank field with no explanation. The blue hint says the token **never exceeds your own access**. | §118-3 |
 | A0-11 | Name it `Nightly regression`, role **Automation Service**, no project, no expiry → **Issue token**. Then press **Esc**, then click the **backdrop**. | The form is **replaced** by the secret, in full, in the mono font, with the warning *"This is the only time this token is shown."* **Esc does nothing. The backdrop does nothing.** This is the one dialog in the app that refuses both, and it is the row that matters most: every other create dialog here closes on success, and a copy of that shape destroys a value nothing can produce again. Press **Copy** — either *"Copied."* appears, or, on a plain-HTTP origin, *"Your browser blocked the clipboard — select the text above and copy it"*, **never a button that silently does nothing**. Record which, and paste the secret somewhere for the next row. | §118-4 |
 | A0-12 | With that secret, `curl -X POST …/api/v1/projects/{OLB}/ingestions` per §117's shape (`Authorization: Bearer <secret>`, an `Idempotency-Key`, a small JUnit XML) | **The credential works** — a 201 and an ingestion job. This is the only row in the pass that proves the screen produced a usable token rather than a plausible-looking string, and it closes M3's loop end to end: §116 mints, §118 hands over, §117 ingests. A 401 here is a finding about the *issue* path, not about ingestion. | §118-5 |
-| A0-13 | Close the dialog and read the row | Name, then the **prefix as its own column** in the mono font — check it is the **first 12 characters of what you pasted**. Role `Automation Service`, *Where it works* the **wide sentence** and not a blank cell, Owner your **display name** and not a uuid, Expires *"Does not expire"*, Status **Live**. **There is no "Last used" column** — the contract says the field is always null today, and shipping the column would leave it empty on every row of every deployment for ever. | §118-6 |
+| A0-13 | Close the dialog and read the row | Name, then the **prefix as its own column** in the mono font — check it is the **first 12 characters of what you pasted**. Role `Automation Service`, *Where it works* the **wide sentence** and not a blank cell, Owner your **display name** and not a uuid, Expires *"Does not expire"*, Status **Live**. ~~**There is no "Last used" column** — the contract says the field is always null today, and shipping the column would leave it empty on every row of every deployment for ever.~~ → **CORRECTED 2026-08-13 (§185). There IS one, and it is right.** §118-6's argument was sound and its premise expired: **§132 gave `api_token.last_used_at` a writer**, and `ApiTokensPage.tsx` added the column in the same slice — both files carry the reversal struck through in their own headers, and only this row went on asserting the absence. So the expectation is: the column exists, reads *"Never used"* on a token nothing has authenticated with, and shows the real timestamp after `A0-12`'s `curl` — which is what the 2026-08-12 pass observed and correctly reported as a divergence. **A stale expectation in this file is worse than a missing row**: it asks the next reader to file the product's correct behaviour as a defect. | §118-6, §132, §185 |
 | A0-14 | Issue a second token called `Nightly regression`; then a third with an expiry **in the past**; then a fourth pinned to `MOB` with an expiry **tomorrow at 14:00 local** | First two are **400s landing on the field that caused them** — the name error quotes the existing token and tells you to revoke it first; the expiry error says the token would be unusable the moment it was issued. Neither reaches the reveal, and what was typed is still there. The fourth succeeds: its row names **MOB** and its Expires cell is a **UTC-labelled** time that is tomorrow 14:00 **converted from your zone** — a screen showing `14:00 UTC` for a `+03:00` browser means the local wall clock was posted verbatim and the token dies three hours early. | §118-7 |
 | A0-15 | **Revoke** `Nightly regression`, reading the dialog before confirming | It names the token **and** its prefix — two tokens can share a name a year apart, and the prefix is what matches a CI configuration. It says the credential stops working immediately, that it cannot be undone, and that **the row stays**. Confirm: the list is the **same length**, the row is muted and reads **Revoked**, and its Revoke is now **disabled** with *"This token was already revoked."* Then re-run `A0-12` with the same secret → **401**. | §118-8 |
 | A0-16 | The row whose expiry has passed (`A0-14`'s third, if it was accepted — otherwise wait out the fourth, or `UPDATE api_token SET expires_at = now() - interval '1 day'` on it) | Status **Expired**, in the muted lifecycle colour and **not red** — a credential reaching its stated end date is the system working. **Revoke is enabled on it**, unlike the revoked row: closing a lapsed credential deliberately is a real act, and a screen that collapsed the two dead states into one would take it away. | §118-9 |

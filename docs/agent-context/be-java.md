@@ -2,14 +2,14 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-13 (**§184** — `DashboardService.health` is the only ordering of health tiles, it is package-private for its own test, and its second comparator key had never been observed; **§182** — `case_health` has no open work left: every column is derived, `HealthSignal` has an eleventh member, and the boundary test stopped needing a witness; **§181** — every health signal has a writer, `ORPHANED` means the owner is no longer in the company's directory, and `incomplete` changed which by-decision map it is in; **§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
+**Last verified:** 2026-08-13 (**§185** — the blob roots are provisioned by the image and pinned by a rule, a bind mount and a named volume behave oppositely, the store refuses to start on an unusable root, and a text rule reading a file outside `src/` is green by cache unless `build.gradle.kts` declares it; **§184** — `DashboardService.health` is the only ordering of health tiles, it is package-private for its own test, and its second comparator key had never been observed; **§182** — `case_health` has no open work left: every column is derived, `HealthSignal` has an eleventh member, and the boundary test stopped needing a witness; **§181** — every health signal has a writer, `ORPHANED` means the owner is no longer in the company's directory, and `incomplete` changed which by-decision map it is in; **§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
 last two came off `case_doc_link`, the statement's *order* inside the recompute is load-bearing, and
 `UNLINKED` counts every relationship while the coverage sites count one; **§177** — `test_run.commit_sha` / `.branch` have a writer, the git-object regex is a pinned second copy, and the clone inherits neither; **§176** — the four contract-binding rules are two questions over two populations, and a bound-and-undeclared query parameter fails the build; **§175** — one `TeamRef`, in `com.tcms.api`, with two inline schemas made `$ref`s and `isLead` off the wire; **§174** — `doc_link.relationship` is the one mutable column, `V48` records who moved it, and both ends got the endpoint; **§171** — the form parts nobody compared: the four multipart bodies are exempt from *pairing* and no longer exempt from *comparison*; **§170** — the population the pairing rule could not see: every object schema, named and inline, is paired or excused, and two ingestion inputs nothing read are gone; **§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `e77c950` (§183 shipped; §184 phase 1 is this commit) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `70989c5` (§184 shipped; §185 phases 1–2 shipped, phase 3 is this commit) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
@@ -200,6 +200,43 @@ fail the build until they are paired.**
   `signalsOf(...)` in `CaseHealthRecomputeTest` must name it.
 - ~~**`StatusChip.SEVERE_SIGNALS` (frontend) disagrees with `HealthSignal.Severity` about two
   members**~~ → **fixed in §179 by deleting the copy: severity is on the wire.** See below.
+
+---
+
+## §185 — THE BLOB ROOTS ARE PROVISIONED BY THE IMAGE, PINNED BY A RULE, AND CHECKED AT BOOT
+
+**Read this before adding a fourth blob store, editing `backend/Dockerfile`, either compose file,
+or `FilesystemBlobStore`'s constructor.**
+
+`application.yml` defaults three roots under `/var/lib/tcms`. Nothing created them, so the first
+*write* — evidence upload, report download, CI ingestion — threw `AccessDeniedException` on a
+container that had reported healthy. **Both live passes this product has had died on it, six days
+apart** (§110 F10 on 2026-08-06; the 2026-08-12 sitting), the second one after the first was
+"fixed": §110 corrected `deploy/compose.prod.yaml` and recorded *"production is unaffected"*, which
+was true of the artifact it was looking at and left the one `CLAUDE.md` tells every reader to run.
+
+- **A fourth store is four edits, and three of them fail the build if you skip them.**
+  `application.yml`, a path in `backend/Dockerfile`'s `mkdir`/`chown`, the `environment:` and
+  `volumes:` entries in `deploy/compose.prod.yaml`, and the runbook's §7 `chown`.
+  `ConfigConventionTest` derives the roots from `application.yml` and asks the Dockerfile and both
+  compose files about **every** member — so the only one still on a human is the runbook, which is
+  prose about a host no test reads, **and it is the one that was already wrong**: §160 added the
+  third root and did not update it, so `/var/lib/tcms/raw-reports` is root-owned on the live VM.
+- **Named volume and bind mount behave OPPOSITELY, and this is the load-bearing fact.** Docker
+  seeds a fresh *named* volume from the image's content at that path, ownership included — so the
+  root `compose.yaml` works *because* the Dockerfile creates the directories. A *bind mount* takes
+  the host directory's ownership and ignores the image's outright, so the Dockerfile buys
+  production nothing and §7's `chown` is the whole of it.
+- **`FilesystemBlobStore`'s constructor creates and probes its root, and throws if it cannot.** In
+  the constructor rather than an adapter so a fourth adapter cannot forget it. The cost is
+  deliberate: a misprovisioned deployment now **refuses to start**, including the operator CLI,
+  rather than starting and 500ing at the first upload weeks later.
+- **`build.gradle.kts` declares `Dockerfile`, `../compose.yaml`, `../deploy` and `../docs/specs`
+  as test inputs.** Without it every source-*text* rule here is **green by cache**: Gradle tracks a
+  Test task's classpath and resources, so editing the checked file leaves `:test` UP-TO-DATE and
+  the rule about the edit never runs. Measured. `IdempotencyKeyCapTest` had read
+  `../docs/specs/openapi.yaml` that way since §136. **Any new rule reading a file outside
+  `src/` must be covered by that `inputs.files` list or it observes nothing.**
 
 ---
 
