@@ -167,8 +167,16 @@ checks*, and it reads as a perfectly sensible sentence right up until the day it
 
 ## Gates
 
-`./gradlew build` on `shanks`, frontend `npm run test:run` / `build` / `lint` — see the commit
-messages for the measured numbers.
+`./gradlew build` on `shanks` **SUCCESSFUL in 7m 21s — 2593 tests / 523 classes / 0 failures**
+(+11 tests, +1 nested class). Frontend **1270 across 97 files in 190.9 s** (+2, no new file), with
+`npm run build` and `npm run lint` clean. `packages/` untouched and not re-run: no contract change,
+so its `schema.d.ts` copies are byte-identical to before.
+
+The **first** run of the backend gate is worth recording, because it is the shape this slice's own
+boundary test is about: 2593 tests, **one** failure, and it was the new partition assertion catching
+that `failing_repeatedly` — `reporting`'s column, derived by no statement in this job — had been left
+in the set the seven `owns` lists were required to cover. A guard rail failing on its author is the
+cheapest place for it to fail.
 
 Rows `§182 CC-1`…`CC-4` and `CC-M1`…`CC-M6` **recorded and not run** (§65). **Built and unverified.**
 
