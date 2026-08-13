@@ -71,6 +71,33 @@ describe('HealthChip — renders the severity it is given, and decides nothing',
     );
   });
 
+  it('explains the owner signal by the state a deployment can actually reach', async () => {
+    // §181's finding, and the third instance of §158's — after OUTDATED_SPEC_CHANGED above, a
+    // tooltip written before its signal could appear turned out to describe the wrong thing.
+    //
+    // The server's predicate has three terms: no membership row, membership REMOVED, account
+    // DEACTIVATED. These words named ONLY the third ("This case's owner has been deactivated"),
+    // which is the one term no running deployment can produce — `AppUser.deactivate` has four
+    // callers and all four are tests. The reader who sees this chip is looking at a case whose
+    // owner was offboarded, and was being told something that had not happened.
+    //
+    // Pinned as the absence of the narrow word rather than only the presence of the broad one:
+    // "deactivated" is exactly what a later tidy-up reaches for, because it is what the signal's
+    // own enum name suggests, and re-adding it would pass a stringContaining assertion.
+    render(<HealthChip signal="ORPHANED" severity="INFO" testId="chip" />);
+    const help = await screen.findByTestId('chip');
+
+    expect(help).toHaveAttribute('aria-label', expect.stringContaining('no longer works here'));
+    expect(help).toHaveAttribute('aria-label', expect.not.stringContaining('deactivated'));
+  });
+
+  it('labels the owner signal by the person, not by the mechanism', () => {
+    // Same finding at the label. 'Owner deactivated' named one of the three states and the chip
+    // fires on all three; the fix is not a longer sentence but a word that is true of every term
+    // in the predicate — which is also what keeps it true when the account screen ships.
+    expect(healthLabels.ORPHANED).toBe('Owner has left');
+  });
+
   it('labels the pair as two different problems', () => {
     // Not two spellings of one. The labels are what a reader triages by, and a pair
     // worded as variations on "automation" leaves them unable to tell which way the

@@ -2,14 +2,38 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-13 (**§180** — the dashboard stopped sending words and colours: tiles and segments are labelled from their `key`, and the two colour maps moved to `lib/statusColors.ts`; **§179** — `SEVERE_SIGNALS` is deleted: a chip's colour comes off the wire, and the grid's one visible chip is the worst one; **§178** — two health chips start appearing and `SEVERE_SIGNALS` disagrees with the server about two members; **§177** — the run's git coordinate: a third header line, two dialog fields, and `describeRunCode` beside `describeLinkTarget`; **§175** — `TeamRef` is one generated type and `CurrentUser.teams[].isLead` is gone; no `src/` change; **§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-13 (**§181** — the health signal whose words named the one state nothing can produce; the `ORPHANED` label and tooltip, and nothing else in `src/`; **§180** — the dashboard stopped sending words and colours: tiles and segments are labelled from their `key`, and the two colour maps moved to `lib/statusColors.ts`; **§179** — `SEVERE_SIGNALS` is deleted: a chip's colour comes off the wire, and the grid's one visible chip is the worst one; **§178** — two health chips start appearing and `SEVERE_SIGNALS` disagrees with the server about two members; **§177** — the run's git coordinate: a third header line, two dialog fields, and `describeRunCode` beside `describeLinkTarget`; **§175** — `TeamRef` is one generated type and `CurrentUser.teams[].isLead` is gone; no `src/` change; **§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `04e8717` (§179 shipped; §180 is this commit) (trust the body over the header and re-grep what a later commit
+**Baseline commit:** `bc5a1a0` (§180 shipped, §181 phase 1 is in; §181 phase 2 is this commit) (trust the body over the header and re-grep what a later commit
 could have moved).
+
+## §181 — THE HEALTH SIGNAL WHOSE WORDS NAMED THE ONE STATE NOTHING CAN PRODUCE
+
+**Two strings and one test file. Read it before editing `healthLabels` or `healthHelp`.**
+
+- **`ORPHANED` has a writer on the server as of §181** — the last of the ten — and the words here
+  were measured against the derivation for the first time. Its predicate has three terms (no
+  membership, membership `REMOVED`, account `DEACTIVATED`) and both strings named **only the third**,
+  which is the one no deployment can currently reach: `AppUser.deactivate` has four callers and all
+  four are tests. The state a deployment *does* reach — an offboarded colleague — had no words at
+  all.
+- **`'Owner deactivated'` → `'Owner has left'`**, and the tooltip now says *no longer works here*
+  plus the action (reassign). Named by the answer all three terms share rather than by any one
+  mechanism, which is also what keeps it true when the account screen ships.
+- **This is the THIRD tooltip in `healthHelp` corrected by the slice that gave its signal a
+  derivation** — after §158's `CONDITION_DRIFT` and §178's `OUTDATED_SPEC_CHANGED`. The pattern is
+  now three for three: **copy for a signal nothing can raise is copy nobody checks**, and it reads as
+  a perfectly sensible sentence until the day it starts appearing. If you add a signal's words before
+  its derivation, assume they are wrong.
+- **`HealthChip.test.tsx` pins the tooltip as an ABSENCE as well as a presence** — it asserts
+  "deactivated" is *not* in the sentence, because that word is exactly what a later tidy-up reaches
+  for (it is what the enum name suggests) and re-adding it would satisfy a `stringContaining` check.
+
+---
 
 ## §180 — NOTHING ON THE DASHBOARD IS LABELLED OR COLOURED BY THE SERVER ANY MORE
 

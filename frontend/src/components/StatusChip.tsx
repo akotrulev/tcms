@@ -193,7 +193,22 @@ const healthHelp: Record<HealthSignal, string> = {
   UNLINKED: 'This case is not linked to any documentation, so nothing traces it to a requirement.',
   FAILING_REPEATEDLY: 'This case has failed in several consecutive runs.',
   INCOMPLETE: 'Required fields are missing.',
-  ORPHANED: "This case's owner has been deactivated.",
+  // Rewritten in §181, the slice that gave this signal a derivation — the third tooltip in this map
+  // to be corrected by the slice that made its signal capable of appearing, after §158's and §178's,
+  // and the same lesson a third time: copy nothing can raise is copy nobody checks.
+  //
+  // It was wrong in the way that matters most here. The server's predicate has three terms — no
+  // membership, membership REMOVED, account DEACTIVATED — and this sentence named only the third,
+  // which is the one no deployment can currently produce. The reader who actually sees this chip is
+  // looking at a case whose owner was offboarded, and was being told something that had not
+  // happened. "No longer works here" covers all three without naming a mechanism the reader has no
+  // way to check, and it stays true when the account screen lands.
+  //
+  // The second sentence is the action, which none of the three states offer on their own: the case
+  // is not wrong, it is unattended, and reassigning it is the whole of the fix. That is also why
+  // this is INFO on the server — nothing here is broken.
+  ORPHANED:
+    'This case is owned by somebody who no longer works here, so nobody is maintaining it. Reassign it to give it an owner.',
 };
 
 /**

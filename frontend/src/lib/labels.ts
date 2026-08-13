@@ -500,7 +500,15 @@ export const healthLabels = {
   UNLINKED: 'Not linked to any spec',
   FAILING_REPEATEDLY: 'Failing repeatedly',
   INCOMPLETE: 'Missing required fields',
-  ORPHANED: 'Owner deactivated',
+  // ~~'Owner deactivated'~~ — the one of the three states the derivation reads that no running
+  // deployment can currently produce. §181 gave this signal its writer and measured the words
+  // against it: `AppUser.deactivate` has four callers and all four are tests, because the account
+  // lifecycle is a `user:manage` screen nobody has built. What a deployment DOES reach is an
+  // offboarded colleague (`MembershipRemovalService`, reachable from the Members screen), and that
+  // state had no words here at all. The label names the answer both spellings share — the person is
+  // not in this company any more — rather than either mechanism, which is also what keeps it true
+  // when the account screen ships.
+  ORPHANED: 'Owner has left',
   // The mirror of STALE_AUTOMATION, and the label is deliberately about the CASE rather
   // than about CI: what the reader can act on is the automation status field, which is
   // wrong. "Receiving CI results" describes the evidence and leaves them working out
