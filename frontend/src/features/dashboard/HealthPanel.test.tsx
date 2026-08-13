@@ -77,14 +77,12 @@ describe('HealthPanel — the difference between clean and unchecked', () => {
         health: [
           {
             key: 'STALE_APPROVAL',
-            label: 'Stale approval',
             count: 31,
             severity: 'WARNING',
             filter: { healthSignal: ['STALE_APPROVAL'] },
           },
           {
             key: 'OUTDATED_SPEC_CHANGED',
-            label: 'Outdated — spec changed',
             count: 78,
             severity: 'ERROR',
             filter: { healthSignal: ['OUTDATED_SPEC_CHANGED'] },
@@ -110,7 +108,6 @@ describe('HealthPanel — the difference between clean and unchecked', () => {
         health: [
           {
             key: 'UNLINKED',
-            label: 'Unlinked',
             count: 156,
             severity: 'INFO',
             filter: { healthSignal: ['UNLINKED'] },

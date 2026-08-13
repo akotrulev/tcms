@@ -7,6 +7,7 @@ import type {
   Priority,
   StatusKind,
 } from '../api/types';
+import { lifecycleVar, statusVar } from '../lib/statusColors';
 import {
   automationLabels,
   healthLabels,
@@ -25,25 +26,11 @@ import {
  *   - **The label comes from the shared map**, so the same value reads identically in the
  *     grid, the filter, the detail pane, and the report.
  *
- * Status colour is load-bearing data here, which is why the brand palette stays out of it.
+ * Status colour is load-bearing data here, which is why the brand palette stays out of it. The
+ * palettes themselves moved to `lib/statusColors.ts` in §180, when the dashboard's stacked bars
+ * needed the lifecycle one — they had been private to this file while the *server* sent a second
+ * copy of the same mapping down the wire.
  */
-
-const statusVar: Record<StatusKind, string> = {
-  PASSED: 'var(--color-passed)',
-  FAILED: 'var(--color-failed)',
-  BLOCKED: 'var(--color-blocked)',
-  SKIPPED: 'var(--color-skipped)',
-  RETEST: 'var(--color-retest)',
-  UNTESTED: 'var(--color-untested)',
-  WIP: 'var(--color-wip)',
-};
-
-const lifecycleVar: Record<LifecycleStatus, string> = {
-  DRAFT: 'var(--color-draft)',
-  IN_REVIEW: 'var(--color-in-review)',
-  APPROVED: 'var(--color-approved)',
-  DEPRECATED: 'var(--color-deprecated)',
-};
 
 /** A filled dot plus text — the pattern used wherever space is tight enough that a chip crowds. */
 export function StatusDot({ kind, testId }: { kind: StatusKind; testId?: string }) {

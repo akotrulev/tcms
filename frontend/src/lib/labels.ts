@@ -38,6 +38,24 @@ import type {
   WorkItemStatus,
 } from '../api/types';
 
+/**
+ * Label a value the wire typed as a bare `string` — the dashboard's tile and segment `key`.
+ *
+ * **Every other caller in this file indexes its map directly and must keep doing so.** A typed
+ * `HealthSignal` looked up in `healthLabels` is total, and routing it through here would trade a
+ * compile error for a silent fallback, which is the whole thing these maps exist to prevent.
+ *
+ * This exists for the one shape that genuinely is not: `DashboardTile.key` is a `string` in the
+ * contract because the same field carries a `HealthSignal` on one panel and a `LifecycleStatus` on
+ * another (§180 took the server's `label` off the wire, so the client labels from the key). The
+ * fallback is the key itself, and it is deliberate on both counts — a tile the client cannot name
+ * still renders and still drills, and `OUTDATED_SPEC_CHANGED` on a screen is a legible bug report
+ * where a blank tile is a rendering fault nobody can describe.
+ */
+export function labelForKey(catalogue: Record<string, string>, key: string): string {
+  return catalogue[key] ?? key;
+}
+
 export const lifecycleLabels = {
   DRAFT: 'Draft',
   IN_REVIEW: 'In review',
@@ -459,14 +477,18 @@ export const stepFormatLabels = {
  * this map must label `INCOMPLETE`, which no server constant can ever send, and a per-case payload
  * carries only the signals that were raised.
  *
- * **BUT THE SERVER SENDS A SECOND SET ANYWAY, and six of the ten disagree with this one.**
+ * ~~**BUT THE SERVER SENDS A SECOND SET ANYWAY, and six of the ten disagree with this one.**
  * `HealthSignal.label()` reaches the SPA as `DashboardTile.label`, which the dashboard renders
  * verbatim, so the "Needs attention" tile reads *"Outdated — spec changed"* and the case list it
- * drills into reads *"Linked spec changed"* — one navigation, two vocabularies. The four that agree
- * are `NEVER_EXECUTED`, `LONG_UNEXECUTED`, `FAILING_REPEATEDLY` and `UNDECLARED_AUTOMATION`.
- * Measured in §179 and left as the next slice: the tiles are generic over kinds, so the repair takes
- * `LifecycleStatus.label()` with it and needs the SPA to label a tile from its `key`. **Do not close
- * it by editing one word here** — that makes the two agree about one signal and leaves the mechanism.
+ * drills into reads *"Linked spec changed"* — one navigation, two vocabularies.~~ → **closed in
+ * §180: `DashboardTile` has no `label`.** `HealthSignal.label()` is deleted outright and the
+ * dashboard labels a tile from its `key` through `labelForKey` above, so this map is the only place
+ * a health signal becomes a word. The four that used to agree by coincidence were
+ * `NEVER_EXECUTED`, `LONG_UNEXECUTED`, `FAILING_REPEATEDLY` and `UNDECLARED_AUTOMATION`; nothing
+ * agrees by coincidence now, because there is nothing to agree with.
+ *
+ * The note §179 left — *"do not close it by editing one word here"* — was the right instruction and
+ * this is why: every one-word fix would have made two spellings agree and left the two spellings.
  */
 export const healthLabels = {
   OUTDATED_SPEC_CHANGED: 'Linked spec changed',

@@ -1,13 +1,19 @@
 import { Box, Button, Chip, Stack, Tooltip, Typography } from '@mui/material';
 import { Link as RouterLink, useParams } from 'react-router-dom';
-import type { DashboardBreakdown, DashboardTile, RepositoryDashboard } from '../../api/types';
+import type {
+  DashboardBreakdown,
+  DashboardTile,
+  LifecycleStatus,
+  RepositoryDashboard,
+} from '../../api/types';
 import { useDashboard, useProject, useSetProjectArchived } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { formatCount, formatDateTime, formatPercent } from '../../lib/format';
-import { automationLabels } from '../../lib/labels';
+import { automationLabels, healthLabels, labelForKey, lifecycleLabels } from '../../lib/labels';
+import { lifecycleVar } from '../../lib/statusColors';
 
 /**
  * Repository status dashboard (plan §6o).
@@ -138,7 +144,12 @@ function DashboardBody({ data, projectId }: { data: RepositoryDashboard; project
       </Typography>
 
       <Panel title="Authoring status" testId="Dashboard.Lifecycle">
-        <TileRow tiles={data.lifecycle} casesPath={casesPath} testId="Dashboard.Lifecycle" />
+        <TileRow
+          tiles={data.lifecycle}
+          labels={lifecycleLabels}
+          casesPath={casesPath}
+          testId="Dashboard.Lifecycle"
+        />
       </Panel>
 
       {/*
@@ -241,6 +252,7 @@ export function HealthPanel({ data, casesPath }: { data: RepositoryDashboard; ca
   return (
     <TileRow
       tiles={[...data.health].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))}
+      labels={healthLabels}
       casesPath={casesPath}
       testId="Dashboard.Health"
     />
@@ -255,6 +267,13 @@ function severityRank(severity: DashboardTile['severity']): number {
  * Tiles carry their filter predicate as query parameters. Serializing it here — rather than
  * hard-coding a path per tile — is what makes the set extensible: a new health signal on the
  * server produces a working, drillable tile with no frontend change.
+ *
+ * **That claim is about the *link*, and §180 is where it stopped being made about the words too.**
+ * The tile used to render a server-sent `label`, defended by this same sentence — but a new signal
+ * is a new member of a contract enum, so it reaches `lib/labels.ts` as a compile error long before
+ * it reaches a tile, and the grid chip and filter bar need the label anyway. The words were
+ * duplicated, not extensible: six of the ten had drifted apart from ours. What survives untouched
+ * is this function, which never has to know what a key means.
  */
 function tileHref(casesPath: string, filter: Record<string, unknown> | undefined): string {
   const params = new URLSearchParams();
@@ -274,12 +293,20 @@ const severityColor: Record<NonNullable<DashboardTile['severity']>, string> = {
   NEUTRAL: 'var(--color-text-muted)',
 };
 
+/**
+ * @param labels the catalogue this row's keys belong to — `lifecycleLabels` for the authoring
+ *               panel, `healthLabels` for "Needs attention". The row is told which vocabulary it is
+ *               rendering because `key` is a bare string on the wire and the two panels draw from
+ *               different enums; a key with no entry falls back to itself (see `labelForKey`).
+ */
 function TileRow({
   tiles,
+  labels,
   casesPath,
   testId,
 }: {
   tiles: DashboardTile[];
+  labels: Record<string, string>;
   casesPath: string;
   testId: string;
 }) {
@@ -318,7 +345,7 @@ function TileRow({
               {formatCount(tile.count)}
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
-              {tile.label}
+              {labelForKey(labels, tile.key)}
             </Typography>
           </Box>
         </RouterLink>
@@ -378,26 +405,35 @@ function BreakdownList({
               direction="row"
               sx={{ height: 14, width: `${(total / max) * 100}%`, minWidth: 40, borderRadius: 0.5, overflow: 'hidden' }}
             >
-              {row.segments.map((segment) => (
+              {row.segments.map((segment) => {
+                // §180: a segment's key is a LifecycleStatus, and both its words and its colour
+                // come from this side now. `row.label` above is the opposite case and stays as it
+                // arrives — a feature path or a person's name is data only the server can resolve.
+                const segmentLabel = labelForKey(lifecycleLabels, segment.key);
+                return (
                 <Tooltip
                   key={segment.key}
-                  title={`${segment.label}: ${formatCount(segment.count)} — open these cases`}
+                  title={`${segmentLabel}: ${formatCount(segment.count)} — open these cases`}
                 >
                   <Box
                     component={RouterLink}
                     to={tileHref(casesPath, segment.filter)}
                     data-testid={`${testId}.Segment.${segment.key}`}
-                    aria-label={`${row.label}, ${segment.label}: ${segment.count} cases`}
+                    aria-label={`${row.label}, ${segmentLabel}: ${segment.count} cases`}
                     sx={{
                       flex: segment.count,
-                      bgcolor: segment.color,
+                      // A status this build has never heard of gets the muted grey rather than
+                      // `undefined`, which paints a transparent — invisible, still clickable —
+                      // slice of a bar.
+                      bgcolor: lifecycleVar[segment.key as LifecycleStatus] ?? 'var(--color-text-muted)',
                       display: 'block',
                       minWidth: 2,
                       '&:hover': { filter: 'brightness(1.15)' },
                     }}
                   />
                 </Tooltip>
-              ))}
+                );
+              })}
             </Stack>
           </Box>
         );

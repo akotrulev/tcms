@@ -193,13 +193,15 @@ export function BoardPage() {
  * comes to read three different ways across the grid, the dashboard and the board.
  *
  * So the labelling happens here, through `healthLabels` — ~~the **same map the dashboard's "Needs
- * attention" panel uses**~~ → **false, and measured in §179: that panel renders `tile.label`, which
- * is `HealthSignal.label()` on the server, and six of the ten disagree with this map.** So a tile
- * reading "Outdated — spec changed" drills into a grid saying "Linked spec changed", and a board card
- * says the second. `CaseService.facets` argues the words belong here; `DashboardTile.label` is the
- * copy that has to go, and it is generic over tile kinds so closing it takes `LifecycleStatus.label()`
- * with it. Left as §179's named next slice — this comment is corrected rather than acted on, because a
- * sentence claiming coverage it does not have is the thing that made the divergence invisible.
+ * attention" panel uses**~~ → ~~**false, and measured in §179: that panel renders `tile.label`, which
+ * is `HealthSignal.label()` on the server, and six of the ten disagree with this map.**~~ →
+ * **true again since §180, and it is worth reading the two struck sentences in order.** The original
+ * claim was aspiration written as fact; §179 measured it and found the panel on the server's words,
+ * six of ten of them different, so a tile reading "Outdated — spec changed" drilled into a grid
+ * saying "Linked spec changed" while this card said the second; §180 deleted `DashboardTile.label`
+ * and `HealthSignal.label()` outright, so the panel reads this map through `labelForKey` and the
+ * sentence describes the code. **A comment that says two surfaces agree is a claim about a
+ * mechanism, and it stayed wrong for as long as nobody could see both stacks at once.**
  * An unrecognised code falls through as itself rather than being dropped:
  * a signal the SPA has no word for yet is still a reason, and silently discarding it would put the
  * card back in the state this function exists to fix.
