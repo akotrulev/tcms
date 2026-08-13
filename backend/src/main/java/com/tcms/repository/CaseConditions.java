@@ -17,12 +17,17 @@ import org.springframework.stereotype.Component;
  *
  * <h2>The order, and why each step of it is the way it is</h2>
  *
- * <p>{@code V1}'s comment on {@code suite_condition} states it: "inherited (walking suite.path
- * upward) then the case's own conditions, deduped by condition_id". Spelled out, per kind:
+ * <p>{@code V49}'s comment on {@code suite_condition} states it: "these attachments first, then the
+ * case own {@code case_condition} rows, deduped by {@code condition_id} with the first occurrence
+ * winning". <strong>It used to say "walking {@code suite.path} upward", and this header quoted that
+ * for the fifteen sections between {@code V33} dropping the column and §190 noticing</strong> — the
+ * order below is written for a chain and the chain has had exactly one element since §98. Spelled
+ * out, per kind:
  *
  * <ol>
  *   <li><strong>Inherited, outermost ancestor first.</strong> The walk collects the case's own
- *       folder and every folder above it, then emits them root-downward. A standing rule set at
+ *       folder and every folder above it, then emits them root-downward — <em>which is now a list
+ *       of one</em>; see {@link #ancestry} for why the shape is kept. A standing rule set at
  *       <em>Billing</em> applies before one set at <em>Billing › Refunds</em> because it is the
  *       broader precondition — "be logged in" precedes "have a settled payment", and a checklist
  *       that reverses them asks the tester to do the second thing first. Within one suite, the
