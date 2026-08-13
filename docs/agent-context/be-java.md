@@ -2,14 +2,14 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-13 (**§185** — the blob roots are provisioned by the image and pinned by a rule, a bind mount and a named volume behave oppositely, the store refuses to start on an unusable root, and a text rule reading a file outside `src/` is green by cache unless `build.gradle.kts` declares it; **§184** — `DashboardService.health` is the only ordering of health tiles, it is package-private for its own test, and its second comparator key had never been observed; **§182** — `case_health` has no open work left: every column is derived, `HealthSignal` has an eleventh member, and the boundary test stopped needing a witness; **§181** — every health signal has a writer, `ORPHANED` means the owner is no longer in the company's directory, and `incomplete` changed which by-decision map it is in; **§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
+**Last verified:** 2026-08-13 (**§186** — `suite_condition` has a writer at last, a suite serves two condition lists instead of one, and its reconcile must rewrite in place because `case_condition_optout` points at the rows; **§185** — the blob roots are provisioned by the image and pinned by a rule, a bind mount and a named volume behave oppositely, the store refuses to start on an unusable root, and a text rule reading a file outside `src/` is green by cache unless `build.gradle.kts` declares it; **§184** — `DashboardService.health` is the only ordering of health tiles, it is package-private for its own test, and its second comparator key had never been observed; **§182** — `case_health` has no open work left: every column is derived, `HealthSignal` has an eleventh member, and the boundary test stopped needing a witness; **§181** — every health signal has a writer, `ORPHANED` means the owner is no longer in the company's directory, and `incomplete` changed which by-decision map it is in; **§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
 last two came off `case_doc_link`, the statement's *order* inside the recompute is load-bearing, and
 `UNLINKED` counts every relationship while the coverage sites count one; **§177** — `test_run.commit_sha` / `.branch` have a writer, the git-object regex is a pinned second copy, and the clone inherits neither; **§176** — the four contract-binding rules are two questions over two populations, and a bound-and-undeclared query parameter fails the build; **§175** — one `TeamRef`, in `com.tcms.api`, with two inline schemas made `$ref`s and `isLead` off the wire; **§174** — `doc_link.relationship` is the one mutable column, `V48` records who moved it, and both ends got the endpoint; **§171** — the form parts nobody compared: the four multipart bodies are exempt from *pairing* and no longer exempt from *comparison*; **§170** — the population the pairing rule could not see: every object schema, named and inline, is paired or excused, and two ingestion inputs nothing read are gone; **§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `70989c5` (§184 shipped; §185 phases 1–2 shipped, phase 3 is this commit) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `27cc687` (§185 shipped; §186 phases 1–2 shipped, phase 3 is this commit) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
@@ -200,6 +200,43 @@ fail the build until they are paired.**
   `signalsOf(...)` in `CaseHealthRecomputeTest` must name it.
 - ~~**`StatusChip.SEVERE_SIGNALS` (frontend) disagrees with `HealthSignal.Severity` about two
   members**~~ → **fixed in §179 by deleting the copy: severity is on the wire.** See below.
+
+---
+
+## §186 — `suite_condition` HAS A WRITER, AND ITS RECONCILE MUST NOT DELETE-AND-REINSERT
+
+**Read this before touching `SuiteConditions`, `SuiteEdit`, `SuiteWriteService`'s condition arm, or
+before "unifying" the two condition reconciles.**
+
+The table shipped in M0 with its `kind` column, its `V10` index, `CaseConditions` reading it, a
+response shape and a `suiteUsageCount` — and **no writer at all** until §186. If you are looking for
+why a fixture writes `suite_condition` in raw SQL, that is why, and `SuiteWriteEndpointTest` no
+longer does.
+
+- **`Suite` serves `preconditions` AND `postconditions`, not `conditions`.** One array could not
+  express `kind`, which `CaseConditionRef` does not carry. The case endpoint's answer, applied here:
+  which array a row is in *is* the field. Do not add `kind` to `CaseConditionRef`.
+- **`SuiteConditions.reconcile` rewrites rows IN PLACE and this is not a preference.**
+  `case_condition_optout.suite_condition_id` references this table `ON DELETE CASCADE`, so a
+  clear-and-reinsert discards every case's opt-out on **every save of the suite**. `CaseConditions`'
+  own javadoc says a delete-and-reinsert "would in fact be *safe* here" and names this table as the
+  exception — **that sentence is about this class.** Measured: with the reuse branch removed exactly
+  one of eleven endpoint tests fails, and the other ten look correct.
+- **The validation is `CaseEdit.normalizeConditions` TRANSFERRED, deliberately not extracted.** The
+  rules being identical is the invariant, and each endpoint test pins them separately. Same error
+  strings, asserted on both sides. If you share it, you have made divergence undetectable to buy six
+  lines.
+- **Absent means "leave alone", `[]` means "detach"** — and `suiteInputFrom` in `packages/client`
+  **drops** both lists, so a CLI `suite edit --name` relies on that distinction. The SPA sends them
+  always. Collapsing absent into empty makes the two clients disagree about what a rename does.
+- **Two known holes, recorded as mutation rows and measured**: nothing reddens if you drop the
+  retired bound in `reconcile` (`§186 SQ-2`) or the stored half of `acceptableConditionIds` in
+  `rename` (`§186 SQ-5`). Both need a condition retired *after* being attached to a suite, which no
+  test reaches.
+- **`case_condition_optout` still has no writer**, and it is now the only reader of
+  `suite_condition.id`. The reconcile protects a row nothing can create.
+- **`V1`'s `COMMENT ON TABLE suite_condition` is stale** — it describes walking `suite.path` upward,
+  which §98 deleted. Correcting it costs a migration for a comment; not done, and it is a decision.
 
 ---
 

@@ -30,10 +30,19 @@ application now refuses to start rather than 500ing at the first upload. A sitti
 2026-08-13 onward should not meet it; **if it does, that is a finding about the fix and not a
 workaround to apply.**
 
-**The other 🔴 is still open and is a product gap, not a UI one**: nothing in the backend can write
+~~**The other 🔴 is still open and is a product gap, not a UI one**: nothing in the backend can write
 a suite-level condition — no `conditions` on `SuiteInput`, no route on `SuiteController`, no
 construction of `SuiteCondition` anywhere — while the read path resolves them in detail. `A1-2` and
-`M2-22` are **undriveable rather than undriven**, and `L4-19`/`L4-20`'s suite sides go with them.
+`M2-22` are **undriveable rather than undriven**, and `L4-19`/`L4-20`'s suite sides go with them.~~
+→ **CLOSED BY §186, and every row named here is driveable now.** `SuiteInput` carries
+`preconditions` / `postconditions`, the suite create/rename dialog carries two condition panels,
+and `Suite` serves the two lists split by kind where it served one undifferentiated `conditions`.
+
+**Three of those rows change what they expect, and the changes are in the rows themselves**:
+`A1-2` now drives a real control instead of asking whether one exists, `M2-22`'s fixture is
+produced by the pass rather than by hand-written SQL, and `L4-19`'s two-figure impact line has a
+**suite** figure that can be non-zero for the first time — the branch that renders it had never
+executed in any deployment, which is why §186 found its wording eighty-eight slices stale.
 
 ## What this file is now — §109, 2026-08-06
 
@@ -174,7 +183,7 @@ deterministic**. Anything a row names by key is created here.
 | Cases, OLB — 26 | `TC-1` authored **as `engineer`**, `TC-2` **as `lead`**, `TC-3` then given `created_by = NULL` by SQL (nothing the API offers can produce it). **Cart holds 9 filed cases** (`M2-44`). **Smoke files none and claims 2 by tag** (`M2-38`) — the non-vacuity of the whole suite-resolution argument, so build it deliberately. Two cases carry `payments` while filed under Refunds/Card capture, so **Payments claims cases it does not file**. |
 | Cases, MOB — 3 | Enough for a second corpus (`L4-17`) and a second board project (`M1-3`). |
 | Tags | `smoke` on 2 cases, `smoke-extended` on 1 (so `M2-49`'s most-used-first ordering has something to order), `payments`, `regression` |
-| Conditions | Three in the library; one attached to a **suite** so `M2-22`'s inherited rows exist; one attached to several cases for `L4-19` |
+| Conditions | Three in the library; one attached to the **suite `Cart`** so `M2-22`'s inherited rows exist — **`A1-2` authors it through the product now (§186)**, where before §186 the pass had no way to make one and two sittings filed it as a defect; one attached to several cases **and to `Cart`** for `L4-19`, whose suite figure is otherwise always 0 |
 | Plans | `TP-1` (sections referencing suites, tags and named cases — `M3-52`…`M3-58` all read it), `TP-2`…`TP-5` down the ladder |
 | Runs | `TR-1` against `TP-1`; further runs as `A3` needs them |
 | Teams | **Platform** (created first and alone, for `L4-1`), then **Payments Squad** (`lead`, `engineer`) and **Checkout Squad** (`viewer`, `newbie`) |
@@ -381,11 +390,13 @@ had. `TC-3`'s `created_by = NULL` still needs SQL; nothing the API offers can pr
 | M2-26 | Save a condition with a blank title, then an all-blank body | Both refused on the field. An empty condition is a picker row that attaches nothing and cannot be told from one that failed to load. | §95-71 |
 | M2-20 | Attach two preconditions, save, reopen | Both, **in attachment order** — position is content. | §95-62 |
 | M2-21 | Attach one, reopen the picker; then attach one condition as **both** pre- and postcondition | The attached one is **not offered**. Both lists accept the same condition and both survive a reopen — "reset the payment data" is the canonical case. | §95-63,64 |
-| A1-2 | Attach a condition to the **suite** `Cart` | This is the fixture `M2-22` reads and nothing else in the pass produces it. If a suite cannot carry a condition through the UI, that is the finding. | §95 |
-| M2-22 | A case filed in `Cart`: open the editor, save untouched, reopen | Inherited rows render **named with their folder**, with no remove/reorder/drag, and are **still inherited** afterwards. **The slice's most dangerous defect**: an editor that seeded them into the form attaches the folder's conditions to every case anybody edits, permanently and invisibly. | §95-65 |
+| A1-2 | Attach a condition to the **suite** `Cart` — kebab → Rename, attach one precondition and one postcondition, save, reopen | ~~If a suite cannot carry a condition through the UI, that is the finding.~~ → **it could not, twice, and §186 built it.** Both land in **their own list**, survive the reopen, and a rename that never touches them leaves them alone. Still the fixture `M2-22` reads and still the only thing that produces it. | §95 · §186 |
+| §186 A1-2a | On that suite: reorder the two preconditions, save, then **detach** one and save | The order sticks. `psql`: `SELECT id, position FROM suite_condition` — **the ids are unchanged across the reorder**, which is what keeps `case_condition_optout` pointing at the attachment it declines. See `§186 SR-3`, its mutation twin. | §186 |
+| §186 A1-2b | Attach the **same** library entry as both a pre- and a postcondition on one suite | Both stored, both rendered, one in each list. This is the arrangement the old single `conditions` array could not describe at all, and it is what a `BOTH` entry exists for. | §186 |
+| M2-22 | A case filed in `Cart` (**filed**, not merely added or tag-matched — only filing inherits): open the editor, save untouched, reopen | Inherited rows render **named with their folder**, with no remove/reorder/drag, and are **still inherited** afterwards. **The slice's most dangerous defect**: an editor that seeded them into the form attaches the folder's conditions to every case anybody edits, permanently and invisibly. | §95-65 |
 | M2-23 | Detach the **last** condition and save | Gone after reload. Absent ≠ empty: a client omitting the empty list reports success and changes nothing. | §95-66 |
 | M2-24 | Reorder conditions with ▲▼, then drag, then keyboard | All three paths produce the same saved order. | §95-67 |
-| L4-19 | Edit a condition attached to several cases: read the impact line, confirm, open a **different** case that attaches it | The line gives **two separate figures** — cases attaching directly, suites attaching — never one blended number. The other case shows the **new** text: the attachment is a reference and the edit propagates with no prompt. **Moved here from `L4`**; it needs the multi-attachment fixture this lane builds. | §95-68 |
+| L4-19 | Edit a condition attached to several cases **and to `Cart`**: read the impact line, confirm, open a **different** case that attaches it | The line gives **two separate figures** — cases attaching directly, suites attaching — never one blended number. **The suite figure has never once rendered** (nothing could write a `suite_condition` row until §186, so the count was 0 everywhere); its sentence is "every case **filed there** inherits it", corrected in §186 from "every case beneath", which §98 made meaningless. The other case shows the **new** text: the attachment is a reference and the edit propagates with no prompt. **Moved here from `L4`**; it needs the multi-attachment fixture this lane builds. | §95-68 |
 | L4-20 | With the condition edit dialog open as `lead`, have `engineer` change that condition, then save | **409 in the dialog** saying to reload and reapply — not a toast, not a silent overwrite. `condition.lock_version` was mapped for the first time in §95 **with** `@Version`; §74 found three entities where the plain-column spelling makes the precondition unable to fail. | §95-69 |
 | L4-21 | The case editor as `viewer` (no `library:manage`) | Attach, detach and reorder still work (attaching is a case edit); **create and edit refused**, legibly rather than as a bare 403. | §95-72 |
 

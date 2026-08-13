@@ -2,14 +2,47 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-13 (**§184** — neither screen ranks a health severity: `severityRank` is deleted and the panel renders the server's order verbatim; **§183** — one severity→colour table in `lib/statusColors.ts`, and INFO stops being amber; **§182** — the health signal whose words left out the gate that gives it its meaning; the `INCOMPLETE` label and tooltip, and nothing else in `src/`; **§181** — the health signal whose words named the one state nothing can produce; the `ORPHANED` label and tooltip, and nothing else in `src/`; **§180** — the dashboard stopped sending words and colours: tiles and segments are labelled from their `key`, and the two colour maps moved to `lib/statusColors.ts`; **§179** — `SEVERE_SIGNALS` is deleted: a chip's colour comes off the wire, and the grid's one visible chip is the worst one; **§178** — two health chips start appearing and `SEVERE_SIGNALS` disagrees with the server about two members; **§177** — the run's git coordinate: a third header line, two dialog fields, and `describeRunCode` beside `describeLinkTarget`; **§175** — `TeamRef` is one generated type and `CurrentUser.teams[].isLead` is gone; no `src/` change; **§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-13 (**§186** — the suite dialog edits the suite's conditions with the case editor's own panel, and `SuiteInput` stops being hand-written; **§184** — neither screen ranks a health severity: `severityRank` is deleted and the panel renders the server's order verbatim; **§183** — one severity→colour table in `lib/statusColors.ts`, and INFO stops being amber; **§182** — the health signal whose words left out the gate that gives it its meaning; the `INCOMPLETE` label and tooltip, and nothing else in `src/`; **§181** — the health signal whose words named the one state nothing can produce; the `ORPHANED` label and tooltip, and nothing else in `src/`; **§180** — the dashboard stopped sending words and colours: tiles and segments are labelled from their `key`, and the two colour maps moved to `lib/statusColors.ts`; **§179** — `SEVERE_SIGNALS` is deleted: a chip's colour comes off the wire, and the grid's one visible chip is the worst one; **§178** — two health chips start appearing and `SEVERE_SIGNALS` disagrees with the server about two members; **§177** — the run's git coordinate: a third header line, two dialog fields, and `describeRunCode` beside `describeLinkTarget`; **§175** — `TeamRef` is one generated type and `CurrentUser.teams[].isLead` is gone; no `src/` change; **§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `133c9e8` (§184 phase 1 shipped; §184 phase 2 is this commit) (trust the body over the header and re-grep what a later commit
+**Baseline commit:** `27cc687` (§186 phases 1–2 shipped; phase 3 is this commit) (trust the body over the header and re-grep what a later commit
 could have moved).
+
+## §186 — A SUITE'S CONDITIONS ARE EDITED IN THE SUITE DIALOG, AND `SuiteInput` IS GENERATED NOW
+
+**Read this before touching `SuiteDialogs.tsx`, `lib/conditions.ts`, or adding a field to a suite
+write.**
+
+- **`ConditionsPanel` is reused, not reimplemented.** The suite create/rename dialog mounts two of
+  them with `inherited={[]}` — by construction, because a suite's conditions *are* the inheritance
+  and §98 removed anything above a suite to inherit from — plus the same `ConditionEditDialog` and
+  the same `createdConditions` state the case editor keeps for the same reason (library reads are
+  cached per search term, so a freshly created entry renders "Unknown condition" without it).
+- **The dialog is `maxWidth="md"`.** At `sm` the panels' reorder controls wrap.
+- **The form holds IDS; the payload is `{conditionId}` objects.** `Suite.preconditions` serves
+  `CaseConditionRef` and `SuiteInput.preconditions` takes `CaseConditionInput` — the read shape is
+  not the write shape, which is exactly why `suiteInputFrom` in `packages/client` drops both lists.
+- **`SERVER_FIELDS` maps the payload's names to the form's** (`preconditions` →
+  `preconditionIds`). Without it a rejected condition lands in the form-level alert instead of on
+  the panel that owns it. Measured: deleting one entry fails exactly one test.
+- **Always send both lists, including `[]`.** Absent means "leave them alone" server-side, so an
+  omitted field makes detaching the last condition a save that reports success and does nothing.
+  `tagRules`' rule, and it matters more here.
+- **`SuiteInput` IS `S['SuiteInput']` NOW.** It was a hand-written literal in
+  `api/queries/suites.ts` from Phase 2 — structurally right until §186 added two fields, then
+  silently typing a payload the endpoint does not accept as one it does. §52's lesson on the write
+  side, where `apiResponseTypes.test.ts` does not look (it refuses inline literals at `api.*` call
+  sites; this was a named type used as an input). **`caseIds` is still on the schema and no screen
+  authors it.**
+- **`impactSummary`'s suite branch had NEVER rendered until this slice.** `suiteUsageCount` counts
+  `suite_condition` rows and nothing could write one, so it was 0 everywhere; the string said
+  *"every case beneath"* for eighty-eight slices after §98 removed the tree. It reads *"every case
+  filed there"* now — only the **filing** arm inherits, not "added" and not tag-matched.
+
+---
 
 ## §184 — NEITHER SCREEN RANKS A HEALTH SEVERITY ANY MORE
 
