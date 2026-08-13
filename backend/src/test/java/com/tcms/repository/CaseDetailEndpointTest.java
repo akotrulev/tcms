@@ -483,6 +483,49 @@ class CaseDetailEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("the declined row is SERVED, on its own list, with the title it was given")
+        void optOutsAreReportedSeparately() throws Exception {
+            // §187. A decline that vanishes without trace is a decline nobody can undo: the toggle
+            // is beside the inherited marker, and once the row leaves `preconditions` there is no
+            // marker left to put a toggle beside. Two lists rather than a flag, because
+            // `preconditions` is the procedure the version snapshot records and the run pins.
+            JsonNode detail = detailAs(LEAD, ACME, ACME_BANKING, caseId("full"));
+
+            assertThat(titlesOf(arrayOf(detail, "declinedPreconditions")))
+                    .containsExactly("Confirm the terms and conditions");
+            assertThat(arrayOf(detail, "declinedPreconditions").get(0).get("inherited").asBoolean())
+                    .as("a decline is always against an inherited attachment")
+                    .isTrue();
+            assertThat(arrayOf(detail, "declinedPreconditions").get(0)
+                    .get("inheritedFrom").asText())
+                    .isEqualTo("Partial refunds");
+        }
+
+        @Test
+        @DisplayName("the declined list does not leak into the procedure, and vice versa")
+        void theTwoListsAreDisjointHere() throws Exception {
+            JsonNode detail = detailAs(LEAD, ACME, ACME_BANKING, caseId("full"));
+
+            assertThat(titlesOf(arrayOf(detail, "preconditions")))
+                    .doesNotContain("Confirm the terms and conditions");
+            assertThat(arrayOf(detail, "declinedPostconditions"))
+                    .as("the case declines no cleanup condition — empty, never absent")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a case with no declines serves two empty arrays, not two missing keys")
+        void bothDeclinedListsAreAlwaysPresent() throws Exception {
+            // `relatedDocuments`' rule: two spellings of nothing is a distinction no consumer
+            // should have to make, and §121 phase 4 shipped that defect one field up.
+            JsonNode detail = detailAs(LEAD, ACME, ACME_BANKING, caseId("bystander"));
+
+            assertThat(detail.has("declinedPreconditions")).isTrue();
+            assertThat(detail.has("declinedPostconditions")).isTrue();
+            assertThat(arrayOf(detail, "declinedPreconditions")).isEmpty();
+        }
+
+        @Test
         @DisplayName("an opt-out binds to ONE attachment, not to the condition everywhere")
         void optOutsAreKeyedOnTheAttachment() throws Exception {
             // The same library entry is attached at PARTIAL (opted out by this case) and again at

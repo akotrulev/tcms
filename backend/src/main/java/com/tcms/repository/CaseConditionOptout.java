@@ -59,6 +59,30 @@ public class CaseConditionOptout {
     protected CaseConditionOptout() {
     }
 
+    /**
+     * One decline, ready to persist.
+     *
+     * <p>This factory is the whole of §187 at the entity: the class shipped in {@code V1} with a
+     * reader ({@link CaseConditionOptoutRepository#findForCase}), a filter
+     * ({@link CaseConditions#withoutOptouts}) and no way for the product to make a row — so the
+     * behaviour every one of those files describes had never happened in any deployment, and the
+     * <em>protection</em> §186 built around the table (a suite-condition reconcile that rewrites
+     * rows in place rather than deleting them, so an opt-out's foreign key survives) was guarding
+     * something nothing could create.
+     *
+     * @param companyId written explicitly rather than derived, for {@link CaseConditions#reconcile}'s
+     *                  reason: RLS refuses an insert whose {@code company_id} does not match
+     *                  {@code app.current_company} (ERD §0.1), so this is what makes the row
+     *                  readable again rather than one this connection writes once and never sees.
+     */
+    static CaseConditionOptout of(UUID caseId, UUID suiteConditionId, UUID companyId) {
+        CaseConditionOptout row = new CaseConditionOptout();
+        row.caseId = caseId;
+        row.suiteConditionId = suiteConditionId;
+        row.companyId = companyId;
+        return row;
+    }
+
     public UUID getCaseId() {
         return caseId;
     }

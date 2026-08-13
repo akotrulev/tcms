@@ -27,4 +27,22 @@ public interface CaseConditionOptoutRepository
              WHERE o.caseId = :caseId
             """)
     List<CaseConditionOptout> findForCase(@Param("caseId") UUID caseId);
+
+    /**
+     * The same answer for a whole selection, in one query — {@code CaseBulkService}'s shape for
+     * every per-case lookup it does, and it is here for that class's stated reason rather than for
+     * speed alone: {@link CaseEdit} carries the declines, so a bulk-reconstructed edit built
+     * without them hashes as though the case declined nothing, and the next ordinary save would be
+     * credited with restoring decisions a {@code MOVE_TO_SUITE} never touched.
+     *
+     * <p>Ordered so the reconstruction is deterministic. It is sorted again before it is hashed —
+     * the set has no order of its own — but an unordered query feeding a sort is a fact worth not
+     * relying on twice.
+     */
+    @Query("""
+            SELECT o FROM CaseConditionOptout o
+             WHERE o.caseId IN :caseIds
+             ORDER BY o.caseId, o.suiteConditionId
+            """)
+    List<CaseConditionOptout> findForCases(@Param("caseIds") List<UUID> caseIds);
 }

@@ -172,6 +172,14 @@ public record TestCaseDetailView(
         List<TestStepView> steps,
         List<CaseConditionRefView> preconditions,
         List<CaseConditionRefView> postconditions,
+        // The inherited attachments this case has TURNED OFF (§187). Beside `preconditions` rather
+        // than flagged inside it, because this record IS the version snapshot and CaseFacts pins a
+        // run's checklist out of that snapshot's `preconditions` — see CaseConditions.Resolved for
+        // the whole argument. They land in the snapshot too, which is correct and, unlike
+        // `flake`/`lastResult` above, they are authored: the ids are in CaseEdit and therefore in
+        // CaseVersions#hash, so turning a rule off writes a version that says so.
+        List<CaseConditionRefView> declinedPreconditions,
+        List<CaseConditionRefView> declinedPostconditions,
         List<DocLinkView> relatedDocuments,
         int currentVersionNo,
         long lockVersion,
@@ -222,6 +230,8 @@ public record TestCaseDetailView(
                 steps,
                 conditions.preconditions(),
                 conditions.postconditions(),
+                conditions.declinedPreconditions(),
+                conditions.declinedPostconditions(),
                 relatedDocuments,
                 row.getCurrentVersionNo(),
                 row.getLockVersion(),

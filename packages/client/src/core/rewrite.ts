@@ -66,6 +66,13 @@ type Schemas = components['schemas'];
  * alone (they are lists), and the read serves `CaseConditionRef`, which is not the shape the
  * write takes. Sending nothing is both correct and the only thing that types.
  *
+ * `declinedConditionIds` is dropped too (§187), and it is worth saying that the reason is only
+ * *half* the one above. The shapes here do line up — `[...declinedPreconditions,
+ * ...declinedPostconditions].map((ref) => ref.id)` is exactly what the write takes — so "it does
+ * not type" is not available as an argument and the whole of it is that **absent leaves them
+ * alone**. Echoing would also be correct and buys nothing; not echoing keeps this function's rule
+ * one rule ("lists are left alone") instead of two.
+ *
  * `steps` is projected rather than dropped, because it is **not** left alone: a STRUCTURED case
  * that omits it is a `400` telling the author to add a step they already have.
  */

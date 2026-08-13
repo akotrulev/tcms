@@ -248,6 +248,10 @@ class CaseSharedStepReferenceTest {
                 Set.of(),
                 List.of(),
                 List.of(),
+                // And about neither half of §6f's opt-out: the request declines nothing, so an
+                // empty declinable set and an empty stored set are never consulted.
+                Set.of(),
+                List.of(),
                 key -> false);
     }
 
@@ -272,7 +276,7 @@ class CaseSharedStepReferenceTest {
                 // class never applies is the value that makes the field invisible to it.
                 null,
                 null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
     }
 
     /** A step being KEPT — it carries the id of a step already on the case. */

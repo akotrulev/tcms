@@ -256,6 +256,22 @@ public class CaseCreateService {
                 // a case with no conditions of its own.
                 List.of(),
                 List.of(),
+                // Resolved from the REQUESTED suite, not from a stored one — there is no row yet.
+                // A create with a suiteId inherits that folder's conditions the moment it exists,
+                // so unlike the two empty arguments above this one is a real set.
+                //
+                // The SPA's create form cannot reach it: `CaseEditorPage` reads its inherited rows
+                // from `existing`, which a create does not have, so no "inherited from Billing"
+                // marker is drawn and there is nothing to toggle. The caller this exists for is
+                // CaseCloneService, whose §6v rule — carry the source's declines when the clone
+                // lands in the source's own suite — has been written down since §129 with no writer
+                // to obey it. Refusing here instead would have forced the clone to write the rows
+                // behind this path's back, and the version it wrote would then hash as a case that
+                // declines nothing.
+                conditions.declinableAttachmentIds(request.suiteId(), liveSuites),
+                // Nothing stored, for the classification reason above: a create declines exactly
+                // what it asks to decline.
+                List.of(),
                 cases::existsByAutomationKey);
 
         if (validated instanceof CaseEdit.Outcome.Invalid invalid) {
@@ -287,6 +303,15 @@ public class CaseCreateService {
         classifications.reconcile(created, edit.classificationValueIds(), vocabulary, companyId);
         conditions.reconcile(
                 created, edit.preconditionIds(), edit.postconditionIds(), companyId);
+        // Nothing is stored, so this only ever inserts — but it goes through the same reconcile the
+        // edit path uses rather than a create-only insert loop, for CaseEdit#of's reason one table
+        // over: a second writer is a second set of rules, and the one that diverges is whichever
+        // was edited second.
+        conditions.reconcileOptouts(
+                created.getId(),
+                conditions.declinableAttachmentIds(created.getSuiteId(), liveSuites),
+                edit.declinedConditionIds(),
+                companyId);
         // Beside the reconciles above and NOT inside `edit`: a tag is not authored content, so it
         // is not in the version hash (CaseEdit.Outcome.Valid). Before the render, for the same
         // reason as the other two — the response IS the version snapshot, and reconciling after it

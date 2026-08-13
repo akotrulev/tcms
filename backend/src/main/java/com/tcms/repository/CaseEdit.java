@@ -70,6 +70,22 @@ record CaseEdit(
         // defect the comment above warns about.
         List<UUID> preconditionIds,
         List<UUID> postconditionIds,
+        // The INHERITED attachments this case declines (§187) — `suite_condition` ids, not library
+        // `condition` ids, because the row they produce is keyed on the attachment.
+        //
+        // Sorted and de-duplicated like `classificationValueIds` and NOT like the two lists above,
+        // and the split is the same one those two comments draw: position is content for an
+        // attachment the case made, and a decline has no position at all. Two saves turning the
+        // same two rules off in a different order are one state and must hash alike.
+        //
+        // Being on this record makes it part of CaseVersions#hash, which is correct and is the
+        // reason it is here rather than beside `tags`: declining "must be logged in" changes the
+        // procedure a tester performs, so it is authored content and belongs in the history. It
+        // carries the same ONE-TIME consequence §95 recorded for the conditions — every hash stored
+        // before §187 was computed without this field, so the first save of each existing case
+        // writes a version whose diff looks empty. Once per case, and unlike the recurring
+        // empty-diff defect, it ends.
+        List<UUID> declinedConditionIds,
         String changeComment) {
 
     /** The longest title the SPA's editor accepts. The column itself is unbounded {@code TEXT}. */
@@ -201,6 +217,8 @@ record CaseEdit(
             Set<UUID> acceptableConditionIds,
             List<UUID> storedPreconditionIds,
             List<UUID> storedPostconditionIds,
+            Set<UUID> declinableAttachmentIds,
+            List<UUID> storedDeclinedIds,
             java.util.function.Predicate<String> automationKeyTaken) {
 
         Map<String, List<String>> errors = new LinkedHashMap<>();
@@ -216,6 +234,9 @@ record CaseEdit(
         List<UUID> postconditions = normalizeConditions(
                 request.postconditions(), "postconditions", acceptableConditionIds,
                 storedPostconditionIds, errors);
+
+        List<UUID> declined = normalizeDeclines(
+                request.declinedConditionIds(), declinableAttachmentIds, storedDeclinedIds, errors);
 
         List<String> tags = normalizeTags(request.tags(), errors);
 
@@ -326,6 +347,7 @@ record CaseEdit(
                 classification,
                 preconditions,
                 postconditions,
+                declined,
                 trimToNull(request.changeComment())),
                 tags);
     }
@@ -423,6 +445,7 @@ record CaseEdit(
             Set<UUID> storedClassificationValueIds,
             List<UUID> storedPreconditionIds,
             List<UUID> storedPostconditionIds,
+            List<UUID> storedDeclinedIds,
             java.util.function.Predicate<String> automationKeyTaken) {
 
         CaseUpdateRequest asRequest = new CaseUpdateRequest(
@@ -480,7 +503,14 @@ record CaseEdit(
                 // attachment against the live library, and a case attaching a since-retired
                 // condition would fail to reconstruct and be skipped by a MOVE_TO_SUITE that has
                 // nothing to do with it. §64's argument, and §68's, for the third time.
-                null, null);
+                null, null,
+                // And the declines, for the fourth. Null is "leave them alone", which is what all
+                // eight bulk actions do — including MOVE_TO_SUITE, where it is load-bearing rather
+                // than incidental: a move is the one action after which a stored decline may stop
+                // reaching the case, and reading absent as "clear" would delete the author's
+                // decision as a side effect of relocating the case. The stored set is supplied
+                // separately, below, so the reconstruction still hashes as the whole case.
+                null);
 
         Set<UUID> existingStepIds = new HashSet<>();
         Set<UUID> storedSharedStepIds = new HashSet<>();
@@ -515,6 +545,12 @@ record CaseEdit(
                 Set.of(),
                 storedPreconditionIds,
                 storedPostconditionIds,
+                // Never consulted, third instance of the same shape: declinedConditionIds is null
+                // on the request above, so nothing is checked against it. An empty declinable set
+                // keeps this a pure function — resolving the real one needs the suite chain and
+                // therefore two queries.
+                Set.of(),
+                storedDeclinedIds,
                 automationKeyTaken);
         return outcome instanceof Outcome.Valid valid
                 ? Optional.of(valid.edit())
@@ -581,6 +617,90 @@ record CaseEdit(
         // Sorted, so the same three values chosen in two different orders are one classification
         // and hash identically — see the field's comment on the record above.
         return distinct.stream().sorted().toList();
+    }
+
+    /**
+     * Normalizes the declined-attachment set (§187).
+     *
+     * <h2>It is a set, so it is sorted — and that is the difference from the two lists below</h2>
+     *
+     * <p>{@link #normalizeClassification}'s treatment rather than {@link #normalizeConditions}',
+     * because a decline has no position. An attachment's {@code position} is the order a tester
+     * performs it in; turning one off is a fact about the case with no order of its own, and two
+     * saves listing the same two declines differently are one state that must hash alike.
+     *
+     * <h2>The membership rule is NOT §64's union, and the asymmetry is the point</h2>
+     *
+     * <p>{@code declinable} is every attachment currently reaching this case whose library entry is
+     * live — {@link CaseConditions#declinableAttachmentIds}. There is deliberately no
+     * "unioned with what this case already declines" half, which is what the two condition lists
+     * need, because the failure that half prevents cannot happen here: an id the client could not
+     * see is an id the client does not send, and one it does not send is <em>protected</em> rather
+     * than dropped. {@link CaseConditions#reconcileOptouts} carries that bound, so the stored row
+     * survives without this method ever having to accept it.
+     *
+     * <p>Put the union in anyway and the rule inverts: a decline against a folder the case has left
+     * would become re-submittable, and a client echoing back a set it was never served would keep
+     * alive a state no screen can show. Refusing is right here for the same reason accepting is
+     * right there.
+     *
+     * <h2>Absent means "leave them alone"</h2>
+     *
+     * <p>The stored set, taken verbatim and unvalidated, for the reason the two lists below give: a
+     * bulk action reconstructs a request without mentioning declines, and reading absent as "clear"
+     * would have every {@code MOVE_TO_SUITE} silently switch back on a rule an author turned off.
+     *
+     * <h2>The invisible declines are ADDED BACK, and that is a hash requirement</h2>
+     *
+     * <p>The result is the submitted set <em>unioned with every stored decline outside
+     * {@code declinable}</em> — the rows {@link CaseConditions#reconcileOptouts} protects because
+     * no list showed them. Without the union this method would answer two different things about
+     * one stored state depending on whether the client sent the field: the full set when it was
+     * absent, and the visible subset when it was sent unchanged. {@link CaseVersions#hash} digests
+     * this record, so those two spellings are two hashes, and a save that changed nothing would
+     * write a version whose diff is empty — the recurring defect the sorting comments on this
+     * record's fields exist to prevent, arrived at from a new direction.
+     *
+     * <p>Stated positively: what is hashed is what the case declines <strong>after</strong> this
+     * save, which is the only value that is a function of the stored row rather than of what the
+     * caller happened to know about it. It is also what lets {@link #of} pass an empty
+     * {@code declinable} and the whole stored set and still agree with the edit path exactly.
+     */
+    private static List<UUID> normalizeDeclines(
+            List<UUID> submitted,
+            Set<UUID> declinable,
+            List<UUID> stored,
+            Map<String, List<String>> errors) {
+
+        if (submitted == null) {
+            return stored.stream().distinct().sorted().toList();
+        }
+
+        // Checked separately from the union below, so an id the caller could not have been shown is
+        // refused rather than absorbed by a stored row that happens to carry it.
+        Set<UUID> chosen = new LinkedHashSet<>();
+        for (UUID attachmentId : submitted) {
+            if (attachmentId == null || !chosen.add(attachmentId)) {
+                continue;
+            }
+            if (!declinable.contains(attachmentId)) {
+                // One message for four causes — another case's attachment, another project's, one
+                // this case no longer inherits, and one whose library entry was retired.
+                // Deliberately not distinguished, on ClassificationVocabulary's grounds: saying
+                // which would confirm the existence of a row the caller may not read.
+                errors.computeIfAbsent("declinedConditionIds", k -> new ArrayList<>())
+                        .add("That condition is not one this case inherits.");
+            }
+        }
+
+        Set<UUID> effective = new LinkedHashSet<>(chosen);
+        for (UUID attachmentId : stored) {
+            if (!declinable.contains(attachmentId)) {
+                effective.add(attachmentId);
+            }
+        }
+
+        return effective.stream().sorted().toList();
     }
 
     /**

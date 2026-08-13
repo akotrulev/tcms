@@ -7022,6 +7022,8 @@ components:
             - flake
             - attachments
             - relatedDocuments
+            - declinedPreconditions
+            - declinedPostconditions
           properties:
             attachments:
               type: array
@@ -7119,6 +7121,35 @@ components:
             postconditions:
               type: array
               items: { $ref: '#/components/schemas/CaseConditionRef' }
+            declinedPreconditions:
+              type: array
+              items: { $ref: '#/components/schemas/CaseConditionRef' }
+              description: |
+                **The inherited setup conditions this case has declined** (§6f's opt-out), and the
+                reason it is a separate list rather than a flag on `preconditions`.
+
+                `preconditions` is the *procedure* — what a tester performs before running this
+                case. A declined entry is not part of it, and it must not be, because that array is
+                what `test_case_version.snapshot` records and what a run pins from: a flag would put
+                the row into the execution checklist of every run started after the decline, marked
+                by a boolean the pin's reader does not know about. So the resolved lists keep
+                meaning exactly what they meant, and the declines are stated beside them.
+
+                Every entry is a `suite_condition` attachment that **currently reaches this case** —
+                the same suite chain `preconditions` is resolved over. An opt-out whose attachment
+                no longer reaches the case (the case moved folders, or the library entry was
+                retired) is **not** listed, and a save that does not mention it does not remove it;
+                `CaseConditions.reconcileOptouts` carries that bound and the reason for it.
+
+                Detail only. Empty is the ordinary state — a case inherits everything above it
+                unless something says otherwise — and it is required rather than omitted for
+                `relatedDocuments`' reason: two spellings of nothing is a distinction no consumer
+                should have to make.
+            declinedPostconditions:
+              type: array
+              items: { $ref: '#/components/schemas/CaseConditionRef' }
+              description: The cleanup half of `declinedPreconditions`, split by kind for the reason
+                `CaseConditionRef` has no `kind` field.
             relatedDocuments:
               type: array
               items: { $ref: '#/components/schemas/DocLink' }
@@ -7260,6 +7291,33 @@ components:
         postconditions:
           type: array
           items: { $ref: '#/components/schemas/CaseConditionInput' }
+        declinedConditionIds:
+          type: array
+          items: { type: string, format: uuid }
+          description: |
+            **The inherited attachments this case declines** — the ids served as
+            `TestCase.declinedPreconditions[].id` and `declinedPostconditions[].id`, which are
+            `suite_condition` row ids and not library `condition` ids. Keyed on the attachment
+            deliberately: "Log in" attached at *Billing* and again at *Billing › Refunds* is two
+            attachments, and declining the first must leave the second in force.
+
+            A **complete set** — every attachment this case should decline after this save. Absent
+            leaves the declines alone; `[]` clears them all. The same absent-versus-empty rule
+            `tags` and `classificationValueIds` use, and it matters here for their reason: a bulk
+            action reconstructs a request without mentioning declines, and reading absent as
+            "clear" would have every move silently re-impose a rule an author had turned off.
+
+            Unordered — a set, not a procedure — so it is sorted and de-duplicated before it is
+            hashed into the case's content version. Both kinds go in one array because a
+            `suite_condition` id already determines its kind; splitting it would let a caller
+            file an id under the wrong one.
+
+            Validated against the attachments that **currently reach this case**, resolved over the
+            same suite chain `preconditions` is. An id that names no such attachment is a field
+            error rather than a stored row nothing can ever show. The converse bound is the one
+            worth knowing: a stored decline whose attachment no longer reaches the case survives a
+            save that omits it, because the client was never shown it and cannot resubmit it —
+            `CaseConditions.reconcile`'s retired-attachment rule, transferred.
         changeComment:
           type: string
           nullable: true

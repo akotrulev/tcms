@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tcms.IntegrationTestBase;
@@ -109,6 +110,40 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
 
     private static final UUID SUITE = UUID.fromString("c9005000-0000-4000-8000-000000000001");
     private static final UUID CASE = UUID.fromString("c9006000-0000-4000-8000-000000000001");
+
+    /**
+     * §187's fixture is a SUITE AND A CASE OF ITS OWN, not an attachment added to {@link #SUITE}.
+     *
+     * <p>Written that way first, and four tests in {@link Attaching} plus one in {@link Editing}
+     * went red: a suite-level attachment is inherited by every case filed beneath, so hanging one
+     * off the shared folder silently added a row to {@code preconditions} in every assertion in the
+     * class. The failure is the feature — it is exactly the inheritance those tests were never
+     * written to see — and a fixture whose blast radius is "everything filed under here" is the one
+     * shape that cannot be shared.
+     */
+    private static final UUID DECLINE_SUITE = UUID.fromString("c9005000-0000-4000-8000-000000000002");
+    private static final UUID DECLINE_CASE = UUID.fromString("c9006000-0000-4000-8000-000000000002");
+
+    /**
+     * A folder with no case filed in it at all — where the "this case does not inherit that" fixture
+     * has to live.
+     *
+     * <p>The second correction of the same mistake. Hanging {@link #ELSEWHERE_ATTACHMENT} off
+     * {@link #SUITE} looked safe because DECLINE_CASE is not filed there — and it made CASE inherit
+     * it, which is the identical five-test failure one folder over. An attachment reaches every case
+     * beneath its suite whether or not the test that wrote it was thinking about those cases.
+     */
+    private static final UUID NEUTRAL_SUITE = UUID.fromString("c9005000-0000-4000-8000-000000000003");
+
+    /** SECOND, attached at DECLINE_SUITE — what DECLINE_CASE inherits and §187 lets it decline. */
+    private static final UUID SUITE_ATTACHMENT =
+            UUID.fromString("c9008000-0000-4000-8000-000000000001");
+    /** The same entry attached at NEUTRAL_SUITE — reachable by id, inherited by nothing. */
+    private static final UUID ELSEWHERE_ATTACHMENT =
+            UUID.fromString("c9008000-0000-4000-8000-000000000002");
+    /** RETIRED, attached at DECLINE_SUITE — served on no list, so declinable from nowhere. */
+    private static final UUID RETIRED_ATTACHMENT =
+            UUID.fromString("c9008000-0000-4000-8000-000000000003");
 
     @Autowired
     private MockMvc mvc;
@@ -528,6 +563,149 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // declining — §187, the writer case_condition_optout shipped without
+    // =====================================================================
+
+    /**
+     * {@code declinedConditionIds} — the half of §6f that had a reader, a filter, an entity, a
+     * repository and prose in four files, and no way for the product to make a row.
+     *
+     * <p>Every test here would have passed vacuously before the slice, which is the property that
+     * made the gap survive from M0: {@link Attaching} is about a case's OWN attachments and cannot
+     * see this table at all, and {@code CaseDetailEndpointTest}'s opt-out coverage seeds its rows
+     * with an {@code INSERT} of its own — §153's shape, a state only a fixture can produce, at the
+     * table {@code CaseCloneService} had already written a paragraph of behaviour for.
+     */
+    @Nested
+    @DisplayName("Declining — the opt-out toggle, and the row a save must not delete")
+    class Declining {
+
+        @Test
+        @DisplayName("declining an inherited condition removes it from the procedure")
+        void declineRemovesTheRow() throws Exception {
+            JsonNode saved = saveDeclineCase(declineBody(List.of(SUITE_ATTACHMENT)));
+
+            assertThat(refTitles(saved.get("preconditions")))
+                    .doesNotContain("Navigate to Billing");
+        }
+
+        @Test
+        @DisplayName("and puts it on declinedPreconditions, where the toggle can find it again")
+        void declineIsReportedBack() throws Exception {
+            // The whole reason the response carries a second list. A decline that vanishes is one
+            // the author cannot undo, because the marker the toggle sits beside is gone with it.
+            JsonNode saved = saveDeclineCase(declineBody(List.of(SUITE_ATTACHMENT)));
+
+            assertThat(refTitles(saved.get("declinedPreconditions")))
+                    .containsExactly("Navigate to Billing");
+            assertThat(saved.get("declinedPreconditions").get(0).get("id").asText())
+                    .as("the id is the ATTACHMENT's — the same value the decline is keyed on")
+                    .isEqualTo(SUITE_ATTACHMENT.toString());
+        }
+
+        @Test
+        @DisplayName("an empty array un-declines; the field being ABSENT leaves the declines alone")
+        void absentAndEmptyAreDifferentInstructions() throws Exception {
+            saveDeclineCase(declineBody(List.of(SUITE_ATTACHMENT)));
+
+            // Absent — the bulk actions' shape, and the one that must not be read as "un-decline".
+            // Reading it that way would have every MOVE_TO_SUITE switch a rule back on.
+            JsonNode untouched = saveDeclineCase(declineBody(null));
+            assertThat(refTitles(untouched.get("declinedPreconditions")))
+                    .containsExactly("Navigate to Billing");
+
+            // Empty — the author turning the rule back on.
+            JsonNode restored = saveDeclineCase(declineBody(List.of()));
+            assertThat(restored.get("declinedPreconditions")).isEmpty();
+            assertThat(refTitles(restored.get("preconditions"))).contains("Navigate to Billing");
+        }
+
+        @Test
+        @DisplayName("declining is authored content — it writes a version, unlike a retag")
+        void aDeclineWritesAVersion() throws Exception {
+            // On CaseEdit and therefore in CaseVersions#hash, deliberately: turning off "must be
+            // logged in" changes the procedure a tester performs, so the history has to say so.
+            int before = saveDeclineCase(declineBody(List.of()))
+                    .get("currentVersionNo").asInt();
+
+            JsonNode declined = saveDeclineCase(declineBody(List.of(SUITE_ATTACHMENT)));
+
+            assertThat(declined.get("currentVersionNo").asInt()).isGreaterThan(before);
+        }
+
+        @Test
+        @DisplayName("re-sending the same decline writes NO version — the set is sorted, not ordered")
+        void aRepeatedDeclineIsNotAChange() throws Exception {
+            int first = saveDeclineCase(declineBody(List.of(SUITE_ATTACHMENT)))
+                    .get("currentVersionNo").asInt();
+
+            assertThat(saveDeclineCase(declineBody(List.of(SUITE_ATTACHMENT)))
+                    .get("currentVersionNo").asInt())
+                    .isEqualTo(first);
+        }
+
+        @Test
+        @DisplayName("a repeat within the array is collapsed, not refused")
+        void repeatsCollapse() throws Exception {
+            JsonNode saved = saveDeclineCase(
+                    declineBody(List.of(SUITE_ATTACHMENT, SUITE_ATTACHMENT)));
+
+            assertThat(refTitles(saved.get("declinedPreconditions")))
+                    .containsExactly("Navigate to Billing");
+        }
+
+        @Test
+        @DisplayName("a CONDITION id is refused — the decline is keyed on the attachment")
+        void refusesALibraryConditionId() throws Exception {
+            // The distinction the whole table rests on. SECOND is the library entry behind
+            // SUITE_ATTACHMENT, so this payload is the plausible mistake rather than a random id,
+            // and accepting it would make one toggle mean "never inherit this from anywhere".
+            mvc.perform(patchDeclineCase(declineBody(List.of(SECOND))))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors.declinedConditionIds").exists());
+        }
+
+        @Test
+        @DisplayName("an attachment on a suite this case is not filed in is refused")
+        void refusesAnAttachmentThisCaseDoesNotInherit() throws Exception {
+            mvc.perform(patchDeclineCase(declineBody(List.of(ELSEWHERE_ATTACHMENT))))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors.declinedConditionIds").exists());
+        }
+
+        @Test
+        @DisplayName("the attachment behind a RETIRED entry cannot be declined — nothing shows it")
+        void refusesARetiredAttachment() throws Exception {
+            // It is not in the procedure either, so there is nothing to turn off. Accepting would
+            // store a row against a row no list carries, which is the state this slice removed.
+            mvc.perform(patchDeclineCase(declineBody(List.of(RETIRED_ATTACHMENT))))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors.declinedConditionIds").exists());
+        }
+
+        @Test
+        @DisplayName("detaching the condition from the SUITE takes the decline with it")
+        void detachingTheAttachmentCascades() throws Exception {
+            // V1's ON DELETE CASCADE toward suite_condition, exercised for the first time by a row
+            // the product made. §186's reconcile rewrites suite attachments in place rather than
+            // deleting them precisely so this cascade does NOT fire on an ordinary reorder — and
+            // until this slice there was never a row for either behaviour to act on.
+            saveDeclineCase(declineBody(List.of(SUITE_ATTACHMENT)));
+            assertThat(countOptouts()).isEqualTo(1);
+
+            try (Connection connection = appConnection(ACME)) {
+                try (var statement = connection.prepareStatement(
+                        "DELETE FROM suite_condition WHERE id = CAST(? AS uuid)")) {
+                    statement.setString(1, SUITE_ATTACHMENT.toString());
+                    statement.executeUpdate();
+                }
+            }
+
+            assertThat(countOptouts()).isZero();
+        }
+    }
+
+    // =====================================================================
     // helpers — requests
     // =====================================================================
 
@@ -612,6 +790,38 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
             entries.add(entry);
         }
         return entries;
+    }
+
+    /**
+     * DECLINE_CASE's editable set, with both condition lists sent EMPTY so a decline is the only
+     * thing that varies between two calls (§187).
+     *
+     * @param declined null leaves the key off entirely — "leave the declines alone", the shape a
+     *                 bulk action reconstructs and the one that must not read as "un-decline"
+     */
+    private String declineBody(List<UUID> declined) throws Exception {
+        Map<String, Object> payload =
+                json.readValue(caseBody(List.of(), List.of()), new TypeReference<>() { });
+        payload.put("title", "Check out as a guest");
+        payload.put("suiteId", DECLINE_SUITE.toString());
+        if (declined != null) {
+            payload.put("declinedConditionIds", declined.stream().map(UUID::toString).toList());
+        }
+        return json.writeValueAsString(payload);
+    }
+
+    private MockHttpServletRequestBuilder patchDeclineCase(String payload) {
+        return MockMvcRequestBuilders
+                .patch("/api/v1/projects/{projectId}/cases/{caseId}", BANKING, DECLINE_CASE)
+                .header("Authorization", "Bearer " + token(LEAD))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payload);
+    }
+
+    private JsonNode saveDeclineCase(String payload) throws Exception {
+        return json.readTree(mvc.perform(patchDeclineCase(payload))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
     }
 
     private String caseBodyRaw(Object preconditions, Object postconditions) throws Exception {
@@ -760,9 +970,26 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
             condition(connection, SECOND, BANKING, ACME, "Navigate to Billing", "PRE",
                     "[\"Open the account menu\"]", 0, false);
 
-            suite(connection, SUITE, BANKING);
-            testCase(connection, CASE, BANKING);
+            suite(connection, SUITE, BANKING, "CWOLB-S1", 1L, "Payments");
+            suite(connection, DECLINE_SUITE, BANKING, "CWOLB-S2", 2L, "Checkout");
+            suite(connection, NEUTRAL_SUITE, BANKING, "CWOLB-S3", 3L, "Archive");
+            testCase(connection, CASE, SUITE, "CWOLB-1", 1L, "Refund a settled payment");
+            testCase(connection, DECLINE_CASE, DECLINE_SUITE, "CWOLB-2", 2L, "Check out as a guest");
             caseCondition(connection, "c9007000-0000-4000-8000-000000000001", CASE, ATTACHED);
+
+            // The inherited half (§187). Seeded rather than driven through §186's suite write,
+            // because the writer under test here is the DECLINE and a suite:manage round trip
+            // would put a second unrelated endpoint in every one of its failure modes.
+            //
+            // Deleted first and re-inserted, not ON CONFLICT DO NOTHING: `Declining` mutates these
+            // rows — one test cascades SUITE_ATTACHMENT away — and a fixture that leaves a deleted
+            // row deleted makes every later test in the class fail for a reason it did not cause.
+            // The same hazard `condition` above resets lock_version for.
+            clearSuiteConditions(connection);
+            suiteCondition(connection, SUITE_ATTACHMENT, DECLINE_SUITE, SECOND, 0);
+            suiteCondition(connection, ELSEWHERE_ATTACHMENT, NEUTRAL_SUITE, SECOND, 0);
+            suiteCondition(connection, RETIRED_ATTACHMENT, DECLINE_SUITE, RETIRED, 1);
+            clearOptouts(connection);
         }
     }
 
@@ -802,7 +1029,10 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
         }
     }
 
-    private void suite(Connection connection, UUID id, UUID projectId) throws SQLException {
+    private void suite(
+            Connection connection, UUID id, UUID projectId, String key, long keySeq, String name)
+            throws SQLException {
+
         try (var statement = connection.prepareStatement("""
                 INSERT INTO suite (id, company_id, project_id, key, key_seq, name)
                 VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?)
@@ -811,15 +1041,71 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
             statement.setString(1, id.toString());
             statement.setString(2, ACME.toString());
             statement.setString(3, projectId.toString());
-            statement.setString(4, "CWOLB-S1");
-            statement.setLong(5, 1L);
+            statement.setString(4, key);
+            statement.setLong(5, keySeq);
             // ltree labels allow only [A-Za-z0-9_], so the hyphens have to come out.
-            statement.setString(6, "Payments");
+            statement.setString(6, name);
             statement.executeUpdate();
         }
     }
 
-    private void testCase(Connection connection, UUID id, UUID projectId) throws SQLException {
+    private void suiteCondition(
+            Connection connection, UUID id, UUID suiteId, UUID conditionId, int position)
+            throws SQLException {
+
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO suite_condition
+                    (id, company_id, suite_id, kind, position, condition_id)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, CAST(? AS uuid))
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, suiteId.toString());
+            statement.setString(4, "PRE");
+            statement.setInt(5, position);
+            statement.setString(6, conditionId.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /** Also cascades away every opt-out against them, which is the point of running it first. */
+    private void clearSuiteConditions(Connection connection) throws SQLException {
+        try (var statement = connection.prepareStatement(
+                """
+                DELETE FROM suite_condition
+                 WHERE suite_id IN (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid))
+                """)) {
+            statement.setString(1, SUITE.toString());
+            statement.setString(2, DECLINE_SUITE.toString());
+            statement.setString(3, NEUTRAL_SUITE.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    private void clearOptouts(Connection connection) throws SQLException {
+        try (var statement = connection.prepareStatement(
+                "DELETE FROM case_condition_optout WHERE case_id = CAST(? AS uuid)")) {
+            statement.setString(1, DECLINE_CASE.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /** Ground truth, read outside the application — the row is what this slice is about. */
+    private int countOptouts() throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "SELECT count(*) FROM case_condition_optout WHERE case_id = CAST(? AS uuid)")) {
+            statement.setString(1, DECLINE_CASE.toString());
+            try (var rows = statement.executeQuery()) {
+                rows.next();
+                return rows.getInt(1);
+            }
+        }
+    }
+
+    private void testCase(
+            Connection connection, UUID id, UUID suiteId, String key, long keySeq, String title)
+            throws SQLException {
         try (var statement = connection.prepareStatement("""
                 INSERT INTO test_case
                     (id, company_id, project_id, suite_id, key, key_seq, title)
@@ -828,11 +1114,11 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
                 """)) {
             statement.setString(1, id.toString());
             statement.setString(2, ACME.toString());
-            statement.setString(3, projectId.toString());
-            statement.setString(4, SUITE.toString());
-            statement.setString(5, "CWOLB-1");
-            statement.setLong(6, 1L);
-            statement.setString(7, "Refund a settled payment");
+            statement.setString(3, BANKING.toString());
+            statement.setString(4, suiteId.toString());
+            statement.setString(5, key);
+            statement.setLong(6, keySeq);
+            statement.setString(7, title);
             statement.executeUpdate();
         }
     }

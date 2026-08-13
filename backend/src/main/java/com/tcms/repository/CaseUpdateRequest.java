@@ -95,7 +95,18 @@ public record CaseUpdateRequest(
         // say so without carrying the case's stored attachments through code with no interest in
         // them. See CaseEdit.of.
         List<CaseConditionInput> preconditions,
-        List<CaseConditionInput> postconditions) {
+        List<CaseConditionInput> postconditions,
+
+        // The INHERITED attachments this case declines (§187) — `suite_condition` ids, served back
+        // as TestCase.declinedPreconditions[].id. Absent (null) is "leave the declines alone" and an
+        // empty list is "decline nothing", the same split the three collections above use.
+        //
+        // It is the FOURTH field on this record to arrive by the route the header describes for the
+        // refused two: the boundary was never a refusal here, it was a table with no writer at all.
+        // `case_condition_optout` shipped in V1 with a reader, a filter and prose in four files
+        // describing rows no deployment could contain — the writerless shape §116, §117, §132 and
+        // §186 each found one instance of.
+        List<UUID> declinedConditionIds) {
 
     /**
      * {@code TestStepInput} — one step as submitted.

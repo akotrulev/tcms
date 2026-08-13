@@ -88,6 +88,10 @@ function caseBody(createdBy: string | null): TestCase {
     // Required since §167, same terms as `attachments`: empty is the ordinary state, not a
     // third spelling of "not computed" — `case_doc_link` cannot say that (V46 §5).
     relatedDocuments: [],
+    // §187: required, so their absence is a `tsc` error here rather than a runtime gap —
+    // the same way `relatedDocuments` above landed in §167.
+    declinedPreconditions: [],
+    declinedPostconditions: [],
   } as TestCase
 }
 

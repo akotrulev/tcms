@@ -262,6 +262,13 @@ public class CaseUpdateService {
         acceptableConditionIds.addAll(
                 conditions.liveAttachedIdsOf(testCase.getId(), ConditionKind.POST));
 
+        // Resolved BEFORE validating and reused by the reconcile below, for the reason the
+        // vocabulary above is: one answer to "what can this case decline", checked and applied.
+        // It has to be read here rather than after applyEdit, because a save that also MOVES the
+        // case would otherwise resolve the declines against the folder it is going to instead of
+        // the one the client was looking at. See CaseConditions#declinableAttachmentIds.
+        Set<UUID> declinable = conditions.declinableAttachmentIds(testCase, liveSuites);
+
         CaseEdit.Outcome validated = CaseEdit.validate(
                 request,
                 liveSuiteIds,
@@ -272,6 +279,8 @@ public class CaseUpdateService {
                 acceptableConditionIds,
                 conditions.liveAttachedIdsOf(testCase.getId(), ConditionKind.PRE),
                 conditions.liveAttachedIdsOf(testCase.getId(), ConditionKind.POST),
+                declinable,
+                conditions.storedDeclinedIds(testCase.getId()),
                 key -> cases.existsByAutomationKeyOtherThan(key, testCase.getId()));
 
         if (validated instanceof CaseEdit.Outcome.Invalid invalid) {
@@ -298,6 +307,11 @@ public class CaseUpdateService {
         // snapshot, so reconciling after it would report the conditions the case had on the way in.
         conditions.reconcile(
                 testCase, edit.preconditionIds(), edit.postconditionIds(), companyId);
+        // The other half of §6f, and it is applied against the set resolved BEFORE applyEdit rather
+        // than re-derived here — see `declinable` above. Before the render for the reason every
+        // reconcile on this line is: the response IS the version snapshot.
+        conditions.reconcileOptouts(
+                testCase.getId(), declinable, edit.declinedConditionIds(), companyId);
         // Beside those two and NOT inside `edit`, because a tag is not authored content and is not
         // in CaseVersions#hash — see CaseEdit.Outcome.Valid. Before the render for the reason the
         // other reconciles are: the response IS the version snapshot, so a save that retagged a

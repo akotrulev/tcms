@@ -130,6 +130,8 @@ function caseBody(links: DocLink[]): TestCase {
     flake: null,
     attachments: [],
     relatedDocuments: links,
+    declinedPreconditions: [],
+    declinedPostconditions: [],
   } as TestCase
 }
 

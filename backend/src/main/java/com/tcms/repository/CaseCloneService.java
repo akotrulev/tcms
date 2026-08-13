@@ -80,11 +80,24 @@ import org.springframework.transaction.annotation.Transactional;
  *       answer regardless — a clone is the cloner's work.</li>
  * </ol>
  *
- * <p><strong>Condition opt-outs are not copied because none exist.</strong>
+ * <p><del><strong>Condition opt-outs are not copied because none exist.</strong>
  * {@link CaseConditionOptout} has no writer anywhere in {@code src/main} — the table is readable and
- * unwritable, so no case in any deployment carries a row. Recorded rather than designed around: when
- * it gets a writer, a clone landing in the source's suite should carry the opt-outs whose
- * {@code suite_condition} belongs to that suite, and one landing elsewhere should carry none.
+ * unwritable, so no case in any deployment carries a row.</del> → <strong>§187 gave it one, and this
+ * paragraph's own prescription is what got built</strong>: "a clone landing in the source's suite
+ * should carry the opt-outs whose {@code suite_condition} belongs to that suite, and one landing
+ * elsewhere should carry none." {@link #derive} does exactly that, through
+ * {@link CaseConditions#declinedAtSuite}.
+ *
+ * <p>The two halves of the rule coincide today and will not always: since §98 flattened the suite
+ * tree a case's chain is its own folder or nothing, so "attachments belonging to that suite" and
+ * "attachments this case inherits" are the same set. Keep the narrower spelling — it is the one that
+ * stays right if inheritance ever widens again, and the {@code declinedAtSuite} name says which
+ * question is being asked.
+ *
+ * <p>They are carried through the <em>request</em> rather than written afterwards, which is not a
+ * style choice: {@link CaseEdit} hashes the declines, so a clone that inserted the rows behind the
+ * create path's back would record a v1 describing a case that declines nothing, and the next
+ * ordinary save would be credited with turning off rules the clone turned off.
  *
  * <h2>Attachments are byte-copied, and §6v asks for the one thing that cannot work</h2>
  *
@@ -113,6 +126,7 @@ public class CaseCloneService {
     private final TestStepRepository steps;
     private final CaseClassificationRepository classifications;
     private final CaseConditionRepository conditions;
+    private final CaseConditions caseConditions;
     private final CaseTagRepository tags;
     private final AttachmentRepository attachments;
     private final AttachmentStore store;
@@ -127,6 +141,7 @@ public class CaseCloneService {
             TestStepRepository steps,
             CaseClassificationRepository classifications,
             CaseConditionRepository conditions,
+            CaseConditions caseConditions,
             CaseTagRepository tags,
             AttachmentRepository attachments,
             AttachmentStore store,
@@ -139,6 +154,7 @@ public class CaseCloneService {
         this.steps = steps;
         this.classifications = classifications;
         this.conditions = conditions;
+        this.caseConditions = caseConditions;
         this.tags = tags;
         this.attachments = attachments;
         this.store = store;
@@ -267,12 +283,25 @@ public class CaseCloneService {
             clonedTags.add(tag.getTag());
         }
 
+        // Null means the source's suite — the same reading `suiteId` below takes, resolved once so
+        // the two cannot disagree about where this clone is landing.
+        UUID targetSuiteId =
+                request.suiteId() == null ? source.getSuiteId() : request.suiteId();
+
+        // The class header's rule, §129's sentence with a writer behind it since §187. A clone
+        // landing anywhere but the source's own folder carries no declines: it will inherit a
+        // different folder's rules, and nobody has decided anything about those.
+        List<UUID> clonedDeclines =
+                java.util.Objects.equals(targetSuiteId, source.getSuiteId())
+                        ? caseConditions.declinedAtSuite(source.getId(), source.getSuiteId())
+                        : List.of();
+
         return new CaseUpdateRequest(
                 request.title(),
                 // Null means the source's suite, which is what "clone this" means unqualified. A
                 // suite from another project is refused as a field error by the create path's own
                 // live-suite check — there is no cross-project clone.
-                request.suiteId() == null ? source.getSuiteId() : request.suiteId(),
+                targetSuiteId,
                 source.getDescription(),
                 source.getObjective(),
                 source.getExpectedOutcome(),
@@ -297,7 +326,8 @@ public class CaseCloneService {
                 null,
                 null,
                 preconditions,
-                postconditions);
+                postconditions,
+                clonedDeclines);
     }
 
     /**

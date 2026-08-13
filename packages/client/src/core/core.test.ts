@@ -217,8 +217,17 @@ describe('read-modify-write', () => {
       by the GET, so echoing them turns every round-trip into a rejection. The conditions are
       lists, so absent leaves them alone, and the read serves a different schema from the write.
       `changeComment` is this edit's own annotation and belongs to nobody's previous save.
+
+      `declinedConditionIds` (§187) is excluded on the weaker half of the conditions' argument and
+      the exclusion is therefore the one to revisit first: it is a list, so absent leaves it alone,
+      but unlike the two above its shape DOES line up with what the read serves. This assertion
+      failed the moment the field appeared, which is the second time it has forced the decision to
+      be made rather than defaulted — §186 was the first.
     */
-    const excluded = ['ownerId', 'automationTags', 'preconditions', 'postconditions', 'changeComment'];
+    const excluded = [
+      'ownerId', 'automationTags', 'preconditions', 'postconditions', 'declinedConditionIds',
+      'changeComment',
+    ];
     const expected = propertiesOf('TestCaseInput').filter((field) => !excluded.includes(field));
 
     expect(expected.length).toBeGreaterThan(10);

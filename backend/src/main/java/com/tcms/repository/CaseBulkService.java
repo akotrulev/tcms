@@ -101,6 +101,7 @@ public class CaseBulkService {
     private final SuiteRepository suites;
     private final ConditionRepository conditions;
     private final CaseConditionRepository caseConditions;
+    private final CaseConditionOptoutRepository caseOptouts;
     private final CaseClassificationRepository caseClassifications;
     private final CaseTagRepository caseTags;
     private final TestStepRepository stepRows;
@@ -118,6 +119,7 @@ public class CaseBulkService {
             SuiteRepository suites,
             ConditionRepository conditions,
             CaseConditionRepository caseConditions,
+            CaseConditionOptoutRepository caseOptouts,
             CaseClassificationRepository caseClassifications,
             CaseTagRepository caseTags,
             TestStepRepository stepRows,
@@ -133,6 +135,7 @@ public class CaseBulkService {
         this.suites = suites;
         this.conditions = conditions;
         this.caseConditions = caseConditions;
+        this.caseOptouts = caseOptouts;
         this.caseClassifications = caseClassifications;
         this.caseTags = caseTags;
         this.stepRows = stepRows;
@@ -610,6 +613,7 @@ public class CaseBulkService {
                         context.classificationOf(row.getId()),
                         context.conditionIdsOf(row.getId(), ConditionKind.PRE),
                         context.conditionIdsOf(row.getId(), ConditionKind.POST),
+                        context.declinedIdsOf(row.getId()),
                         key -> cases.existsByAutomationKeyOtherThan(key, row.getId()))
                 // evaluate() already refused every case loadContext could not reconstruct, and the
                 // only fields this class changes are ones validate accepts by construction — a
@@ -699,6 +703,10 @@ public class CaseBulkService {
             List<ClassificationDimensionView> vocabularies,
             Map<UUID, Set<String>> tags,
             Map<UUID, List<CaseCondition>> conditions,
+            /**
+             * Each case's declined inherited attachments, unrestricted — see {@link #declinedIdsOf}.
+             */
+            Map<UUID, List<UUID>> declines,
             Map<UUID, Set<UUID>> classifications,
             Map<UUID, CaseEdit> priorEdits,
             /**
@@ -769,6 +777,20 @@ public class CaseBulkService {
             return conditionIds(conditionsOf(caseId), kind);
         }
 
+        /**
+         * The inherited attachments this case declines (§187), carried into the reconstructed edit
+         * for {@link #classificationOf}'s reason exactly — no bulk action changes them, which is
+         * precisely why leaving them out would hash the case as declining nothing.
+         *
+         * <p><strong>Every stored row, including ones no list shows.</strong> The edit path's
+         * default is the same unrestricted set for this reason: two paths restricting differently
+         * are two hashes for one stored state. {@link CaseEdit#normalizeDeclines} is where the
+         * restriction is applied, once, to the submitted set alone.
+         */
+        List<UUID> declinedIdsOf(UUID caseId) {
+            return declines.getOrDefault(caseId, List.of());
+        }
+
         /** Whether a version row can be written for this case at all. */
         boolean reconstructable(UUID caseId) {
             return priorEdits.containsKey(caseId);
@@ -831,6 +853,24 @@ public class CaseBulkService {
             }
         }
 
+        // The declines, for the AUTHORED commands only and for `byCase`'s reason exactly (§187):
+        // CaseEdit carries them, so an edit reconstructed without them hashes as though the case
+        // declined nothing, and the next ordinary save would be credited with restoring a decision
+        // a MOVE_TO_SUITE never touched. Unlike `byCase` no bulk command acts on these rows, so
+        // this half is the whole of the reason to load them.
+        //
+        // Loaded UNRESTRICTED — every stored row, including the ones no list shows. That is what
+        // makes this agree with the edit path without resolving a suite chain per case; see
+        // CaseConditions#storedDeclinedIds and CaseEdit#normalizeDeclines.
+        Map<UUID, List<UUID>> declinesByCase = new LinkedHashMap<>();
+        if (authored && !found.isEmpty()) {
+            for (CaseConditionOptout row
+                    : caseOptouts.findForCases(found.stream().map(TestCase::getId).toList())) {
+                declinesByCase.computeIfAbsent(row.getCaseId(), key -> new ArrayList<>())
+                        .add(row.getSuiteConditionId());
+            }
+        }
+
         // Reconstructed once, here, and read twice — by the verdict (may this case be changed at
         // all) and by the version writer. Doing it in both places would read every case's steps
         // twice per operation, and would let the two disagree.
@@ -865,6 +905,7 @@ public class CaseBulkService {
                                 classificationsByCase.getOrDefault(row.getId(), Set.of()),
                                 conditionIds(byCase.get(row.getId()), ConditionKind.PRE),
                                 conditionIds(byCase.get(row.getId()), ConditionKind.POST),
+                                declinesByCase.getOrDefault(row.getId(), List.of()),
                                 key -> cases.existsByAutomationKeyOtherThan(key, row.getId()))
                         .ifPresent(edit -> priorEdits.put(row.getId(), edit));
             }
@@ -892,6 +933,7 @@ public class CaseBulkService {
                 vocabularies,
                 tags,
                 byCase,
+                declinesByCase,
                 classificationsByCase,
                 Map.copyOf(priorEdits),
                 reviewRefusals,
