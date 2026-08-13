@@ -218,6 +218,7 @@ record CaseEdit(
             List<UUID> storedPreconditionIds,
             List<UUID> storedPostconditionIds,
             Set<UUID> declinableAttachmentIds,
+            Set<UUID> retainedAttachmentIds,
             List<UUID> storedDeclinedIds,
             java.util.function.Predicate<String> automationKeyTaken) {
 
@@ -236,7 +237,11 @@ record CaseEdit(
                 storedPostconditionIds, errors);
 
         List<UUID> declined = normalizeDeclines(
-                request.declinedConditionIds(), declinableAttachmentIds, storedDeclinedIds, errors);
+                request.declinedConditionIds(),
+                declinableAttachmentIds,
+                retainedAttachmentIds,
+                storedDeclinedIds,
+                errors);
 
         List<String> tags = normalizeTags(request.tags(), errors);
 
@@ -550,6 +555,15 @@ record CaseEdit(
                 // keeps this a pure function — resolving the real one needs the suite chain and
                 // therefore two queries.
                 Set.of(),
+                // The RETENTION bound, and it is deliberately the stored set itself — "retain all
+                // of it" (§192). It cannot be Set.of() the way `declinable` above can: that one is
+                // never read for a null request field, this one always is, and an empty set would
+                // reconstruct every bulk-touched case as declining nothing. Nor can it be the real
+                // set, which is the same query this method exists without. THE CALLER NARROWS IT
+                // INSTEAD: CaseBulkService's MOVE_TO_SUITE arm resolves the target folder's
+                // attachments ONCE for the whole batch — the target is one suite for every case in
+                // the operation — and passes the already-narrowed list as storedDeclinedIds.
+                Set.copyOf(storedDeclinedIds),
                 storedDeclinedIds,
                 automationKeyTaken);
         return outcome instanceof Outcome.Valid valid
@@ -639,10 +653,22 @@ record CaseEdit(
      * than dropped. {@link CaseConditions#reconcileOptouts} carries that bound, so the stored row
      * survives without this method ever having to accept it.
      *
-     * <p>Put the union in anyway and the rule inverts: a decline against a folder the case has left
-     * would become re-submittable, and a client echoing back a set it was never served would keep
-     * alive a state no screen can show. Refusing is right here for the same reason accepting is
-     * right there.
+     * <p>Put the union in anyway and the rule inverts: a client echoing back a set it was never
+     * served would keep alive a state no screen can show. Refusing is right here for the same
+     * reason accepting is right there.
+     *
+     * <h2>The retention bound is applied LAST, and it is not a validation</h2>
+     *
+     * <p>{@code retained} is every attachment reaching the case's suite <strong>after this save</strong>
+     * ({@link CaseConditions.Reaching#all()}), and the result is intersected with it (§192). A save
+     * that also moves the case therefore drops the declines the move invalidates rather than
+     * refusing them: the client's set describes the folder it was looking at and is checked against
+     * <em>that</em> folder's {@code declinable}, so restating a decline while relocating a case is
+     * an ordinary request and not a 400. What it is not is a decision that survives the move —
+     * {@link CaseConditions#reconcileOptouts} deletes those rows, and this intersection is what
+     * makes the hash say so in the same breath. Bounding it here rather than after
+     * {@link CaseVersions#decide} is the whole point: the two would otherwise disagree about what
+     * the case declines, and the version would record a decline the row does not carry.
      *
      * <h2>Absent means "leave them alone"</h2>
      *
@@ -669,11 +695,12 @@ record CaseEdit(
     private static List<UUID> normalizeDeclines(
             List<UUID> submitted,
             Set<UUID> declinable,
+            Set<UUID> retained,
             List<UUID> stored,
             Map<String, List<String>> errors) {
 
         if (submitted == null) {
-            return stored.stream().distinct().sorted().toList();
+            return stored.stream().distinct().filter(retained::contains).sorted().toList();
         }
 
         // Checked separately from the union below, so an id the caller could not have been shown is
@@ -700,7 +727,7 @@ record CaseEdit(
             }
         }
 
-        return effective.stream().sorted().toList();
+        return effective.stream().filter(retained::contains).sorted().toList();
     }
 
     /**

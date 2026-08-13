@@ -248,8 +248,10 @@ class CaseSharedStepReferenceTest {
                 Set.of(),
                 List.of(),
                 List.of(),
-                // And about neither half of §6f's opt-out: the request declines nothing, so an
-                // empty declinable set and an empty stored set are never consulted.
+                // And about no part of §6f's opt-out: the request declines nothing and the stored
+                // set is empty, so neither the declinable bound nor the retention bound (§192) is
+                // ever consulted.
+                Set.of(),
                 Set.of(),
                 List.of(),
                 key -> false);

@@ -96,6 +96,11 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
 
     private static final UUID PRECONDITION = UUID.fromString("4b005000-0000-4000-8000-000000000001");
     /** A condition in the sibling project — nameable, and not attachable here. */
+    /** A folder of its own, so its standing rule reaches exactly one case — see {@link #declinedCase}. */
+    private static final UUID QUARANTINE = UUID.fromString("4b004000-0000-4000-8000-000000000004");
+    /** QUARANTINE's attachment of {@link #PRECONDITION}, and the row {@link #declinedCase} declines. */
+    private static final UUID QUARANTINE_ATTACHMENT =
+            UUID.fromString("4b006000-0000-4000-8000-000000000001");
     private static final UUID FOREIGN_CONDITION =
             UUID.fromString("4b005000-0000-4000-8000-000000000002");
 
@@ -173,6 +178,12 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
             delete(connection, "DELETE FROM audit_event");
             delete(connection, "DELETE FROM case_condition");
             delete(connection, "DELETE FROM case_tag");
+            // BEFORE condition, which it references — and the reason it is here at all is that the
+            // rows outlive the method: nothing rolls back a MockMvc request, so QUARANTINE's
+            // attachment would still be pointing at PRECONDITION when the next test's reset tried
+            // to delete it. Cascades away every optout against it, which is why the decline is
+            // re-seeded in seedConditions rather than once.
+            delete(connection, "DELETE FROM suite_condition");
             delete(connection, "DELETE FROM condition");
             delete(connection, "DELETE FROM test_case");
         }
@@ -652,6 +663,42 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("MOVE_TO_SUITE takes the declines the destination does not impose (§192)")
+        void moveDropsTheDeclinesItInvalidates() throws Exception {
+            // A decline is an exception to a rule the case's FOLDER imposes. REFUNDS imposes
+            // nothing, so after the move there is no rule to be an exception to — and §187's
+            // protection would have kept the row alive, unreachable and un-undoable, until
+            // something moved the case back into QUARANTINE and switched it off again.
+            assertThat(optoutCountOf(declinedCase())).isEqualTo(1);
+
+            MvcResult result = commit(LEAD, moveToSuite(REFUNDS, declinedCase()));
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(changed(result)).containsExactly("TC-6");
+            assertThat(optoutCountOf(declinedCase())).isZero();
+        }
+
+        @Test
+        @DisplayName("and the version it writes hashes the case WITHOUT them — one version, not two")
+        void theMoveVersionHashesTheSurvivingDeclines() throws Exception {
+            // §95's bulk-hash trap on the field §187 added. The reconstruction reads the declines
+            // out of the context, so narrowing the rows without narrowing the context would record
+            // a version claiming a decline the row no longer carries — and the next ordinary save
+            // of that case, changing nothing, would be credited with turning the rule back on.
+            commit(LEAD, moveToSuite(REFUNDS, declinedCase()));
+            assertThat(versionsOf(declinedCase())).hasSize(1);
+
+            // A second move back to where it came from. The case now declines nothing, so this
+            // writes a version for the relocation alone and the decline never reappears.
+            commit(LEAD, moveToSuite(QUARANTINE, declinedCase()));
+
+            assertThat(versionsOf(declinedCase())).hasSize(2);
+            assertThat(optoutCountOf(declinedCase()))
+                    .as("the decision does not follow the case home")
+                    .isZero();
+        }
+
+        @Test
         @DisplayName("ADD_TAGS is additive and set-valued — a tag already there leaves the case unchanged")
         void addTagsIsASet() throws Exception {
             Map<String, Object> operation = operation("ADD_TAGS", false, draft(), inReview());
@@ -1086,6 +1133,18 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
         return caseId("mobile");
     }
 
+    /**
+     * A DRAFT filed alone in {@link #QUARANTINE}, carrying a decline of that folder's attachment.
+     *
+     * <p>Alone, and in a folder of its own, for §187's reason: a suite-level attachment is inherited
+     * by every case <em>filed</em> in the suite, so hanging one off {@link #PAYMENTS} would add a
+     * precondition to the four cases every other test in this class asserts about and would change
+     * the hash of every version they write.
+     */
+    private static UUID declinedCase() {
+        return caseId("declined");
+    }
+
     private static UUID caseId(String marker) {
         return UUID.nameUUIDFromBytes(("case-bulk-case:" + marker).getBytes());
     }
@@ -1097,6 +1156,7 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
             suite(connection, PAYMENTS, ACME, BANKING, null, "BAOLB-S1", 1, "Payments", "s1");
             suite(connection, REFUNDS, ACME, BANKING, null, "BAOLB-S2", 2, "Refunds", "s2");
             suite(connection, MOBILE_SUITE, ACME, MOBILE, null, "BAMOB-S1", 1, "Login", "s1");
+            suite(connection, QUARANTINE, ACME, BANKING, null, "BAOLB-S3", 3, "Quarantine", "s3");
         }
     }
 
@@ -1112,6 +1172,8 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
                     "Sign in", "DRAFT");
             testCase(connection, secondDraft(), ACME, BANKING, PAYMENTS, "TC-5", 5,
                     "Refund a cancelled order", "DRAFT");
+            testCase(connection, declinedCase(), ACME, BANKING, QUARANTINE, "TC-6", 6,
+                    "Refund an expired voucher", "DRAFT");
 
             // Every case gets one step: CaseEdit.validate refuses a STRUCTURED case with none, so a
             // stepless fixture would make every version-writing action skip instead of change — and
@@ -1122,6 +1184,8 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
             step(connection, stepId("mobile"), ACME, mobileCase(), 0, "Open the app");
             step(connection, stepId("second-draft"), ACME, secondDraft(), 0,
                     "Open the payments screen");
+            step(connection, stepId("declined"), ACME, declinedCase(), 0,
+                    "Open the vouchers screen");
         }
     }
 
@@ -1133,7 +1197,42 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
         try (Connection connection = appConnection(ACME)) {
             condition(connection, PRECONDITION, ACME, BANKING, "A card is registered");
             condition(connection, FOREIGN_CONDITION, ACME, MOBILE, "The app is installed");
+
+            // QUARANTINE's standing rule, and one case declining it (§187). Seeded rather than
+            // driven, because the writer under test here is the bulk MOVE: reaching the same state
+            // through the case endpoint would put a second endpoint in this test's failure modes,
+            // and neither endpoint on this class's list can produce a suite attachment at all.
+            //
+            // Re-inserted every time rather than ON CONFLICT DO NOTHING: resetMutableRows deletes
+            // both, and the move under test deletes the optout, so a fixture that left either
+            // deleted would make the next test pass for a reason it did not cause.
+            try (var statement = connection.prepareStatement("""
+                    INSERT INTO suite_condition
+                        (id, company_id, suite_id, kind, position, condition_id)
+                    VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), 'PRE', 0,
+                            CAST(? AS uuid))
+                    """)) {
+                statement.setString(1, QUARANTINE_ATTACHMENT.toString());
+                statement.setString(2, ACME.toString());
+                statement.setString(3, QUARANTINE.toString());
+                statement.setString(4, PRECONDITION.toString());
+                statement.executeUpdate();
+            }
+            try (var statement = connection.prepareStatement("""
+                    INSERT INTO case_condition_optout (company_id, case_id, suite_condition_id)
+                    VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid))
+                    """)) {
+                statement.setString(1, ACME.toString());
+                statement.setString(2, declinedCase().toString());
+                statement.setString(3, QUARANTINE_ATTACHMENT.toString());
+                statement.executeUpdate();
+            }
         }
+    }
+
+    private int optoutCountOf(UUID caseId) throws SQLException {
+        return Integer.parseInt(scalar(
+                "SELECT count(*) FROM case_condition_optout WHERE case_id = '" + caseId + "'"));
     }
 
     private void condition(

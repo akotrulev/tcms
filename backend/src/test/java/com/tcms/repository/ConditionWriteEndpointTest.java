@@ -703,6 +703,100 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
 
             assertThat(countOptouts()).isZero();
         }
+
+        @Test
+        @DisplayName("MOVING the case to another folder deletes the declines that folder does not impose")
+        void aMoveDeletesTheDeclinesItInvalidates() throws Exception {
+            // §192, and the state §187 protected. DECLINE_SUITE imposes SUITE_ATTACHMENT;
+            // NEUTRAL_SUITE imposes an attachment of its own to the same library entry, so the
+            // rule "Navigate to Billing" applies in both folders and only the DECISION about it is
+            // folder-scoped. That is what makes this a test of the decline rather than of the rule.
+            saveDeclineCase(declineBody(List.of(SUITE_ATTACHMENT)));
+            assertThat(countOptouts()).isEqualTo(1);
+
+            JsonNode moved = saveDeclineCase(declineBodyAt(NEUTRAL_SUITE, null));
+
+            assertThat(countOptouts())
+                    .as("the row is gone — not merely unlisted, which is what §187 left behind")
+                    .isZero();
+            assertThat(moved.get("declinedPreconditions")).isEmpty();
+            assertThat(refTitles(moved.get("preconditions")))
+                    .as("the destination's own attachment of the same entry arrives in force")
+                    .contains("Navigate to Billing");
+        }
+
+        @Test
+        @DisplayName("and moving BACK does not re-arm it — the six-months-later reappearance")
+        void aDeclineDoesNotFollowTheCaseHome() throws Exception {
+            // The sentence CaseConditions.reconcileOptouts stated as this design's cost: "Move the
+            // case back under Billing and a rule the author turned off six months ago is off
+            // again, with nothing on the screen having said so in between."
+            saveDeclineCase(declineBody(List.of(SUITE_ATTACHMENT)));
+            saveDeclineCase(declineBodyAt(NEUTRAL_SUITE, null));
+
+            JsonNode home = saveDeclineCase(declineBody(null));
+
+            assertThat(refTitles(home.get("preconditions")))
+                    .as("the folder's standing rule applies again, visibly, on the screen")
+                    .contains("Navigate to Billing");
+            assertThat(home.get("declinedPreconditions")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a move may RESTATE the decline it invalidates — checked against the old folder, stored against the new")
+        void aMoveThatRestatesTheDeclineIsNotARefusal() throws Exception {
+            // The two bounds are different questions and this is the request that separates them.
+            // The client is looking at DECLINE_SUITE, so SUITE_ATTACHMENT is a legitimate thing for
+            // it to name; validating against the destination instead would 400 on an id the
+            // response it is answering had just served. It is still not retained.
+            saveDeclineCase(declineBody(List.of(SUITE_ATTACHMENT)));
+
+            JsonNode moved = saveDeclineCase(
+                    declineBodyAt(NEUTRAL_SUITE, List.of(SUITE_ATTACHMENT)));
+
+            assertThat(moved.get("declinedPreconditions")).isEmpty();
+            assertThat(countOptouts()).isZero();
+        }
+
+        @Test
+        @DisplayName("the version the move writes hashes the declines the case is LEFT with")
+        void theMoveVersionHashesWhatSurvived() throws Exception {
+            // The hash must be a function of the stored row (§187), and a bound applied after
+            // CaseVersions#decide would break that from the one direction §187 could not reach: the
+            // version would record a decline the row no longer carries, and the very next save —
+            // which changes nothing — would be credited with un-declining it.
+            saveDeclineCase(declineBody(List.of(SUITE_ATTACHMENT)));
+
+            int afterMove = saveDeclineCase(declineBodyAt(NEUTRAL_SUITE, null))
+                    .get("currentVersionNo").asInt();
+            int afterANoOpSave = saveDeclineCase(declineBodyAt(NEUTRAL_SUITE, null))
+                    .get("currentVersionNo").asInt();
+
+            assertThat(afterANoOpSave)
+                    .as("a save that changed nothing wrote no version, so the move's hash was right")
+                    .isEqualTo(afterMove);
+        }
+
+        @Test
+        @DisplayName("RETIRING the entry does NOT delete the decline — the half §192 did not reverse")
+        void aRetiredEntryKeepsTheDecline() throws Exception {
+            // The asymmetry the slice rests on. A retired entry's attachment still hangs off the
+            // case's own folder, so the rule is still this folder's; retirement is reversible and
+            // says nothing about this case, while a move is a person's decision about it. The row
+            // is on no list while the entry is retired — which is why a save omitting it must not
+            // read as "un-decline".
+            saveDeclineCase(declineBody(List.of(SUITE_ATTACHMENT)));
+
+            retire(SECOND);
+            JsonNode saved = saveDeclineCase(declineBody(null));
+
+            assertThat(saved.get("declinedPreconditions"))
+                    .as("nothing renders a withdrawn procedure, so it is not on the list")
+                    .isEmpty();
+            assertThat(countOptouts())
+                    .as("and the decision survives the save that could not mention it")
+                    .isEqualTo(1);
+        }
     }
 
     // =====================================================================
@@ -800,14 +894,37 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
      *                 bulk action reconstructs and the one that must not read as "un-decline"
      */
     private String declineBody(List<UUID> declined) throws Exception {
+        return declineBodyAt(DECLINE_SUITE, declined);
+    }
+
+    /**
+     * The same body filed somewhere else — the MOVE, which is the one act that ends a decline
+     * (§192).
+     *
+     * <p>The suite is a parameter rather than a second body builder because a move is an ordinary
+     * field of an ordinary save here: the SPA's editor carries {@code suiteId} on every PATCH, so a
+     * relocation and a rename arrive through the same request and differ only in which field
+     * changed.
+     */
+    private String declineBodyAt(UUID suiteId, List<UUID> declined) throws Exception {
         Map<String, Object> payload =
                 json.readValue(caseBody(List.of(), List.of()), new TypeReference<>() { });
         payload.put("title", "Check out as a guest");
-        payload.put("suiteId", DECLINE_SUITE.toString());
+        payload.put("suiteId", suiteId.toString());
         if (declined != null) {
             payload.put("declinedConditionIds", declined.stream().map(UUID::toString).toList());
         }
         return json.writeValueAsString(payload);
+    }
+
+    /** Soft-deletes a library entry mid-test, which is what "retired" is (§95). */
+    private void retire(UUID conditionId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "UPDATE condition SET deleted_at = now() WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, conditionId.toString());
+            statement.executeUpdate();
+        }
     }
 
     private MockHttpServletRequestBuilder patchDeclineCase(String payload) {
@@ -1110,8 +1227,14 @@ class ConditionWriteEndpointTest extends IntegrationTestBase {
                 INSERT INTO test_case
                     (id, company_id, project_id, suite_id, key, key_seq, title)
                 VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?)
-                ON CONFLICT (id) DO NOTHING
+                ON CONFLICT (id) DO UPDATE SET suite_id = EXCLUDED.suite_id
                 """)) {
+            // DO UPDATE on the FILING, not DO NOTHING, and only since §192 — that slice's tests
+            // MOVE the case, the rows outlive the method (nothing rolls back a MockMvc request),
+            // and what a case may decline is resolved from the folder it is stored in. Left as
+            // DO NOTHING, one move leaves DECLINE_CASE filed in NEUTRAL_SUITE and every later
+            // decline in the class is a legitimate 400 about a rule the case no longer inherits.
+            // The same hazard `condition` above resets lock_version for.
             statement.setString(1, id.toString());
             statement.setString(2, ACME.toString());
             statement.setString(3, BANKING.toString());

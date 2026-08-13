@@ -226,6 +226,11 @@ public class CaseCreateService {
                 renderer.vocabularies(userId, project.getId());
         ClassificationVocabulary vocabulary = ClassificationVocabulary.of(vocabularies);
 
+        // The requested folder's imposition, read once and used three times below — the same
+        // one-read rule the vocabulary above follows. Read from the REQUEST rather than from a
+        // stored row, because there is none.
+        CaseConditions.Reaching reaching = conditions.reachingAt(request.suiteId(), liveSuites);
+
         CaseEdit.Outcome validated = CaseEdit.validate(
                 request,
                 liveSuiteIds,
@@ -268,7 +273,13 @@ public class CaseCreateService {
                 // to obey it. Refusing here instead would have forced the clone to write the rows
                 // behind this path's back, and the version it wrote would then hash as a case that
                 // declines nothing.
-                conditions.declinableAttachmentIds(request.suiteId(), liveSuites),
+                reaching.declinable(),
+                // The retention bound (§192), and on this path it is the same folder by
+                // construction — a create cannot move a case, because there is nowhere to move it
+                // from. It still goes through the same bound rather than being waved past with the
+                // full set, so a clone landing in a folder that has since dropped the attachment
+                // its source declined does not carry a decline of a rule nothing imposes.
+                reaching.all(),
                 // Nothing stored, for the classification reason above: a create declines exactly
                 // what it asks to decline.
                 List.of(),
@@ -309,7 +320,8 @@ public class CaseCreateService {
         // was edited second.
         conditions.reconcileOptouts(
                 created.getId(),
-                conditions.declinableAttachmentIds(created.getSuiteId(), liveSuites),
+                reaching.declinable(),
+                reaching.all(),
                 edit.declinedConditionIds(),
                 companyId);
         // Beside the reconciles above and NOT inside `edit`: a tag is not authored content, so it

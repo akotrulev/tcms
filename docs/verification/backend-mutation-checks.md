@@ -2280,6 +2280,16 @@ handoff section (grepped before minting it, per the §154 banner — `AG`, `CD` 
 because two lanes independently reached for the obvious initials, and `CD` in particular is already
 twice-taken).
 
+> **THREE OF THE FOUR HOLES ARE CLOSED — §192, 2026-08-13.** `DC-1`, `DC-3` and `DC-5` each said
+> "the fixture needs a decline, then a move" and no test performed one. §192's slice is that move:
+> `ConditionWriteEndpointTest$Declining` now moves `DECLINE_CASE` between two folders and
+> `CaseBulkEndpointTest` moves a declined case through `MOVE_TO_SUITE`. **The mutations are not
+> re-usable as written, because §192 changed what they mutate** — the guard `DC-1` deletes is now
+> two guards and only one of them is the protection, and `DC-3`'s union is followed by a retention
+> intersection. Their replacements are `§192 DF-1`…`DF-3` below; the rows are kept here because
+> what they were written against is what §192 reversed, and because `DC-4` is **still** a hole for
+> exactly the reason it gives.
+
 **`DC-3` is the row this block exists for, and `DC-6` is the one whose expected result is green.**
 The hash rule — what a case declines *after* this save, never what the caller happened to know
 about it — is the slice's least obvious decision and the one a reader "simplifying a union" would
@@ -2392,3 +2402,37 @@ fresh container and reads three catalog queries.
 | `§190 SM-4` | Delete the `isPartOfAQualifiedName` call from `everySchemaIdentifierNamesALiveObject` | the rule, naming `links_changed` under `column case_doc_link.page_key` | The skip is load-bearing, not tidiness: `documentation.links_changed` is the outbox event type §167 added, and `app.current_company` is the RLS GUC. Without it both come back as offenders and the honest repair is three exemptions — which is how an ignore list grows past the point where anyone reads it (§162). ⬜ NOT RUN |
 | `§190 SM-5` | Add a reference to a **dropped table in dotted form** — e.g. `suite_parent_link.label` — to any comment | *nothing* — a **hole**, and stated as one | Neither rule can see it: the qualified rule ignores an unknown left half (it must, or every `plan §6f` and `docs/specs` becomes an offender), and the bare rule skips both halves of a dotted name. A dropped table written **bare** is caught (`SM-2`); written dotted it is invisible. The alternative is demanding that every module, package and event name in every sentence be a table, which is a rule nobody could keep. |
 | `§190 SM-6` | Add `"suite_case"` to `NOT_A_SCHEMA_IDENTIFIER` | `everyExemptionStillExemptsSomething` on its **second** direction — an exemption for a name the catalog declares | The map's two directions are different failures. A dead entry excuses nothing today; an entry shadowing a live name excuses nothing today **and starts excusing it on the day the object is dropped** — the exact event the class exists to catch, arriving pre-suppressed. ⬜ NOT RUN |
+
+## §192 — the decline that outlived its folder
+
+**Seven rows, none run** — §65. Ids are `§192 DF-*` (*declines follow the filing*); `DF` is unused
+across both queue files and every handoff section (grepped before minting it, per the §154 banner —
+`AG`, `CD` and `RL` all collided because two lanes independently reached for the obvious initials).
+
+**`DF-1` is the row this block exists for.** The retention bound is one `if` in
+`CaseConditions.reconcileOptouts` sitting immediately above the bound §187 wrote, and the two read
+almost identically: *not in `retained` → delete* against *not in `declinable` → keep*. A reader
+consolidating them into one guard gets a rule that either deletes a retired entry's decline or keeps
+a moved-away one, and both are silent.
+
+**`DF-4` is the row §187 could not write.** Three of that block's five holes (`DC-1`, `DC-3`,
+`DC-5`) were holes for one reason — *"needs a decline, then a move, and no test performs one"* — and
+this slice's fixtures perform exactly that on both writers. `DC-4` is **still** a hole, and its
+reason is unchanged: nothing sends one request that moves a case *and* names a decline… except that
+`DF-3` now does, which is what makes `DC-4`'s mutation observable at last. It is recorded here
+rather than back-patched into §187's block, per the id rule.
+
+**`DF-7` needs a database, not a build.** It is the only row in either queue whose subject is a
+`DO $$` block, and the only way to observe it is to migrate a container that already holds a
+violating row — `IntegrationTestBase` migrates a fresh one, so no test in this repository can see
+`V50` do anything at all.
+
+| Row | Mutate | Must redden | What a green build would mean |
+|---|---|---|---|
+| `§192 DF-1` | In `CaseConditions.reconcileOptouts`, delete the `!retained.contains(...)` arm, leaving §187's `declinable` guard alone — i.e. the code as it stood before this slice | `aMoveDeletesTheDeclinesItInvalidates` **and** `aDeclineDoesNotFollowTheCaseHome` (edit path) **and** `moveDropsTheDeclinesItInvalidates` (bulk) | The whole of §192. The row survives the move, shows on no list, cannot be undone from any screen, and switches a rule back off the day anything files the case back where it came from. It is the state §187 described in its own javadoc as this design's cost, which is why the reversal had to be pinned by three tests on two writers rather than one. ⬜ NOT RUN |
+| `§192 DF-2` | In the same method, **swap the two arms** — check `declinable` first and `continue`, then `retained` | `aRetiredEntryKeepsTheDecline` | The half §192 did **not** reverse, and the ordering is what separates them. A retired entry's attachment is not declinable but *is* retained, so testing `declinable` first deletes a decision the client could not restate — the exact failure §187's bound exists for, reintroduced by a reordering that looks like tidying. Two guards whose order is the rule is worth one row. ⬜ NOT RUN |
+| `§192 DF-3` | In `CaseEdit.normalizeDeclines`, drop the `.filter(retained::contains)` from the `submitted != null` return, keeping it on the absent branch | `aMoveThatRestatesTheDeclineIsNotARefusal` — on the **response**, not on the row | The hash and the row would disagree for one request shape only: a save that moves the case *and* restates the decline. `reconcileOptouts` still deletes the row (`DF-1`'s bound is independent), so the version records a decline the case does not carry and the next save — changing nothing — is credited with un-declining it. §187's `DC-3` from the other direction, and the reason the intersection is applied before `CaseVersions.decide` rather than after. ⬜ NOT RUN |
+| `§192 DF-4` | In `CaseBulkService`, delete the `context.declines().put(row.getId(), surviving)` line, keeping the reconcile | `theMoveVersionHashesTheSurvivingDeclines` | `DC-5`'s trap on the field that now moves. The rows go, the version says they did not, and every one of §95's and §187's warnings about reconstructing an edit from a stale context applies verbatim — the difference being that this is the first bulk command that *changes* one of the reconstructed fields rather than merely carrying it. ⬜ NOT RUN |
+| `§192 DF-5` | In `CaseBulkService.loadContext`, resolve `retainedAtTarget` from the case's **current** suite instead of `move.suiteId()` | `moveDropsTheDeclinesItInvalidates` | One suite id, and it inverts the rule: every decline is retained because every decline is imposed by the folder the case is leaving. It reads correctly — "the attachments reaching this case" — which is precisely the sentence the bound must **not** be about. ⬜ NOT RUN |
+| `§192 DF-6` | In `CaseUpdateService`, resolve `retained` from `testCase.getSuiteId()` unconditionally, dropping the `request.suiteId()` branch | `aMoveDeletesTheDeclinesItInvalidates` | `DF-5`'s mutation on the other writer, and the one a reader makes while "removing a redundant conditional" — the two suite ids are equal on every save that does not move the case, which is nearly all of them, so the mutation is invisible in the ordinary path and total in the one that matters. ⬜ NOT RUN |
+| `§192 DF-7` | Migrate a database that already holds a violating row (decline a case through `PATCH`, move it with `UPDATE test_case SET suite_id = …` behind the app's back, then run `V50`) | *nothing in the build* — a **hole**, and it needs a hand-built database | The sweep is the half a code change cannot reach: the writers hold the invariant from now on, and the rows already stored are `V50`'s alone. It is also the row where an RLS mistake is silent — a `DELETE` with no `app.current_company` set matches **zero rows and reports success** (V44 §3), so the migration would report a clean run over a database it changed nothing in. Run it by hand against a container with two companies' rows and check both are gone. ⬜ NOT RUN |

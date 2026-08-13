@@ -102,6 +102,13 @@ public class CaseBulkService {
     private final ConditionRepository conditions;
     private final CaseConditionRepository caseConditions;
     private final CaseConditionOptoutRepository caseOptouts;
+    /**
+     * §6f's resolver, injected for the two things only it may do — read what a folder imposes, and
+     * write the declines. A bulk move changes which folder a case is filed in, and the declines
+     * follow the filing (§192); doing that against {@link #caseOptouts} directly would be a second
+     * writer of the same rule, which is {@link CaseEdit#of}'s argument one table over.
+     */
+    private final CaseConditions caseConditionResolution;
     private final CaseClassificationRepository caseClassifications;
     private final CaseTagRepository caseTags;
     private final TestStepRepository stepRows;
@@ -120,6 +127,7 @@ public class CaseBulkService {
             ConditionRepository conditions,
             CaseConditionRepository caseConditions,
             CaseConditionOptoutRepository caseOptouts,
+            CaseConditions caseConditionResolution,
             CaseClassificationRepository caseClassifications,
             CaseTagRepository caseTags,
             TestStepRepository stepRows,
@@ -136,6 +144,7 @@ public class CaseBulkService {
         this.conditions = conditions;
         this.caseConditions = caseConditions;
         this.caseOptouts = caseOptouts;
+        this.caseConditionResolution = caseConditionResolution;
         this.caseClassifications = caseClassifications;
         this.caseTags = caseTags;
         this.stepRows = stepRows;
@@ -553,7 +562,35 @@ public class CaseBulkService {
 
             case BulkCommand.SetOwner owner -> row.assignOwner(owner.ownerId(), userId, now);
 
-            case BulkCommand.MoveToSuite move -> row.moveToSuite(move.suiteId(), userId, now);
+            case BulkCommand.MoveToSuite move -> {
+                row.moveToSuite(move.suiteId(), userId, now);
+
+                // §192. A decline is an exception to a rule the case's FOLDER imposes, so the ones
+                // the destination does not impose stop existing here — the same answer §129's clone
+                // rule has given since before there was a writer to obey it, and the reason it has
+                // to be applied on this path too is that a bulk move is the product's ONLY move
+                // over a selection. The narrowed list goes back into the context because
+                // writeVersion reconstructs the edit from it a few lines below, and a version
+                // hashing declines the row no longer carries is the trap `classificationOf`
+                // describes, arrived at from the one direction it cannot see.
+                List<UUID> stored = context.declinedIdsOf(row.getId());
+                if (!stored.isEmpty()) {
+                    List<UUID> surviving = stored.stream()
+                            .filter(context.retainedAtTarget()::contains)
+                            .toList();
+                    caseConditionResolution.reconcileOptouts(
+                            row.getId(),
+                            // Nothing is DECLINABLE on this path: a bulk move states nothing about
+                            // conditions, so no stored row is a candidate for the ordinary
+                            // "the client omitted it" deletion. The retention bound is the whole
+                            // of what acts here.
+                            Set.of(),
+                            context.retainedAtTarget(),
+                            surviving,
+                            companyId);
+                    context.declines().put(row.getId(), surviving);
+                }
+            }
 
             case BulkCommand.AddTags add -> {
                 Set<String> existing = context.tags().getOrDefault(row.getId(), Set.of());
@@ -707,6 +744,16 @@ public class CaseBulkService {
              * Each case's declined inherited attachments, unrestricted — see {@link #declinedIdsOf}.
              */
             Map<UUID, List<UUID>> declines,
+            /**
+             * Every {@code suite_condition} the destination folder imposes — <strong>empty for the
+             * seven commands that are not a move</strong>, and the retention bound the move applies
+             * to each case's declines (§192).
+             *
+             * <p>One suite for the whole operation, so this is one query for four hundred cases
+             * rather than one per case. Includes retired entries' attachments, which
+             * {@link CaseConditions.Reaching} explains: retention is not an authoring act.
+             */
+            Set<UUID> retainedAtTarget,
             Map<UUID, Set<UUID>> classifications,
             Map<UUID, CaseEdit> priorEdits,
             /**
@@ -871,6 +918,15 @@ public class CaseBulkService {
             }
         }
 
+        // The destination's imposition, once for the whole operation (§192) — see Context. Resolved
+        // for the move alone, and only when there is a case to move: the other seven commands do
+        // not change what any case inherits, so a stored decline of theirs is retained by
+        // definition and the query would answer a question nobody asks.
+        Set<UUID> retainedAtTarget = command instanceof BulkCommand.MoveToSuite move
+                && !found.isEmpty()
+                ? caseConditionResolution.reachingAt(move.suiteId(), liveSuites).all()
+                : Set.of();
+
         // Reconstructed once, here, and read twice — by the verdict (may this case be changed at
         // all) and by the version writer. Doing it in both places would read every case's steps
         // twice per operation, and would let the two disagree.
@@ -934,6 +990,7 @@ public class CaseBulkService {
                 tags,
                 byCase,
                 declinesByCase,
+                retainedAtTarget,
                 classificationsByCase,
                 Map.copyOf(priorEdits),
                 reviewRefusals,

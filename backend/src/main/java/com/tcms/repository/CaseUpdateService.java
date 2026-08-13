@@ -266,8 +266,20 @@ public class CaseUpdateService {
         // vocabulary above is: one answer to "what can this case decline", checked and applied.
         // It has to be read here rather than after applyEdit, because a save that also MOVES the
         // case would otherwise resolve the declines against the folder it is going to instead of
-        // the one the client was looking at. See CaseConditions#declinableAttachmentIds.
-        Set<UUID> declinable = conditions.declinableAttachmentIds(testCase, liveSuites);
+        // the one the client was looking at. See CaseConditions#reachingAt.
+        CaseConditions.Reaching here = conditions.reachingAt(testCase.getSuiteId(), liveSuites);
+        Set<UUID> declinable = here.declinable();
+
+        // And the RETENTION bound, at the folder the case will be in when this save is done (§192).
+        // The SAME folder in every save that does not move the case — which is nearly all of them,
+        // and the reason this is a conditional rather than a second unconditional query. A null
+        // suiteId is an unfiled case, which inherits nothing and therefore retains no decline; a
+        // suiteId this project does not offer is refused by validate below, and asking about it
+        // here first costs one query that answers nothing rather than a wrong answer.
+        Set<UUID> retained =
+                java.util.Objects.equals(request.suiteId(), testCase.getSuiteId())
+                        ? here.all()
+                        : conditions.reachingAt(request.suiteId(), liveSuites).all();
 
         CaseEdit.Outcome validated = CaseEdit.validate(
                 request,
@@ -280,6 +292,7 @@ public class CaseUpdateService {
                 conditions.liveAttachedIdsOf(testCase.getId(), ConditionKind.PRE),
                 conditions.liveAttachedIdsOf(testCase.getId(), ConditionKind.POST),
                 declinable,
+                retained,
                 conditions.storedDeclinedIds(testCase.getId()),
                 key -> cases.existsByAutomationKeyOtherThan(key, testCase.getId()));
 
@@ -311,7 +324,7 @@ public class CaseUpdateService {
         // than re-derived here — see `declinable` above. Before the render for the reason every
         // reconcile on this line is: the response IS the version snapshot.
         conditions.reconcileOptouts(
-                testCase.getId(), declinable, edit.declinedConditionIds(), companyId);
+                testCase.getId(), declinable, retained, edit.declinedConditionIds(), companyId);
         // Beside those two and NOT inside `edit`, because a tag is not authored content and is not
         // in CaseVersions#hash — see CaseEdit.Outcome.Valid. Before the render for the reason the
         // other reconciles are: the response IS the version snapshot, so a save that retagged a

@@ -8336,10 +8336,29 @@ export interface components {
              *     meaning exactly what they meant, and the declines are stated beside them.
              *
              *     Every entry is a `suite_condition` attachment that **currently reaches this case** —
-             *     the same suite chain `preconditions` is resolved over. An opt-out whose attachment
-             *     no longer reaches the case (the case moved folders, or the library entry was
-             *     retired) is **not** listed, and a save that does not mention it does not remove it;
-             *     `CaseConditions.reconcileOptouts` carries that bound and the reason for it.
+             *     the same suite chain `preconditions` is resolved over.
+             *
+             *     ~~An opt-out whose attachment no longer reaches the case (the case moved folders, or
+             *     the library entry was retired) is **not** listed, and a save that does not mention it
+             *     does not remove it.~~ → **§191 split those two causes**, because only one of them can
+             *     produce a row this list will never show again.
+             *
+             *     **Moving the case ENDS the declines its new folder does not impose**, whether the
+             *     move arrives as a `suiteId` on `PATCH /cases/{caseId}` or as a bulk `MOVE_TO_SUITE`,
+             *     and the version the move writes hashes the case without them. A decline is an
+             *     exception to a rule the case's folder imposes; since §98 a case inherits from the
+             *     folder it is *filed* in and from nothing else, so relocating it is the one act that
+             *     decides which standing rules govern it. `POST /cases/{caseId}/clone` has answered the
+             *     same question the same way since §129 — a clone landing outside the source's folder
+             *     carries none. A save may still *restate* a decline it is moving away from: the ids
+             *     are validated against the folder the client was looking at, so a client echoing back
+             *     what this response served is never a 400. It is simply not retained.
+             *
+             *     **Retiring the library entry does NOT.** That attachment still belongs to the case's
+             *     own folder, so the row survives a save that cannot mention it — nothing renders a
+             *     withdrawn procedure, so it is on no list while the entry is retired, and restoring
+             *     the entry brings the rule, the decline and its toggle back together.
+             *     `CaseConditions.reconcileOptouts` carries both bounds and the reason for each.
              *
              *     Detail only. Empty is the ordinary state — a case inherits everything above it
              *     unless something says otherwise — and it is required rather than omitted for
@@ -8462,19 +8481,21 @@ export interface components {
              *     leaves the declines alone; `[]` clears them all. The same absent-versus-empty rule
              *     `tags` and `classificationValueIds` use, and it matters here for their reason: a bulk
              *     action reconstructs a request without mentioning declines, and reading absent as
-             *     "clear" would have every move silently re-impose a rule an author had turned off.
+             *     "clear" would make the *reason* a decline ended depend on which client sent the save.
+             *     What ends one is stated below, not inferred from an omission.
              *
              *     Unordered — a set, not a procedure — so it is sorted and de-duplicated before it is
              *     hashed into the case's content version. Both kinds go in one array because a
              *     `suite_condition` id already determines its kind; splitting it would let a caller
              *     file an id under the wrong one.
              *
-             *     Validated against the attachments that **currently reach this case**, resolved over the
-             *     same suite chain `preconditions` is. An id that names no such attachment is a field
-             *     error rather than a stored row nothing can ever show. The converse bound is the one
-             *     worth knowing: a stored decline whose attachment no longer reaches the case survives a
-             *     save that omits it, because the client was never shown it and cannot resubmit it —
-             *     `CaseConditions.reconcile`'s retired-attachment rule, transferred.
+             *     Validated against the attachments that **currently reach this case** — the folder the
+             *     case is stored in as this request arrives, which is the one the client was looking at.
+             *     An id that names no such attachment is a field error rather than a stored row nothing
+             *     can ever show. **A `suiteId` on the same request does not move that goalpost**: it is
+             *     legitimate to restate a decline while relocating a case, and the relocation is what ends
+             *     it rather than a refusal. See `TestCase.declinedPreconditions` for which of the two ways
+             *     a decline stops applying ends the row and which does not.
              */
             declinedConditionIds?: string[];
             /** @description Optional by design — mandatory comments produce a thousand "update"s. */
@@ -8873,6 +8894,12 @@ export interface components {
             /**
              * Format: uuid
              * @description Required by `MOVE_TO_SUITE`. Must be a live suite in this project.
+             *
+             *     The move changes what each case **inherits**, and therefore what its declines can be
+             *     exceptions to: every `case_condition_optout` the destination does not impose ends here,
+             *     and the version the move writes hashes the case without it (§191). See
+             *     `TestCase.declinedPreconditions`. Nothing else about a case's conditions changes — the
+             *     case's *own* attachments travel with it, as they always have.
              */
             suiteId?: string;
             /**

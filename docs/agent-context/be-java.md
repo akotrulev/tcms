@@ -2,17 +2,58 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-13 (**§190** — a table comment is checked against the catalog, `V49` restated two of them, and a full stop is not a qualifier; **§188** — both column rules' corpora are `src/main`, `@Version` is skipped by the writer rule, a test that SELECTs a column is no longer that column's reader, and an explicit `= null` is a writer to a bytecode rule; **§187** — `case_condition_optout` has a writer at last, the declined rows are served on two lists of their own because `preconditions` is what a run pins, the hash must be what the case declines *after* the save, and a table whose only writer is a fixture reads as written to the column rule; **§186** — `suite_condition` has a writer at last, a suite serves two condition lists instead of one, and its reconcile must rewrite in place because `case_condition_optout` points at the rows; **§185** — the blob roots are provisioned by the image and pinned by a rule, a bind mount and a named volume behave oppositely, the store refuses to start on an unusable root, and a text rule reading a file outside `src/` is green by cache unless `build.gradle.kts` declares it; **§184** — `DashboardService.health` is the only ordering of health tiles, it is package-private for its own test, and its second comparator key had never been observed; **§182** — `case_health` has no open work left: every column is derived, `HealthSignal` has an eleventh member, and the boundary test stopped needing a witness; **§181** — every health signal has a writer, `ORPHANED` means the owner is no longer in the company's directory, and `incomplete` changed which by-decision map it is in; **§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
+**Last verified:** 2026-08-13 (**§192** — a decline lives exactly as long as its folder imposes the rule, `reconcileOptouts` carries two bounds whose order is the rule, `declinableAttachmentIds` is now `reachingAt` returning both sets, and `V50` sweeps what the writers cannot reach; **§190** — a table comment is checked against the catalog, `V49` restated two of them, and a full stop is not a qualifier; **§188** — both column rules' corpora are `src/main`, `@Version` is skipped by the writer rule, a test that SELECTs a column is no longer that column's reader, and an explicit `= null` is a writer to a bytecode rule; **§187** — `case_condition_optout` has a writer at last, the declined rows are served on two lists of their own because `preconditions` is what a run pins, the hash must be what the case declines *after* the save, and a table whose only writer is a fixture reads as written to the column rule; **§186** — `suite_condition` has a writer at last, a suite serves two condition lists instead of one, and its reconcile must rewrite in place because `case_condition_optout` points at the rows; **§185** — the blob roots are provisioned by the image and pinned by a rule, a bind mount and a named volume behave oppositely, the store refuses to start on an unusable root, and a text rule reading a file outside `src/` is green by cache unless `build.gradle.kts` declares it; **§184** — `DashboardService.health` is the only ordering of health tiles, it is package-private for its own test, and its second comparator key had never been observed; **§182** — `case_health` has no open work left: every column is derived, `HealthSignal` has an eleventh member, and the boundary test stopped needing a witness; **§181** — every health signal has a writer, `ORPHANED` means the owner is no longer in the company's directory, and `incomplete` changed which by-decision map it is in; **§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
 last two came off `case_doc_link`, the statement's *order* inside the recompute is load-bearing, and
 `UNLINKED` counts every relationship while the coverage sites count one; **§177** — `test_run.commit_sha` / `.branch` have a writer, the git-object regex is a pinned second copy, and the clone inherits neither; **§176** — the four contract-binding rules are two questions over two populations, and a bound-and-undeclared query parameter fails the build; **§175** — one `TeamRef`, in `com.tcms.api`, with two inline schemas made `$ref`s and `isLead` off the wire; **§174** — `doc_link.relationship` is the one mutable column, `V48` records who moved it, and both ends got the endpoint; **§171** — the form parts nobody compared: the four multipart bodies are exempt from *pairing* and no longer exempt from *comparison*; **§170** — the population the pairing rule could not see: every object schema, named and inline, is paired or excused, and two ingestion inputs nothing read are gone; **§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `48218a4` (§189 shipped and recorded — `packages/` only; §190 phase 1 shipped, the records are this commit) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `93df45d` (§190 and §191 shipped and recorded — §191 is another lane's, `frontend/` test code only; §192 is this commit — one phase, `backend/` + `V50` + a contract description) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
+
+## §192 — A DECLINE LIVES AS LONG AS ITS FOLDER IMPOSES THE RULE
+
+Read this with §187's section below, which it half-reverses. **`CaseConditions.reconcileOptouts`
+carries TWO bounds and the order of the two `if`s is the rule.**
+
+    optout.suite_condition.suite_id = test_case.suite_id, for every row.   (V50 swept, V50 comments)
+
+- **`declinableAttachmentIds` is GONE.** One method answers both bounds:
+  `CaseConditions.reachingAt(suiteId, liveSuites)` → `Reaching(all, declinable)`. `all` includes
+  **retired entries' attachments**; `declinable` does not. They differ by exactly that, and each
+  bound wants a different one.
+- **`retained` (= `Reaching.all()` at the POST-SAVE folder) ⇒ outside it, DELETE, whatever the
+  request said.** A move is the only way out of that set, and a move is the one act that decides
+  which standing rules govern a case (§98: inheritance follows *filing* alone).
+- **`declinable` ⇒ inside `retained` but outside this, KEEP, whatever the request omitted.** The
+  retired-entry case: nothing renders a withdrawn procedure, so the client could not restate it.
+  **Swapping the two arms deletes exactly the rows §187's bound exists for** and looks like tidying
+  (`§192 DF-2`).
+- **`CaseEdit.normalizeDeclines` intersects with `retained` LAST**, after §187's union — so the hash
+  is what the case declines after the save. Bounding it after `CaseVersions.decide` instead records
+  a decline the row does not carry, and the next no-op save is credited with un-declining it.
+- **Validated against the OLD folder, stored against the NEW.** A request that moves the case *and*
+  restates a decline of the folder it is leaving is a **200**, not a 400 — refusing it is the screen
+  rejecting a value it just served. It is simply not retained.
+- **`CaseEdit.of` passes `Set.copyOf(storedDeclinedIds)` — "retain all of it".** It cannot pass
+  `Set.of()` the way it passes an empty `declinable`: that one is never consulted for a null field
+  and this one always is. **The bulk caller narrows instead** — one `MOVE_TO_SUITE` has one
+  destination, so it is one query for four hundred cases — and it must also
+  `context.declines().put(...)` the narrowed list, because `writeVersion` reconstructs from it.
+- **The reason this reverses §187 is that the CLONE had already answered it.** `declinedAtSuite` has
+  carried a clone's declines only into the source's own folder since §129, so a *moved* case was
+  declining a rule a *copy* of it would not.
+- **`V50` is a DML migration under RLS** — the `company` loop with `set_config(..., true)`, V44's
+  pattern, fourth use. A `DELETE` with no `app.current_company` set matches **zero rows and reports
+  success**. Nothing in the build can observe it: `IntegrationTestBase` migrates a fresh container,
+  so there is never a violating row (`§192 DF-7`, a hole).
+- **Fixture trap, §187's one table over**: `ON CONFLICT DO NOTHING` on a `test_case` seed does not
+  reset `suite_id`, and MockMvc rows outlive the method — so one test that moves a case leaves every
+  later decline in the class a legitimate 400. The seed is `DO UPDATE SET suite_id` now. In
+  `CaseBulkEndpointTest`, `suite_condition` must be deleted **before** `condition` in the reset.
 
 ## §190 — A COMMENT IS CHECKED NOW, AND `V1`'S TEXT IS NOT WHAT `\d+` PRINTS
 
@@ -295,15 +336,15 @@ or before "simplifying" the union in either.**
   on a third field.
 - **`declinable` is resolved BEFORE `applyEdit`, and reused by the reconcile.** A save that also
   moves the case would otherwise validate against the folder it is going *to*, not the one the
-  client was looking at.
+  client was looking at. **Since §192 it is one of TWO bounds — see that section.**
 - **The CREATE path accepts declines because `CaseCloneService` is a caller.** The SPA's create form
   draws no inherited marker, so no screen reaches it; the clone does, and its §129 header prescribed
   the rule (`declinedAtSuite`: carry them when the clone lands in the source's own suite, none
   otherwise). Writing the rows behind the create path's back would record a v1 hashing as a case
   that declines nothing.
-- **The INERT decline is real and invisible.** A decline whose attachment no longer reaches the case
-  survives every save. Nothing shows it, no test reaches it, and four of `§187 DC-1`…`DC-6` are
-  holes for that one reason.
+- ~~**The INERT decline is real and invisible.** A decline whose attachment no longer reaches the
+  case survives every save.~~ → **HALF-REVERSED BY §192**: a **move** ends the decline now; a
+  **retired entry** still does not. Three of the four holes closed with it.
 - **A suite-level attachment is inherited by every case filed beneath it**, so a `suite_condition`
   fixture cannot be shared with tests that assert `preconditions` — it reddened five of
   `ConditionWriteEndpointTest`'s twice. §187's fixture is a suite, a case and an empty third folder

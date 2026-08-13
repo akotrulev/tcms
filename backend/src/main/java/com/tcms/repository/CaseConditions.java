@@ -151,46 +151,38 @@ public class CaseConditions {
     }
 
     /**
-     * The inherited attachments this case is <strong>allowed to decline</strong> — every
-     * {@code suite_condition} reaching it whose library entry is still live.
+     * The attachments a case filed in {@code suiteId} inherits, in the two bounds §6f needs —
+     * <strong>one query answering both</strong>.
      *
-     * <p>Read once per save and used for two things that must not disagree: it is what
-     * {@link CaseEdit#validate} checks a submitted id against, and it is the removal bound
-     * {@link #reconcileOptouts} applies. Two reads would be two answers to "what can this case
-     * decline" a few lines apart, and the write would be checked against one while being applied
+     * <p>Read once per save and used for three things that must not disagree: {@link #declinable()}
+     * is what {@link CaseEdit#validate} checks a submitted id against and the removal bound
+     * {@link #reconcileOptouts} applies, and {@link Reaching#all()} is the <em>retention</em> bound
+     * both of those also take (§192). Two reads would be two answers to "what does this folder
+     * impose" a few lines apart, and the write would be checked against one while being applied
      * under the other — {@link CaseUpdateService}'s reason for resolving the vocabulary before
      * validating, at a second table.
      *
-     * <p><strong>Live entries only, and that is the same bound {@link #reconcile} carries.</strong>
-     * A retired entry's attachment is not served on any list, so a client cannot resubmit its
-     * decline and must not have it deleted for the omission.
+     * <p><strong>The two sets differ by exactly the retired entries</strong>, and each bound wants
+     * a different one. Declining is an authoring act, so it is bounded by what the author can see
+     * ({@link #reconcile}'s rule, transferred): a retired entry's attachment is on no list, so it
+     * can be neither declined nor un-declined. <em>Retention</em> is not an authoring act and must
+     * not use that bound — a decline whose entry was retired is still a decline of a rule this
+     * folder imposes, and the entry can be restored.
      *
-     * <p>Resolved against the case's <em>stored</em> suite, deliberately, even when the same save
-     * moves it. The client's set describes the folder it was looking at; a move brings a new
-     * ancestry whose attachments nobody has decided about yet, so they arrive in force and the
-     * declines against the old folder become inert rather than being reinterpreted. See
-     * {@link #reconcileOptouts} for what "inert" costs.
+     * <p>Takes a {@code suiteId} rather than a {@link TestCase} because both callers that matter
+     * ask about a folder the case is not in yet: a create has no row to ask, and an edit that moves
+     * the case asks about the folder it is going to. Inventing a half-built {@link TestCase} to
+     * satisfy a signature is how a row that does not exist reaches code that assumes a stored one.
      */
-    Set<UUID> declinableAttachmentIds(TestCase testCase, List<Suite> liveSuites) {
-        return declinableAttachmentIds(testCase.getSuiteId(), liveSuites);
-    }
-
-    /**
-     * The same set for a case that does not exist yet — the create and clone paths' form.
-     *
-     * <p>Split from the overload above rather than being folded into it, because a create has no
-     * {@link TestCase} to ask and inventing one to satisfy a signature is how a half-built row
-     * reaches code that assumes a stored one.
-     */
-    Set<UUID> declinableAttachmentIds(UUID suiteId, List<Suite> liveSuites) {
+    Reaching reachingAt(UUID suiteId, List<Suite> liveSuites) {
         List<Suite> chain = ancestry(suiteId, liveSuites);
         if (chain.isEmpty()) {
-            return Set.of();
+            return Reaching.NONE;
         }
         List<SuiteCondition> reaching =
                 inherited.findForSuites(chain.stream().map(Suite::getId).toList());
         if (reaching.isEmpty()) {
-            return Set.of();
+            return Reaching.NONE;
         }
 
         Set<UUID> referenced = new LinkedHashSet<>();
@@ -198,13 +190,29 @@ public class CaseConditions {
         Set<UUID> live = new HashSet<>();
         library.findLiveByIds(referenced).forEach(condition -> live.add(condition.getId()));
 
+        Set<UUID> all = new LinkedHashSet<>();
         Set<UUID> declinable = new LinkedHashSet<>();
         for (SuiteCondition attachment : reaching) {
+            all.add(attachment.getId());
             if (live.contains(attachment.getConditionId())) {
                 declinable.add(attachment.getId());
             }
         }
-        return declinable;
+        return new Reaching(Set.copyOf(all), Set.copyOf(declinable));
+    }
+
+    /**
+     * One folder's imposition on a case filed in it.
+     *
+     * @param all        every {@code suite_condition} reaching the case, retired entries included —
+     *                   the <strong>retention</strong> bound (§192). A stored decline outside this
+     *                   set is a decision about a folder the case is not in.
+     * @param declinable the subset whose library entry is still live — the <strong>authoring</strong>
+     *                   bound, which is what a client can name.
+     */
+    record Reaching(Set<UUID> all, Set<UUID> declinable) {
+
+        static final Reaching NONE = new Reaching(Set.of(), Set.of());
     }
 
     /**
@@ -215,6 +223,10 @@ public class CaseConditions {
      * differ, deliberately. That method is bounded by what the project still offers because its
      * value is a <em>reconcile</em> input; this one feeds {@link CaseEdit#normalizeDeclines}, whose
      * output is hashed, and a hash input must be a function of the stored row and nothing else.
+     *
+     * <p>Since §192 the rows outside a client's view are the retired-entry ones alone, so this
+     * differs from what any list shows by less than it did — but it is still not the same set, and
+     * the reason to read it unrestricted is unchanged.
      *
      * <p>Bound it here instead and the bulk path breaks in the way {@link CaseBulkService} keeps
      * warning about: {@link CaseEdit#of} would have to resolve a suite chain and a library per case
@@ -234,30 +246,50 @@ public class CaseConditions {
      * Brings this case's declines in line with the submitted set, in the caller's transaction —
      * <strong>the writer {@code case_condition_optout} shipped in {@code V1} without</strong>.
      *
-     * <h2>The removal bound, which is the whole reason this is not a delete-all-and-reinsert</h2>
+     * <h2>Two bounds, and they answer opposite questions</h2>
      *
-     * <p>{@link #reconcile}'s retired-attachment rule, transferred to the other table. Only
-     * declines against an attachment in {@code declinable} are candidates for deletion, so a
-     * decline whose {@code suite_condition} no longer reaches this case survives a save that does
-     * not mention it. That state has two ordinary causes — the case moved to another folder, and
-     * the library entry behind the attachment was retired — and in both the client was never shown
-     * the row and therefore cannot resubmit it. Without the bound, the first save after either
-     * event silently discards a decision an author made, and the evidence it was ever made goes
-     * with it.
+     * <p><strong>The retention bound, {@code retained} (§192).</strong> A decline is an exception to
+     * a rule this case's folder imposes, so it lives exactly as long as its {@code suite_condition}
+     * hangs off that folder. A row outside {@code retained} is deleted <em>whatever the request
+     * said</em>, because the only way out of that set is the case being moved — and a move is a
+     * statement about which standing rules govern the case, since inheritance follows filing and
+     * nothing else (§98). The clone path has answered this question the same way since §129:
+     * {@link #declinedAtSuite} carries a clone's declines only when it lands in the source's own
+     * folder, and a move that kept them would have the same case declining a rule after relocation
+     * that a copy of it would not.
      *
-     * <p><strong>The cost is stated rather than discovered</strong>: an inert decline is invisible
+     * <p><strong>The removal bound, {@code declinable}.</strong> {@link #reconcile}'s
+     * retired-attachment rule, transferred to the other table. Among the rows that survive the
+     * first bound, only those in {@code declinable} are candidates for deletion — so a decline whose
+     * library entry has been retired survives a save that does not mention it, because that row was
+     * on no list the client saw and reading its absence as an instruction would delete a decision
+     * the client never had the chance to restate. That is a genuinely temporary invisibility:
+     * restoring the entry brings the attachment, the decline and the toggle back together.
+     *
+     * <p>~~<strong>The cost is stated rather than discovered</strong>: an inert decline is invisible
      * state. Move the case back under <em>Billing</em> and a rule the author turned off six months
      * ago is off again, with nothing on the screen having said so in between. The alternative —
      * deleting declines on a move — loses the decision on an action that said nothing about
-     * conditions, which is the worse of the two, and it is the same trade {@link #reconcile}
-     * already made for a retired entry's attachment.
+     * conditions, which is the worse of the two~~ → <strong>superseded by §192, and the reversal
+     * turns on that last clause being wrong</strong>. A move is not an action that says nothing
+     * about conditions; it is the only action that decides which ones apply. What §187 protected
+     * was a decision the author could not see, could not undo and could not be warned about — it
+     * re-armed itself the day anything moved the case back. The trade is not symmetric with the
+     * retired-entry one above, because retirement is reversible and a move is a new decision.
      *
-     * @param wanted the complete set, already validated against {@code declinable}, de-duplicated
+     * @param retained every attachment reaching the case's suite <em>after this save</em>, retired
+     *                 entries included — {@link Reaching#all()} at the post-save folder
+     * @param wanted the complete set, already validated against {@code declinable} and already
+     *               intersected with {@code retained} by {@link CaseEdit}
      * @param companyId written onto every new row for {@link #reconcile}'s reason: RLS refuses an
      *                  insert whose value does not match {@code app.current_company}
      */
     void reconcileOptouts(
-            UUID caseId, Set<UUID> declinable, List<UUID> wanted, UUID companyId) {
+            UUID caseId,
+            Set<UUID> declinable,
+            Set<UUID> retained,
+            List<UUID> wanted,
+            UUID companyId) {
 
         List<CaseConditionOptout> stored = optouts.findForCase(caseId);
 
@@ -267,9 +299,15 @@ public class CaseConditions {
 
         for (CaseConditionOptout row : stored) {
             alreadyDeclined.add(row.getSuiteConditionId());
+            if (!retained.contains(row.getSuiteConditionId())) {
+                // The case has left the folder that imposed the rule. Deleted rather than kept —
+                // see the header; this is the half §187 got wrong.
+                stale.add(row);
+                continue;
+            }
             if (!declinable.contains(row.getSuiteConditionId())) {
-                // Not reachable from this case today, so it was not on any list the client saw.
-                // Protected rather than deleted — see the header.
+                // Still imposed by this folder, but behind a retired entry, so it was on no list
+                // the client saw. Protected rather than deleted — see the header.
                 continue;
             }
             if (!keep.contains(row.getSuiteConditionId())) {
@@ -521,8 +559,10 @@ public class CaseConditions {
      * Which of these attachments this case has declined — usually none.
      *
      * <p>Restricted to the attachments passed in rather than returning every stored row, because a
-     * decline against a folder the case has since left is inert and naming it would invite a caller
-     * to render it. {@link #reconcileOptouts} is the one place that cares those rows exist.
+     * decline whose library entry has been retired is not renderable — it has no title — and naming
+     * it would invite a caller to render it. Since §192 that is the <em>only</em> stored row this
+     * restriction can drop: a decline against a folder the case has left no longer exists, because
+     * the move that took the case out of the folder deleted it ({@link #reconcileOptouts}).
      */
     private Set<UUID> declinedAmong(UUID caseId, List<SuiteCondition> attachments) {
         if (attachments.isEmpty()) {
