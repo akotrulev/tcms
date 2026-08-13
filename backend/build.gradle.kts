@@ -103,11 +103,20 @@ tasks.withType<Test>().configureEach {
     // hand-kept tally §152–§156 replaced four times. `optional`, because the Docker build stage
     // copies only the build definition and `src` into its context, so these paths do not exist
     // while it configures the build to run `bootJar -x test`.
+    // A single FILE for the SPA and not its directory, which is the opposite of the choice above
+    // and for the reason that choice states: a fifth artifact under `deploy` or `docs/specs` is
+    // one this suite would want to see, while `frontend/src` is another stack's whole source tree
+    // and declaring it would re-run every backend test on every unrelated component edit. §188's
+    // SeedDataTest.areasMatchTheSpa reads exactly one file there — permission.area's only
+    // justification for existing is that it agrees with that file's `permissionAreas` — so the
+    // declaration is exactly one file, and a second such read must add its own line here rather
+    // than widening this one to the directory.
     inputs.files(
         file("Dockerfile"),
         file("../compose.yaml"),
         file("../deploy"),
         file("../docs/specs"),
+        file("../frontend/src/lib/permissions.ts"),
     ).withPropertyName("outOfSourceArtifactsReadByTests")
         .withPathSensitivity(PathSensitivity.RELATIVE)
         .optional(true)

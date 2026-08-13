@@ -18,6 +18,10 @@ import jakarta.persistence.Table;
  *
  * <p>{@link #area} matches {@code lib/permissions.ts} exactly, because both sides group a
  * 55-item list for humans and two different groupings would be two different products.
+ * <strong>That sentence was unchecked from M0 to §188</strong> — {@code SeedDataTest} compared the
+ * catalogue's <em>keys</em> to the contract and the SPA's {@code satisfies Record<PermissionKey,
+ * Area>} pinned its keys to the same contract, so both ends were held to the same 55 keys and
+ * neither looked at the <em>value</em>. {@code SeedDataTest.areasMatchTheSpa} is the comparison.
  */
 @Entity
 @Table(name = "permission")

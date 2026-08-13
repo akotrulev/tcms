@@ -27,7 +27,15 @@ type Area =
   | 'company'
   | 'system';
 
-/** Every permission, keyed to its area. Exhaustive against the contract by construction. */
+/**
+ * Every permission, keyed to its area. Exhaustive against the contract by construction.
+ *
+ * The `satisfies` clause below holds the KEYS to the contract and says nothing about the VALUES.
+ * Those are the second copy of `permission.area`, which V3 seeds and no backend code reads — the
+ * column's whole justification is that it agrees with this map. `SeedDataTest.areasMatchTheSpa`
+ * (backend) compares the two and reads this file directly, so moving a permission to a different
+ * area here fails the backend build until the seed moves with it, in a corrective migration.
+ */
 export const permissionAreas = {
   'suite:manage': 'repository',
   'suite:delete': 'repository',

@@ -13,7 +13,9 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -111,6 +113,50 @@ class SeedDataTest extends IntegrationTestBase {
                         to a corrective migration together with the roles that should hold them.""")
                 .isEmpty();
         assertThat(seeded).as("the v1 catalogue is 55 keys (spec Part A3)").hasSize(55);
+    }
+
+    @Test
+    @DisplayName("permission.area matches lib/permissions.ts exactly — the claim two headers made")
+    void areasMatchTheSpa() throws SQLException, IOException {
+        // V3's header and Permission's class javadoc have both said, since M0, that `area` "matches
+        // lib/permissions.ts exactly, because both sides group a 55-item list for humans and two
+        // different groupings would be two different products". Nothing checked it, and §188 is why
+        // that matters more than it looks: `permission.area` is READERLESS — no endpoint serves it,
+        // no query selects it, PermissionRepository declares no method. Its whole justification for
+        // existing is a claim about a file in another stack.
+        //
+        // The three checks around it do NOT cover this. catalogueMatchesTheContract compares the
+        // KEYS to openapi.yaml, and the SPA's own `satisfies Record<PermissionKey, Area>` holds its
+        // keys to the same contract at compile time — so both ends are pinned to the same 55 keys
+        // and NEITHER looks at the value. A permission moved from 'repository' to 'project' on one
+        // side alone typechecks, seeds, and passes every one of them.
+        //
+        // Reading a file outside backend/ is deliberate and it is the same argument
+        // permissionKeysFromContract makes for reading the YAML: the catalogue is a repo-level
+        // artifact, and this is the only place on either side that can make the divergence a build
+        // failure. IT ALSO NEEDS A LINE IN build.gradle.kts — §185's lesson, and the reason that
+        // file already lists ../docs/specs: Gradle tracks a Test task's classpath and resources, so
+        // without the declaration an edit to permissions.ts leaves :test UP-TO-DATE and this rule
+        // is green by cache, which is worse than not having it.
+        Map<String, String> seeded = new TreeMap<>();
+        try (Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery("SELECT key, area FROM permission")) {
+            while (rs.next()) {
+                seeded.put(rs.getString(1), rs.getString(2));
+            }
+        }
+
+        assertThat(seeded)
+                .as("""
+                        The seeded permission areas and the SPA's permissionAreas disagree. Both \
+                        sides group the same 55 keys for humans and two different groupings are two \
+                        different products — V3's header and Permission's javadoc have claimed they \
+                        match since M0, and this is the first thing to check it. Nothing in the \
+                        backend READS permission.area (ArchitectureRulesTest.READERLESS_BY_DECISION), \
+                        so agreeing with lib/permissions.ts is the entire reason the column is \
+                        maintained: decide which grouping is right, then fix the other side — the \
+                        seed with a corrective migration, or the .ts file.""")
+                .isEqualTo(permissionAreasFromTheSpa());
     }
 
     @Test
@@ -723,18 +769,58 @@ class SeedDataTest extends IntegrationTestBase {
         return keys;
     }
 
+    /**
+     * {@code permissionAreas} as written in {@code frontend/src/lib/permissions.ts}.
+     *
+     * <p>Parsed from the source rather than from anything generated, for the same reason
+     * {@link #permissionKeysFromContract} parses the YAML: this map is hand-maintained and is
+     * therefore the thing that can drift. The {@code satisfies Record<PermissionKey, Area>} the
+     * class header credits holds the <em>keys</em> to the contract at compile time and says nothing
+     * whatever about the <em>values</em>, which is the half being compared here.
+     */
+    private static Map<String, String> permissionAreasFromTheSpa() throws IOException {
+        Path source = locateRepositoryFile("frontend/src/lib/permissions.ts");
+        String typescript = Files.readString(source);
+
+        int start = typescript.indexOf("export const permissionAreas = {");
+        assertThat(start)
+                .as("lib/permissions.ts no longer exports permissionAreas — fix this parse rather "
+                        + "than deleting the comparison")
+                .isNotNegative();
+        int end = typescript.indexOf("\n} as const satisfies Record<PermissionKey, Area>;", start);
+        assertThat(end)
+                .as("permissionAreas no longer closes with `satisfies Record<PermissionKey, Area>` "
+                        + "— that clause is what makes the SPA's copy exhaustive, so its "
+                        + "disappearance is a finding and not a parse problem")
+                .isNotNegative();
+
+        Map<String, String> areas = new TreeMap<>();
+        Matcher matcher = Pattern.compile("'([^']+)':\\s*'([^']+)'")
+                .matcher(typescript.substring(start, end));
+        while (matcher.find()) {
+            areas.put(matcher.group(1), matcher.group(2));
+        }
+        assertThat(areas).as("parsed no permission areas out of lib/permissions.ts").isNotEmpty();
+        return areas;
+    }
+
     private static Path locateContract() {
+        return locateRepositoryFile("docs/specs/openapi.yaml");
+    }
+
+    private static Path locateRepositoryFile(String relative) {
         Path directory = Path.of("").toAbsolutePath();
         while (directory != null) {
-            Path candidate = directory.resolve("docs/specs/openapi.yaml");
+            Path candidate = directory.resolve(relative);
             if (Files.exists(candidate)) {
                 return candidate;
             }
             directory = directory.getParent();
         }
         throw new IllegalStateException(
-                "docs/specs/openapi.yaml not found above " + Path.of("").toAbsolutePath()
-                        + " — the backend and the contract must be checked out together, since the "
-                        + "SPA is served from the boot jar and both sides share one catalogue.");
+                relative + " not found above " + Path.of("").toAbsolutePath()
+                        + " — the backend, the contract and the SPA must be checked out together, "
+                        + "since the SPA is served from the boot jar and all three share one "
+                        + "catalogue.");
     }
 }
