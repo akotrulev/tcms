@@ -8,6 +8,49 @@ import { describe, expect, it } from 'vitest';
 import { EXIT, main } from './main.js';
 import { PROJECT, api, env, mainWith, recorder } from './test/harness.js';
 
+/**
+ * A case detail with all four condition arrays, which is what the contract requires of one.
+ *
+ * `sc-1` and `sc-2` are `suite_condition` **attachment** ids — what `--decline` takes — and
+ * `cond-1`/`cond-2` the library entries behind them. The two are different ids on purpose: the
+ * same library entry attached at two suites is two attachments, and declining one must leave the
+ * other in force.
+ */
+const CASE_DETAIL = {
+  id: 'c-9',
+  key: 'TC-42',
+  title: 'Login works',
+  lifecycleStatus: 'APPROVED',
+  tags: [],
+  preconditions: [
+    {
+      id: 'sc-1',
+      position: 1,
+      conditionId: 'cond-1',
+      title: 'Log in',
+      body: ['Sign in as ops@acme.test'],
+      inline: false,
+      inherited: true,
+      inheritedFrom: 'Billing',
+    },
+  ],
+  postconditions: [],
+  declinedPreconditions: [
+    {
+      id: 'sc-2',
+      position: 2,
+      conditionId: 'cond-2',
+      title: 'Seed the ledger',
+      body: ['Insert three settled invoices'],
+      inline: false,
+      inherited: true,
+      inheritedFrom: 'Billing',
+    },
+  ],
+  declinedPostconditions: [],
+  lockVersion: 3,
+};
+
 describe('argument handling', () => {
   it('prints usage and exits 2 when given nothing', async () => {
     const out = recorder();
@@ -152,10 +195,7 @@ describe('reads', () => {
     const stub = api({
       '/projects': { status: 200, body: [PROJECT] },
       '/cases': { status: 200, body: { page: 0, size: 1, total: 1, facets: [], items: [{ id: 'c-9', key: 'TC-42' }] } },
-      '/cases/c-9': {
-        status: 200,
-        body: { id: 'c-9', key: 'TC-42', title: 'Login works', lifecycleStatus: 'APPROVED', tags: [], lockVersion: 3 },
-      },
+      '/cases/c-9': { status: 200, body: CASE_DETAIL },
     });
 
     expect(await mainWith(['case', 'show', 'TC-42'], out, stub.fetch)).toBe(EXIT.ok);
@@ -163,6 +203,90 @@ describe('reads', () => {
     // The lock version is printed because every edit needs it — omitting If-Match is
     // last-write-wins, which is the worst thing this surface can do silently.
     expect(out.stdout).toContain('Lock version: 3');
+  });
+
+  /*
+    §189. The ids are the reason this table exists: `case edit --decline` takes `suite_condition`
+    ATTACHMENT ids, and until this command printed them the only way to learn one at a terminal
+    was `--json`. A flag whose argument the surface cannot tell you is a flag nobody can use.
+
+    The fixture is the whole resource for the reason `writes.test.ts` states over its own: this
+    stub used to carry six fields, none of the four condition arrays among them, and a partial
+    fixture agrees with a client that reads nothing.
+  */
+  it('prints each condition with its attachment id, and says which are declined', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      '/cases': { status: 200, body: { page: 0, size: 1, total: 1, facets: [], items: [{ id: 'c-9', key: 'TC-42' }] } },
+      '/cases/c-9': { status: 200, body: CASE_DETAIL },
+    });
+
+    expect(await mainWith(['case', 'show', 'TC-42'], out, stub.fetch)).toBe(EXIT.ok);
+
+    expect(out.stdout).toContain('sc-1');
+    expect(out.stdout).toContain('Log in');
+    // Declined entries are printed BESIDE the live ones, never merged into them: the server
+    // serves two arrays because a declined condition is not part of what the case does.
+    expect(out.stdout).toMatch(/sc-2.*declined/);
+    expect(out.stdout).toMatch(/sc-1.*in force/);
+    // Where an inherited rule came from is the context for refusing it.
+    expect(out.stdout).toContain('Billing');
+  });
+
+  /*
+    §189's other half. `suite edit --precondition` takes a LIBRARY id, and `case edit --decline`
+    takes an ATTACHMENT id; the two are one column apart in this table and neither works in the
+    other's flag. Printing only one of them makes one of the two writes unusable.
+  */
+  it('prints a suite’s conditions with the library id first and the attachment id beside it', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      '/suites': { status: 200, body: [{ id: 's-1', key: 'TS-7', name: 'Smoke', caseCount: 2, lifecycleStatus: 'DRAFT', tagRules: [], caseIds: [], preconditions: [], postconditions: [], lockVersion: 4 }] },
+      '/suites/s-1': {
+        status: 200,
+        body: {
+          id: 's-1',
+          key: 'TS-7',
+          name: 'Smoke',
+          description: 'What we check on every build.',
+          caseCount: 2,
+          lifecycleStatus: 'DRAFT',
+          tagRules: ['smoke'],
+          caseIds: [],
+          preconditions: [{ id: 'sc-1', position: 1, conditionId: 'cond-1', title: 'Log in', body: [], inline: false, inherited: false }],
+          postconditions: [],
+          lockVersion: 4,
+        },
+      },
+    });
+
+    expect(await mainWith(['suite', 'show', 'TS-7'], out, stub.fetch)).toBe(EXIT.ok);
+    expect(out.stdout).toMatch(/cond-1.*PRE.*sc-1/);
+    expect(out.stdout).toContain('Lock version: 4');
+  });
+
+  it('reads both libraries in one command, and passes the filters through', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      '/conditions': { status: 200, body: [{ id: 'cond-1', title: 'Log in', type: 'PRE', body: [], usageCount: 4, suiteUsageCount: 1, lockVersion: 1 }] },
+      '/shared-steps': { status: 200, body: [{ id: 'ss-1', title: 'Open the app', body: [], usageCount: 9 }] },
+    });
+
+    expect(await mainWith(['library', 'list', '--q', 'log', '--type', 'PRE'], out, stub.fetch)).toBe(EXIT.ok);
+
+    // The id is the first column because it is what a write takes; the title is how a person
+    // finds the row and the id is what they then have to type.
+    expect(out.stdout).toContain('cond-1');
+    expect(out.stdout).toContain('ss-1');
+    const asked = stub.urls.find((url) => url.includes('/conditions')) ?? '';
+    expect(asked).toContain('q=log');
+    expect(asked).toContain('type=PRE');
+    // `type` is a conditions-only filter and the shared-step read must not carry it — the two
+    // halves of this command are two endpoints, and one of them has no such parameter.
+    expect(stub.urls.find((url) => url.includes('/shared-steps')) ?? '').not.toContain('type=');
   });
 
   /*

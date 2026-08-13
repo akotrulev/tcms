@@ -185,10 +185,118 @@ const caseShow: Command = {
       ['Lock version', show(found.lockVersion)],
     ]);
 
+    /*
+      The conditions, with their **attachment** ids — the half of this command §189 added, and
+      the ids are the point rather than the titles.
+
+      `case edit --decline` takes `suite_condition` row ids, which are exactly what `id` is on
+      these four arrays and are **not** library `condition` ids: "Log in" attached at *Billing*
+      and again at *Billing › Refunds* is two attachments, and declining one must leave the other
+      in force. Before this, a person at a terminal could reach those ids only through
+      `--json`, so the flag the same slice built would have had no way to learn its argument.
+
+      Declined entries are listed **beside** the live ones rather than merged into them: the
+      server serves them in separate arrays precisely because a declined condition is not part of
+      what this case does, and a single list with a marker column would be one careless `grep`
+      away from reading as though it were.
+    */
+    const conditions = [
+      ...found.preconditions.map((row) => ({ row, kind: 'PRE', declined: false })),
+      ...found.postconditions.map((row) => ({ row, kind: 'POST', declined: false })),
+      ...found.declinedPreconditions.map((row) => ({ row, kind: 'PRE', declined: true })),
+      ...found.declinedPostconditions.map((row) => ({ row, kind: 'POST', declined: true })),
+    ];
+
+    if (conditions.length > 0) {
+      out.line();
+      table(out, conditions, [
+        { header: 'CONDITION', value: (entry) => show(entry.row.id) },
+        { header: 'KIND', value: (entry) => entry.kind },
+        { header: 'STATE', value: (entry) => (entry.declined ? 'declined' : 'in force') },
+        // Where an inherited entry came from, which is what makes a decline a considered act:
+        // declining is refusing a rule a suite imposed, and the suite's name is the whole
+        // context for that decision.
+        { header: 'FROM', value: (entry) => (entry.row.inherited ? show(entry.row.inheritedFrom) : 'this case') },
+        { header: 'TITLE', value: (entry) => show(entry.row.title).slice(0, 40) },
+      ]);
+    }
+
     if (found.description) {
       out.line();
       out.line(found.description);
     }
+  },
+};
+
+const libraryList: Command = {
+  name: 'library list',
+  summary: 'The reusable condition and shared-step libraries',
+  usage: 'tcms library list [--q TEXT] [--type PRE|POST|BOTH]',
+  options: {
+    q: { type: 'string' },
+    type: { type: 'string' },
+  },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+    const path = { projectId };
+    const q = first(options['q']);
+    const type = first(options['type']);
+
+    /*
+      Read-only, and the noun is `library` rather than `condition` for that reason: writing to
+      either half costs `library:manage`, which this surface deliberately does not carry (§A3
+      gates it by an impact modal an API caller never sees), so `tcms library create` is a
+      command that could only ever 403. The same shape and the same name as `tcms_list_library`,
+      which is the rule the two surfaces share — one command per operation here, one
+      workflow-shaped tool there, and the same word for the same thing.
+
+      It exists because `suite edit --precondition` takes a **library** id and, until this
+      command, no read on this surface served one. A write whose argument cannot be learned from
+      the surface that offers it is a write nobody can make.
+    */
+    const [conditions, sharedSteps] = await Promise.all([
+      client.GET('/projects/{projectId}/conditions', {
+        params: {
+          path,
+          query: {
+            ...(q === undefined ? {} : { q }),
+            ...(type === undefined ? {} : { type: type as 'PRE' | 'POST' | 'BOTH' }),
+          },
+        },
+        tcms: request,
+      }),
+      client.GET('/projects/{projectId}/shared-steps', {
+        // No `type` here, and that is the contract rather than an omission: `GET /shared-steps`
+        // declares `q` alone, and passing a conditions-only filter to it would narrow nothing
+        // while reading as though it had.
+        params: { path, query: q === undefined ? {} : { q } },
+        tcms: request,
+      }),
+    ]);
+
+    if (json) return out.json({ conditions, sharedSteps });
+
+    out.line('Conditions');
+    table(out, conditions, [
+      // First column, because it is what a write takes. Titles are how a person finds the row;
+      // the id is what they then have to type.
+      { header: 'ID', value: (row) => show(row.id) },
+      { header: 'TYPE', value: (row) => show(row.type) },
+      { header: 'TITLE', value: (row) => show(row.title) },
+      // Two numbers rather than one: a condition's usage spans `case_condition` and
+      // `suite_condition`, and blending them would be a guess (the contract says so).
+      { header: 'CASES', value: (row) => show(row.usageCount) },
+      { header: 'SUITES', value: (row) => show(row.suiteUsageCount) },
+    ]);
+
+    out.line();
+    out.line('Shared steps');
+    table(out, sharedSteps, [
+      { header: 'ID', value: (row) => show(row.id) },
+      { header: 'TITLE', value: (row) => show(row.title) },
+      { header: 'USED BY', value: (row) => show(row.usageCount) },
+    ]);
   },
 };
 
@@ -212,6 +320,67 @@ const suiteList: Command = {
       { header: 'CASES', value: (row) => show(row.caseCount) },
       { header: 'STATUS', value: (row) => show(row.lifecycleStatus) },
     ]);
+  },
+};
+
+const suiteShow: Command = {
+  name: 'suite show',
+  summary: 'One suite, with the conditions it imposes',
+  usage: 'tcms suite show TS-7',
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const projectId = await projectOf(context);
+    const suiteId = await resolveId({
+      client, projectId, value: requireArg(context, 'suite'), entity: 'SUITE',
+    });
+
+    const suite = await client.GET('/projects/{projectId}/suites/{suiteId}', {
+      params: { path: { projectId, suiteId } },
+      tcms: request,
+    });
+
+    if (json) return out.json(suite);
+
+    fields(out, [
+      ['Key', show(suite.key)],
+      ['Name', show(suite.name)],
+      ['Status', show(suite.lifecycleStatus)],
+      ['Cases', show(suite.caseCount)],
+      ['Tag rules', suite.tagRules.join(', ') || '—'],
+      ['Lock version', show(suite.lockVersion)],
+    ]);
+
+    /*
+      The suite's own conditions, printed with the id `suite edit --precondition` takes — which is
+      the **library** `conditionId`, not the attachment `id` beside it. The two are one column
+      apart here and they are the two ids this slice's flags take, in opposite directions: a suite
+      attaches a library entry (`conditionId`), and a case declines an attachment (`id`). Printing
+      only one of them would make one of the two flags unusable, and printing them unlabelled
+      would make it worse — a wrong id here is a field error, and a wrong id that happens to name
+      a real row is a save nobody notices.
+
+      `conditionId` is nullable on the wire for the inline form, which §95 ended and no writer can
+      produce; it prints as an em-dash if one is ever found rather than as the word "null".
+    */
+    const conditions = [
+      ...suite.preconditions.map((row) => ({ row, kind: 'PRE' })),
+      ...suite.postconditions.map((row) => ({ row, kind: 'POST' })),
+    ];
+
+    if (conditions.length > 0) {
+      out.line();
+      table(out, conditions, [
+        { header: 'CONDITION', value: (entry) => show(entry.row.conditionId) },
+        { header: 'KIND', value: (entry) => entry.kind },
+        { header: 'ATTACHMENT', value: (entry) => show(entry.row.id) },
+        { header: 'TITLE', value: (entry) => show(entry.row.title).slice(0, 40) },
+      ]);
+    }
+
+    if (suite.description) {
+      out.line();
+      out.line(suite.description);
+    }
   },
 };
 
@@ -335,7 +504,9 @@ export const READS: readonly Command[] = [
   projectList,
   caseList,
   caseShow,
+  libraryList,
   suiteList,
+  suiteShow,
   planList,
   runList,
   docList,

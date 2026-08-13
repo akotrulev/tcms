@@ -223,6 +223,13 @@ describe('read-modify-write', () => {
       but unlike the two above its shape DOES line up with what the read serves. This assertion
       failed the moment the field appeared, which is the second time it has forced the decision to
       be made rather than defaulted — §186 was the first.
+
+      **§189 revisited it and the exclusion stands**, which is the outcome worth recording because
+      the sentence above predicted a reversal. Both callers grew a flag for the field, and a flag
+      is a delta: it says what the caller asked for. This function says what an unchanged save
+      sends, and for a list that is nothing. The two were only ever the same question if the
+      projection is read as "the resource", which is what `suiteInputFrom` calls a base body and
+      what the two exclusions above prove it is not.
     */
     const excluded = [
       'ownerId', 'automationTags', 'preconditions', 'postconditions', 'declinedConditionIds',
@@ -257,6 +264,11 @@ describe('read-modify-write', () => {
       `CaseConditionInput`. §186 added them to `SuiteInput` — and this assertion is what forced the
       decision to be made rather than defaulted, because it FAILED the moment the field appeared.
       That is the whole reason it is written as "every field" rather than "these four".
+
+      §189 gave both callers `--precondition` / `--postcondition`, so the sentence this comment
+      used to carry — "what a CLI cannot yet do is change them" — is gone from `rewrite.ts`. The
+      exclusion is not: the change arrives in the delta, where the caller's own library ids are,
+      and a projection would still have nothing to build a `conditionId` from on an inline row.
     */
     const excluded = ['preconditions', 'postconditions'];
     const expected = propertiesOf('SuiteInput').filter((field) => !excluded.includes(field));

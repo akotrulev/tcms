@@ -73,6 +73,15 @@ type Schemas = components['schemas'];
  * alone**. Echoing would also be correct and buys nothing; not echoing keeps this function's rule
  * one rule ("lists are left alone") instead of two.
  *
+ * **§189 gave both callers a flag for it and the drop still stands**, which is the case worth
+ * recording because a projection and a delta answer different questions. The projection asks
+ * *what does an unchanged save send*, and for a list the answer is nothing. The delta asks *what
+ * did the caller say*, and `--decline` / `declinedConditions` is now where that is said. The
+ * projection could have carried it — the ids the read serves are exactly the declinable ones, and
+ * `CaseConditions.reconcileOptouts` bounds its deletions by `declinable` so a decline the client
+ * was never shown survives either way — but it would state as an assertion what the caller never
+ * mentioned, and this function's rule stays "lists are left alone; a flag changes one".
+ *
  * `steps` is projected rather than dropped, because it is **not** left alone: a STRUCTURED case
  * that omits it is a `400` telling the author to add a step they already have.
  */
@@ -137,7 +146,11 @@ function stepInputFrom(step: Schemas['TestStep']): Schemas['TestStepInput'] {
  * exception the paragraph above predicted — dropped, on `caseInputFrom`'s grounds: the read serves
  * `CaseConditionRef` and the write takes `CaseConditionInput`, so echoing the resource is not a
  * thing that types here. Absent leaves them alone, which is the correct behaviour for a `--name`
- * edit either way. What a CLI cannot yet do is *change* them; that wants a flag, not a projection.
+ * edit either way. ~~What a CLI cannot yet do is *change* them; that wants a flag, not a
+ * projection.~~ → **§189 built the flag** (`--precondition` / `--postcondition`, and
+ * `preconditions` / `postconditions` on the tool), and the sentence it replaces is the reason the
+ * drop is still right: the change goes in the delta, where the caller's own ids are, rather than
+ * through a projection that would have to invent a `conditionId` for an inline row that has none.
  */
 export function suiteInputFrom(current: Schemas['Suite']): Schemas['SuiteInput'] {
   return {

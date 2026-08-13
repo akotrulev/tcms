@@ -173,7 +173,8 @@ const caseEdit: Command = {
   usage:
     'tcms case edit TC-42 [--title T] [--description D] [--objective O] [--expected-outcome E]\n'
     + '                    [--priority P] [--severity S] [--automation-status S] [--suite TS-3]\n'
-    + '                    [--unfile] [--tag T]... [--file BODY.json --lock-version N]',
+    + '                    [--unfile] [--tag T]... [--decline ATTACHMENT-ID]...\n'
+    + '                    [--file BODY.json --lock-version N]',
   options: {
     title: { type: 'string' },
     description: { type: 'string' },
@@ -186,6 +187,7 @@ const caseEdit: Command = {
     suite: { type: 'string' },
     unfile: { type: 'boolean' },
     tag: { type: 'string', multiple: true },
+    decline: { type: 'string', multiple: true },
     file: { type: 'string' },
     'lock-version': { type: 'string' },
   },
@@ -226,7 +228,19 @@ const caseEdit: Command = {
           // A complete set, per the contract: absent leaves the tags alone, `--tag ''` clears
           // them. Not a merge — `--tag smoke` on a case tagged `smoke, slow` leaves it tagged
           // `smoke`, which is what the field means everywhere else in this product.
-          tags: tagsFrom(options['tag']),
+          tags: completeSet(options['tag']),
+          /*
+            §6f's opt-out, and the arm §187 built the endpoint for without giving either machine
+            surface a way to send it. A complete set on the same rule as `tags`, so
+            `--decline ''` re-imposes every inherited condition this case had turned off.
+
+            The ids are `suite_condition` **attachments** — the CONDITION column of
+            `tcms case show` — and not library `condition` ids: the same entry attached at two
+            suites is two attachments, and declining one must leave the other in force. The wrong
+            kind is a field error rather than a silent no-op, because the server validates every
+            id against the attachments that currently reach this case.
+          */
+          declinedConditionIds: completeSet(options['decline']),
         }),
         'Name at least one field to change, or pass --file with a body.',
       );
@@ -273,15 +287,34 @@ async function optionalSuite(
 }
 
 /**
- * A complete tag set, or undefined for "leave them alone".
+ * A complete set of whatever a repeatable flag names, or undefined for "leave it alone".
  *
  * `--tag ''` is the clearing form, matching `nullableText`'s rule on the fields that take null:
  * an array field's empty value is `[]`, and a shell cannot type that either.
+ *
+ * ~~`tagsFrom`~~ → renamed in §189, when the third and fourth callers arrived and neither is a
+ * tag. Every complete-set field on this surface has the same three states and they must be
+ * spelled the same way, or `--tag ''` clearing the tags while `--decline ''` did nothing would
+ * be two rules a person has to remember which of.
  */
-function tagsFrom(value: string | boolean | (string | boolean)[] | undefined): string[] | undefined {
+function completeSet(value: string | boolean | (string | boolean)[] | undefined): string[] | undefined {
   const values = all(value);
   if (values.length === 0) return undefined;
-  return values.filter((tag) => tag !== '');
+  return values.filter((entry) => entry !== '');
+}
+
+/**
+ * The condition ids a suite attaches, as the input the write takes.
+ *
+ * **Library ids, not attachment ids** — `Suite.preconditions[].conditionId`, which
+ * `tcms suite show` prints in its first column for this reason. `CaseConditionInput` carries
+ * nothing else: `inlineBody` exists in the schema only so it can be refused, and order is the
+ * content, assigned from this array rather than sent.
+ */
+function conditionsFrom(
+  value: string | boolean | (string | boolean)[] | undefined,
+): { conditionId: string }[] | undefined {
+  return completeSet(value)?.map((conditionId) => ({ conditionId }));
 }
 
 const caseProposal: Command = {
@@ -361,12 +394,14 @@ const suiteCreate: Command = {
   summary: 'Create a suite',
   usage:
     'tcms suite create --name N [--description D] [--tag-rule R]... [--case TC-n]...\n'
-    + '                  [--idempotency-key K]',
+    + '                  [--precondition ID]... [--postcondition ID]... [--idempotency-key K]',
   options: {
     name: { type: 'string' },
     description: { type: 'string' },
     'tag-rule': { type: 'string', multiple: true },
     case: { type: 'string', multiple: true },
+    precondition: { type: 'string', multiple: true },
+    postcondition: { type: 'string', multiple: true },
     'idempotency-key': { type: 'string' },
   },
   write: { kind: 'create', permission: 'suite:manage' },
@@ -379,8 +414,14 @@ const suiteCreate: Command = {
       body: present({
         name: requireOption(context, 'name'),
         description: nullableText(options['description']),
-        tagRules: tagsFrom(options['tag-rule']),
+        tagRules: completeSet(options['tag-rule']),
         caseIds: await resolveMany(context, projectId, options['case'], 'CASE'),
+        // Offered on the create as well as the edit, and not merely for symmetry: a suite's
+        // conditions reach the cases filed in it, so "create it, then attach the conditions" is
+        // a window in which those cases run without a setup step their author intended. One
+        // request is the only spelling with no window.
+        preconditions: conditionsFrom(options['precondition']),
+        postconditions: conditionsFrom(options['postcondition']),
       }) as components['schemas']['SuiteInput'],
       tcms: { ...request, ...createIntent({ key: text(options['idempotency-key']) }) },
     });
@@ -400,12 +441,15 @@ const suiteEdit: Command = {
   summary: 'Rename a suite, or change what it collects',
   usage:
     'tcms suite edit TS-7 [--name N] [--description D] [--tag-rule R]... [--case TC-n]...\n'
+    + '                    [--precondition ID]... [--postcondition ID]...\n'
     + '                    [--file BODY.json --lock-version N]',
   options: {
     name: { type: 'string' },
     description: { type: 'string' },
     'tag-rule': { type: 'string', multiple: true },
     case: { type: 'string', multiple: true },
+    precondition: { type: 'string', multiple: true },
+    postcondition: { type: 'string', multiple: true },
     file: { type: 'string' },
     'lock-version': { type: 'string' },
   },
@@ -434,8 +478,22 @@ const suiteEdit: Command = {
           // Both are complete sets, per the contract, and both matter more here than on a case:
           // a suite's membership IS these lists, so reading a partial list as a merge would make
           // "collect these three" mean "add these three" and never let anything be removed.
-          tagRules: tagsFrom(options['tag-rule']),
+          tagRules: completeSet(options['tag-rule']),
           caseIds: await resolveMany(context, projectId, options['case'], 'CASE'),
+          /*
+            §186's two arrays, reachable from this surface for the first time. Complete sets on
+            the same rule as the two above, and `core/rewrite.ts` is why they can only be that:
+            `suiteInputFrom` cannot project them back (the read serves `CaseConditionRef` and the
+            write takes `CaseConditionInput`), so what the caller names here is the whole of what
+            the suite will impose — `--precondition ''` detaches every one of them.
+
+            Library ids, which `tcms suite show` prints in its first column. Its second column is
+            the *attachment* id, which is what `case edit --decline` takes; the two live one
+            column apart because they are the two halves of §6f and neither is usable in the
+            other's flag.
+          */
+          preconditions: conditionsFrom(options['precondition']),
+          postconditions: conditionsFrom(options['postcondition']),
         }),
         'Name at least one field to change, or pass --file with a body.',
       );
@@ -877,7 +935,7 @@ const runCreate: Command = {
         // A run's tags point the opposite way from a case filter's — every live case carrying
         // ANY of them, union not intersection. The contract says so on the field; naming it here
         // would be a second statement of the same rule.
-        tags: tagsFrom(options['tag']),
+        tags: completeSet(options['tag']),
         releaseVersion: nullableText(options['release']),
         buildNumber: nullableText(options['build']),
         commitSha: nullableText(options['commit']),

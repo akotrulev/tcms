@@ -68,6 +68,22 @@ const CASE = {
   ],
   preconditions: [],
   postconditions: [],
+  // A stored decline, so the round-trip assertions below are about a case that HAS one. With
+  // both arrays empty, "the projection does not send declines" and "this case has none to send"
+  // are the same green.
+  declinedPreconditions: [
+    {
+      id: 'sc-2',
+      position: 1,
+      conditionId: 'cond-2',
+      title: 'Seed the ledger',
+      body: [],
+      inline: false,
+      inherited: true,
+      inheritedFrom: 'Billing',
+    },
+  ],
+  declinedPostconditions: [],
   attachments: [],
   flake: null,
   currentVersionNo: 3,
@@ -306,6 +322,53 @@ describe('case edit', () => {
     });
   });
 
+  /*
+    §189. `case_condition_optout` got its endpoint in §187 and neither machine surface could send
+    to it: `--decline` is the flag, and the round-trip is where it could have gone wrong, because
+    the base body this delta lands on is composed from the same read that served the declines.
+  */
+  it('declines the attachments named, and only those', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /cases/c-9': { status: 200, body: CASE } });
+
+    await mainWith(['case', 'edit', 'TC-42', '--decline', 'sc-2', '--decline', 'sc-3'], out, stub.fetch);
+
+    // A COMPLETE set, like `tags`: these two and no others, not "add these two".
+    expect(JSON.parse(stub.write('/cases/c-9').body ?? '{}')).toEqual({
+      ...CASE_ECHO,
+      declinedConditionIds: ['sc-2', 'sc-3'],
+    });
+  });
+
+  it('re-imposes every declined condition on --decline ""', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /cases/c-9': { status: 200, body: CASE } });
+
+    await mainWith(['case', 'edit', 'TC-42', '--decline', ''], out, stub.fetch);
+
+    // The clearing form every complete-set flag on this surface shares. An empty array is a
+    // request; a shell cannot type one, and a flag with no clearing form can never empty a field.
+    expect(JSON.parse(stub.write('/cases/c-9').body ?? '{}')).toEqual({
+      ...CASE_ECHO,
+      declinedConditionIds: [],
+    });
+  });
+
+  /*
+    The projection stays out of it, which is `core/rewrite.ts`'s decision rather than an
+    oversight: a list absent leaves it alone, so an edit that says nothing about declines asserts
+    nothing about them. Echoing the read's ids back would be the same VALUE and a different
+    claim — a `--title` edit stating the complete set of the author's opt-outs.
+  */
+  it('says nothing about declines when no flag named them, on a case that has one', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /cases/c-9': { status: 200, body: CASE } });
+
+    await mainWith(['case', 'edit', 'TC-42', '--title', 'Login still works'], out, stub.fetch);
+
+    expect(JSON.parse(stub.write('/cases/c-9').body ?? '{}')).not.toHaveProperty('declinedConditionIds');
+  });
+
   it('sends an explicit null for --unfile, which is not the same as omitting the suite', async () => {
     const out = recorder();
     const stub = api({ ...scaffolding(), 'PATCH /cases/c-9': { status: 200, body: CASE } });
@@ -512,6 +575,61 @@ describe('suite writes', () => {
     const sent = stub.write('/suites/s-1');
     expect(sent.headers.get('If-Match')).toBe('2');
     expect(JSON.parse(sent.body ?? '{}')).toEqual({ ...SUITE_ECHO, tagRules: ['nightly'] });
+  });
+
+  /*
+    §189. §186 gave a suite its two condition arrays and §187 gave a case the decline; neither
+    was reachable from this surface. The suite half takes LIBRARY ids — the write's shape is
+    `CaseConditionInput`, which carries `conditionId` and nothing else, so the projection cannot
+    produce it from the `CaseConditionRef` the read serves and the caller's flag is the only
+    source (`core/rewrite.ts`).
+  */
+  it('attaches conditions by library id, wrapped as the input the write takes', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /suites/s-1': { status: 200, body: SUITE } });
+
+    await mainWith(
+      ['suite', 'edit', 'TS-7', '--precondition', 'cond-1', '--postcondition', 'cond-9'],
+      out,
+      stub.fetch,
+    );
+
+    expect(JSON.parse(stub.write('/suites/s-1').body ?? '{}')).toEqual({
+      ...SUITE_ECHO,
+      // Order is the content and is assigned from the array — never sent, because a
+      // client-supplied position can duplicate or skip and no constraint would refuse it.
+      preconditions: [{ conditionId: 'cond-1' }],
+      postconditions: [{ conditionId: 'cond-9' }],
+    });
+  });
+
+  it('detaches every condition on --precondition ""', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /suites/s-1': { status: 200, body: SUITE } });
+
+    await mainWith(['suite', 'edit', 'TS-7', '--precondition', ''], out, stub.fetch);
+
+    const sent = JSON.parse(stub.write('/suites/s-1').body ?? '{}');
+    expect(sent.preconditions).toEqual([]);
+    // The other list is untouched, not emptied alongside it: two flags, two fields, and a
+    // suite's cleanup rules are not collateral of a change to its setup ones.
+    expect(sent).not.toHaveProperty('postconditions');
+  });
+
+  it('attaches them on the create, so no case is filed into a suite whose setup is half applied', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'POST /suites': { status: 201, body: SUITE } });
+
+    await mainWith(
+      ['suite', 'create', '--name', 'Smoke', '--precondition', 'cond-1'],
+      out,
+      stub.fetch,
+    );
+
+    expect(JSON.parse(stub.write('/suites').body ?? '{}')).toEqual({
+      name: 'Smoke',
+      preconditions: [{ conditionId: 'cond-1' }],
+    });
   });
 
   it('sends no If-Match and no key on a status transition', async () => {
