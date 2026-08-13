@@ -2361,3 +2361,34 @@ which is the same state. It belongs to the next `packages/` live pass
 (`docs/verification/2026-08-09-packages-live-pass-round-2.md` is the most recent), alongside one
 `tcms suite edit --precondition` against a real library id. Both are **NOT RUN**, and neither has
 ever been executed by anything: these two arms have existed for one commit.
+
+## §190 — the comments nothing validates
+
+**Six rows; `SM-1`…`SM-3` are RUN and the other three are not** — §65. Ids are `§190 SM-*`; `SM` is
+unused across both queue files and every handoff section (grepped before minting it, per the §154
+banner — `SC` was the obvious pick and §152 already holds it).
+
+**The three that are run are the mutation-verification of a check written in this slice**, taken
+while writing it, which is what makes a green first run evidence rather than a coincidence (§175's
+`GranteeGroup`, §188's `NR-6`). Everything else here is deferred.
+
+**`SM-2` is the row this block exists for**, because it did not merely go red as predicted — it
+went red *and* exposed that the rule was silent on its own main population. The first
+`isPartOfAQualifiedName` asked only whether the next character was a dot, so a sentence ending
+"…through `suite_parent_link`." was skipped as though `suite_parent_link` were a table whose column
+was being named. **A sentence-final identifier is the most ordinary way a comment names a table**,
+so the bare rule would have shipped green, scanning, and blind. It was found by mutating, not by
+reading — the mutation was written to prove the rule fires and it proved the opposite first.
+
+**Every row here runs as `cd backend && ./gradlew test --tests 'com.tcms.schema.SchemaCommentTest'`**
+on a Linux shape (`~/bin/tcms-remote`), and each takes ~14s: the class boots the context, migrates a
+fresh container and reads three catalog queries.
+
+| Row | Mutate | Must redden | What a green build would mean |
+|---|---|---|---|
+| `§190 SM-1` | In `V49`, restore `suite_condition`'s comment to "resolved by walking `suite.path` upward" | `everyQualifiedReferenceNamesALiveColumn`, naming `suite.path` under `table suite_condition` | ✅ **RUN 2026-08-13** — red exactly there, the other three rules green. This is the pre-`V49` tree, so the run is also the measurement of the finding: the comment stood for fifteen sections, past `ddl-auto: validate`, `SchemaConventionTest` and 2632 tests, none of which read a sentence. |
+| `§190 SM-2` | In the same comment, name a table that does not exist, **at the end of a sentence** — "…through `suite_parent_link`." | `everySchemaIdentifierNamesALiveObject`, naming `suite_parent_link` | ✅ **RUN 2026-08-13** — and it was **green first**, which is the finding above: the full stop was read as a qualifier. Red after the fix, green after the revert. A green build here means the bare rule reports only identifiers that happen not to end a sentence. |
+| `§190 SM-3` | Move the catalog read back into `@BeforeAll` | all four rules, on their **corpus pins** — 0 comments, 0 tokens, 0 resolved references | ✅ **RUN 2026-08-13** — the first version of this class was exactly this, and every rule failed on its pin rather than on its subject. Flyway runs when the Spring context is created, which is after the class-level callback: `pg_description` had 5286 rows (all `pg_catalog`'s own) and `public` had **zero tables**. **Without the pins this class would have passed, permanently, checking nothing** — §154's shape, met on the day the check was written. |
+| `§190 SM-4` | Delete the `isPartOfAQualifiedName` call from `everySchemaIdentifierNamesALiveObject` | the rule, naming `links_changed` under `column case_doc_link.page_key` | The skip is load-bearing, not tidiness: `documentation.links_changed` is the outbox event type §167 added, and `app.current_company` is the RLS GUC. Without it both come back as offenders and the honest repair is three exemptions — which is how an ignore list grows past the point where anyone reads it (§162). ⬜ NOT RUN |
+| `§190 SM-5` | Add a reference to a **dropped table in dotted form** — e.g. `suite_parent_link.label` — to any comment | *nothing* — a **hole**, and stated as one | Neither rule can see it: the qualified rule ignores an unknown left half (it must, or every `plan §6f` and `docs/specs` becomes an offender), and the bare rule skips both halves of a dotted name. A dropped table written **bare** is caught (`SM-2`); written dotted it is invisible. The alternative is demanding that every module, package and event name in every sentence be a table, which is a rule nobody could keep. |
+| `§190 SM-6` | Add `"suite_case"` to `NOT_A_SCHEMA_IDENTIFIER` | `everyExemptionStillExemptsSomething` on its **second** direction — an exemption for a name the catalog declares | The map's two directions are different failures. A dead entry excuses nothing today; an entry shadowing a live name excuses nothing today **and starts excusing it on the day the object is dropped** — the exact event the class exists to catch, arriving pre-suppressed. ⬜ NOT RUN |
