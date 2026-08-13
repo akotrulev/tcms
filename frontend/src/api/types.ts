@@ -53,6 +53,16 @@ export type CaseStatus = S['CaseStatus'];
 
 // repository
 export type Suite = S['Suite'];
+/**
+ * The body of both suite writes.
+ *
+ * **Generated, as of §186, where it was hand-written in `api/queries/suites.ts`.** It had been a
+ * structural copy of this schema since Phase 2 and was correct for as long as nobody added a
+ * field — then §186 added two, and the copy silently kept typing a payload the endpoint accepts
+ * as a payload it does not, which is §52's lesson on the write side: a hand-written type is
+ * generated from nothing, so there is no second opinion for the compiler to compare it against.
+ */
+export type SuiteInput = S['SuiteInput'];
 export type TestCase = S['TestCase'];
 export type TestCaseSummary = S['TestCaseSummary'];
 /**

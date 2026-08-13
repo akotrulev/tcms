@@ -5,7 +5,7 @@
  *
  * **The two counts being added, or the suite count rendered as cases.** They measure different
  * things: `usageCount` is cases attaching the entry directly, `suiteUsageCount` is suites, each of
- * which propagates to every case beneath it. Their sum is a number about nothing, and the case
+ * which propagates to every case filed in it. Their sum is a number about nothing, and the case
  * reach of a suite attachment is not computable on this side at all.
  *
  * That failure is invisible in every other kind of test. The dialog still renders, the numbers
@@ -46,12 +46,12 @@ describe('impactSummary', () => {
   it('says what a suite attachment MEANS rather than leaving the reader to guess', () => {
     // "attached to 3 suites" alone reads as a smaller impact than "used by 4 cases", when it is
     // very likely the larger one. The inheritance is the whole point of stating it.
-    expect(impactSummary(condition(4, 3))).toContain('every case beneath inherits them');
+    expect(impactSummary(condition(4, 3))).toContain('every case filed there inherits them');
   });
 
   it('singularizes both halves', () => {
     expect(impactSummary(condition(1, 1))).toBe(
-      'Used by 1 case, attached to 1 suite — every case beneath inherits it',
+      'Used by 1 case, attached to 1 suite — every case filed there inherits it',
     );
   });
 

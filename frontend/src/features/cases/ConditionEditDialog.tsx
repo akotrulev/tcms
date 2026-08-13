@@ -17,7 +17,7 @@
  * ## The two counts are never added
  *
  * `usageCount` is cases attaching the entry directly; `suiteUsageCount` is suites, each of which
- * propagates to every case beneath it. Their sum is a number about nothing, and this dialog is
+ * propagates to every case filed in it. Their sum is a number about nothing, and this dialog is
  * where an author decides from it — so the suite figure is worded as what it is rather than
  * converted into a case count the client has no basis to compute.
  */

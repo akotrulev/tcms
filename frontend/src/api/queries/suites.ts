@@ -1,7 +1,7 @@
 /** The suite list and its three writes. */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { api } from '../client';
-import type { LifecycleStatus, Suite, SuiteHistoryResponse } from '../types';
+import type { LifecycleStatus, Suite, SuiteHistoryResponse, SuiteInput } from '../types';
 import { base, keys } from './keys';
 
 export function useSuites(projectId: string): UseQueryResult<Suite[]> {
@@ -18,23 +18,19 @@ export function useSuites(projectId: string): UseQueryResult<Suite[]> {
  * `parentId` was on it until §98 and is the field the two verbs disagreed about — a create chose
  * the parent, a rename could only repeat it. Suites are flat now, so the disagreement and the
  * field are both gone.
+ *
+ * **Re-exported from the generated types since §186, where it was a hand-written literal here.**
+ * Every field it declared was right; what it could not do was notice `preconditions` and
+ * `postconditions` arriving on the schema. The comments it carried are on the contract, which is
+ * where the rules they describe are decided:
+ *
+ * - `tagRules` and the two condition lists — absent means "leave them alone", `[]` means "clear
+ *   them", which is why the dialog always sends all three.
+ * - `caseIds` — the individually-added membership arm, which the endpoint takes and validates and
+ *   **no screen authors**. Still true after §186, and still worth a line here rather than being
+ *   discovered as missing.
  */
-export type SuiteInput = {
-  name: string;
-  description?: string | null;
-  /**
-   * The tags this suite claims (§96). **Absent means "leave them alone" and `[]` means "clear
-   * them"** — the same split every collection on this API uses, and the reason the rename dialog
-   * always sends the field: a save that omitted it could not clear the last rule.
-   */
-  tagRules?: string[];
-  /**
-   * The cases added to this suite **individually** — the membership arm no screen authors yet.
-   * The endpoint takes it and validates it against the project's live cases; the suite dialog
-   * offers tag rules only, so this is named here rather than left to be discovered as missing.
-   */
-  caseIds?: string[];
-};
+export type { SuiteInput };
 
 export function useCreateSuite(projectId: string) {
   const client = useQueryClient();

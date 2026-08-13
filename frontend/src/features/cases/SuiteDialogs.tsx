@@ -11,14 +11,16 @@ import {
   TextField,
 } from '@mui/material';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import type { Suite } from '../../api/types';
+import type { CaseConditionRef, Condition, Suite } from '../../api/types';
 import { ApiError } from '../../api/client';
 import { Identifier } from '../../components/Identifier';
 import { useCreateSuite, useDeleteSuite, useProjectTags, useRenameSuite } from '../../api/queries';
 import { describeError } from '../../lib/describeError';
+import { ConditionEditDialog } from './ConditionEditDialog';
+import { ConditionsPanel } from './ConditionsPanel';
 
 /**
  * Creating, renaming and deleting a folder — the tree's write affordances.
@@ -55,11 +57,50 @@ const SuiteSchema = z.object({
    * can never match anything, accepted and silently useless.
    */
   tagRules: z.array(z.string().max(MAX_TAG, `Keep each tag under ${MAX_TAG} characters.`)),
+  /**
+   * The suite's own conditions (§186), as ids in the author's order — the ids and not the refs,
+   * because order is the content here and the panel reorders a list of ids.
+   *
+   * A suite's conditions are inherited by the cases **filed** in it, and by those only: a case
+   * *added* individually or matched by a `tagRule` does not pick them up. The helper text below
+   * says so, because there is nowhere else on this form a reader would learn it.
+   */
+  preconditionIds: z.array(z.string()),
+  postconditionIds: z.array(z.string()),
 });
 
 type SuiteFormInput = z.infer<typeof SuiteSchema>;
 
 const TestIdPrefix = 'Suites.Dialog';
+
+/**
+ * A served condition list as the form holds it.
+ *
+ * The `?? []` is for the create path and the null filter is for the contract: `conditionId` is
+ * nullable on `CaseConditionRef` because an inline attachment has none — and the server excludes
+ * inline rows at the query, so the filter drops nothing in practice and is what keeps this honest
+ * if that ever changes. Attaching a row whose entry is unknown is not a thing this form can express.
+ */
+function attachedIds(refs: readonly CaseConditionRef[] | undefined): string[] {
+  return (refs ?? []).map((ref) => ref.conditionId).filter((id): id is string => id !== null && id !== undefined);
+}
+
+/**
+ * The input schema's field names, mapped to this form's.
+ *
+ * They agree everywhere but the two condition lists, where the server reports under
+ * `preconditions` / `postconditions` (the payload's names) and the form holds
+ * `preconditionIds` / `postconditionIds` (ids, not refs). Without the mapping a rejected condition
+ * would land in the form-level alert instead of on the panel that owns it — the same silent drop
+ * the `If-Match` note below is about, one field along.
+ */
+const SERVER_FIELDS = {
+  name: 'name',
+  description: 'description',
+  tagRules: 'tagRules',
+  preconditions: 'preconditionIds',
+  postconditions: 'postconditionIds',
+} as const satisfies Record<string, keyof SuiteFormInput>;
 
 /**
  * Maps a rejected write onto the form.
@@ -71,13 +112,14 @@ const TestIdPrefix = 'Suites.Dialog';
  */
 function applyServerError(
   error: unknown,
-  setError: (field: 'name' | 'description' | 'tagRules' | 'root', message: string) => void,
+  setError: (field: keyof SuiteFormInput | 'root', message: string) => void,
 ) {
   if (error instanceof ApiError && error.fieldErrors) {
     let landed = false;
     for (const [field, messages] of Object.entries(error.fieldErrors)) {
-      if (field === 'name' || field === 'description' || field === 'tagRules') {
-        setError(field, messages.join(' '));
+      const formField = SERVER_FIELDS[field as keyof typeof SERVER_FIELDS];
+      if (formField) {
+        setError(formField, messages.join(' '));
         landed = true;
       }
     }
@@ -116,12 +158,31 @@ function SuiteFormDialog({
   testId: string;
 }) {
   const projectTags = useProjectTags(projectId);
+
+  /*
+    The library dialog, opened FROM this dialog — the case editor's arrangement (`CaseEditorPage`),
+    kept identical on purpose. An author assembling a suite's standing procedure is exactly as
+    likely to find the entry missing as one assembling a case's, and sending them to the case
+    editor to write it would be the half-finished flow `ui-rules` calls a workflow defect.
+
+    `createdConditions` is why it is state rather than a fire-and-forget: the library reads are
+    keyed by search term and all stale at the moment of creation, so a freshly created entry
+    resolves to nothing and the row the author just added renders "Unknown condition".
+  */
+  const [conditionDialog, setConditionDialog] = useState<{
+    kind: 'PRE' | 'POST';
+    condition: Condition | null;
+  } | null>(null);
+  const [createdConditions, setCreatedConditions] = useState<Condition[]>([]);
+
   const {
     register,
     control,
     handleSubmit,
     setError,
     setFocus,
+    setValue,
+    getValues,
     formState: { errors },
   } = useForm<SuiteFormInput>({
     resolver: zodResolver(SuiteSchema),
@@ -151,7 +212,9 @@ function SuiteFormDialog({
   });
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={testId}>
+    // `md`, not `sm`: the two condition panels each carry a list, a picker and a create button,
+    // and at `sm` the reorder controls wrap under the title they belong to.
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md" data-testid={testId}>
       <form onSubmit={submit} noValidate aria-busy={isPending}>
         <DialogTitle>{title}</DialogTitle>
         <DialogContent>
@@ -226,6 +289,73 @@ function SuiteFormDialog({
                 />
               )}
             />
+
+            {/*
+              §186 — the suite's own conditions, and the first surface in the product that can
+              write one. `suite_condition` shipped in M0 with a reader, an index and no writer at
+              all; a row could only be created by hand-written SQL until this form existed.
+
+              `inherited={[]}` and not a prop: a suite's conditions ARE the inheritance, running
+              downward to the cases filed in it. There is nothing above a suite to inherit from —
+              §98 removed the tree — so the panel's inherited section is empty here by construction
+              rather than by omission.
+            */}
+            <Stack sx={{ gap: 1 }}>
+              <DialogContentText variant="body2">
+                Conditions are inherited by the cases <strong>filed</strong> in this suite. A case
+                added individually, or matched by a tag rule, does not pick them up.
+              </DialogContentText>
+              <Stack sx={{ gap: 3 }}>
+                <Controller
+                  control={control}
+                  name="preconditionIds"
+                  render={({ field, fieldState }) => (
+                    <Stack sx={{ gap: 0.5 }}>
+                      <ConditionsPanel
+                        kind="PRE"
+                        projectId={projectId}
+                        testId={`${TestIdPrefix}.Preconditions`}
+                        value={field.value}
+                        inherited={[]}
+                        onChange={field.onChange}
+                        known={createdConditions}
+                        onCreate={() => setConditionDialog({ kind: 'PRE', condition: null })}
+                        onEdit={(condition) => setConditionDialog({ kind: 'PRE', condition })}
+                      />
+                      {fieldState.error && (
+                        <Alert severity="error" role="alert">
+                          {fieldState.error.message}
+                        </Alert>
+                      )}
+                    </Stack>
+                  )}
+                />
+                <Controller
+                  control={control}
+                  name="postconditionIds"
+                  render={({ field, fieldState }) => (
+                    <Stack sx={{ gap: 0.5 }}>
+                      <ConditionsPanel
+                        kind="POST"
+                        projectId={projectId}
+                        testId={`${TestIdPrefix}.Postconditions`}
+                        value={field.value}
+                        inherited={[]}
+                        onChange={field.onChange}
+                        known={createdConditions}
+                        onCreate={() => setConditionDialog({ kind: 'POST', condition: null })}
+                        onEdit={(condition) => setConditionDialog({ kind: 'POST', condition })}
+                      />
+                      {fieldState.error && (
+                        <Alert severity="error" role="alert">
+                          {fieldState.error.message}
+                        </Alert>
+                      )}
+                    </Stack>
+                  )}
+                />
+              </Stack>
+            </Stack>
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -242,6 +372,25 @@ function SuiteFormDialog({
           </Button>
         </DialogActions>
       </form>
+      {conditionDialog && (
+        <ConditionEditDialog
+          key={conditionDialog.condition?.id ?? 'new'}
+          projectId={projectId}
+          open
+          condition={conditionDialog.condition}
+          defaultType={conditionDialog.kind}
+          onClose={() => setConditionDialog(null)}
+          onCreated={(created) => {
+            // Attached to the list it was created from — `CaseEditorPage`'s rule: they asked for a
+            // condition HERE, and leaving them to find it in the picker they just left is a
+            // workflow defect rather than a saving of one click.
+            setCreatedConditions((current) => [...current, created]);
+            const field =
+              conditionDialog.kind === 'PRE' ? 'preconditionIds' : 'postconditionIds';
+            setValue(field, [...getValues(field), created.id], { shouldDirty: true });
+          }}
+        />
+      )}
     </Dialog>
   );
 }
@@ -268,7 +417,13 @@ export function CreateSuiteDialog({
       // create could land somewhere the user had not chosen deliberately; §98 removed the place.
       title="New suite"
       submitLabel="Create suite"
-      defaults={{ name: '', description: '', tagRules: [] }}
+      defaults={{
+        name: '',
+        description: '',
+        tagRules: [],
+        preconditionIds: [],
+        postconditionIds: [],
+      }}
       isPending={create.isPending}
       testId={`${TestIdPrefix}.Create`}
       onSubmit={async (values, setError) => {
@@ -277,6 +432,8 @@ export function CreateSuiteDialog({
             name: values.name.trim(),
             description: values.description?.trim() || null,
             tagRules: values.tagRules,
+            preconditions: values.preconditionIds.map((conditionId) => ({ conditionId })),
+            postconditions: values.postconditionIds.map((conditionId) => ({ conditionId })),
           });
           onCreated(created);
           onClose();
@@ -313,7 +470,17 @@ export function RenameSuiteDialog({
       // The suite's OWN rules, served on every read since §96. Seeding them is what makes a
       // rename able to leave them alone — the field is always sent, so an unmentioned collection
       // could only be preserved by knowing what it was.
-      defaults={{ name: suite.name, description: suite.description ?? '', tagRules: suite.tagRules }}
+      // The suite's OWN conditions, seeded from the read for the same reason the tag rules are:
+      // the fields are always sent, so an unmentioned list could only be preserved by knowing what
+      // it was. Absent WOULD preserve it server-side — but a form that sometimes omits a field it
+      // renders is a form whose Save means two different things.
+      defaults={{
+        name: suite.name,
+        description: suite.description ?? '',
+        tagRules: suite.tagRules,
+        preconditionIds: attachedIds(suite.preconditions),
+        postconditionIds: attachedIds(suite.postconditions),
+      }}
       isPending={rename.isPending}
       testId={`${TestIdPrefix}.Rename`}
       onSubmit={async (values, setError) => {
@@ -323,8 +490,12 @@ export function RenameSuiteDialog({
             description: values.description?.trim() || null,
             // Always sent, including as []: the server reads absent as "leave them alone", so
             // clearing a suite's last rule would otherwise report success and change nothing —
-            // and the collection would keep holding cases nobody could see why.
+            // and the collection would keep holding cases nobody could see why. The two condition
+            // lists are sent on the same terms and it matters more there: detaching the last
+            // condition is exactly the save an absent field would report as done and not do.
             tagRules: values.tagRules,
+            preconditions: values.preconditionIds.map((conditionId) => ({ conditionId })),
+            postconditions: values.postconditionIds.map((conditionId) => ({ conditionId })),
             lockVersion: suite.lockVersion,
           });
           onRenamed(renamed);

@@ -1,8 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { api } from '../../api/client'
-import type { Suite, TagUsage } from '../../api/types'
+import { ApiError, api } from '../../api/client'
+import type { CaseConditionRef, Condition, Suite, TagUsage } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { CreateSuiteDialog, RenameSuiteDialog } from './SuiteDialogs'
@@ -40,9 +40,38 @@ const suite: Suite = {
   lockVersion: 3,
 }
 
-function mockReads(tags: TagUsage[] = []) {
-  vi.spyOn(api, 'get').mockImplementation((async (path: string) =>
-    path.includes('/tags') ? tags : []) as never)
+function mockReads(tags: TagUsage[] = [], conditions: Condition[] = []) {
+  vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+    if (path.includes('/tags')) return tags
+    if (path.includes('/conditions')) return conditions
+    return []
+  }) as never)
+}
+
+const LOGIN: Condition = {
+  id: 'cond-1',
+  title: 'Log in as standard user',
+  type: 'BOTH',
+  body: ['Open the application'],
+  usageCount: 3,
+  suiteUsageCount: 0,
+  lockVersion: 0,
+}
+
+const CLEANUP: Condition = { ...LOGIN, id: 'cond-2', title: 'Reset the payment data' }
+
+/** A served attachment — the read shape, which is NOT the shape the write takes. */
+function attached(condition: Condition, id: string): CaseConditionRef {
+  return {
+    id,
+    position: 0,
+    conditionId: condition.id,
+    title: condition.title,
+    body: condition.body,
+    inline: false,
+    inherited: false,
+    inheritedFrom: null,
+  }
 }
 
 function renderCreate() {
@@ -58,14 +87,14 @@ function renderCreate() {
   )
 }
 
-function renderRename() {
+function renderRename(override: Partial<Suite> = {}) {
   return render(
     <TestProviders client={createTestQueryClient()} route={`/projects/${PROJECT}/cases`}>
       <RenameSuiteDialog
         open
         onClose={() => {}}
         projectId={PROJECT}
-        suite={suite}
+        suite={{ ...suite, ...override }}
         onRenamed={() => {}}
       />
     </TestProviders>,
@@ -151,5 +180,114 @@ describe('SuiteDialogs — tag rules', () => {
     await waitFor(() => expect(patch).toHaveBeenCalled())
     const body = patch.mock.calls[0][1] as { tagRules: string[] }
     expect(body.tagRules).toEqual([])
+  })
+})
+
+/**
+ * The suite's own conditions (§186) — the first write path `suite_condition` has ever had.
+ *
+ * The table shipped in M0 with its `kind` column, an index, a resolution order that reads it and
+ * a `suiteUsageCount` on the library. Nothing could create a row: the only ones in this repository
+ * were written by hand-rolled SQL in a backend fixture. So the failures worth pinning here are the
+ * three that are silent, and they are `tagRules`' three with one addition — the payload SHAPE,
+ * because the read serves `CaseConditionRef` and the write takes `CaseConditionInput`, and sending
+ * the wrong one is a 400 about a field the author never typed in.
+ */
+describe('SuiteDialogs — conditions', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('sends CaseConditionInput, not the refs it was seeded with', async () => {
+    // The shape, which is the one failure a fixture cannot catch by agreeing with itself: the
+    // form holds ids because order is the content, and the payload is `{conditionId}` objects.
+    const user = userEvent.setup()
+    mockReads([], [LOGIN, CLEANUP])
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue(suite as never)
+    renderRename({ preconditions: [attached(LOGIN, 'sc-1')], postconditions: [] })
+
+    await waitFor(() => expect(screen.getByTestId('Suites.Dialog.Submit')).toBeEnabled())
+    await user.click(screen.getByTestId('Suites.Dialog.Submit'))
+
+    await waitFor(() => expect(patch).toHaveBeenCalled())
+    const body = patch.mock.calls[0][1] as {
+      preconditions: { conditionId: string }[]
+      postconditions: unknown[]
+    }
+    expect(body.preconditions).toEqual([{ conditionId: 'cond-1' }])
+    expect(body.postconditions).toEqual([])
+  })
+
+  it('seeds the stored attachments on a rename, so an untouched save preserves them', async () => {
+    // `tagRules`' rule on the list where getting it wrong is worst: a rename that defaulted these
+    // to [] would detach a standing procedure every case filed in the suite depends on, and the
+    // save would report success.
+    mockReads([], [LOGIN, CLEANUP])
+    renderRename({
+      preconditions: [attached(LOGIN, 'sc-1')],
+      postconditions: [attached(CLEANUP, 'sc-2')],
+    })
+
+    expect(await screen.findByText('Log in as standard user')).toBeVisible()
+    expect(await screen.findByText('Reset the payment data')).toBeVisible()
+  })
+
+  it('sends EMPTY lists when the last condition is detached, rather than omitting them', async () => {
+    // The one the server cannot recover from, exactly as for `tagRules`: absent means "leave them
+    // alone", so an omitted field makes detaching the last condition a no-op reported as a save.
+    const user = userEvent.setup()
+    mockReads([], [LOGIN])
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue(suite as never)
+    renderRename({ preconditions: [attached(LOGIN, 'sc-1')], postconditions: [] })
+
+    await user.click(await screen.findByTestId('Suites.Dialog.Preconditions.Remove'))
+    await user.click(screen.getByTestId('Suites.Dialog.Submit'))
+
+    await waitFor(() => expect(patch).toHaveBeenCalled())
+    const body = patch.mock.calls[0][1] as { preconditions: unknown[]; postconditions: unknown[] }
+    expect(body.preconditions).toEqual([])
+    expect(body.postconditions).toEqual([])
+  })
+
+  it('a create sends both lists, so a suite can be born with its procedure', async () => {
+    const user = userEvent.setup()
+    mockReads([], [LOGIN, CLEANUP])
+    const post = vi.spyOn(api, 'post').mockResolvedValue(suite as never)
+    renderCreate()
+
+    await user.type(screen.getByTestId('Suites.Dialog.Name'), 'Guarded')
+    await user.click(screen.getByTestId('Suites.Dialog.Postconditions.Attach'))
+    await user.click(await screen.findByText('Reset the payment data'))
+    await user.click(screen.getByTestId('Suites.Dialog.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    const body = post.mock.calls[0][1] as {
+      preconditions: unknown[]
+      postconditions: { conditionId: string }[]
+    }
+    expect(body.preconditions).toEqual([])
+    expect(body.postconditions).toEqual([{ conditionId: 'cond-2' }])
+  })
+
+  it('lands a rejected condition on its own panel, not in the form-level alert', async () => {
+    // The server reports under `preconditions` and the form holds `preconditionIds`. Without the
+    // mapping the message would go to the root alert — visible, but not beside the list it is
+    // about, on a dialog that now has three lists.
+    const user = userEvent.setup()
+    mockReads([], [LOGIN])
+    vi.spyOn(api, 'patch').mockRejectedValue(
+      new ApiError(400, 'Bad request', {
+        preconditions: ['That condition is not one this project offers.'],
+      }),
+    )
+    renderRename({ preconditions: [attached(LOGIN, 'sc-1')], postconditions: [] })
+
+    await waitFor(() => expect(screen.getByTestId('Suites.Dialog.Submit')).toBeEnabled())
+    await user.click(screen.getByTestId('Suites.Dialog.Submit'))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'That condition is not one this project offers.',
+    )
+    expect(screen.queryByTestId('Suites.Dialog.Error')).toBeNull()
   })
 })
