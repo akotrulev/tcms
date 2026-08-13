@@ -2,14 +2,14 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-12 (**§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
+**Last verified:** 2026-08-13 (**§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
 last two came off `case_doc_link`, the statement's *order* inside the recompute is load-bearing, and
 `UNLINKED` counts every relationship while the coverage sites count one; **§177** — `test_run.commit_sha` / `.branch` have a writer, the git-object regex is a pinned second copy, and the clone inherits neither; **§176** — the four contract-binding rules are two questions over two populations, and a bound-and-undeclared query parameter fails the build; **§175** — one `TeamRef`, in `com.tcms.api`, with two inline schemas made `$ref`s and `isLead` off the wire; **§174** — `doc_link.relationship` is the one mutable column, `V48` records who moved it, and both ends got the endpoint; **§171** — the form parts nobody compared: the four multipart bodies are exempt from *pairing* and no longer exempt from *comparison*; **§170** — the population the pairing rule could not see: every object schema, named and inline, is paired or excused, and two ingestion inputs nothing read are gone; **§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `6e74c9e` (§178 shipped; §179 is this commit) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `04e8717` (§179 shipped; §180 is this commit) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
@@ -202,6 +202,37 @@ fail the build until they are paired.**
 
 ---
 
+## §180 — THE DASHBOARD SENDS NO DISPLAY TEXT AND NO COLOURS
+
+**Read this before touching `DashboardView`, `DashboardService`, `HealthSignal` or
+`LifecycleStatus`.**
+
+- **`HealthSignal` HAS NO `label`.** The field, the constructor argument, the accessor and all ten
+  constant arguments are gone. It reached the SPA through `DashboardTile.label` and **six of the ten
+  disagreed with `lib/labels.ts`**, so a tile reading "Outdated — spec changed" drilled into a grid
+  reading "Linked spec changed" — one navigation, two vocabularies, each screen internally
+  consistent. `CaseService.facets` argued the direction since M1.
+- **`TileView` is `(key, count, severity, filter)` and `SegmentView` is `(key, count, filter)`.**
+  `DashboardTile.label` and the segment's `label` **and `color`** are off the wire and out of the
+  contract's `required` arrays. The client labels and colours from `key`.
+- **The "generic tile" argument survives, but it was never about the words.** What makes a tile
+  extensible is that `filter` is opaque to the client. A new `HealthSignal` is a *contract* enum
+  member, so it is a compile error in `lib/labels.ts` before it can render anywhere — the label was
+  duplicated, not extensible.
+- **`LifecycleStatus.label()` STAYS, with exactly one caller** — `CaseBulkService.leadOnly`, which
+  composes *"…a case that is already approved."* A **refusal is a sentence** (§149), not a field a
+  client renders. Do not delete it as leftover; `§180 TL-M4` is the mutation that says so.
+- **`DashboardBreakdown.label` STAYS**: a classification path or a person's name in this company is
+  data only the server can resolve. That is the line — rendering a closed enum versus resolving data.
+- **`DashboardService.quietDays` is deleted — it had no caller since §96.** A *private static*
+  helper is in neither §152's nor §153's population and javac has no lint for one, so it was
+  invisible to every gate here. §170's finding at a method.
+- **`DashboardEndpointTest` asserts the fields are ABSENT** (`tilesCarryNoWords`,
+  `barsKeepDataWordsAndSegmentsLoseRenderedOnes`). An assertion on a tile's other fields passes
+  happily beside a re-added `label`; only absence fails on an addition.
+
+---
+
 ## §179 — A RAISED SIGNAL CARRIES ITS SEVERITY, AND `signals()` IS SORTED WORST FIRST
 
 **Read this before touching `HealthSignal`, `CaseHealth.signals()`, either `TestCase*View`, or
@@ -215,10 +246,8 @@ anything that renders a health signal.**
   place a new member is a compile error); severity is a judgement about how wrong a case is, and the
   filter bar needs labels for members no server can send (`INCOMPLETE`). Do not "finish the job" by
   putting `label` on `RaisedSignal`.
-- **`HealthSignal.label()` IS STILL A SECOND SET OF WORDS**, on the wire via `DashboardTile.label`,
-  and **six of the ten disagree with `lib/labels.ts`** — the table is in §179's section file. Measured
-  and left: the tiles are generic over kinds, so closing it takes `LifecycleStatus.label()` too. It is
-  the named next slice.
+- ~~**`HealthSignal.label()` IS STILL A SECOND SET OF WORDS**, on the wire via `DashboardTile.label`,
+  and **six of the ten disagree with `lib/labels.ts`**~~ → **§180 deleted it; see that entry.**
 - **`CaseHealth.signals()` SORTS BY SEVERITY, stably**, so ties keep declaration order. It is not
   cosmetic: `CaseGrid` renders `healthSignals[0]` and hides the rest behind `+n`, so declaration order
   showed `UNLINKED` (INFO, most cases since §178) in place of a case whose automation had stopped

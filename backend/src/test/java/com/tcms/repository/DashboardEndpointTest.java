@@ -295,13 +295,20 @@ class DashboardEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("the tile label is display text and the key is the enum constant")
-        void keysAreStableAndLabelsAreNot() throws Exception {
+        @DisplayName("a tile carries the enum constant and no display text at all")
+        void tilesCarryNoWords() throws Exception {
+            // §180. `label` used to be here and to read "Draft". It was a second set of English
+            // words for enums `lib/labels.ts` already names, and on the health half six of the ten
+            // had drifted apart from it — so the assertion is now that the field is ABSENT, which
+            // is the only form that fails if somebody re-adds one.
             JsonNode draft = tile(dashboardAs(LEAD, ACME, ACME_BANKING), "lifecycle", "DRAFT");
 
             assertThat(draft.get("key").asText()).isEqualTo("DRAFT");
-            assertThat(draft.get("label").asText()).isEqualTo("Draft");
             assertThat(draft.get("severity").asText()).isEqualTo("NEUTRAL");
+            assertThat(draft.has("label"))
+                    .as("a tile labels itself from its key, client-side — see DashboardTile in "
+                            + "openapi.yaml")
+                    .isFalse();
         }
     }
 
@@ -375,6 +382,29 @@ class DashboardEndpointTest extends IntegrationTestBase {
         @DisplayName("each segment's count equals the case list called with that segment's filter")
         void segmentCountsMatchTheListTheyOpen() throws Exception {
             assertSegmentsDrillCorrectly(dashboardAs(LEAD, ACME, ACME_BANKING), "byFeature");
+        }
+
+        @Test
+        @DisplayName("a breakdown keeps its own label, and its segments carry no presentation")
+        void barsKeepDataWordsAndSegmentsLoseRenderedOnes() throws Exception {
+            // The line §180 draws, asserted on the one response where both sides of it appear. A
+            // bar's label is DATA — a classification path or a person's name in this company, which
+            // no client can resolve. A segment's key is a LifecycleStatus, so its label and its
+            // colour were both renderings of a closed set the SPA already has tables for; the
+            // colour was the worse of the two, because the server built "var(--color-draft)" by
+            // concatenation while StatusChip.tsx held the identical string in `lifecycleVar`.
+            JsonNode bar = dashboardAs(LEAD, ACME, ACME_BANKING).get("byFeature").get(0);
+
+            assertThat(bar.get("label").asText()).isNotBlank();
+
+            JsonNode segment = bar.get("segments").get(0);
+            assertThat(segment.get("key").asText()).isIn("DRAFT", "IN_REVIEW", "APPROVED",
+                    "DEPRECATED");
+            assertThat(segment.has("label")).isFalse();
+            assertThat(segment.has("color"))
+                    .as("presentation for a closed enum does not travel; the client colours from "
+                            + "the key")
+                    .isFalse();
         }
     }
 

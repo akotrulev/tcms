@@ -21,7 +21,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -177,7 +176,6 @@ public class DashboardService {
         for (LifecycleStatus status : LifecycleStatus.values()) {
             tiles.add(new TileView(
                     status.name(),
-                    status.label(),
                     counts.getOrDefault(status, 0L),
                     // IN_REVIEW is the one that is about somebody: work waiting on a reviewer, which
                     // is an action rather than a state. The other three are just where cases are.
@@ -235,7 +233,6 @@ public class DashboardService {
             }
             tiles.add(new TileView(
                     signal.name(),
-                    signal.label(),
                     count,
                     signal.severity(),
                     Map.of("healthSignal", List.of(signal.name()))));
@@ -362,9 +359,13 @@ public class DashboardService {
      * the same one both times: a tile is a distribution the reader is asked to read, a segment is a
      * one-pixel sliver they are asked to click. A zero-width link is not a link.
      *
-     * <p>The colours are CSS custom-property <em>names</em>, resolved by the browser against whatever
-     * theme is active. A hex value computed here would be the single element on the page that ignored
-     * dark mode.
+     * <p><del>The colours are CSS custom-property <em>names</em>, resolved by the browser against
+     * whatever theme is active. A hex value computed here would be the single element on the page
+     * that ignored dark mode.</del> <strong>Both the colour and the label are gone in §180</strong>
+     * — see {@link SegmentView}. The dark-mode argument was right and answered a question nobody
+     * asked: the choice was never hex-versus-custom-property, it was whether a mapping from a closed
+     * enum to presentation belongs on a wire at all. It does not, and this one was composed by
+     * string concatenation here while the SPA held the same four strings in a table.
      */
     private static List<SegmentView> segments(
             Map<LifecycleStatus, Long> counts,
@@ -376,13 +377,7 @@ public class DashboardService {
             if (count == 0) {
                 continue;
             }
-            segments.add(new SegmentView(
-                    status.name(),
-                    status.label(),
-                    count,
-                    "var(--color-" + status.name().toLowerCase(Locale.ROOT)
-                            .replace('_', '-') + ")",
-                    filter.apply(status)));
+            segments.add(new SegmentView(status.name(), count, filter.apply(status)));
         }
         return List.copyOf(segments);
     }
@@ -463,17 +458,21 @@ public class DashboardService {
         return List.copyOf(days);
     }
 
-    /** The same thirty days, all empty — for a project with nothing in it. */
-    private static List<ActivityPointView> quietDays(Instant now) {
-        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
-        LocalDate from = today.minusDays(ACTIVITY_DAYS - 1L);
-
-        List<ActivityPointView> days = new ArrayList<>(ACTIVITY_DAYS);
-        for (int offset = 0; offset < ACTIVITY_DAYS; offset++) {
-            days.add(new ActivityPointView(from.plusDays(offset), 0, 0));
-        }
-        return List.copyOf(days);
-    }
+    /*
+     * `quietDays` stood here — "the same thirty days, all empty, for a project with nothing in it"
+     * — and nothing called it, since §96 deleted the empty-tree guard that was its only caller.
+     * Deleted in §180 rather than left as documentation of a branch that does not exist:
+     * `activity` already returns thirty zero-filled days for an empty project, which is what made
+     * the guard removable in the first place.
+     *
+     * Worth one line on why it survived four slices of rules written to find exactly this.
+     * §152's `everyDeclaredRepositoryMethodHasACaller` and §153's
+     * `everyPublicBeanMethodIsExercisedInProduction` both range over *reachable* declarations —
+     * repository interfaces and public bean methods. A PRIVATE static helper is in neither
+     * population, and javac has no lint for one, so it is invisible to every gate this project owns
+     * on both counts. §170's finding at an enum, at a method: the population a rule cannot see is
+     * not the population that is clean.
+     */
 
     private static Map<LocalDate, Long> perDay(Collection<Instant> moments) {
         Map<LocalDate, Long> counts = new HashMap<>();

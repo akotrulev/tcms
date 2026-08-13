@@ -9875,24 +9875,43 @@ export interface components {
         /**
          * @description `filter` is the query that reproduces this count — the tile is a link into
          *     a pre-filtered, bulk-actionable case list, not decoration (plan §6o).
+         *
+         *     **`key` is the enum constant and there is no `label` (§180).** It is a
+         *     `HealthSignal` on the `health` tiles and a `LifecycleStatus` on the `lifecycle`
+         *     ones, and the client labels it from the same catalogue it labels every other
+         *     occurrence of that enum with. A `label` here was a second set of English words
+         *     for a closed set the client already labels — six of the ten health signals
+         *     disagreed with it, so the tile *"Outdated — spec changed"* opened a case list
+         *     whose chips read *"Linked spec changed"*, on the one navigation where the two
+         *     vocabularies meet. `CaseService.facets` has refused the same duplication since
+         *     M1. What the tile keeps is the property that mattered: `filter` is opaque to the
+         *     client, so a tile whose key it cannot label still renders and still drills.
          */
         DashboardTile: {
             key: string;
-            label: string;
             count: number;
             severity: components["schemas"]["HealthSignalSeverity"];
             filter: {
                 [key: string]: unknown;
             };
         };
+        /**
+         * @description One stacked bar — a Feature or a person — split by authoring status.
+         *
+         *     `label` here is **data**, not a rendering of an enum: a classification path or a
+         *     person's display name, which only the server can resolve. Its segments carry
+         *     neither a label nor a colour (§180): a segment's `key` is a `LifecycleStatus`,
+         *     so both were presentation for a closed set the client already has a table for —
+         *     and the colour was the sharper of the two, because the server composed
+         *     `var(--color-…)` from the constant's own name while the client kept the identical
+         *     four strings in a map, two mechanisms nothing compared.
+         */
         DashboardBreakdown: {
             id: string;
             label: string;
             segments: {
                 key: string;
-                label: string;
                 count: number;
-                color: string;
                 filter: {
                     [key: string]: unknown;
                 };

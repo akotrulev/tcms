@@ -71,11 +71,11 @@ package com.tcms.repository;
  * because both tidyings are worse — deleting it from the contract breaks a label the SPA has, and
  * adding it here invents the writerless facet above.
  *
- * <h2>Severity and label are here for the same reason the attribute is</h2>
+ * <h2>Severity is here for the same reason the attribute is. The label is not here at all</h2>
  *
  * <p>The dashboard's "Needs attention" panel sorts its tiles by severity rather than alphabetically,
  * because the panel is the one people act on and the two error-severity signals mean something is
- * wrong <em>now</em>. Both properties sit beside the attribute so that adding a tenth signal is one
+ * wrong <em>now</em>. It sits beside the attribute so that adding a tenth signal is one
  * line here and nothing anywhere else — the alternative, a severity map in {@code DashboardService},
  * is a second list to keep in step and the symptom of missing an entry would be a genuinely broken
  * case tiled as neutral.
@@ -87,12 +87,18 @@ package com.tcms.repository;
  * {@link #CONDITION_DRIFT} and {@link #FAILING_REPEATEDLY}, so one case read red on a tile and amber
  * on its own chip. {@link #severity()} is on the wire beside every raised signal now
  * ({@link RaisedSignalView}), the SPA's list is deleted, and the sentence above describes the code.
- * <strong>The label is the one that is still copied</strong>, and deliberately so from the other
- * side: {@code CaseService.facets} argues that enum <em>words</em> belong to the SPA's catalogue and
- * that a second set here is the one that goes stale. That leaves {@link #label} on the wire through
- * {@code DashboardTile.label} as exactly the second set that argument refuses — six of the ten
- * disagree with {@code lib/labels.ts}, on two screens a tile links between. §179 measured it and left
- * it; the tiles are not all signals, so it is a change to how a tile is built.
+ *
+ * <p><strong>And in §180 the label went the other way: there is no {@code label} on this enum any
+ * more.</strong> §179 measured the divergence and left it — {@code label()} reached the SPA through
+ * {@code DashboardTile.label}, which is exactly the second set of words {@code CaseService.facets}
+ * has refused since M1, and <strong>six of the ten disagreed with {@code lib/labels.ts}</strong>, so
+ * a tile reading "Outdated — spec changed" drilled into a grid reading "Linked spec changed". The
+ * reason it was left is that the tiles are not all signals ({@code LifecycleStatus} rides the same
+ * field), so the repair was a change to how a tile is built rather than a member being dropped;
+ * §180 made that change and both labels went with it. The two properties this enum used to carry
+ * therefore went <em>opposite</em> ways, each to the side that can be wrong about it: severity is a
+ * judgement about how broken a case is, made where the derivations are, and words are words, owned
+ * by the one catalogue where a new member is a compile error until it is named.
  *
  * <p><strong>{@link Severity}'s declaration order is load-bearing</strong> — a {@code Comparator}
  * over an enum orders by ordinal, and both {@code DashboardService.health} and
@@ -123,7 +129,7 @@ public enum HealthSignal {
      * {@code DERIVED_FROM} a moved statement is as wrong as one claiming to verify it. Argued at
      * {@code SpecLinkage.recomputeLinkageSignals}, beside the opposite call for {@link #UNLINKED}.
      */
-    OUTDATED_SPEC_CHANGED("outdatedSpecChanged", Severity.ERROR, "Outdated — spec changed"),
+    OUTDATED_SPEC_CHANGED("outdatedSpecChanged", Severity.ERROR),
     /**
      * §6g's edit-after-approval marker, and since §157 the one signal here derived from neither an
      * execution nor a document — {@code ApprovalFacts} reads {@code review}, which
@@ -135,7 +141,7 @@ public enum HealthSignal {
      * precisely because "forcing full re-approval on a typo fix is how review processes get
      * abandoned" — a signal that shouted would be arguing with the setting it reports on.
      */
-    STALE_APPROVAL("staleApproval", Severity.WARNING, "Stale approval"),
+    STALE_APPROVAL("staleApproval", Severity.WARNING),
     /**
      * §6f's reference-while-live, copy-once-versioned split, observed from the side where the two
      * disagree — {@code ConditionDrift} since §158.
@@ -147,10 +153,10 @@ public enum HealthSignal {
      * loudest — a referenced entry was deleted and the live case quietly renders one instruction
      * fewer than the snapshot says it should. Nothing about that self-corrects by being read.
      */
-    CONDITION_DRIFT("conditionDrift", Severity.ERROR, "Condition drift"),
-    STALE_AUTOMATION("staleAutomation", Severity.ERROR, "Stale automation"),
-    NEVER_EXECUTED("neverExecuted", Severity.WARNING, "Never executed"),
-    LONG_UNEXECUTED("longUnexecuted", Severity.WARNING, "Not run in 90 days"),
+    CONDITION_DRIFT("conditionDrift", Severity.ERROR),
+    STALE_AUTOMATION("staleAutomation", Severity.ERROR),
+    NEVER_EXECUTED("neverExecuted", Severity.WARNING),
+    LONG_UNEXECUTED("longUnexecuted", Severity.WARNING),
     /**
      * §6o's traceability gap — {@code SpecLinkage} since §178, and the only signal here that will
      * fire on <em>most</em> cases of a project that has not started linking. Plan §6o's own layout
@@ -167,9 +173,9 @@ public enum HealthSignal {
      * {@code SpecLinkage.recomputeLinkageSignals} and it turns on the chip being rendered inches
      * from the list of the very links it would be denying.
      */
-    UNLINKED("unlinked", Severity.INFO, "Unlinked"),
-    FAILING_REPEATEDLY("failingRepeatedly", Severity.WARNING, "Failing repeatedly"),
-    ORPHANED("orphaned", Severity.INFO, "Orphaned"),
+    UNLINKED("unlinked", Severity.INFO),
+    FAILING_REPEATEDLY("failingRepeatedly", Severity.WARNING),
+    ORPHANED("orphaned", Severity.INFO),
 
     /**
      * §6c's second drift direction, added in {@code V37} — CI is posting results for a case whose
@@ -187,8 +193,7 @@ public enum HealthSignal {
      * the direction that costs nobody a missed defect. Both need fixing; only one of them can be
      * hiding a failure.
      */
-    UNDECLARED_AUTOMATION(
-            "undeclaredAutomation", Severity.WARNING, "Automated, but not marked so");
+    UNDECLARED_AUTOMATION("undeclaredAutomation", Severity.WARNING);
 
     /**
      * {@code DashboardTile.severity} in {@code openapi.yaml}. Ordered worst first, which is the
@@ -207,12 +212,10 @@ public enum HealthSignal {
 
     private final String attribute;
     private final Severity severity;
-    private final String label;
 
-    HealthSignal(String attribute, Severity severity, String label) {
+    HealthSignal(String attribute, Severity severity) {
         this.attribute = attribute;
         this.severity = severity;
-        this.label = label;
     }
 
     /** The {@link CaseHealth} field this signal is stored in. */
@@ -225,8 +228,10 @@ public enum HealthSignal {
         return severity;
     }
 
-    /** How this signal is written on a dashboard tile — see {@link LifecycleStatus#label()}. */
-    String label() {
-        return label;
-    }
+    /*
+     * There is no `label()`. It was deleted in §180 along with `DashboardTile.label`, and the
+     * reason is in this file's header: `lib/labels.ts` is the one catalogue that must name every
+     * member — including INCOMPLETE, which this enum does not even have — and a second set here is
+     * the one that goes stale. It did: six of these ten disagreed with it.
+     */
 }
