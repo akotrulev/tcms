@@ -2293,3 +2293,34 @@ undo. `DC-6` is a recorded **hole**: the shape it breaks needs a state no test f
 | `§187 DC-4` | In `CaseUpdateService.apply`, move the `declinable` resolution to **after** `testCase.applyEdit(...)` | *nothing today* — the **fourth hole** | The declines would be validated against the folder the case is moving *to* rather than the one the client was looking at, so a save that both moves a case and keeps its declines would 400 on ids the response had just served. Needs a single request that changes `suiteId` **and** sends `declinedConditionIds`, which nothing does: the SPA's move is a bulk action and the bulk path sends neither. |
 | `§187 DC-5` | In `CaseBulkService.loadContext`, pass `List.of()` instead of `declinesByCase.getOrDefault(...)` to `CaseEdit.of` | *nothing today* — the **fifth hole**, and it is `classificationOf`'s trap on a third field | A bulk `MOVE_TO_SUITE` over a case carrying a decline would write a version hashing as though it declined nothing, and the next ordinary save would be credited with turning the rule back off. The fixture is a declined case put through a bulk action; `CaseBulkEndpointTest` has no case with a suite-level attachment, so nothing observes it. §95 recorded the identical hole for the conditions and it has never been closed either. |
 | `§187 DC-6` | In `ArchitectureRulesTest`, delete `CaseConditionOptout.of` and its two call sites in `CaseConditions` — i.e. put the table back as it shipped | `everyEntityIsWritableByTheProduct` — **and `everyMappedColumnHasAWriter` will NOT** | **The row whose value is the pair.** The new rule names `CaseConditionOptout`; the thirty-one-section-old one stays green, because two test fixtures INSERT into that table and its corpus reads `src/test`. Run both to see the exact blindness §187 was written about. If the older rule ever *does* redden here, its corpus has been narrowed — and the eight findings that narrowing produces (measured in phase 3) need answering first. |
+
+## §188 — the corpus that counted a fixture, and the claim two headers made
+
+**Six rows.** Ids are `§188 NR-*`; `NR` is unused across both queue files and every handoff section
+(grepped before minting it, per the §154 banner — `AG`, `CD` and `RL` all collided because two lanes
+independently reached for the obvious initials).
+
+**Five are unrun (§65). `NR-6` is recorded as ✅ RUN and is not an exception to the batching
+policy** — it is the mutation-verification of a check written in this slice, taken while writing it,
+which is what makes a green first run evidence rather than a coincidence (§175's `GranteeGroup` is
+the precedent). It is written down here because the *measurement* belongs in the queue whether or
+not the queue was executed.
+
+**`NR-2` is the row this block exists for.** An explicit `= null` is an assignment, an assignment is
+a writer to a bytecode rule, and two of the three unwritten `change_comment` columns were invisible
+for that reason alone — inside `src/main`, where no corpus change can reach them. It is the one
+finding here that narrowing the corpus does *not* explain.
+
+**`§187 DC-6` is now half-answered.** Its last sentence said "if the older rule ever *does* redden
+here, its corpus has been narrowed — and the eight findings that narrowing produces need answering
+first." It has, and they are. Re-run `DC-6` against this tree and the pair no longer diverges, which
+is the intended end state of that row rather than a failure of it.
+
+| Row | Mutate | Must redden | What a green build would mean |
+|---|---|---|---|
+| `§188 NR-1` | In `ArchitectureRulesTest`, put `Path.of("src", "test", "java")` back into the reader rule's corpus | `everyMappedColumnHasAReader` — with **seven** unexpected *absences*, not presences | The direction this map fails in is the one worth seeing: the entries do not go stale, they go *unreachable*, and the rule reports the by-decision list as over-long rather than reporting a column. That is the both-ways property, and it is what stops the corpus being quietly widened back to make a red run green. |
+| `§188 NR-2` | In `SuiteVersion.of`, restore `version.changeComment = null;` | `everyMappedColumnHasAWriter` — the entry becomes unreachable | **The row the block is named for.** One no-op assignment silences the rule for that column, permanently and invisibly, and it reads as tidy defensive initialisation. Two of the three `change_comment` columns were in exactly this state; the only one ever reported was the one whose factory happened to omit the field. A green build means a writer rule that any author can switch off by writing a line that does nothing. |
+| `§188 NR-3` | In `everyMappedColumnHasAWriter`, drop the `field.isAnnotatedWith(Version.class)` skip | the rule, with **fifteen** `lockVersion` members | Not a finding and not noise to be filtered downstream: Hibernate's assignment exists in no source file and no bytecode this rule can read, so reporting them is the rule asserting something untrue. Recorded because the skip looks like an exemption and is the opposite of one — the mirror rule deliberately has none, since `lock_version` really is read. |
+| `§188 NR-4` | In `everyMappedColumnHasAWriter`, restore `src/test/resources` to the SQL corpus | *nothing today* — a **hole**, and stated as one | There is no column whose only SQL writer is a fixture's `.sql` right now, so this passes green. It is recorded because the `.sql` half of the corpus is the half a reader is most likely to widen "for symmetry" with the reader rule, and the day a fixture's init script fills a column, the rule goes quiet with no other symptom. The Java half is covered by `NR-1`. |
+| `§188 NR-5` | In `SeedDataTest.areasMatchTheSpa`, compare `seeded.keySet()` to `permissionAreasFromTheSpa().keySet()` instead of the maps | *nothing* — a **hole by construction**, and the point of the row | The mutation produces exactly the check that already existed twice over, which is the whole finding: `catalogueMatchesTheContract` and the SPA's own `satisfies` both hold the same 55 keys, and neither looks at the value. A reader "de-duplicating" this test into a key comparison would restore the M0 state and every gate would agree with them. |
+| `§188 NR-6` | ✅ **RUN.** In `frontend/src/lib/permissions.ts` alone, move `'library:manage'` from `'repository'` to `'project'` | `areasMatchTheSpa` — **it did** | Measured, and it settles two things at once. The check can fail, which a green first run cannot show. And `:test` **re-ran** although the only edit in the tree was a `.ts` file in another stack — so `build.gradle.kts`'s new `inputs.files` line works and the rule is not green by cache, which is §185's failure and the one this kind of check meets most often. |
