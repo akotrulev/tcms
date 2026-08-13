@@ -192,7 +192,24 @@ const healthHelp: Record<HealthSignal, string> = {
   // in both places.
   UNLINKED: 'This case is not linked to any documentation, so nothing traces it to a requirement.',
   FAILING_REPEATEDLY: 'This case has failed in several consecutive runs.',
-  INCOMPLETE: 'Required fields are missing.',
+  // Rewritten in §182, the slice that gave this signal a derivation — the fourth tooltip in this
+  // map corrected by the slice that made its signal capable of appearing, after §158's, §178's and
+  // §181's. Four for four, which is no longer a run of coincidences: copy for a signal nothing can
+  // raise is copy nobody checks, and it reads as a perfectly sensible sentence right up until the
+  // day it starts appearing.
+  //
+  // "Required fields are missing" was wrong twice over. Nothing is required — the case saved, and
+  // the server's three terms (no steps, nothing saying what should happen, no classification) are
+  // all optional columns. And it left out the gate, which is the entire meaning: only an APPROVED
+  // case raises this, so what the reader is looking at is a sign-off that covered unfinished work.
+  // A draft missing the same three things is just a draft and raises nothing.
+  //
+  // The second sentence is the action, and it is deliberately "open it" rather than a list: the
+  // signal does not say WHICH of the three is missing, and a tooltip that guessed would be wrong
+  // on two cases out of three.
+  INCOMPLETE:
+    'This case was approved without its steps, without saying what should happen, or without a '
+    + 'classification. Open it to see which.',
   // Rewritten in §181, the slice that gave this signal a derivation — the third tooltip in this map
   // to be corrected by the slice that made its signal capable of appearing, after §158's and §178's,
   // and the same lesson a third time: copy nothing can raise is copy nobody checks.

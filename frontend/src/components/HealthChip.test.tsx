@@ -91,6 +91,30 @@ describe('HealthChip — renders the severity it is given, and decides nothing',
     expect(help).toHaveAttribute('aria-label', expect.not.stringContaining('deactivated'));
   });
 
+  it('explains the completeness signal by the sign-off, not by "required fields"', async () => {
+    // §182's finding, and the fourth instance of §158's. The server's predicate is three optional
+    // columns (steps, an expected result anywhere, any classification) behind one gate —
+    // lifecycle_status = 'APPROVED'. The old sentence, "Required fields are missing.", got both
+    // halves wrong: none of the three is required, and the gate is the whole meaning, since a DRAFT
+    // missing all three raises nothing at all.
+    //
+    // Pinned as the absence of "required" as well as the presence of the sign-off, for §181's
+    // reason: it is the word the signal's own name suggests and exactly what a later tidy-up
+    // reaches for, and re-adding it would satisfy a stringContaining assertion.
+    render(<HealthChip signal="INCOMPLETE" severity="INFO" testId="chip" />);
+    const help = await screen.findByTestId('chip');
+
+    expect(help).toHaveAttribute('aria-label', expect.stringContaining('was approved without'));
+    expect(help).toHaveAttribute('aria-label', expect.not.stringContaining('required'));
+  });
+
+  it('labels the completeness signal with the gate that gives it its meaning', () => {
+    // Same finding at the label. "Missing required fields" describes a state no chip is raised for:
+    // a case can miss all three of those things and be perfectly fine, right up until somebody
+    // approves it.
+    expect(healthLabels.INCOMPLETE).toBe('Approved but unfinished');
+  });
+
   it('labels the owner signal by the person, not by the mechanism', () => {
     // Same finding at the label. 'Owner deactivated' named one of the three states and the chip
     // fires on all three; the fix is not a longer sentence but a word that is true of every term

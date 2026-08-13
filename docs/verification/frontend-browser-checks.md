@@ -2262,3 +2262,23 @@ already does this for `§157 SA-1` and `§178 SL-1`, and the same note applies.
 | `§181 OS-2` | **L4**: hover the chip from `OS-1` | *"This case is owned by somebody who no longer works here, so nobody is maintaining it. Reassign it to give it an owner."* The word **"deactivated" must not appear** — that was the old sentence and it named the one of three states nothing in the product can currently produce. This is the row that would catch the sentence being "tidied" back toward the enum's name. |
 | `§181 OS-3` | **L4**, straight after `OS-1`: **re-invite** the same person, wait for a tick, and reload the list | Every chip is **gone**, on every case, with nothing clicked on any case. The signal self-heals from a status update one screen away — which is the property `HealthSignal`'s "no button for lying" rule buys, and the one a reader has no reason to believe until they watch it happen. Note that they are `INVITED` at this point, not `ACTIVE`: an invitation outstanding is deliberately not an orphan, so the chip must clear **before** they accept. |
 | `§181 OS-4` | **not driveable — recorded rather than skipped.** The third term of the predicate is `app_user.status = 'DEACTIVATED'`, and no screen or endpoint in the product writes it: `AppUser.deactivate` has four callers and all four are tests | The options, so the next author does not re-discover them: (a) drive it from `psql` against the live stack, which tests the derivation but not any path a user has; (b) leave it until the `user:manage` account screen exists, which is where the writer will be, and drive it there; (c) accept that `OS-1` covers the reachable half and that this half is covered by `CaseHealthRecomputeTest.aDeactivatedAccountIsAnOrphan` alone. **(c) is the recommendation** — the term is one `OR` in a statement a unit test pins directly, and (a) proves nothing about the product. Revisit when the account screen lands. |
+
+## §182 — the case somebody approved before it was finished
+
+**Four rows, none run** (§65). Ids are `§182 CC-*`; `CC` is unused elsewhere in this file.
+
+The fixture this lane must author is the *opposite* of every other health fixture: nothing has to go
+wrong and nothing has to age. **Approve a case that is missing something** — which the product will
+let you do, and which is the whole point of the signal. `CC-3` is the row that proves the gate, and
+it is the one worth doing first, because a lane that only ever looks at approved cases cannot tell
+this signal from "most cases in this project".
+
+The recompute is hourly by default, so every row here waits for a tick or triggers one; the same
+note as `§157 SA-1`, `§178 SL-1` and `§181 OS-1`.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§182 CC-1` | **L4**, fixture the lane authors: in `OLB`, take a case with steps and an expected result, make sure it carries **no classification**, approve it, wait for a tick, and open the case list | The Health cell carries **"Approved but unfinished"** in the same amber as any other INFO chip. This is the one of the three terms a running deployment can actually reach — `CaseEdit` refuses to save a case with no steps and a Gherkin case with no scenario, so the classification term is what a real project raises. |
+| `§182 CC-2` | **L4**: hover the chip from `CC-1` | *"This case was approved without its steps, without saying what should happen, or without a classification. Open it to see which."* The word **"required" must not appear** — that was the old sentence (*"Required fields are missing."*) and none of the three is a required field; the case saved perfectly well without them. This is the row that would catch the sentence being tidied back toward the enum's name, which is §181's `OS-2` at a different signal and the fourth time this map has needed the correction. |
+| `§182 CC-3` | **L4**: take the same case, send it back to **Draft**, wait for a tick, reload | The chip is **gone**, with nothing about the case's content changed. The signal is a claim about a *sign-off*, not about a case, and this is the only way to see that from the outside. Then approve it again and watch it come back — which is also the self-heal, in the direction a person actually drives it. |
+| `§182 CC-4` | **L4**: classify the case from `CC-1`, wait for a tick, and check both the case list **and** the dashboard's "Needs attention" panel | Chip gone on the grid **and** the tile's count down by one, or the tile absent if it was the last. Worth doing together because the tile and the chip are two screens over one column, which is the pair §180 found disagreeing — and because a tile that keeps its count after the chip clears is the read model being served from a cache nobody invalidated. |

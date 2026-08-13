@@ -473,9 +473,13 @@ export const stepFormatLabels = {
  *
  * **These words stay on this side and the severity does not (§179).** `CaseService.facets` argues
  * the split from the server: enum *words* belong to this catalogue, because it is the one place a
- * new member is a compile error until it is labelled. And the wire structurally cannot own them —
- * this map must label `INCOMPLETE`, which no server constant can ever send, and a per-case payload
- * carries only the signals that were raised.
+ * new member is a compile error until it is labelled. ~~And the wire structurally cannot own them —
+ * this map must label `INCOMPLETE`, which no server constant can ever send~~ → **§182 gave
+ * `INCOMPLETE` a server constant and a derivation, so that half of the argument is spent.** The
+ * argument itself is not: `satisfies Record<HealthSignal, string>` is what makes a new member a
+ * compile error here, and that holds whether or not the two enums are the same set. What remains
+ * structural is the other clause — a per-case payload carries only the signals that were *raised*,
+ * so nothing on the wire can carry the vocabulary.
  *
  * ~~**BUT THE SERVER SENDS A SECOND SET ANYWAY, and six of the ten disagree with this one.**
  * `HealthSignal.label()` reaches the SPA as `DashboardTile.label`, which the dashboard renders
@@ -499,7 +503,14 @@ export const healthLabels = {
   STALE_AUTOMATION: 'Automation stopped reporting',
   UNLINKED: 'Not linked to any spec',
   FAILING_REPEATEDLY: 'Failing repeatedly',
-  INCOMPLETE: 'Missing required fields',
+  // ~~'Missing required fields'~~ — the FOURTH tooltip-and-label pair in this family corrected by
+  // the slice that gave its signal a derivation (§158, §178, §181, now §182), and the words were
+  // wrong in a way only the derivation could show. Nothing here is a REQUIRED field: a case saves
+  // perfectly well with no steps, no expected result and no classification, and the server's
+  // predicate says so — what it adds is a gate, `lifecycle_status = 'APPROVED'`. So the fault is
+  // not that fields are missing, it is that somebody signed the case off while they were, and the
+  // label that omits the gate describes a state no chip is ever raised for.
+  INCOMPLETE: 'Approved but unfinished',
   // ~~'Owner deactivated'~~ — the one of the three states the derivation reads that no running
   // deployment can currently produce. §181 gave this signal its writer and measured the words
   // against it: `AppUser.deactivate` has four callers and all four are tests, because the account
