@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { HealthChip } from './StatusChip';
 import { healthLabels } from '../lib/labels';
+import { severityVar } from '../lib/statusColors';
 import type { HealthSignalSeverity } from '../api/types';
 
 /**
@@ -38,11 +39,18 @@ describe('HealthChip — renders the severity it is given, and decides nothing',
     expect(colorOf('WARNING')).toBe('var(--color-blocked)');
   });
 
-  it('renders an INFO signal in the same amber as a WARNING, deliberately', () => {
-    // Not an oversight: since §178 gave UNLINKED a writer, INFO is most rows of a young project.
-    // Quietening it is a change to the grid's reading plan and is recorded rather than made here —
-    // this test exists so that change is a decision somebody takes on purpose.
-    expect(colorOf('INFO')).toBe('var(--color-blocked)');
+  it('does NOT render an INFO signal in the warning amber', () => {
+    // §183, the decision §179 recorded and deferred through four slices. Amber was carrying two
+    // meanings — "something is wrong now" and "worth knowing" — and by §182 three of the ten
+    // signals were INFO, one of them (UNLINKED) firing on any case with no spec link. Most rows of
+    // a young project were amber, which spends the triage colour on ordinary state.
+    //
+    // Asserted as a pair on purpose. The value is what INFO looks like now; the inequality is the
+    // property the decision is actually about, and it survives a later change of token in a way
+    // the equality alone does not. The second assertion reads the table rather than rendering a
+    // second chip — two renders in one test put two `chip` testids in the document.
+    expect(colorOf('INFO')).toBe('var(--color-info)');
+    expect(severityVar.INFO).not.toBe(severityVar.WARNING);
   });
 
   it('takes the label from the signal and the colour from the severity', () => {

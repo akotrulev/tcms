@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import type { RepositoryDashboard } from '../../api/types'
 import { theme } from '../../app/theme'
+import { severityVar } from '../../lib/statusColors'
 import { HealthPanel } from './DashboardPage'
 
 /**
@@ -120,6 +121,30 @@ describe('HealthPanel — the difference between clean and unchecked', () => {
       'href',
       '/projects/p/cases?healthSignal=UNLINKED',
     )
+  })
+
+  it('takes a tile border from the same table the case chip takes its colour from', () => {
+    // §183. There were two four-key severity→colour maps — this panel's private `severityColor`
+    // and `StatusChip.tsx`'s — agreeing on three values and disagreeing on INFO: blue here, amber
+    // on the chip. One severity, two colours, so the same signal read as information on the
+    // dashboard and as a warning in the grid one navigation later.
+    //
+    // Nothing could see it. No test in either suite had ever asserted a colour on a tile, and the
+    // maps were in different directories with different names. That is `SEVERE_SIGNALS` (§179) and
+    // `DashboardBreakdown.color` (§180) a third time, which is why the assertion is against the
+    // shared table rather than against a literal — a literal here would be the fourth copy.
+    renderPanel(
+      dashboard({
+        healthComputedAt: '2026-08-01T08:00:00Z',
+        health: [
+          { key: 'UNLINKED', count: 156, severity: 'INFO', filter: { healthSignal: ['UNLINKED'] } },
+        ],
+      }),
+    )
+
+    const tile = screen.getByTestId('Dashboard.Health.Tile.UNLINKED').firstElementChild!
+
+    expect(getComputedStyle(tile).borderLeftColor).toBe(severityVar.INFO)
   })
 
   it('claims only that no signal was raised, never that nothing is wrong', () => {

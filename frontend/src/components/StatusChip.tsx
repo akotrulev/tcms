@@ -7,7 +7,7 @@ import type {
   Priority,
   StatusKind,
 } from '../api/types';
-import { lifecycleVar, statusVar } from '../lib/statusColors';
+import { lifecycleVar, severityVar, statusVar } from '../lib/statusColors';
 import {
   automationLabels,
   healthLabels,
@@ -229,44 +229,18 @@ const healthHelp: Record<HealthSignal, string> = {
 };
 
 /**
- * How loudly each severity reads — **a map over the server's four values, not over the
- * signals.**
- *
- * ~~`const SEVERE_SIGNALS: HealthSignal[]`~~ **is gone (§179), and what it was is worth
- * keeping.** It was a hand-written list of the signals that mean something is wrong *now*,
- * with a comment saying out loud that it was a second copy of `HealthSignal.Severity` and
- * that "if a signal ever renders here with a severity beside it, this list should go rather
- * than be kept in step". By §178 **the two copies disagreed about two of the ten members** —
- * the list carried `FAILING_REPEATEDLY` (the server: WARNING) and lacked `CONDITION_DRIFT`
- * (the server: ERROR) — so the same case rendered red on a dashboard tile and amber on its
- * own chip, and no gate on either side could see it. The wire carries the severity now, so
- * this file no longer holds an opinion about which signals are severe; it only decides what
- * a severity *looks like*.
- *
- * `satisfies Record<HealthSignalSeverity, string>` is the difference between the two shapes:
- * a new severity on the wire is a compile error here, where a new *signal* was silently
- * absent from the old list and rendered as merely worth a look.
- *
- * **INFO reads the same as WARNING today and that is not an oversight.** It is the amber
- * treatment, which since §178 means most rows of a young project carry an amber chip
- * (`UNLINKED` fires on any case with no spec link). Quietening INFO is a design change to
- * the grid's reading plan, not a mapping fix, so it is recorded rather than smuggled in
- * here. `NEUTRAL` never reaches a chip — it is for the dashboard tiles that are not signals
- * — and is mapped so the exhaustiveness check has something to be exhaustive about.
- */
-const severityColors = {
-  ERROR: 'var(--color-failed)',
-  WARNING: 'var(--color-blocked)',
-  INFO: 'var(--color-blocked)',
-  NEUTRAL: 'var(--color-text-muted)',
-} as const satisfies Record<HealthSignalSeverity, string>;
-
-/**
  * One raised signal, in the colour the server says it deserves.
  *
  * Both props come off one `RaisedSignal` and must keep coming off the *same* one: the pair is
  * assembled server-side from one enum in one expression precisely so a chip cannot show one
  * signal's name in another's colour.
+ *
+ * ~~`const severityColors`~~ **moved to `lib/statusColors.ts` in §183**, where the header carries
+ * the reading-plan decision it stopped deferring (INFO is blue, not amber) and the reason there is
+ * one table: the dashboard tile had a private copy of the same four keys that disagreed about that
+ * exact value. What this component decides is unchanged and is nothing — the severity arrives with
+ * the signal, and ~~`SEVERE_SIGNALS`~~, the hand-written list of "which signals are severe" that
+ * drifted from the server about two of the ten members, went in §179.
  */
 export function HealthChip({
   signal,
@@ -277,7 +251,7 @@ export function HealthChip({
   severity: HealthSignalSeverity;
   testId?: string;
 }) {
-  const color = severityColors[severity];
+  const color = severityVar[severity];
   return (
     <Tooltip title={healthHelp[signal]}>
       <Chip

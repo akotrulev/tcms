@@ -13,7 +13,7 @@ import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { formatCount, formatDateTime, formatPercent } from '../../lib/format';
 import { automationLabels, healthLabels, labelForKey, lifecycleLabels } from '../../lib/labels';
-import { lifecycleVar } from '../../lib/statusColors';
+import { lifecycleVar, severityVar } from '../../lib/statusColors';
 
 /**
  * Repository status dashboard (plan §6o).
@@ -286,13 +286,6 @@ function tileHref(casesPath: string, filter: Record<string, unknown> | undefined
   return qs ? `${casesPath}?${qs}` : casesPath;
 }
 
-const severityColor: Record<NonNullable<DashboardTile['severity']>, string> = {
-  ERROR: 'var(--color-failed)',
-  WARNING: 'var(--color-blocked)',
-  INFO: 'var(--color-info)',
-  NEUTRAL: 'var(--color-text-muted)',
-};
-
 /**
  * @param labels the catalogue this row's keys belong to — `lifecycleLabels` for the authoring
  *               panel, `healthLabels` for "Needs attention". The row is told which vocabulary it is
@@ -333,7 +326,12 @@ function TileRow({
               borderColor: 'divider',
               borderRadius: 1,
               borderLeft: '3px solid',
-              borderLeftColor: severityColor[tile.severity ?? 'NEUTRAL'],
+              // §183: the shared table, not a private one. This line read
+              // `severityColor[tile.severity ?? 'NEUTRAL']` against a four-key map declared thirty
+              // lines up — same keys as the case chip's, one differing value, and INFO was the one
+              // that differed. The `??` went with it: `DashboardTile.severity` is required on the
+              // wire, so the fallback answered a question the contract does not ask.
+              borderLeftColor: severityVar[tile.severity],
               transition: 'border-color 120ms ease, background-color 120ms ease',
               '&:hover': { bgcolor: 'action.hover' },
             }}
