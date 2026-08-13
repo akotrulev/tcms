@@ -2,13 +2,13 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-13 (**§187** — an inherited condition carries an opt-out switch, a declined row stays in the panel greyed rather than leaving it, and the case detail page names the folder a turned-off rule still applies to; **§186** — the suite dialog edits the suite's conditions with the case editor's own panel, and `SuiteInput` stops being hand-written; **§184** — neither screen ranks a health severity: `severityRank` is deleted and the panel renders the server's order verbatim; **§183** — one severity→colour table in `lib/statusColors.ts`, and INFO stops being amber; **§182** — the health signal whose words left out the gate that gives it its meaning; the `INCOMPLETE` label and tooltip, and nothing else in `src/`; **§181** — the health signal whose words named the one state nothing can produce; the `ORPHANED` label and tooltip, and nothing else in `src/`; **§180** — the dashboard stopped sending words and colours: tiles and segments are labelled from their `key`, and the two colour maps moved to `lib/statusColors.ts`; **§179** — `SEVERE_SIGNALS` is deleted: a chip's colour comes off the wire, and the grid's one visible chip is the worst one; **§178** — two health chips start appearing and `SEVERE_SIGNALS` disagrees with the server about two members; **§177** — the run's git coordinate: a third header line, two dialog fields, and `describeRunCode` beside `describeLinkTarget`; **§175** — `TeamRef` is one generated type and `CurrentUser.teams[].isLead` is gone; no `src/` change; **§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-13 (**§189** — `packages/` only, no `frontend/src` change: the CLI and the MCP server can decline a case's inherited condition and change a suite's, and the two condition ids are not interchangeable; **§187** — an inherited condition carries an opt-out switch, a declined row stays in the panel greyed rather than leaving it, and the case detail page names the folder a turned-off rule still applies to; **§186** — the suite dialog edits the suite's conditions with the case editor's own panel, and `SuiteInput` stops being hand-written; **§184** — neither screen ranks a health severity: `severityRank` is deleted and the panel renders the server's order verbatim; **§183** — one severity→colour table in `lib/statusColors.ts`, and INFO stops being amber; **§182** — the health signal whose words left out the gate that gives it its meaning; the `INCOMPLETE` label and tooltip, and nothing else in `src/`; **§181** — the health signal whose words named the one state nothing can produce; the `ORPHANED` label and tooltip, and nothing else in `src/`; **§180** — the dashboard stopped sending words and colours: tiles and segments are labelled from their `key`, and the two colour maps moved to `lib/statusColors.ts`; **§179** — `SEVERE_SIGNALS` is deleted: a chip's colour comes off the wire, and the grid's one visible chip is the worst one; **§178** — two health chips start appearing and `SEVERE_SIGNALS` disagrees with the server about two members; **§177** — the run's git coordinate: a third header line, two dialog fields, and `describeRunCode` beside `describeLinkTarget`; **§175** — `TeamRef` is one generated type and `CurrentUser.teams[].isLead` is gone; no `src/` change; **§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `158db4c` (§186 shipped; §187 phases 1–3 shipped, the records are this commit) (trust the body over the header and re-grep what a later commit
+**Baseline commit:** `91e50c5` (§187 shipped; §189 phases 1–2 shipped, the records are this commit — and §188 changed nothing this cache covers) (trust the body over the header and re-grep what a later commit
 could have moved).
 
 ## §187 — AN INHERITED CONDITION HAS A TOGGLE, AND A DECLINED ROW STAYS IN THE PANEL
@@ -641,6 +641,47 @@ the table's name.
   re-deriving it.
 - **An inline `?status=` in a query hook fails `contractOperations.test.ts`**, which reads the
   literal path out of the source. Use `qs({ … })`.
+
+## §189 — TWO CONDITION IDS ON THE `packages/` SURFACE, AND THEY ARE NOT INTERCHANGEABLE
+
+**Read this before touching `case edit --decline`, `suite edit --precondition`, `case show`'s or
+`suite show`'s condition tables, or `tcms_write_case` / `tcms_write_suite`'s condition arguments.
+Nothing in `frontend/src` changed.**
+
+- **THE WHOLE SLICE IS KEEPING TWO UUIDS APART.** A **library** id (`condition.id`, served as
+  `CaseConditionRef.conditionId`) is what a *suite* attaches; an **attachment** id
+  (`suite_condition.id`, served as `CaseConditionRef.id`) is what a *case* declines. Both are
+  UUIDs, both appear one column apart in `tcms suite show`'s table, and swapping them types
+  everywhere. `--precondition` takes the first, `--decline` the second, and the only thing that
+  refuses a mix-up is the server.
+- **`caseInputFrom` and `suiteInputFrom` still drop the condition lists, and §189 is the slice that
+  revisited that and kept it.** `core.test.ts`'s `excluded` list predicted a reversal for
+  `declinedConditionIds` ("the exclusion to revisit first") and the answer is no: a **projection**
+  says what an unchanged save sends, and for a list that is nothing; a **flag** is a delta and says
+  what the caller asked for. Adding the echo makes every `--title` edit assert the complete set of
+  an author's opt-outs.
+- **Four complete-set flags, one spelling.** `--tag`, `--tag-rule`, `--decline`, `--precondition`
+  and `--postcondition` all go through `completeSet` (renamed from `tagsFrom`, since two of its
+  four callers are not tags): absent leaves the list alone, `--flag ''` empties it. On the MCP side
+  `[]` is the clearing form, because JSON can type an empty array and a shell cannot.
+- **The MCP suite arm takes BARE ids and builds the `CaseConditionInput` wrapper itself.** The
+  object has exactly one fillable field — `inlineBody` exists only to be refused (§95) and position
+  is the array's order — so asking a model for the shape buys a shape to get wrong.
+- **`library list` and `suite show` are new read commands and they exist for the writes.**
+  `library list` is `tcms_list_library`'s CLI twin (read-only: writing either library costs
+  `library:manage`, which this surface deliberately does not hold), and `suite show` is the only
+  place the two ids are printed side by side. **A write whose argument cannot be learned from the
+  surface offering it is a write nobody can make** — before this, both ids were reachable only
+  through `--json`.
+- **`case show` prints declined conditions BESIDE the live ones, never merged.** The server serves
+  four arrays for that reason: a declined condition is not part of what the case does.
+- **Two fixtures were stale and one was wrong about the wire.** `mcp/src/writes.test.ts`'s
+  `SUITE_ROW` said `conditions: []` — the single undifferentiated array §186 removed three sections
+  earlier — and both case-detail fixtures omitted the declined arrays the contract requires. A stub
+  answers 200 to whatever arrives, so a partial fixture agrees with a client that reads nothing.
+- **What none of this can check is the id being the right *kind*** (`§189 CN-3`, a recorded hole):
+  the stub accepts either, so declining a condition through a mis-wired field would *attach* it and
+  every test stays green. That is a live-pass row, not a unit test.
 
 ## §137 — THERE IS A THIRD TYPESCRIPT STACK NOW, AND IT IS NOT THIS ONE
 

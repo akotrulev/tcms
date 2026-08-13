@@ -2324,3 +2324,40 @@ is the intended end state of that row rather than a failure of it.
 | `§188 NR-4` | In `everyMappedColumnHasAWriter`, restore `src/test/resources` to the SQL corpus | *nothing today* — a **hole**, and stated as one | There is no column whose only SQL writer is a fixture's `.sql` right now, so this passes green. It is recorded because the `.sql` half of the corpus is the half a reader is most likely to widen "for symmetry" with the reader rule, and the day a fixture's init script fills a column, the rule goes quiet with no other symptom. The Java half is covered by `NR-1`. |
 | `§188 NR-5` | In `SeedDataTest.areasMatchTheSpa`, compare `seeded.keySet()` to `permissionAreasFromTheSpa().keySet()` instead of the maps | *nothing* — a **hole by construction**, and the point of the row | The mutation produces exactly the check that already existed twice over, which is the whole finding: `catalogueMatchesTheContract` and the SPA's own `satisfies` both hold the same 55 keys, and neither looks at the value. A reader "de-duplicating" this test into a key comparison would restore the M0 state and every gate would agree with them. |
 | `§188 NR-6` | ✅ **RUN.** In `frontend/src/lib/permissions.ts` alone, move `'library:manage'` from `'repository'` to `'project'` | `areasMatchTheSpa` — **it did** | Measured, and it settles two things at once. The check can fail, which a green first run cannot show. And `:test` **re-ran** although the only edit in the tree was a `.ts` file in another stack — so `build.gradle.kts`'s new `inputs.files` line works and the rule is not green by cache, which is §185's failure and the one this kind of check meets most often. |
+
+## §189 — the two ids neither machine surface could name
+
+**Seven rows, none run** — §65. Ids are `§189 CN-*`; `CN` is unused across both queue files and
+every handoff section (grepped before minting it, per the §154 banner — `AG`, `CD` and `RL` all
+collided because two lanes independently reached for the obvious initials).
+
+**Every row here mutates `packages/` and runs as `cd packages && npm run test:run --workspaces`**,
+so this block joins `§141 RL-7`/`RL-8`, `MS-*`, `CW-*` and `TS-*` in being observed only by a
+stubbed `fetch`. What that costs is stated in `§141`'s block and holds unchanged here: a stub
+answers 200 to whatever arrives, so **not one of these rows can tell a wrong id from a right one**.
+The server is where an attachment id is validated against the attachments that reach a case, and
+`CN-3` is the row that says so.
+
+**`CN-1` is the row this block exists for.** The two ids look interchangeable — both UUIDs, one
+column apart in the two tables this slice prints — and the whole of the slice's care is keeping
+them apart at four call sites and two schemas. Swapping them is the edit a reader makes while
+"tidying", it types, and the failure it produces is a field error at a terminal rather than
+anything a build sees.
+
+| Row | Mutate | Must redden | What a green build would mean |
+|---|---|---|---|
+| `§189 CN-1` | In `cli/src/reads.ts`, print `entry.row.conditionId` in `case show`'s CONDITION column (the library id in the attachment's place) | `prints each condition with its attachment id, and says which are declined` | **The row the block is named for.** The column would print an id that is real, resolves to a real row, and is refused by `--decline` — or, worse, is *accepted* by `suite edit --precondition`, where it means something else entirely. A green build means the read half of this slice is asserted by shape rather than by value. |
+| `§189 CN-2` | In `cli/src/writes.ts`, make `conditionsFrom` return the bare ids (`completeSet(value)`) instead of wrapping them | `attaches conditions by library id, wrapped as the input the write takes` | The wire shape stops being `CaseConditionInput`. The server answers a field error naming a shape no CLI flag mentions, and the flag has never once worked — §143's defect exactly, in a client whose type assertion (`as SuiteInput`) is on the merged body and therefore cannot see it. |
+| `§189 CN-3` | In `mcp/src/writes.ts`, read `strings(input, 'declinedConditions')` into `preconditions` instead of `declinedConditionIds` | *nothing* — a **hole**, and stated as one | The two fields take the same JSON type and the stub accepts either, so declining a condition would *attach* it — the exact inversion of the caller's intent — and every test here would stay green. Only the server can refuse it: `CaseConditionInput` requires an object, so this is a 400 on the first live call. **This is the row that says what a stubbed surface cannot check**, and it is the reason the live-pass row below exists. |
+| `§189 CN-4` | In `cli/src/writes.ts`, have `completeSet` keep the empty strings rather than filtering them | `re-imposes every declined condition on --decline ""` and `detaches every condition on --precondition ""` | `--decline ''` would send `['']`, which is a field error rather than the clearing form — so the one spelling a shell has for "empty this list" would be the one spelling that fails, on all four complete-set flags at once. |
+| `§189 CN-5` | In `client/src/core/rewrite.ts`, add `declinedConditionIds: [...current.declinedPreconditions, ...current.declinedPostconditions].map((ref) => ref.id)` to `caseInputFrom` | `carries every field of TestCaseInput a round-trip may send, and no other`, and `says nothing about declines when no flag named them, on a case that has one` | The reversal §189 considered and refused. Every `--title` edit would state the complete set of an author's opt-outs as though the caller had named them; harmless while the read's ids are exactly the declinable ones, and a claim nobody made either way. The `excluded` list in `core.test.ts` is what makes it a decision rather than a default. |
+| `§189 CN-6` | In `cli/src/reads.ts`, merge the declined arrays into the live ones in `case show` (one list, no STATE column) | *nothing* — the **second hole** | The two assertions are `toMatch(/sc-2.*declined/)` and `/sc-1.*in force/`, which a merged list with a marker column still satisfies. What the mutation destroys is the *reading*: a declined condition is not part of what the case does, and a single list is one careless glance from saying it is. Recorded rather than faked — the alternative is asserting on a table's layout, which is how a test starts refusing a better one. |
+| `§189 CN-7` | In `mcp/src/writes.ts`, drop the `preconditions`/`postconditions` properties from `tcms_write_suite`'s `inputSchema` while leaving the `run` body reading them | *nothing* | `additionalProperties: false` is declared and the SDK validates against it — but these tests call the tool's `run` directly, so the schema is never applied. The arm keeps working here and is refused at the boundary in the field: a tool whose schema and body disagree is invisible to every test in this package. **The same gap `MS-*` records, at a new door.** |
+
+**The live-pass row this slice leaves.** `CN-3`'s hole is not closeable here: the check it wants is
+one real `tcms_write_case` `action: edit` carrying `declinedConditions`, against an instance where
+the case actually inherits a suite condition — the fixture `§186 A1-2` authors on the browser side,
+which is the same state. It belongs to the next `packages/` live pass
+(`docs/verification/2026-08-09-packages-live-pass-round-2.md` is the most recent), alongside one
+`tcms suite edit --precondition` against a real library id. Both are **NOT RUN**, and neither has
+ever been executed by anything: these two arms have existed for one commit.

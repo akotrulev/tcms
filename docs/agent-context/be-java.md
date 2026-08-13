@@ -329,6 +329,9 @@ longer does.
 - **Absent means "leave alone", `[]` means "detach"** — and `suiteInputFrom` in `packages/client`
   **drops** both lists, so a CLI `suite edit --name` relies on that distinction. The SPA sends them
   always. Collapsing absent into empty makes the two clients disagree about what a rename does.
+  **§189 added `--precondition` / `--postcondition` and the drop still stands**: the change goes in
+  the delta, where the caller's own library ids are, and `''` (CLI) / `[]` (MCP) is how "detach
+  them all" is spelled. So this endpoint now has three callers depending on the distinction.
 - **Two known holes, recorded as mutation rows and measured**: nothing reddens if you drop the
   retired bound in `reconcile` (`§186 SQ-2`) or the stored half of `acceptableConditionIds` in
   `rename` (`§186 SQ-5`). Both need a condition retired *after* being attached to a suite, which no
