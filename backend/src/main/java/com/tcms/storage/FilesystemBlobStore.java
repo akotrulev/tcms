@@ -54,6 +54,63 @@ final class FilesystemBlobStore {
     FilesystemBlobStore(String root, String kind) {
         this.root = Path.of(root).toAbsolutePath().normalize();
         this.kind = kind;
+        requireUsableRoot();
+    }
+
+    /**
+     * Refuse to start rather than to answer, when the configured root cannot be written to.
+     *
+     * <h2>Why this is in the constructor</h2>
+     *
+     * <p>Without it the failure arrives at the <em>first write</em> — the first evidence upload,
+     * the first report download, the first CI ingestion — as a 500 from
+     * {@link #put}'s {@code Files.createDirectories}, on a container that reported healthy at boot
+     * and has been serving every other request correctly for however long it took somebody to
+     * attach a screenshot. Readiness covers the datasource and Flyway; nothing covered this.
+     *
+     * <p><strong>Both live passes this product has had found exactly that, six days apart</strong>
+     * (§110 F10, 2026-08-06; §185, 2026-08-12), each an
+     * {@code AccessDeniedException: /var/lib/tcms} on the first blob write of the sitting. §185
+     * provisions the roots in the image and in both compose files, and
+     * {@code ConfigConventionTest} pins those three artifacts — but every one of those checks
+     * reads a file in this repository, and the deployment that matters most is a directory on a
+     * host no test can see. The Hetzner runbook's {@code chown} is prose, and it is prose that has
+     * been wrong since §160 added the third root: {@code /var/lib/tcms/raw-reports} is root-owned
+     * on the live VM today. This is the check that reads the host.
+     *
+     * <h2>The cost, taken deliberately</h2>
+     *
+     * <p>A deployment whose roots are not writable now <strong>refuses to start</strong>, where
+     * before it started and 500'd later. That is the trade: a failure at deploy time, in front of
+     * the operator running the deploy, against a failure weeks later in front of a user attaching
+     * evidence. It applies to the operator CLI too ({@code provision-company} builds the same
+     * beans), which is the same answer for the same reason.
+     *
+     * <p>The message names the path and the ownership, because the fix is a {@code chown} and an
+     * operator reading a stack trace at 2am should not have to find the runbook to learn that.
+     */
+    private void requireUsableRoot() {
+        try {
+            // Creating it is half the check: /var/lib is root-owned in the runtime image, so this
+            // is the call that throws AccessDeniedException — the same call put() makes, moved to
+            // a point where failing is free.
+            Files.createDirectories(root);
+        } catch (IOException failure) {
+            throw new IllegalStateException(unusable("could not be created"), failure);
+        }
+        if (!Files.isWritable(root)) {
+            // Created, or already there, and still not ours: a bind mount takes the HOST
+            // directory's ownership and ignores the image's outright, which is the production
+            // shape and the one the image's mkdir does nothing for.
+            throw new IllegalStateException(unusable("exists but is not writable"));
+        }
+    }
+
+    private String unusable(String what) {
+        return ("The %s storage root %s %s. The application runs as UID 10001 and cannot fix this "
+                + "itself. On the host: mkdir -p %s && chown -R 10001:10001 the tcms storage "
+                + "directory. Refusing to start, rather than answering 500 at the first write.")
+                .formatted(kind, root, what, root);
     }
 
     void put(String key, byte[] bytes) {

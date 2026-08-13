@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -230,6 +231,61 @@ class FilesystemBlobStoreTest {
             assertThatThrownBy(() -> store.put("../escaped", new byte[] {1}))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("raw report");
+        }
+    }
+
+    /**
+     * The root itself, checked at construction — §185.
+     *
+     * <p>Both live passes this product has had died at the same place: a blob root that no
+     * deployment artifact created, discovered as a 500 on the first upload of the sitting, six
+     * days and one "fixed" apart. §185 provisions the roots in the image and in both compose
+     * files and pins all three with {@code ConfigConventionTest}; these two tests cover what that
+     * cannot, which is a directory on a host no test reads.
+     *
+     * <p><strong>The failure is provoked without touching permissions, deliberately.</strong> The
+     * obvious fixture is {@code chmod 0555} on a parent, and it is a fixture that quietly stops
+     * testing anything when the suite runs as root — the nightly lane runs on a box where that is
+     * one CI configuration away, and a test that passes by being unable to fail is the shape §184
+     * measured its way out of. A root whose parent is a regular <em>file</em> cannot be created by
+     * any uid, so these hold for root too.
+     */
+    @Nested
+    @DisplayName("the root is checked at construction, not at the first write")
+    class UsableRoot {
+
+        @Test
+        @DisplayName("an uncreatable root refuses at construction rather than 500ing on first put")
+        void refusesAtConstruction() throws IOException {
+            // A file, not a directory — so `<file>/blobs` cannot be created, whoever we are.
+            Path occupied = root.resolve("not-a-directory");
+            Files.writeString(occupied, "x");
+
+            assertThatThrownBy(
+                    () -> new FilesystemBlobStore(occupied.resolve("blobs").toString(), "evidence"))
+                    .isInstanceOf(IllegalStateException.class)
+                    // What an operator needs is which root and where, because the fix is a chown
+                    // and they should not have to find the runbook to learn that.
+                    .hasMessageContaining("evidence")
+                    .hasMessageContaining(occupied.resolve("blobs").toString())
+                    .hasMessageContaining("chown");
+        }
+
+        @Test
+        @DisplayName("a root that does not exist yet is created rather than refused")
+        void createsAMissingRoot() {
+            // The other half, and the one that would make this check a regression if it were
+            // wrong: every test in this suite points its roots at a /tmp path that does not exist
+            // until something makes it, and so does a first boot against a fresh named volume.
+            // "Refuse when unusable" must not become "refuse when absent".
+            Path fresh = root.resolve("made-on-demand").resolve("deeper");
+
+            FilesystemBlobStore store = new FilesystemBlobStore(fresh.toString(), "evidence");
+
+            assertThat(fresh).isDirectory();
+            String key = UUID.randomUUID().toString();
+            store.put(key, new byte[] {1});
+            assertThat(store.exists(key)).isTrue();
         }
     }
 }
