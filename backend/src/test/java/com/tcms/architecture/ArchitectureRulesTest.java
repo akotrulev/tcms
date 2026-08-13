@@ -27,6 +27,7 @@ import com.tngtech.archunit.lang.syntax.ArchRuleDefinition;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -1097,6 +1098,142 @@ class ArchitectureRulesTest {
                         the list. Its mirror is everyMappedColumnHasAReader; a member of both is \
                         the cheap case, a member of this one alone is not""")
                 .containsExactlyInAnyOrderElementsOf(WRITERLESS_BY_DECISION.keySet());
+    }
+
+    /**
+     * Entities whose table the product cannot put a row in, though a test fixture can.
+     *
+     * <p><strong>One, and it is the one that was already argued.</strong> §187 asked the question
+     * for the first time and the population was five; four of those were the rule's own corpus
+     * being wrong rather than the product being incomplete — {@code permission} and {@code role}
+     * are seeded by {@code V3}, {@code configuration} and {@code doc_space} by {@code V1}'s seed
+     * functions — which is why the migrations are in it now. Measured, not predicted.
+     *
+     * <p>{@code case_condition_optout} was the member this rule was written for and it left the
+     * list before the list existed: §187 phase 1 gave it {@code CaseConditionOptout.of} and a
+     * reconcile, so the rule is green <em>because</em> that landed rather than in spite of it.
+     */
+    private static final Map<String, String> UNWRITABLE_BY_DECISION = Map.of(
+            "CaseAutomationTag",
+            "the CI SELECTION tags (§6c), and the one field on TestCaseInput still REFUSED with a "
+                    + "400 rather than ignored — CaseUpdateRequest's \"the two fields this "
+                    + "endpoint refuses\", of which this is now the second-to-last. Unwritable is "
+                    + "the honest state while the refusal stands: the reconcile is a different "
+                    + "table and a different job from the organisational `tags` §96 built, and "
+                    + "building it silently here would make the 400 a lie. The exit is the same "
+                    + "one classificationValueIds, the conditions and tags each took in turn");
+
+    @Test
+    @DisplayName("every entity's table has a writer IN THE PRODUCT, not only in a fixture")
+    void everyEntityIsWritableByTheProduct() {
+        // §116'S QUESTION, AT THE GRANULARITY §116 ASKED IT AT, AND THE ONE ITS SUCCESSOR CANNOT
+        // ANSWER. everyMappedColumnHasAWriter reads `src/test` as well as `src/main`, deliberately
+        // — a great deal of this suite's ground truth is raw SQL, and excluding it would report
+        // fifteen @Version columns as writerless because Hibernate's assignment is not in any
+        // source file. The cost of that inclusion is exactly this: A TABLE WHOSE ONLY WRITER IS A
+        // FIXTURE READS AS WRITTEN.
+        //
+        // `case_condition_optout` is the measured instance and the reason this rule is here. It
+        // shipped in V1 with an entity, an id class, a repository, a filter in CaseConditions and
+        // prose in four files describing what its rows do — and no way for any request to create
+        // one. Two test fixtures INSERT into it, which is the whole of why §156's rule ran green
+        // over it for thirty-one sections. §153's finding at the level below: a test caller is a
+        // consumer for a READ seam and never for a WRITE one, and a table is the largest write
+        // seam there is.
+        //
+        // THE NARROW SCOPE IS THE POINT. Restricting the column rule's own corpus to src/main was
+        // measured rather than proposed (§187): the writerless population goes 6 → 22, of which
+        // FIFTEEN are lockVersion — @Version, written by Hibernate, definitionally not a finding —
+        // and exactly one is real (DocPageVersion.changeComment). The reader rule's goes 11 → 18,
+        // and all seven of those ARE real, TestRun.releaseSortKey and TestExecution.releaseSortKey
+        // among them: §151 built that sort key and nothing in the product has ever read it back.
+        // Eight genuine findings needing eight decisions is a slice, not a tail, and it is recorded
+        // as the next one rather than laundered through a by-decision map here.
+        //
+        // At table granularity none of that arises. An entity is written if ANY of its fields is
+        // assigned in src/main or its table is named by an INSERT there, so a @Version column
+        // carries no weight and the answer is one bit per table.
+        Map<Path, String> mainWrites = new LinkedHashMap<>();
+        try (Stream<Path> sources = Files.walk(MAIN_SOURCE)) {
+            for (Path file : sources.filter(p -> p.toString().endsWith(".java")).toList()) {
+                mainWrites.put(file, writesInLiterals(
+                        COMMENT.matcher(Files.readString(file)).replaceAll(" ")));
+            }
+        } catch (IOException unreadable) {
+            throw new AssertionError("src/main is this rule's corpus", unreadable);
+        }
+        // The MIGRATIONS are main sources too, and leaving them out cost four false members on the
+        // first run: `permission` and `role` are seeded by V3, `configuration` and `doc_space` by
+        // the seed functions V1 declares. A migration that fills a table is a writer of it — V44 is
+        // the worked example the column rule already cites — and at table granularity that is even
+        // more clearly true, because "the product can put a row here" is exactly what a seed does.
+        try (Stream<Path> sources = Files.walk(Path.of("src", "main", "resources"))) {
+            for (Path file : sources.filter(p -> p.toString().endsWith(".sql")).toList()) {
+                mainWrites.put(file, writesIn(
+                        SQL_COMMENT.matcher(Files.readString(file)).replaceAll(" ")));
+            }
+        } catch (IOException unreadable) {
+            throw new AssertionError("the migrations are this rule's corpus too", unreadable);
+        }
+
+        assertThat(mainWrites)
+                .as("the main source corpus is empty or tiny, so every table below would read as "
+                        + "unwritable — the working directory or the source layout has moved")
+                .hasSizeGreaterThan(300);
+
+        Map<String, String> unwritable = new TreeMap<>();
+        int examined = 0;
+
+        for (JavaClass type : PRODUCTION) {
+            if (!type.isAnnotatedWith(Entity.class)) {
+                continue;
+            }
+            examined++;
+            String table = tableOf(type);
+            boolean writable = namedIn(mainWrites, null, table);
+            if (!writable) {
+                for (JavaField field : type.getFields()) {
+                    if (field.getModifiers().contains(JavaModifier.STATIC)) {
+                        continue;
+                    }
+                    // A field assigned from outside the entity, or by a mutator something calls —
+                    // isWrittenInJava's rule, which is what makes a factory count and a dead
+                    // setter not. ArchUnit's class corpus is PRODUCTION, so a fixture's assignment
+                    // is not in it and cannot make a table look writable.
+                    if (isWrittenInJava(field)) {
+                        writable = true;
+                        break;
+                    }
+                }
+            }
+            if (!writable) {
+                unwritable.put(type.getSimpleName(), table);
+            }
+        }
+
+        assertThat(examined)
+                .as("no entity was examined, so this rule passes vacuously — the @Entity predicate "
+                        + "or the import has moved")
+                .isGreaterThan(50);
+
+        assertThat(unwritable.keySet())
+                .as("""
+                        nothing in src/main can put a row in this table, so it is empty in every \
+                        deployment and full in the test database — which is the one arrangement in \
+                        which a green suite is evidence FOR the behaviour nobody can perform. \
+                        case_condition_optout was that for thirty-one sections, with a reader, a \
+                        filter and four files of prose describing rows no request could create. \
+                        Give it a writer, drop the table in a migration, or add it to \
+                        UNWRITABLE_BY_DECISION with the argument written at the entity""")
+                .containsExactlyInAnyOrderElementsOf(UNWRITABLE_BY_DECISION.keySet());
+    }
+
+    /** An entity's table name — the {@code @Table} annotation, or the class's own simple name. */
+    private static String tableOf(JavaClass type) {
+        return type.tryGetAnnotationOfType(Table.class)
+                .map(Table::name)
+                .filter(name -> !name.isEmpty())
+                .orElseGet(type::getSimpleName);
     }
 
     @Test
