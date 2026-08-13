@@ -2436,3 +2436,30 @@ violating row — `IntegrationTestBase` migrates a fresh one, so no test in this
 | `§192 DF-5` | In `CaseBulkService.loadContext`, resolve `retainedAtTarget` from the case's **current** suite instead of `move.suiteId()` | `moveDropsTheDeclinesItInvalidates` | One suite id, and it inverts the rule: every decline is retained because every decline is imposed by the folder the case is leaving. It reads correctly — "the attachments reaching this case" — which is precisely the sentence the bound must **not** be about. ⬜ NOT RUN |
 | `§192 DF-6` | In `CaseUpdateService`, resolve `retained` from `testCase.getSuiteId()` unconditionally, dropping the `request.suiteId()` branch | `aMoveDeletesTheDeclinesItInvalidates` | `DF-5`'s mutation on the other writer, and the one a reader makes while "removing a redundant conditional" — the two suite ids are equal on every save that does not move the case, which is nearly all of them, so the mutation is invisible in the ordinary path and total in the one that matters. ⬜ NOT RUN |
 | `§192 DF-7` | Migrate a database that already holds a violating row (decline a case through `PATCH`, move it with `UPDATE test_case SET suite_id = …` behind the app's back, then run `V50`) | *nothing in the build* — a **hole**, and it needs a hand-built database | The sweep is the half a code change cannot reach: the writers hold the invariant from now on, and the rows already stored are `V50`'s alone. It is also the row where an RLS mistake is silent — a `DELETE` with no `app.current_company` set matches **zero rows and reports success** (V44 §3), so the migration would report a clean run over a database it changed nothing in. Run it by hand against a container with two companies' rows and check both are gone. ⬜ NOT RUN |
+
+## §193 — the decline that ended without a sentence
+
+**Four rows, none run** — §65. Ids are `§193 LD-*` (*lost declines*); `LD` is unused across both
+queue files and every handoff section (grepped before minting it, per the §154 banner).
+
+**`LD-1` is the row this block exists for, and it is the defect this slice already hit once.** The
+report is read out of the same context the mutation narrows in place, so the *order* of two adjacent
+statements is the whole rule — and getting it wrong is not a failure, it is a field that is correct
+on every preview and silently empty on every commit. It was measured, red, on the first run of this
+slice's gate rather than reasoned about.
+
+**`LD-4` is a hole, and it is structural rather than an omission.** Since §98 a suite is flat, so
+`CaseConditions.ancestry` resolves a case's inheritance to **one** suite — its own — and a stored
+decline names an attachment of the folder the case is *leaving*. On the bulk path there is therefore
+no reachable state in which a decline **survives** a move: `retainedDeclinesOf` is empty for every
+selection, and `endsADecline` reduces to *"did this case decline anything"*. The bound is observable
+in the direction that deletes (`LD-1`, and `§192 DF-1` on the edit path) and unobservable in the
+direction that keeps, and no mutation can close that — it needs a *fixture* the product cannot
+currently produce.
+
+| Row | Mutate | Must redden | What a green build would mean |
+|---|---|---|---|
+| `§193 LD-1` | In `CaseBulkService.apply`, move the `endsADecline` call **below** the `if (!dryRun) mutate(...)` block | `theMoveReportsTheDeclineItEnds` — and **not** `thePreviewReportsTheDeclineBeforeItEndsIt`, which is the finding | §192 made `MOVE_TO_SUITE` the first bulk command that *writes back* one of the reconstructed fields (`context.declines().put(...)`), so after the mutation the stored list **is** the retained one and the two sizes agree. The preview never mutates, so it keeps answering correctly — a client would see the warning on the dialog and an empty `declinesEnded` on the commit that acted on it. Exactly one of the two test arms sees this, which is why both exist. ⬜ NOT RUN |
+| `§193 LD-2` | Delete the `command instanceof BulkCommand.MoveToSuite` guard from `endsADecline` | `anAuthoredNonMoveClaimsNoLoss` | `Context.retainedAtTarget` is empty for the seven commands that are not a move — for the reason *"nobody asked"*, not *"the folder imposes nothing"* — so without the guard every stored decline in the selection narrows to nothing and a `SET_AUTOMATION_STATUS` reports the loss of rows it does not touch. A response that invents a consequence is worse than one that omits it, and this is the shape that does it. ⬜ NOT RUN |
+| `§193 LD-3` | In `CaseBulkService.mutate`, restore the local narrowing — `stored.stream().filter(context.retainedAtTarget()::contains).toList()` — in place of `context.retainedDeclinesOf(row.getId())` | *nothing* — a **hole**, and stated as one | The two expressions are the same rule written twice, which is exactly the state §193 removed: they agree today, and the first edit to either makes the response describe an operation the database did not perform. There is no failing state to assert *while they agree*, so the check is that one projection has one implementation — a reading, not a test. Recorded rather than dropped because "a green build proves nothing here" is the honest verdict, not a reason to leave the duplication. |
+| `§193 LD-4` | Move a case whose decline the **destination also imposes**, and assert it is absent from `declinesEnded` | *nothing* — a **hole**, and it needs a fixture no schema state can produce, see above | The retention half of the bound has no witness. Deleting the filter is not the mutation for it — that reddens `LD-1` and `moveDropsTheDeclinesItInvalidates` immediately, because `endsADecline` and the write both read this one projection. What has no test is the arm where a decline is **kept**, and while a suite is flat there is no pair of folders sharing an attachment id to build it from. The consequence to hold on to: today `declinesEnded` and *"this case declined something and moved"* are the same set, and only the first of those is the sentence the product means. |
