@@ -160,4 +160,171 @@ class ConfigConventionTest {
                         + "in production.")
                 .isEmpty();
     }
+
+    // ---------------------------------------------------------------------------------------
+    // The blob roots, checked against the artifacts that have to provision them.
+    //
+    // WHY THESE EXIST. `application.yml` defaults three filesystem roots under /var/lib/tcms.
+    // Nothing creates them: /var/lib is root-owned in the runtime base image and the process
+    // runs as UID 10001, so the first Files.createDirectories under it throws
+    // AccessDeniedException — at the first *write*, which is the first evidence upload, the
+    // first report download or the first CI ingestion, long after the container reported
+    // healthy. A live pass found it on 2026-08-06 (§110 F10) and a second live pass found the
+    // identical stack trace on 2026-08-12, six days later.
+    //
+    // The reason it survived the first finding is the reason these rules are computed rather
+    // than a line in a runbook. §110 fixed `deploy/compose.prod.yaml` and wrote "production is
+    // unaffected" — true of the artifact it was looking at, and the artifact it was not looking
+    // at is the one this repo's own setup instructions tell every reader to run. Then §160 added
+    // a THIRD root, and the Hetzner runbook's `chown` still names two, so that root has been
+    // root-owned on the live host since — the same defect, arriving through the same gap,
+    // against a fix that had already been applied once.
+    //
+    // So the population is derived from application.yml and the rules ask each provisioning
+    // artifact about every member of it. A fourth store fails the build until it is provisioned,
+    // which is the one property neither prose nor a careful reading has managed to hold.
+    // ---------------------------------------------------------------------------------------
+
+    /** A configured filesystem root: the environment variable, and the path it defaults to. */
+    private record StorageRoot(String variable, String path) {}
+
+    /**
+     * {@code root: ${VAR:/some/path}} — the shape every blob store's property has, and the only
+     * shape in these files that names a directory the deployment must exist before a write.
+     */
+    private static final Pattern ROOT_PROPERTY =
+            Pattern.compile("(?m)^\\s*root:\\s*\\$\\{([A-Za-z0-9_]+):([^}]+)}");
+
+    private static List<StorageRoot> storageRoots() {
+        List<StorageRoot> roots = new ArrayList<>();
+        Matcher m = ROOT_PROPERTY.matcher(codeOf(Path.of("src/main/resources/application.yml")));
+        while (m.find()) {
+            roots.add(new StorageRoot(m.group(1), m.group(2).trim()));
+        }
+
+        // The self-corpus guard, and it is not defensive padding. §154's rule ran green over a
+        // halved population because it matched its own argument; §156's first draft hid two
+        // members because a fixture swallowed a file. A text rule that matches nothing passes
+        // every check it makes, so the population is asserted before it is used.
+        assertThat(roots)
+                .describedAs("ROOT_PROPERTY matched %d roots in application.yml. The product has "
+                        + "three blob stores (evidence, reports, raw-reports), so fewer than three "
+                        + "means this pattern has stopped seeing the file rather than that a root "
+                        + "was removed — and every rule below would then pass over nothing.",
+                        roots.size())
+                .hasSizeGreaterThanOrEqualTo(3);
+        return roots;
+    }
+
+    /** Whole-line {@code #} comments only — a Dockerfile has no trailing-comment syntax. */
+    private static String dockerfileCode() {
+        try {
+            return Files.readAllLines(Path.of("Dockerfile"), StandardCharsets.UTF_8).stream()
+                    .filter(line -> !line.stripLeading().startsWith("#"))
+                    .reduce("", (a, b) -> a + "\n" + b);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    @Test
+    @DisplayName("every blob root is created and owned by the runtime user in the image")
+    void everyStorageRootIsCreatedInTheImage() {
+        String dockerfile = dockerfileCode();
+        List<String> missing = storageRoots().stream()
+                .map(StorageRoot::path)
+                .filter(path -> !dockerfile.contains(path))
+                .toList();
+
+        assertThat(missing)
+                .describedAs("""
+                        backend/Dockerfile does not create %s.
+
+                        The image is the one artifact every deployment shares, which is why the \
+                        fix lives there: a per-deployment fix was applied once already (§110, \
+                        compose.prod.yaml) and the defect re-fired six days later through the \
+                        deployment that fix did not touch.
+
+                        It is also what makes the root compose.yaml's named volume come up owned \
+                        by 10001 — Docker seeds a fresh named volume from the image's content at \
+                        that path, ownership included. Delete the mkdir and the volume is created \
+                        root-owned and the AccessDeniedException returns through the mount.
+
+                        Comments are stripped before this check. A PRECAUTION, not a measured \
+                        save — verified 2026-08-13 by deleting the RUN and leaving the comment \
+                        block, and the rule failed, because that prose names the paths by brace \
+                        expansion rather than in full. Kept because the next edit to that comment \
+                        need only spell one of them out for the rule to start passing over its \
+                        own explanation, which is the shape §162 deleted two exemptions for.""",
+                        missing)
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("every blob root is bind-mounted in production, at the path the app writes to")
+    void everyStorageRootIsMountedInProduction() {
+        String prod = codeOf(Path.of("../deploy/compose.prod.yaml"));
+        List<String> offences = new ArrayList<>();
+
+        for (StorageRoot root : storageRoots()) {
+            if (!prod.contains(root.path() + ":" + root.path())) {
+                offences.add("no bind mount `%s:%s`".formatted(root.path(), root.path()));
+            }
+            if (!prod.contains(root.variable() + ": " + root.path())) {
+                offences.add("`%s` is not set to `%s`".formatted(root.variable(), root.path()));
+            }
+        }
+
+        assertThat(offences)
+                .describedAs("""
+                        deploy/compose.prod.yaml: %s.
+
+                        Both halves are the same decision (§107): the application's path and the \
+                        mount target must be ONE string. Set the variable without the mount and \
+                        the bytes land in the container's writable layer, where `docker compose \
+                        pull && up -d` destroys them; mount without setting the variable and the \
+                        app writes somewhere else entirely and the mount sits empty.
+
+                        Note what this rule CANNOT check. A bind mount takes the host directory's \
+                        ownership and ignores the image's outright, so the image's mkdir buys \
+                        production nothing — §7 of the Hetzner runbook (`mkdir` + `chown -R \
+                        10001:10001 /var/lib/tcms`) is the step that makes the VM work, and it is \
+                        prose on a host no test can read. That is where the third root (§160) is \
+                        still root-owned today.""", offences)
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("the local stack persists every blob root under one mounted directory")
+    void everyStorageRootIsPersistedLocally() {
+        String compose = codeOf(Path.of("../compose.yaml"));
+
+        // Derived, not asserted as a literal: whatever compose mounts must be an ancestor of
+        // every root the application writes to, so a fourth root outside it fails here.
+        String mounted = "/var/lib/tcms";
+        List<String> outside = storageRoots().stream()
+                .map(StorageRoot::path)
+                .filter(path -> !path.equals(mounted) && !path.startsWith(mounted + "/"))
+                .toList();
+
+        assertThat(compose)
+                .describedAs("""
+                        The root compose.yaml has no volume mounted at %s.
+
+                        This is the artifact §110 did not fix and the second live pass then hit: \
+                        `docker compose up --build`, the command this repository's own CLAUDE.md \
+                        gives as the way to run the stack, produced a backend that 500s on the \
+                        first evidence upload, the first report download and the first CI \
+                        ingestion.
+
+                        A named volume rather than nothing, for the reason pgdata is one: bytes \
+                        that survive `down` and are dropped by `down -v`, which is what the \
+                        documented reset command already promises.""", mounted)
+                .contains(":" + mounted);
+
+        assertThat(outside)
+                .describedAs("Root(s) %s are configured outside %s, so the local stack's volume "
+                        + "does not persist them.", outside, mounted)
+                .isEmpty();
+    }
 }

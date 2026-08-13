@@ -84,6 +84,41 @@ RUN command -v wget >/dev/null 2>&1 \
     && groupadd --gid 10001 app \
     && useradd --uid 10001 --gid app --shell /usr/sbin/nologin --no-create-home app
 
+# The three blob roots, created here because the application cannot create them itself.
+#
+# `application.yml` defaults `tcms.storage.{evidence,reports,raw-reports}.root` to these three
+# paths. `/var/lib` in this base image is root-owned and the process runs as 10001, so the first
+# `Files.createDirectories` under it fails with AccessDeniedException — and it fails at the first
+# *write*, which is the first evidence upload, the first report download or the first CI
+# ingestion, long after the container reported healthy (the HEALTHCHECK below reads readiness,
+# which covers the datasource and Flyway and nothing else).
+#
+# THIS DEFECT HAS BEEN FOUND TWICE BY A LIVE PASS AND NEVER BY A GATE — §110 on 2026-08-06 and
+# again on 2026-08-12, six days apart, on the same stack trace. §110 fixed `compose.prod.yaml`
+# and recorded "production is unaffected", which was true of the artifact it looked at and left
+# the one every reader of this repo's own setup instructions runs. Hence a fix in the *image*:
+# it is the one artifact every deployment shares, so it cannot be fixed per-deployment again.
+#
+# WHAT THIS DOES AND DOES NOT COVER, and the distinction is the whole of it:
+#
+#   - Nothing mounted over these paths — the paths live in the container's writable layer.
+#     Works, and the bytes die with the container. That is `docker compose run --rm backend`.
+#   - A NAMED VOLUME (root `compose.yaml`). Docker seeds a fresh named volume from the image's
+#     content at that path, ownership included, so the volume comes up owned by 10001 BECAUSE
+#     these directories exist here. Remove this RUN and the named volume is created root-owned
+#     and the defect comes straight back through the mount.
+#   - A BIND MOUNT (`deploy/compose.prod.yaml`). The host directory's ownership wins outright
+#     and the image's is not consulted at all. This RUN buys production NOTHING; the runbook's
+#     `mkdir` + `chown -R 10001:10001` is still the step that makes the VM work, which is why
+#     §7 of the Hetzner runbook is load-bearing rather than belt-and-braces.
+#
+# `ConfigConventionTest` derives this list from `application.yml` and fails the build if a
+# fourth root is added without a line here — the mechanical half of the same lesson, since the
+# third root (§160) reached a live host with no `chown` and has been failing every CI upload
+# there since.
+RUN mkdir -p /var/lib/tcms/evidence /var/lib/tcms/reports /var/lib/tcms/raw-reports \
+    && chown -R 10001:10001 /var/lib/tcms
+
 WORKDIR /app
 USER 10001:10001
 

@@ -95,8 +95,32 @@ services:
       SPRING_MAIL_HOST: ${SMTP_HOST:-}
       SPRING_MAIL_PORT: ${SMTP_PORT:-25}
       TCMS_MAIL_FROM: ${TCMS_MAIL_FROM:-tcms@localhost}
+    volumes:
+      # The product's state that is NOT in Postgres: evidence, generated reports, and the
+      # verbatim CI uploads. `application.yml` defaults all three roots under this directory.
+      #
+      # WITHOUT THIS, `docker compose up --build` — the command CLAUDE.md gives as the way to
+      # run this stack — produced a backend that 500s on the first evidence upload, the first
+      # report download and the first CI ingestion, with nothing wrong at boot. Found by a live
+      # pass on 2026-08-06 (§110 F10) and AGAIN, on the same stack trace, on 2026-08-12: the
+      # first finding fixed compose.prod.yaml and recorded "production is unaffected", which was
+      # true and left this file alone.
+      #
+      # A NAMED VOLUME, not a bind mount, and the difference is load-bearing rather than
+      # stylistic: Docker seeds a fresh named volume from the image's content at that path,
+      # ownership included, so this comes up owned by 10001 because backend/Dockerfile creates
+      # the three directories. A bind mount would take the host's ownership instead and put a
+      # `chown` on the developer — which is precisely the step production needs and forgets.
+      #
+      # It is also why `docker compose down -v` is the documented reset: -v drops this with
+      # pgdata, so the blobs and the rows they belong to are discarded together. Plain `down`
+      # keeps both, which is the pairing you want.
+      - tcmsblobs:/var/lib/tcms
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
 
 volumes:
   pgdata:
+  # Named per the compose project (see `name:` above), so lane B gets its own blobs alongside
+  # its own pgdata rather than writing evidence into lane A's tree.
+  tcmsblobs:

@@ -82,6 +82,36 @@ tasks.withType<Test>().configureEach {
     // long-lived part and they grow with the codebase, so the ceiling gets closer every slice.
     maxHeapSize = "2g"
 
+    // The artifacts this suite reads that are NOT on its classpath, declared so Gradle re-runs
+    // the tests when they change.
+    //
+    // WITHOUT THIS THOSE RULES ARE GREEN BY CACHE, which is worse than not having them.
+    // Several tests here assert over source *text* rather than over bytecode, because the thing
+    // being checked is a string: ConfigConventionTest reads backend/Dockerfile and both compose
+    // files (§185), IdempotencyKeyCapTest has read ../docs/specs/openapi.yaml since §136. Gradle
+    // tracks a Test task's inputs as its classpath and its resources, so editing any of those
+    // files leaves `:test` UP-TO-DATE and the rule about the edit never executes. Measured, and
+    // it is how this comment came to exist: §185's own rules were verified by deleting the fix
+    // they check, and the build reported success without running them.
+    //
+    // That is the failure this repo keeps meeting from the other end — a check that exists and
+    // is not driven is a claim, not an observer — arriving here through the build tool rather
+    // than through a deferred queue.
+    //
+    // Directories rather than files for `deploy` and `docs/specs`: a fifth artifact added there
+    // is covered without anyone remembering this list, and this list is exactly the kind of
+    // hand-kept tally §152–§156 replaced four times. `optional`, because the Docker build stage
+    // copies only the build definition and `src` into its context, so these paths do not exist
+    // while it configures the build to run `bootJar -x test`.
+    inputs.files(
+        file("Dockerfile"),
+        file("../compose.yaml"),
+        file("../deploy"),
+        file("../docs/specs"),
+    ).withPropertyName("outOfSourceArtifactsReadByTests")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+        .optional(true)
+
     systemProperty("api.version", System.getenv("DOCKER_API_VERSION") ?: "1.41")
     testLogging {
         events("passed", "skipped", "failed")
