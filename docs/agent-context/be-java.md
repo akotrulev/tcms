@@ -2,14 +2,14 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-13 (**§186** — `suite_condition` has a writer at last, a suite serves two condition lists instead of one, and its reconcile must rewrite in place because `case_condition_optout` points at the rows; **§185** — the blob roots are provisioned by the image and pinned by a rule, a bind mount and a named volume behave oppositely, the store refuses to start on an unusable root, and a text rule reading a file outside `src/` is green by cache unless `build.gradle.kts` declares it; **§184** — `DashboardService.health` is the only ordering of health tiles, it is package-private for its own test, and its second comparator key had never been observed; **§182** — `case_health` has no open work left: every column is derived, `HealthSignal` has an eleventh member, and the boundary test stopped needing a witness; **§181** — every health signal has a writer, `ORPHANED` means the owner is no longer in the company's directory, and `incomplete` changed which by-decision map it is in; **§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
+**Last verified:** 2026-08-13 (**§187** — `case_condition_optout` has a writer at last, the declined rows are served on two lists of their own because `preconditions` is what a run pins, the hash must be what the case declines *after* the save, and a table whose only writer is a fixture reads as written to the column rule; **§186** — `suite_condition` has a writer at last, a suite serves two condition lists instead of one, and its reconcile must rewrite in place because `case_condition_optout` points at the rows; **§185** — the blob roots are provisioned by the image and pinned by a rule, a bind mount and a named volume behave oppositely, the store refuses to start on an unusable root, and a text rule reading a file outside `src/` is green by cache unless `build.gradle.kts` declares it; **§184** — `DashboardService.health` is the only ordering of health tiles, it is package-private for its own test, and its second comparator key had never been observed; **§182** — `case_health` has no open work left: every column is derived, `HealthSignal` has an eleventh member, and the boundary test stopped needing a witness; **§181** — every health signal has a writer, `ORPHANED` means the owner is no longer in the company's directory, and `incomplete` changed which by-decision map it is in; **§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
 last two came off `case_doc_link`, the statement's *order* inside the recompute is load-bearing, and
 `UNLINKED` counts every relationship while the coverage sites count one; **§177** — `test_run.commit_sha` / `.branch` have a writer, the git-object regex is a pinned second copy, and the clone inherits neither; **§176** — the four contract-binding rules are two questions over two populations, and a bound-and-undeclared query parameter fails the build; **§175** — one `TeamRef`, in `com.tcms.api`, with two inline schemas made `$ref`s and `isLead` off the wire; **§174** — `doc_link.relationship` is the one mutable column, `V48` records who moved it, and both ends got the endpoint; **§171** — the form parts nobody compared: the four multipart bodies are exempt from *pairing* and no longer exempt from *comparison*; **§170** — the population the pairing rule could not see: every object schema, named and inline, is paired or excused, and two ingestion inputs nothing read are gone; **§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `27cc687` (§185 shipped; §186 phases 1–2 shipped, phase 3 is this commit) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `158db4c` (§186 shipped; §187 phases 1–3 shipped, the records are this commit) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
@@ -203,6 +203,71 @@ fail the build until they are paired.**
 
 ---
 
+## §187 — `case_condition_optout` HAS A WRITER, AND THE HASH RULE THAT COMES WITH IT
+
+**Read this before touching `CaseConditions`, `CaseEdit.normalizeDeclines`, `CaseCloneService.derive`,
+or before "simplifying" the union in either.**
+
+`TestCaseInput.declinedConditionIds` is the writer — **`suite_condition` ids, never library
+`condition` ids** — reconciled by `CaseConditions.reconcileOptouts`. `TestCase` serves
+`declinedPreconditions` / `declinedPostconditions` beside the two resolved lists.
+
+- **Two extra lists, NOT a `declined` flag on `CaseConditionRef`.** `TestCaseDetailView` *is* the
+  version snapshot (`CaseVersions` serializes it whole) and `CaseFacts` pins a run's checklist out of
+  that snapshot's `preconditions`. A flag puts declined rows into every checklist of every run
+  started after the decline, marked by a boolean the pin's reader has never heard of. **Do not add
+  the flag.**
+- **The INPUT is one array for both kinds**, because a `suite_condition` id already determines its
+  kind. Splitting it would let a caller file an id under the wrong one.
+- **`CaseEdit.normalizeDeclines` unions the invisible stored declines back in, and that is a HASH
+  requirement.** `reconcileOptouts` protects a decline whose attachment no longer reaches the case
+  (the retired-attachment bound, transferred from `reconcile`), so the client's set and the stored
+  set are different populations. Without the union, a request that *sends* the field and one that
+  *omits* it answer two different `CaseEdit`s for one stored state — two hashes, and a save that
+  changed nothing writes an empty-diff version. What is hashed is **what the case declines after
+  this save**.
+- **`storedDeclinedIds` is UNRESTRICTED on purpose**, unlike `liveAttachedIdsOf`. It feeds a hash
+  input, and a hash input must be a function of the stored row. Bounding it here forces
+  `CaseEdit.of` to resolve a suite chain and a library per case to agree — `CaseBulkService`'s trap
+  on a third field.
+- **`declinable` is resolved BEFORE `applyEdit`, and reused by the reconcile.** A save that also
+  moves the case would otherwise validate against the folder it is going *to*, not the one the
+  client was looking at.
+- **The CREATE path accepts declines because `CaseCloneService` is a caller.** The SPA's create form
+  draws no inherited marker, so no screen reaches it; the clone does, and its §129 header prescribed
+  the rule (`declinedAtSuite`: carry them when the clone lands in the source's own suite, none
+  otherwise). Writing the rows behind the create path's back would record a v1 hashing as a case
+  that declines nothing.
+- **The INERT decline is real and invisible.** A decline whose attachment no longer reaches the case
+  survives every save. Nothing shows it, no test reaches it, and four of `§187 DC-1`…`DC-6` are
+  holes for that one reason.
+- **A suite-level attachment is inherited by every case filed beneath it**, so a `suite_condition`
+  fixture cannot be shared with tests that assert `preconditions` — it reddened five of
+  `ConditionWriteEndpointTest`'s twice. §187's fixture is a suite, a case and an empty third folder
+  of its own.
+
+## §187 — `everyEntityIsWritableByTheProduct`, AND WHY THE COLUMN RULE COULD NOT CATCH THIS
+
+`everyMappedColumnHasAWriter`'s corpus reads **`src/test` as well as `src/main`**, so a table whose
+only writer is a fixture reads as written. That is why §156's rule ran green over
+`case_condition_optout` for thirty-one sections. §153's finding one level down: a test caller is a
+consumer for a *read* seam and never for a *write* one.
+
+- **Do not "fix" it by narrowing that corpus without doing the work.** Measured in §187: writerless
+  goes **6 → 22**, of which **fifteen are `lockVersion`** (`@Version`, written by Hibernate, in no
+  source file, definitionally not a finding) and one is real (`DocPageVersion.changeComment`).
+  Readerless goes **11 → 18** and **all seven are real** — `TestRun.releaseSortKey` and
+  `TestExecution.releaseSortKey` among them, so §151 shipped that column as a *fix* and nothing in
+  the product reads it back. Eight findings, eight decisions: that is a slice.
+- **The new rule is at TABLE granularity**, where a `@Version` column carries no weight. Migrations
+  are in its corpus — leaving them out gave four false members (`permission`/`role` from `V3`,
+  `configuration`/`doc_space` from `V1`'s seed functions).
+- **`UNWRITABLE_BY_DECISION` has one member**, `CaseAutomationTag`, whose argument is already at
+  `CaseUpdateRequest`: `automationTags` is still refused with a 400, and building the reconcile
+  quietly would make that refusal a lie.
+
+---
+
 ## §186 — `suite_condition` HAS A WRITER, AND ITS RECONCILE MUST NOT DELETE-AND-REINSERT
 
 **Read this before touching `SuiteConditions`, `SuiteEdit`, `SuiteWriteService`'s condition arm, or
@@ -233,8 +298,9 @@ longer does.
   retired bound in `reconcile` (`§186 SQ-2`) or the stored half of `acceptableConditionIds` in
   `rename` (`§186 SQ-5`). Both need a condition retired *after* being attached to a suite, which no
   test reaches.
-- **`case_condition_optout` still has no writer**, and it is now the only reader of
-  `suite_condition.id`. The reconcile protects a row nothing can create.
+- ~~**`case_condition_optout` still has no writer**, and it is now the only reader of
+  `suite_condition.id`. The reconcile protects a row nothing can create.~~ → **§187 gave it one**,
+  so the reconcile now protects a row the product can create. See §187 below.
 - **`V1`'s `COMMENT ON TABLE suite_condition` is stale** — it describes walking `suite.path` upward,
   which §98 deleted. Correcting it costs a migration for a comment; not done, and it is a decision.
 
