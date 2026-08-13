@@ -13,6 +13,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * The {@code case_health} recompute — the first writer this read model has ever had, and since M3
@@ -41,9 +43,18 @@ import org.springframework.beans.factory.annotation.Autowired;
  * and four memberships, where the review fixtures deliberately seed none because their derivation
  * asks which version was signed and never by whom.
  *
+ * <strong>Ten since §182</strong>, which added §6o's completeness check — the one signal here whose
+ * enum member did not exist before the slice that derived it, and the first needing a case's own
+ * authored content (steps, expected results, a classification) as fixture rather than something
+ * that happened to the case.
+ *
  * <p>That last pair is why this class's assertions grew rather than merely gained a group:
  * <strong>{@code unlinked} fires on every case nobody has linked</strong>, which here is nearly all
- * of them. Every {@code containsExactly} names it, for the reason the stale-approval fixtures give
+ * of them. <strong>{@code incomplete} is the second signal with that property</strong>, on a
+ * narrower population: the five APPROVED cases of the stale-approval block are unfinished by this
+ * derivation's reading and their assertions say so, which is the same call §178 made and for the
+ * same reason — an assertion that filtered the sibling out would pass against an implementation
+ * raising it wrongly. Every {@code containsExactly} names it, for the reason the stale-approval fixtures give
  * about {@code never_executed} — an assertion that filtered a sibling signal out would pass against
  * an implementation raising it wrongly.
  *
@@ -82,7 +93,11 @@ import org.springframework.beans.factory.annotation.Autowired;
  *       signal at all: {@code incomplete}, the one {@code case_health} boolean outside the enum and
  *       the only one left that nothing writes. A column with no owner cannot acquire one by a
  *       sibling module deciding to run, which is the objection that ruled {@code failing_repeatedly}
- *       out twice.</li>
+ *       out twice. <strong>→ §182 derived that one too, so there is no witness left and no way to
+ *       make another.</strong> The assertion drives each statement alone now and reads the property
+ *       off its siblings' own columns, which is stronger than any witness was: it can see two
+ *       statements inside this job both writing one column, and the witness shape structurally
+ *       could not.</li>
  *   <li><strong>A signal derived from a table this job rewrote a statement earlier.</strong> §178's
  *       two are read off {@code case_doc_link}, so they are the only signals here whose correctness
  *       depends on where their statement <em>sits</em> rather than on what it says. One test asserts
@@ -425,6 +440,76 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     private static final UUID FOREIGN_OWNED =
             UUID.fromString("ce004000-0000-4000-8000-000000000032");
 
+    // ---- §182, the completeness check --------------------------------------------------------
+    //
+    // Every case above is STRUCTURED with no steps, no expected outcome and no classification, so
+    // by this signal's predicate the only thing keeping them clean is their lifecycle status —
+    // which is the derivation's gate and therefore exactly the term a fixture must not lean on by
+    // accident. The five APPROVED cases in the stale-approval block DO raise it, and their
+    // assertions say so rather than filtering it out; that is the same call §178 made when
+    // `unlinked` started firing on nearly all of them.
+
+    /** APPROVED, one step with an expected result, one classification. The clean case. */
+    private static final UUID COMPLETE = UUID.fromString("ce004000-0000-4000-8000-000000000033");
+    /**
+     * APPROVED, classified, states its overall outcome — and has no steps at all.
+     *
+     * <p>Not producible through the API: {@code CaseEdit.validate} refuses a STRUCTURED case with
+     * an empty step list on both the create and the update path. Seeded because the predicate
+     * carries the term anyway, for the reason at {@code CaseCompleteness.recomputeIncomplete} — a
+     * validator is a rule about new writes and says nothing about rows already stored.
+     */
+    private static final UUID APPROVED_WITHOUT_STEPS =
+            UUID.fromString("ce004000-0000-4000-8000-000000000034");
+    /** APPROVED and classified, with a step — and nothing anywhere saying what should happen. */
+    private static final UUID APPROVED_WITHOUT_AN_EXPECTED_RESULT =
+            UUID.fromString("ce004000-0000-4000-8000-000000000035");
+    /**
+     * APPROVED and classified, steps with no expected result of their own, and a case-level
+     * outcome. Clean — the two spellings are alternatives, not a checklist.
+     */
+    private static final UUID APPROVED_WITH_A_CASE_LEVEL_OUTCOME =
+            UUID.fromString("ce004000-0000-4000-8000-000000000036");
+    /**
+     * The same, with both fields present and made of spaces.
+     *
+     * <p>{@code btrim} rather than {@code IS NOT NULL} is the whole of the difference, and a
+     * whitespace-only field is what a rich-text editor leaves behind when somebody clears one.
+     */
+    private static final UUID APPROVED_WITH_A_BLANK_EXPECTED_RESULT =
+            UUID.fromString("ce004000-0000-4000-8000-000000000037");
+    /** APPROVED, steps, expected results — and no {@code case_classification} row. */
+    private static final UUID APPROVED_WITHOUT_A_CLASSIFICATION =
+            UUID.fromString("ce004000-0000-4000-8000-000000000038");
+    /**
+     * DRAFT, missing all three. Must stay clean: a draft missing things is a draft, and the gate
+     * is what stops this signal firing on the whole of an active project's authoring queue.
+     */
+    private static final UUID A_DRAFT_MISSING_EVERYTHING =
+            UUID.fromString("ce004000-0000-4000-8000-000000000039");
+    /** DEPRECATED, missing all three. Retired cases are not going to be finished. */
+    private static final UUID A_DEPRECATED_CASE_MISSING_EVERYTHING =
+            UUID.fromString("ce004000-0000-4000-8000-00000000003a");
+    /**
+     * APPROVED, classified, {@code GHERKIN} with a written scenario and — legitimately — <em>no
+     * {@code test_step} rows and no expected outcome</em>.
+     *
+     * <p>THE fixture of this group. A predicate that read {@code test_step} alone, which is the
+     * obvious spelling of "has steps", reports every Gherkin case in the product as unfinished, and
+     * every other assertion here passes while it does.
+     */
+    private static final UUID AN_APPROVED_SCENARIO =
+            UUID.fromString("ce004000-0000-4000-8000-00000000003b");
+    /** The same with an empty scenario — the Gherkin spelling of "no steps". */
+    private static final UUID AN_APPROVED_EMPTY_SCENARIO =
+            UUID.fromString("ce004000-0000-4000-8000-00000000003c");
+
+    /** One MULTI dimension and one value, so a case can be classified without a trigger's help. */
+    private static final UUID FEATURE_DIMENSION =
+            UUID.fromString("ce009000-0000-4000-8000-000000000001");
+    private static final UUID CHECKOUT =
+            UUID.fromString("ce009000-0000-4000-8000-000000000002");
+
     /** ACTIVE account, ACTIVE membership in Acme. */
     private static final UUID COLLEAGUE = UUID.fromString("ce008000-0000-4000-8000-000000000001");
     /** DEACTIVATED account, and its Acme membership is left ACTIVE so the account is the cause. */
@@ -539,8 +624,52 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     private static final Duration WELL_INSIDE = Duration.ofDays(10);
     private static final Duration WELL_OUTSIDE = Duration.ofDays(120);
 
+    /**
+     * Every boolean on {@code case_health}, which since §182 is every {@link HealthSignal} and
+     * nothing else.
+     *
+     * <p>One list rather than two: {@link #signalsOf} reads it and
+     * {@code Boundaries.otherSignalsAreNotClobbered} partitions it, and those two disagreeing is
+     * how a column would quietly stop being asserted over anywhere.
+     */
+    private static final List<String> SIGNAL_COLUMNS = List.of(
+            "outdated_spec_changed", "stale_approval", "condition_drift", "stale_automation",
+            "never_executed", "long_unexecuted", "unlinked", "failing_repeatedly", "orphaned",
+            "undeclared_automation", "incomplete");
+
     @Autowired
     private CaseHealthRecomputeService recompute;
+
+    // The individual statements, for Boundaries.otherSignalsAreNotClobbered, which drives each one
+    // alone. Every other test in this class goes through the service — the job's own ordering is
+    // part of what is being asserted (SpecLinkage after the mirror refresh), and seven fields here
+    // would be seven chances to assemble a recompute the product does not run.
+    @Autowired
+    private ExecutionFacts executionFacts;
+
+    @Autowired
+    private ApprovalFacts approvalFacts;
+
+    @Autowired
+    private ConditionDrift conditionDrift;
+
+    @Autowired
+    private SpecLinkage specLinkage;
+
+    @Autowired
+    private OwnerStanding ownerStanding;
+
+    @Autowired
+    private CaseCompleteness caseCompleteness;
+
+    @Autowired
+    private CaseHealthProperties thresholds;
+
+    @Autowired
+    private Clock clock;
+
+    @Autowired
+    private TransactionTemplate transactions;
 
     @Autowired
     private CompanyRepository companies;
@@ -855,6 +984,60 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             ownedCase(acme, OWNED_BY_AN_INVITEE, ACME, ACME_PROJECT, ACME_SUITE, "TC-46", 46,
                     INVITEE);
             ownedCase(acme, UNOWNED, ACME, ACME_PROJECT, ACME_SUITE, "TC-47", 47, null);
+
+            // ---- the completeness check (§182) -----------------------------------------------
+            //
+            // One dimension and one value, MULTI rather than SINGLE: V2's integrity trigger runs
+            // the cardinality branch only for SINGLE, and nothing in this group is about that
+            // trigger. Seeded rather than taken from tcms_seed_project_defaults so the fixture
+            // states what it depends on.
+            dimension(acme, FEATURE_DIMENSION, ACME, ACME_PROJECT, "cehealth-feature", "MULTI");
+            classificationValue(acme, CHECKOUT, ACME, FEATURE_DIMENSION, "checkout", "Checkout");
+
+            authoredCase(acme, COMPLETE, ACME_PROJECT, "TC-48", 48, "APPROVED", 1);
+            step(acme, "ce00a000-0000-4000-8000-000000000001", COMPLETE, 0, "Pay", "A receipt");
+            classify(acme, COMPLETE);
+
+            authoredCase(acme, APPROVED_WITHOUT_STEPS, ACME_PROJECT, "TC-49", 49, "APPROVED", 1);
+            expectedOutcome(acme, APPROVED_WITHOUT_STEPS, "The order is placed");
+            classify(acme, APPROVED_WITHOUT_STEPS);
+
+            authoredCase(acme, APPROVED_WITHOUT_AN_EXPECTED_RESULT, ACME_PROJECT, "TC-50", 50,
+                    "APPROVED", 1);
+            step(acme, "ce00a000-0000-4000-8000-000000000002",
+                    APPROVED_WITHOUT_AN_EXPECTED_RESULT, 0, "Pay", null);
+            classify(acme, APPROVED_WITHOUT_AN_EXPECTED_RESULT);
+
+            authoredCase(acme, APPROVED_WITH_A_CASE_LEVEL_OUTCOME, ACME_PROJECT, "TC-51", 51,
+                    "APPROVED", 1);
+            step(acme, "ce00a000-0000-4000-8000-000000000003",
+                    APPROVED_WITH_A_CASE_LEVEL_OUTCOME, 0, "Pay", null);
+            expectedOutcome(acme, APPROVED_WITH_A_CASE_LEVEL_OUTCOME, "The order is placed");
+            classify(acme, APPROVED_WITH_A_CASE_LEVEL_OUTCOME);
+
+            authoredCase(acme, APPROVED_WITH_A_BLANK_EXPECTED_RESULT, ACME_PROJECT, "TC-52", 52,
+                    "APPROVED", 1);
+            step(acme, "ce00a000-0000-4000-8000-000000000004",
+                    APPROVED_WITH_A_BLANK_EXPECTED_RESULT, 0, "Pay", "   ");
+            expectedOutcome(acme, APPROVED_WITH_A_BLANK_EXPECTED_RESULT, "  ");
+            classify(acme, APPROVED_WITH_A_BLANK_EXPECTED_RESULT);
+
+            authoredCase(acme, APPROVED_WITHOUT_A_CLASSIFICATION, ACME_PROJECT, "TC-53", 53,
+                    "APPROVED", 1);
+            step(acme, "ce00a000-0000-4000-8000-000000000005",
+                    APPROVED_WITHOUT_A_CLASSIFICATION, 0, "Pay", "A receipt");
+
+            authoredCase(acme, A_DRAFT_MISSING_EVERYTHING, ACME_PROJECT, "TC-54", 54, "DRAFT", 1);
+            authoredCase(acme, A_DEPRECATED_CASE_MISSING_EVERYTHING, ACME_PROJECT, "TC-55", 55,
+                    "DEPRECATED", 1);
+
+            authoredCase(acme, AN_APPROVED_SCENARIO, ACME_PROJECT, "TC-56", 56, "APPROVED", 1);
+            scenario(acme, AN_APPROVED_SCENARIO, "Given a basket\nWhen I pay\nThen I get a receipt");
+            classify(acme, AN_APPROVED_SCENARIO);
+
+            authoredCase(acme, AN_APPROVED_EMPTY_SCENARIO, ACME_PROJECT, "TC-57", 57, "APPROVED", 1);
+            scenario(acme, AN_APPROVED_EMPTY_SCENARIO, "   ");
+            classify(acme, AN_APPROVED_EMPTY_SCENARIO);
         }
 
         try (Connection umbra = appConnection(UMBRA)) {
@@ -1214,6 +1397,14 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         }
     }
 
+    /**
+     * <strong>Every case in this group raises {@code incomplete} as well, and that is §182 rather
+     * than an accident.</strong> These five are the class's only APPROVED fixtures, none of them
+     * carries a step, an expected result or a classification, and the completeness derivation reads
+     * exactly that. Written out in each assertion rather than filtered, for the reason the class
+     * header gives about {@code unlinked}: a {@code containsExactly} that dropped the sibling would
+     * pass against an implementation raising it on the wrong rows.
+     */
     @Nested
     @DisplayName("Stale approval — §6g, and §157's derivation of it")
     class StaleApproval {
@@ -1223,7 +1414,8 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         void approvedThenEdited() {
             recomputeFor(ACME);
             assertThat(signalsOf(APPROVED_THEN_EDITED))
-                    .containsExactlyInAnyOrder("stale_approval", "never_executed", "unlinked");
+                    .containsExactlyInAnyOrder("stale_approval", "never_executed", "unlinked",
+                            "incomplete");
         }
 
         @Test
@@ -1231,7 +1423,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         void approvedAndUntouched() {
             recomputeFor(ACME);
             assertThat(signalsOf(APPROVED_AND_UNTOUCHED))
-                    .containsExactly("never_executed", "unlinked");
+                    .containsExactlyInAnyOrder("never_executed", "unlinked", "incomplete");
         }
 
         @Test
@@ -1245,7 +1437,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // permits. There is nothing to be stale.
             recomputeFor(ACME);
             assertThat(signalsOf(APPROVED_WITHOUT_A_REVIEW))
-                    .containsExactly("never_executed", "unlinked");
+                    .containsExactlyInAnyOrder("never_executed", "unlinked", "incomplete");
         }
 
         @Test
@@ -1267,7 +1459,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // somebody REFUSED to sign as one whose sign-off has aged.
             recomputeFor(ACME);
             assertThat(signalsOf(REJECTED_AT_AN_OLD_VERSION))
-                    .containsExactly("never_executed", "unlinked");
+                    .containsExactlyInAnyOrder("never_executed", "unlinked", "incomplete");
         }
 
         @Test
@@ -1278,7 +1470,8 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // signed off as stale — and it self-heals only if re-approval is what clears the
             // signal, which is the whole "no button for lying" property.
             recomputeFor(ACME);
-            assertThat(signalsOf(APPROVED_TWICE)).containsExactly("never_executed", "unlinked");
+            assertThat(signalsOf(APPROVED_TWICE))
+                    .containsExactlyInAnyOrder("never_executed", "unlinked", "incomplete");
         }
 
         @Test
@@ -1292,7 +1485,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             assertThat(signalsOf(APPROVED_AND_UNTOUCHED))
                     .as("the case's status is a term in the expression, not a filter in the WHERE "
                             + "— a filter would skip the row and leave the stale flag for ever")
-                    .containsExactly("never_executed", "unlinked");
+                    .containsExactlyInAnyOrder("never_executed", "unlinked", "incomplete");
         }
     }
 
@@ -2000,44 +2193,229 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     }
 
     @Nested
+    @DisplayName("The completeness check — §6o, and §182's derivation of it")
+    class Completeness {
+
+        @Test
+        @DisplayName("an approved case with steps, an expected result and a classification is clean")
+        void aFinishedCaseRaisesNothing() {
+            recomputeFor(ACME);
+            assertThat(signalsOf(COMPLETE)).containsExactly("never_executed", "unlinked");
+        }
+
+        @Test
+        @DisplayName("approved with no steps at all is INCOMPLETE")
+        void noSteps() {
+            recomputeFor(ACME);
+            assertThat(signalsOf(APPROVED_WITHOUT_STEPS))
+                    .as("the case states its outcome and is classified; the instructions are what "
+                            + "is missing, and a signed-off case nobody can follow is the loudest "
+                            + "of the three terms")
+                    .containsExactlyInAnyOrder("never_executed", "unlinked", "incomplete");
+        }
+
+        @Test
+        @DisplayName("approved with steps but nothing saying what should happen is INCOMPLETE")
+        void noExpectedResultAnywhere() {
+            recomputeFor(ACME);
+            assertThat(signalsOf(APPROVED_WITHOUT_AN_EXPECTED_RESULT))
+                    .containsExactlyInAnyOrder("never_executed", "unlinked", "incomplete");
+        }
+
+        @Test
+        @DisplayName("a case-level outcome satisfies the expected-result term on its own")
+        void theCaseLevelOutcomeCounts() {
+            // The two columns answer different questions — TestCase.expectedOutcome's own comment
+            // says so — and EITHER is enough. Requiring both fires on almost every case in the
+            // product, because almost nobody fills in both; requiring only the per-step one calls a
+            // house style a gap. What the term asks is whether a tester can tell a pass from a
+            // fail, and one statement of that anywhere in the case answers it.
+            recomputeFor(ACME);
+            assertThat(signalsOf(APPROVED_WITH_A_CASE_LEVEL_OUTCOME))
+                    .containsExactly("never_executed", "unlinked");
+        }
+
+        @Test
+        @DisplayName("whitespace is not an expected result")
+        void blankIsNotStated() {
+            // btrim rather than IS NOT NULL, and the difference is what a rich-text editor leaves
+            // behind when somebody clears a field: a present, empty string. Both columns are made
+            // of spaces here, so an implementation testing either for null passes this row.
+            recomputeFor(ACME);
+            assertThat(signalsOf(APPROVED_WITH_A_BLANK_EXPECTED_RESULT))
+                    .containsExactlyInAnyOrder("never_executed", "unlinked", "incomplete");
+        }
+
+        @Test
+        @DisplayName("approved and unclassified is INCOMPLETE — the term that fires today")
+        void noClassification() {
+            // The only one of the three terms a running deployment reaches: CaseEdit.validate
+            // refuses a case with no steps and a Gherkin case with no scenario, and nothing
+            // anywhere requires a classification. "Any row" is the whole predicate, because
+            // classification_dimension has cardinality, controlled, hierarchical and locked and no
+            // REQUIRED — so there is no per-project spelling of "its classification" to read.
+            recomputeFor(ACME);
+            assertThat(signalsOf(APPROVED_WITHOUT_A_CLASSIFICATION))
+                    .containsExactlyInAnyOrder("never_executed", "unlinked", "incomplete");
+        }
+
+        @Test
+        @DisplayName("a DRAFT missing all three is not incomplete — it is a draft")
+        void theGateIsTheSignal() {
+            // Drop the lifecycle term and this signal fires on every case somebody is currently
+            // writing, which is most of an active project, and reports ordinary work in progress
+            // as a fault. Every other assertion in this group passes while it does.
+            recomputeFor(ACME);
+            assertThat(signalsOf(A_DRAFT_MISSING_EVERYTHING))
+                    .containsExactly("never_executed", "unlinked");
+        }
+
+        @Test
+        @DisplayName("a DEPRECATED case missing all three is not incomplete either")
+        void aRetiredCaseIsNotUnfinished() {
+            // "Approved but missing…" (§6o) is one status, not "anything past draft". A retired
+            // case is not going to be finished, and a chip asking somebody to finish it is asking
+            // for work nobody wants done.
+            recomputeFor(ACME);
+            assertThat(signalsOf(A_DEPRECATED_CASE_MISSING_EVERYTHING))
+                    .containsExactly("never_executed", "unlinked");
+        }
+
+        @Test
+        @DisplayName("a Gherkin scenario is steps AND an expected result, with no test_step rows")
+        void aScenarioIsNotMissingItsSteps() {
+            // THE test of this group. step_format makes test_step rows and gherkin_source
+            // alternatives (plan §6a), so a GHERKIN case legitimately has neither steps nor an
+            // expected outcome — and the obvious spelling of "has steps", a lookup in test_step,
+            // reports every Gherkin case in the product as unfinished. The scenario also settles
+            // the expected-result term for that format: its Then clause IS the expected result, and
+            // finding it means parsing Gherkin in SQL in a scheduled job.
+            recomputeFor(ACME);
+            assertThat(signalsOf(AN_APPROVED_SCENARIO))
+                    .containsExactly("never_executed", "unlinked");
+        }
+
+        @Test
+        @DisplayName("an empty scenario is the Gherkin spelling of no steps")
+        void anEmptyScenarioIsIncomplete() {
+            recomputeFor(ACME);
+            assertThat(signalsOf(AN_APPROVED_EMPTY_SCENARIO))
+                    .containsExactlyInAnyOrder("never_executed", "unlinked", "incomplete");
+        }
+
+        @Test
+        @DisplayName("an incomplete flag left behind by an earlier tick is cleared, not merely not set")
+        void theSignalSelfHeals() throws SQLException {
+            recomputeFor(ACME);
+            setSignal(ACME, COMPLETE, "incomplete", true);
+
+            recomputeFor(ACME);
+
+            assertThat(signalsOf(COMPLETE))
+                    .as("the flag is in the ON CONFLICT's SET list, so a false is WRITTEN rather "
+                            + "than merely not written — and this is the signal whose cause a "
+                            + "person clears deliberately, by finishing the case")
+                    .containsExactly("never_executed", "unlinked");
+        }
+    }
+
+    @Nested
     @DisplayName("What the job must not touch")
     class Boundaries {
 
+        /**
+         * <strong>The witness is gone and the assertion is per-statement now.</strong>
+         *
+         * <p>This test proved that each {@code ON CONFLICT} names only the columns its statement
+         * computes, and it proved it with a <em>witness</em>: one {@code case_health} column nothing
+         * writes, set by hand, still set after a tick. The witness had to move three times —
+         * {@code stale_approval} (§157), {@code unlinked} (§178), {@code orphaned} (§181) — each
+         * time because the slice that moved it had given the previous one a writer, and §181 took
+         * the last one that was not a signal at all ({@code incomplete}) while writing down that
+         * there was no fifth.
+         *
+         * <p>§182 derived that one too, so the population is not merely exhausted, it is
+         * <em>closed</em>: every boolean on this row is computed, and no future slice can restore a
+         * witness by leaving a column alone. The honest answer is to stop needing one. Each
+         * statement is driven on its own here and the property is read off its siblings' columns —
+         * which needs no unwritten column anywhere, and asserts something strictly stronger than the
+         * witness ever did: the old shape could not have noticed <em>two statements inside this job
+         * both writing one column</em>, because it only ever watched a column outside all of them.
+         *
+         * <p>The reporting-owned {@code failing_repeatedly} is still not the answer, and this is now
+         * the reason rather than the objection recorded twice before: it is not that asserting over
+         * another module's schedule is wrong, it is that one borrowed column tests one statement's
+         * blast radius and this tests all seven.
+         */
         @Test
-        @DisplayName("signals this job does not compute survive a recompute")
+        @DisplayName("each statement writes only the columns it computes")
         void otherSignalsAreNotClobbered() throws SQLException {
-            // The five ON CONFLICT clauses name two or three columns each. If any named all of
-            // them, this job would blank a sibling's work on every tick — a defect that appears an
-            // hour after the other feature ships and looks like the other feature's bug.
+            // If any ON CONFLICT named every column, this job would blank a sibling's work on every
+            // tick — a defect that appears an hour after the other feature ships and looks like the
+            // other feature's bug.
             //
-            // The column asserted here was stale_approval until §157, which gave that one a writer
-            // in this very service and so had to move the assertion. unlinked was the replacement
-            // — and §178 gave THAT one a writer, in this very service again, so this is the second
-            // move and the same cause both times. orphaned was the third, and §181 gave it one too.
-            //
-            // THE POPULATION IS EXHAUSTED AND THIS IS THE STRUCTURALLY DIFFERENT REPLACEMENT the
-            // note here asked for. Every column the server's HealthSignal names is now derived, so
-            // there is no fourth signal to borrow. The answer is the one case_health boolean that
-            // is NOT a signal: incomplete, which no job anywhere writes (ArchitectureRulesTest's
-            // WRITERLESS_BY_DECISION, where it is now the last case_health entry) and which is
-            // therefore stable in the one way this assertion needs — its value cannot be changed by
-            // another module deciding to run.
-            //
-            // That is why it is a better fixture than the reporting-owned failing_repeatedly this
-            // note twice reached for and twice rejected: the objection was that setting it here
-            // makes this test assert over another module's schedule, and a column with no owner has
-            // no schedule to assert over. What is being pinned is not a signal at all — it is that
-            // the six ON CONFLICT clauses name only the columns they compute. Reading incomplete
-            // through signalsOf() is what makes it visible; that helper's javadoc has the note.
+            // RECENT is the subject because it raises exactly one signal (unlinked), so every
+            // statement's own columns come back false and the surviving set is a plain expression:
+            // everything this statement does not own, plus unlinked, which is true either way.
             recomputeFor(ACME);
-            setSignal(ACME, RECENT, "incomplete", true);
+            Instant now = clock.instant();
 
-            recomputeFor(ACME);
+            record Statement(String label, List<String> owns, Runnable run) {
+            }
+            List<Statement> statements = List.of(
+                    new Statement("ExecutionFacts.recomputeExecutionSignals",
+                            List.of("never_executed", "long_unexecuted"),
+                            () -> executionFacts.recomputeExecutionSignals(
+                                    now.minus(thresholds.longUnexecuted()), now)),
+                    new Statement("ExecutionFacts.recomputeAutomationDrift",
+                            List.of("stale_automation", "undeclared_automation"),
+                            () -> executionFacts.recomputeAutomationDrift(
+                                    now.minus(thresholds.staleAutomation()), now)),
+                    new Statement("ApprovalFacts.recomputeStaleApproval",
+                            List.of("stale_approval"),
+                            () -> approvalFacts.recomputeStaleApproval(now)),
+                    new Statement("ConditionDrift.recomputeConditionDrift",
+                            List.of("condition_drift"),
+                            () -> conditionDrift.recomputeConditionDrift(now)),
+                    new Statement("SpecLinkage.recomputeLinkageSignals",
+                            List.of("outdated_spec_changed", "unlinked"),
+                            () -> specLinkage.recomputeLinkageSignals(now)),
+                    new Statement("OwnerStanding.recomputeOrphaned",
+                            List.of("orphaned"),
+                            () -> ownerStanding.recomputeOrphaned(now)),
+                    new Statement("CaseCompleteness.recomputeIncomplete",
+                            List.of("incomplete"),
+                            () -> caseCompleteness.recomputeIncomplete(now)));
 
-            assertThat(signalsOf(RECENT))
-                    .as("incomplete belongs to a computation nobody has written; a tick of this "
-                            + "job must not blank a column it does not derive")
-                    .containsExactly("unlinked", "incomplete");
+            // failing_repeatedly is reporting.ExecutionSource's and is deliberately absent from the
+            // list above — which makes it the one column this loop never expects to change, and the
+            // closest thing left to a witness. It is not the assertion, though: the assertion is
+            // that the seven statements partition the rest.
+            List<String> derivedHere = new ArrayList<>(SIGNAL_COLUMNS);
+            derivedHere.remove("failing_repeatedly");
+            assertThat(statements.stream().flatMap(statement -> statement.owns().stream()).toList())
+                    .as("the seven statements must between them own every column this job derives, "
+                            + "exactly once — a column owned twice is two statements racing to "
+                            + "write it, and a column owned by none is one nothing here derives")
+                    .containsExactlyInAnyOrderElementsOf(derivedHere);
+
+            for (Statement statement : statements) {
+                for (String column : SIGNAL_COLUMNS) {
+                    setSignal(ACME, RECENT, column, true);
+                }
+
+                inTransaction(ACME, statement.run());
+
+                List<String> expected = new ArrayList<>(SIGNAL_COLUMNS);
+                expected.removeAll(statement.owns());
+                if (!expected.contains("unlinked")) {
+                    expected.add("unlinked");
+                }
+                assertThat(signalsOf(RECENT))
+                        .as("%s must recompute %s and leave every other column on the shared row "
+                                + "exactly as it found it", statement.label(), statement.owns())
+                        .containsExactlyInAnyOrderElementsOf(expected);
+            }
         }
 
         @Test
@@ -2114,6 +2492,20 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     }
 
     /**
+     * Run one derivation on its own, in the shape the service runs it in.
+     *
+     * <p>The transaction is not a formality: {@code CompanyAwareTransactionManager} sets
+     * {@code app.current_company} in {@code doBegin}, so a statement run outside one sees the GUC
+     * unset and {@code V4}'s {@code nullif} makes that match <em>zero</em> rows. It would report
+     * success having written nothing, and every assertion about what it left alone would pass.
+     */
+    private void inTransaction(UUID companyId, Runnable statement) {
+        try (var ignored = CompanyContext.open(companyId)) {
+            transactions.executeWithoutResult(status -> statement.run());
+        }
+    }
+
+    /**
      * The signal columns this row asserts, so an assertion reads as a set rather than nine booleans.
      *
      * <p><strong>{@code incomplete} is in the list and is not a signal</strong> — it is the one
@@ -2125,9 +2517,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
      */
     private List<String> signalsOf(UUID caseId) {
         UUID companyId = companyOf(caseId);
-        List<String> columns = List.of("outdated_spec_changed", "stale_approval", "condition_drift",
-                "stale_automation", "never_executed", "long_unexecuted", "unlinked",
-                "failing_repeatedly", "orphaned", "undeclared_automation", "incomplete");
+        List<String> columns = SIGNAL_COLUMNS;
         try (Connection connection = appConnection(companyId);
                 PreparedStatement statement = connection.prepareStatement(
                         "SELECT " + String.join(", ", columns)
@@ -2631,6 +3021,122 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             statement.setLong(6, keySeq);
             statement.setString(7, "Case " + key);
             statement.setString(8, ownerId == null ? null : ownerId.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * One classification dimension — §182, and the only fixture here that exists to be
+     * <em>attached</em> to rather than read.
+     *
+     * <p>{@code MULTI} rather than {@code SINGLE}: {@code V2}'s integrity trigger takes its
+     * cardinality branch only for {@code SINGLE}, and nothing in the completeness group is about
+     * that trigger. Project-scoped like Feature (plan §6d) rather than company-scoped, because a
+     * company-level dimension is shared and this class already runs two projects in Acme.
+     */
+    private void dimension(Connection connection, UUID id, UUID companyId, UUID projectId,
+            String key, String cardinality) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO classification_dimension
+                    (id, company_id, project_id, key, name, cardinality, controlled, hierarchical,
+                     locked, position)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?, true, false,
+                        false, 0)
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, companyId.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, key);
+            statement.setString(5, "Feature");
+            statement.setString(6, cardinality);
+            statement.executeUpdate();
+        }
+    }
+
+    /** One value on that dimension. {@code path} is {@code LTREE} and {@code NOT NULL}. */
+    private void classificationValue(Connection connection, UUID id, UUID companyId,
+            UUID dimensionId, String path, String name) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO classification_value
+                    (id, company_id, dimension_id, parent_id, path, name, position, deleted_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), NULL,
+                        CAST(? AS ltree), ?, 0, NULL)
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, companyId.toString());
+            statement.setString(3, dimensionId.toString());
+            statement.setString(4, path);
+            statement.setString(5, name);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * Classify a case — the third of the completeness signal's three terms.
+     *
+     * <p>{@code dimension_id} is the denormalized copy {@code V2}'s trigger verifies against the
+     * value's own, so it is not a parameter: one wrong argument here would be refused with a
+     * message about a check nobody in this class is testing.
+     */
+    private void classify(Connection connection, UUID caseId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO case_classification (company_id, case_id, value_id, dimension_id)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid))
+                ON CONFLICT (case_id, value_id) DO NOTHING
+                """)) {
+            statement.setString(1, ACME.toString());
+            statement.setString(2, caseId.toString());
+            statement.setString(3, CHECKOUT.toString());
+            statement.setString(4, FEATURE_DIMENSION.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * One step. {@code expectedResult} null is a step that says what to do and not what to expect,
+     * which is the ordinary shape of a case whose outcome is stated once at the case level.
+     */
+    private void step(Connection connection, String id, UUID caseId, int position, String action,
+            String expectedResult) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO test_step (id, company_id, case_id, position, action, expected_result)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?)
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id);
+            statement.setString(2, ACME.toString());
+            statement.setString(3, caseId.toString());
+            statement.setInt(4, position);
+            statement.setString(5, action);
+            statement.setString(6, expectedResult);
+            statement.executeUpdate();
+        }
+    }
+
+    /** {@code test_case.expected_outcome} — what the case as a whole proves. */
+    private void expectedOutcome(Connection connection, UUID caseId, String outcome)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE test_case SET expected_outcome = ? WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, outcome);
+            statement.setString(2, caseId.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * Turn a case into a {@code GHERKIN} one — {@code step_format} and {@code gherkin_source}
+     * together, because the two are one decision and a case carrying one without the other is a
+     * state {@code CaseEdit} refuses.
+     */
+    private void scenario(Connection connection, UUID caseId, String source) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE test_case SET step_format = 'GHERKIN', gherkin_source = ? "
+                        + "WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, source);
+            statement.setString(2, caseId.toString());
             statement.executeUpdate();
         }
     }

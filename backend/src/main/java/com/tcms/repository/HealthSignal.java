@@ -33,7 +33,10 @@ package com.tcms.repository;
  * ({@code ConditionDrift}) and {@link #UNLINKED} + {@link #OUTDATED_SPEC_CHANGED} in §178
  * ({@code SpecLinkage}) and {@link #ORPHANED} in §181 ({@code OwnerStanding})
  * — <strong><del>five</del><del>six</del><del>seven</del><del>nine</del> all ten
- * are real</strong>. <del>The other five still report an honest zero</del> → <strong>and §156 is
+ * are real</strong>, and {@link #INCOMPLETE} arrived in §182 ({@code CaseCompleteness}) already
+ * derived, which is why the tally reads <strong>eleven of eleven</strong> rather than ten of eleven:
+ * the eleventh member and its writer landed in one slice, so this enum has never contained a
+ * constant nothing computes. <del>The other five still report an honest zero</del> → <strong>and §156 is
  * where "honest" stopped being the right word.</strong> A zero is honest on an <em>absent</em> row,
  * which is what this sentence was written against; the recompute that made the five real also
  * writes a row and a {@code computed_at} for every live case, and on a row that exists the other
@@ -65,20 +68,30 @@ package com.tcms.repository;
  * lesson worth keeping is which of the two a sentence like the struck one describes: it named the
  * blocker correctly, and four slices read it as an estimate.
  *
- * <h2>{@code incomplete} is on the table and not in this enum</h2>
+ * <h2><del>{@code incomplete} is on the table and not in this enum</del> → §182 PUT IT IN, AND THE
+ * TWO ENUMS ARE ONE SET NOW</h2>
  *
- * <p>{@code case_health.incomplete} exists in the schema with no constant here. Left out rather
+ * <p><del>{@code case_health.incomplete} exists in the schema with no constant here. Left out rather
  * than added: no computation asserts it, and a member whose column no writer fills is a facet that
- * always tallies zero.
+ * always tallies zero.</del> The premise was right and it expired the way every entry in this
+ * family expires — by somebody writing the computation. {@link #INCOMPLETE} is
+ * {@code CaseCompleteness}', and the facet it tallies is not zero.
  *
  * <p><strong>The contract went the other way and this header did not notice.</strong>
  * {@code openapi.yaml}'s {@code HealthSignal} <em>does</em> list {@code INCOMPLETE}, and
  * {@code lib/labels.ts} labels it — so the original reasoning here ("putting it on the wire would
  * invent a member the SPA has no label for") describes a state that has not been true for some
- * time. The two enums are therefore <strong>not</strong> the same set: the wire is a superset by
- * one member this server can never send. Left as it is rather than tidied in either direction,
- * because both tidyings are worse — deleting it from the contract breaks a label the SPA has, and
- * adding it here invents the writerless facet above.
+ * time. <del>The two enums are therefore <strong>not</strong> the same set: the wire is a superset
+ * by one member this server can never send.</del> <strong>They are the same set as of §182</strong>,
+ * and {@code ContractEnumTest.DIVERGENCE_BY_DECISION} is down to its one server-only entry.
+ *
+ * <p>Worth keeping the struck sentence rather than deleting it, because <strong>the direction was
+ * the finding</strong>. §161 measured it: the entry blamed the <em>contract</em> for a member this
+ * server could not send, which reads as a wire change — two generated copies and every client — and
+ * priced the repair out of five consecutive slices. It was a derivation and a product decision, on
+ * this side, and it cost neither a migration nor one byte of {@code openapi.yaml}. The general form
+ * is the one §181 wrote down at the field next door: a sentence naming the wrong blocker is not a
+ * smaller version of naming the right one, it is the absence of one.
  *
  * <h2>Severity is here for the same reason the attribute is. The label is not here at all</h2>
  *
@@ -226,7 +239,32 @@ public enum HealthSignal {
      * the direction that costs nobody a missed defect. Both need fixing; only one of them can be
      * hiding a failure.
      */
-    UNDECLARED_AUTOMATION("undeclaredAutomation", Severity.WARNING);
+    UNDECLARED_AUTOMATION("undeclaredAutomation", Severity.WARNING),
+
+    /**
+     * §6o's <em>"approved but missing steps, expected results, or classification"</em> —
+     * {@code CaseCompleteness} since §182, and <strong>the member this enum did not have</strong>
+     * for as long as the contract did.
+     *
+     * <p>Appended last for {@link #UNDECLARED_AUTOMATION}'s reason, which is the only rule this
+     * declaration has: {@code CaseSearch.tallyHealth} reads its aggregates back by position.
+     *
+     * <p><strong>The gate is the whole of the signal's meaning.</strong> A draft missing its steps
+     * is a draft, and a deprecated case is not going to be finished; only an <em>approved</em> case
+     * carries a claim that somebody signed off on something unfinished. That crossing — a stored
+     * status against a derived signal — is §6o's two-axis model at its narrowest, and the argument
+     * for each of the three terms is at {@code CaseCompleteness}.
+     *
+     * <p><strong>INFO, and by this header's own split.</strong> Nothing is broken and nothing is
+     * decaying: every word the case does contain is as true as it was the day it was approved, and
+     * what is missing is missing. It is "something is missing but nothing is broken" almost
+     * literally. The tempting reading is WARNING — an approval that passed an unfinished case is a
+     * process failure — but the severity is a judgement about <em>the case</em>, not about the
+     * review that let it through, and {@link #UNLINKED}'s volume argument applies here too: the
+     * classification term alone will fire on most approved cases of a project that has not started
+     * classifying.
+     */
+    INCOMPLETE("incomplete", Severity.INFO);
 
     /**
      * {@code DashboardTile.severity} in {@code openapi.yaml}. Ordered worst first, which is the
@@ -264,7 +302,13 @@ public enum HealthSignal {
     /*
      * There is no `label()`. It was deleted in §180 along with `DashboardTile.label`, and the
      * reason is in this file's header: `lib/labels.ts` is the one catalogue that must name every
-     * member — including INCOMPLETE, which this enum does not even have — and a second set here is
-     * the one that goes stale. It did: six of these ten disagreed with it.
+     * member — and a second set here is the one that goes stale. It did: six of the ten disagreed
+     * with it.
+     *
+     * §180 wrote "including INCOMPLETE, which this enum does not even have" as the structural half
+     * of that argument, and §182 removed that half by adding the member. The argument is unaffected
+     * and worth keeping without it: the catalogue is the one place a new member is a compile error
+     * until it is named, which is a property of `satisfies Record<HealthSignal, string>` and not of
+     * the two enums having different populations.
      */
 }

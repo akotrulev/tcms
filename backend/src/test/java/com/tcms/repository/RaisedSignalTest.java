@@ -48,19 +48,25 @@ class RaisedSignalTest {
      * only one of them can hide a failure), {@code CONDITION_DRIFT} is ERROR where its neighbour
      * {@code STALE_APPROVAL} is WARNING, and {@code UNLINKED} is INFO because it fires on most of a
      * young project and a WARNING on 156 cases takes the two ERRORs down with it.
+     *
+     * <p><strong>{@code Map.of} ran out at ten and §182's {@code INCOMPLETE} was the eleventh</strong>,
+     * which is worth a line because the mechanical fix — dropping a member to fit — is available,
+     * silent, and would leave this map and the enum different sets while {@code containsOnlyKeys}
+     * below is the only thing that would say so. {@code Map.ofEntries} has no such ceiling.
      */
     private static final Map<HealthSignal, HealthSignal.Severity> DECIDED =
-            new EnumMap<>(Map.of(
-                    HealthSignal.OUTDATED_SPEC_CHANGED, HealthSignal.Severity.ERROR,
-                    HealthSignal.CONDITION_DRIFT, HealthSignal.Severity.ERROR,
-                    HealthSignal.STALE_AUTOMATION, HealthSignal.Severity.ERROR,
-                    HealthSignal.STALE_APPROVAL, HealthSignal.Severity.WARNING,
-                    HealthSignal.NEVER_EXECUTED, HealthSignal.Severity.WARNING,
-                    HealthSignal.LONG_UNEXECUTED, HealthSignal.Severity.WARNING,
-                    HealthSignal.FAILING_REPEATEDLY, HealthSignal.Severity.WARNING,
-                    HealthSignal.UNDECLARED_AUTOMATION, HealthSignal.Severity.WARNING,
-                    HealthSignal.UNLINKED, HealthSignal.Severity.INFO,
-                    HealthSignal.ORPHANED, HealthSignal.Severity.INFO));
+            new EnumMap<>(Map.ofEntries(
+                    Map.entry(HealthSignal.OUTDATED_SPEC_CHANGED, HealthSignal.Severity.ERROR),
+                    Map.entry(HealthSignal.CONDITION_DRIFT, HealthSignal.Severity.ERROR),
+                    Map.entry(HealthSignal.STALE_AUTOMATION, HealthSignal.Severity.ERROR),
+                    Map.entry(HealthSignal.STALE_APPROVAL, HealthSignal.Severity.WARNING),
+                    Map.entry(HealthSignal.NEVER_EXECUTED, HealthSignal.Severity.WARNING),
+                    Map.entry(HealthSignal.LONG_UNEXECUTED, HealthSignal.Severity.WARNING),
+                    Map.entry(HealthSignal.FAILING_REPEATEDLY, HealthSignal.Severity.WARNING),
+                    Map.entry(HealthSignal.UNDECLARED_AUTOMATION, HealthSignal.Severity.WARNING),
+                    Map.entry(HealthSignal.UNLINKED, HealthSignal.Severity.INFO),
+                    Map.entry(HealthSignal.ORPHANED, HealthSignal.Severity.INFO),
+                    Map.entry(HealthSignal.INCOMPLETE, HealthSignal.Severity.INFO)));
 
     @Nested
     @DisplayName("Severity — the decision, and where it is allowed to live")

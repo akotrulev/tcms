@@ -14,13 +14,16 @@ import org.springframework.transaction.annotation.Transactional;
  * that ingestion exists to make "no ingested result in N days" mean something, <strong>five since
  * §157</strong>, which added §6g's stale approval, <strong>six since §158</strong>, which added
  * §6f's condition drift, <strong>eight since §178</strong>, which added §6i's spec-changed
- * marker and §6o's unlinked one, and <strong>nine since §181</strong>, which added the owner check.
+ * marker and §6o's unlinked one, <strong>nine since §181</strong>, which added the owner check,
+ * and <strong>ten since §182</strong>, which added §6o's completeness check — the one member of
+ * {@link HealthSignal} that did not exist until the slice that derived it.
  *
- * <p><strong>"The signals this module can see" is no longer a narrowing.</strong> Nine of the ten
- * members of {@link HealthSignal} are computed here and the tenth ({@code FAILING_REPEATEDLY}) in
+ * <p><strong>"The signals this module can see" is no longer a narrowing.</strong> Ten of the eleven
+ * members of {@link HealthSignal} are computed here and the eleventh ({@code FAILING_REPEATEDLY}) in
  * {@code reporting.ExecutionSource}, so between the two jobs every signal on the wire has a
- * derivation — see {@link OwnerStanding}, which closed the last one, and {@code CaseHealth}'s
- * header for what that changes about reading a {@code false}.
+ * derivation — see {@link OwnerStanding}, which closed the last writerless <em>column</em>, and
+ * {@link CaseCompleteness}, which closed the last writerless one of any kind by making it a signal,
+ * and {@code CaseHealth}'s header for what that changes about reading a {@code false}.
  *
  * <p>The word "execution-driven" was in this sentence until §157 and is gone rather than qualified:
  * {@code STALE_APPROVAL} is derived from {@code review} and {@code test_case.current_version_no}
@@ -36,6 +39,13 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code company_membership}, this module already crosses to it for the owner's <em>name</em>
  * ({@code CaseOwners}), and what made {@code ORPHANED} the last signal standing was never a
  * boundary — it was a decision, which {@link OwnerStanding}'s header takes.
+ *
+ * <p>§182's is the module edge that is not one at all: {@link CaseCompleteness} reads
+ * {@code test_case}, {@code test_step} and {@code case_classification}, all three of them this
+ * module's own, which makes it {@code ConditionDrift}'s shape rather than any of the other five.
+ * What blocked it was neither a boundary nor a decision about the domain but <em>a sentence about
+ * the contract that was false the day it was written</em> — the account is at
+ * {@link HealthSignal#INCOMPLETE}'s column.
  *
  * <h2>Why this exists at all, and what it stops the dashboard from claiming</h2>
  *
@@ -90,6 +100,11 @@ import org.springframework.transaction.annotation.Transactional;
  * that one was no less misleading for the count having come down. Nothing here is wrong; the consequence just belongs written down at the thing that
  * causes it. {@code CaseHealth}'s header has the account.
  *
+ * <p><strong>§182 kept it stopped while adding a member</strong>, which is a different property and
+ * the one worth having: {@link HealthSignal#INCOMPLETE} and its derivation landed in one slice, so
+ * the enum has never named a column this job leaves at its default. Adding a constant first and a
+ * writer later is exactly the state the paragraphs above took five slices to leave.
+ *
  * <p><strong>§181 is where that paragraph stops applying to any column</strong> and becomes history
  * rather than a caveat — which is worth stating plainly, because the state it describes lasted from
  * §53 to §181 and the read path never learned to distinguish the two zeroes. It did not have to;
@@ -122,6 +137,7 @@ public class CaseHealthRecomputeService {
     private final DocumentationFacts documentationFacts;
     private final SpecLinkage specLinkage;
     private final OwnerStanding ownerStanding;
+    private final CaseCompleteness caseCompleteness;
     private final CaseHealthProperties thresholds;
     private final Clock clock;
 
@@ -132,6 +148,7 @@ public class CaseHealthRecomputeService {
             DocumentationFacts documentationFacts,
             SpecLinkage specLinkage,
             OwnerStanding ownerStanding,
+            CaseCompleteness caseCompleteness,
             CaseHealthProperties thresholds,
             Clock clock) {
         this.executionFacts = executionFacts;
@@ -140,6 +157,7 @@ public class CaseHealthRecomputeService {
         this.documentationFacts = documentationFacts;
         this.specLinkage = specLinkage;
         this.ownerStanding = ownerStanding;
+        this.caseCompleteness = caseCompleteness;
         this.thresholds = thresholds;
         this.clock = clock;
     }
@@ -201,9 +219,15 @@ public class CaseHealthRecomputeService {
         // "who owns this case" is the one question here that nothing else in the transaction has
         // an opinion about.
         ownerStanding.recomputeOrphaned(now);
+        // Eighth statement, same transaction, position not load-bearing for the same reason as the
+        // seventh: it reads no row this job writes. It is last because it is the newest, and
+        // because "is this approved case finished" is the one question here whose inputs are the
+        // case's own authored content — the thing every other statement in this transaction reads
+        // AROUND rather than reads.
+        caseCompleteness.recomputeIncomplete(now);
         log.debug("Recomputed execution, automation-drift, approval, condition-drift, "
-                + "documentation-linkage and owner-standing health signals for {} cases, and "
-                + "mirrored {} documentation links", cases, links);
+                + "documentation-linkage, owner-standing and completeness health signals for {} "
+                + "cases, and mirrored {} documentation links", cases, links);
         return cases;
     }
 }

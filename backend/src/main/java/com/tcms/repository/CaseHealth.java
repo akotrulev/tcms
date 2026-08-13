@@ -18,11 +18,14 @@ import org.hibernate.annotations.Filter;
 /**
  * The derived health of one case — a <strong>read model</strong>, not authored state (plan §6o).
  *
- * <p><del>Nine booleans, one per {@link HealthSignal}</del> <strong>Eleven booleans: one per
+ * <p><del>Nine booleans, one per {@link HealthSignal}</del> <del><strong>Eleven booleans: one per
  * {@link HealthSignal}, of which there are ten, plus {@link #incomplete}, which is a column and not
- * a signal</strong> — keyed on the case. The struck sentence counted the signals (nine, then) and
- * called the answer the number of columns, which was already ten; {@code V37}'s
- * {@code UNDECLARED_AUTOMATION} then moved both and neither was corrected. §161. Denormalized into columns
+ * a signal</strong></del> <strong>Eleven booleans, one per {@link HealthSignal}, of which there are
+ * now eleven</strong> — keyed on the case. The first struck sentence counted the signals (nine,
+ * then) and called the answer the number of columns, which was already ten; {@code V37}'s
+ * {@code UNDECLARED_AUTOMATION} then moved both and neither was corrected (§161). The second was
+ * accurate for exactly one slice: §182 made {@link #incomplete} a signal, so the two counts have
+ * converged and the qualifier is gone rather than renumbered. Denormalized into columns
  * rather than held as a set of signal rows because every use is a predicate over a specific signal
  * — "which cases in this project have a stale approval" is a partial index away in this shape and a
  * join plus a filter in the other, and {@code V1} already ships four such indexes.
@@ -36,13 +39,16 @@ import org.hibernate.annotations.Filter;
  * contradict each other. The honest alternative was renaming the table, not splitting it.
  *
  * <h2><del>Nothing writes this yet, and the endpoint is correct anyway</del> → <del>FIVE</del>
- * <del>SIX</del> <del>NINE</del> ALL TEN
+ * <del>SIX</del> <del>NINE</del> <del>ALL TEN</del> ALL ELEVEN
  * SIGNALS ARE WRITTEN NOW, AND <del>THAT IS WHAT MAKES THE OTHER FIVE MISLEADING</del>
  * A {@code false} FINALLY MEANS WHAT EVERY READER ALREADY ASSUMED</h2>
  *
  * <p><strong>§181 is the end of this section's subject.</strong> {@code OwnerStanding} derives
  * {@link #orphaned}, so from that slice on every member of {@link HealthSignal} is computed on
- * every tick and the distinction below — between a zero that was checked and a zero that was never
+ * every tick — and §182 kept it true while <em>adding</em> a member, which is the property worth
+ * having: {@link HealthSignal#INCOMPLETE} and {@code CaseCompleteness} landed together, so there
+ * has never been a moment when this enum named a column nothing filled. The distinction below —
+ * between a zero that was checked and a zero that was never
  * looked for — no longer applies to any column on this row. The section stays because the state it
  * describes was true from §53 to §181 and is the reason {@link #computedAt} is mapped at all; what
  * follows is history now, and the paragraphs are left in their original order so the count coming
@@ -247,9 +253,22 @@ public class CaseHealth {
     private boolean undeclaredAutomation;
 
     /**
-     * {@code case_health.incomplete} — mapped so {@code ddl-auto: validate} has the whole row in
+     * <del>{@code case_health.incomplete} — mapped so {@code ddl-auto: validate} has the whole row in
      * view, and absent from the server's {@link HealthSignal} because
-     * <strong>nothing derives it</strong>: there is no computation to name, so there is no constant.
+     * <strong>nothing derives it</strong>: there is no computation to name, so there is no
+     * constant.</del>
+     *
+     * <p><strong>→ §182 gave it one</strong>, and it was the last column on this row of which the
+     * struck sentence was true. {@code CaseCompleteness} derives it: an <em>approved</em> case with
+     * no steps, or with nothing anywhere in it saying what should happen, or with no classification.
+     * {@link HealthSignal#INCOMPLETE} exists now, so this is a signal like the other ten and the
+     * paragraphs below are the account of the years it was not.
+     *
+     * <p><strong>The whole of what it cost is worth stating, because this comment priced it wrongly
+     * for five slices in two different directions.</strong> First as a contract change (§161
+     * corrected that), then as an expensive decision (it is one class, one statement, one enum
+     * constant and three arguments). What it actually cost was the four slices that read the
+     * sentence and moved on — the same bill §181 paid, at the field one place up.
      *
      * <p><del>The contract's enum has no such member, and inventing one would put a value on the
      * wire the SPA cannot label.</del> <strong>→ corrected 2026-08-10 (§161), and the correction
@@ -269,7 +288,9 @@ public class CaseHealth {
      * migration, no contract change — and four slices of deferral, which is the part that was
      * expensive. The decision here is narrower than that one was: "approved but missing steps,
      * expected results, or classification" (plan §6o) names three terms, and all three are in this
-     * module.
+     * module. <strong>That paragraph was written one slice before the slice that acted on it, and
+     * every clause of it held</strong>: §182 cost one class, one statement, no migration and no
+     * contract change, and the three terms were all in this module.
      *
      * <p>The direction matters because it is what a reader acts on. Stated as a contract problem,
      * closing this reads as a wire change — the expensive kind, two generated copies and every
@@ -277,7 +298,8 @@ public class CaseHealth {
      *
      * <p>§154 made this the reference entry in
      * <del>{@code ArchitectureRulesTest.READERLESS_BY_DECISION}</del>
-     * {@code ArchitectureRulesTest.WRITERLESS_BY_DECISION}, where it moved in §181 — the recompute
+     * <del>{@code ArchitectureRulesTest.WRITERLESS_BY_DECISION}</del>, where it moved in §181 — the
+     * recompute
      * test reads this column now, to prove the job that writes every other column on the row leaves
      * this one alone, so it is no longer readerless and the rule said so. It is the same argument in
      * the map next door, because the comment above was already
@@ -288,6 +310,12 @@ public class CaseHealth {
      * {@code WRITERLESS_BY_DECISION} as well, which is the harmless overlap: unlike the signals
      * above it, nothing reads this one either, so there is no reader to be misled by the default
      * it holds.
+     *
+     * <p><strong>It is in neither map as of §182, having spent one slice in each and one slice in
+     * both.</strong> That is the intended exit and it is the third time this column has moved
+     * between those two lists without the column itself changing at all — which is the clearest
+     * argument there is for running the pair rather than either alone: what moved each time was
+     * <em>which end was dead</em>, and no single rule can report that.
      */
     @Column(name = "incomplete", nullable = false)
     private boolean incomplete;
@@ -312,8 +340,8 @@ public class CaseHealth {
 
     /**
      * {@code case_health.last_status_kind} — the first of {@code V45}'s three, and the first
-     * columns on this row that are <strong>not signals</strong> beyond {@link #computedAt} and
-     * {@link #incomplete}.
+     * columns on this row that are <strong>not signals</strong> beyond {@link #computedAt}
+     * (§182 made {@link #incomplete} one, so it is no longer the other name in this sentence).
      *
      * <p>They are here rather than in a {@code case_last_result} table because
      * {@link #neverExecuted}, {@link #longUnexecuted} and these are <em>one fact</em> —
@@ -411,6 +439,7 @@ public class CaseHealth {
                 case FAILING_REPEATEDLY -> failingRepeatedly;
                 case ORPHANED -> orphaned;
                 case UNDECLARED_AUTOMATION -> undeclaredAutomation;
+                case INCOMPLETE -> incomplete;
             };
             if (set) {
                 raised.add(signal);

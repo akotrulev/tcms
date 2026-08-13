@@ -2,14 +2,14 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-13 (**§181** — every health signal has a writer, `ORPHANED` means the owner is no longer in the company's directory, and `incomplete` changed which by-decision map it is in; **§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
+**Last verified:** 2026-08-13 (**§182** — `case_health` has no open work left: every column is derived, `HealthSignal` has an eleventh member, and the boundary test stopped needing a witness; **§181** — every health signal has a writer, `ORPHANED` means the owner is no longer in the company's directory, and `incomplete` changed which by-decision map it is in; **§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
 last two came off `case_doc_link`, the statement's *order* inside the recompute is load-bearing, and
 `UNLINKED` counts every relationship while the coverage sites count one; **§177** — `test_run.commit_sha` / `.branch` have a writer, the git-object regex is a pinned second copy, and the clone inherits neither; **§176** — the four contract-binding rules are two questions over two populations, and a bound-and-undeclared query parameter fails the build; **§175** — one `TeamRef`, in `com.tcms.api`, with two inline schemas made `$ref`s and `isLead` off the wire; **§174** — `doc_link.relationship` is the one mutable column, `V48` records who moved it, and both ends got the endpoint; **§171** — the form parts nobody compared: the four multipart bodies are exempt from *pairing* and no longer exempt from *comparison*; **§170** — the population the pairing rule could not see: every object schema, named and inline, is paired or excused, and two ingestion inputs nothing read are gone; **§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `b95c230` (§180 shipped; §181 is this commit) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `33026c6` (§181 shipped; §182 is this commit) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
@@ -200,6 +200,52 @@ fail the build until they are paired.**
   `signalsOf(...)` in `CaseHealthRecomputeTest` must name it.
 - ~~**`StatusChip.SEVERE_SIGNALS` (frontend) disagrees with `HealthSignal.Severity` about two
   members**~~ → **fixed in §179 by deleting the copy: severity is on the wire.** See below.
+
+---
+
+## §182 — `case_health` IS FINISHED: EVERY COLUMN DERIVED, AND NO WITNESS LEFT TO BORROW
+
+**Read this before touching `CaseHealthRecomputeService`, `CaseCompleteness`, `HealthSignal`, either
+`*_BY_DECISION` map, or `CaseHealthRecomputeTest.Boundaries`.**
+
+- **`HealthSignal` HAS ELEVEN MEMBERS.** `INCOMPLETE` was contract-only from 2026-07-30 until §182 and
+  is now a server constant with a derivation (`CaseCompleteness`), **appended LAST** for
+  `UNDECLARED_AUTOMATION`'s reason — `CaseSearch.tallyHealth` reads its aggregates back **by
+  position**. `Severity.INFO`.
+- **THE DECISION:** an **APPROVED** case with no steps, or with nothing anywhere saying what should
+  happen, or with no `case_classification` row. **The gate is the signal, not a filter on it** — a
+  draft missing things is a draft, and `DEPRECATED` is out because a retired case is not going to be
+  finished. Dropping the gate fires on most of an active project.
+- **`step_format` IS A TERM IN TWO OF THE THREE.** A `GHERKIN` case legitimately has no `test_step`
+  rows (plan §6a), so the obvious "has steps" predicate reports **every Gherkin case in the product**
+  as unfinished. The scenario also settles the expected-result term for that format: its `Then`
+  clause is the expected result, and finding it means parsing Gherkin in SQL in a cron job.
+- **EITHER `expected_outcome` OR any step's `expected_result` counts.** They answer different
+  questions (`TestCase.expectedOutcome`'s comment); requiring both fires on almost every case,
+  requiring only the per-step one calls a house style a gap.
+- **Classification means ANY row**, because `classification_dimension` has no `required` column.
+- **Two of the three terms have no reachable producer** — `CaseEdit.validate` refuses both on create
+  and update, and every creation path goes through it. Written anyway, and the argument is
+  *different* from §181's: that term was missing a **writer**, these are refused by a **validator**,
+  and a validator says nothing about rows already stored.
+- **`EXISTS`, not a join — the opposite call from §181's and the same reasoning.** A semi-join cannot
+  duplicate a row, so the cardinality failure `OwnerStanding` carries `m.company_id = c.company_id`
+  to prevent is unreachable here rather than guarded against.
+- **`Boundaries.otherSignalsAreNotClobbered` NO LONGER USES A WITNESS.** The witness moved three times
+  (§157, §178, §181) and §182 derived the last borrowable column, so the population is *closed*. Each
+  of the seven statements is driven alone (autowired components + `TransactionTemplate` +
+  `CompanyContext.open` — outside a transaction the GUC is unset and the statement writes nothing
+  while looking successful), and the seven `owns` lists must **partition** the columns this job
+  derives. That partition check can see two statements colliding on one column; the witness shape
+  structurally could not.
+- **`CaseHealth.incomplete` IS IN NEITHER `*_BY_DECISION` MAP.** Third move between them in three
+  slices, with the column unchanged each time. `WRITERLESS_BY_DECISION` is six entries and names **no
+  `case_health` column**; `ContractEnumTest.DIVERGENCE_BY_DECISION` is down to one **server-only**
+  entry, so there is no contract-only member left.
+- **`RaisedSignalTest.DECIDED` is `Map.ofEntries`** — `Map.of` caps at ten pairs and this was the
+  eleventh. Dropping a member to fit is the silent fix.
+- **The five APPROVED fixtures in `CaseHealthRecomputeTest`'s stale-approval block now raise
+  `incomplete`**, and their assertions say so rather than filtering it out (§178's call).
 
 ---
 

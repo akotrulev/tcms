@@ -53,8 +53,13 @@ import org.junit.jupiter.api.Test;
  * a label for a value it never receives; the cost is a dead branch, not a wrong screen. Both are
  * worth naming, because which one an enum is in tells the next author what closing it costs — and
  * getting that backwards is the whole of §161's finding. {@code incomplete}'s entry said the
- * repair was a contract change. The contract was already paid for; what is missing is a server
- * constant and a decision about what "incomplete" means.
+ * repair was a contract change. The contract was already paid for; <del>what is missing is a server
+ * constant and a decision about what "incomplete" means</del> — <strong>and §182 supplied both, so
+ * this rule now reports no contract-only member at all.</strong> The sentence held for exactly the
+ * price it named: one constant, one derivation, one decision, and not one byte of
+ * {@code openapi.yaml}. Which is the argument for writing the direction down rather than the
+ * member: the entry that named the wrong side survived five slices, and the one that named the
+ * right side survived one.
  *
  * <p>No Spring context and no database, like {@link ContractConventionTest}: one YAML parse and one
  * bytecode import.
@@ -153,8 +158,21 @@ class ContractEnumTest {
     /**
      * Members present on one side and not the other, with the argument for each.
      *
-     * <p>Two, and they are in opposite directions — which is the point of recording the direction
-     * rather than just the member. A key here is {@code Schema.MEMBER}.
+     * <p><del>Two, and they are in opposite directions</del> — <strong>one since §182, and the
+     * direction that survived is the dangerous one.</strong> Recording the direction was the point
+     * of the map rather than a nicety, and this is the payoff: the contract-only entry was closed
+     * by a derivation on the server, which is what "contract-only" always meant here and not what
+     * its own first wording said. A key here is {@code Schema.MEMBER}.
+     *
+     * <p><strong>The entry that left, because it is the whole of §161's finding and the map is
+     * where a reader meets it.</strong> A health-signal member lived on the wire and not in the
+     * server's enum, and the reason recorded at the mapped column blamed the <em>contract</em> for
+     * lacking it — which read as a wire change, the expensive kind, and priced the repair out of
+     * five consecutive slices. The contract had carried it since 2026-07-30, one day before the
+     * sentence claiming otherwise. What it actually cost, in §182, was a constant, a statement and
+     * a product decision, on the server, with {@code openapi.yaml} untouched. <strong>A divergence
+     * entry names which side is missing something, and getting that backwards is not a smaller
+     * error than not writing one.</strong>
      *
      * <p><strong>Neither value below spells a column name, and that is load-bearing rather than
      * style.</strong> {@code ArchitectureRulesTest.everyMappedColumnHasAReader} counts a whole-word
@@ -166,19 +184,6 @@ class ContractEnumTest {
      * identifiers belong in this javadoc, where the corpus cannot see them.
      */
     private static final Map<String, String> DIVERGENCE_BY_DECISION = Map.of(
-            "HealthSignal.INCOMPLETE",
-            "CONTRACT-ONLY, deliberately. The case_health column behind this member has no "
-                    + "derivation (ArchitectureRulesTest.WRITERLESS_BY_DECISION) and therefore no "
-                    + "server constant, and the contract carries the member so a client's labels "
-                    + "stay complete — which lib/labels.ts and StatusChip both act on. §161's "
-                    + "finding is that the READERLESS_BY_DECISION entry had this backwards and "
-                    + "named the contract as the blocker: closing it is a derivation plus a "
-                    + "product decision, and costs no contract change at all. That entry is gone "
-                    + "as of §181 — the column acquired a reader, in a test that proves the "
-                    + "recompute leaves it alone — so the writerless map is where the argument "
-                    + "lives now, and this member is the LAST contract-only one of its family. "
-                    + "(The column's own name is deliberately not spelled in this literal — see "
-                    + "the note above this map.)",
             "PermissionQualifier.NONE",
             "SERVER-ONLY, which is the dangerous direction, and safe here for a reason the code "
                     + "enforces rather than states: NONE means \"not held\", and PermissionSet's "
