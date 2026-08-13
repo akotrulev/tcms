@@ -35,7 +35,8 @@ const suite: Suite = {
   tagRules: ['smoke'],
   caseIds: [],
   lifecycleStatus: 'DRAFT',
-  conditions: [],
+  preconditions: [],
+  postconditions: [],
   lockVersion: 3,
 }
 

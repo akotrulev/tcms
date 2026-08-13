@@ -171,7 +171,9 @@ public class SuiteService {
 
         List<UUID> suiteIds = live.stream().map(Suite::getId).toList();
         Map<UUID, Long> caseCounts = membership.countsBySuite(companyId, projectId);
-        Map<UUID, List<SuiteConditionView>> bySuite = conditionsBySuite(suiteIds);
+        Map<ConditionKind, Map<UUID, List<SuiteConditionView>>> byKind = conditionsBySuite(suiteIds);
+        Map<UUID, List<SuiteConditionView>> pre = byKind.get(ConditionKind.PRE);
+        Map<UUID, List<SuiteConditionView>> post = byKind.get(ConditionKind.POST);
         Map<UUID, List<String>> tagRules = tagRulesBySuite(suiteIds);
         Map<UUID, List<UUID>> addedCases = addedCasesBySuite(suiteIds);
 
@@ -190,9 +192,12 @@ public class SuiteService {
                         tagRules.getOrDefault(suite.getId(), List.of()),
                         addedCases.getOrDefault(suite.getId(), List.of()),
                         suite.getLifecycleStatus(),
-                        // Must serialize as [] and never as null: the contract marks `conditions`
-                        // required, so the SPA cannot null-check it.
-                        bySuite.getOrDefault(suite.getId(), List.of()),
+                        // Must serialize as [] and never as null: the contract marks both lists
+                        // required, so the SPA cannot null-check either. A suite with setup and no
+                        // cleanup is the ordinary case, so the empty side is the normal path here
+                        // rather than a fallback.
+                        pre.getOrDefault(suite.getId(), List.of()),
+                        post.getOrDefault(suite.getId(), List.of()),
                         suite.getLockVersion()))
                 .toList();
     }
@@ -222,15 +227,29 @@ public class SuiteService {
     }
 
     /**
-     * Resolves each attachment against the live library and groups by suite.
+     * Resolves each attachment against the live library and groups it by <strong>kind, then
+     * suite</strong>.
      *
      * <p>Preserves the query's ordering within each suite — {@code ArrayList}, not a set — because
      * a condition list is a sequence of actions and its order is its content.
+     *
+     * <p>Both kinds are always present in the outer map, even when nothing of that kind exists
+     * anywhere in the project. The alternative is a {@code null} the caller has to remember to
+     * default, on a path whose whole job is producing two arrays that are never null — see
+     * {@link #render}, and see {@code ConditionKind} for why there are exactly two of them to
+     * enumerate rather than a set discovered from the data.
      */
-    private Map<UUID, List<SuiteConditionView>> conditionsBySuite(List<UUID> suiteIds) {
+    private Map<ConditionKind, Map<UUID, List<SuiteConditionView>>> conditionsBySuite(
+            List<UUID> suiteIds) {
+
+        Map<ConditionKind, Map<UUID, List<SuiteConditionView>>> byKind = new HashMap<>();
+        for (ConditionKind kind : ConditionKind.values()) {
+            byKind.put(kind, new HashMap<>());
+        }
+
         List<SuiteCondition> live = attachments.findForSuites(suiteIds);
         if (live.isEmpty()) {
-            return Map.of();
+            return byKind;
         }
 
         // LinkedHashSet: de-duplicated, because two suites referencing one library condition is
@@ -242,7 +261,6 @@ public class SuiteService {
         conditions.findLiveByIds(referenced).forEach(condition ->
                 library.put(condition.getId(), condition));
 
-        Map<UUID, List<SuiteConditionView>> grouped = new HashMap<>();
         for (SuiteCondition attachment : live) {
             Condition condition = library.get(attachment.getConditionId());
             if (condition == null) {
@@ -251,9 +269,10 @@ public class SuiteService {
                 // what actually closes it.
                 continue;
             }
-            grouped.computeIfAbsent(attachment.getSuiteId(), key -> new ArrayList<>())
+            byKind.get(attachment.getKind())
+                    .computeIfAbsent(attachment.getSuiteId(), key -> new ArrayList<>())
                     .add(SuiteConditionView.of(attachment, condition));
         }
-        return grouped;
+        return byKind;
     }
 }

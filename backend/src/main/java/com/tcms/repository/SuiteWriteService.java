@@ -63,6 +63,15 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>On a create: the counter increment, the suite row, its v1 composition version and the audit
  * row, in one transaction. The counter is in it for {@link DisplayKeys}' reason — its row lock must
  * be held until the row that used the number commits.
+ *
+ * <h2>Conditions ride on both writes (§186), and that is why they exist at all</h2>
+ *
+ * <p>{@code suite_condition} had no writer anywhere in the product until this class got one. It was
+ * not made its own endpoint because a suite's conditions are the suite's content in the way its tag
+ * rules are — an author sets them while naming the collection, and a separate {@code PUT
+ * .../conditions} would be a second write whose {@code If-Match} argues about a different version
+ * than the one the form was rendered from. {@link SuiteConditions#reconcile} does the work and its
+ * header records the one way it differs from the case-side reconcile it is otherwise a copy of.
  */
 @Service
 public class SuiteWriteService {
@@ -93,6 +102,8 @@ public class SuiteWriteService {
     private final SuiteService tree;
     private final SuiteVersions versions;
     private final SuiteMembershipWriter membership;
+    private final SuiteConditions conditions;
+    private final ConditionService conditionLibrary;
     private final TestCaseRepository cases;
     private final DisplayKeys displayKeys;
     private final ReviewService reviews;
@@ -105,6 +116,8 @@ public class SuiteWriteService {
             SuiteService tree,
             SuiteVersions versions,
             SuiteMembershipWriter membership,
+            SuiteConditions conditions,
+            ConditionService conditionLibrary,
             TestCaseRepository cases,
             DisplayKeys displayKeys,
             ReviewService reviews,
@@ -116,6 +129,8 @@ public class SuiteWriteService {
         this.tree = tree;
         this.versions = versions;
         this.membership = membership;
+        this.conditions = conditions;
+        this.conditionLibrary = conditionLibrary;
         this.cases = cases;
         this.displayKeys = displayKeys;
         this.reviews = reviews;
@@ -225,8 +240,17 @@ public class SuiteWriteService {
 
         // The project's live suites are no longer read here: they existed only to resolve and
         // validate the parent (§98). A create now touches no other suite at all.
-        SuiteEdit.Outcome validated =
-                SuiteEdit.validate(request, liveCaseIds(project.getId(), request));
+        //
+        // The stored halves of the condition union are List.of() rather than a read: the suite does
+        // not exist yet, so it attaches nothing, and an absent list on a create therefore resolves
+        // to empty. Passing a read here would be a query against an id no row carries.
+        SuiteEdit.Outcome validated = SuiteEdit.validate(
+                request,
+                liveCaseIds(project.getId(), request),
+                conditionLibrary.liveLibraryIds(
+                        project.getId(), SuiteEdit.referencedConditionIds(request)),
+                List.of(),
+                List.of());
         if (validated instanceof SuiteEdit.Outcome.Invalid invalid) {
             return new Outcome.Invalid(invalid.errors());
         }
@@ -253,6 +277,9 @@ public class SuiteWriteService {
         // After the flush, so suite_case.suite_id has a row to reference.
         membership.reconcile(
                 created, edit.tagRules(), edit.caseIds(), companyId, userId, now);
+        // Likewise: suite_condition.suite_id references the row that was just flushed.
+        conditions.reconcile(
+                created, edit.preconditionIds(), edit.postconditionIds(), companyId);
         versions.writeInitial(created, userId, now);
 
         audit(project.getId(), userId, "suite.created", created, now);
@@ -288,8 +315,25 @@ public class SuiteWriteService {
                 return new Outcome.Stale();
             }
 
-            SuiteEdit.Outcome validated =
-                    SuiteEdit.validate(request, liveCaseIds(project.getId(), request));
+            // The union CaseUpdateService assembles for a case, on the other entity that attaches
+            // conditions: this project's live library entries for the ids the payload NAMES, plus
+            // whatever the suite already attaches. Only the named ids are looked up, so the
+            // ordinary rename — which names none — costs no library query.
+            Set<UUID> acceptableConditionIds = new HashSet<>(conditionLibrary.liveLibraryIds(
+                    project.getId(), SuiteEdit.referencedConditionIds(request)));
+            List<UUID> storedPre =
+                    conditions.liveAttachedIdsOf(suite.getId(), ConditionKind.PRE);
+            List<UUID> storedPost =
+                    conditions.liveAttachedIdsOf(suite.getId(), ConditionKind.POST);
+            acceptableConditionIds.addAll(storedPre);
+            acceptableConditionIds.addAll(storedPost);
+
+            SuiteEdit.Outcome validated = SuiteEdit.validate(
+                    request,
+                    liveCaseIds(project.getId(), request),
+                    acceptableConditionIds,
+                    storedPre,
+                    storedPost);
             if (validated instanceof SuiteEdit.Outcome.Invalid invalid) {
                 return new Outcome.Invalid(invalid.errors());
             }
@@ -321,6 +365,8 @@ public class SuiteWriteService {
             // the composition-versioning slice, not a line here.
             membership.reconcile(
                     suite, edit.tagRules(), edit.caseIds(), companyId, userId, now);
+            conditions.reconcile(
+                    suite, edit.preconditionIds(), edit.postconditionIds(), companyId);
 
             // No version row: a name is content, and suite_version holds composition. See
             // SuiteVersions for why bumping here would start the every-edit-bumps-every-ancestor

@@ -118,6 +118,21 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
     private static final UUID SIGNED_OFF = UUID.fromString("f1004000-0000-4000-8000-000000000012");
     private static final UUID RETIRED = UUID.fromString("f1004000-0000-4000-8000-000000000013");
 
+    /**
+     * The condition library, for §186's write path.
+     *
+     * <p>{@code SIBLING_CONDITION} lives in {@code ACME_MOBILE} — the same company, so the foreign
+     * key, the company column and RLS all admit it and only the project predicate refuses it. That
+     * is the boundary the union in {@code SuiteWriteService} exists for, and asserting it needs a
+     * row that is legitimate in every other respect.
+     */
+    private static final UUID LOGIN = UUID.fromString("f1005000-0000-4000-8000-000000000001");
+    private static final UUID CLEANUP = UUID.fromString("f1005000-0000-4000-8000-000000000002");
+    private static final UUID RETIRED_CONDITION =
+            UUID.fromString("f1005000-0000-4000-8000-000000000003");
+    private static final UUID SIBLING_CONDITION =
+            UUID.fromString("f1005000-0000-4000-8000-000000000004");
+
     private static final UUID LOCKED_SUITE = UUID.fromString("f1004000-0000-4000-8000-000000000004");
     /** Root in the other client, deliberately keyed TS-1 like Acme's. */
     private static final UUID UMBRA_SUITE = UUID.fromString("f1004000-0000-4000-8000-000000000005");
@@ -190,6 +205,7 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         seedCompanyDefaults(UMBRA);
         resetMutableRows();
         seedTrees();
+        seedConditionLibrary();
     }
 
     /**
@@ -210,10 +226,57 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
                 // these rows to delete them, which is isolation working rather than a leftover row.
                 execute(connection, "DELETE FROM audit_event");
                 execute(connection, "DELETE FROM test_case");
+                // Before `suite`, though `suite_condition.suite_id` cascades: the delete below
+                // would take the attachments with it either way, and naming the table here is what
+                // makes a reader of this method see that a test can write one.
+                execute(connection, "DELETE FROM suite_condition");
                 execute(connection, "DELETE FROM suite_version");
                 execute(connection, "DELETE FROM suite");
                 execute(connection, "UPDATE key_sequence SET next_value = 1");
             }
+        }
+    }
+
+    /**
+     * Four library entries: two live in the project under test, one retired, one in the sibling
+     * project.
+     *
+     * <p>{@code ON CONFLICT DO NOTHING} because {@link #resetMutableRows} deliberately does not
+     * clear {@code condition} — nothing here edits the library, so re-seeding it per test would be
+     * work with no assertion behind it.
+     */
+    private void seedConditionLibrary() throws SQLException {
+        try (Connection connection = appConnection(ACME)) {
+            condition(connection, LOGIN, ACME_BANKING, "Log in as standard user",
+                    "[\"Open the application\", \"Enter valid credentials\"]", false);
+            condition(connection, CLEANUP, ACME_BANKING, "Reset the test payment data",
+                    "[\"Void every pending charge\"]", false);
+            condition(connection, RETIRED_CONDITION, ACME_BANKING, "Log in as the old admin",
+                    "[\"Open the legacy console\"]", true);
+            condition(connection, SIBLING_CONDITION, ACME_MOBILE, "Install the beta build",
+                    "[\"Sideload the APK\"]", false);
+        }
+    }
+
+    /** Every nullable parameter is bound through an explicit {@code CAST} — pgjdbc infers none. */
+    private void condition(
+            Connection connection, UUID id, UUID projectId, String title, String body,
+            boolean retired) throws SQLException {
+
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO condition
+                    (id, company_id, project_id, title, type, body, deleted_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, 'BOTH',
+                        CAST(? AS jsonb), CAST(? AS timestamptz))
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, title);
+            statement.setString(5, body);
+            statement.setString(6, retired ? "2026-01-01T00:00:00Z" : null);
+            statement.executeUpdate();
         }
     }
 
@@ -542,22 +605,224 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a new suite reports caseCount 0 and conditions [], never null")
+        @DisplayName("a new suite reports caseCount 0 and both condition lists [], never null")
         void theCreateResponseIsTheReadShape() throws Exception {
             // Served through SuiteService's own renderer rather than assembled by the write path,
             // so a field cannot show one value on create and another on the reload after it.
             JsonNode created = body(post(LEAD, ACME, ACME_BANKING, suiteInput("Shaped")));
 
             assertThat(List.of("id", "key", "name", "caseCount", "lifecycleStatus",
-                    "conditions", "lockVersion"))
+                    "preconditions", "postconditions", "lockVersion"))
                     .allSatisfy(field -> assertThat(created.has(field))
                             .as("Suite.%s is required by openapi.yaml", field)
                             .isTrue());
             assertThat(created.get("caseCount").asLong()).isZero();
-            assertThat(created.get("conditions").isArray()).isTrue();
-            assertThat(created.get("conditions")).isEmpty();
+            assertThat(created.get("preconditions").isArray()).isTrue();
+            assertThat(created.get("preconditions")).isEmpty();
+            assertThat(created.get("postconditions").isArray()).isTrue();
+            assertThat(created.get("postconditions")).isEmpty();
             assertThat(created.has("companyId")).isFalse();
             assertThat(created.has("projectId")).isFalse();
+        }
+    }
+
+
+    // =====================================================================
+    // Conditions (§186) — the write path suite_condition never had
+    //
+    // The table, its `kind` column, the resolution order that reads it and the library's
+    // `suiteUsageCount` all shipped in M0. Nothing created a row: `new SuiteCondition(` occurred
+    // nowhere in src/main, and the only rows in this repository were written by hand-rolled SQL in
+    // a read test's fixture. Everything below drives the endpoint.
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Conditions — attached, reordered and detached through the suite write")
+    class Conditions {
+
+        @Test
+        @DisplayName("a create attaches both lists, in the payload's order, and serves them split")
+        void aCreateAttachesBothKinds() throws Exception {
+            JsonNode created = body(post(LEAD, ACME, ACME_BANKING,
+                    suiteInput("Guarded", List.of(CLEANUP, LOGIN), List.of(LOGIN))));
+
+            // The order is the payload's and NOT the library's: CLEANUP sorts after LOGIN by title,
+            // so a service that re-sorted anything would answer these the other way round. A
+            // condition list is a procedure and its order is its content.
+            assertThat(titlesOf(created.get("preconditions")))
+                    .containsExactly("Reset the test payment data", "Log in as standard user");
+            assertThat(titlesOf(created.get("postconditions")))
+                    .containsExactly("Log in as standard user");
+
+            // The same entry in both lists — legitimate, common, and deduped per list rather than
+            // across them. Two different actions at two different moments.
+            assertThat(created.get("preconditions").get(1).get("conditionId").asText())
+                    .isEqualTo(created.get("postconditions").get(0).get("conditionId").asText());
+            assertThat(created.get("preconditions").get(1).get("id").asText())
+                    .as("two attachments, so two rows and two ids")
+                    .isNotEqualTo(created.get("postconditions").get(0).get("id").asText());
+        }
+
+        @Test
+        @DisplayName("position is assigned from array order and never taken from the request")
+        void positionsComeFromTheArray() throws Exception {
+            UUID id = idOf(post(LEAD, ACME, ACME_BANKING,
+                    suiteInput("Ordered", List.of(CLEANUP, LOGIN), List.of())));
+
+            // Read from the row, not the response: the response orders by the query's ORDER BY, so
+            // a service that wrote every row at position 0 would still serve them in insertion
+            // order most of the time. `suite_condition` has no constraint that would refuse a
+            // duplicate position — this is the only place the value is observable.
+            assertThat(positionsOf(id, "PRE")).containsExactly(0, 1);
+        }
+
+        @Test
+        @DisplayName("an absent list leaves the attachments alone; [] detaches them")
+        void absentIsNotEmpty() throws Exception {
+            UUID id = idOf(post(LEAD, ACME, ACME_BANKING,
+                    suiteInput("Standing", List.of(LOGIN), List.of(CLEANUP))));
+
+            // A rename that never mentions conditions. This is the whole reason the two states have
+            // different representations: the SPA's rename dialog sends neither field, and emptying
+            // a standing procedure on a name change is exactly what that must not do.
+            JsonNode renamed = body(patch(LEAD, ACME, ACME_BANKING, id,
+                    "{\"name\":\"Renamed\"}", null));
+            assertThat(renamed.get("preconditions")).hasSize(1);
+            assertThat(renamed.get("postconditions")).hasSize(1);
+
+            JsonNode cleared = body(patch(LEAD, ACME, ACME_BANKING, id,
+                    suiteInput("Cleared", List.of(), List.of()), null));
+            assertThat(cleared.get("preconditions")).isEmpty();
+            assertThat(cleared.get("postconditions")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a REORDER keeps every attachment id — and with it every case's opt-out")
+        void reorderingPreservesTheAttachmentRow() throws Exception {
+            // THE test of this slice. `case_condition_optout` references `suite_condition(id)` ON
+            // DELETE CASCADE, so a reconcile that cleared the list and reinserted it would discard
+            // every opt-out on EVERY save of the suite — a save that changed nothing an author can
+            // see would silently re-impose a condition twenty cases had declined, and the rows
+            // proving they declined it would be gone.
+            //
+            // The case-side reconcile's javadoc says a delete-and-reinsert "would in fact be safe
+            // here" and names this table as the one where it is not. This is that sentence, driven.
+            UUID id = idOf(post(LEAD, ACME, ACME_BANKING,
+                    suiteInput("Declinable", List.of(LOGIN, CLEANUP), List.of())));
+
+            UUID attachment = attachmentIdOf(id, LOGIN);
+            UUID declining = UUID.nameUUIDFromBytes("sw-ref0".getBytes());
+            optOut(declining, attachment);
+
+            // Swap the two. Same set, different order — the ordinary drag-and-drop save.
+            body(patch(LEAD, ACME, ACME_BANKING, id,
+                    suiteInput("Declinable", List.of(CLEANUP, LOGIN), List.of()), null));
+
+            assertThat(attachmentIdOf(id, LOGIN))
+                    .as("the row is moved, not replaced")
+                    .isEqualTo(attachment);
+            assertThat(positionsOf(id, "PRE")).containsExactly(0, 1);
+            assertThat(optOutsAgainst(attachment))
+                    .as("the case's refusal survives a reorder of the list it is against")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("DETACHING discards the opt-outs against it, because there is nothing left to decline")
+        void detachingTakesTheOptOutWithIt() throws Exception {
+            // The other half of the rule above, and it is the cascade rather than a decision this
+            // endpoint applies. Asserted so the pair is visible together: a reorder must keep the
+            // opt-out and a detach must not, and a reconcile that got either wrong would look
+            // correct against the other.
+            UUID id = idOf(post(LEAD, ACME, ACME_BANKING,
+                    suiteInput("Withdrawn", List.of(LOGIN), List.of())));
+
+            UUID attachment = attachmentIdOf(id, LOGIN);
+            optOut(UUID.nameUUIDFromBytes("sw-ref0".getBytes()), attachment);
+
+            body(patch(LEAD, ACME, ACME_BANKING, id,
+                    suiteInput("Withdrawn", List.of(), List.of()), null));
+
+            assertThat(optOutsAgainst(attachment)).isZero();
+        }
+
+        @Test
+        @DisplayName("a duplicate inside one list collapses rather than being refused")
+        void duplicatesCollapse() throws Exception {
+            // Asking the author to remove something they cannot see is worse than resolving it:
+            // the same entry twice in one list is a row with no meaning, not a mistake to report.
+            JsonNode created = body(post(LEAD, ACME, ACME_BANKING,
+                    suiteInput("Twice", List.of(LOGIN, LOGIN), List.of())));
+
+            assertThat(created.get("preconditions")).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a SIBLING project's condition is a field error, not a stored row")
+        void aSiblingProjectsConditionIsRefused() throws Exception {
+            // It satisfies the foreign key, the company column and RLS — only the project predicate
+            // refuses it. Without that half of the union, every later read of this suite would
+            // resolve a condition through a project the reader was never granted.
+            MvcResult refused = post(LEAD, ACME, ACME_BANKING,
+                    suiteInput("Leaky", List.of(SIBLING_CONDITION), List.of()));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(refused).get("errors").get("preconditions").get(0).asText())
+                    .as("one message for three causes — retired, another project's, or nothing at "
+                            + "all; distinguishing them confirms a condition the caller may not use")
+                    .isEqualTo("That condition is not one this project offers.");
+        }
+
+        @Test
+        @DisplayName("a RETIRED condition cannot be attached, and reports the same message")
+        void aRetiredConditionIsRefused() throws Exception {
+            MvcResult refused = post(LEAD, ACME, ACME_BANKING,
+                    suiteInput("Withdrawn procedure", List.of(), List.of(RETIRED_CONDITION)));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(refused).get("errors").get("postconditions").get(0).asText())
+                    .isEqualTo("That condition is not one this project offers.");
+        }
+
+        @Test
+        @DisplayName("an inlineBody is REFUSED, not swallowed")
+        void inlineIsRefused() throws Exception {
+            // Nothing renders an inline attachment — every CaseConditionRef requires a title and
+            // the row has no column for one — so accepting it would be a save that succeeds and a
+            // condition the author can never see again. The field is declared on the contract
+            // precisely so it can be refused rather than being indistinguishable from a typo.
+            MvcResult refused = post(LEAD, ACME, ACME_BANKING,
+                    "{\"name\":\"Inline\",\"preconditions\":[{\"inlineBody\":[\"Be logged in\"]}]}");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(refused).get("errors").get("preconditions").get(0).asText())
+                    .isEqualTo("Attach a condition from the library. Inline conditions are not "
+                            + "supported yet.");
+        }
+
+        @Test
+        @DisplayName("a rejected condition list burns no key")
+        void aRejectedListBurnsNoKey() throws Exception {
+            // §29's rule, on the newest way to be rejected: the counter only moves forward, so a
+            // burned number is a permanent hole in the company's keys. Validation runs before the
+            // allocation and this is what says so for the condition arm specifically.
+            String next = keyOf(post(LEAD, ACME, ACME_BANKING, suiteInput("Before")));
+            post(LEAD, ACME, ACME_BANKING, suiteInput("Leaky", List.of(SIBLING_CONDITION), List.of()));
+
+            assertThat(keyOf(post(LEAD, ACME, ACME_BANKING, suiteInput("After"))))
+                    .isEqualTo("TS-" + (Integer.parseInt(next.substring(3)) + 1));
+        }
+
+        @Test
+        @DisplayName("a Viewer cannot attach conditions — the gate is suite:manage, not a new key")
+        void theGateIsTheSuiteWritesOwn() throws Exception {
+            // Deliberately NOT a thirteenth permission key. Conditions are the suite's content in
+            // the way its tag rules are, and a key seeded to nobody is a 403 no administrator can
+            // grant their way out of (the argument that kept `evidence:read` from existing).
+            assertThat(post(VIEWER, ACME, ACME_BANKING,
+                    suiteInput("Nope", List.of(LOGIN), List.of()))
+                    .getResponse().getStatus())
+                    .isEqualTo(403);
         }
     }
 
@@ -1369,6 +1634,98 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
 
     private static String suiteInput(String name) {
         return "{\"name\":\"" + name + "\"}";
+    }
+
+    /** {@link #suiteInput(String)} with both condition lists — always both, never one. */
+    private static String suiteInput(String name, List<UUID> pre, List<UUID> post) {
+        return "{\"name\":\"" + name + "\",\"preconditions\":" + refs(pre)
+                + ",\"postconditions\":" + refs(post) + "}";
+    }
+
+    private static String refs(List<UUID> conditionIds) {
+        return conditionIds.stream()
+                .map(id -> "{\"conditionId\":\"" + id + "\"}")
+                .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+    }
+
+    private static List<String> titlesOf(JsonNode array) {
+        List<String> titles = new ArrayList<>();
+        array.forEach(entry -> titles.add(entry.get("title").asText()));
+        return titles;
+    }
+
+    private UUID idOf(MvcResult result) throws Exception {
+        assertThat(result.getResponse().getStatus())
+                .as("expected a created suite; body was %s",
+                        result.getResponse().getContentAsString())
+                .isEqualTo(201);
+        return UUID.fromString(body(result).get("id").asText());
+    }
+
+    /** The stored positions of one suite's attachments of one kind, in position order. */
+    private List<Integer> positionsOf(UUID suiteId, String kind) throws SQLException {
+        List<Integer> positions = new ArrayList<>();
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "SELECT position FROM suite_condition WHERE suite_id = CAST(? AS uuid) "
+                             + "AND kind = ? ORDER BY position")) {
+            statement.setString(1, suiteId.toString());
+            statement.setString(2, kind);
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    positions.add(rows.getInt(1));
+                }
+            }
+        }
+        return positions;
+    }
+
+    /** The attachment row's own id — what an opt-out points at, and what a reorder must not change. */
+    private UUID attachmentIdOf(UUID suiteId, UUID conditionId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "SELECT id FROM suite_condition WHERE suite_id = CAST(? AS uuid) "
+                             + "AND condition_id = CAST(? AS uuid) AND kind = \'PRE\'")) {
+            statement.setString(1, suiteId.toString());
+            statement.setString(2, conditionId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                assertThat(rows.next()).as("no PRE attachment of that condition").isTrue();
+                return UUID.fromString(rows.getString(1));
+            }
+        }
+    }
+
+    /**
+     * One case declining one inherited attachment — written by hand because nothing in the product
+     * writes {@code case_condition_optout} yet either. That gap is real and is named in the handoff;
+     * it does not block asserting that the toggle's row survives a reorder, which is the property
+     * the reconcile is shaped around.
+     */
+    private void optOut(UUID caseId, UUID suiteConditionId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement("""
+                     INSERT INTO case_condition_optout (company_id, case_id, suite_condition_id)
+                     VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid))
+                     ON CONFLICT DO NOTHING
+                     """)) {
+            statement.setString(1, ACME.toString());
+            statement.setString(2, caseId.toString());
+            statement.setString(3, suiteConditionId.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    private int optOutsAgainst(UUID suiteConditionId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "SELECT count(*) FROM case_condition_optout "
+                             + "WHERE suite_condition_id = CAST(? AS uuid)")) {
+            statement.setString(1, suiteConditionId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                rows.next();
+                return rows.getInt(1);
+            }
+        }
     }
 
     // =====================================================================

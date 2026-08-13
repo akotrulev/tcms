@@ -241,14 +241,26 @@ describe('read-modify-write', () => {
     expect(caseInputFrom(CASE).severity).toBe('LOW');
   });
 
-  it('carries every field of SuiteInput', () => {
+  it('carries every field of SuiteInput a round-trip may send, and no other', () => {
+    /*
+      The two condition lists are excluded on `caseInputFrom`'s grounds exactly: they are lists, so
+      absent leaves them alone, and the read serves `CaseConditionRef` where the write takes
+      `CaseConditionInput`. §186 added them to `SuiteInput` — and this assertion is what forced the
+      decision to be made rather than defaulted, because it FAILED the moment the field appeared.
+      That is the whole reason it is written as "every field" rather than "these four".
+    */
+    const excluded = ['preconditions', 'postconditions'];
+    const expected = propertiesOf('SuiteInput').filter((field) => !excluded.includes(field));
+
     const suite = {
       id: 's-1', key: 'TS-7', name: 'Smoke', description: null, caseCount: 0,
-      tagRules: ['smoke'], caseIds: ['c-1'], lifecycleStatus: 'DRAFT', conditions: [],
+      tagRules: ['smoke'], caseIds: ['c-1'], lifecycleStatus: 'DRAFT',
+      preconditions: [], postconditions: [],
       lockVersion: 2,
     } as unknown as Parameters<typeof suiteInputFrom>[0];
 
-    expect(Object.keys(suiteInputFrom(suite)).sort()).toEqual(propertiesOf('SuiteInput').sort());
+    expect(expected.length).toBeGreaterThan(3);
+    expect(Object.keys(suiteInputFrom(suite)).sort()).toEqual(expected.sort());
   });
 
   it('carries every SCALAR of TestPlanUpdateInput and none of its lists', () => {

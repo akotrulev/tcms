@@ -15,7 +15,14 @@ import java.util.UUID;
  * condition set belongs to the case endpoint, and doing it here as well would be the second
  * implementation of a resolution order that must have exactly one.
  *
- * <h2>Two contract gaps this shape has, recorded rather than worked around</h2>
+ * <h2>Two contract gaps this shape had — one is closed, one is not</h2>
+ *
+ * <p><strong>The second closed in §186</strong>, and it closed in the course of giving
+ * {@code suite_condition} its first writer: a suite response now carries {@code preconditions} and
+ * {@code postconditions} rather than one {@code conditions}, so {@code kind} is answered by which
+ * array a row is in — {@code TestCaseDetailView}'s answer, applied to the shape that had been
+ * recorded as unable to give it. The record below is kept because the argument for <em>not</em>
+ * adding a {@code kind} field to {@code CaseConditionRef} is still the live one.
  *
  * <ol>
  *   <li><strong>An inline attachment has no title, and {@code title} is required.</strong>
@@ -30,14 +37,18 @@ import java.util.UUID;
  *       with the condition-authoring endpoint that first makes an inline row reachable, which is
  *       also the first moment the question has a real answer: either the contract grows an inline
  *       title or {@code title} becomes nullable. Nothing can create one today.</li>
- *   <li><strong>{@code kind} (PRE / POST) has nowhere to go <em>in this shape</em>.</strong> The
+ *   <li><strong>~~{@code kind} (PRE / POST) has nowhere to go <em>in this shape</em>.</strong> The
  *       column exists, the distinction is real — a postcondition is cleanup, not setup — and it is
  *       mapped as of the case detail slice, which reads it. But {@code CaseConditionRef} carries no
  *       field for it, so this list still arrives undifferentiated. The case endpoint does not need
  *       one: it has <em>two arrays</em>, and which array a row is in says what the field would have.
  *       A suite has one array and therefore genuinely loses the distinction. Closing it is an
  *       {@code openapi.yaml} change with a consumer on the other side, and the SPA's suite tree
- *       does not render conditions at all yet.</li>
+ *       does not render conditions at all yet.~~ → <strong>CLOSED, §186.</strong> The last sentence
+ *       was the blocker and it expired the moment the write path existed: a form that attaches a
+ *       condition has to say which list it is attaching to, so the consumer arrived with the
+ *       writer. The fix is the one this entry names — two arrays, not a {@code kind} field, which
+ *       would have been redundant on every case row where two arrays already answer it.</li>
  * </ol>
  *
  * <p>A third case drops out quietly and is worth naming: an attachment whose library condition has

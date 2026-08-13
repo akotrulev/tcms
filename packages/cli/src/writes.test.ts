@@ -132,7 +132,8 @@ const SUITE = {
   lifecycleStatus: 'DRAFT',
   tagRules: ['smoke'],
   caseIds: ['c-9'],
-  conditions: [],
+  preconditions: [],
+  postconditions: [],
   lockVersion: 2,
 };
 
@@ -287,7 +288,7 @@ describe('case edit', () => {
     const out = recorder();
     const stub = api({
       ...scaffolding(),
-      'GET /suites': { status: 200, body: [{ id: 's-1', key: 'TS-7', name: 'Smoke', caseCount: 1, lifecycleStatus: 'DRAFT', tagRules: [], caseIds: [], conditions: [], lockVersion: 1 }] },
+      'GET /suites': { status: 200, body: [{ id: 's-1', key: 'TS-7', name: 'Smoke', caseCount: 1, lifecycleStatus: 'DRAFT', tagRules: [], caseIds: [], preconditions: [], postconditions: [], lockVersion: 1 }] },
       'PATCH /cases/c-9': { status: 200, body: CASE },
     });
 

@@ -33,6 +33,14 @@ import java.util.UUID;
  * @param caseIds   the cases added to this suite <em>individually</em> — the explicit arm only.
  *                  A case merely filed here, or matched by a tag rule, is not in this list: it is
  *                  what an editor has to render and reconcile, not the membership.
+ * @param preconditions the suite's own setup conditions, in the author's order. <strong>Two lists
+ *                  since §186, where there was one {@code conditions}</strong> — {@code
+ *                  CaseConditionRef} carries no {@code kind}, so a single array served both kinds
+ *                  undifferentiated and a suite lost a distinction {@code suite_condition.kind} has
+ *                  stored since M0. Which array a row is in is what the missing field would have
+ *                  said, which is how {@code TestCaseDetailView} has always answered it.
+ * @param postconditions cleanup, on the same terms. Resolved and deduped independently of
+ *                  {@link #preconditions} — the same library entry legitimately appears in both.
  * @param lockVersion sent back on a rename so a concurrent edit is a 409 rather than a silent
  *                  overwrite (plan §6j). The one internal field that is on the wire on purpose.
  */
@@ -45,6 +53,7 @@ public record SuiteView(
         List<String> tagRules,
         List<UUID> caseIds,
         LifecycleStatus lifecycleStatus,
-        List<SuiteConditionView> conditions,
+        List<SuiteConditionView> preconditions,
+        List<SuiteConditionView> postconditions,
         long lockVersion) {
 }

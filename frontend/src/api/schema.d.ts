@@ -1356,6 +1356,14 @@ export interface paths {
          *     Send the suite's `lockVersion` as `If-Match`. Omitting it is last-write-wins, which is right
          *     for an importer with no prior read; the SPA always sends it, so a concurrent rename is a
          *     `409` rather than a silent overwrite (§6j).
+         *
+         *     **Detaching a condition here discards every case's opt-out against it**, and that is the
+         *     cascade rather than a rule this endpoint applies: `case_condition_optout` keys on
+         *     `suite_condition.id` with `ON DELETE CASCADE`, so the row that recorded "this case declines
+         *     that inherited condition" goes when the thing it declined does. Re-attaching the same entry
+         *     afterwards is a **new** attachment, which every case then inherits afresh. It is also why
+         *     the server rewrites the attachment rows *in place* — a save that reordered the list by
+         *     deleting and reinserting would silently clear opt-outs nobody touched.
          */
         patch: {
             parameters: {
@@ -8148,7 +8156,7 @@ export interface components {
             caseIds: string[];
             lifecycleStatus: components["schemas"]["LifecycleStatus"];
             /**
-             * @description Suite-level conditions, inherited by the cases **filed** in this suite (plan §6f).
+             * @description Suite-level setup conditions, inherited by the cases **filed** in this suite (plan §6f).
              *
              *     ~~and by every case beneath it~~ → **§98**: with no subtree there is no chain to walk,
              *     so a suite's conditions reach exactly its own filed cases. Inheritance deliberately did
@@ -8157,8 +8165,18 @@ export interface components {
              *     lives and the standing rules of that place apply to it; a tag rule says a collection
              *     wants to see it, which is not a claim about how it is run. Widening is a decision with a
              *     slice behind it, not a side effect of flattening.
+             *
+             *     `inherited` is `false` and `inheritedFrom` null on every entry, by construction: read on
+             *     a suite these are the suite's *own* attachments, and the inheritance runs downward.
              */
-            conditions: components["schemas"]["CaseConditionRef"][];
+            preconditions: components["schemas"]["CaseConditionRef"][];
+            /**
+             * @description Suite-level cleanup conditions, on the same terms as `preconditions` above. A
+             *     postcondition is cleanup and not setup, and the two lists are resolved and deduped
+             *     independently — the same entry may legitimately be in both ("reset the payment data" is
+             *     setup *and* cleanup), which is what a `BOTH` library entry is for.
+             */
+            postconditions: components["schemas"]["CaseConditionRef"][];
             lockVersion: number;
         };
         SuiteInput: {
@@ -8186,6 +8204,27 @@ export interface components {
              *     reader was never granted.
              */
             caseIds?: string[];
+            /**
+             * @description The suite's setup conditions, as a **complete set** — absent leaves them alone, `[]`
+             *     detaches them all. `tagRules`' rule, for the same reason: a rename that never mentioned
+             *     the conditions must not empty a standing procedure.
+             *
+             *     **This is the first write path `suite_condition` has ever had.** The table, its `kind`
+             *     column and the whole read side shipped in M0; the rows could only be created by hand-
+             *     written SQL, which is what the suite fixtures in the test suite actually did. `§186`.
+             *
+             *     Same rules as `TestCaseInput.preconditions`, which this reuses in full: the reference
+             *     form only (`inlineBody` is refused with a field error, not swallowed), each id must name
+             *     a live entry **of this project** or one this suite already attaches, order is the
+             *     content and position is assigned from array order, and a repeat inside one list is
+             *     de-duplicated rather than refused.
+             */
+            preconditions?: components["schemas"]["CaseConditionInput"][];
+            /**
+             * @description The suite's cleanup conditions, on the terms `preconditions` sets out. The two lists are
+             *     independent — the same entry in both is legitimate and common.
+             */
+            postconditions?: components["schemas"]["CaseConditionInput"][];
         };
         SuiteStatusInput: {
             status: components["schemas"]["LifecycleStatus"];

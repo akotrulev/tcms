@@ -40,7 +40,8 @@ const suite = (id: string, name: string, caseCount: number): Suite => ({
   /** The wire meaning, and since §98 the only meaning: what this suite resolves to. */
   caseCount,
   lifecycleStatus: 'APPROVED',
-  conditions: [],
+  preconditions: [],
+  postconditions: [],
   lockVersion: 1,
 })
 

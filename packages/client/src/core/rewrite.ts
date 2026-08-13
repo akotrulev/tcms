@@ -125,6 +125,12 @@ function stepInputFrom(step: Schemas['TestStep']): Schemas['TestStepInput'] {
  * `tagRules` and `caseIds` are lists and would survive being omitted, but they are included
  * anyway: a base body that is the resource is one rule to read, and "these two fields alone are
  * safe to leave out" is the kind of exception that stops being true when a field is added.
+ *
+ * **`preconditions` and `postconditions` are the field that was added** (§186), and they are the
+ * exception the paragraph above predicted — dropped, on `caseInputFrom`'s grounds: the read serves
+ * `CaseConditionRef` and the write takes `CaseConditionInput`, so echoing the resource is not a
+ * thing that types here. Absent leaves them alone, which is the correct behaviour for a `--name`
+ * edit either way. What a CLI cannot yet do is *change* them; that wants a flag, not a projection.
  */
 export function suiteInputFrom(current: Schemas['Suite']): Schemas['SuiteInput'] {
   return {

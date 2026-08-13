@@ -107,6 +107,10 @@ class SuiteEndpointTest extends IntegrationTestBase {
     private static final UUID RETIRED_CONDITION =
             UUID.fromString("5a005000-0000-4000-8000-00000000000b");
 
+    /** Refunds' cleanup attachment — the same library entry as its setup one, in the other list. */
+    private static final UUID POST_ATTACHMENT =
+            UUID.fromString("5a006000-0000-4000-8000-000000000004");
+
     @Autowired
     private MockMvc mvc;
 
@@ -274,7 +278,7 @@ class SuiteEndpointTest extends IntegrationTestBase {
             JsonNode suite = byName(treeAs(LEAD, ACME, ACME_BANKING), "Refunds");
 
             assertThat(List.of("id", "key", "name", "caseCount", "lifecycleStatus",
-                    "conditions", "lockVersion"))
+                    "preconditions", "postconditions", "lockVersion"))
                     .allSatisfy(field -> assertThat(suite.has(field))
                             .as("Suite.%s is required by openapi.yaml", field)
                             .isTrue());
@@ -431,9 +435,9 @@ class SuiteEndpointTest extends IntegrationTestBase {
         @DisplayName("a reference attachment resolves to the library entry's title and body")
         void referencesResolve() throws Exception {
             JsonNode refunds = byName(treeAs(LEAD, ACME, ACME_BANKING), "Refunds");
-            JsonNode condition = refunds.get("conditions").get(0);
+            JsonNode condition = refunds.get("preconditions").get(0);
 
-            assertThat(refunds.get("conditions")).hasSize(1);
+            assertThat(refunds.get("preconditions")).hasSize(1);
             assertThat(condition.get("title").asText()).isEqualTo("Log in as standard user");
             assertThat(namesIn(condition.get("body")))
                     .as("the body is an ordered list of actions, not a paragraph — 'log in' is "
@@ -449,7 +453,7 @@ class SuiteEndpointTest extends IntegrationTestBase {
             // items on this id. Exposing the condition id here would produce duplicate React keys
             // the moment the same precondition is attached twice.
             JsonNode condition =
-                    byName(treeAs(LEAD, ACME, ACME_BANKING), "Refunds").get("conditions").get(0);
+                    byName(treeAs(LEAD, ACME, ACME_BANKING), "Refunds").get("preconditions").get(0);
 
             assertThat(condition.get("id").asText()).isNotEqualTo(LIVE_CONDITION.toString());
         }
@@ -461,7 +465,7 @@ class SuiteEndpointTest extends IntegrationTestBase {
             // above it. Read on a suite, the inheritance runs downward — so `true` here would be
             // the response claiming this suite got the condition from somewhere else.
             JsonNode condition =
-                    byName(treeAs(LEAD, ACME, ACME_BANKING), "Refunds").get("conditions").get(0);
+                    byName(treeAs(LEAD, ACME, ACME_BANKING), "Refunds").get("preconditions").get(0);
 
             assertThat(condition.get("inherited").asBoolean()).isFalse();
             assertThat(condition.get("inheritedFrom").isNull()).isTrue();
@@ -493,10 +497,11 @@ class SuiteEndpointTest extends IntegrationTestBase {
             }
 
             assertThat(attached)
-                    .as("the two reference-backed attachments, and neither of them the inline one")
+                    .as("the three reference-backed attachments, and none of them the inline one")
                     .containsExactlyInAnyOrder(
                             UUID.fromString("5a006000-0000-4000-8000-000000000001"),
-                            UUID.fromString("5a006000-0000-4000-8000-000000000002"))
+                            UUID.fromString("5a006000-0000-4000-8000-000000000002"),
+                            POST_ATTACHMENT)
                     .doesNotContain(UUID.fromString("5a006000-0000-4000-8000-000000000003"));
         }
 
@@ -513,7 +518,7 @@ class SuiteEndpointTest extends IntegrationTestBase {
             // WHEN THIS TEST FAILS: an inline authoring surface has landed. The fix is not to
             // delete the predicate — it is to decide, in openapi.yaml, whether an inline
             // condition carries a title or whether `title` becomes nullable.
-            assertThat(byName(treeAs(LEAD, ACME, ACME_BANKING), "Checkout").get("conditions"))
+            assertThat(byName(treeAs(LEAD, ACME, ACME_BANKING), "Checkout").get("preconditions"))
                     .isEmpty();
         }
 
@@ -525,21 +530,51 @@ class SuiteEndpointTest extends IntegrationTestBase {
             // has exactly one attachment, to exactly that entry.
             JsonNode partial = byName(treeAs(LEAD, ACME, ACME_BANKING), "Partial refunds");
 
-            assertThat(partial.has("conditions")).isTrue();
-            assertThat(partial.get("conditions").isArray()).isTrue();
-            assertThat(partial.get("conditions")).isEmpty();
+            assertThat(partial.has("preconditions")).isTrue();
+            assertThat(partial.get("preconditions").isArray()).isTrue();
+            assertThat(partial.get("preconditions")).isEmpty();
+            assertThat(partial.get("postconditions")).isEmpty();
         }
 
         @Test
-        @DisplayName("a suite with no conditions serializes as [], never as null or absent")
+        @DisplayName("PRE and POST attachments land in different arrays, not one merged list")
+        void theTwoKindsAreSeparated() throws Exception {
+            // §186's whole contract change, asserted at the only place it is observable. Refunds
+            // attaches the SAME library entry twice — once as setup, once as cleanup — which is
+            // exactly what a BOTH entry is for and exactly what the single `conditions` array
+            // could not express: both rows arrived in one list, in an order decided by `position`,
+            // with nothing on the wire saying which was which.
+            //
+            // WHEN THIS TEST FAILS by both lists holding both rows: the grouping stopped keying on
+            // `SuiteCondition.kind` and is bucketing by suite alone.
+            JsonNode refunds = byName(treeAs(LEAD, ACME, ACME_BANKING), "Refunds");
+
+            assertThat(refunds.get("preconditions")).hasSize(1);
+            assertThat(refunds.get("postconditions")).hasSize(1);
+            assertThat(refunds.get("preconditions").get(0).get("id").asText())
+                    .isNotEqualTo(POST_ATTACHMENT.toString());
+            assertThat(refunds.get("postconditions").get(0).get("id").asText())
+                    .isEqualTo(POST_ATTACHMENT.toString());
+            assertThat(refunds.get("postconditions").get(0).get("conditionId").asText())
+                    .as("the same library entry as the precondition — one procedure, two moments")
+                    .isEqualTo(LIVE_CONDITION.toString());
+        }
+
+        @Test
+        @DisplayName("a suite with neither kind serializes both as [], never as null or absent")
         void anEmptySuiteCarriesAnEmptyArray() throws Exception {
-            // The contract marks `conditions` required, so the SPA cannot null-check it — an
-            // absent key is a crash on the tree rather than an empty list.
+            // The contract marks both required, so the SPA cannot null-check either — an absent
+            // key is a crash on the tree rather than an empty list. Both arms matter now that
+            // there are two: a suite with setup and no cleanup is the ordinary state, so the
+            // empty side is the normal path rather than an edge case.
             JsonNode payments = byName(treeAs(LEAD, ACME, ACME_BANKING), "Payments");
 
-            assertThat(payments.has("conditions")).isTrue();
-            assertThat(payments.get("conditions").isArray()).isTrue();
-            assertThat(payments.get("conditions")).isEmpty();
+            assertThat(payments.has("preconditions")).isTrue();
+            assertThat(payments.get("preconditions").isArray()).isTrue();
+            assertThat(payments.get("preconditions")).isEmpty();
+            assertThat(payments.has("postconditions")).isTrue();
+            assertThat(payments.get("postconditions").isArray()).isTrue();
+            assertThat(payments.get("postconditions")).isEmpty();
         }
     }
 
@@ -969,11 +1004,19 @@ class SuiteEndpointTest extends IntegrationTestBase {
     }
 
     /**
-     * One live library condition, one retired one, and the three attachment shapes.
+     * One live library condition, one retired one, and the four attachment shapes.
      *
-     * <p>Refunds gets the live reference, Partial refunds the retired one, Checkout an inline
-     * body. The last two are the exclusions {@code SuiteConditionView} documents, and they have no
-     * other coverage — nothing in the product can create any of these rows yet.
+     * <p>Refunds gets the live reference as setup <em>and</em> as cleanup, Partial refunds the
+     * retired one, Checkout an inline body. The retired and inline rows are the exclusions
+     * {@code SuiteConditionView} documents and they have no other coverage — those two the product
+     * still cannot create.
+     *
+     * <p>~~nothing in the product can create any of these rows yet~~ → <strong>§186 gave
+     * {@code suite_condition} a writer</strong>, so the two <em>reference</em> rows here could now
+     * be seeded through {@code POST /suites}. They are deliberately not: this class tests the read,
+     * and seeding a read fixture through the write under test makes a broken pair agree with
+     * itself — which is the argument §107 deleted the whole mock layer over. {@code
+     * SuiteWriteEndpointTest} owns the write, and it seeds nothing by hand.</p>
      */
     private void seedConditions() throws SQLException {
         try (Connection connection = appConnection(ACME)) {
@@ -983,11 +1026,16 @@ class SuiteEndpointTest extends IntegrationTestBase {
                     "[\"Open the legacy console\"]", true);
 
             attachment(connection, UUID.fromString("5a006000-0000-4000-8000-000000000001"),
-                    REFUNDS, 0, LIVE_CONDITION, null);
+                    REFUNDS, "PRE", 0, LIVE_CONDITION, null);
             attachment(connection, UUID.fromString("5a006000-0000-4000-8000-000000000002"),
-                    PARTIAL, 0, RETIRED_CONDITION, null);
+                    PARTIAL, "PRE", 0, RETIRED_CONDITION, null);
             attachment(connection, UUID.fromString("5a006000-0000-4000-8000-000000000003"),
-                    CHECKOUT, 0, null, "[\"Have a cart with two items\"]");
+                    CHECKOUT, "PRE", 0, null, "[\"Have a cart with two items\"]");
+            // The SAME library entry, on the SAME suite, as cleanup — which is the arrangement the
+            // one-array response could not describe (§186) and the one a BOTH entry exists for.
+            // Position 0 again: the two lists number independently, so a POST row sharing a
+            // position with a PRE row is correct rather than a collision.
+            attachment(connection, POST_ATTACHMENT, REFUNDS, "POST", 0, LIVE_CONDITION, null);
         }
     }
 
@@ -1081,22 +1129,23 @@ class SuiteEndpointTest extends IntegrationTestBase {
      * Hence the explicit casts on every nullable parameter here and above.
      */
     private void attachment(
-            Connection connection, UUID id, UUID suiteId, int position, UUID conditionId,
-            String inlineBody) throws SQLException {
+            Connection connection, UUID id, UUID suiteId, String kind, int position,
+            UUID conditionId, String inlineBody) throws SQLException {
 
         try (var statement = connection.prepareStatement("""
                 INSERT INTO suite_condition
                     (id, company_id, suite_id, kind, position, condition_id, inline_body)
-                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), 'PRE', ?,
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
                         CAST(? AS uuid), CAST(? AS jsonb))
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
             statement.setString(2, ACME.toString());
             statement.setString(3, suiteId.toString());
-            statement.setInt(4, position);
-            statement.setString(5, conditionId == null ? null : conditionId.toString());
-            statement.setString(6, inlineBody);
+            statement.setString(4, kind);
+            statement.setInt(5, position);
+            statement.setString(6, conditionId == null ? null : conditionId.toString());
+            statement.setString(7, inlineBody);
             statement.executeUpdate();
         }
     }

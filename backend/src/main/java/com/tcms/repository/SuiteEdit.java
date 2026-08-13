@@ -1,8 +1,10 @@
 package com.tcms.repository;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,7 +32,16 @@ record SuiteEdit(
         // Null for "leave them alone", which the rename dialog sends and the create path never
         // does. Both are normalized by #normalizeTagRules / #normalizeCaseIds before they get here.
         List<String> tagRules,
-        List<UUID> caseIds) {
+        List<UUID> caseIds,
+
+        // NEVER null, unlike the two above, and the asymmetry is CaseEdit's rather than an
+        // inconsistency: #normalizeConditions resolves an absent list against what is STORED, so
+        // "leave them alone" has already been turned into the concrete list by the time it lands
+        // here. The membership lists cannot do that — SuiteMembershipWriter takes the null and skips
+        // the arm — and conditions cannot either, because reconcile needs both lists to compute
+        // what is stale.
+        List<UUID> preconditionIds,
+        List<UUID> postconditionIds) {
 
     /**
      * The longest name the tree will accept.
@@ -70,18 +81,132 @@ record SuiteEdit(
      * @param liveCaseIds the project's live case ids, for the explicitly-added membership arm. A
      *                    {@code caseId} outside this set is a field error rather than a silent
      *                    drop, for the same reason.
+     * @param acceptableConditionIds this project's live library entries, unioned with the ids this
+     *                    suite already attaches. Both halves are load-bearing and they fail in
+     *                    opposite directions — {@link CaseEdit}'s {@code normalizeConditions} spells
+     *                    out which, and this is the third table the same union has been needed on.
+     * @param storedPreconditionIds what the suite attaches today, per kind — what an <em>absent</em>
+     *                    list resolves to. Taken verbatim and unvalidated: it describes what is
+     *                    already on the row rather than something this caller asked for, so
+     *                    re-litigating it would let a library retirement refuse a rename that never
+     *                    mentioned conditions.
      */
-    static Outcome validate(SuiteWriteRequest request, Set<UUID> liveCaseIds) {
+    static Outcome validate(
+            SuiteWriteRequest request,
+            Set<UUID> liveCaseIds,
+            Set<UUID> acceptableConditionIds,
+            List<UUID> storedPreconditionIds,
+            List<UUID> storedPostconditionIds) {
+
         Map<String, List<String>> errors = new LinkedHashMap<>();
 
         String name = validName(request, errors);
         List<String> tagRules = normalizeTagRules(request.tagRules(), errors);
         List<UUID> caseIds = normalizeCaseIds(request.caseIds(), liveCaseIds, errors);
+        List<UUID> preconditions = normalizeConditions(
+                request.preconditions(), "preconditions", acceptableConditionIds,
+                storedPreconditionIds, errors);
+        List<UUID> postconditions = normalizeConditions(
+                request.postconditions(), "postconditions", acceptableConditionIds,
+                storedPostconditionIds, errors);
 
         return errors.isEmpty()
                 ? new Outcome.Valid(new SuiteEdit(
-                        name, trimToNull(request.description()), tagRules, caseIds))
+                        name,
+                        trimToNull(request.description()),
+                        tagRules,
+                        caseIds,
+                        preconditions,
+                        postconditions))
                 : new Outcome.Invalid(errors);
+    }
+
+    /**
+     * Normalizes one of the two condition lists — {@link CaseEdit}'s {@code normalizeConditions},
+     * transferred, and the rules it enforces are that method's in full.
+     *
+     * <p>It is a transfer and not an extraction, which is a decision worth stating. The two could
+     * share one static method; they are the same six lines over a different stored value. They are
+     * kept apart because the shared version would take five parameters to say which of two entities
+     * it is validating for, and because the <em>rules</em> being identical is the invariant —
+     * {@code SuiteWriteEndpointTest} and {@code CaseUpdateEndpointTest} each pin them against their
+     * own endpoint, so the day they diverge is a failing test rather than a silent edit to one
+     * caller's behaviour. The one place a shared helper would genuinely have paid — the error
+     * messages — is handled by the strings being the same text, which those tests assert.
+     *
+     * <p>Absent means "leave it alone" and resolves to {@code stored}; empty means "detach
+     * everything", which is a thing an author asks for by removing the last row. The distinction is
+     * why the field is a {@code List} that may be null on the request record and never null here.
+     *
+     * @param field the name to report errors under, as spelled on {@code SuiteInput}
+     */
+    private static List<UUID> normalizeConditions(
+            List<CaseConditionInput> submitted,
+            String field,
+            Set<UUID> acceptableConditionIds,
+            List<UUID> stored,
+            Map<String, List<String>> errors) {
+
+        if (submitted == null) {
+            return stored == null ? List.of() : List.copyOf(stored);
+        }
+
+        Set<UUID> distinct = new LinkedHashSet<>();
+        for (CaseConditionInput entry : submitted) {
+            if (entry == null) {
+                continue;
+            }
+            if (entry.inlineBody() != null) {
+                // Refused rather than ignored: nothing renders an inline attachment — every
+                // CaseConditionRef requires a title and the row has no column for one — so
+                // accepting it would be a save that succeeds and a condition nobody can ever see.
+                errors.computeIfAbsent(field, key -> new ArrayList<>())
+                        .add("Attach a condition from the library. Inline conditions are not "
+                                + "supported yet.");
+                continue;
+            }
+            if (entry.conditionId() == null) {
+                errors.computeIfAbsent(field, key -> new ArrayList<>()).add("Choose a condition.");
+                continue;
+            }
+            if (!acceptableConditionIds.contains(entry.conditionId())) {
+                // One message for three causes — retired, another project's, or nothing at all.
+                // Distinguishing them would confirm the existence of a condition the caller may
+                // not use.
+                errors.computeIfAbsent(field, key -> new ArrayList<>())
+                        .add("That condition is not one this project offers.");
+                continue;
+            }
+            distinct.add(entry.conditionId());
+        }
+
+        return List.copyOf(distinct);
+    }
+
+    /**
+     * Every condition id the payload names, across both lists — what the caller resolves the live
+     * library half of {@code acceptableConditionIds} from.
+     *
+     * <p>Empty for the overwhelmingly common suite write, which is a rename mentioning no condition
+     * at all, and an empty set is what keeps {@code IN ()} from ever being bound.
+     */
+    static Set<UUID> referencedConditionIds(SuiteWriteRequest request) {
+        Set<UUID> ids = new HashSet<>();
+        // Arrays.asList and not List.of: either list is legitimately null — that is what "leave
+        // them alone" is spelled as — and List.of throws on a null element.
+        for (List<CaseConditionInput> list :
+                Arrays.asList(request.preconditions(), request.postconditions())) {
+
+            if (list == null) {
+                continue;
+            }
+            for (CaseConditionInput entry : list) {
+                if (entry != null && entry.conditionId() != null) {
+                    ids.add(entry.conditionId());
+                }
+            }
+        }
+        return ids;
     }
 
     /**
