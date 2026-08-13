@@ -105,9 +105,23 @@ public class TestExecution {
 
     /**
      * Derived from {@link #releaseVersion} in the one statement that sets it, exactly as on
-     * {@link TestRun}. {@code test_execution_release_idx} leads on this column, so leaving it null
-     * while the release is set makes the release-filtered aggregate — the one every report runs —
-     * skip the rows it is about.
+     * {@link TestRun}.
+     *
+     * <p><del>{@code test_execution_release_idx} leads on this column, so leaving it null while the
+     * release is set makes the release-filtered aggregate — the one every report runs — skip the
+     * rows it is about.</del> <strong>Corrected in §188: there is no such aggregate.</strong> No
+     * query in {@code src/main} filters or orders by {@code release_sort_key} on any of the three
+     * tables that carry it — every release filter in the product, including the reports', is an
+     * exact match on {@code release_version} — so the consequence described above has nothing to
+     * occur in. It is the shape §152 named, in the file where §151 had already recorded the fact
+     * that contradicts it.
+     *
+     * <p>In {@code ArchitectureRulesTest.READERLESS_BY_DECISION} since §188, and it was the hardest
+     * of that section's seven to see: {@code reporting.ExecutionSource} <em>does</em> select this
+     * column — into {@code execution_fact.release_sort_key}, which nothing orders by either. A value
+     * propagated through a third table and consumed nowhere is still consumed nowhere. The rule
+     * could not report it before §188 for an unrelated reason worth knowing: that {@code SELECT}
+     * lives inside an {@code INSERT}, and the reader rule strips a write statement whole.
      */
     @Column(name = "release_sort_key", updatable = false)
     private String releaseSortKey;

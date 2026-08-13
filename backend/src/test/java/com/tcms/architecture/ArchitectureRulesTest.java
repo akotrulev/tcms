@@ -132,28 +132,29 @@ class ArchitectureRulesTest {
             .collect(Collectors.toCollection(TreeSet::new));
 
     /**
-     * The production sources — the corpus {@link #everyMappedColumnHasAReader} needs and the only
-     * thing in this file that is not bytecode. Relative, because Gradle runs a test with the
-     * project directory as its working directory; the rule asserts the corpus is non-empty rather
-     * than trusting that.
-     */
-    private static final List<Path> SOURCE_ROOTS =
-            List.of(Path.of("src", "main", "java"), Path.of("src", "test", "java"));
-
-    /** Where an entity's own file is, so the rule does not count a field's declaration as its reader. */
-    private static final Path MAIN_SOURCE = SOURCE_ROOTS.get(0);
-
-    /**
-     * This file, excluded from its own corpus.
+     * The product's sources — the corpus both column rules read, and the only thing in this file
+     * that is not bytecode. Relative, because Gradle runs a test with the project directory as its
+     * working directory; the rules assert the corpus is non-empty rather than trusting that. It is
+     * also where an entity's own file is, so a field's declaration does not count as its reader.
      *
-     * <p>Not housekeeping — without it the rule cannot fail. Every key in
+     * <p><strong>It was {@code src/main} + {@code src/test} until §188.</strong> The narrowing is
+     * argued at each rule and the argument is one sentence in both: <em>the product is the
+     * population</em>. A fixture that INSERTs a row proves a column can hold a value; a fixture that
+     * SELECTs one proves a write happened. Neither is the question either rule asks, which is
+     * whether anything the product does produces or consumes the value.
+     *
+     * <p><strong>Narrowing it deleted a trap rather than merely changing a number, and that is the
+     * part worth keeping.</strong> {@code OWN_FILE} used to exclude this file from its own corpus,
+     * and it was not housekeeping — without it the reader rule could not fail. Every key in
      * {@link #READERLESS_BY_DECISION} is the string {@code "Entity.field"}, so each argument for
      * keeping a column was itself a string literal naming that column, and the corpus read the
-     * argument as the reader. Five of the seven members made themselves disappear. It is the same
-     * shape §152 found in a javadoc and §153 found in a prefix match: the prose about a seam
-     * standing in for the seam, this time inside the check written to stop that happening.
+     * argument as the reader; five of the seven members then extant made themselves disappear. The
+     * arguments live in {@code src/test} and the corpus is {@code src/main}, so the constant is gone
+     * because the shape it guarded is now unreachable — not because anyone decided it was safe. It
+     * was the same shape §152 found in a javadoc and §153 in a prefix match: the prose about a seam
+     * standing in for the seam, that time inside the check written to stop that happening.
      */
-    private static final String OWN_FILE = "ArchitectureRulesTest.java";
+    private static final Path MAIN_SOURCE = Path.of("src", "main", "java");
 
     /** A mapping declares a column, it does not read one — stripped before the corpus is searched. */
     private static final Pattern MAPPING_ANNOTATION = Pattern.compile(
@@ -625,8 +626,17 @@ class ArchitectureRulesTest {
      * giving one of these a reader without deleting its entry. The argument for each is written at
      * the field itself; what is here is the one-line reason and the shape it is an instance of.
      *
-     * <p><strong><del>Twelve since §160</del> Eleven since §181</strong> — {@code rawStorageKey}
-     * left by getting both halves at
+     * <p><strong><del>Twelve since §160</del> <del>Eleven since §181</del> EIGHTEEN since §188</strong>,
+     * which is the first time this count has gone up and the reason is the corpus rather than the
+     * code: {@code src/test} came out of it, so seven columns whose only reader was a fixture are
+     * findings now. The seven are argued at their fields and in the entries below, and one of them
+     * is worth reading before the rest — {@code TestRun.releaseSortKey} is §151's, and §151 recorded
+     * the absence of a reader as finding 3 and deliberately did not act on it. Two more,
+     * {@code AuditEvent.actorTokenId} and {@code ReportArtifact.generatedAt}, arrive by an argument
+     * that used to be the argument against them: each was cited, at the field and in this rule's own
+     * comment, as the example of a column whose test SELECT counted.
+     *
+     * <p>{@code rawStorageKey} left by getting both halves at
      * once, which is the first exit from this rule in either direction and the second time a member
      * has been written out rather than argued for (§157 did it in the writerless twin). Its entry
      * had said closing it was "a storage read path and an operation, not a wiring fix", and that was
@@ -741,7 +751,61 @@ class ArchitectureRulesTest {
                             + "\"set when this event is one of many\" describes a state that has "
                             + "never occurred. The audit trail has no screen, which §152 recorded "
                             + "from the other side when AuditEventRepository's only reader turned "
-                            + "out to be a test"));
+                            + "out to be a test"),
+            Map.entry("AuditEvent.actorTokenId",
+                    "bulkOperationId's neighbour and the opposite half: §132 spent a slice giving "
+                            + "it a writer, and the audit trail still has no screen. It was this "
+                            + "rule's own worked example for counting a test as a reader — "
+                            + "IngestionEndpointTest selects the column — until §188 narrowed the "
+                            + "corpus to src/main, so it arrives here by the argument it used to "
+                            + "be the argument against. The reader it wants is the audit screen "
+                            + "§152 named, which is a contract change"),
+            Map.entry("ClassificationDimension.controlled",
+                    "mapped and not on the wire, argued at the field since it was written: the "
+                            + "contract's ClassificationDimension does not carry it and inventing "
+                            + "the field would commit the SPA to a distinction nothing renders. "
+                            + "Every seeded dimension is controlled, so the column has one value "
+                            + "in every deployment — cheaper than the usual shape, because a "
+                            + "reader added later would find the data already correct"),
+            Map.entry("Permission.area",
+                    "the catalogue's grouping for humans, seeded by V3 and served by nothing. The "
+                            + "SPA groups from its own copy in frontend/src/lib/permissions.ts, "
+                            + "which is exhaustive against the contract by construction and "
+                            + "therefore the stronger of the two — so serving this column would "
+                            + "not retire the copy, and neither side reads the other. What both "
+                            + "headers claim instead is that the two groupings AGREE, which is a "
+                            + "checkable sentence nothing was checking"),
+            Map.entry("ReportArtifact.generatedAt",
+                    "stamped by ReportArtifact.of on every generate, and the entry its own field "
+                            + "javadoc has been predicting: it said the reason it was NOT here was "
+                            + "that a test selects the column, which stopped being a reason in "
+                            + "§188. ReportArtifactRepository declares no method at all. The "
+                            + "reader it wants is an artifact list, which is a contract change "
+                            + "rather than a wiring fix"),
+            Map.entry("SuiteVersion.contentHash",
+                    "the digest that exists so a LATER version can be compared to an earlier one, "
+                            + "on the one version table that has never written a second row: "
+                            + "SuiteVersions writes v1 at create and nothing since, and its header "
+                            + "says why a decide() sibling would be \"a comparison with exactly "
+                            + "one caller that always answers yes\". PageVersions.recordEdit is "
+                            + "what the reader looks like when it arrives; the exit is the "
+                            + "composition writes SuiteVersions already names as owed"),
+            Map.entry("TestRun.releaseSortKey",
+                    "§151's column, and the sharpest member of this list: written on three tables, "
+                            + "indexed on three tables, and there is no WHERE and no ORDER BY over "
+                            + "it anywhere in src/main. That is not an oversight §151 missed — it "
+                            + "is §151's own finding 3, recorded and deliberately not acted on, "
+                            + "because giving it a reader is §6q's latest-release view and a "
+                            + "feature. What §151 bought was that the eventual reader is not "
+                            + "written against three tables of keys that order releases backwards"),
+            Map.entry("TestExecution.releaseSortKey",
+                    "TestRun's, one table along, and the one whose absence of a reader was hardest "
+                            + "to see: ExecutionSource DOES select it — into execution_fact's own "
+                            + "release_sort_key, which nothing orders by either. A value "
+                            + "propagated through a third table and consumed nowhere is still "
+                            + "consumed nowhere, and this rule could not report it before §188 "
+                            + "because the SELECT lives inside an INSERT and withoutWrites strips "
+                            + "the statement whole"));
 
     @Test
     @DisplayName("every mapped column has a reader — the readerless tally, computed")
@@ -767,11 +831,30 @@ class ArchitectureRulesTest {
         // FOUR THINGS COUNT AS A READER, and each of the four was added because leaving it out
         // reported a column something really reads. A whole-word occurrence of the COLUMN name in
         // any file but the entity's own; the FIELD name inside a string literal; the capitalised
-        // field name in any name a repository declares; or a Java read. Src/main AND src/test, for
-        // §152's reason — a test that SELECTs a column to assert what a write left behind is that
-        // column's reader, and it is the only one three of these columns have. AuditEvent's
-        // actorTokenId is the instance: §132 spent a slice giving it a writer, no product code
-        // reads it, and IngestionEndpointTest's "SELECT actor_token_id FROM audit_event" does.
+        // field name in any name a repository declares; or a Java read.
+        //
+        // THE CORPUS IS src/main, AND IT WAS src/main + src/test UNTIL §188 — where the reasoning
+        // above used to run "a test that SELECTs a column to assert what a write left behind is
+        // that column's reader (§152), and it is the only one three of these columns have."
+        //
+        // THAT SENTENCE WAS ANSWERING A DIFFERENT QUESTION, and §187 is where the distinction got
+        // its name. §153's rule is about SEAMS: a method exists to be called, so a test calling it
+        // is a caller and everyPublicBeanMethodIsExercised counts it. A COLUMN is not a seam, it is
+        // a VALUE, and this rule's failure message has always said so — "that is not waste, it is
+        // an unverified value". A fixture that selects a column proves the write happened. It does
+        // not make anything downstream consult the value, which is the only property that can make
+        // a wrong one matter. release_sort_key is the proof and it is not hypothetical: the column
+        // is written on three tables, indexed on three tables, copied from test_execution into
+        // execution_fact by ExecutionSource — and there is no WHERE and no ORDER BY over it
+        // anywhere, which is exactly why it could sort a release below its own release candidate
+        // from M0 to §151 with the whole suite green. Under the old corpus this rule was silent
+        // about it, because §151's own tests name the column while asserting the fix.
+        //
+        // THE COST IS PAID IN ONE PLACE AND IT IS NAMED THERE. AuditEvent.actorTokenId was the
+        // instance §132 cited for the old corpus — a slice spent giving it a writer, no product
+        // code reading it, and IngestionEndpointTest's "SELECT actor_token_id FROM audit_event"
+        // standing in as the reader. It is in READERLESS_BY_DECISION now, with the same argument
+        // bulkOperationId has carried since §152: the audit trail has no screen.
         //
         // TWO THINGS ARE STRIPPED FIRST, and both were measured. A mapping annotation is not a
         // read — without stripping it, every entity declaring its own created_at marks every other
@@ -782,13 +865,17 @@ class ArchitectureRulesTest {
         // outliving the seam. An INSERT's column list is a write and is dropped with the same
         // argument; a fixture that inserts a row is not a reader of what it inserted.
         //
-        // AND THIS FILE IS EXCLUDED FROM ITS OWN CORPUS, which is not housekeeping: see OWN_FILE.
-        // Every key in READERLESS_BY_DECISION is the string "Entity.field", so each argument for
-        // keeping a column was a string literal naming that column, and the corpus read the
-        // argument as the reader. Five of the thirteen members deleted themselves. §152 found a
-        // javadoc standing in for the seam it described and §153 found a prefix match hiding the
-        // method it was meant to report; this is the third, inside the check written to end the
-        // first two, and it is the reason the population went 7 → 13 after the last fix.
+        // THIS FILE USED TO BE EXCLUDED FROM ITS OWN CORPUS and no longer needs to be — see
+        // MAIN_SOURCE, where the trap and its disappearance are both recorded. It was not
+        // housekeeping: every key in READERLESS_BY_DECISION is the string "Entity.field", so each
+        // argument for keeping a column was a string literal naming that column, the corpus read
+        // the argument as the reader, and five of the thirteen members then extant deleted
+        // themselves. §152 found a javadoc standing in for the seam it described and §153 found a
+        // prefix match hiding the method it was meant to report; that was the third, inside the
+        // check written to end the first two, and it is the reason the population went 7 → 13 after
+        // the last fix. The arguments are in src/test and the corpus is src/main, so it cannot
+        // recur — which is a better outcome than a filter, and is the one thing §188's narrowing
+        // did for free.
         //
         // The remainder still over-counts and it does so ON PURPOSE, one way. A native query
         // naming ANOTHER table's lock_version marks this one read, because the corpus is text and
@@ -815,23 +902,19 @@ class ArchitectureRulesTest {
         Map<Path, String> columnText = new LinkedHashMap<>();
         Map<Path, String> literalText = new LinkedHashMap<>();
         StringBuilder repositoryMethodNames = new StringBuilder();
-        for (Path root : SOURCE_ROOTS) {
-            try (Stream<Path> sources = Files.walk(root)) {
-                for (Path file : sources.filter(p -> p.toString().endsWith(".java"))
-                        .filter(p -> !p.getFileName().toString().equals(OWN_FILE))
-                        .toList()) {
-                    String reading = withoutWrites(
-                            COMMENT.matcher(Files.readString(file)).replaceAll(" "));
-                    columnText.put(file, MAPPING_ANNOTATION.matcher(reading).replaceAll(" "));
-                    literalText.put(file, literalsOf(reading));
-                    if (file.getFileName().toString().endsWith("Repository.java")) {
-                        METHOD_NAME.matcher(reading).results()
-                                .forEach(m -> repositoryMethodNames.append(' ').append(m.group(1)));
-                    }
+        try (Stream<Path> sources = Files.walk(MAIN_SOURCE)) {
+            for (Path file : sources.filter(p -> p.toString().endsWith(".java")).toList()) {
+                String reading = withoutWrites(
+                        COMMENT.matcher(Files.readString(file)).replaceAll(" "));
+                columnText.put(file, MAPPING_ANNOTATION.matcher(reading).replaceAll(" "));
+                literalText.put(file, literalsOf(reading));
+                if (file.getFileName().toString().endsWith("Repository.java")) {
+                    METHOD_NAME.matcher(reading).results()
+                            .forEach(m -> repositoryMethodNames.append(' ').append(m.group(1)));
                 }
-            } catch (IOException unreadable) {
-                throw new AssertionError("the sources are this rule's corpus", unreadable);
             }
+        } catch (IOException unreadable) {
+            throw new AssertionError("src/main is this rule's corpus", unreadable);
         }
         String methodNames = repositoryMethodNames.toString();
 

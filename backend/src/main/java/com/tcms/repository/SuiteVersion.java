@@ -59,6 +59,21 @@ public class SuiteVersion {
     @Column(name = "snapshot", nullable = false, updatable = false)
     private String snapshot;
 
+    /**
+     * <strong>Written and never read</strong> — in
+     * {@code ArchitectureRulesTest.READERLESS_BY_DECISION} since §188, and it is the one member of
+     * that list whose absent reader is a direct consequence of a decision argued elsewhere. A
+     * content hash exists so a <em>later</em> version can be compared to an earlier one;
+     * {@link SuiteVersions} writes v1 at create and has never written a second row, so there is
+     * nothing to compare it against. That class's header states the same fact from the other end:
+     * a {@code decide()} sibling would be "a comparison with exactly one caller that always answers
+     * yes".
+     *
+     * <p>{@code documentation.PageVersions#recordEdit} is what the reader looks like when it
+     * arrives — {@code findLatest(…).getContentHash().equals(hash)}, the thing that makes a no-op
+     * save write nothing. The exit is therefore the composition writes {@link SuiteVersions} already
+     * names as owed, not a query somebody could add here.
+     */
     @Column(name = "content_hash", nullable = false, updatable = false)
     private String contentHash;
 

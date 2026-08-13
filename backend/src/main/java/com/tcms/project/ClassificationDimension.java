@@ -75,6 +75,11 @@ public class ClassificationDimension {
      * <p>Mapped but <strong>not on the wire</strong>: the contract's
      * {@code ClassificationDimension} does not carry it, and inventing the field here would
      * commit the SPA to a distinction nothing renders yet. Every seeded dimension is controlled.
+     *
+     * <p>Which makes it written-and-readerless, and it is in
+     * {@code ArchitectureRulesTest.READERLESS_BY_DECISION} since §188 — the cheap end of that list
+     * rather than §151's expensive one: a column with one value in every deployment cannot be
+     * silently wrong, so the reader that eventually arrives finds the data already correct.
      */
     @Column(name = "controlled", nullable = false)
     private boolean controlled;

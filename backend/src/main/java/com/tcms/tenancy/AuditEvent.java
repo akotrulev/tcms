@@ -77,6 +77,14 @@ public class AuditEvent {
      * 2026-08-08.</strong> §116 issued the first token and §117 made CI ingest with one, so this
      * sentence stopped being true two slices before anything wrote here. {@code #record} fills it
      * from {@link TokenContext}.
+     *
+     * <p><strong>Written and never read — in {@code ArchitectureRulesTest.READERLESS_BY_DECISION}
+     * since §188</strong>, and it spent thirty-two sections as that rule's worked example for the
+     * opposite position. Its corpus included {@code src/test}, so {@code IngestionEndpointTest}'s
+     * {@code SELECT actor_token_id FROM audit_event} counted as the reader; §188 narrowed the corpus
+     * to the product, on the ground that a fixture selecting a column proves the write happened and
+     * not that anything consults the value. Nothing does. {@link #bulkOperationId}'s argument is the
+     * same one and the exit is the same screen: the audit trail has none.</p>
      */
     @Column(name = "actor_token_id", updatable = false)
     private UUID actorTokenId;

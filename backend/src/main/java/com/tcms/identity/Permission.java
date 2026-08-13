@@ -27,6 +27,17 @@ public class Permission {
     @Column(name = "key", nullable = false, updatable = false)
     private String key;
 
+    /**
+     * The grouping the catalogue is rendered in — and <strong>nothing in this application reads
+     * it.</strong> No endpoint serves it, no query selects it, and {@code PermissionRepository}
+     * declares no method; the SPA groups from {@code frontend/src/lib/permissions.ts}, whose own
+     * copy is exhaustive against the contract by construction and is therefore the stronger of the
+     * two. Serving this column would not retire that copy, so the reader is not a wiring fix.
+     *
+     * <p>In {@code ArchitectureRulesTest.READERLESS_BY_DECISION} since §188. The class header's
+     * claim that the two groupings <em>agree</em> is a different question from whether either reads
+     * the other, and it is the one worth checking.
+     */
     @Column(name = "area", nullable = false)
     private String area;
 

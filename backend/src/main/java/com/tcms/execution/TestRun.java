@@ -157,6 +157,19 @@ public class TestRun {
      * Derived from {@link #releaseVersion}, never set on its own — see the class header and
      * {@link ReleaseSortKey}. {@code updatable = false} because nothing may change the release of a
      * run that has been executed against, and because a settable pair is a pair that drifts.
+     *
+     * <p><strong>Nothing reads it, and that is §151's own finding rather than a later discovery.</strong>
+     * The column is written on three tables and indexed on three tables, and there is no
+     * {@code WHERE} and no {@code ORDER BY} over it anywhere in {@code src/main}; {@code releaseVersion}
+     * is an exact-match filter in every operation that takes one. §151 recorded that as its finding 3
+     * — "the wrong ordering has never reached a screen and could not have" — and deliberately did not
+     * act on it, because giving the column a reader is §6q's latest-release view and therefore a
+     * feature. What §151 bought by correcting the stored value first is that the eventual reader is
+     * not written against three tables of keys that order releases backwards.
+     *
+     * <p>It is in {@code ArchitectureRulesTest.READERLESS_BY_DECISION} since §188, which is the first
+     * section in which that rule could see it: its corpus included {@code src/test} until then, and
+     * §151's own tests name the column while asserting the fix.
      */
     @Column(name = "release_sort_key", updatable = false)
     private String releaseSortKey;
