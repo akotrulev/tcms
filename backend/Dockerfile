@@ -112,6 +112,14 @@ RUN command -v wget >/dev/null 2>&1 \
 #     `mkdir` + `chown -R 10001:10001` is still the step that makes the VM work, which is why
 #     §7 of the Hetzner runbook is load-bearing rather than belt-and-braces.
 #
+# MEASURED, not reasoned — 2026-08-13, on a real build of this image on `shanks`:
+#   ls -ln /var/lib/tcms                            → all three dirs 10001:10001
+#   touch evidence/probe, no mount                  → WRITABLE
+#   touch raw-reports/probe, fresh named volume     → WRITABLE, dirs still 10001:10001
+#   mkdir evidence, bind mount of a root-owned dir  → Permission denied
+# The last two are the two halves of the asymmetry above, and the third is the one everything
+# in compose.yaml rests on.
+#
 # `ConfigConventionTest` derives this list from `application.yml` and fails the build if a
 # fourth root is added without a line here — the mechanical half of the same lesson, since the
 # third root (§160) reached a live host with no `chown` and has been failing every CI upload

@@ -50,11 +50,18 @@ blobs with `pgdata` under the `down -v` the setup instructions already document 
 **A named volume and a bind mount behave oppositely, and the whole shape of the fix is that
 difference:**
 
-| Mount | Ownership | What the image's `mkdir` buys |
-|---|---|---|
-| none (writable layer) | the image's | everything; bytes die with the container |
-| **named volume** (`compose.yaml`) | seeded **from the image's content, ownership included** | everything — the volume comes up owned by 10001 *because* those directories exist in the image |
-| **bind mount** (`compose.prod.yaml`) | the **host** directory's, image ignored outright | **nothing.** §7's `chown` is the entire mechanism |
+| Mount | Ownership | What the image's `mkdir` buys | Measured |
+|---|---|---|---|
+| none (writable layer) | the image's | everything; bytes die with the container | dirs `10001:10001`, `touch` **WRITABLE** |
+| **named volume** (`compose.yaml`) | seeded **from the image's content, ownership included** | everything — the volume comes up owned by 10001 *because* those directories exist in the image | fresh volume, dirs still `10001:10001`, `touch` **WRITABLE** |
+| **bind mount** (`compose.prod.yaml`) | the **host** directory's, image ignored outright | **nothing.** §7's `chown` is the entire mechanism | root-owned source dir → `mkdir: Permission denied` |
+
+**That table was reasoned when it was written and is measured now** — 2026-08-13, on a real
+`docker build` of this image on `shanks`, four runs, one per row plus the writable-layer probe. It
+is worth the paragraph because the middle row is what the whole of `compose.yaml`'s fix rests on:
+if a named volume did *not* inherit the image's ownership, the mount would shadow the directories
+with a root-owned empty one and phase 1 would have made the local stack worse rather than better,
+with all three rules green. The bottom row is why phase 2 exists.
 
 `ConfigConventionTest` — no context, no database, source text only, which is where it already
 checked the JWT default §108 shipped for a year — derives the roots from `application.yml` and asks
