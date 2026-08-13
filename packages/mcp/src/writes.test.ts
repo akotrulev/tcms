@@ -65,6 +65,15 @@ const CASE_DETAIL = {
   ],
   preconditions: [],
   postconditions: [],
+  // A stored decline, so "the round-trip does not assert declines" is a claim about a case that
+  // has one rather than about an empty array (§189).
+  declinedPreconditions: [
+    {
+      id: 'sc-2', position: 1, conditionId: 'cond-2', title: 'Seed the ledger',
+      body: [], inline: false, inherited: true, inheritedFrom: 'Billing',
+    },
+  ],
+  declinedPostconditions: [],
   attachments: [],
   flake: null,
   currentVersionNo: 4,
@@ -101,9 +110,16 @@ const PROPOSABLE = {
   automationStatus: 'MANUAL',
   steps: [{ action: 'Sign out', expectedResult: 'The session is gone.' }],
 };
+/**
+ * ~~`conditions: []`~~ → **the two arrays §186 split it into**, corrected in §189. The single
+ * undifferentiated array left the wire three sections earlier and this fixture kept describing a
+ * suite the server has not served since — the shape of stale fixture `writes.test.ts` opens by
+ * warning about, in a file whose whole subject is round-tripping a resource faithfully.
+ */
 const SUITE_ROW = {
   id: 's-1', key: 'TS-7', name: 'Auth', description: null, caseCount: 2,
-  lifecycleStatus: 'DRAFT', tagRules: [], caseIds: [], conditions: [], lockVersion: 2,
+  lifecycleStatus: 'DRAFT', tagRules: [], caseIds: [],
+  preconditions: [], postconditions: [], lockVersion: 2,
 };
 const PLAN_ROW = {
   id: 'tp-1', key: 'TP-1', name: 'Release 4.2', status: 'DRAFT',
@@ -242,6 +258,39 @@ describe('tcms_write_case', () => {
     expect(JSON.parse(stub.write('/cases/c-1').body ?? '{}')).toEqual({ ...CASE_ECHO, suiteId: null });
   });
 
+  /*
+    §189. `case_condition_optout` got its endpoint in §187 and neither machine surface could send
+    to it, so the state was reachable from one screen and nowhere else.
+  */
+  it('declines the attachments named, as a complete set, and asserts nothing when none are named', async () => {
+    const stub = api(agentRoutes({
+      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      'GET /cases/c-1': { status: 200, body: CASE_DETAIL },
+      'PATCH /cases/c-1': { status: 200, body: CASE_DETAIL },
+    }));
+
+    await run(stub, 'tcms_write_case', {
+      action: 'edit', case: 'TC-42', declinedConditions: ['sc-2'], lockVersion: 4,
+    });
+    expect(JSON.parse(stub.write('/cases/c-1').body ?? '{}'))
+      .toEqual({ ...CASE_ECHO, declinedConditionIds: ['sc-2'] });
+
+    // `[]` is a request and JSON can type it, unlike the CLI's `--decline ''`: it re-imposes
+    // every inherited condition this case had turned off.
+    await run(stub, 'tcms_write_case', {
+      action: 'edit', case: 'TC-42', declinedConditions: [], lockVersion: 4,
+    });
+    expect(JSON.parse(stub.write('/cases/c-1').body ?? '{}'))
+      .toEqual({ ...CASE_ECHO, declinedConditionIds: [] });
+
+    // And the projection stays out of it: a title-only edit says nothing about the decline this
+    // case has, because a list absent leaves it alone and an echo would state as the caller's
+    // intent a set they never mentioned. `core/rewrite.ts`.
+    await run(stub, 'tcms_write_case', { action: 'edit', case: 'TC-42', title: 'x', lockVersion: 4 });
+    expect(JSON.parse(stub.write('/cases/c-1').body ?? '{}'))
+      .not.toHaveProperty('declinedConditionIds');
+  });
+
   it('refuses an edit that would send nothing', async () => {
     const stub = api(agentRoutes({
       '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
@@ -349,6 +398,38 @@ describe('tcms_write_suite', () => {
     expect(JSON.parse(sent.body ?? '{}')).toEqual({
       name: 'Auth', description: null, caseIds: [], tagRules: ['nightly'],
     });
+  });
+
+  /*
+    §189, the suite half. Bare library ids in, `CaseConditionInput` objects out — the wrapper is
+    this surface's to build, because the object has exactly one field a caller may fill and
+    asking a model for the shape buys a shape to get wrong.
+  */
+  it('wraps condition ids as the input the write takes, on both arms', async () => {
+    const stub = api(agentRoutes({
+      '/suites': { status: 200, body: [SUITE_ROW] },
+      'GET /suites/s-1': { status: 200, body: SUITE_ROW },
+      'PATCH /suites/s-1': { status: 200, body: SUITE_ROW },
+      'POST /suites': { status: 201, body: SUITE_ROW },
+    }));
+
+    await run(stub, 'tcms_write_suite', {
+      action: 'edit', suite: 'TS-7', preconditions: ['cond-1'], postconditions: ['cond-9'],
+    });
+    expect(JSON.parse(stub.write('/suites/s-1').body ?? '{}')).toEqual({
+      name: 'Auth',
+      description: null,
+      caseIds: [],
+      tagRules: [],
+      preconditions: [{ conditionId: 'cond-1' }],
+      postconditions: [{ conditionId: 'cond-9' }],
+    });
+
+    // On the create too: a suite's conditions reach the cases filed in it, so attaching them in
+    // a second call is a window in which those cases run without a setup step.
+    await run(stub, 'tcms_write_suite', { action: 'create', name: 'Auth', preconditions: ['cond-1'] });
+    expect(JSON.parse(stub.write('/suites').body ?? '{}'))
+      .toEqual({ name: 'Auth', preconditions: [{ conditionId: 'cond-1' }] });
   });
 
   it('sends a status transition with neither header, because its precondition is the state', async () => {

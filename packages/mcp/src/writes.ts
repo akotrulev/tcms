@@ -111,6 +111,11 @@ async function resolveMany(
   return ids;
 }
 
+/** Library ids as the input the write takes — `conditionId` is the only field a caller may fill. */
+function conditionsFrom(values: readonly string[] | undefined): { conditionId: string }[] | undefined {
+  return values?.map((conditionId) => ({ conditionId }));
+}
+
 const LOCK_VERSION_PROPERTY = {
   type: 'integer',
   description:
@@ -118,6 +123,28 @@ const LOCK_VERSION_PROPERTY = {
     + 'tcms_list_suites / tcms_open_doc_page returned: it is what stops this overwriting a '
     + 'colleague who saved while you were composing.',
 } as const;
+
+/**
+ * A suite's condition list, as an array of **library** ids.
+ *
+ * Taken as bare ids rather than as the `{conditionId}` objects the contract's `CaseConditionInput`
+ * declares, which is this surface's rule and not a shortcut: `additionalProperties: false` cannot
+ * be stated usefully for a nested object a model has never seen, `inlineBody` is a key that exists
+ * only to be refused, and position is the array's order and is never sent. So the object has
+ * exactly one field a caller may fill, and asking for the wrapper buys a shape to get wrong.
+ * `tcms_list_library` is where the ids come from, and it is the same read the CLI's
+ * `tcms library list` makes.
+ */
+const CONDITION_PROPERTY = (kind: 'setup' | 'cleanup') => ({
+  type: 'array',
+  items: { type: 'string' },
+  description:
+    `COMPLETE set of ${kind} condition ids from tcms_list_library — every one this suite should `
+    + 'impose after the save, so `[]` detaches them all and omitting the field leaves them alone. '
+    + 'The suite\'s conditions reach the cases filed in it; a case may decline one through '
+    + 'tcms_write_case. These are LIBRARY ids (`conditionId`), not the attachment ids a decline '
+    + 'takes.',
+});
 
 const ACTION = (values: readonly string[], description: string) => ({
   type: 'string',
@@ -191,6 +218,17 @@ const writeCase: ToolDefinition = {
         type: 'array',
         items: { type: 'string' },
         description: 'The COMPLETE tag set, not an addition. Omit to leave the tags alone.',
+      },
+      declinedConditions: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'The inherited conditions this case declines — the COMPLETE set, so `[]` re-imposes '
+          + 'every one it had turned off and omitting the field leaves them alone. Pass the `id` '
+          + 'of an entry in tcms_open_case\'s preconditions / postconditions / '
+          + 'declinedPreconditions / declinedPostconditions, which is an ATTACHMENT id and NOT '
+          + 'the conditionId beside it: the same library entry attached at two suites is two '
+          + 'attachments, and declining one leaves the other in force.',
       },
       lockVersion: LOCK_VERSION_PROPERTY,
     },
@@ -294,6 +332,18 @@ const writeCase: ToolDefinition = {
           ? undefined
           : await resolveId({ client: session.client, projectId, value: suite, entity: 'SUITE' }),
       tags: strings(input, 'tags'),
+      /*
+        §6f's opt-out (§187's endpoint, §189's argument). A COMPLETE set on `tags`' rule: absent
+        leaves the declines alone, `[]` re-imposes every inherited condition this case had turned
+        off. `core/rewrite.ts` records why the round-trip does not carry it — a projection states
+        what an unchanged save sends, and this is the one place the caller's intent is said.
+
+        Attachment ids, not library condition ids, and nothing here can save a model from
+        confusing them: the server validates each against the attachments that currently reach
+        this case, so the wrong kind is a field error rather than a silent no-op. The description
+        says which is which because that refusal costs a round trip.
+      */
+      declinedConditionIds: strings(input, 'declinedConditions'),
     });
 
     if (Object.keys(delta).length === 0) {
@@ -327,10 +377,11 @@ const writeSuite: ToolDefinition = {
   title: 'Create a suite, change one, or move it through review',
   description:
     'A suite is a FLAT named collection, not a folder. Its members are three arms together: cases '
-    + 'filed in it, cases added explicitly (`cases`), and cases matched by its tag rules. Both '
-    + 'lists are COMPLETE SETS — sending `cases` replaces the membership rather than adding to '
-    + 'it. `status` moves it to DRAFT or IN_REVIEW; APPROVED and DEPRECATED need suite:approve, '
-    + 'which this credential does not hold.',
+    + 'filed in it, cases added explicitly (`cases`), and cases matched by its tag rules. It also '
+    + 'imposes pre/postconditions on the cases filed in it. EVERY list here is a COMPLETE SET — '
+    + 'sending `cases` replaces the membership rather than adding to it, and the same holds for '
+    + '`tagRules`, `preconditions` and `postconditions`. `status` moves it to DRAFT or IN_REVIEW; '
+    + 'APPROVED and DEPRECATED need suite:approve, which this credential does not hold.',
   gate: { mode: 'all', permissions: ['suite:manage'] },
   arms: [
     { action: 'create', kind: 'create', permission: 'suite:manage' },
@@ -348,6 +399,8 @@ const writeSuite: ToolDefinition = {
       description: { type: ['string', 'null'] },
       tagRules: { type: 'array', items: { type: 'string' }, description: 'COMPLETE set of tag rules.' },
       cases: { type: 'array', items: { type: 'string' }, description: 'COMPLETE set of member case keys.' },
+      preconditions: CONDITION_PROPERTY('setup'),
+      postconditions: CONDITION_PROPERTY('cleanup'),
       status: { type: 'string', description: 'For `status`: DRAFT or IN_REVIEW.' },
       lockVersion: LOCK_VERSION_PROPERTY,
     },
@@ -364,6 +417,11 @@ const writeSuite: ToolDefinition = {
           description: nullableStr(input, 'description'),
           tagRules: strings(input, 'tagRules'),
           caseIds: await resolveMany(session, projectId, strings(input, 'cases'), 'CASE'),
+          // On the create as well as the edit: a suite's conditions reach the cases filed in it,
+          // so "create it, then attach them" is a window in which those cases run without a
+          // setup step their author intended.
+          preconditions: conditionsFrom(strings(input, 'preconditions')),
+          postconditions: conditionsFrom(strings(input, 'postconditions')),
         }) as components['schemas']['SuiteInput'],
         tcms: { ...session.request, ...createIntent({ key: session.callId }) },
       });
@@ -392,6 +450,12 @@ const writeSuite: ToolDefinition = {
       description: nullableStr(input, 'description'),
       tagRules: strings(input, 'tagRules'),
       caseIds: await resolveMany(session, projectId, strings(input, 'cases'), 'CASE'),
+      // §186's two arrays, reachable from this surface for the first time. `suiteInputFrom`
+      // cannot project them back — the read serves `CaseConditionRef` and the write takes
+      // `CaseConditionInput` — so what the caller names here is the whole of what the suite
+      // imposes. `core/rewrite.ts`.
+      preconditions: conditionsFrom(strings(input, 'preconditions')),
+      postconditions: conditionsFrom(strings(input, 'postconditions')),
     });
     if (Object.keys(delta).length === 0) {
       throw new InputError('Nothing to change. Name at least one field.');
