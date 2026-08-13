@@ -601,7 +601,10 @@ function BulkPreview({ result }: { result: BulkResult }) {
   return (
     <Box data-testid={`${TestIdPrefix}.Preview.Result`}>
       <Alert
-        severity={result.skipped.length > 0 ? 'warning' : 'info'}
+        // A lost decline warns as loudly as a skip, and it is the opposite kind of event: a skip
+        // is something the operation will NOT do, this is something it will do that nobody asked
+        // for (§193).
+        severity={result.skipped.length > 0 || result.declinesEnded.length > 0 ? 'warning' : 'info'}
         icon={false}
         sx={{ '& .MuiAlert-message': { width: '100%' } }}
       >
@@ -628,6 +631,35 @@ function BulkPreview({ result }: { result: BulkResult }) {
                   <Typography variant="caption">+{result.changed.length - 12} more</Typography>
                 )}
               </Box>
+            </Box>
+          )}
+
+          {/* The one consequence on this screen that the user did not ask for (§193). A move
+              ends the declines the destination folder does not impose, and the server deletes
+              them — so this is the only moment the person can decline to proceed. Named, not
+              counted, for the same reason `skipped` is: "3 will lose an exception" leaves them
+              no way to find out which three. */}
+          {result.declinesEnded.length > 0 && (
+            <Box>
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                Losing a condition exception
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
+                {result.declinesEnded.slice(0, 12).map((key) => (
+                  <Identifier key={key} variant="muted">
+                    {key}
+                  </Identifier>
+                ))}
+                {result.declinesEnded.length > 12 && (
+                  <Typography variant="caption">
+                    +{result.declinesEnded.length - 12} more
+                  </Typography>
+                )}
+              </Box>
+              <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                These cases turn an inherited condition off. The folder they are moving to does not
+                impose it, so the exception ends — and moving them back will not bring it back.
+              </Typography>
             </Box>
           )}
 

@@ -246,8 +246,14 @@ export function CaseListPage() {
           const parts = [`${formatCount(result.changed.length)} updated`];
           if (result.unchanged.length) parts.push(`${formatCount(result.unchanged.length)} already matched`);
           if (result.skipped.length) parts.push(`${formatCount(result.skipped.length)} skipped`);
+          // Repeated here even though the preview named these cases, because this is the sentence
+          // that survives the dialog closing — and it is the only record on this screen that a
+          // stored decision ended (§193). Not a success, whatever the rest of the counts say.
+          if (result.declinesEnded.length) {
+            parts.push(`${formatCount(result.declinesEnded.length)} lost a condition exception`);
+          }
           enqueueSnackbar(parts.join(' · '), {
-            variant: result.skipped.length ? 'warning' : 'success',
+            variant: result.skipped.length || result.declinesEnded.length ? 'warning' : 'success',
           });
           setSelection([]);
         }}

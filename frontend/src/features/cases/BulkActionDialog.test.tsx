@@ -36,6 +36,7 @@ const previewResult = {
   changed: ['TC-1', 'TC-2'],
   unchanged: ['TC-3'],
   skipped: [],
+  declinesEnded: [],
   auditEventId: null,
 }
 
@@ -208,6 +209,28 @@ describe('BulkActionDialog', () => {
       expect(
         screen.getByText(/A draft must be reviewed before it can be approved/),
       ).toBeInTheDocument()
+    })
+
+    it('names the cases a move takes a condition exception from, BEFORE it happens', async () => {
+      // §193. The server deletes those declines as part of the move and no other screen ever
+      // mentions it, so the preview is the only moment the person can decide not to. Named rather
+      // than counted, on the skip list's argument exactly.
+      vi.spyOn(api, 'post').mockResolvedValue({
+        ...previewResult,
+        changed: ['TC-1', 'TC-6'],
+        unchanged: [],
+        declinesEnded: ['TC-6'],
+      } as never)
+      renderDialog()
+      await waitFor(() => expect(api.get).toHaveBeenCalled())
+
+      await userEvent.click(screen.getByTestId('Cases.BulkDialog.Preview'))
+
+      expect(await screen.findByText('Losing a condition exception')).toBeInTheDocument()
+      expect(screen.getByText(/moving them back will not bring it back/)).toBeInTheDocument()
+      // The warning is on the same footing as a skip: this operation does something the caller
+      // did not ask for, so the panel must not read as an ordinary informational preview.
+      expect(screen.getByRole('alert')).toHaveClass('MuiAlert-colorWarning')
     })
 
     it('discards the preview when the argument changes', async () => {
