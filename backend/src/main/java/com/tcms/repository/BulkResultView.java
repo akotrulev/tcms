@@ -20,9 +20,25 @@ import java.util.UUID;
  * what they see everywhere else in the product. The id is what the request carried and the response
  * has no use for it.
  *
+ * <h2>Three buckets and one annotation</h2>
+ *
+ * <p>{@code changed}, {@code unchanged} and {@code skipped} partition the selection — every
+ * requested id lands in exactly one. {@link #declinesEnded} does <strong>not</strong>: it is a
+ * subset of {@code changed}, naming the cases whose change costs something the caller did not ask
+ * for. A fourth bucket would have to take those keys <em>out</em> of {@code changed}, which is
+ * false — they did change, and in the way the caller asked.
+ *
  * @param dryRun       true when nothing was written. Echoed rather than assumed from the request so
  *                     the client can assert what it got back was a preview, which is what
  *                     {@code onCommitted} branches on.
+ * @param declinesEnded the cases this operation takes a condition exception away from (§193) — a
+ *                     subset of {@code changed}, empty for the seven commands that are not a move.
+ *                     Reported because a decline ends <em>silently</em> otherwise: the response to a
+ *                     move over four hundred rows named the keys that changed and nothing about
+ *                     what the change cost, so the author who turned that rule off found out by
+ *                     reading the case. Populated on the preview too, which is the point of it —
+ *                     the consequence is disclosed before the person consents to the move rather
+ *                     than reported after it.
  * @param auditEventId the one audit row this operation wrote, naming every changed case (§6g:
  *                     "preview, transactional, single audit event"). Null on a preview, and null on
  *                     a commit that changed nothing — writing an audit row for an operation that
@@ -35,6 +51,7 @@ record BulkResultView(
         List<String> changed,
         List<String> unchanged,
         List<SkippedCase> skipped,
+        List<String> declinesEnded,
         UUID auditEventId) {
 
     /** One case that could not be changed, with the reason rendered beside its key. */

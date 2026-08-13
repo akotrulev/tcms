@@ -8340,7 +8340,7 @@ export interface components {
              *
              *     ~~An opt-out whose attachment no longer reaches the case (the case moved folders, or
              *     the library entry was retired) is **not** listed, and a save that does not mention it
-             *     does not remove it.~~ → **§191 split those two causes**, because only one of them can
+             *     does not remove it.~~ → **§192 split those two causes**, because only one of them can
              *     produce a row this list will never show again.
              *
              *     **Moving the case ENDS the declines its new folder does not impose**, whether the
@@ -8897,7 +8897,7 @@ export interface components {
              *
              *     The move changes what each case **inherits**, and therefore what its declines can be
              *     exceptions to: every `case_condition_optout` the destination does not impose ends here,
-             *     and the version the move writes hashes the case without it (§191). See
+             *     and the version the move writes hashes the case without it (§192). See
              *     `TestCase.declinedPreconditions`. Nothing else about a case's conditions changes — the
              *     case's *own* attachments travel with it, as they always have.
              */
@@ -8947,6 +8947,22 @@ export interface components {
                 /** @example A draft must be reviewed before it can be approved. */
                 reason: string;
             }[];
+            /**
+             * @description Case keys that LOSE a condition exception to this operation — **a subset of
+             *     `changed`, not a fourth bucket**. They changed, in exactly the way the caller
+             *     asked; this names what the change additionally cost.
+             *
+             *     Only `MOVE_TO_SUITE` can populate it, and the empty array is the answer for the
+             *     other seven actions. A decline is an exception to a rule the case's FOLDER
+             *     imposes (`TestCase.declinedPreconditions`), so relocating a case ends the
+             *     declines its new folder does not impose — the one operation in the product that
+             *     ends a stored decision without mentioning it.
+             *
+             *     **Populated on the preview**, which is the whole of why it exists: the person
+             *     selecting four hundred cases is told what the move costs before they confirm it,
+             *     not after. On a commit it reports what was actually deleted.
+             */
+            declinesEnded: string[];
             /** Format: uuid */
             auditEventId?: string | null;
         };

@@ -679,6 +679,57 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("and it SAYS SO — the case is named in declinesEnded (§193)")
+        void theMoveReportsTheDeclineItEnds() throws Exception {
+            // §192 shipped the deletion and nothing that mentions it: the response named the keys
+            // that changed, which is what the caller asked for, and said nothing about what the
+            // change cost. A decline is somebody's decision, and one click over a selection ended
+            // it with the author finding out by reading the case.
+            MvcResult result = commit(LEAD, moveToSuite(REFUNDS, declinedCase(), draft()));
+
+            assertThat(changed(result)).containsExactly("TC-6", "TC-1");
+            assertThat(declinesEnded(result))
+                    .as("a subset of `changed`, not a fourth bucket — TC-1 moved and lost nothing")
+                    .containsExactly("TC-6");
+        }
+
+        @Test
+        @DisplayName("the PREVIEW says so too, and writes nothing — the point of reporting it at all")
+        void thePreviewReportsTheDeclineBeforeItEndsIt() throws Exception {
+            // The whole value of the field. Reported after the fact it is an apology; reported on
+            // the preview it is the thing the person is consenting to. `dryRun` is consulted at
+            // exactly one place in the service, so this arm exists to prove the disclosure was not
+            // computed on the write path — where it would have been silent here.
+            MvcResult result = preview(LEAD, moveToSuite(REFUNDS, declinedCase()));
+
+            assertThat(declinesEnded(result)).containsExactly("TC-6");
+            assertThat(optoutCountOf(declinedCase()))
+                    .as("a preview that deleted the row would be reporting its own damage")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("an AUTHORED command that is not a move ends nothing, and must not claim to")
+        void anAuthoredNonMoveClaimsNoLoss() throws Exception {
+            // The guard `endsADecline` puts on the command. A SET_AUTOMATION_STATUS loads the
+            // case's declines — CaseEdit hashes them — and loads NO destination, so the retention
+            // bound is empty for the reason "nobody asked" rather than "the folder imposes
+            // nothing". Narrowing against it here would report every decline in the selection as
+            // lost, on an operation that touches no condition row at all.
+            Map<String, Object> operation = operation("SET_AUTOMATION_STATUS", false, declinedCase());
+            // TO_BE_AUTOMATED and not AUTOMATED: the latter requires an `automationKey` this
+            // fixture has no reason to carry, and the case would be skipped rather than changed —
+            // which would make this test pass for the wrong reason.
+            operation.put("payload", Map.of("automationStatus", "TO_BE_AUTOMATED"));
+
+            MvcResult result = post(LEAD, operation);
+
+            assertThat(changed(result)).containsExactly("TC-6");
+            assertThat(declinesEnded(result)).isEmpty();
+            assertThat(optoutCountOf(declinedCase())).isEqualTo(1);
+        }
+
+        @Test
         @DisplayName("and the version it writes hashes the case WITHOUT them — one version, not two")
         void theMoveVersionHashesTheSurvivingDeclines() throws Exception {
             // §95's bulk-hash trap on the field §187 added. The reconstruction reads the declines
@@ -937,6 +988,10 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
 
     private List<String> unchanged(MvcResult result) throws Exception {
         return strings(body(result).get("unchanged"));
+    }
+
+    private List<String> declinesEnded(MvcResult result) throws Exception {
+        return strings(body(result).get("declinesEnded"));
     }
 
     private List<String> skippedKeys(MvcResult result) throws Exception {

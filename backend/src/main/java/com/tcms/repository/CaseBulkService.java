@@ -273,6 +273,7 @@ public class CaseBulkService {
         List<String> unchanged = new ArrayList<>();
         List<BulkResultView.SkippedCase> skipped = new ArrayList<>();
         List<UUID> changedIds = new ArrayList<>();
+        List<String> declinesEnded = new ArrayList<>();
 
         // The caller's order, over the REQUESTED ids rather than the found ones, so an id that
         // resolved to nothing still lands in a bucket. See BulkVerdict — the mock's loop dropped
@@ -295,6 +296,15 @@ public class CaseBulkService {
                         skipped.add(new BulkResultView.SkippedCase(row.getKey(), skip.reason()));
                 case BulkVerdict.Unchanged ignored -> unchanged.add(row.getKey());
                 case BulkVerdict.Changed ignored -> {
+                    // BEFORE the mutation, and that is not a style choice: a MOVE_TO_SUITE writes
+                    // the narrowed list back into the context (§192), so the same question asked
+                    // one line later answers "nothing was lost" on every commit while still
+                    // answering correctly on every preview. Measured, not reasoned about — the
+                    // commit arm of `theMoveReportsTheDeclineItEnds` was RED with this call below
+                    // the mutation and its preview twin was green (§193).
+                    if (endsADecline(row, command, context)) {
+                        declinesEnded.add(row.getKey());
+                    }
                     // The one place dryRun is consulted. Everything above ran identically.
                     if (!dryRun) {
                         mutate(companyId, userId, project.getId(), row, command, context, now);
@@ -319,7 +329,33 @@ public class CaseBulkService {
 
         return new Outcome.Done(new BulkResultView(
                 dryRun, caseIds.size(), List.copyOf(changed), List.copyOf(unchanged),
-                List.copyOf(skipped), auditEventId));
+                List.copyOf(skipped), List.copyOf(declinesEnded), auditEventId));
+    }
+
+    /**
+     * Whether this operation takes a condition exception away from this case (§193).
+     *
+     * <p>A pure read over the context, asked for a row the verdict already called
+     * {@link BulkVerdict.Changed} — so it describes the same operation the preview previews and the
+     * commit commits, on the class's standing rule that {@code dryRun} is consulted at exactly one
+     * place.
+     *
+     * <p><strong>It must be asked before {@link #mutate}</strong>, which is the one thing about it
+     * that cannot be read off this method: the move narrows {@link Context#declines} in place, so
+     * afterwards the stored list <em>is</em> the retained one and this returns false on every
+     * commit. The caller carries that note; a reader who moves the call down gets a field that is
+     * correct on the preview and empty on the commit, which is the worst of the three states.
+     *
+     * <p><strong>The instanceof is load-bearing.</strong> {@link Context#retainedAtTarget} is empty
+     * for the seven commands that are not a move, because nothing else changes what a case
+     * inherits — so {@link Context#retainedDeclinesOf} over one of them would narrow every stored
+     * decline to nothing and report a loss no code path performs. The guard is the same shape
+     * {@code loadContext} uses to decide whether to run the query at all, and the two must agree.
+     */
+    private boolean endsADecline(TestCase row, BulkCommand command, Context context) {
+        return command instanceof BulkCommand.MoveToSuite
+                && context.retainedDeclinesOf(row.getId()).size()
+                        != context.declinedIdsOf(row.getId()).size();
     }
 
     // ------------------------------------------------------------------ argument ----
@@ -575,9 +611,11 @@ public class CaseBulkService {
                 // describes, arrived at from the one direction it cannot see.
                 List<UUID> stored = context.declinedIdsOf(row.getId());
                 if (!stored.isEmpty()) {
-                    List<UUID> surviving = stored.stream()
-                            .filter(context.retainedAtTarget()::contains)
-                            .toList();
+                    // The same projection the report reads (§193), and it has to be the same one:
+                    // a response saying a case kept its exception while the write deleted it is
+                    // worse than the silence §193 replaced, because it is a claim rather than an
+                    // omission.
+                    List<UUID> surviving = context.retainedDeclinesOf(row.getId());
                     caseConditionResolution.reconcileOptouts(
                             row.getId(),
                             // Nothing is DECLINABLE on this path: a bulk move states nothing about
@@ -836,6 +874,24 @@ public class CaseBulkService {
          */
         List<UUID> declinedIdsOf(UUID caseId) {
             return declines.getOrDefault(caseId, List.of());
+        }
+
+        /**
+         * Which of them survive the move — {@link #retainedAtTarget} applied to
+         * {@link #declinedIdsOf}, in the stored order.
+         *
+         * <p><strong>One projection, two readers</strong> (§193): the write narrows the rows with
+         * it and the response counts against it. Computing "what survives" beside the write and
+         * "what was lost" beside the report is two implementations of one rule that agree by
+         * inspection, and the first thing to change either of them makes the response describe an
+         * operation the database did not perform.
+         *
+         * <p>Only meaningful for a move — see {@link CaseBulkService#endsADecline}, which owns the
+         * guard, because this method cannot tell an empty {@code retainedAtTarget} that means "the
+         * destination imposes nothing" from one that means "nobody asked".
+         */
+        List<UUID> retainedDeclinesOf(UUID caseId) {
+            return declinedIdsOf(caseId).stream().filter(retainedAtTarget::contains).toList();
         }
 
         /** Whether a version row can be written for this case at all. */
