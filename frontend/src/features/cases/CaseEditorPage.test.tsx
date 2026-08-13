@@ -420,6 +420,30 @@ describe('CaseEditorPage — completing from the project corpus', () => {
     vi.restoreAllMocks()
   })
 
+  /**
+   * Pick a suggestion by its action text, re-finding the row on every attempt.
+   *
+   * The debounce is 250ms of *real* time and `userEvent` types a character at a time, so a machine
+   * under full-suite load runs several debounce rounds for one `type()` — 'Refund', 'Refund i',
+   * 'Refund it'. Each round is a new query key, so `suggestions.data` is `undefined` until it
+   * resolves, the popup renders no rows, and the `<li>` a `findAllByTestId` handed back a moment
+   * earlier is detached. Clicking a detached node fires nothing and the field keeps the typed text
+   * — which is exactly how this file failed in CI on 2026-08-13, and only ever under load.
+   *
+   * Capturing the row and clicking it therefore has to be one retried step, not two awaited ones.
+   * A pick is idempotent, so a retry after a click that did land is harmless.
+   */
+  async function pickSuggestion(user: ReturnType<typeof userEvent.setup>, action: string) {
+    await waitFor(async () => {
+      const row = screen
+        .queryAllByTestId('CaseEditor.Steps.Suggestion')
+        .find((option) => option.textContent?.includes(action))
+      expect(row).toBeDefined()
+      await user.click(row!)
+      expect(actionFields()[0]).toHaveValue(action)
+    })
+  }
+
   it('asks for suggestions only once there is a fragment to narrow with', async () => {
     const user = userEvent.setup()
     mockReads()
@@ -444,9 +468,8 @@ describe('CaseEditorPage — completing from the project corpus', () => {
     renderEditor()
 
     await user.type(actionFields()[0], 'Refund')
-    await user.click(await screen.findAllByTestId('CaseEditor.Steps.Suggestion').then((rows) => rows[0]))
+    await pickSuggestion(user, 'Refund the payment')
 
-    await waitFor(() => expect(actionFields()[0]).toHaveValue('Refund the payment'))
     expect(screen.getAllByTestId('CaseEditor.Steps.Field.TestData')[0]).toHaveValue('120.00 EUR')
     expect(screen.getAllByTestId('CaseEditor.Steps.Field.ExpectedResult')[0]).toHaveValue(
       'The refund is accepted',
@@ -461,12 +484,10 @@ describe('CaseEditorPage — completing from the project corpus', () => {
     await user.type(screen.getAllByTestId('CaseEditor.Steps.Field.TestData')[0], 'stale')
     await user.type(actionFields()[0], 'Refund it')
 
-    const options = await screen.findAllByTestId('CaseEditor.Steps.Suggestion')
-    await user.click(options[options.length - 1])
+    await pickSuggestion(user, 'Refund it twice')
 
     // `testData: null` on the suggestion means the step has none — leaving the author's previous
     // value behind would attach it to a step it was never written for.
-    await waitFor(() => expect(actionFields()[0]).toHaveValue('Refund it twice'))
     expect(screen.getAllByTestId('CaseEditor.Steps.Field.TestData')[0]).toHaveValue('')
   })
 })

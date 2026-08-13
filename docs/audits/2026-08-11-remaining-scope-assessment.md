@@ -1,5 +1,17 @@
 # Remaining-scope assessment — what is left to build
 
+> **⚠ SUPERSEDED 2026-08-13 by `docs/audits/2026-08-13-remaining-scope-assessment.md` (round 5,
+> baseline `0df1d73`, §190).** Twenty-four slices later the total went 24.4% → **22.3%** remaining,
+> one shot-list row closed (git traceability, §177) and one opened (the audit trail's read path).
+> **Two of this document's own conclusions do not survive re-derivation.** §1.5 retired the
+> unenforced-permission check on a count of ten; under its own stated filter the count was
+> **fifteen, at this document's own baseline** — `artifact:read` and `doc:read` are argued
+> exemptions, but `audit:view`, `project:audit` and `company:settings` are holes, and the first two
+> are a table with ~20 writers and no read path anywhere. §1.1's "tables with no code" question is
+> the wrong one: §186 and §187 each closed a table this check had passed in every round, and asking
+> for a *writer* instead finds `defect_link` — read by `TestExecutionRepository`, declared on the
+> contract, rendered by three SPA screens, written by nothing. Read round 5; this file is history.
+
 **Date:** 2026-08-11 · **Baseline commit:** `89ce051` (§166 docs, the last commit on `master`)
 **Round 4.** Round 3 is `docs/audits/2026-08-05-remaining-scope-assessment.md` (`ced197e`, §100);
 rounds 1 and 2 are `docs/audits/2026-08-02-remaining-scope-assessment.md`. Their figures are quoted

@@ -118,10 +118,19 @@ npm run dev          # http://localhost:5173 — proxies /api to localhost:8080
                      # sign in by redeeming the /accept-invitation link provision-company prints
 npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
-npm run test:run     # Vitest + RTL, ~~1203~~ ~~1251~~ 1276 tests (measured 2026-08-13) — also a gate.
-                     # `CaseEditorPage.test.tsx` has a load-dependent flake on shanks: one test
+npm run test:run     # Vitest + RTL, ~~1203~~ ~~1251~~ ~~1276~~ 1285 tests (measured 2026-08-13) — also a gate.
+                     # ~~`CaseEditorPage.test.tsx` has a load-dependent flake on shanks: one test
                      # asserts a half-typed value under full-suite load and passes when the file
-                     # runs alone. Measured against a stashed tree in §186; NOT fixed.
+                     # runs alone. Measured against a stashed tree in §186; NOT fixed.~~ →
+                     # **fixed 2026-08-13** after it finally reddened CI (run 31731166477). It was
+                     # never half-typed input: the step-suggestion debounce is 250ms of REAL time,
+                     # so a loaded machine runs several debounce rounds per `user.type()`, each a new
+                     # query key whose `data` is undefined until it resolves — the popup empties and
+                     # the `<li>` a `findAllByTestId` just handed back is DETACHED. Clicking a
+                     # detached node fires nothing, so the field keeps the typed text. Capturing a
+                     # row and clicking it must be ONE retried step (`pickSuggestion`), not two
+                     # awaited ones. Any test that finds a node in a debounce-fed popup and clicks
+                     # it on the next line has the same defect.
 npm run gen:api      # regenerate src/api/schema.d.ts after ANY openapi.yaml change
                      # — AND packages/client's copy; the two are byte-identical and a test compares them
 ```
