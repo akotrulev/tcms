@@ -232,8 +232,19 @@ public class DashboardService {
      *
      * <p>It is also the first tile that can appear because somebody <em>left</em> — a change made on
      * the Members screen by an administrator who was not thinking about test cases at all.
+     *
+     * <h2>Package-private, and that is §184's doing</h2>
+     *
+     * <p>It was {@code private}. The tile order had <strong>no observer on this side at all</strong>
+     * — {@code DashboardEndpointTest}'s fixture writes no {@code case_health} row, so its health
+     * assertions are that the panel is empty — and the one test anywhere that pinned "worst first"
+     * was {@code HealthPanel.test.tsx}, aimed at the SPA's own copy of the ranking. §184 deletes
+     * that copy, which is §153's finding a second time if the assertion does not move with it, so
+     * {@code HealthTileOrderTest} arrives in the same slice and needs to call this. Widening
+     * visibility for a test is a cost; the alternative was raising eleven signals through the
+     * endpoint to assert a comparator.
      */
-    private static List<TileView> health(Map<HealthSignal, Long> counts) {
+    static List<TileView> health(Map<HealthSignal, Long> counts) {
         List<TileView> tiles = new ArrayList<>();
         for (HealthSignal signal : HealthSignal.values()) {
             long count = counts.getOrDefault(signal, 0L);
@@ -246,9 +257,19 @@ public class DashboardService {
                     signal.severity(),
                     Map.of("healthSignal", List.of(signal.name()))));
         }
-        // Sorted here rather than left to the SPA, which sorts by severity too: the order is a
-        // property of the answer, and a client that forgot would render a broken case below a
-        // missing link. The SPA's own sort is then a no-op over an already-ordered list.
+        // Sorted here rather than left to the SPA: the order is a property of the answer, and a
+        // client that forgot would render a broken case below a missing link.
+        //
+        // ~~"which sorts by severity too … the SPA's own sort is then a no-op over an
+        // already-ordered list."~~ → superseded 2026-08-13 (§184). It WAS a no-op, and it was one
+        // by coincidence: `Array.prototype.sort` is stable and the SPA's key happened to be this
+        // comparator's FIRST key, so the second key below survived a sort that had never heard of
+        // it. The SPA's copy is deleted, so this comparator is now the only ordering of tiles
+        // anywhere and both its keys mean what they say.
+        //
+        // TWO keys, and the second is not decoration. Within one severity the bigger count is the
+        // one to open first — 78 outdated specs above 31 stale approvals — and a panel is five
+        // tiles wide, so "which ERROR first" is a question the reader asks every time.
         tiles.sort(Comparator.comparing(TileView::severity)
                 .thenComparing(Comparator.comparingLong(TileView::count).reversed()));
         return List.copyOf(tiles);
