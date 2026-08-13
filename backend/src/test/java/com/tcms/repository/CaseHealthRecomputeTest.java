@@ -36,7 +36,10 @@ import org.springframework.beans.factory.annotation.Autowired;
  * module's own version history read against its own library. <strong>Eight since §178</strong>,
  * which added §6i's spec-changed marker and §6o's unlinked one together — the third and fourth of
  * the five, taken in one slice because both are read off {@code case_doc_link}, the mirror §167
- * built for a panel.
+ * built for a panel. <strong>Nine since §181</strong>, which added §6o's owner check — the fifth
+ * and last of them, and the first fixture in this class that needs <em>people</em>: five accounts
+ * and four memberships, where the review fixtures deliberately seed none because their derivation
+ * asks which version was signed and never by whom.
  *
  * <p>That last pair is why this class's assertions grew rather than merely gained a group:
  * <strong>{@code unlinked} fires on every case nobody has linked</strong>, which here is nearly all
@@ -68,14 +71,18 @@ import org.springframework.beans.factory.annotation.Autowired;
  *       person still runs by hand satisfies one and not the other, and copying the neighbouring
  *       lateral — the likeliest edit anybody makes here — reports it as healthy.</li>
  *   <li><strong>The job asserting signals it did not compute.</strong> <del>Five</del> <del>four</del>
- *       <strong>one</strong> of the
- *       ten signals has no writer, and one more ({@code failing_repeatedly}) has a writer in
+ *       <del>one</del> <strong>none</strong> of the
+ *       ten signals has no writer, and one ({@code failing_repeatedly}) has a writer in
  *       another module writing the same rows on its own schedule. An {@code ON CONFLICT} that set every column would make this job the author
- *       of claims it has no evidence for, and would blank a future approval computation's work on
+ *       of claims it has no evidence for, and would blank the neighbouring computation's work on
  *       every tick. The columns are owned individually even though the row is shared. <strong>The
  *       column {@code Boundaries.otherSignalsAreNotClobbered} uses to prove it has had to move
- *       twice</strong> — §157 took {@code stale_approval} and §178 took {@code unlinked} — and
- *       {@code orphaned} is the last one available.</li>
+ *       three times</strong> — §157 took {@code stale_approval}, §178 took {@code unlinked} and
+ *       §181 took {@code orphaned}, each in this very service — so the fourth spelling is not a
+ *       signal at all: {@code incomplete}, the one {@code case_health} boolean outside the enum and
+ *       the only one left that nothing writes. A column with no owner cannot acquire one by a
+ *       sibling module deciding to run, which is the objection that ruled {@code failing_repeatedly}
+ *       out twice.</li>
  *   <li><strong>A signal derived from a table this job rewrote a statement earlier.</strong> §178's
  *       two are read off {@code case_doc_link}, so they are the only signals here whose correctness
  *       depends on where their statement <em>sits</em> rather than on what it says. One test asserts
@@ -369,6 +376,70 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
      */
     private static final UUID LINKED_BY_REFERENCE_ONLY =
             UUID.fromString("ce004000-0000-4000-8000-00000000002b");
+
+    // ---- §181, the owner check ---------------------------------------------------------------
+    //
+    // THE FIRST PEOPLE THIS CLASS HAS EVER SEEDED. The review fixtures leave approved_by null and
+    // say why: the derivation asks WHICH VERSION was signed off, never by whom. This signal asks
+    // only about whom, so it is the first that cannot be expressed without accounts and
+    // memberships — five of each, because the predicate has three terms and two of them have a
+    // near neighbour that must NOT fire (an invitee is not an ex-colleague; an active member is
+    // not a deactivated account).
+    /** ACTIVE account, ACTIVE membership — the case that must stay clean. */
+    private static final UUID OWNED_BY_A_COLLEAGUE =
+            UUID.fromString("ce004000-0000-4000-8000-00000000002c");
+    /** The instance-wide off switch: ACTIVE membership, DEACTIVATED account. */
+    private static final UUID OWNED_BY_A_DEACTIVATED_ACCOUNT =
+            UUID.fromString("ce004000-0000-4000-8000-00000000002d");
+    /**
+     * Offboarded — membership {@code REMOVED}, account untouched, which is exactly what
+     * {@code MembershipRemovalService} writes and the only one of the three terms a running
+     * deployment can currently reach.
+     */
+    private static final UUID OWNED_BY_AN_OFFBOARDED_COLLEAGUE =
+            UUID.fromString("ce004000-0000-4000-8000-00000000002e");
+    /**
+     * Owned by an account with no membership row in this company at all.
+     *
+     * <p>Not reachable through the API — assignment goes through the company's own directory — and
+     * seeded anyway, because it is what a hard-deleted membership, a restored backup or a
+     * cross-company data repair leaves behind, and because it is the term {@code m.user_id IS NULL}
+     * exists for. An implementation that only checked {@code status = 'REMOVED'} passes every other
+     * test in this block.
+     */
+    private static final UUID OWNED_BY_A_STRANGER =
+            UUID.fromString("ce004000-0000-4000-8000-00000000002f");
+    /** Membership {@code INVITED} — somebody arriving, not somebody gone. Must stay clean. */
+    private static final UUID OWNED_BY_AN_INVITEE =
+            UUID.fromString("ce004000-0000-4000-8000-000000000030");
+    /**
+     * {@code owner_id} null, which most cases in this class already are — named here so the
+     * assertion that an unowned case is not an orphan reads as a decision rather than as an
+     * incidental property of a fixture seeded for something else.
+     */
+    private static final UUID UNOWNED = UUID.fromString("ce004000-0000-4000-8000-000000000031");
+    /**
+     * Umbra's case, owned by the same person Acme offboarded — the one fixture that can tell
+     * "this owner is gone" from "this owner is gone <em>from this company</em>".
+     */
+    private static final UUID FOREIGN_OWNED =
+            UUID.fromString("ce004000-0000-4000-8000-000000000032");
+
+    /** ACTIVE account, ACTIVE membership in Acme. */
+    private static final UUID COLLEAGUE = UUID.fromString("ce008000-0000-4000-8000-000000000001");
+    /** DEACTIVATED account, and its Acme membership is left ACTIVE so the account is the cause. */
+    private static final UUID DEACTIVATED_ACCOUNT =
+            UUID.fromString("ce008000-0000-4000-8000-000000000002");
+    /** INVITED account, INVITED membership — the near neighbour of REMOVED that must not fire. */
+    private static final UUID INVITEE = UUID.fromString("ce008000-0000-4000-8000-000000000003");
+    /** ACTIVE account, no membership row in either company. */
+    private static final UUID STRANGER = UUID.fromString("ce008000-0000-4000-8000-000000000004");
+    /**
+     * ACTIVE account, {@code REMOVED} in Acme and {@code ACTIVE} in Umbra — one person, two
+     * clients, which is plan §6s's whole point and the state the membership join's company
+     * predicate is written for.
+     */
+    private static final UUID CONTRACTOR = UUID.fromString("ce008000-0000-4000-8000-000000000005");
 
     private static final UUID ACME_OTHER_PROJECT =
             UUID.fromString("ce001000-0000-4000-8000-000000000003");
@@ -748,6 +819,42 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             authoredCase(acme, LINKED_BY_REFERENCE_ONLY, ACME_PROJECT, "TC-41", 41, "DRAFT", 1);
             datedVersion(acme, LINKED_BY_REFERENCE_ONLY, now.minus(WELL_INSIDE));
             link(acme, UUID.randomUUID(), ACME, LINKED_BY_REFERENCE_ONLY, SPEC_BLOCK, "REFERENCES");
+
+            // ---- the owner check (§181) ------------------------------------------------------
+            //
+            // People and memberships are the only fixtures in this class that survive
+            // clearHealthAndExecutions() — app_user is instance-level and company_membership names
+            // no case — so both helpers UPDATE the status on conflict rather than DO NOTHING. Every
+            // other fixture here is re-inserted from nothing each time and can therefore leave the
+            // seed alone; these two would otherwise carry one test's mutation into the next, which
+            // is precisely the failure theSignalSelfHeals() creates on purpose.
+            person(acme, COLLEAGUE, "cehealth-colleague@acme.test", "Cass Ollie", "ACTIVE");
+            person(acme, DEACTIVATED_ACCOUNT, "cehealth-gone@acme.test", "Dee Activated",
+                    "DEACTIVATED");
+            person(acme, INVITEE, "cehealth-invitee@acme.test", "Ivy Newcomer", "INVITED");
+            person(acme, STRANGER, "cehealth-stranger@acme.test", "Stan Ranger", "ACTIVE");
+            person(acme, CONTRACTOR, "cehealth-contractor@acme.test", "Con Tractor", "ACTIVE");
+
+            membership(acme, ACME, COLLEAGUE, "ACTIVE");
+            // ACTIVE here on purpose: the offboarding path and the account path must be separable,
+            // and a fixture that removed the membership too would pass against an implementation
+            // that never reads app_user at all.
+            membership(acme, ACME, DEACTIVATED_ACCOUNT, "ACTIVE");
+            membership(acme, ACME, INVITEE, "INVITED");
+            membership(acme, ACME, CONTRACTOR, "REMOVED");
+            // STRANGER gets no row in either company — that is the fixture.
+
+            ownedCase(acme, OWNED_BY_A_COLLEAGUE, ACME, ACME_PROJECT, ACME_SUITE, "TC-42", 42,
+                    COLLEAGUE);
+            ownedCase(acme, OWNED_BY_A_DEACTIVATED_ACCOUNT, ACME, ACME_PROJECT, ACME_SUITE,
+                    "TC-43", 43, DEACTIVATED_ACCOUNT);
+            ownedCase(acme, OWNED_BY_AN_OFFBOARDED_COLLEAGUE, ACME, ACME_PROJECT, ACME_SUITE,
+                    "TC-44", 44, CONTRACTOR);
+            ownedCase(acme, OWNED_BY_A_STRANGER, ACME, ACME_PROJECT, ACME_SUITE, "TC-45", 45,
+                    STRANGER);
+            ownedCase(acme, OWNED_BY_AN_INVITEE, ACME, ACME_PROJECT, ACME_SUITE, "TC-46", 46,
+                    INVITEE);
+            ownedCase(acme, UNOWNED, ACME, ACME_PROJECT, ACME_SUITE, "TC-47", 47, null);
         }
 
         try (Connection umbra = appConnection(UMBRA)) {
@@ -765,6 +872,14 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             pageVersion(umbra, UMBRA_PAGE, 1, now.minus(WELL_OUTSIDE));
             block(umbra, UMBRA_BLOCK, UMBRA, UMBRA_PAGE, 0, "Umbra's statement.");
             link(umbra, UUID.randomUUID(), UMBRA, FOREIGN_LINKED, UMBRA_BLOCK, "VERIFIES");
+
+            // §181 — the same account Acme removed, working here. The membership row is Umbra's and
+            // is written on Umbra's connection, because company_membership is under FORCE ROW LEVEL
+            // SECURITY and an insert on Acme's connection would be refused by the policy rather
+            // than land in the wrong company.
+            membership(umbra, UMBRA, CONTRACTOR, "ACTIVE");
+            ownedCase(umbra, FOREIGN_OWNED, UMBRA, UMBRA_PROJECT, UMBRA_SUITE, "TC-3", 3,
+                    CONTRACTOR);
         }
 
         // Nothing here rolls back, so a link one test MAKES outlives it. LATE_LINK is the only such
@@ -1754,6 +1869,136 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         }
     }
 
+    /**
+     * §6o's owner check — {@code OwnerStanding}, §181, and the last signal in the enum to acquire a
+     * writer.
+     *
+     * <p>Every case in this block is also {@code never_executed} and {@code unlinked}, which is the
+     * ordinary state of a case nobody has run or linked, so each assertion names all three columns
+     * rather than the one under test. Asserting the whole set is deliberate here for the same reason
+     * it is everywhere else in this class: a derivation that raised {@code orphaned} correctly and
+     * cleared somebody else's column would pass a {@code contains} and fail a person.
+     */
+    @Nested
+    @DisplayName("The owner check")
+    class OwnerStandingSignal {
+
+        @Test
+        @DisplayName("an owner who is still here raises nothing")
+        void anActiveOwnerIsClean() {
+            recomputeFor(ACME);
+
+            assertThat(signalsOf(OWNED_BY_A_COLLEAGUE))
+                    .as("an ACTIVE membership on an ACTIVE account is the ordinary case, and it is "
+                            + "most of the rows in any deployment")
+                    .containsExactly("never_executed", "unlinked");
+        }
+
+        @Test
+        @DisplayName("a deactivated account orphans the cases it owns")
+        void aDeactivatedAccountIsAnOrphan() {
+            // The instance-wide off switch, with the membership left ACTIVE — so this case fails on
+            // an implementation that reads company_membership alone. That implementation is the
+            // tempting one: it is one join shorter, and the term it drops is the one no production
+            // path currently writes (AppUser.deactivate has four callers, all tests).
+            recomputeFor(ACME);
+
+            assertThat(signalsOf(OWNED_BY_A_DEACTIVATED_ACCOUNT))
+                    .containsExactly("never_executed", "unlinked", "orphaned");
+        }
+
+        @Test
+        @DisplayName("an offboarded colleague orphans the cases they owned")
+        void anOffboardedMemberIsAnOrphan() {
+            // THE case this signal exists for, and the only one of the three terms a running
+            // deployment reaches today: MembershipRemovalService writes REMOVED and deletes
+            // nothing, precisely so authorship survives. This is what that leaves behind.
+            recomputeFor(ACME);
+
+            assertThat(signalsOf(OWNED_BY_AN_OFFBOARDED_COLLEAGUE))
+                    .containsExactly("never_executed", "unlinked", "orphaned");
+        }
+
+        @Test
+        @DisplayName("an owner with no membership here at all is an orphan")
+        void someoneWhoWasNeverAMemberHereIsAnOrphan() {
+            // The m.user_id IS NULL term. An implementation checking only status = 'REMOVED' passes
+            // every other test in this block and reports this case as healthy — a case owned by
+            // somebody the company has no record of, rendered as owned.
+            recomputeFor(ACME);
+
+            assertThat(signalsOf(OWNED_BY_A_STRANGER))
+                    .containsExactly("never_executed", "unlinked", "orphaned");
+        }
+
+        @Test
+        @DisplayName("an outstanding invitation is not somebody who left")
+        void anInvitationOutstandingIsNotAnOrphan() {
+            // The decision, as a test. "Not ACTIVE" is the shorter predicate and it is wrong in the
+            // direction that costs a team its trust in the panel: a case assigned to a colleague
+            // being onboarded would be chipped "owner has left" for the whole of their first week,
+            // and then heal itself the day they arrive.
+            recomputeFor(ACME);
+
+            assertThat(signalsOf(OWNED_BY_AN_INVITEE))
+                    .containsExactly("never_executed", "unlinked");
+        }
+
+        @Test
+        @DisplayName("a case with no owner is not an orphan")
+        void anUnownedCaseIsNotAnOrphan() {
+            // The other half of that decision. owner_id is nullable and unowned cases are ordinary,
+            // so a predicate without the IS NOT NULL term puts an INFO chip on most rows of a young
+            // project — UNLINKED's failure mode, which that signal at least has a traceability
+            // argument for. "Nobody owns these" is a population, and the dashboard's by-owner
+            // breakdown is where a population belongs.
+            recomputeFor(ACME);
+
+            assertThat(signalsOf(UNOWNED))
+                    .containsExactly("never_executed", "unlinked");
+        }
+
+        @Test
+        @DisplayName("one person, two clients — the answer is per company")
+        void theSameContractorIsJudgedPerCompany() {
+            // The same account owns both cases. Acme removed them; Umbra did not. A derivation that
+            // asked "is this person gone" rather than "is this person gone FROM THIS COMPANY" would
+            // chip Umbra's case because of a decision taken inside a different client's tenancy —
+            // and plan §6s exists to make that impossible.
+            recomputeFor(ACME);
+            recomputeFor(UMBRA);
+
+            assertThat(signalsOf(OWNED_BY_AN_OFFBOARDED_COLLEAGUE))
+                    .as("removed in Acme")
+                    .contains("orphaned");
+            assertThat(signalsOf(FOREIGN_OWNED))
+                    .as("the same person, working in Umbra")
+                    .doesNotContain("orphaned");
+        }
+
+        @Test
+        @DisplayName("re-inviting somebody clears the signal on everything they own")
+        void theSignalSelfHeals() throws SQLException {
+            // HealthSignal's "no button for lying" rule from the other side: nothing sets this flag
+            // false, so the only thing that can clear it is the cause going away. Re-invitation is
+            // the real path — CompanyMembership.reinvite puts a REMOVED row back to INVITED — and
+            // an invitee is not an orphan, so one status update clears every case at once.
+            recomputeFor(ACME);
+            assertThat(signalsOf(OWNED_BY_AN_OFFBOARDED_COLLEAGUE)).contains("orphaned");
+
+            try (Connection acme = appConnection(ACME)) {
+                membership(acme, ACME, CONTRACTOR, "ACTIVE");
+            }
+            recomputeFor(ACME);
+
+            assertThat(signalsOf(OWNED_BY_AN_OFFBOARDED_COLLEAGUE))
+                    .as("the flag is in the ON CONFLICT's SET list, so a false is WRITTEN rather "
+                            + "than merely not written — without that the chip outlives its cause "
+                            + "forever and nothing in the product can take it down")
+                    .containsExactly("never_executed", "unlinked");
+        }
+    }
+
     @Nested
     @DisplayName("What the job must not touch")
     class Boundaries {
@@ -1768,24 +2013,31 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // The column asserted here was stale_approval until §157, which gave that one a writer
             // in this very service and so had to move the assertion. unlinked was the replacement
             // — and §178 gave THAT one a writer, in this very service again, so this is the second
-            // move and the same cause both times. failing_repeatedly would be the stronger choice —
-            // it has a real writer in reporting — and it is not used, because setting it here would
-            // be this test asserting over another module's schedule.
+            // move and the same cause both times. orphaned was the third, and §181 gave it one too.
             //
-            // THE POPULATION THIS TEST DRAWS FROM IS NOW ONE. orphaned is the last case_health
-            // column that is read and written by nothing (ArchitectureRulesTest's
-            // WRITERLESS_BY_DECISION), so the slice that derives it has to replace this assertion
-            // with something structurally different rather than with a third column — most likely
-            // reporting's failing_repeatedly plus the schedule problem that argument dodges twice
-            // above. Written down here because the next author meets the shortage, not the history.
+            // THE POPULATION IS EXHAUSTED AND THIS IS THE STRUCTURALLY DIFFERENT REPLACEMENT the
+            // note here asked for. Every column the server's HealthSignal names is now derived, so
+            // there is no fourth signal to borrow. The answer is the one case_health boolean that
+            // is NOT a signal: incomplete, which no job anywhere writes (ArchitectureRulesTest's
+            // WRITERLESS_BY_DECISION, where it is now the last case_health entry) and which is
+            // therefore stable in the one way this assertion needs — its value cannot be changed by
+            // another module deciding to run.
+            //
+            // That is why it is a better fixture than the reporting-owned failing_repeatedly this
+            // note twice reached for and twice rejected: the objection was that setting it here
+            // makes this test assert over another module's schedule, and a column with no owner has
+            // no schedule to assert over. What is being pinned is not a signal at all — it is that
+            // the six ON CONFLICT clauses name only the columns they compute. Reading incomplete
+            // through signalsOf() is what makes it visible; that helper's javadoc has the note.
             recomputeFor(ACME);
-            setSignal(ACME, RECENT, "orphaned", true);
+            setSignal(ACME, RECENT, "incomplete", true);
 
             recomputeFor(ACME);
 
             assertThat(signalsOf(RECENT))
-                    .as("orphaned belongs to a computation this job knows nothing about")
-                    .containsExactly("unlinked", "orphaned");
+                    .as("incomplete belongs to a computation nobody has written; a tick of this "
+                            + "job must not blank a column it does not derive")
+                    .containsExactly("unlinked", "incomplete");
         }
 
         @Test
@@ -1861,12 +2113,21 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         }
     }
 
-    /** The signal columns this row asserts, so an assertion reads as a set rather than nine booleans. */
+    /**
+     * The signal columns this row asserts, so an assertion reads as a set rather than nine booleans.
+     *
+     * <p><strong>{@code incomplete} is in the list and is not a signal</strong> — it is the one
+     * {@code case_health} boolean the server's {@code HealthSignal} does not name, and since §181 it
+     * is also the only one no job writes. That combination is what {@code Boundaries} needs: a
+     * column this job must leave alone whose owner is nobody, rather than one whose owner is
+     * another module's schedule. Reading it here costs nothing on every other assertion, because a
+     * column no writer touches is false unless a test set it.
+     */
     private List<String> signalsOf(UUID caseId) {
-        UUID companyId = caseId.equals(FOREIGN) ? UMBRA : ACME;
+        UUID companyId = companyOf(caseId);
         List<String> columns = List.of("outdated_spec_changed", "stale_approval", "condition_drift",
                 "stale_automation", "never_executed", "long_unexecuted", "unlinked",
-                "failing_repeatedly", "orphaned", "undeclared_automation");
+                "failing_repeatedly", "orphaned", "undeclared_automation", "incomplete");
         try (Connection connection = appConnection(companyId);
                 PreparedStatement statement = connection.prepareStatement(
                         "SELECT " + String.join(", ", columns)
@@ -1887,6 +2148,20 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         } catch (SQLException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    /**
+     * Which company's connection a case is read on.
+     *
+     * <p>A method rather than the ternary it replaces: §181 added a second Umbra case, and a
+     * two-way conditional that names one id silently reads the other one through Acme's connection,
+     * where RLS returns no row and every assertion about it reports "no signals" — a green test
+     * proving nothing.
+     */
+    private static UUID companyOf(UUID caseId) {
+        return caseId.equals(FOREIGN) || caseId.equals(FOREIGN_LINKED)
+                || caseId.equals(FOREIGN_OWNED)
+                ? UMBRA : ACME;
     }
 
     private boolean healthRowExists(UUID companyId, UUID caseId) {
@@ -2325,6 +2600,97 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     }
 
     /**
+     * One case with an owner — {@code test_case.owner_id}, which no other helper here writes.
+     *
+     * <p>A third case helper rather than a fourteenth parameter on {@link #testCase} or a fifth on
+     * {@link #authoredCase}, for the reason {@link #authoredCase}'s own javadoc gives: those two are
+     * about the automation columns and the authoring columns respectively, and every one of their
+     * call sites would have to state an owner it does not care about. All three write the same
+     * table.
+     *
+     * @param ownerId null for the unowned case, which is a term in the predicate and not an
+     *                absence of one.
+     */
+    private void ownedCase(Connection connection, UUID id, UUID companyId, UUID projectId,
+            UUID suiteId, String key, long keySeq, UUID ownerId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO test_case
+                    (id, company_id, project_id, suite_id, key, key_seq, title, step_format,
+                     priority, lifecycle_status, automation_status, owner_id,
+                     created_at, updated_at, deleted_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
+                        ?, 'STRUCTURED', 'MEDIUM', 'DRAFT', 'MANUAL', CAST(? AS uuid),
+                        now(), now(), NULL)
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, companyId.toString());
+            statement.setString(3, projectId.toString());
+            statement.setString(4, suiteId.toString());
+            statement.setString(5, key);
+            statement.setLong(6, keySeq);
+            statement.setString(7, "Case " + key);
+            statement.setString(8, ownerId == null ? null : ownerId.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * One account — {@code app_user}, instance-level and outside RLS.
+     *
+     * <p><strong>{@code DO UPDATE} rather than {@code DO NOTHING}, unlike every other helper in this
+     * class.</strong> Nothing deletes accounts between tests (they are not company-owned, so
+     * {@link #clearHealthAndExecutions} cannot reach them and must not try), so a test that
+     * reactivates somebody would leave them reactivated for whichever method JUnit runs next. The
+     * seed has to be able to put a status back, which is §19's fixture-collision lesson arriving
+     * through time rather than through an id — the same reason {@code LATE_LINK} is a named
+     * constant.
+     *
+     * @param email class-prefixed like every other naturally-keyed fixture value here: the column
+     *              is {@code CITEXT} and globally unique, so an unprefixed "qa@acme.test" is a
+     *              collision with whichever other suite thought of it first.
+     */
+    private void person(Connection connection, UUID id, String email, String name, String status)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO app_user
+                    (id, email, canonical_name, status, locale, timezone, created_at, updated_at)
+                VALUES (CAST(? AS uuid), CAST(? AS citext), ?, ?, 'en', 'UTC', now(), now())
+                ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, email);
+            statement.setString(3, name);
+            statement.setString(4, status);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * One membership — the row the derivation actually reads.
+     *
+     * <p>{@code DO UPDATE} for {@link #person}'s reason, and written on the connection of the
+     * company it belongs to: {@code company_membership} is under {@code FORCE ROW LEVEL SECURITY},
+     * so an insert of an Umbra row through Acme's connection is refused by the policy rather than
+     * quietly landing in the wrong company.
+     */
+    private void membership(Connection connection, UUID companyId, UUID userId, String status)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO company_membership
+                    (company_id, user_id, display_name, status, invited_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), ?, ?, now())
+                ON CONFLICT (company_id, user_id) DO UPDATE SET status = EXCLUDED.status
+                """)) {
+            statement.setString(1, companyId.toString());
+            statement.setString(2, userId.toString());
+            statement.setString(3, "Member " + userId.toString().substring(0, 8));
+            statement.setString(4, status);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
      * One library condition.
      *
      * @param body the ordered steps, written as a JSONB array because that is what {@code V1}
@@ -2616,7 +2982,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
      * through the entity would let a mapping bug and a derivation bug cancel each other out.
      */
     private StoredLastResult lastResultOf(UUID caseId) {
-        UUID companyId = caseId.equals(FOREIGN) ? UMBRA : ACME;
+        UUID companyId = companyOf(caseId);
         try (Connection connection = appConnection(companyId);
                 PreparedStatement statement = connection.prepareStatement("""
                         SELECT last_status_kind, last_executed_at, last_release_version,

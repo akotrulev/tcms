@@ -31,7 +31,8 @@ package com.tcms.repository;
  * {@code STALE_AUTOMATION} + {@code UNDECLARED_AUTOMATION} in M3 slice 5,
  * {@link #STALE_APPROVAL} in §157 ({@code ApprovalFacts}), {@link #CONDITION_DRIFT} in §158
  * ({@code ConditionDrift}) and {@link #UNLINKED} + {@link #OUTDATED_SPEC_CHANGED} in §178
- * ({@code SpecLinkage}) — <strong><del>five</del><del>six</del><del>seven</del> nine of the ten
+ * ({@code SpecLinkage}) and {@link #ORPHANED} in §181 ({@code OwnerStanding})
+ * — <strong><del>five</del><del>six</del><del>seven</del><del>nine</del> all ten
  * are real</strong>. <del>The other five still report an honest zero</del> → <strong>and §156 is
  * where "honest" stopped being the right word.</strong> A zero is honest on an <em>absent</em> row,
  * which is what this sentence was written against; the recompute that made the five real also
@@ -40,7 +41,8 @@ package com.tcms.repository;
  * that conclusion until §156 narrowed its copy. See {@code CaseHealth}'s header for the full
  * account and for why nullable columns are not the fix.
  *
- * <p><strong><del>Four, since §157</del> <del>Three, since §158</del> One, since §178.</strong>
+ * <p><strong><del>Four, since §157</del> <del>Three, since §158</del> <del>One, since §178</del>
+ * None, since §181.</strong>
  * {@link #STALE_APPROVAL} is
  * derived from {@code review} and the case's current version number, {@link #CONDITION_DRIFT} from
  * the newest version's snapshot against the live library, and each derivation cost one class —
@@ -53,8 +55,15 @@ package com.tcms.repository;
  * {@code case_doc_link} in this module for the case detail's panel, so by §178 the rows the two
  * signals need were already here and the module edge had stopped being the obstacle. A sentence
  * naming a real constraint can go stale by something else being built.
- * {@link #ORPHANED} needs a decision about what "left the project" means
- * before it needs any code, and it is the last.
+ * <del>{@link #ORPHANED} needs a decision about what "left the project" means
+ * before it needs any code, and it is the last.</del>
+ *
+ * <p><strong>§181 took that decision and the derivation cost one class as well</strong>, so the
+ * prediction three paragraphs up held for all five — including the one it was least likely to hold
+ * for, since a signal deferred four running slices reads like the expensive one. It was not
+ * expensive; it was <em>undecided</em>, and those are different problems with the same symptom. The
+ * lesson worth keeping is which of the two a sentence like the struck one describes: it named the
+ * blocker correctly, and four slices read it as an estimate.
  *
  * <h2>{@code incomplete} is on the table and not in this enum</h2>
  *
@@ -175,6 +184,30 @@ public enum HealthSignal {
      */
     UNLINKED("unlinked", Severity.INFO),
     FAILING_REPEATEDLY("failingRepeatedly", Severity.WARNING),
+    /**
+     * §6o's owner check — {@code OwnerStanding} since §181, and <strong>the last member of this enum
+     * to get a writer</strong>, five slices and four deferrals after {@code case_health} acquired
+     * its first.
+     *
+     * <p>What it means was the whole of that slice: <em>the case has an owner, and that owner is no
+     * longer somebody this company's administrator would see in the Members list</em> — membership
+     * gone or {@code REMOVED}, or the account {@code DEACTIVATED}. Not "holds no grant on this
+     * project", which would be a second implementation of {@code PermissionEvaluator} and would
+     * report every Company Admin as having left the projects they administer. The argument is at
+     * {@code OwnerStanding}.
+     *
+     * <p><strong>INFO, and unlike {@link #UNLINKED} the volume is not why.</strong> Nothing is
+     * broken: the case is as correct today as it was the day its owner left, and every word of it
+     * still applies. What is missing is a person to ask about it — "no home", which is exactly what
+     * the severity split at the bottom of this header calls INFO. The signal that would be an
+     * ERROR is a case whose content is wrong, and losing an owner does not make content wrong.
+     *
+     * <p><strong>An unowned case does not raise it</strong>, which is the one place the derivation
+     * is narrower than the words suggest. {@code test_case.owner_id} is nullable and unowned cases
+     * are ordinary; a signal on each of them is {@link #UNLINKED}'s failure mode with none of its
+     * justification, and "nobody owns these" is a population, which the dashboard's by-owner
+     * breakdown already shows as one.
+     */
     ORPHANED("orphaned", Severity.INFO),
 
     /**

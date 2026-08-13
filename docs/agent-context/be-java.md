@@ -2,14 +2,14 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-13 (**§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
+**Last verified:** 2026-08-13 (**§181** — every health signal has a writer, `ORPHANED` means the owner is no longer in the company's directory, and `incomplete` changed which by-decision map it is in; **§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
 last two came off `case_doc_link`, the statement's *order* inside the recompute is load-bearing, and
 `UNLINKED` counts every relationship while the coverage sites count one; **§177** — `test_run.commit_sha` / `.branch` have a writer, the git-object regex is a pinned second copy, and the clone inherits neither; **§176** — the four contract-binding rules are two questions over two populations, and a bound-and-undeclared query parameter fails the build; **§175** — one `TeamRef`, in `com.tcms.api`, with two inline schemas made `$ref`s and `isLead` off the wire; **§174** — `doc_link.relationship` is the one mutable column, `V48` records who moved it, and both ends got the endpoint; **§171** — the form parts nobody compared: the four multipart bodies are exempt from *pairing* and no longer exempt from *comparison*; **§170** — the population the pairing rule could not see: every object schema, named and inline, is paired or excused, and two ingestion inputs nothing read are gone; **§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `04e8717` (§179 shipped; §180 is this commit) (per `CLAUDE.md`, trust the body over the header and
+**Baseline commit:** `b95c230` (§180 shipped; §181 is this commit) (per `CLAUDE.md`, trust the body over the header and
 re-grep what a later commit could have moved).
 
 ---
@@ -190,15 +190,60 @@ fail the build until they are paired.**
 - **A link into a soft-deleted page, or a sibling project's page, reads as NO link** — the mirror drops
   it, so the chip agrees with the panel. Looks like a bug, is the design, and is the strongest reason
   the derivation reads the mirror.
-- **`WRITERLESS_BY_DECISION` is EIGHT entries and `CaseHealth.orphaned` is the last health signal in
+- ~~**`WRITERLESS_BY_DECISION` is EIGHT entries and `CaseHealth.orphaned` is the last health signal in
   it.** Four left by being written (§157, §158, §178 ×2). `orphaned` needs a *decision* first, so the
   run of cheap exits is over. It is also the column
   `CaseHealthRecomputeTest.Boundaries.otherSignalsAreNotClobbered` now uses — the second column that
-  test has had to move to, and there is no third.
+  test has had to move to, and there is no third.~~ → **§181 wrote it. Seven entries, no health
+  signal among them, and the boundary test moved to `incomplete`.** See below.
 - **`unlinked` fires on most cases of most projects** (INFO for that reason). Any new assertion over
   `signalsOf(...)` in `CaseHealthRecomputeTest` must name it.
 - ~~**`StatusChip.SEVERE_SIGNALS` (frontend) disagrees with `HealthSignal.Severity` about two
   members**~~ → **fixed in §179 by deleting the copy: severity is on the wire.** See below.
+
+---
+
+## §181 — EVERY HEALTH SIGNAL HAS A WRITER, AND "LEFT THE PROJECT" MEANS MEMBERSHIP
+
+**Read this before touching `CaseHealthRecomputeService`, `OwnerStanding`, either
+`*_BY_DECISION` map in `ArchitectureRulesTest`, or anything that assigns a case owner.**
+
+- **`OwnerStanding` derives `ORPHANED`** — the seventh statement in `recompute()`, one `LEFT JOIN`
+  pair over `company_membership` + `app_user`. Its position is **not** load-bearing (unlike §178's):
+  it reads no row this job writes.
+- **THE DECISION, and it is the whole slice:** a case is orphaned when it **has** an owner and that
+  owner is *no longer in this company's directory* — membership missing or `REMOVED`, or the account
+  `DEACTIVATED`. **Not "holds no grant on this project".** That reading needs project visibility
+  re-derived from grants, teams, company-scope roles and SYSTEM assignments — a second
+  `PermissionEvaluator`, in SQL, in a cron job — and it is *wrong* on Company Admins and Instance
+  Admins, who own cases in projects they hold no project-scope grant for. Membership is the
+  precondition for every permission (`CompanyMembership`'s header), so offboarding is the one status
+  the derivation needs.
+- **It is the SQL spelling of `AdminDirectoryService.listUsers` + `statusOf`.** Same three cases,
+  negated. A second definition of "still here" is a chip and the Members screen disagreeing about one
+  person — §180's defect shape, which lives only in the transition between two screens.
+- **An `INVITED` membership is NOT an orphan, and neither is an unowned case.** Both are decisions
+  with tests (`anInvitationOutstandingIsNotAnOrphan`, `anUnownedCaseIsNotAnOrphan`); "not ACTIVE" and
+  a missing `owner_id IS NOT NULL` are the two tempting widenings, and the second is `UNLINKED`'s
+  volume failure with none of its justification.
+- **The membership join carries `m.company_id = c.company_id` and its siblings carry no company
+  predicate at all.** Cardinality, not isolation: it is the first statement here joining a table where
+  one person has many rows legitimately (one per client), so with RLS disabled — which `V1` permits
+  per deployment — the `ON CONFLICT` would refuse to affect a row twice. Loud, not silent.
+- **`AppUser.deactivate` has NO production caller** (four test callers). The term is in the predicate
+  anyway; the frontend's words named *only* that unreachable half until phase 2.
+- **`CaseHealth.orphaned`'s own javadoc said the signal meant "a case in no suite and no plan"** —
+  a predicate `test_case.suite_id NOT NULL` forbids. It sat at the column for five slices while four
+  signals were derived around it. If you are about to trust a field comment about a writerless
+  column, that is the precedent.
+- **`CaseHealth.incomplete` LEFT `READERLESS_BY_DECISION` and stays in `WRITERLESS_BY_DECISION`.**
+  The boundary test needed a column with no owner, so `signalsOf` selects `incomplete` — and a test
+  SELECT is a reader by that rule's own definition. It is a weaker reader than the rule was written
+  for (it verifies an *absence*), the text corpus cannot tell, and the entry was deleted rather than
+  kept, because a one-directional ignore list is §162's finding.
+- **`Boundaries.otherSignalsAreNotClobbered` now uses `incomplete`** — the fourth witness, and the
+  first that is not a signal. There is no fifth: it is the only `case_health` boolean left that
+  nothing writes.
 
 ---
 

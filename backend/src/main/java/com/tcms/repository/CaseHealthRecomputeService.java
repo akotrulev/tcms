@@ -13,18 +13,29 @@ import org.springframework.transaction.annotation.Transactional;
  * since §53, <strong>four since M3 slice 5</strong>, which added §6c's automation-drift pair now
  * that ingestion exists to make "no ingested result in N days" mean something, <strong>five since
  * §157</strong>, which added §6g's stale approval, <strong>six since §158</strong>, which added
- * §6f's condition drift, and <strong>eight since §178</strong>, which added §6i's spec-changed
- * marker and §6o's unlinked one.
+ * §6f's condition drift, <strong>eight since §178</strong>, which added §6i's spec-changed
+ * marker and §6o's unlinked one, and <strong>nine since §181</strong>, which added the owner check.
+ *
+ * <p><strong>"The signals this module can see" is no longer a narrowing.</strong> Nine of the ten
+ * members of {@link HealthSignal} are computed here and the tenth ({@code FAILING_REPEATEDLY}) in
+ * {@code reporting.ExecutionSource}, so between the two jobs every signal on the wire has a
+ * derivation — see {@link OwnerStanding}, which closed the last one, and {@code CaseHealth}'s
+ * header for what that changes about reading a {@code false}.
  *
  * <p>The word "execution-driven" was in this sentence until §157 and is gone rather than qualified:
  * {@code STALE_APPROVAL} is derived from {@code review} and {@code test_case.current_version_no}
  * and has nothing to do with running anything. What the signals here have in common is that
  * <em>this module can see their cause</em> — through {@code ExecutionFacts} for the four that live
- * behind a forbidden module edge, through {@code ApprovalFacts} for the one that lives behind a
- * permitted one, through {@code ConditionDrift} for the one whose cause is in this module
+ * behind a forbidden module edge, through {@code ApprovalFacts} and {@link OwnerStanding} for the
+ * two that live behind permitted ones ({@code project} and {@code identity}), through
+ * {@code ConditionDrift} for the one whose cause is in this module
  * outright, and through {@code SpecLinkage} for the two whose cause reached this module as a
  * <em>table</em> — {@code case_doc_link}, which §167 built for the case detail's panel and which
- * turned out to be everything the two documentation signals had been waiting for.
+ * turned out to be everything the two documentation signals had been waiting for. §181's edge is
+ * the second permitted one and the least eventful of the six: {@code identity} holds
+ * {@code company_membership}, this module already crosses to it for the owner's <em>name</em>
+ * ({@code CaseOwners}), and what made {@code ORPHANED} the last signal standing was never a
+ * boundary — it was a decision, which {@link OwnerStanding}'s header takes.
  *
  * <h2>Why this exists at all, and what it stops the dashboard from claiming</h2>
  *
@@ -39,10 +50,11 @@ import org.springframework.transaction.annotation.Transactional;
  * ingestion still have no writer of their own~~ → <strong>four of the ten, and ingestion is no
  * longer on the list</strong>: §117 gave {@code test_run.source = 'INGESTED'} a writer, which is the
  * whole predicate {@code STALE_AUTOMATION} was blocked on. <del>Approvals</del>, <del>documentation
- * links</del> and the
- * owner check keep their <del>honest</del> zero (see {@code ExecutionFacts}' note on why this job
- * must not touch their columns), as does {@code FAILING_REPEATEDLY}, which is a sibling job's and
- * not absent.
+ * links</del> and <del>the
+ * owner check</del> keep their <del>honest</del> zero (see {@code ExecutionFacts}' note on why this
+ * job must not touch their columns), as does {@code FAILING_REPEATEDLY}, which is a sibling job's
+ * and not absent. <strong>→ nothing is left on that list as of §181</strong>; every clause of this
+ * paragraph is now struck through except the one about the sibling job.
  *
  * <p><strong>§157 took approvals off that list</strong> — the first of §156's five to get a
  * derivation, and the cheapest of the five, because {@code review} belongs to {@code project} and
@@ -57,17 +69,31 @@ import org.springframework.transaction.annotation.Transactional;
  * the obstacle a slice earlier.</strong> {@code SpecLinkage} derives them from {@code case_doc_link}
  * — a table in <em>this</em> module, which §167 created to serve the case detail's Traceability
  * panel and which happens to hold, per case, both facts these two signals ask for. So the sentence
- * above was right about the boundary and wrong about what it blocked: nothing had to cross. <strong>
- * {@link HealthSignal#ORPHANED} is the last one</strong>, and it is the one that needs a decision
+ * above was right about the boundary and wrong about what it blocked: nothing had to cross. <del>
+ * {@link HealthSignal#ORPHANED} is the last one</del>, and it is the one that needs a decision
  * before it needs any code.
+ *
+ * <p><strong>→ §181 took it, and the decision was the whole of the work.</strong> The statement is
+ * one {@code LEFT JOIN} pair and shorter than {@code ApprovalFacts}'; the four slices that deferred
+ * it were right that it was blocked and right about what on. The decision — <em>membership, not
+ * grants</em> — is argued at {@link OwnerStanding}, and it rests on this repository's oldest rule
+ * rather than on anything about health signals: deriving "left the project" from
+ * {@code role_assignment} is a second implementation of {@code PermissionEvaluator}, and it reports
+ * every Company Admin as having left the projects they administer.
  *
  * <p><strong>§156: the word "honest" was load-bearing and this service is what took it away.</strong>
  * A zero is honest while the row is absent — the dashboard's whole three-state design rests on
  * that. The first run of this job writes a row and a {@code computed_at} for every live case, so
  * from then on the signals nobody derives report a zero the read path cannot tell from a check
- * that passed — five when §156 wrote that sentence, <del>three</del> <strong>one</strong> now, and
- * that one is no less misleading for the count having come down. Nothing here is wrong; the consequence just belongs written down at the thing that
+ * that passed — five when §156 wrote that sentence, <del>three</del> <del>one</del>
+ * <strong>none</strong> now, and
+ * that one was no less misleading for the count having come down. Nothing here is wrong; the consequence just belongs written down at the thing that
  * causes it. {@code CaseHealth}'s header has the account.
+ *
+ * <p><strong>§181 is where that paragraph stops applying to any column</strong> and becomes history
+ * rather than a caveat — which is worth stating plainly, because the state it describes lasted from
+ * §53 to §181 and the read path never learned to distinguish the two zeroes. It did not have to;
+ * the job caught up instead.
  *
  * <h2>Why a scheduled recompute and not an event handler</h2>
  *
@@ -95,6 +121,7 @@ public class CaseHealthRecomputeService {
     private final ConditionDrift conditionDrift;
     private final DocumentationFacts documentationFacts;
     private final SpecLinkage specLinkage;
+    private final OwnerStanding ownerStanding;
     private final CaseHealthProperties thresholds;
     private final Clock clock;
 
@@ -104,6 +131,7 @@ public class CaseHealthRecomputeService {
             ConditionDrift conditionDrift,
             DocumentationFacts documentationFacts,
             SpecLinkage specLinkage,
+            OwnerStanding ownerStanding,
             CaseHealthProperties thresholds,
             Clock clock) {
         this.executionFacts = executionFacts;
@@ -111,6 +139,7 @@ public class CaseHealthRecomputeService {
         this.conditionDrift = conditionDrift;
         this.documentationFacts = documentationFacts;
         this.specLinkage = specLinkage;
+        this.ownerStanding = ownerStanding;
         this.thresholds = thresholds;
         this.clock = clock;
     }
@@ -167,9 +196,14 @@ public class CaseHealthRecomputeService {
         // two-answers-one-screen defect this whole arrangement is against, arriving from the one
         // direction one transaction does not close. SpecLinkage's header has the account.
         specLinkage.recomputeLinkageSignals(now);
-        log.debug("Recomputed execution, automation-drift, approval, condition-drift and "
-                + "documentation-linkage health signals for {} cases, and mirrored {} "
-                + "documentation links", cases, links);
+        // Seventh statement, same transaction, and its position does not matter — unlike the pair
+        // above, it reads no row this job writes. It is last because it is the newest, and because
+        // "who owns this case" is the one question here that nothing else in the transaction has
+        // an opinion about.
+        ownerStanding.recomputeOrphaned(now);
+        log.debug("Recomputed execution, automation-drift, approval, condition-drift, "
+                + "documentation-linkage and owner-standing health signals for {} cases, and "
+                + "mirrored {} documentation links", cases, links);
         return cases;
     }
 }

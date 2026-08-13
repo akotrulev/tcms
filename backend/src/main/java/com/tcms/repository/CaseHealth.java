@@ -36,9 +36,17 @@ import org.hibernate.annotations.Filter;
  * contradict each other. The honest alternative was renaming the table, not splitting it.
  *
  * <h2><del>Nothing writes this yet, and the endpoint is correct anyway</del> → <del>FIVE</del>
- * <del>SIX</del> NINE OF
- * THE TEN SIGNALS ARE WRITTEN NOW, AND THAT IS WHAT MAKES THE <del>OTHER FIVE</del> <del>FOUR</del>
- * LAST ONE MISLEADING</h2>
+ * <del>SIX</del> <del>NINE</del> ALL TEN
+ * SIGNALS ARE WRITTEN NOW, AND <del>THAT IS WHAT MAKES THE OTHER FIVE MISLEADING</del>
+ * A {@code false} FINALLY MEANS WHAT EVERY READER ALREADY ASSUMED</h2>
+ *
+ * <p><strong>§181 is the end of this section's subject.</strong> {@code OwnerStanding} derives
+ * {@link #orphaned}, so from that slice on every member of {@link HealthSignal} is computed on
+ * every tick and the distinction below — between a zero that was checked and a zero that was never
+ * looked for — no longer applies to any column on this row. The section stays because the state it
+ * describes was true from §53 to §181 and is the reason {@link #computedAt} is mapped at all; what
+ * follows is history now, and the paragraphs are left in their original order so the count coming
+ * down one slice at a time is still visible.
  *
  * <p><del>The signals are computed from executions and documentation links, and neither module
  * exists. So the table is empty, every case reports no signals, and every health facet counts zero.
@@ -54,23 +62,29 @@ import org.hibernate.annotations.Filter;
  * <p><strong>What changed is what a {@code false} means.</strong> On an absent row, every signal
  * reads "not computed", which is honest. On a row that exists,
  * <del>{@link #outdatedSpecChanged}</del>, <del>{@link #staleApproval}</del>, <del>{@link #conditionDrift}</del>,
- * <del>{@link #unlinked}</del> and {@link #orphaned} are {@code NOT NULL} columns holding their default, and
+ * <del>{@link #unlinked}</del> and <del>{@link #orphaned}</del> are {@code NOT NULL} columns holding their default, and
  * the read path cannot tell that from a computation that ran and found nothing wrong.
  * <strong>§157 closed the first of them</strong> — {@code ApprovalFacts} derives
  * {@link #staleApproval} now — <strong>§158 the second</strong>, {@code ConditionDrift} for
  * {@link #conditionDrift}, <strong>and §178 the third and fourth together</strong>,
- * {@code SpecLinkage} for the two documentation signals — so <strong>{@link #orphaned} is the only
- * one left</strong> and this paragraph is one-fifth as true as it was.
+ * {@code SpecLinkage} for the two documentation signals — <del>so <strong>{@link #orphaned} is the
+ * only one left</strong> and this paragraph is one-fifth as true as it was</del>
+ * <strong>and §181 {@code OwnerStanding} for {@link #orphaned}, so it is true of nothing</strong>.
  * The chip list omits it,
  * the facet counts it zero, and {@code computedAt} — the column mapped precisely so
  * "nothing is wrong" and "nobody has looked" render as different sentences — now says
  * <em>looked</em> for the whole row. The distinction it was added for survives per row and has been
  * lost for that one signal. {@code ArchitectureRulesTest.everyMappedColumnHasAWriter} is what names
- * the remainder; closing it is <del>three derivations</del> <strong>one</strong>, not a schema
+ * the remainder; closing it is <del>three derivations</del> <del>one</del> <strong>none</strong>,
+ * not a schema
  * change, and it needs
- * a decision about what "left the project" means before any module can be asked. <strong>The four
+ * a decision about what "left the project" means before any module can be asked. <strong>The
+ * <del>four</del> five
  * that closed cost one class each and not one migration between them</strong>, which is what the
  * paragraph above predicted and is worth having on the record now that the prediction is spent.
+ * <strong>The fifth is the one the prediction was least likely to hold for</strong> — it was
+ * deferred four times, and it still cost one class, because what it was blocked on was a sentence
+ * rather than a schema.
  *
  * <p>Which is also why there is no factory here and no mutator anywhere: a signal that a human can
  * set is a signal that can be set to false while its cause is still true, and the self-healing
@@ -132,7 +146,8 @@ public class CaseHealth {
      * relationship counts, not only {@code VERIFIES}; the reason is at the statement.
      *
      * <p><strong>A zero here is a check that ran.</strong> See the class header for the state that
-     * made the other reading possible, and {@link #orphaned} for the one column it still describes.
+     * made the other reading possible — <del>and {@link #orphaned} for the one column it still
+     * describes</del>, which since §181 is no column at all.
      */
     @Column(name = "outdated_spec_changed", nullable = false)
     private boolean outdatedSpecChanged;
@@ -143,9 +158,10 @@ public class CaseHealth {
      * {@code review.subject_version_no} against {@code test_case.current_version_no}, which is the
      * comparison {@code ReviewPanel} has drawn its stale banner from since §76.
      *
-     * <p><strong>A zero here is now a check that ran</strong>, unlike {@link #outdatedSpecChanged},
-     * {@link #unlinked} and {@link #orphaned} — which is the distinction the class header says the
-     * read path cannot draw, drawn for one column at a time.
+     * <p><strong>A zero here is now a check that ran</strong>, <del>unlike
+     * {@link #outdatedSpecChanged}, {@link #unlinked} and {@link #orphaned}</del> — which is the
+     * distinction the class header says the read path cannot draw, drawn for one column at a time
+     * until §181 drew the last one.
      */
     @Column(name = "stale_approval", nullable = false)
     private boolean staleApproval;
@@ -157,8 +173,8 @@ public class CaseHealth {
      * {@code condition} rows they name — <em>content</em>, not {@code updated_at}, because a
      * timestamp comparison can never go false and this is an ERROR-severity signal.
      *
-     * <p><strong>A zero here is a check that ran</strong>, as on {@link #staleApproval}. Three of
-     * the ten are still the other thing.
+     * <p><strong>A zero here is a check that ran</strong>, as on {@link #staleApproval}. <del>Three
+     * of the ten are still the other thing.</del> None are, since §181.
      */
     @Column(name = "condition_drift", nullable = false)
     private boolean conditionDrift;
@@ -195,7 +211,27 @@ public class CaseHealth {
     @Column(name = "failing_repeatedly", nullable = false)
     private boolean failingRepeatedly;
 
-    /** No writer (§156) — outdatedSpecChanged's case; the cause is a case in no suite and no plan. */
+    /**
+     * <del>No writer (§156) — outdatedSpecChanged's case; the cause is a case in no suite and no
+     * plan.</del> <strong>→ §181 gave it one, and the struck sentence was wrong about the signal
+     * as well as about the writer.</strong> {@code OwnerStanding} derives it from the owner's
+     * standing in the company, which is what plan §6o has said since 2026-07-30 ("owner
+     * deactivated or left the project") and what {@code lib/labels.ts} has rendered words about for
+     * just as long.
+     *
+     * <p><strong>Worth keeping rather than deleting, because the wrong definition was the load-bearing
+     * one.</strong> "A case in no suite and no plan" is not merely a different reading — its first
+     * half is a predicate the schema forbids: {@code test_case.suite_id} is {@code NOT NULL} and has
+     * been since {@code V1}, so a case in no suite does not exist and never did. This is the only
+     * place in the repository that carried that reading, it sat at the column for five slices while
+     * four other signals were derived around it, and every one of those slices said the blocker was
+     * a <em>decision</em> — correctly, and about a decision this comment had quietly already taken,
+     * wrongly, in one clause. §162's lesson at a field: a sentence naming the wrong mechanism reads
+     * as an account of the thing and is the absence of one.
+     *
+     * <p><strong>A zero here is a check that ran</strong>, and this is the last member of which that
+     * became true — see the class header, whose whole first section is about the years it was not.
+     */
     @Column(name = "orphaned", nullable = false)
     private boolean orphaned;
 
@@ -227,12 +263,24 @@ public class CaseHealth {
      * before it a decision about what "incomplete" means for a case, which is
      * {@link #orphaned}'s shape rather than {@link #staleApproval}'s.
      *
+     * <p><strong>And since §181 it is the <em>last</em> column of that shape</strong>, {@link #orphaned}
+     * having had its decision taken ({@code OwnerStanding}). Worth knowing what that cost, because
+     * this comment has been read as "expensive" for five slices: one class, one statement, no
+     * migration, no contract change — and four slices of deferral, which is the part that was
+     * expensive. The decision here is narrower than that one was: "approved but missing steps,
+     * expected results, or classification" (plan §6o) names three terms, and all three are in this
+     * module.
+     *
      * <p>The direction matters because it is what a reader acts on. Stated as a contract problem,
      * closing this reads as a wire change — the expensive kind, two generated copies and every
      * client. It is not one.
      *
      * <p>§154 made this the reference entry in
-     * {@code ArchitectureRulesTest.READERLESS_BY_DECISION}, because the comment above was already
+     * <del>{@code ArchitectureRulesTest.READERLESS_BY_DECISION}</del>
+     * {@code ArchitectureRulesTest.WRITERLESS_BY_DECISION}, where it moved in §181 — the recompute
+     * test reads this column now, to prove the job that writes every other column on the row leaves
+     * this one alone, so it is no longer readerless and the rule said so. It is the same argument in
+     * the map next door, because the comment above was already
      * in the shape that rule asks of the other twelve: what the column is, why it is mapped
      * anyway, and why it stops there. It was the right shape carrying a false premise, copied
      * twelve times before anybody checked it; {@code ContractEnumTest} is the check that reads the

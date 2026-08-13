@@ -223,6 +223,15 @@ public class DashboardService {
      * edited <em>something else</em>: a shared condition in the library, on a screen with no case
      * on it. Nothing on this method changed for that one either, and it is now the second slice
      * running to say so, which is what "generic over {@code HealthSignal}" was supposed to buy.
+     *
+     * <p><strong>None of the ten, since §181</strong> — {@code OwnerStanding} derives
+     * {@code ORPHANED}, the last one. The escape hatch above is spent: on a project whose
+     * {@code computed_at} is set, an empty tile list now means what this panel's heading has always
+     * implied, that nothing was found. Five slices bought that and not one of them changed this
+     * method, which is the whole of what "generic over {@code HealthSignal}" was for.
+     *
+     * <p>It is also the first tile that can appear because somebody <em>left</em> — a change made on
+     * the Members screen by an administrator who was not thinking about test cases at all.
      */
     private static List<TileView> health(Map<HealthSignal, Long> counts) {
         List<TileView> tiles = new ArrayList<>();

@@ -173,7 +173,10 @@ class ContractEnumTest {
                     + "stay complete — which lib/labels.ts and StatusChip both act on. §161's "
                     + "finding is that the READERLESS_BY_DECISION entry had this backwards and "
                     + "named the contract as the blocker: closing it is a derivation plus a "
-                    + "product decision, and costs no contract change at all. "
+                    + "product decision, and costs no contract change at all. That entry is gone "
+                    + "as of §181 — the column acquired a reader, in a test that proves the "
+                    + "recompute leaves it alone — so the writerless map is where the argument "
+                    + "lives now, and this member is the LAST contract-only one of its family. "
                     + "(The column's own name is deliberately not spelled in this literal — see "
                     + "the note above this map.)",
             "PermissionQualifier.NONE",
