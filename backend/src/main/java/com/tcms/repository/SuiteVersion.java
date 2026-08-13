@@ -62,6 +62,21 @@ public class SuiteVersion {
     @Column(name = "content_hash", nullable = false, updatable = false)
     private String contentHash;
 
+    /**
+     * <strong>Never written.</strong> {@code V1} gives all four version tables this column and only
+     * {@code test_case_version} has an endpoint that takes one — {@code CaseUpdateRequest}'s
+     * {@code changeComment}, which the contract declares and describes as optional by design. A
+     * suite version is written at creation and nowhere else ({@link SuiteVersions}), so there is no
+     * save for an author to comment on.
+     *
+     * <p>It was assigned {@code null} in {@link #of} until §188, which is worth knowing rather than
+     * deleting quietly: an explicit no-op assignment is indistinguishable from a real one to
+     * {@code ArchitectureRulesTest.everyMappedColumnHasAWriter}, which reads bytecode, so two of the
+     * three unwritten {@code change_comment} columns were invisible to it and the third — the one
+     * whose factory simply omitted the field — was the only one reported. Stating the absence in
+     * the by-decision map is what an argument looks like; stating it in an assignment is what
+     * silence looks like.
+     */
     @Column(name = "change_comment", updatable = false)
     private String changeComment;
 
@@ -96,7 +111,6 @@ public class SuiteVersion {
         version.versionNo = versionNo;
         version.snapshot = snapshot;
         version.contentHash = contentHash;
-        version.changeComment = null;
         version.pinned = false;
         version.createdAt = now;
         version.createdBy = authorId;

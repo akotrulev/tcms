@@ -79,6 +79,14 @@ public class TestPlanVersion {
     @Column(name = "content_hash", nullable = false, updatable = false)
     private String contentHash;
 
+    /**
+     * <strong>Never written</strong>, for {@code repository.SuiteVersion}'s reason and with its
+     * history: {@code V1} gives all four version tables the column, only {@code test_case_version}
+     * has an endpoint that takes one, and this field was assigned {@code null} in {@link #of} until
+     * §188 — an explicit no-op that read as a writer to the rule whose subject is unwritten columns.
+     * The argument is in {@code ArchitectureRulesTest.WRITERLESS_BY_DECISION}; the exit from it is a
+     * contract field on the plan save, which nothing has asked for.
+     */
     @Column(name = "change_comment", updatable = false)
     private String changeComment;
 
@@ -113,7 +121,6 @@ public class TestPlanVersion {
         version.versionNo = versionNo;
         version.snapshot = snapshot;
         version.contentHash = contentHash;
-        version.changeComment = null;
         version.pinned = false;
         version.createdAt = now;
         version.createdBy = authorId;

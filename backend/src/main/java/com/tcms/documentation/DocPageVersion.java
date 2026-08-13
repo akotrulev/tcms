@@ -50,6 +50,17 @@ public class DocPageVersion {
     @Column(name = "content_hash", nullable = false, updatable = false)
     private String contentHash;
 
+    /**
+     * <strong>Never written</strong> — and the only one of the three that has always looked that
+     * way. {@code repository.SuiteVersion} and {@code execution.TestPlanVersion} carry the same
+     * unwritten column and both assigned it {@code null} in their factories, which is why §188 found
+     * this field alone: {@link #of} omits it, and omission is the only spelling the writer rule can
+     * see. All three are in {@code ArchitectureRulesTest.WRITERLESS_BY_DECISION} now.
+     *
+     * <p>The exit is a contract field. {@code test_case_version} is the one version table whose save
+     * takes a comment, and a page save that took one would be a change to {@code DocPageUpdateRequest}
+     * rather than a wiring fix here.
+     */
     @Column(name = "change_comment", updatable = false)
     private String changeComment;
 

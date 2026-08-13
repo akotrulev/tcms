@@ -172,9 +172,16 @@ class ArchitectureRulesTest {
     /** Any declared name followed by a parameter list — Spring Data derives the query from it. */
     private static final Pattern METHOD_NAME = Pattern.compile("\\b(\\w+)\\s*\\(");
 
-    /** The migrations and the test's init script — SQL that writes without any Java in between. */
-    private static final List<Path> SQL_ROOTS = List.of(
-            Path.of("src", "main", "resources"), Path.of("src", "test", "resources"));
+    /**
+     * The migrations — SQL that writes without any Java in between, and <strong>{@code src/main}
+     * only</strong>.
+     *
+     * <p>It was {@code src/main/resources} <em>and</em> {@code src/test/resources} until §188, for
+     * the same reason the Java corpus reached into {@code src/test}, and it came out for the same
+     * reason: the harness's init script and its fixtures are not the product. See
+     * {@link #everyMappedColumnHasAWriter}'s corpus note.
+     */
+    private static final Path MAIN_RESOURCES = Path.of("src", "main", "resources");
 
     /** {@link #COMMENT}'s SQL spelling. V1's comments carry the why, and prose is not a write. */
     private static final Pattern SQL_COMMENT = Pattern.compile("--[^\\n]*");
@@ -883,7 +890,21 @@ class ArchitectureRulesTest {
      *
      * <p><del>Fourteen</del> <del>thirteen since §157</del> <del>twelve since §158</del> <del>eleven since §159</del>
      * <del>ten since §160</del> <del>eight since §178</del> <del>seven since §181</del>
-     * <strong>six since §182</strong>.
+     * <del>six since §182</del> <strong>NINE since §188</strong> — and the first time this count has
+     * gone <em>up</em>, which is what a corpus narrowing looks like from inside a map that had only
+     * ever emptied. The three arrivals are one column on three tables ({@code change_comment} on
+     * {@code doc_page_version}, {@code suite_version} and {@code test_plan_version}), and only one
+     * of them arrived because the corpus moved: the other two were being hidden by an explicit
+     * {@code = null} in their factories, which is an assignment and therefore a writer to a rule
+     * that reads bytecode. <strong>A no-op write is the one spelling that defeats this rule</strong>
+     * — the mirror of the fixture problem below, arrived at from inside {@code src/main}, where no
+     * corpus change can reach it. Both no-ops are deleted.
+     *
+     * <p><strong>The corpus is {@code src/main} since §188</strong> and {@code @Version} fields are
+     * skipped; both are argued in the rule. What the narrowing cost is one entry
+     * ({@code DocPageVersion.changeComment}) and what it bought is that a column whose only writer
+     * is a test fixture is now a finding here, which is the question §187 could only ask one
+     * granularity up.
      * <strong>Eight</strong> members have now left by being <em>written</em>
      * rather than deleted — {@code CaseHealth.staleApproval} (§157), {@code CaseHealth.conditionDrift}
      * (§158), {@code Project.archivedAt} (§159), {@code IngestionJob.rawStorageKey} (§160),
@@ -917,7 +938,8 @@ class ArchitectureRulesTest {
      * argued for the other half's absence, so writing one alone would have been the two-states-at-once
      * shape {@code IngestionJob}'s own field javadoc warned about.
      *
-     * <p><del>Five of the eight</del> <del>Four of the seven</del> Four of the six are already in
+     * <p><del>Five of the eight</del> <del>Four of the seven</del> <del>Four of the six</del> Four
+     * of the nine are already in
      * {@link #READERLESS_BY_DECISION} — the
      * four §154 called
      * "writerless as well". <del>Plus {@code CaseHealth.incomplete},
@@ -960,7 +982,21 @@ class ArchitectureRulesTest {
                             + "IngestionJob's header since §117: the idempotency key is consumed "
                             + "by whichever attempt writes a row, so a failed row would make the "
                             + "corrected retry replay the failure. A report that cannot be parsed "
-                            + "leaves no row at all"));
+                            + "leaves no row at all"),
+            Map.entry("DocPageVersion.changeComment",
+                    "V1 gives all four version tables a change_comment and only test_case_version "
+                            + "has an endpoint that takes one. The exit is a contract field on the "
+                            + "page save, not a wiring fix — argued at the field"),
+            Map.entry("SuiteVersion.changeComment",
+                    "DocPageVersion.changeComment's argument exactly, and the one that was HIDDEN: "
+                            + "SuiteVersion.of assigned it null, which this rule reads as a writer, "
+                            + "so two of the three identical columns were invisible while the third "
+                            + "— whose factory merely omitted the field — was reported alone. The "
+                            + "no-op assignment is gone (§188); a suite version is written at "
+                            + "creation and nowhere else, so there is no save to comment on"),
+            Map.entry("TestPlanVersion.changeComment",
+                    "the third of the three, and the second that was hidden by an explicit null. "
+                            + "Argued at the field; same exit as the other two"));
 
 
     @Test
@@ -972,9 +1008,9 @@ class ArchitectureRulesTest {
         // question. §116's phrasing — "three V1 tables had never had a writer" — is this rule at
         // table granularity, answered by a person who happened to be looking.
         //
-        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. Four of these six are in
+        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. Four of these nine are in
         // READERLESS_BY_DECISION too, which is the harmless half: a column nobody fills and nobody
-        // consults costs a javadoc describing a state the database has never been in. The TWO
+        // consults costs a javadoc describing a state the database has never been in. The FIVE
         // this rule sees alone are the expensive half, and they are invisible to §154 by
         // construction — a column with a reader passes that rule no matter what fills it. Something
         // downstream is drawing a conclusion from a value nothing produces: five HealthSignal
@@ -1012,6 +1048,27 @@ class ArchitectureRulesTest {
         // of them — a migration that backfills a column is a writer of it (V44 is the worked
         // example), and one that only creates it is not, because CREATE TABLE is neither verb.
         //
+        // THE CORPUS IS src/main, AND IT WAS src/main + src/test UNTIL §188. §153's rule, which
+        // this file has applied at three granularities since: a test caller is a consumer for a
+        // READ seam and never for a WRITE one. A fixture that INSERTs a row proves the column can
+        // hold a value, which nobody doubted; it says nothing about the product ever producing one.
+        // §187 measured the cost of the old corpus at table granularity — case_condition_optout had
+        // an entity, a repository, a filter and four files of prose, two fixtures that INSERTed
+        // into it, no way for any request to create a row, and thirty-one green sections of this
+        // rule — and answered it with everyEntityIsWritableByTheProduct rather than here, because
+        // narrowing the corpus took the population from 6 to 22 and FIFTEEN of the sixteen new
+        // members were lockVersion. That is the next paragraph, and it is why both could be done at
+        // once in the end: the noise had one cause and the cause is not a finding.
+        //
+        // @Version IS SKIPPED, and it is the one exemption in either rule that is about the
+        // OBSERVER rather than about a column. Hibernate assigns the version field itself, by
+        // reflection, on every flush — so the write exists, is essential, and is in no source file
+        // and no bytecode this rule can reach. Reporting fifteen of them would not be a finding
+        // list with noise in it; it would be a rule asserting something untrue. The mirror rule
+        // needs no such carve-out and deliberately has none: lock_version really is READ, by the
+        // queries that name it, and everyLockVersionColumnIsAVersion is the rule that asks the
+        // question @Version actually raises.
+        //
         // THE FIRST DRAFT OVER-MATCHED, WHICH IN THIS DIRECTION HIDES FINDINGS. §154's corpus joins
         // a file's literals and searches the join, which is right for a word-boundary read; here a
         // statement runs to the next semicolon, and a fixture's "UPDATE key_sequence SET
@@ -1030,27 +1087,21 @@ class ArchitectureRulesTest {
         // Project.archivedAt was on this list until §159: it had a mutator, a good one, and the
         // only caller it had was a test fixture seeding a state no request could produce.
         Map<Path, String> writeText = new LinkedHashMap<>();
-        for (Path root : SOURCE_ROOTS) {
-            try (Stream<Path> sources = Files.walk(root)) {
-                for (Path file : sources.filter(p -> p.toString().endsWith(".java"))
-                        .filter(p -> !p.getFileName().toString().equals(OWN_FILE))
-                        .toList()) {
-                    writeText.put(file, writesInLiterals(
-                            COMMENT.matcher(Files.readString(file)).replaceAll(" ")));
-                }
-            } catch (IOException unreadable) {
-                throw new AssertionError("the sources are this rule's corpus", unreadable);
+        try (Stream<Path> sources = Files.walk(MAIN_SOURCE)) {
+            for (Path file : sources.filter(p -> p.toString().endsWith(".java")).toList()) {
+                writeText.put(file, writesInLiterals(
+                        COMMENT.matcher(Files.readString(file)).replaceAll(" ")));
             }
+        } catch (IOException unreadable) {
+            throw new AssertionError("src/main is this rule's corpus", unreadable);
         }
-        for (Path root : SQL_ROOTS) {
-            try (Stream<Path> sources = Files.walk(root)) {
-                for (Path file : sources.filter(p -> p.toString().endsWith(".sql")).toList()) {
-                    writeText.put(file, writesIn(
-                            SQL_COMMENT.matcher(Files.readString(file)).replaceAll(" ")));
-                }
-            } catch (IOException unreadable) {
-                throw new AssertionError("the migrations are this rule's corpus too", unreadable);
+        try (Stream<Path> sources = Files.walk(MAIN_RESOURCES)) {
+            for (Path file : sources.filter(p -> p.toString().endsWith(".sql")).toList()) {
+                writeText.put(file, writesIn(
+                        SQL_COMMENT.matcher(Files.readString(file)).replaceAll(" ")));
             }
+        } catch (IOException unreadable) {
+            throw new AssertionError("the migrations are this rule's corpus too", unreadable);
         }
 
         assertThat(writeText)
@@ -1066,7 +1117,9 @@ class ArchitectureRulesTest {
                 continue;
             }
             for (JavaField field : type.getFields()) {
-                if (field.getModifiers().contains(JavaModifier.STATIC)) {
+                // Hibernate writes it and no source file does — see the corpus note above.
+                if (field.getModifiers().contains(JavaModifier.STATIC)
+                        || field.isAnnotatedWith(Version.class)) {
                     continue;
                 }
                 examined++;
@@ -1126,12 +1179,20 @@ class ArchitectureRulesTest {
     @Test
     @DisplayName("every entity's table has a writer IN THE PRODUCT, not only in a fixture")
     void everyEntityIsWritableByTheProduct() {
-        // §116'S QUESTION, AT THE GRANULARITY §116 ASKED IT AT, AND THE ONE ITS SUCCESSOR CANNOT
-        // ANSWER. everyMappedColumnHasAWriter reads `src/test` as well as `src/main`, deliberately
-        // — a great deal of this suite's ground truth is raw SQL, and excluding it would report
-        // fifteen @Version columns as writerless because Hibernate's assignment is not in any
-        // source file. The cost of that inclusion is exactly this: A TABLE WHOSE ONLY WRITER IS A
-        // FIXTURE READS AS WRITTEN.
+        // §116'S QUESTION, AT THE GRANULARITY §116 ASKED IT AT. ~~And the one its successor cannot
+        // answer~~ — that was true for exactly one section. everyMappedColumnHasAWriter read
+        // `src/test` as well as `src/main` when this rule was written, so A TABLE WHOSE ONLY WRITER
+        // IS A FIXTURE READ AS WRITTEN there, and this rule existed to ask the question the column
+        // rule structurally could not. §188 narrowed that corpus to `src/main` and skipped @Version
+        // — the two changes the paragraph below said were needed — so the column rule now answers
+        // it too, per column rather than per table.
+        //
+        // THIS RULE STAYS, AND NOT OUT OF SENTIMENT. The two disagree in one direction and it is
+        // the direction that matters: an entity whose columns are ALL individually excused would
+        // pass the column rule entry by entry while remaining a table the product cannot put a row
+        // in, and case_condition_optout is precisely that shape — every one of its three columns
+        // has an obvious argument, and the finding was never about any of them. One bit per table
+        // is a different question from one bit per column, and §116 asked the table one.
         //
         // `case_condition_optout` is the measured instance and the reason this rule is here. It
         // shipped in V1 with an entity, an id class, a repository, a filter in CaseConditions and
@@ -1141,14 +1202,15 @@ class ArchitectureRulesTest {
         // consumer for a READ seam and never for a WRITE one, and a table is the largest write
         // seam there is.
         //
-        // THE NARROW SCOPE IS THE POINT. Restricting the column rule's own corpus to src/main was
-        // measured rather than proposed (§187): the writerless population goes 6 → 22, of which
-        // FIFTEEN are lockVersion — @Version, written by Hibernate, definitionally not a finding —
-        // and exactly one is real (DocPageVersion.changeComment). The reader rule's goes 11 → 18,
-        // and all seven of those ARE real, TestRun.releaseSortKey and TestExecution.releaseSortKey
+        // THE NARROW SCOPE IS THE POINT. Restricting the column rules' own corpus to src/main was
+        // measured rather than proposed (§187): the writerless population went 6 → 22, of which
+        // FIFTEEN were lockVersion — @Version, written by Hibernate, definitionally not a finding —
+        // and exactly one was real (DocPageVersion.changeComment). The reader rule's went 11 → 18,
+        // and all seven of those WERE real, TestRun.releaseSortKey and TestExecution.releaseSortKey
         // among them: §151 built that sort key and nothing in the product has ever read it back.
-        // Eight genuine findings needing eight decisions is a slice, not a tail, and it is recorded
-        // as the next one rather than laundered through a by-decision map here.
+        // Eight genuine findings needing eight decisions was a slice and not a tail, so §187
+        // recorded the numbers instead of laundering them through a by-decision map here, and §188
+        // took it. Both corpora are src/main now and all eight are answered at their fields.
         //
         // At table granularity none of that arises. An entity is written if ANY of its fields is
         // assigned in src/main or its table is named by an INSERT there, so a @Version column
