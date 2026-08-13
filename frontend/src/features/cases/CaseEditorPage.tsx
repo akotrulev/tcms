@@ -372,10 +372,27 @@ function CaseEditorForm({
   */
   const [createdConditions, setCreatedConditions] = useState<Condition[]>([]);
 
-  // The folder's conditions, rendered read-only beside the case's own. Filtered here rather than in
-  // the panel so the panel takes exactly what it renders and nothing that needs interpreting.
-  const inheritedPre = (existing?.preconditions ?? []).filter((ref) => ref.inherited);
-  const inheritedPost = (existing?.postconditions ?? []).filter((ref) => ref.inherited);
+  /*
+    The folder's conditions, rendered read-only beside the case's own. Filtered here rather than in
+    the panel so the panel takes exactly what it renders and nothing that needs interpreting.
+
+    DECLINED ROWS ARE CONCATENATED ON (§187), and the order is deliberate. The server serves the two
+    lists separately because `preconditions` is the procedure a run pins, so the union has to be made
+    somewhere — and it is made HERE, once per response, rather than inside the panel as the toggle is
+    used. Recomputing it on every toggle would reorder the list under the author's cursor: a row they
+    just switched off would jump to the end of the group, which reads as the control having deleted
+    it. Declined rows sit last because their §6f position is resolved over the suite chain
+    server-side, and interleaving them would be the second implementation of that order the shared
+    layer exists to prevent.
+  */
+  const inheritedPre = [
+    ...(existing?.preconditions ?? []).filter((ref) => ref.inherited),
+    ...(existing?.declinedPreconditions ?? []),
+  ];
+  const inheritedPost = [
+    ...(existing?.postconditions ?? []).filter((ref) => ref.inherited),
+    ...(existing?.declinedPostconditions ?? []),
+  ];
 
   const createCase = useCreateCase(projectId);
   const updateCase = useUpdateCase(projectId, existing?.id ?? '');
@@ -438,6 +455,14 @@ function CaseEditorForm({
       // one: nothing can render it.
       preconditionIds: ownConditionIds(existing?.preconditions),
       postconditionIds: ownConditionIds(existing?.postconditions),
+      // The attachment ids the server says this case declines (§187) — BOTH kinds in one array,
+      // because an attachment id already determines its kind. Seeded from the two dedicated
+      // response fields rather than from `preconditions`, which by construction never contains a
+      // declined row: that is the whole reason those fields exist.
+      declinedConditionIds: [
+        ...(existing?.declinedPreconditions ?? []).map((ref) => ref.id),
+        ...(existing?.declinedPostconditions ?? []).map((ref) => ref.id),
+      ],
       // Served on TestCaseSummary and therefore on TestCase — the editor could not author them
       // until §96 and the update endpoint refused them, so this is the field's first binding.
       tags: existing?.tags ?? [],
@@ -1300,42 +1325,68 @@ function CaseEditorForm({
               step list would put the setup after the procedure that assumes it.
             */}
             <Panel title="Conditions" testId={`${TestIdPrefix}.Conditions`}>
-              <Stack sx={{ gap: 3 }}>
-                <Controller
-                  control={control}
-                  name="preconditionIds"
-                  render={({ field }) => (
-                    <ConditionsPanel
-                      kind="PRE"
-                      projectId={projectId}
-                      testId={`${TestIdPrefix}.Preconditions`}
-                      value={field.value}
-                      inherited={inheritedPre}
-                      onChange={field.onChange}
-                      known={createdConditions}
-                      onCreate={() => setConditionDialog({ kind: 'PRE', condition: null })}
-                      onEdit={(condition) => setConditionDialog({ kind: 'PRE', condition })}
-                    />
-                  )}
-                />
-                <Controller
-                  control={control}
-                  name="postconditionIds"
-                  render={({ field }) => (
-                    <ConditionsPanel
-                      kind="POST"
-                      projectId={projectId}
-                      testId={`${TestIdPrefix}.Postconditions`}
-                      value={field.value}
-                      inherited={inheritedPost}
-                      onChange={field.onChange}
-                      known={createdConditions}
-                      onCreate={() => setConditionDialog({ kind: 'POST', condition: null })}
-                      onEdit={(condition) => setConditionDialog({ kind: 'POST', condition })}
-                    />
-                  )}
-                />
-              </Stack>
+              {/*
+                The decline toggle is bound through its OWN Controller wrapping both panels, rather
+                than through each panel's. `declinedConditionIds` is one array carrying both kinds
+                (an attachment id determines its kind), so two Controllers over one field would be
+                two independent copies of it — and the last panel to fire would overwrite the other
+                panel's toggles with a value it read before they happened.
+              */}
+              <Controller
+                control={control}
+                name="declinedConditionIds"
+                render={({ field: declines }) => {
+                  const toggle = (attachmentId: string, next: boolean) =>
+                    declines.onChange(
+                      next
+                        ? [...declines.value, attachmentId]
+                        : declines.value.filter((id: string) => id !== attachmentId),
+                    );
+
+                  return (
+                    <Stack sx={{ gap: 3 }}>
+                      <Controller
+                        control={control}
+                        name="preconditionIds"
+                        render={({ field }) => (
+                          <ConditionsPanel
+                            kind="PRE"
+                            projectId={projectId}
+                            testId={`${TestIdPrefix}.Preconditions`}
+                            value={field.value}
+                            inherited={inheritedPre}
+                            declined={declines.value}
+                            onToggleDecline={toggle}
+                            onChange={field.onChange}
+                            known={createdConditions}
+                            onCreate={() => setConditionDialog({ kind: 'PRE', condition: null })}
+                            onEdit={(condition) => setConditionDialog({ kind: 'PRE', condition })}
+                          />
+                        )}
+                      />
+                      <Controller
+                        control={control}
+                        name="postconditionIds"
+                        render={({ field }) => (
+                          <ConditionsPanel
+                            kind="POST"
+                            projectId={projectId}
+                            testId={`${TestIdPrefix}.Postconditions`}
+                            value={field.value}
+                            inherited={inheritedPost}
+                            declined={declines.value}
+                            onToggleDecline={toggle}
+                            onChange={field.onChange}
+                            known={createdConditions}
+                            onCreate={() => setConditionDialog({ kind: 'POST', condition: null })}
+                            onEdit={(condition) => setConditionDialog({ kind: 'POST', condition })}
+                          />
+                        )}
+                      />
+                    </Stack>
+                  );
+                }}
+              />
             </Panel>
 
             <Panel title="Automation" testId={`${TestIdPrefix}.Automation`}>

@@ -100,7 +100,11 @@ function caseBody(createdBy: string | null): TestCase {
  *   `heldPermissions` takes only the exceptions, so `'ALL'` is not a value it accepts. That is the
  *   seeded catalogue's own rule and it is enforced by the type rather than by a convention.
  */
-function mockReads(createdBy: string | null, qualifier?: 'OWN') {
+function mockReads(
+  createdBy: string | null,
+  qualifier?: 'OWN',
+  overrides: Partial<TestCase> = {},
+) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) {
       return heldPermissions(
@@ -108,7 +112,7 @@ function mockReads(createdBy: string | null, qualifier?: 'OWN') {
         qualifier ? { 'case:delete': qualifier } : {},
       )
     }
-    if (path.includes('/cases/')) return caseBody(createdBy)
+    if (path.includes('/cases/')) return { ...caseBody(createdBy), ...overrides }
     if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
     return []
   }) as never)
@@ -247,5 +251,59 @@ describe('CaseDetailPage — the attachment panel is gated on case:edit', () => 
     await waitFor(() =>
       expect(screen.getByTestId('CaseDetail.Attachments.Empty')).toBeInTheDocument(),
     )
+  })
+})
+
+/**
+ * The declined inherited conditions (§187).
+ *
+ * The failure this catches is one the page had by construction until the field existed: a rule the
+ * folder sets and this case has turned off rendered **identically to a rule nobody ever set**,
+ * because the row was simply absent from `preconditions`. A reader deciding whether to log in
+ * before running the case could not tell "somebody decided this case does not need it" from
+ * "nobody has thought about it", and the two lead to opposite actions.
+ */
+describe('CaseDetailPage — a rule this case turned off', () => {
+  const declined = [
+    {
+      id: 'attach-1',
+      position: 0,
+      conditionId: 'cond-1',
+      title: 'Log in as standard user',
+      body: ['Open the application'],
+      inline: false,
+      inherited: true,
+      inheritedFrom: 'Payments',
+    },
+  ]
+
+  it('renders it struck through, and NAMES the folder it still applies to', async () => {
+    // The folder is the actionable half. "Declined" alone tells a reader a decision was made and
+    // not where the rule still holds — which is the same reason the inherited chip is named rather
+    // than merely marked.
+    mockReads(CALLER, undefined, { declinedPreconditions: declined } as Partial<TestCase>)
+    renderPage()
+
+    const section = await screen.findByTestId('CaseDetail.Preconditions.Declined')
+    expect(section).toHaveTextContent('Log in as standard user')
+    expect(section).toHaveTextContent(/still applies to every other case in Payments/i)
+  })
+
+  it('keeps it OUT of the procedure — the checklist is what a tester performs', async () => {
+    // Not a struck-through line inside the list: that is a step a tester has to decide about, and
+    // it is the same argument the server makes for serving two lists instead of one flagged one.
+    mockReads(CALLER, undefined, { declinedPreconditions: declined } as Partial<TestCase>)
+    renderPage()
+
+    await screen.findByTestId('CaseDetail.Preconditions.Declined')
+    expect(screen.queryByTestId('CaseDetail.Preconditions.Item')).not.toBeInTheDocument()
+  })
+
+  it('shows nothing at all when the case declines nothing — the ordinary state', async () => {
+    mockReads(CALLER)
+    renderPage()
+
+    await screen.findByTestId('CaseDetail.Preconditions')
+    expect(screen.queryByTestId('CaseDetail.Preconditions.Declined')).not.toBeInTheDocument()
   })
 })

@@ -50,6 +50,9 @@ const filled: CaseInput = {
   classificationValueIds: ['cv-1', 'cv-2'],
   preconditionIds: ['cond-1', 'cond-2'],
   postconditionIds: ['cond-3'],
+  // Attachment ids, both kinds in one array — §187. Populated here for this fixture's stated
+  // reason: a field dropped by either mapping needs somewhere to show up.
+  declinedConditionIds: ['attach-9'],
   tags: ['smoke', 'regression'],
   changeComment: 'Corrected the amount',
 }
@@ -125,6 +128,7 @@ describe('toCasePayload', () => {
       classificationValueIds: [],
       preconditionIds: [],
       postconditionIds: [],
+      declinedConditionIds: [],
     })
 
     expect(payload.tags).toEqual([])

@@ -247,6 +247,7 @@ export function CaseDetailPage() {
                 <ConditionPanel
                   title="Preconditions"
                   conditions={data.preconditions ?? []}
+                  declined={data.declinedPreconditions ?? []}
                   testId="CaseDetail.Preconditions"
                   emptyBody="No preconditions. The case runs from a clean session."
                 />
@@ -256,6 +257,7 @@ export function CaseDetailPage() {
                 <ConditionPanel
                   title="Postconditions"
                   conditions={data.postconditions ?? []}
+                  declined={data.declinedPostconditions ?? []}
                   testId="CaseDetail.Postconditions"
                   emptyBody="No postconditions. Nothing needs cleaning up after this case."
                 />
@@ -505,11 +507,22 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
 function ConditionPanel({
   title,
   conditions,
+  declined,
   testId,
   emptyBody,
 }: {
   title: string;
   conditions: CaseConditionRef[];
+  /**
+   * The folder's rules this case has turned off (§6f's opt-out, served since §187).
+   *
+   * Rendered, and below the procedure rather than inside it. A reader looking at a case filed under
+   * *Billing* has to be able to tell "this case does not require being logged in" from "nobody ever
+   * decided" — and before this field existed the two rendered identically, because the row simply
+   * was not there. It is deliberately NOT part of the list above: that list is the procedure, and a
+   * struck-through line in the middle of a checklist is a step a tester has to decide about.
+   */
+  declined: CaseConditionRef[];
   testId: string;
   emptyBody: string;
 }) {
@@ -579,6 +592,37 @@ function ConditionPanel({
                 </Stack>
               </Box>
             ))}
+        </Stack>
+      )}
+
+      {declined.length > 0 && (
+        <Stack sx={{ gap: 0.5, mt: 2 }} data-testid={`${testId}.Declined`}>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            Turned off for this case
+          </Typography>
+          {declined.map((condition) => (
+            <Stack
+              key={condition.id}
+              direction="row"
+              data-testid={`${testId}.DeclinedItem`}
+              sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
+            >
+              <Typography
+                variant="body2"
+                sx={{ textDecoration: 'line-through', color: 'text.disabled' }}
+              >
+                {condition.title}
+              </Typography>
+              {/* Named for the same reason the inherited chip above is: "declined" alone leaves the
+                  reader without the one fact that makes it actionable — which folder set the rule,
+                  and therefore where it still applies. */}
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                {condition.inheritedFrom
+                  ? `still applies to every other case in ${condition.inheritedFrom}`
+                  : 'still applies to every other case in the folder'}
+              </Typography>
+            </Stack>
+          ))}
         </Stack>
       )}
     </Panel>

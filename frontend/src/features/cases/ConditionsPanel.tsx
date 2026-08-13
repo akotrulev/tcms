@@ -16,12 +16,25 @@
  * states the blast radius first (`ConditionEditDialog`), and why the panel reads `usageCount` and
  * `suiteUsageCount` off the entry rather than computing anything.
  *
- * ## Inherited rows are shown and NOT editable here
+ * ## Inherited rows are shown and NOT editable here — but they can be DECLINED (§187)
  *
  * A folder's conditions reach every case beneath it. They are rendered — an author needs to know
  * the case already has "Log in as standard user" before attaching a second copy — but they carry no
  * remove, no reorder and no drag handle, because they are not this case's to move. The form binds
  * only the case's own ids; `ownConditionIds` in the editor is where inherited rows are dropped.
+ *
+ * What they do carry is §6f's opt-out toggle. A standing rule always has the one case it is wrong
+ * for — the case that tests the login screen cannot require being logged in — and without the
+ * toggle the author's only ways out are moving the case out of the folder it belongs in or deleting
+ * the rule for two hundred siblings. Declining writes an attachment id into `declinedConditionIds`;
+ * it changes nothing about the folder.
+ *
+ * **A declined row stays in this list, greyed rather than removed.** It is the only control that
+ * can put the rule back, so removing it on decline would make the action one-way from this screen —
+ * which is exactly the state the server was in before §187, one layer down. The declined rows the
+ * server serves separately are appended at the end of the group rather than interleaved: their
+ * §6f order is resolved server-side over the suite chain and re-deriving it here would be the
+ * second implementation `CaseDetailPage` refuses to write for the same list.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
@@ -52,8 +65,10 @@ import {
   Autocomplete,
   Box,
   Chip,
+  FormControlLabel,
   IconButton,
   Stack,
+  Switch,
   TextField,
   Tooltip,
   Typography,
@@ -111,6 +126,8 @@ export function ConditionsPanel({
   testId,
   value,
   inherited,
+  declined = [],
+  onToggleDecline,
   onChange,
   onCreate,
   onEdit,
@@ -122,8 +139,22 @@ export function ConditionsPanel({
   testId: string;
   /** The case's OWN attached ids, in order. */
   value: string[];
-  /** The folder's conditions, shown read-only. */
+  /**
+   * Every attachment the folder reaches this case with, declined or not — the live ones in the
+   * server's §6f order, then the declined ones. Computed once in the editor from two response
+   * fields and NOT re-derived here as the toggle is used, so a row never moves when it greys out.
+   */
   inherited: CaseConditionRef[];
+  /**
+   * Which of those the form currently declines — attachment ids, form state and not the server's.
+   *
+   * Optional, and the default is the honest one rather than a convenience: `SuiteDialogs` renders
+   * this panel for a SUITE's own conditions, which inherit from nothing at all (`inherited` is
+   * `[]` there), so a suite has no attachment it could decline and no toggle to hand it. Requiring
+   * the props would make that caller pass an empty array and a function that can never be called.
+   */
+  declined?: readonly string[];
+  onToggleDecline?: (attachmentId: string, next: boolean) => void;
   onChange: (next: string[]) => void;
   onCreate: () => void;
   onEdit: (condition: Condition) => void;
@@ -209,23 +240,78 @@ export function ConditionsPanel({
 
       {inherited.length > 0 && (
         <Stack spacing={0.5} data-testid={`${testId}.Inherited`}>
-          {inherited.map((ref) => (
-            <Box
-              key={ref.id}
-              sx={{ p: 1, border: '1px dashed', borderColor: 'divider', borderRadius: 1 }}
-            >
-              <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
-                <Typography variant="body2">{ref.title}</Typography>
-                {/* Named, not just marked: "inherited" alone leaves the author hunting for which
-                    folder to change. */}
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={ref.inheritedFrom ? `From ${ref.inheritedFrom}` : 'Inherited'}
-                />
-              </Stack>
-            </Box>
-          ))}
+          {inherited.map((ref) => {
+            const isDeclined = declined.includes(ref.id);
+            return (
+              <Box
+                key={ref.id}
+                data-testid={`${testId}.Inherited.Item`}
+                data-declined={isDeclined ? 'true' : 'false'}
+                sx={{ p: 1, border: '1px dashed', borderColor: 'divider', borderRadius: 1 }}
+              >
+                <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
+                  <Typography
+                    variant="body2"
+                    sx={
+                      isDeclined
+                        ? { textDecoration: 'line-through', color: 'text.disabled' }
+                        : undefined
+                    }
+                  >
+                    {ref.title}
+                  </Typography>
+                  {/* Named, not just marked: "inherited" alone leaves the author hunting for which
+                      folder to change. */}
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={ref.inheritedFrom ? `From ${ref.inheritedFrom}` : 'Inherited'}
+                  />
+
+                  {/*
+                    §6f's opt-out, and it is a switch rather than a Remove button on purpose: this
+                    row is not the case's to remove, and a control spelled "remove" beside a
+                    "From Billing" chip is one an author reasonably reads as deleting the folder's
+                    rule for all two hundred siblings.
+                  */}
+                  <Tooltip
+                    title={
+                      isDeclined
+                        ? `This case ignores the ${ref.inheritedFrom ?? 'folder'} rule. `
+                          + 'Switch it back on to apply it again.'
+                        : `Turn this off for THIS CASE only. The ${ref.inheritedFrom ?? 'folder'} `
+                          + 'rule keeps applying to every other case beneath it.'
+                    }
+                  >
+                    <FormControlLabel
+                      sx={{ ml: 'auto', mr: 0 }}
+                      data-testid={`${testId}.DeclineToggle`}
+                      control={
+                        <Switch
+                          size="small"
+                          checked={!isDeclined}
+                          disabled={disabled}
+                          // The accessible name IS the handle a test uses — `getByRole('switch',
+                          // { name })` — because MUI v7's Switch input slot types reject an
+                          // arbitrary data attribute, and a label the screen reader reads is the
+                          // better selector anyway.
+                          slotProps={{
+                            input: { 'aria-label': `Applies to this case: ${ref.title}` },
+                          }}
+                          onChange={(event) => onToggleDecline?.(ref.id, !event.target.checked)}
+                        />
+                      }
+                      label={
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                          {isDeclined ? 'Not applicable' : 'Applies'}
+                        </Typography>
+                      }
+                    />
+                  </Tooltip>
+                </Stack>
+              </Box>
+            );
+          })}
         </Stack>
       )}
 

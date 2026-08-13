@@ -140,6 +140,23 @@ export const CaseSchema = z
     preconditionIds: z.array(z.string()),
     postconditionIds: z.array(z.string()),
     /**
+     * The INHERITED attachments this case declines (§187) — §6f's opt-out toggle.
+     *
+     * **Attachment ids, not condition ids**, and the distinction is the feature: "Log in" attached
+     * at *Billing* and again at *Refunds* is two attachments, and turning off the first must leave
+     * the second in force. The server refuses a library `conditionId` here with a field error for
+     * that reason, so sending the wrong one fails loudly rather than declining more than the author
+     * asked.
+     *
+     * **One array for both kinds**, unlike the two above, because an attachment id already
+     * determines its kind — splitting it would let a value be filed under the wrong one. The two
+     * panels write into the same array; each only ever touches ids it renders.
+     *
+     * **A set, not a procedure.** Order carries no meaning here (the server sorts it before
+     * hashing), which is the other half of why it is not modelled like `preconditionIds`.
+     */
+    declinedConditionIds: z.array(z.string()),
+    /**
      * The case's organisational tags (§96) — free text, a set, and the thing a suite's tag rules
      * resolve against.
      *
@@ -283,6 +300,10 @@ export function toCasePayload(data: CaseInput): Record<string, unknown> {
     tags: [...new Set(data.tags.map((tag) => tag.trim()).filter((tag) => tag !== ''))],
     preconditions: data.preconditionIds.map((conditionId) => ({ conditionId })),
     postconditions: data.postconditionIds.map((conditionId) => ({ conditionId })),
+    // Sent on every save, including when it is empty. Absent means "leave the declines alone" and
+    // this editor renders every one of them, so absent would be a lie about a screen the author
+    // can see — the same reason every other field here is sent whether or not it changed.
+    declinedConditionIds: [...new Set(data.declinedConditionIds)],
     changeComment: data.changeComment || null,
   };
 }
@@ -384,6 +405,9 @@ export function fromCasePayload(content: unknown): CaseInput {
     classificationValueIds: strArray(raw.classificationValueIds),
     preconditionIds: conditionIds(raw.preconditions),
     postconditionIds: conditionIds(raw.postconditions),
+    // Already the ids the form binds — a draft buffers the FORM's shape, and this field is a flat
+    // array of attachment ids in both, so it needs no projection the way the two above do.
+    declinedConditionIds: strArray(raw.declinedConditionIds),
     tags: strArray(raw.tags),
     changeComment: nullableStr(raw.changeComment),
   };

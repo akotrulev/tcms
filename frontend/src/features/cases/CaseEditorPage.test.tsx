@@ -824,3 +824,204 @@ describe('the draft buffer', () => {
     expect(paths.some((path) => String(path).includes('/draft'))).toBe(false)
   })
 })
+
+/**
+ * The opt-out toggle (§187) — §6f's "not this one", on an inherited condition.
+ *
+ * What these exist to catch, none of it visible to `tsc` or the linter:
+ *
+ *   1. **A declined row that disappears from the panel when it is declined.** The toggle lives
+ *      beside the inherited marker; remove the row and the only control that can put the rule back
+ *      goes with it, so the action is one-way from the one screen that offers it. That was the
+ *      server's state before this slice, one layer down, which is what makes it the likely mistake
+ *      rather than a hypothetical one.
+ *   2. **`declinedConditionIds` sent as absent instead of empty.** The server reads absent as
+ *      "leave the declines alone", so switching the last rule back on would report success and
+ *      change nothing — `postconditions`' defect (§95) on a field added ninety sections later.
+ *   3. **Two Controllers over one array.** Both panels write into the same field; if each bound its
+ *      own, the second to fire would overwrite the first's toggle with a value read before it.
+ */
+describe('CaseEditorPage — declining an inherited condition (§187)', () => {
+  const CASE_ID = 'c-187'
+
+  /** SECOND is attached at the folder; the case declines nothing yet. */
+  const inheritedCase = {
+    id: CASE_ID,
+    key: 'TC-187',
+    keySeq: 187,
+    title: 'Log in with a bad password',
+    suiteId: 'suite-1',
+    suiteName: 'Payments',
+    objective: null,
+    description: null,
+    expectedOutcome: null,
+    priority: 'MEDIUM',
+    severity: 'MEDIUM',
+    automationStatus: 'MANUAL',
+    automationKey: null,
+    notAutomatableReason: null,
+    estimatedDurationSec: null,
+    stepFormat: 'STRUCTURED',
+    gherkinSource: null,
+    steps: [{ id: 's1', keyword: null, action: 'Open the login page', testData: null, expectedResult: null }],
+    classificationValueIds: [],
+    preconditions: [
+      {
+        id: 'attach-1',
+        position: 0,
+        conditionId: 'cond-1',
+        title: 'Log in as standard user',
+        body: ['Open the application'],
+        inline: false,
+        inherited: true,
+        inheritedFrom: 'Payments',
+      },
+    ],
+    postconditions: [],
+    declinedPreconditions: [],
+    declinedPostconditions: [],
+    tags: [],
+    lockVersion: 3,
+    currentVersionNo: 2,
+    lifecycleStatus: 'DRAFT',
+  } as unknown as TestCase
+
+  /** The same case with the attachment already declined — what a reload serves after a save. */
+  const declinedCase = {
+    ...inheritedCase,
+    preconditions: [],
+    declinedPreconditions: inheritedCase.preconditions,
+  } as unknown as TestCase
+
+  function mockDeclineReads(theCase: TestCase) {
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path.startsWith('/me/permissions')) return heldPermissions(['case:edit'], {}, PROJECT)
+      if (path.includes('/draft')) return null
+      if (path.includes('/step-suggestions')) return corpus
+      if (path.includes('/conditions')) return library
+      if (path.includes('/suites')) return suites
+      if (path.includes('/classification')) return []
+      if (path.includes('/tags')) return projectTags
+      if (path.includes(`/cases/${CASE_ID}`)) return theCase
+      return []
+    }) as never)
+  }
+
+  function renderDeclineEditor() {
+    return render(
+      <TestProviders
+        client={createTestQueryClient()}
+        route={`/projects/${PROJECT}/cases/${CASE_ID}/edit`}
+      >
+        <SessionRecoveryContext.Provider value={sessionRecovery}>
+          <SnackbarProvider>
+            <Routes>
+              <Route
+                path="/projects/:projectId/cases/:caseId/edit"
+                element={<CaseEditorPage mode="edit" />}
+              />
+            </Routes>
+          </SnackbarProvider>
+        </SessionRecoveryContext.Provider>
+      </TestProviders>,
+    )
+  }
+
+  const toggle = () => screen.getByRole('switch', { name: /applies to this case/i })
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('renders a declined row STILL IN THE PANEL, switched off — not removed from it', async () => {
+    // The server serves it on `declinedPreconditions`, which the editor unions onto the inherited
+    // group. If it did not, the row would be absent from the one screen that can restore it.
+    mockDeclineReads(declinedCase)
+    renderDeclineEditor()
+
+    const row = await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
+    expect(row).toHaveAttribute('data-declined', 'true')
+    expect(row).toHaveTextContent('Log in as standard user')
+    expect(toggle()).not.toBeChecked()
+  })
+
+  it('an inherited condition that is NOT declined shows the switch on', async () => {
+    mockDeclineReads(inheritedCase)
+    renderDeclineEditor()
+
+    const row = await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
+    expect(row).toHaveAttribute('data-declined', 'false')
+    expect(toggle()).toBeChecked()
+  })
+
+  it('sends the ATTACHMENT id, never the library condition id', async () => {
+    // The distinction the whole table rests on: "Log in" attached at two folders is two
+    // attachments, and declining one must leave the other in force. The server refuses a
+    // conditionId here with a field error, so getting this wrong is a 400 rather than a silent
+    // over-decline — but the 400 lands on a save the author will read as broken.
+    const user = userEvent.setup()
+    mockDeclineReads(inheritedCase)
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ id: CASE_ID, currentVersionNo: 3 } as never)
+    renderDeclineEditor()
+
+    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
+    await user.click(toggle())
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    await waitFor(() => expect(patch).toHaveBeenCalled())
+    const body = patch.mock.calls[0][1] as { declinedConditionIds: string[] }
+    expect(body.declinedConditionIds).toEqual(['attach-1'])
+  })
+
+  it('sends an EMPTY array when the last decline is switched back on, never omits the field', async () => {
+    // Absent means "leave the declines alone", so omitting it would make un-declining a save that
+    // reports success and restores nothing. §95's `postconditions` defect, one field over.
+    const user = userEvent.setup()
+    mockDeclineReads(declinedCase)
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ id: CASE_ID, currentVersionNo: 3 } as never)
+    renderDeclineEditor()
+
+    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
+    await user.click(toggle())
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    await waitFor(() => expect(patch).toHaveBeenCalled())
+    const body = patch.mock.calls[0][1] as { declinedConditionIds: string[] }
+    expect(body.declinedConditionIds).toEqual([])
+  })
+
+  it('a save that touches nothing else still carries the declines it was served', async () => {
+    // The form sends the whole editable set on every save, so a title fix must not read as an
+    // instruction to switch every declined rule back on.
+    const user = userEvent.setup()
+    mockDeclineReads(declinedCase)
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ id: CASE_ID, currentVersionNo: 3 } as never)
+    renderDeclineEditor()
+
+    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
+    await user.type(screen.getByTestId('CaseEditor.Field.Title'), '!')
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    await waitFor(() => expect(patch).toHaveBeenCalled())
+    const body = patch.mock.calls[0][1] as { declinedConditionIds: string[] }
+    expect(body.declinedConditionIds).toEqual(['attach-1'])
+  })
+
+  it('declining does NOT seed the folder condition into the case as its own', async () => {
+    // The failure this panel's whole design guards against, now reachable through a new control:
+    // a decline that also attached the folder's condition directly to the case would turn "not
+    // this one" into "this one for ever, unlinked from the folder".
+    const user = userEvent.setup()
+    mockDeclineReads(inheritedCase)
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ id: CASE_ID, currentVersionNo: 3 } as never)
+    renderDeclineEditor()
+
+    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
+    await user.click(toggle())
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    await waitFor(() => expect(patch).toHaveBeenCalled())
+    const body = patch.mock.calls[0][1] as { preconditions: unknown[] }
+    expect(body.preconditions).toEqual([])
+  })
+})

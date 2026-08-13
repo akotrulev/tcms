@@ -41,6 +41,7 @@ const valid = () => ({
   // unexpressible — and would silently preserve attachments the author had just removed.
   preconditionIds: [],
   postconditionIds: [],
+  declinedConditionIds: [],
   // Same three-way distinction again, one field over (§96) — and the one that a bulk action
   // depends on, since it reconstructs a request without mentioning tags.
   tags: [],
