@@ -2307,3 +2307,26 @@ correct, and both are corrected in place above rather than renumbered.
 | `§183 IC-2` | **L4**: with a grid row raising both a WARNING (or ERROR) signal and an INFO one, read the Health cell **without hovering anything** | The visible chip is the **severe** one in amber or red, the `+1` covers the INFO. This is `§179 RS-2` re-driven for the reason §183 exists: the ordering was already right, and until this slice the reader could not tell it *was* right, because the chip it promoted looked exactly like the one it demoted. |
 | `§183 IC-3` | **L4**: put the app in **dark mode** and re-read `IC-1` | The tile border, the chip text and the chip border are all `--color-info`'s dark value and still legible against the sunken surface. Colour is the half no test can see (§180 `TL-3` says so about `--color-draft`), and this is a token that was, until this slice, used only for *decorative* borders — the case-detail inherited-condition outline, the board's chip. **This is the first time `--color-info` carries a triage meaning**, so it is the first time its contrast in dark mode is load-bearing. |
 | `§183 IC-4` | **L4**: with the case list open, scan a whole page of rows in the young project and say out loud which rows need work | The rows carrying amber and red are the answer, and there should be **few of them**. This is the row that judges the decision rather than the code: the reading plan was the point, and its success condition is a person's answer to that question, not a hex value. If the INFO chips still dominate the scan, the next move is the chip's *weight* (a dot, an outline) and not its colour. |
+
+---
+
+## §184 — the order the tiles arrive in, now that only one side decides it
+
+**Three rows, none run** (§65). Ids are `§184 TO-*`; `TO` is unused elsewhere in this file.
+
+**No new fixture, and one of these rows cannot be driven without help.** The panel's order is only
+observable when the panel holds **at least two tiles**, and its second key — count descending within
+one severity — needs **two tiles of the same severity with different counts**. A young project
+raises `UNLINKED` on most of its cases and little else, so `TO-2` names what it needs and says
+plainly that it may not be reachable in the pass; "not driven, and here is why" is the outcome the
+queue accepts, a silent skip is not.
+
+**What changed is a deletion, so there is nothing new on screen.** That is exactly why these rows
+exist: §184 removed the SPA's re-sort, and the failure mode is a panel that looks perfectly
+plausible in the wrong order. The only observer is a reader who knows what order the server sent.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§184 TO-1` | **L4**, in a project raising signals of more than one severity (any of `§157 SA-1` / `§178 SL-1` / `§181 OS-1` / `§182 CC-1` will do, and the lane will have several by then): open the dashboard and read the "Needs attention" tiles **left to right** | Red first, then amber, then blue — **worst first**, whatever the counts say. A project whose 156 unlinked cases tile ahead of its two whose spec changed underneath them is the §179 regression at the case grid, one screen over and a whole panel wide. Read the tiles' left borders rather than their words: after §183 the border is the severity. |
+| `§184 TO-2` | **L4**, and **may not be reachable — say so rather than passing it**: with **two tiles of the same severity and different counts** on the panel, check the bigger count is the left one | The comparator's second key, which no screen has ever shown. It needs two same-severity signals raised at once — e.g. `OUTDATED_SPEC_CHANGED` and `CONDITION_DRIFT`, both ERROR, from `§169`'s and `§158`'s fixtures. If the lane cannot produce them, record that: `HealthTileOrderTest` asserts this key on the server, so the open question is only whether the panel renders what it is given, which `TO-3` answers from the other end. |
+| `§184 TO-3` | **L4**: with two or more tiles showing, open **devtools → Network**, re-request the dashboard and compare the `health` array's order to the tiles' order on screen | **Identical, element for element.** This is the row that actually tests §184: the panel is now transparent, and the assertion is that it re-orders nothing. Until this slice a client-side sort sat between the two, and it was a no-op only by the accident of a stable sort agreeing with the server's first key — so the response and the screen agreed for a reason nobody had written down. |

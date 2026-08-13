@@ -2,14 +2,38 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-13 (**§183** — one severity→colour table in `lib/statusColors.ts`, and INFO stops being amber; **§182** — the health signal whose words left out the gate that gives it its meaning; the `INCOMPLETE` label and tooltip, and nothing else in `src/`; **§181** — the health signal whose words named the one state nothing can produce; the `ORPHANED` label and tooltip, and nothing else in `src/`; **§180** — the dashboard stopped sending words and colours: tiles and segments are labelled from their `key`, and the two colour maps moved to `lib/statusColors.ts`; **§179** — `SEVERE_SIGNALS` is deleted: a chip's colour comes off the wire, and the grid's one visible chip is the worst one; **§178** — two health chips start appearing and `SEVERE_SIGNALS` disagrees with the server about two members; **§177** — the run's git coordinate: a third header line, two dialog fields, and `describeRunCode` beside `describeLinkTarget`; **§175** — `TeamRef` is one generated type and `CurrentUser.teams[].isLead` is gone; no `src/` change; **§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
+**Last verified:** 2026-08-13 (**§184** — neither screen ranks a health severity: `severityRank` is deleted and the panel renders the server's order verbatim; **§183** — one severity→colour table in `lib/statusColors.ts`, and INFO stops being amber; **§182** — the health signal whose words left out the gate that gives it its meaning; the `INCOMPLETE` label and tooltip, and nothing else in `src/`; **§181** — the health signal whose words named the one state nothing can produce; the `ORPHANED` label and tooltip, and nothing else in `src/`; **§180** — the dashboard stopped sending words and colours: tiles and segments are labelled from their `key`, and the two colour maps moved to `lib/statusColors.ts`; **§179** — `SEVERE_SIGNALS` is deleted: a chip's colour comes off the wire, and the grid's one visible chip is the worst one; **§178** — two health chips start appearing and `SEVERE_SIGNALS` disagrees with the server about two members; **§177** — the run's git coordinate: a third header line, two dialog fields, and `describeRunCode` beside `describeLinkTarget`; **§175** — `TeamRef` is one generated type and `CurrentUser.teams[].isLead` is gone; no `src/` change; **§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
 the one doc-block renderer and the editor's three new types; §126 phase 4 — the three attachment
 surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the flake panel and the
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `a5e2777` (§182 shipped; §183 is this commit) (trust the body over the header and re-grep what a later commit
+**Baseline commit:** `133c9e8` (§184 phase 1 shipped; §184 phase 2 is this commit) (trust the body over the header and re-grep what a later commit
 could have moved).
+
+## §184 — NEITHER SCREEN RANKS A HEALTH SEVERITY ANY MORE
+
+**Read this before adding a sort to `DashboardPage.tsx` or `CaseGrid.tsx`, and before writing an
+ordering assertion in `HealthPanel.test.tsx`.**
+
+- **`severityRank` IS DELETED.** `HealthPanel` renders `data.health` **verbatim**;
+  `DashboardService.health` sorts by severity and then by **count descending**, and it is now the
+  only ordering of tiles anywhere. §179 took this decision at the case grid (which carries the same
+  do-not-sort comment); §184 applied it to the other screen showing a health severity.
+- **`HealthPanel.test.tsx`'s order test now asserts the OPPOSITE of what it used to.** Its fixture
+  passes a WARNING ahead of an ERROR — an order the server cannot produce — and expects the panel to
+  render it unchanged. It reads like a bug and is not: it is the only input a sorting panel and a
+  transparent one disagree about. Do not "fix" it.
+- **The old sort was a no-op by coincidence, not by design.** `Array.prototype.sort` is stable and
+  its key was the server comparator's *first* key, so the server's count tiebreak survived a sort
+  that had never heard of it. It was also a **non-exhaustive ternary chain** — a fifth `Severity`
+  member would have ranked bottom silently, where `severityVar` thirty lines away is a
+  `satisfies Record<…>` and fails the build. That contrast is the general rule: a `Record` over a
+  contract union is a compile error on a new member; a ternary chain is a default.
+- **`HealthTileOrderTest` (backend) is where the order is asserted now.** A frontend assertion on
+  which tile is worst would be the copy this slice deleted.
+
+---
 
 ## §183 — ONE SEVERITY→COLOUR TABLE, AND INFO IS NOT AMBER
 

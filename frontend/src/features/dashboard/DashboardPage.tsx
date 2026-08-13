@@ -250,17 +250,26 @@ export function HealthPanel({ data, casesPath }: { data: RepositoryDashboard; ca
   }
 
   return (
+    /* THE FIRST TILE IS THE WORST ONE, and that is the server's doing rather than this
+       component's — `DashboardService.health` sorts by severity and then by count descending
+       (§184). Do not sort here. This is §179's rule at the case grid, applied to the second of
+       the two screens that show a health severity: the ranking is a property of the answer, and a
+       client-side sort is the second copy of it.
+
+       There WAS one, and it was `severityRank` — four severities in a ternary chain, right here,
+       thirty lines under the colour table §183 had just deleted for being a second copy of the
+       same enum. It was a no-op, and it was one by coincidence: `Array.prototype.sort` is stable
+       and its key was the server comparator's FIRST key, so the server's count-descending
+       tiebreak survived a sort that had never heard of it. It was also not exhaustive — a fifth
+       `Severity` member would have ranked bottom silently, where `severityVar` beside it is a
+       `satisfies Record<…>` and would have failed the build. */
     <TileRow
-      tiles={[...data.health].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))}
+      tiles={data.health}
       labels={healthLabels}
       casesPath={casesPath}
       testId="Dashboard.Health"
     />
   );
-}
-
-function severityRank(severity: DashboardTile['severity']): number {
-  return severity === 'ERROR' ? 0 : severity === 'WARNING' ? 1 : severity === 'INFO' ? 2 : 3;
 }
 
 /**

@@ -68,10 +68,19 @@ describe('HealthPanel — the difference between clean and unchecked', () => {
     expect(screen.queryByTestId('Dashboard.Health.NotComputed')).not.toBeInTheDocument()
   })
 
-  it('renders the tiles when signals were raised, worst first', () => {
-    // The server already sorts by severity; the panel sorts again so the order is a property of
-    // the screen rather than of one server version. WARNING is passed in first on purpose — a
-    // panel that rendered the response's order would put it above the ERROR.
+  it('renders the tiles in the order the server sent them, and does not rank them again', () => {
+    // §184, and this test used to assert the opposite. It passed a WARNING ahead of an ERROR and
+    // checked the panel swapped them — so it was pinning `severityRank`, the panel's own copy of a
+    // ranking the server already applies, and it would have stayed green against a server that
+    // returned its tiles in enum order. It was also the only assertion anywhere that a tile list
+    // is ordered at all: `DashboardEndpointTest`'s fixture writes no `case_health` row, so the
+    // server's own sort had no observer until `HealthTileOrderTest` arrived with this deletion.
+    //
+    // §179 took this decision at the case grid — the ranking is a property of the answer, a
+    // client-side sort is the second copy of it — and this is the other screen that shows a health
+    // severity. The fixture below is therefore in an order the server CANNOT produce (a WARNING
+    // ahead of an ERROR), because that is the only input an unsorted panel and a sorted one
+    // disagree about. Read it as "the panel is transparent", not as "the panel is wrong".
     renderPanel(
       dashboard({
         healthComputedAt: '2026-08-01T08:00:00Z',
@@ -94,8 +103,8 @@ describe('HealthPanel — the difference between clean and unchecked', () => {
 
     const tiles = screen.getAllByTestId(/^Dashboard\.Health\.Tile\./)
     expect(tiles.map((tile) => tile.getAttribute('data-testid'))).toEqual([
-      'Dashboard.Health.Tile.OUTDATED_SPEC_CHANGED',
       'Dashboard.Health.Tile.STALE_APPROVAL',
+      'Dashboard.Health.Tile.OUTDATED_SPEC_CHANGED',
     ])
   })
 
