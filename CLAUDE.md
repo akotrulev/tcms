@@ -39,11 +39,32 @@ This project is built through the installed `fe-react`, `be-java`, `data`, `qa-j
 `business-analysis` plugin skills (see `.claude/settings.json`). The work so far follows their phased
 pipelines; continuing without them produces inconsistent output.
 
-- Frontend work → `fe-react:fe-react`, then load only the current phase's skills.
-- Backend work → `be-java:be-java`, plus `be-java:be-java-database-code` for JPA and
-  `data:data-postgresql` / `data:data-migrations` for schema and migrations.
+**The orchestrator entry point is a slash command, not a skill.** ~~Frontend work →
+`fe-react:fe-react`; backend work → `be-java:be-java`.~~ → **corrected 2026-08-14: neither is a
+skill and neither ever was.** No `SKILL.md` in the library declares `name: fe-react` or
+`name: be-java` — every skill the plugins ship is *prefixed* (`fe-react-basics`,
+`be-java-database-code`, …). `fe-react` and `be-java` exist as a **command** and an **agent**, and
+the command's whole job is to load the agent definition, which then names the phase skills. So
+`Skill(fe-react:fe-react)` returns "Unknown skill" even when the plugins are loaded correctly, and
+reading that failure as "the plugins aren't registered" sends you after the wrong defect.
+
+- Frontend work → **`/fe-react`**, then load only the current phase's skills.
+- Backend work → **`/be-java`**, plus the `be-java-database-code` skill for JPA and
+  `data-postgresql` / `data-migrations` for schema and migrations.
+- QA has no self-named command — its entries are per-lane (`/qa-api-java`, `/qa-ui-java`, …).
 - Never improvise a pattern a skill owns. If a listed skill is missing on disk, say so and proceed
   with general rules — never substitute invented guidance.
+
+**If none of the plugin skills are visible, check the install path before anything else.**
+Enablement and installation are two different halves: `.claude/settings.json`'s `enabledPlugins` is
+committed and travels with the repo, but `~/.claude/plugins/installed_plugins.json` keys every
+installation on an **absolute `projectPath`** and does not. Moving the checkout therefore silently
+unregisters all eight plugins — which is exactly what happened when this repo moved from
+`~/Documents/tcms` to `~/RiderProjects/tcms` (fixed 2026-08-14, `--scope project`, which also bumped
+the library `be1222c5e59d` → `0d8474f66507`). **`claude plugin list` will not show you this**: it
+prints every row across every project, all `✔ enabled`, so it reads healthy from any directory. Use
+`claude plugin list --json` and check `projectPath` against `pwd`. The tell is that it is not
+skills-specific — `context7` is enabled in the same file, so its MCP tools go missing too.
 
 ## Commands
 
