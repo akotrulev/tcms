@@ -26,7 +26,7 @@
  * So the seam sits where the double is *created*. `vi.spyOn` is wrapped once, here, and any spy it
  * returns for a member of the `api` object gets its `mockImplementation` / `mockResolvedValue` /
  * `mockReturnValue` (and the `…Once` forms) wrapped so the value they hand back passes through
- * `contractResponses.ts` on the way out. Nothing in a test file changes, a test written tomorrow is
+ * `contractBodies.ts` on the way out. Nothing in a test file changes, a test written tomorrow is
  * covered without being told to be, and the one thing that could quietly turn the instrument off —
  * the suite moving off `vi.spyOn(api, …)` — is what `contractDoubles.test.ts`'s population guard
  * watches.

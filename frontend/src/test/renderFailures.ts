@@ -48,7 +48,7 @@
  * (§116, §117, §121, §132, §172); here the seam was right and the reader is two years late.
  *
  * **`__tcmsErrors` is populated only on the `import.meta.env.DEV` branch of `send()`**, which is the
- * one way this module could go silently dark. `renderFailures.test.ts` drives a real throw through a
+ * one way this module could go silently dark. `renderFailures.test.tsx` drives a real throw through a
  * real boundary rather than asserting against a hand-made report, so a mode change that turned the
  * array off would redden there instead of nowhere.
  *
@@ -171,7 +171,7 @@ function collected(): ClientErrorReport[] {
 /**
  * Every boundary trip and failed request since the last drain, cleared.
  *
- * `afterEach` below drains to decide whether to fail; `renderFailures.test.ts` drains to assert
+ * `afterEach` below drains to decide whether to fail; `renderFailures.test.tsx` drains to assert
  * *what* was collected, which is the only way a green suite can observe an instrument whose working
  * state is silence.
  */

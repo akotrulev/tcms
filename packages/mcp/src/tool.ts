@@ -31,7 +31,7 @@ import type { Qualifier, Session } from './session.js';
 /**
  * JSON Schema, as it goes on the wire.
  *
- * ~~Hand-written rather than derived — see `schemas.ts`.~~ → **there is no `schemas.ts` and there
+ * ~~Hand-written rather than derived — see `schemas.ts`.~~ → **there is no such file and there
  * never was** (§205). Every input schema is written out beside the tool that takes it, in `reads.ts`
  * and `writes.ts`, and *that is the decision*: a tool argument is not a contract schema. It takes
  * display keys where the API takes UUIDs, it flattens `CaseConditionInput` to bare ids, and its
