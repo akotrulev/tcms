@@ -65,6 +65,14 @@ import org.springframework.transaction.annotation.Transactional;
  * differences that are both properties of there being no prior case: the set of adoptable step ids is
  * <strong>empty</strong>, and the automation-key check excludes nothing.
  *
+ * <p><strong>Since §200 there is a third, and it is not that shape</strong> — it is a rule about the
+ * payload rather than about there being nothing stored yet, so it is the one place this path is
+ * genuinely more permissive than an edit. {@link CaseEdit.ProcedureRule#DEFERRED}: a case may be
+ * created before anybody has written how to run it, and what comes out is a {@code DRAFT} whose
+ * missing procedure {@code case_health} only calls a fault once somebody approves it. Every other
+ * rule — the title, the suite, the automation pair, the classification, the conditions — is the
+ * update path's, unchanged, for the reason above.
+ *
  * <h2>What commits together</h2>
  *
  * <p>The counter increment, the case row, its steps, the v1 version row and the audit row are one
@@ -283,7 +291,16 @@ public class CaseCreateService {
                 // Nothing stored, for the classification reason above: a create declines exactly
                 // what it asks to decline.
                 List.of(),
-                cases::existsByAutomationKey);
+                cases::existsByAutomationKey,
+                // §200: a case may be created before anybody has written how to run it. This is the
+                // one rule the create path relaxes relative to the update path, and it is a rule
+                // about the payload rather than about there being no prior case — so unlike the
+                // arguments above it does not follow from "nothing is stored yet". The reason is
+                // {@link CaseEdit.ProcedureRule}'s: the plan's Test cases tab authors a case from a
+                // title, and requiring a step there means refusing the save or inventing content.
+                // What is created is a DRAFT, which is what makes this cheap — case_health only
+                // calls a missing procedure a fault once somebody has APPROVED the case.
+                CaseEdit.ProcedureRule.DEFERRED);
 
         if (validated instanceof CaseEdit.Outcome.Invalid invalid) {
             return new Outcome.Invalid(invalid.errors());

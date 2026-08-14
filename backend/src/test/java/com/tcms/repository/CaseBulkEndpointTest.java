@@ -663,6 +663,27 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("a stepless stub MOVES — it is not skipped as content that must be completed")
+        void aStubIsMovableLikeAnyOtherCase() throws Exception {
+            // §200's regression guard, and it belongs here rather than beside the create tests
+            // because the create is not where it would have broken. MOVE_TO_SUITE writes a version,
+            // so it re-validates the STORED row through CaseEdit.of first — and while that carried
+            // the update path's procedure rule, every case a plan authored would have come back
+            // `skipped` with NEEDS_A_SAVE: "open this case and save it once", which PATCH refuses
+            // for the very same missing steps. A dead end reachable by an ordinary click, produced
+            // by two rules that are each right on their own.
+            MvcResult result = commit(LEAD, moveToSuite(REFUNDS, stub()));
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(changed(result)).containsExactly("TC-7");
+            assertThat(skippedKeys(result)).isEmpty();
+            assertThat(suiteOf(stub())).isEqualTo(REFUNDS);
+            assertThat(versionsOf(stub()))
+                    .as("the move is authored content, so the stub gets a version like any case")
+                    .hasSize(1);
+        }
+
+        @Test
         @DisplayName("MOVE_TO_SUITE takes the declines the destination does not impose (§192)")
         void moveDropsTheDeclinesItInvalidates() throws Exception {
             // A decline is an exception to a rule the case's FOLDER imposes. REFUNDS imposes
@@ -1200,6 +1221,21 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
         return caseId("declined");
     }
 
+    /**
+     * A {@code STRUCTURED} DRAFT with <strong>no steps</strong> — §200's stub, and the only case
+     * here that has none.
+     *
+     * <p>What a plan's Test cases tab writes: a title, and nobody has said how to run it yet. It is
+     * seeded because the rule that lets it exist lands on the <em>create</em> path while the thing
+     * that would break lives here — {@link CaseEdit#of} re-validates a stored row before an authored
+     * bulk action may write its version, so a validator that still refused a stepless case would
+     * report every stub as skipped, under a message telling its author to open and save it, which
+     * the update path would then refuse. Deadlocked by two rules that are each individually correct.
+     */
+    private static UUID stub() {
+        return caseId("stub");
+    }
+
     private static UUID caseId(String marker) {
         return UUID.nameUUIDFromBytes(("case-bulk-case:" + marker).getBytes());
     }
@@ -1229,10 +1265,17 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
                     "Refund a cancelled order", "DRAFT");
             testCase(connection, declinedCase(), ACME, BANKING, QUARANTINE, "TC-6", 6,
                     "Refund an expired voucher", "DRAFT");
+            testCase(connection, stub(), ACME, BANKING, PAYMENTS, "TC-7", 7,
+                    "Cover the chargeback path", "DRAFT");
 
-            // Every case gets one step: CaseEdit.validate refuses a STRUCTURED case with none, so a
-            // stepless fixture would make every version-writing action skip instead of change — and
-            // the version tests would pass for the wrong reason.
+            // Every case but the stub gets one step. ~~CaseEdit.validate refuses a STRUCTURED case
+            // with none, so a stepless fixture would make every version-writing action skip instead
+            // of change — and the version tests would pass for the wrong reason.~~
+            // → half-superseded by §200. The create path defers the rule now, so a stepless case is
+            // a row this product WRITES rather than one only a fixture could forge, and CaseEdit.of
+            // reconstructs it. The reason still stands for the six above — a skipped case asserts
+            // nothing about the version a changed one writes — and `stub()` exists precisely to
+            // hold the other half, where a skip would be the defect.
             step(connection, stepId("draft"), ACME, draft(), 0, "Open the payments screen");
             step(connection, stepId("in-review"), ACME, inReview(), 0, "Open the payments screen");
             step(connection, stepId("approved"), ACME, approved(), 0, "Open the payments screen");

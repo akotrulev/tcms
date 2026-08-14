@@ -2247,11 +2247,13 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("approved and unclassified is INCOMPLETE — the term that fires today")
+        @DisplayName("approved and unclassified is INCOMPLETE — the term that fired first")
         void noClassification() {
-            // The only one of the three terms a running deployment reaches: CaseEdit.validate
-            // refuses a case with no steps and a Gherkin case with no scenario, and nothing
-            // anywhere requires a classification. "Any row" is the whole predicate, because
+            // ~~The only one of the three terms a running deployment reaches~~ → all three since
+            // §200, which lets a create defer the procedure so a plan can author a case from a
+            // title. This one is still the only term that needs nothing else to go wrong: nothing
+            // anywhere requires a classification, while the other two now need a stub that somebody
+            // approved without finishing. "Any row" is the whole predicate, because
             // classification_dimension has cardinality, controlled, hierarchical and locked and no
             // REQUIRED — so there is no per-project spelling of "its classification" to read.
             recomputeFor(ACME);

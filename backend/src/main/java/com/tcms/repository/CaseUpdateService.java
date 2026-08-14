@@ -294,7 +294,12 @@ public class CaseUpdateService {
                 declinable,
                 retained,
                 conditions.storedDeclinedIds(testCase.getId()),
-                key -> cases.existsByAutomationKeyOtherThan(key, testCase.getId()));
+                key -> cases.existsByAutomationKeyOtherThan(key, testCase.getId()),
+                // The path the procedure rule is FOR (§200). A PATCH body is the whole editable set
+                // sent by an author with the field in front of them, so an empty one says this case
+                // has no procedure rather than leaving the question open — and this is the funnel a
+                // stub created elsewhere reaches its steps through.
+                CaseEdit.ProcedureRule.REQUIRED);
 
         if (validated instanceof CaseEdit.Outcome.Invalid invalid) {
             return new Outcome.Invalid(invalid.errors());

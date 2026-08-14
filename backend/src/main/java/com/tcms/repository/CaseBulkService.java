@@ -556,7 +556,18 @@ public class CaseBulkService {
         };
     }
 
-    /** Said to a case whose own stored content will not validate — see {@link CaseEdit#of}. */
+    /**
+     * Said to a case whose own stored content will not validate — see {@link CaseEdit#of}.
+     *
+     * <p><strong>Nothing produces it, and since §200 that is by construction rather than by
+     * luck.</strong> Both states {@code CaseEdit#of} named as its causes are gone: a stepless
+     * {@code STRUCTURED} case is a legal row that reconstructs
+     * ({@link CaseEdit.ProcedureRule#DEFERRED}), and a suite with live cases filed in it cannot be
+     * deleted. No test has ever asserted this sentence, which is the other half of the observation
+     * and the reason it is recorded here rather than being deleted: a message with no producer is
+     * removable, a message with no <em>test</em> is one nobody would notice going wrong. §200 names
+     * the pair as an opened item rather than resolving it inside a slice about a validator.
+     */
     private static final String NEEDS_A_SAVE =
             "Open this case and save it once — it has content that must be completed first.";
 

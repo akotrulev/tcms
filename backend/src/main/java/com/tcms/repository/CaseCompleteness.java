@@ -48,7 +48,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>{@code step_format} makes {@code test_step} rows and {@code gherkin_source} <em>alternatives</em>
  * (plan §6a, and {@code TestCase.gherkinSource}'s field comment): a {@code GHERKIN} case legitimately
- * has no steps at all, and {@code CaseEdit} refuses to save one with an empty scenario. A predicate
+ * has no steps at all, and {@code CaseEdit} refuses to <em>update</em> one to an empty scenario
+ * (§200 — a create may leave either spelling of the procedure unwritten, which is what gives the
+ * empty-scenario term below a producer at last). A predicate
  * that read {@code test_step} alone would report every Gherkin case in the product as having no
  * steps — which is not a near-miss but the majority of a Gherkin-first team's repository.
  *
@@ -110,26 +112,33 @@ class CaseCompleteness {
      * Re-derive {@link HealthSignal#INCOMPLETE} for every live case in the currently-open company,
      * in one statement.
      *
-     * <h2>Two of the three terms have no reachable producer today, and are here anyway</h2>
+     * <h2>~~Two of the three terms have no reachable producer today~~ → all three do, since §200</h2>
      *
-     * <p>{@code CaseEdit.validate} refuses a {@code STRUCTURED} case with no steps and a
-     * {@code GHERKIN} case with no scenario, on <em>both</em> the create and the update path — and
-     * every other way a case comes into existence goes through that same validation
+     * <p>What §182 wrote here was this: {@code CaseEdit.validate} refuses a {@code STRUCTURED} case
+     * with no steps and a {@code GHERKIN} case with no scenario, on <em>both</em> the create and the
+     * update path, and every other way a case comes into existence goes through that same validation
      * ({@code CaseCloneService} and {@code AiProposalDecisionService} both say so in their headers,
-     * and both give the same reason: a second assembler of a legal case is the one that diverges).
-     * So a saved case with no steps is not a state this product can currently produce.
+     * and both give the same reason: a second assembler of a legal case is the one that diverges) —
+     * so a saved case with no steps was not a state this product could produce. It went into the
+     * predicate anyway, on §181's {@code DEACTIVATED} precedent and with one difference worth naming:
+     * that term was missing a <em>writer</em>, while this one was refused by a <em>validator</em>,
+     * and a validator is a rule about new writes that says nothing about rows already stored. The
+     * list of things that would produce the state without touching this file ended <em>"or a
+     * relaxation of that rule in a slice thinking about something else"</em>.
      *
-     * <p>It is in the predicate anyway, and §181's {@code DEACTIVATED} term is the precedent — with
-     * one difference worth naming, because it points the other way. That term was missing a
-     * <em>writer</em>; this one is refused by a <em>validator</em>, and a validator is a rule about
-     * new writes that says nothing about rows already stored. The import path §6t will need, a
-     * repair script, a future format, or a relaxation of that rule in a slice thinking about
-     * something else — each of those produces the state without touching this file, and a term left
-     * out until then is a signal that silently stops covering it on the day it becomes reachable.
-     * One {@code CASE} expression now is cheaper than that, and the fixtures are what will still be
+     * <p><strong>That is §200, except it was not thinking about something else.</strong> The create
+     * path now defers the rule — {@link CaseEdit.ProcedureRule}, because a plan's Test cases tab
+     * authors a case from a title alone and the alternative was refusing the save or inventing a
+     * step. A stub is a legal row, so both terms have a producer.
+     *
+     * <p>They are reached only after somebody <strong>approves</strong> one, and that is what makes
+     * deferring the rule cheap rather than merely permissive: a draft missing its procedure is
+     * ordinary work in progress, which is exactly what the {@code APPROVED} gate below already said.
+     * The predicate is unchanged, and that is the whole return on having written it early — the day
+     * the state became reachable the signal was already covering it, and the fixtures were already
      * asserting the right thing.
      *
-     * <p>The third term — no classification — needs nothing to change and fires today.
+     * <p>The third term — no classification — needed nothing to change and fired from the start.
      *
      * <h2>{@code ON CONFLICT} names two columns</h2>
      *

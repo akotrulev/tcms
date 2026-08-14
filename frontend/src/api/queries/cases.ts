@@ -653,6 +653,16 @@ export function useCaseHistory(
  * browser lane that drives this screen (`A2 — plans`) is the one the queue has been stopped at since
  * §186. The gate it would have to fail is a live one: a `toHaveBeenCalledWith` in a green test is the
  * suite agreeing with the payload rather than the server doing so.
+ *
+ * ## And the server had to move too — §200
+ *
+ * §199 got the body past the *contract* and left it one server rule short: `CaseEdit.validate`
+ * refused a `STRUCTURED` case with no steps, so the Save answered 400 on `steps` instead of on
+ * three fields. That rule now applies to `PATCH` alone. A case may be created before anybody has
+ * written how to run it, because the alternatives here were refusing the save or inventing a step
+ * the author did not write — see `CaseEdit.ProcedureRule`. What this hook creates is a **DRAFT
+ * stub**, which the case editor is the place to finish; `caseHealth` calls a missing procedure a
+ * fault only once such a case is approved.
  */
 export function useCreatePlanCase(projectId: string) {
   const client = useQueryClient();

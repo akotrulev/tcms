@@ -109,7 +109,8 @@ npm run build                     # THE gate: tsc over source+tests, then emit. 
                                   # names the order client → cli → mcp; mcp is THIRD for the
                                   # same reason cli is second.
 npm run lint --workspaces         # oxlint, 0 warnings
-npm run test:run --workspaces     # 211 tests, ~1s — CI runs these, unlike the backend's
+npm run test:run --workspaces     # ~~211~~ 241 tests (75 client / 85 cli / 81 mcp, measured on
+                                  # shanks 2026-08-14), ~1s — CI runs these, unlike the backend's
 cd client && npm run gen:api      # THE SECOND COPY of schema.d.ts. Regenerate BOTH after any
                                   # openapi.yaml change; schemaFreshness.test.ts fails otherwise.
 node cli/dist/main.js help        # TCMS_URL + TCMS_TOKEN drive it

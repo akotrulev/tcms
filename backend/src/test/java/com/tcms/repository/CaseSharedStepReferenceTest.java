@@ -254,7 +254,11 @@ class CaseSharedStepReferenceTest {
                 Set.of(),
                 Set.of(),
                 List.of(),
-                key -> false);
+                key -> false,
+                // REQUIRED, which is the update path's rule and the stricter of the two: this class
+                // asserts what a step REFERENCE is refused for, and every request below carries
+                // steps, so §200's deferral cannot colour a refusal under test either way.
+                CaseEdit.ProcedureRule.REQUIRED);
     }
 
     /** A minimal valid case, so any refusal reported is the one under test. */

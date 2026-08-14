@@ -23,8 +23,10 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -843,19 +845,17 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
                     .containsKey("notAutomatableReason");
         }
 
-        @Test
-        @DisplayName("STRUCTURED with no steps is refused, and GHERKIN with no scenario too")
-        void bothFormatsNeedTheirContent() throws Exception {
-            Map<String, Object> noSteps = newCase("Empty");
-            noSteps.put("steps", List.of());
-            assertThat(errorsOf(post(LEAD, ACME, ACME_BANKING, noSteps, null))).containsKey("steps");
+        /*
+          ~~STRUCTURED with no steps is refused, and GHERKIN with no scenario too.~~
+          → REVERSED IN §200, and moved to `TheProcedureMayBeDeferred` below, which asserts the
+          opposite of every line this test held.
 
-            Map<String, Object> noScenario = newCase("Empty scenario");
-            noScenario.put("stepFormat", "GHERKIN");
-            noScenario.put("gherkinSource", "  ");
-            assertThat(errorsOf(post(LEAD, ACME, ACME_BANKING, noScenario, null)))
-                    .containsKey("gherkinSource");
-        }
+          It is left here as a comment rather than deleted because it is the one rule where this
+          class's own title — "the same rules as an edit, refused the same way" — stopped being
+          true, and a reader who finds only the new test cannot tell whether the old behaviour was
+          considered or merely never existed. It was considered from M0 to §199 and it made the
+          plan's Test cases tab unable to save.
+        */
 
         @Test
         @DisplayName("blank optional text is stored as null, not as an empty string")
@@ -871,6 +871,153 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
             assertThat(casesIn(ACME_BANKING)).singleElement()
                     .satisfies(row -> assertThat(row.objective()).isNull());
             assertThat(caseId).isNotNull();
+        }
+    }
+
+    /**
+     * §200 — the one rule a create is more permissive about than an edit.
+     *
+     * <p>Every other test in {@code Validation} above asserts that this endpoint refuses what
+     * {@code PATCH} refuses. These assert the single exception and, just as importantly, its two
+     * bounds: {@code PATCH} still refuses, so the asymmetry is real rather than a rule that quietly
+     * went away everywhere; and the stub is a {@code DRAFT}, which is what stops the deferral from
+     * meaning "an approved case need not say how it is run".
+     *
+     * <p>The reason the rule moved is {@code useCreatePlanCase}: the plan's Test cases tab authors a
+     * case from a title, and from §97 to §199 every Save on that tab with a row in it answered 400.
+     */
+    @Nested
+    @DisplayName("The procedure may be deferred on create, and only on create (§200)")
+    class TheProcedureMayBeDeferred {
+
+        @Test
+        @DisplayName("a STRUCTURED case with no steps is created, and stores none")
+        void structuredWithoutStepsIsAStub() throws Exception {
+            Map<String, Object> payload = newCase("Cover the refund path");
+            payload.put("steps", List.of());
+
+            MvcResult result = post(LEAD, ACME, ACME_BANKING, payload, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(201);
+            assertThat(stepsOf(idOf(result))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a GHERKIN case with no scenario is created too — the two are one rule")
+        void gherkinWithoutAScenarioIsAStubToo() throws Exception {
+            // StepFormat makes steps and a scenario ALTERNATIVES, so deferring one and requiring the
+            // other would refuse or accept the same act depending on a format the author may not
+            // have chosen yet. CaseCompleteness already reads them as one question.
+            Map<String, Object> payload = newCase("Cover the refund path");
+            payload.put("stepFormat", "GHERKIN");
+            payload.put("gherkinSource", "  ");
+            payload.put("steps", List.of());
+
+            MvcResult result = post(LEAD, ACME, ACME_BANKING, payload, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(201);
+            assertThat(body(result).get("gherkinSource").isNull())
+                    .as("a blank scenario is stored as null, like every other blank optional")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("the stub is a DRAFT — deferring the procedure never approves anything")
+        void theStubIsADraft() throws Exception {
+            // The whole reason this is cheap. case_health calls a missing procedure a fault only
+            // once a case is APPROVED, so a stub is ordinary work in progress until somebody signs
+            // it off without finishing it — which is exactly the state INCOMPLETE was written for.
+            Map<String, Object> payload = newCase("Cover the refund path");
+            payload.put("steps", List.of());
+
+            post(LEAD, ACME, ACME_BANKING, payload, null);
+
+            assertThat(casesIn(ACME_BANKING)).singleElement()
+                    .satisfies(row -> assertThat(row.lifecycleStatus()).isEqualTo("DRAFT"));
+        }
+
+        @Test
+        @DisplayName("PATCHing the stub back unchanged is still 400 — the asymmetry is the point")
+        void theEditPathStillRefusesIt() throws Exception {
+            // The funnel. A stub reaches its steps by being opened and saved, and this is the rule
+            // that makes saving it mean writing it. If this ever answers 200, the deferral has
+            // stopped being a create-path concession and become the product's position on whether a
+            // case says how to run it.
+            Map<String, Object> payload = newCase("Cover the refund path");
+            payload.put("steps", List.of());
+            UUID caseId = idOf(post(LEAD, ACME, ACME_BANKING, payload, null));
+
+            MvcResult edited = patchFor(LEAD, ACME, ACME_BANKING, caseId, payload);
+
+            assertThat(edited.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(edited)).containsKey("steps");
+        }
+
+        /*
+          §144's check, on the operation it was never run against.
+
+          `TestCaseInput` is ONE schema serving two operations, and until now the two enforced the
+          same rules, so comparing `required` to the PATCH endpoint's behaviour compared it to
+          both. This slice ends that. `required` is unchanged and still correct — neither deferred
+          field was ever in it — but "still correct" is a claim about the create path that nothing
+          in the suite made, and the shape §144 exists to prevent is exactly a contract that
+          describes one verb while a caller uses the other.
+
+          So the same experiment, on POST: drop each editable field in turn from a payload the
+          endpoint accepts, and whatever it then refuses is what `required` has to say. It fails in
+          both directions, and it is what would notice if a later slice made the create path
+          stricter or looser again without saying so on the contract.
+        */
+        @Test
+        @DisplayName("the contract's required set is exactly what CREATE refuses to work without too")
+        void contractRequiredMatchesWhatCreateEnforces() throws Exception {
+            var contract = com.tcms.contract.OpenApiContract.load();
+            Set<String> declared = contract.requiredOf("#/components/schemas/TestCaseInput");
+
+            Set<String> enforced = new LinkedHashSet<>();
+            for (String field : newCase("Refund the whole payment").keySet()) {
+                // The two automation fields, and ONLY those two: `steps` and `gherkinSource` are
+                // the update path's conditional pair and this operation defers them outright, so
+                // they belong to neither set here and dropping them is what the tests above assert.
+                if (field.equals("automationKey") || field.equals("notAutomatableReason")) {
+                    continue;
+                }
+                Map<String, Object> without = newCase("Refund the whole payment");
+                without.remove(field);
+
+                MvcResult result = post(LEAD, ACME, ACME_BANKING, without, null);
+                if (result.getResponse().getStatus() == 400
+                        && errorsOf(result).containsKey(field)) {
+                    enforced.add(field);
+                }
+            }
+
+            assertThat(enforced).as("the server must refuse SOMETHING, or this test proves nothing")
+                    .isNotEmpty();
+            assertThat(declared)
+                    .as("""
+                        `TestCaseInput.required` must name exactly the fields the CREATE path \
+                        refuses to work without, not only the fields PATCH does. One schema serves \
+                        both verbs, and since §200 they no longer enforce the same rules — so a \
+                        rule that moves on one path and not the other is a contract that is true \
+                        of whichever operation somebody happened to test.""")
+                    .containsExactlyInAnyOrderElementsOf(enforced);
+        }
+
+        @Test
+        @DisplayName("the stub's v1 is written like any other, so its history is not a gap")
+        void theStubGetsItsVersionOne() throws Exception {
+            // A stub is a case, not a placeholder for one: it holds a key, an owner and a version.
+            // Skipping v1 here would give the first REAL save of every plan-authored case a v2 with
+            // nothing before it, which is precisely what §129's create-writes-v1 rule exists to
+            // prevent.
+            Map<String, Object> payload = newCase("Cover the refund path");
+            payload.put("steps", List.of());
+
+            UUID caseId = idOf(post(LEAD, ACME, ACME_BANKING, payload, null));
+
+            assertThat(versionsOf(caseId)).singleElement()
+                    .satisfies(version -> assertThat(version.versionNo()).isEqualTo(1));
         }
     }
 
@@ -904,7 +1051,14 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
     private void patch(UUID userId, UUID companyId, UUID projectId, UUID caseId,
             Map<String, Object> payload) throws Exception {
 
-        mvc.perform(MockMvcRequestBuilders.patch(path(projectId) + "/" + caseId)
+        patchFor(userId, companyId, projectId, caseId, payload);
+    }
+
+    /** The same edit, for the tests that assert on how it was refused rather than on its effect. */
+    private MvcResult patchFor(UUID userId, UUID companyId, UUID projectId, UUID caseId,
+            Map<String, Object> payload) throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders.patch(path(projectId) + "/" + caseId)
                         .header("Authorization", "Bearer " + tokenFor(userId, companyId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(payload)))

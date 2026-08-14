@@ -20,6 +20,11 @@
  *
  * The contract is fixed too (§144). This stays because the file-time endpoint still validates
  * nothing, so the contract being right only helps a caller that reads it.
+ *
+ * **Two of the six checks stopped mirroring the server in §200** — `steps` and `gherkinSource`,
+ * which the create path now defers — and they are kept anyway, for a reason stated at the checks
+ * themselves. The rest of this header still holds: every other field it names is refused by the
+ * server at accept exactly as it is here.
  */
 import { TcmsClientError } from '../errors.js';
 
@@ -52,6 +57,17 @@ export function requireProposableCase(testCase: Record<string, unknown>, source:
   );
 
   const format = testCase['stepFormat'];
+  // THE NEXT TWO ARE STRICTER THAN THE SERVER SINCE §200, and that is now a decision rather than
+  // parity. The create path defers the procedure — a case may exist before anybody has written how
+  // to run it — so accepting a stepless proposal would succeed and produce a DRAFT stub.
+  //
+  // They stay because the deferral was granted to a different act. A person typing a title into a
+  // plan they are writing has said what the case is FOR and will say how it runs later; a model
+  // filing a proposal has been asked for the case itself, and one with no procedure is an empty
+  // proposal whose acceptance gains the reviewer nothing they could not have got by typing the
+  // title. The refusal is also the only feedback the model gets — see the message below, which is
+  // what a caller reads and retries against.
+  //
   // Non-empty, not merely present: `CaseEdit` reads null and `[]` alike as "nothing was sent".
   if (format === 'STRUCTURED' && !(Array.isArray(testCase['steps']) && testCase['steps'].length > 0)) {
     missing.push('steps');

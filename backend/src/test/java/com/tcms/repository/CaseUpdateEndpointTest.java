@@ -804,6 +804,13 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
          * for {@code STRUCTURED}, {@code gherkinSource} for {@code GHERKIN}, and the two
          * automation fields for their two statuses. They are optional on the contract and refused
          * on the server, and that is the honest arrangement rather than a complete one.
+         *
+         * <p><strong>Since §200 the first two are conditional on the VERB as well</strong>, and
+         * this test is the update half: {@code PATCH} refuses them, {@code POST} defers them, so a
+         * case may be created before anybody has written how it is run. The `required` array is
+         * unaffected — neither was ever in it — and the create half is
+         * {@code CaseCreateEndpointTest.TheProcedureMayBeDeferred} plus the twin of this check
+         * below it.
          */
         private static final Set<String> CONDITIONALLY_REQUIRED =
                 Set.of("steps", "gherkinSource", "automationKey", "notAutomatableReason");

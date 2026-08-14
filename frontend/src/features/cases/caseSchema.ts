@@ -175,6 +175,13 @@ export const CaseSchema = z
   })
   // Cross-field rules the server also enforces. Both live in the schema rather than in the
   // submit handler, so the message lands on the field that caused it.
+  //
+  // The first two are stricter than the server's CREATE path since §200, and deliberately so. The
+  // server defers the procedure because the plan's Test cases tab authors a case from a title with
+  // no step field on screen; this editor renders one, so an author here has been asked the question
+  // and an empty answer is an answer. Relaxing it to match would let the one surface built for
+  // writing a case be the surface that saves an empty one. The stub the plan creates is finished
+  // HERE, and this rule is what finishing means.
   .refine((data) => data.stepFormat !== 'GHERKIN' || !!data.gherkinSource?.trim(), {
     path: ['gherkinSource'],
     message: 'Write the scenario, or switch to structured steps.',

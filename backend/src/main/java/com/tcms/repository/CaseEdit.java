@@ -142,6 +142,58 @@ record CaseEdit(
     }
 
     /**
+     * Whether this payload has to state the case's <strong>procedure</strong> — {@code steps} for a
+     * {@code STRUCTURED} case, {@code gherkinSource} for a {@code GHERKIN} one.
+     *
+     * <p>The two are one rule with two spellings, not two rules: {@link StepFormat} makes them
+     * alternatives, so a case states its procedure in exactly one of them and asking a caller for
+     * the other is a category error. {@link CaseCompleteness} already reads them as one question
+     * for the same reason. They are therefore deferred together and enforced together; nothing else
+     * validated here differs by path.
+     *
+     * <h2>Why a case may exist before its procedure does</h2>
+     *
+     * <p>A plan's Test cases tab lists what the plan covers by title and creates a case per row
+     * (§97 D2). Requiring a step there leaves two options and both are worse than the stub:
+     * <em>refuse the save</em> — which is what it did from §97 to §199, on fields the author was
+     * never shown and could not have filled — or <em>invent a step</em> the author did not write,
+     * which is authored content with nobody's name on it.
+     *
+     * <p>So a case whose procedure is not written yet is a first-class state, and the product
+     * already had the observer for it before it had a producer: {@code case_health.incomplete}
+     * fires on an <strong>approved</strong> case with no steps or an empty scenario (§182), and
+     * {@link CaseCompleteness} recorded that as a term nothing could reach. A draft missing its
+     * procedure is ordinary work in progress; one signed off still missing it is the fault. That
+     * line is drawn there, and this enum is what lets a case get to the side of it where somebody
+     * can see it.
+     */
+    enum ProcedureRule {
+
+        /**
+         * The payload must state it — the <strong>update</strong> path.
+         *
+         * <p>A {@code PATCH} body is the whole editable set (§144) sent by an author with the field
+         * in front of them, so an empty one is a statement that this case has no procedure rather
+         * than a question left open. It is also the funnel: a stub reaches its steps by being
+         * opened and saved, and this is the rule that makes saving it mean writing it.
+         */
+        REQUIRED,
+
+        /**
+         * The payload need not — the <strong>create</strong> path, and {@link #of} reconstructing a
+         * stored row.
+         *
+         * <p>Those two are one reason, not two. A stub is a legal row once create admits it, so a
+         * reconstruction that refused one would have the validator disagreeing with the database
+         * about which cases exist — and the case would be skipped by a bulk action that has nothing
+         * to do with its steps, under a message telling its author to save it once, which the
+         * update path would then refuse. §64's argument about stored references, reached from the
+         * far end.
+         */
+        DEFERRED
+    }
+
+    /**
      * Validates and normalizes a submitted update against the case it targets.
      *
      * @param liveSuiteIds the project's live suite ids — passed in rather than looked up here so
@@ -206,6 +258,8 @@ record CaseEdit(
      *                           keeps its CI identifier reserved — which is correct (results still
      *                           arrive for it) and surprising, hence a checked message instead of
      *                           the 500 a constraint violation would produce.
+     * @param procedure whether this payload must state how the case is run — see
+     *                  {@link ProcedureRule}, which is the one rule here that differs by path.
      */
     static Outcome validate(
             CaseUpdateRequest request,
@@ -220,7 +274,8 @@ record CaseEdit(
             Set<UUID> declinableAttachmentIds,
             Set<UUID> retainedAttachmentIds,
             List<UUID> storedDeclinedIds,
-            java.util.function.Predicate<String> automationKeyTaken) {
+            java.util.function.Predicate<String> automationKeyTaken,
+            ProcedureRule procedure) {
 
         Map<String, List<String>> errors = new LinkedHashMap<>();
 
@@ -274,7 +329,9 @@ record CaseEdit(
         List<StepEdit> steps =
                 normalizeSteps(request.steps(), existingStepIds, acceptableSharedStepIds, errors);
 
-        if (format == StepFormat.GHERKIN && gherkin == null) {
+        boolean statesItsProcedure = procedure == ProcedureRule.REQUIRED;
+
+        if (statesItsProcedure && format == StepFormat.GHERKIN && gherkin == null) {
             errors.computeIfAbsent("gherkinSource", k -> new ArrayList<>())
                     .add("Write the scenario, or switch to structured steps.");
         }
@@ -287,7 +344,7 @@ record CaseEdit(
         // blank action and an unknown step id, so this predates the reference check and is fixed
         // for all three.
         boolean noStepsSubmitted = request.steps() == null || request.steps().isEmpty();
-        if (format == StepFormat.STRUCTURED && noStepsSubmitted) {
+        if (statesItsProcedure && format == StepFormat.STRUCTURED && noStepsSubmitted) {
             errors.computeIfAbsent("steps", k -> new ArrayList<>())
                     .add("Add at least one step, or switch to Gherkin.");
         }
@@ -437,11 +494,18 @@ record CaseEdit(
      *                                     every bulk-written version hash as though the case had
      *                                     been un-classified, and the next ordinary save would then
      *                                     read as a change that restored it.
-     * @return empty when the stored row does not validate — a case with no steps in structured
-     *         format, or one whose suite has since been deleted. Rare and real, so the caller skips
-     *         that case with a reason rather than this throwing and failing the whole operation.
-     *         Applying the change without a version row is not an option: it is exactly the silent
-     *         mis-attribution this method exists to prevent.
+     * @return empty when the stored row does not validate. The caller skips that case with a reason
+     *         rather than this throwing and failing the whole operation; applying the change without
+     *         a version row is not an option, since that is exactly the silent mis-attribution this
+     *         method exists to prevent.
+     *         <p><strong>What can still land here is narrower since §200, and worth stating because
+     *         the two examples this line used to give were both of them.</strong> "A case with no
+     *         steps in structured format" is now a legal stored row and reconstructs — see
+     *         {@link ProcedureRule#DEFERRED}, passed below. "One whose suite has since been deleted"
+     *         cannot be produced either: {@link SuiteWriteService#delete} refuses a suite with live
+     *         cases filed in it. So the empty arm is defensive rather than reachable through any
+     *         endpoint today — §181's shape, kept for §181's reason, and the caller's
+     *         {@code NEEDS_A_SAVE} skip is a sentence no test has ever produced.
      */
     static Optional<CaseEdit> of(
             TestCase row,
@@ -565,7 +629,15 @@ record CaseEdit(
                 // the operation — and passes the already-narrowed list as storedDeclinedIds.
                 Set.copyOf(storedDeclinedIds),
                 storedDeclinedIds,
-                automationKeyTaken);
+                automationKeyTaken,
+                // A stored row is not an authoring act, so the procedure rule has nothing here to
+                // protect — the fourth argument of this shape, after the vocabulary, the library and
+                // the declinable set above. It differs from those three in that it cannot be spelled
+                // as an empty set, and in what it would cost: since §200 a stub is a legal row, so
+                // REQUIRED here would refuse to reconstruct a case the database holds and every
+                // authored bulk action would skip it under a message telling its author to save it
+                // once — which the update path, where the rule DOES apply, would then refuse.
+                ProcedureRule.DEFERRED);
         return outcome instanceof Outcome.Valid valid
                 ? Optional.of(valid.edit())
                 : Optional.empty();

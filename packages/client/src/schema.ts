@@ -1630,6 +1630,15 @@ export interface paths {
          *     Version **1** is written in the same transaction as the case, so a case created here has a
          *     gapless history. Cases that predate this endpoint have no v1 and their first edit is v2; see
          *     `EntityVersion`.
+         *
+         *     **A case may be created before its procedure is written.** `steps` for a `STRUCTURED` case
+         *     and `gherkinSource` for a `GHERKIN` one are required by `PATCH` and **not** by this
+         *     operation, which is the one rule where creating is more permissive than editing. It exists
+         *     because a plan's Test cases tab authors a case from a title alone, where the alternatives
+         *     were refusing the save or inventing a step nobody wrote. What you get back is a `DRAFT`
+         *     stub; `caseHealth.signals` reports `INCOMPLETE` only once such a case is **approved**, since
+         *     a draft that is not finished yet is not a fault. Note the asymmetry when round-tripping: a
+         *     stub read back and `PATCH`ed unchanged is refused until its procedure is filled in.
          */
         post: {
             parameters: {
@@ -1871,6 +1880,13 @@ export interface paths {
          *     `ownerId` and `automationTags` are on `TestCaseInput` and are **refused with a 400 when
          *     present** — each needs a write path no slice has built. A round-trip must therefore drop
          *     them rather than echo what the `GET` returned.
+         *
+         *     **This is where the procedure is required**, and the only rule `POST` is more permissive
+         *     about: a `STRUCTURED` case must carry at least one `step` and a `GHERKIN` one a
+         *     `gherkinSource`. A body here is an author's whole restatement of the case, so an empty
+         *     procedure says the case has none rather than leaving the question open — and this is how a
+         *     stub created by `POST` gets its steps. A read-modify-write over a stub is therefore refused
+         *     until the caller supplies them.
          */
         patch: {
             parameters: {
