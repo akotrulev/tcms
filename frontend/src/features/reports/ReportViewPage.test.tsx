@@ -6,6 +6,7 @@ import { ApiError, api } from '../../api/client'
 import { reportJobStatusLabels } from '../../lib/labels'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
+import { aProject } from '../../test/fixtures'
 import { ReportViewPage } from './ReportViewPage'
 
 /**
@@ -82,7 +83,7 @@ const storedModel = {
 function answerReads(row: Record<string, unknown>) {
   return vi.spyOn(api, 'get').mockImplementation((path: string) => {
     if (path.includes('/reports/jobs/')) return Promise.resolve(row as never)
-    return Promise.resolve({ id: PROJECT, key: 'ACME', name: 'Acme Platform' } as never)
+    return Promise.resolve(aProject({ id: PROJECT, key: 'ACME', name: 'Acme Platform' }) as never)
   })
 }
 

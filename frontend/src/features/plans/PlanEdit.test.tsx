@@ -8,6 +8,7 @@ import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aProject, planStatistics, projectSettings } from '../../test/fixtures'
 import { PlanStatisticsPage } from './PlanStatisticsPage'
 
 /**
@@ -75,25 +76,11 @@ function mockReads(plan: TestPlan, permissions: PermissionKey[] = ['project:read
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes('/statistics')) {
-      return {
-        planId: PLAN,
-        planKey: 'TP-4',
-        planName: plan.name,
-        aggregationPolicy: 'LATEST',
-        counts: { passed: 0, failed: 0, blocked: 0, skipped: 0, retest: 0, notRun: 0, total: 0 },
-        coveragePercent: 0,
-        stale: false,
-        byConfiguration: [],
-        bySuite: [],
-        blockers: [],
-        notRun: [],
-        trend: [],
-        exitCriteria: [],
-        latestExecutionAt: null,
-      }
+      return planStatistics({ planId: PLAN, planKey: 'TP-4', planName: plan.name })
     }
     if (path.includes(`/plans/${PLAN}`)) return plan
-    if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+    if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
+    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }

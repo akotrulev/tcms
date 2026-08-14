@@ -8,6 +8,7 @@ import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aDocPageSummary, aProject, planStatistics, projectSettings } from '../../test/fixtures'
 import { PlanStatisticsPage } from './PlanStatisticsPage'
 
 /**
@@ -59,9 +60,16 @@ function planBody(): TestPlan {
 }
 
 const PAGES = [
-  { id: 'dp1', key: 'DOC-1', title: 'Payments v4 requirements', subjectType: null, subjectId: null },
+  aDocPageSummary({ id: 'dp1', key: 'DOC-1', title: 'Payments v4 requirements', slug: 'payments-v4' }),
   // Spoken for by ANOTHER plan — the row assertion 2 is about.
-  { id: 'dp2', key: 'DOC-2', title: 'Refunds v2 requirements', subjectType: 'TEST_PLAN', subjectId: 'tp-other' },
+  aDocPageSummary({
+    id: 'dp2',
+    key: 'DOC-2',
+    title: 'Refunds v2 requirements',
+    slug: 'refunds-v2',
+    subjectType: 'TEST_PLAN',
+    subjectId: 'tp-other',
+  }),
 ]
 
 const LINKED_PAGE: DocPage = {
@@ -109,23 +117,11 @@ function mockReads(document: DocPage | null, permissions: PermissionKey[] = ['pr
       if (document) return document
       throw new ApiError(404, 'Not found', null, null, null, "That plan's document")
     }
-    if (path.includes('/statistics')) {
-      return {
-        counts: { total: 0, passed: 0, failed: 0, blocked: 0, skipped: 0, retest: 0, notRun: 0 },
-        coveragePercent: 0,
-        stale: false,
-        byConfiguration: [],
-        bySuite: [],
-        blockers: [],
-        notRun: [],
-        trend: [],
-        exitCriteria: [],
-        latestExecutionAt: null,
-      }
-    }
+    if (path.includes('/statistics')) return planStatistics({ planId: PLAN })
     if (path.includes('/doc-pages')) return PAGES
     if (path.includes(`/plans/${PLAN}`)) return planBody()
-    if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+    if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
+    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }

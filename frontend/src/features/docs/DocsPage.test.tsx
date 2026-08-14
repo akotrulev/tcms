@@ -6,6 +6,7 @@ import type { DocPage, DocPageSummary, PermissionKey } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aProject } from '../../test/fixtures'
 import { DocsPage } from './DocsPage'
 
 /**
@@ -48,7 +49,7 @@ function mockReads(keys: PermissionKey[], attachments: DocPage['attachments'] = 
     if (path.startsWith('/me/permissions')) return heldPermissions(keys)
     if (path.includes('/doc-pages/')) return page(attachments)
     if (path.endsWith('/doc-pages')) return [summary]
-    if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }

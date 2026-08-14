@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import { TestProviders } from '../../test/TestProviders'
+import { aWorkItem } from '../../test/fixtures'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TaskCreateDialog } from './TaskCreateDialog'
 
@@ -90,7 +91,7 @@ describe('TaskCreateDialog — the assignee picker', () => {
 
   it('sends the chosen member as assigneeId', async () => {
     mockGets(members)
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 't1', title: 'X' } as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(aWorkItem({ id: 't1', title: 'X' }) as never)
 
     renderDialog()
     // The options only exist once the popover is open — MUI renders the menu lazily — so the
@@ -107,7 +108,7 @@ describe('TaskCreateDialog — the assignee picker', () => {
 
   it('sends null — not an empty string — when the task is left unassigned', async () => {
     mockGets(members)
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 't1', title: 'X' } as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(aWorkItem({ id: 't1', title: 'X' }) as never)
 
     renderDialog()
     await userEvent.type(screen.getByTestId('Board.Create.Title'), "Nobody's yet")
@@ -121,7 +122,7 @@ describe('TaskCreateDialog — the assignee picker', () => {
 
   it('carries an Idempotency-Key, so a retry cannot leave two cards on the board', async () => {
     mockGets(members)
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 't1', title: 'X' } as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(aWorkItem({ id: 't1', title: 'X' }) as never)
 
     renderDialog()
     await userEvent.type(screen.getByTestId('Board.Create.Title'), 'Only once')
@@ -136,7 +137,7 @@ describe('TaskCreateDialog — the assignee picker', () => {
 
   it('still creates the task when the members list fails to load', async () => {
     vi.spyOn(api, 'get').mockRejectedValue(new Error('members unavailable'))
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 't1', title: 'X' } as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(aWorkItem({ id: 't1', title: 'X' }) as never)
 
     renderDialog()
     await userEvent.type(screen.getByTestId('Board.Create.Title'), 'Still addable')

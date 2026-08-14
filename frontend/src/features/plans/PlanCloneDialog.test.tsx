@@ -5,6 +5,7 @@ import { ApiError, api } from '../../api/client'
 import type { TestPlan } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
+import { aPlan } from '../../test/fixtures'
 import { PlanCloneDialog } from './PlanCloneDialog'
 
 /**
@@ -76,7 +77,7 @@ describe('PlanCloneDialog', () => {
   })
 
   it('suggests the name and posts to the clone endpoint, not to the create', async () => {
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'plan-2', key: 'TP-4' } as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(aPlan({ id: 'plan-2', key: 'TP-4' }) as never)
     const onCloned = renderDialog()
 
     expect(await screen.findByTestId('PlanStats.Clone.Name')).toHaveValue('Copy of Regression 4.3')

@@ -19,6 +19,7 @@ import viteConfig from './vite.config.ts'
 export default mergeConfig(
   viteConfig,
   defineConfig({
+    server: { fs: { allow: ['..'] } },
     test: {
       /**
        * jsdom, not happy-dom, for three specific reasons rather than habit:

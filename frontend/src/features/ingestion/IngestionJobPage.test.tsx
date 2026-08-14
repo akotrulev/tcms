@@ -6,6 +6,7 @@ import type { IngestionJob, PermissionKey } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aProject } from '../../test/fixtures'
 import { IngestionJobPage } from './IngestionJobPage'
 
 /**
@@ -51,7 +52,7 @@ function mockApi(permissions: PermissionKey[], job: IngestionJob = JOB) {
   return vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes('/ingestions/')) return job
-    if (path.startsWith('/projects/p1')) return { id: 'p1', key: 'OLB', name: 'Banking' }
+    if (path.startsWith('/projects/p1')) return aProject({ id: 'p1', key: 'OLB', name: 'Banking' })
     throw new Error(`unmocked read: ${path}`)
   }) as never)
 }

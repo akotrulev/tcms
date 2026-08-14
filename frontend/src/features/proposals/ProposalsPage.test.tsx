@@ -7,6 +7,7 @@ import type { AiProposalSummary } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aProject } from '../../test/fixtures'
 import { ProposalsPage } from './ProposalsPage'
 
 /**
@@ -65,7 +66,7 @@ function mockApi(rows: AiProposalSummary[] = [UNCHECKED, CLAIMED, BY_HAND]) {
         total: status === 'PENDING' ? rows.length : 0,
       }
     }
-    if (path.startsWith('/projects/p1')) return { id: 'p1', key: 'OLB', name: 'Banking' }
+    if (path.startsWith('/projects/p1')) return aProject({ id: 'p1', key: 'OLB', name: 'Banking' })
     throw new Error(`unmocked read: ${path}`)
   }) as never)
 }

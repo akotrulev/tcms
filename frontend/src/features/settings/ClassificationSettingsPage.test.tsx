@@ -7,6 +7,7 @@ import type { ClassificationDimension, PermissionKey } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aProject } from '../../test/fixtures'
 import { ClassificationSettingsPage } from './ClassificationSettingsPage'
 
 /**
@@ -73,7 +74,7 @@ function mockApi(onProject: PermissionKey[], inCompany: PermissionKey[]) {
     if (path.startsWith('/me/permissions?')) return heldPermissions(onProject, {}, PROJECT)
     if (path.startsWith('/me/permissions')) return heldPermissions(inCompany, {}, null)
     if (path.endsWith('/classification')) return dimensions
-    return { id: PROJECT, key: 'OLB', name: 'Online Banking' }
+    return aProject({ id: PROJECT, key: 'OLB', name: 'Online Banking' })
   }) as never)
 }
 

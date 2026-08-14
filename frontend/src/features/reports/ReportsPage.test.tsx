@@ -4,6 +4,7 @@ import { api } from '../../api/client'
 import { TestProviders } from '../../test/TestProviders'
 import { heldPermissions } from '../../test/permissions'
 import { createTestQueryClient } from '../../test/queryClient'
+import { aProject } from '../../test/fixtures'
 import { ReportsPage } from './ReportsPage'
 import type { PermissionKey } from '../../api/types'
 
@@ -32,7 +33,7 @@ function mockReads(held: PermissionKey[]) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.includes('/me/permissions')) return heldPermissions(held, {}, PROJECT)
     if (path.endsWith('/reports')) return []
-    if (path.includes(`/projects/${PROJECT}`)) return { id: PROJECT, key: 'ACME', name: 'Acme' }
+    if (path.includes(`/projects/${PROJECT}`)) return aProject({ id: PROJECT, key: 'ACME', name: 'Acme' })
     return []
   }) as unknown as typeof api.get)
 }

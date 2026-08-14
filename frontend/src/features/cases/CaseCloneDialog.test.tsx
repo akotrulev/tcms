@@ -5,6 +5,7 @@ import { ApiError, api } from '../../api/client'
 import type { CaseConditionRef, TestCase } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
+import { aCase, aSuite } from '../../test/fixtures'
 import { CaseCloneDialog } from './CaseCloneDialog'
 
 /**
@@ -32,8 +33,8 @@ import { CaseCloneDialog } from './CaseCloneDialog'
 const PROJECT = '11111111-1111-1111-1111-111111111111'
 
 const suites = [
-  { id: 'suite-1', key: 'TS-1', name: 'Payments', caseCount: 12 },
-  { id: 'suite-2', key: 'TS-2', name: 'Refunds', caseCount: 4 },
+  aSuite({ id: 'suite-1', key: 'TS-1', name: 'Payments', caseCount: 12 }),
+  aSuite({ id: 'suite-2', key: 'TS-2', name: 'Refunds', caseCount: 4 }),
 ]
 
 /**
@@ -138,7 +139,7 @@ describe('CaseCloneDialog', () => {
   })
 
   it('sends the edited title and no suiteId when the folder is left alone', async () => {
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'case-2', key: 'TC-8' } as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(aCase({ id: 'case-2', key: 'TC-8' }) as never)
     const onCloned = renderDialog(sourceCase())
 
     const title = await screen.findByTestId('CaseDetail.Clone.Title')
@@ -157,7 +158,7 @@ describe('CaseCloneDialog', () => {
   })
 
   it('sends the chosen folder when one is picked', async () => {
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'case-2' } as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(aCase({ id: 'case-2' }) as never)
     renderDialog(sourceCase())
 
     await screen.findByTestId('CaseDetail.Clone.Title')

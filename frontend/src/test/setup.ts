@@ -5,8 +5,16 @@
  * import. Nothing about application behaviour is configured here — a setup file that quietly
  * changes how the app behaves under test is how a suite ends up green against a program that
  * does not exist.
+ *
+ * `contractDoubles` is the one import that does more than fill a gap, and it is here *because* of
+ * the rule above rather than despite it: it changes nothing about the application and everything
+ * about what a **test double** is allowed to claim, by comparing every body a mocked `api.*` call
+ * serves against `openapi.yaml`. A suite green against a program that does not exist is exactly
+ * what an unchecked fixture buys. It has to be installed globally — a check each file opts into is
+ * a hand-maintained list — so this is the only place it can go; see that module's header.
  */
 import '@testing-library/jest-dom/vitest'
+import './contractDoubles'
 import { cleanup, configure } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 

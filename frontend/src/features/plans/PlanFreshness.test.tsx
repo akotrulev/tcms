@@ -7,6 +7,7 @@ import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aProject, noCounts, planStatistics, projectSettings } from '../../test/fixtures'
 import { PlanStatisticsPage } from './PlanStatisticsPage'
 
 /**
@@ -71,13 +72,11 @@ function mockReads(computedAt: string | null, stale = false) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(['project:read'])
     if (path.includes('/statistics')) {
-      return {
+      return planStatistics({
         planId: PLAN,
         planKey: 'TP-4',
         planName: 'Release 4.4 regression',
-        planVersionNo: 1,
-        aggregationPolicy: 'LATEST',
-        counts: { passed: 3, failed: 1, blocked: 0, skipped: 0, notRun: 0, total: 4 },
+        counts: noCounts({ passed: 3, failed: 1, total: 4 }),
         coveragePercent: 100,
         // Non-null, because the freshness caption above `computedAt` only renders when there is a
         // latest execution — without it this test would be asserting the presence of one line while
@@ -85,16 +84,11 @@ function mockReads(computedAt: string | null, stale = false) {
         latestExecutionAt: '2026-08-06T11:00:00Z',
         stale,
         computedAt,
-        byConfiguration: [],
-        bySuite: [],
-        blockers: [],
-        notRun: [],
-        trend: [],
-        exitCriteria: [],
-      }
+      })
     }
     if (path.includes(`/plans/${PLAN}`)) return planBody()
-    if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+    if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
+    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }

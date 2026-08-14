@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type { TestPlan } from '../../api/types'
 import { createTestQueryClient } from '../../test/queryClient'
+import { aCase } from '../../test/fixtures'
 import { blankCaseRow, draftFromPlan, type PlanDraft } from './planDraft'
 import { usePlanSave } from './usePlanSave'
 
@@ -88,7 +89,7 @@ describe('usePlanSave', () => {
     const post = vi.spyOn(api, 'post').mockImplementation((async (_path: string, body: unknown) => {
       calls.push('post')
       const title = (body as { title: string }).title
-      return { id: `case-${title}`, key: `TC-${title}` }
+      return aCase({ id: `case-${title}`, key: `TC-${title}` })
     }) as never)
     const patch = vi.spyOn(api, 'patch').mockImplementation((async () => {
       calls.push('patch')
@@ -110,10 +111,8 @@ describe('usePlanSave', () => {
   })
 
   it('gives every row its own idempotency key', async () => {
-    const post = vi.spyOn(api, 'post').mockImplementation((async (_p: string, body: unknown) => ({
-      id: 'c',
-      key: `TC-${(body as { title: string }).title}`,
-    })) as never)
+    const post = vi.spyOn(api, 'post').mockImplementation((async (_p: string, body: unknown) =>
+      aCase({ id: 'c', key: `TC-${(body as { title: string }).title}` })) as never)
     vi.spyOn(api, 'patch').mockResolvedValue(planBody() as never)
 
     const plan = planBody()
@@ -131,7 +130,7 @@ describe('usePlanSave', () => {
   it('sends the same key again on a retry, so a second Save creates nothing twice', async () => {
     const post = vi
       .spyOn(api, 'post')
-      .mockImplementation((async () => ({ id: 'case-1', key: 'TC-1' })) as never)
+      .mockImplementation((async () => aCase({ id: 'case-1', key: 'TC-1' })) as never)
     vi.spyOn(api, 'patch')
       .mockRejectedValueOnce(new Error('the plan step fell over'))
       .mockResolvedValue(planBody() as never)
@@ -153,10 +152,8 @@ describe('usePlanSave', () => {
   })
 
   it('reports the cases it created when the plan step fails', async () => {
-    vi.spyOn(api, 'post').mockImplementation((async (_p: string, body: unknown) => ({
-      id: 'case-x',
-      key: `TC-${(body as { title: string }).title}`,
-    })) as never)
+    vi.spyOn(api, 'post').mockImplementation((async (_p: string, body: unknown) =>
+      aCase({ id: 'case-x', key: `TC-${(body as { title: string }).title}` })) as never)
     vi.spyOn(api, 'patch').mockRejectedValue(new Error('nope'))
 
     const plan = planBody()
@@ -172,7 +169,7 @@ describe('usePlanSave', () => {
     vi.spyOn(api, 'post').mockImplementation((async (_p: string, body: unknown) => {
       const title = (body as { title: string }).title
       if (title === 'b') throw new Error('refused')
-      return { id: `case-${title}`, key: `TC-${title}` }
+      return aCase({ id: `case-${title}`, key: `TC-${title}` })
     }) as never)
     const patch = vi.spyOn(api, 'patch').mockResolvedValue(planBody() as never)
 

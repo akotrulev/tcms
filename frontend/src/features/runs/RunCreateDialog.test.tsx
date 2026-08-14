@@ -5,6 +5,7 @@ import { ApiError, api } from '../../api/client'
 import { TestProviders } from '../../test/TestProviders'
 import { heldPermissions } from '../../test/permissions'
 import { createTestQueryClient } from '../../test/queryClient'
+import { aCaseSummary, aPlan, aRun, aSuite } from '../../test/fixtures'
 import { RunCreateDialog } from './RunCreateDialog'
 import type { PermissionKey } from '../../api/types'
 
@@ -35,37 +36,32 @@ import type { PermissionKey } from '../../api/types'
 const PROJECT = '11111111-1111-1111-1111-111111111111'
 
 const plans = [
-  {
+  aPlan({
     id: 'plan-1',
     key: 'TP-1',
     name: 'Release 4.3',
-    status: 'ACTIVE',
+    // `APPROVED`, not the `ACTIVE` this fixture carried for four slices: `PlanStatus` has three
+    // members and that is not one of them. The doubles check compares structure, not values, so
+    // an invented enum member is drift it cannot see — found by reading, while repairing the rest.
+    status: 'APPROVED',
     milestoneName: 'GA',
     milestoneDate: '2026-09-01',
     caseCount: 27,
-    passRate: null,
-    coverage: null,
-    description: null,
-    entryCriteria: [],
-    exitCriteria: [],
-    configurations: [],
-    currentVersionNo: 1,
-    lockVersion: 1,
-  },
+  }),
 ]
 
 /** §99's scope arms, as their endpoints answer them. */
 const suites = [
-  { id: 'suite-1', key: 'TS-1', name: 'Payments', caseCount: 12 },
-  { id: 'suite-2', key: 'TS-2', name: 'Refunds', caseCount: 4 },
+  aSuite({ id: 'suite-1', key: 'TS-1', name: 'Payments', caseCount: 12 }),
+  aSuite({ id: 'suite-2', key: 'TS-2', name: 'Refunds', caseCount: 4 }),
 ]
 const tagUsage = [
   { tag: 'smoke', caseCount: 9 },
   { tag: 'payments', caseCount: 3 },
 ]
 const caseRows = [
-  { id: 'case-1', key: 'TC-1', title: 'Refund the whole amount' },
-  { id: 'case-2', key: 'TC-2', title: 'Partial refund rounds' },
+  aCaseSummary({ id: 'case-1', key: 'TC-1', title: 'Refund the whole amount' }),
+  aCaseSummary({ id: 'case-2', key: 'TC-2', title: 'Partial refund rounds' }),
 ]
 
 function mockPlans(rows: unknown[], held: PermissionKey[] = []) {
@@ -78,7 +74,7 @@ function mockPlans(rows: unknown[], held: PermissionKey[] = []) {
     if (path.includes('/me/permissions')) return heldPermissions(held, {}, PROJECT)
     if (path.includes('/suites')) return suites
     if (path.includes('/tags')) return tagUsage
-    if (path.includes('/cases')) return { items: caseRows, page: 0, size: 200, total: 2 }
+    if (path.includes('/cases')) return { items: caseRows, facets: [], page: 0, size: 200, total: 2 }
     return []
   }) as unknown as typeof api.get)
 }
@@ -138,7 +134,7 @@ describe('RunCreateDialog', () => {
 
   it('sends the three arms, and the plan is still recorded beside them', async () => {
     mockPlans(plans)
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'run-1', key: 'TR-1' } as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(aRun({ id: 'run-1', key: 'TR-1' }) as never)
 
     render(
       <TestProviders client={createTestQueryClient()}>
@@ -207,7 +203,7 @@ describe('RunCreateDialog', () => {
     mockPlans(plans)
     const post = vi
       .spyOn(api, 'post')
-      .mockResolvedValue({ id: 'run-1', key: 'TR-1' } as never)
+      .mockResolvedValue(aRun({ id: 'run-1', key: 'TR-1' }) as never)
     const onCreated = vi.fn()
 
     render(
@@ -240,7 +236,7 @@ describe('RunCreateDialog', () => {
     mockPlans(plans)
     const post = vi
       .spyOn(api, 'post')
-      .mockResolvedValue({ id: 'run-1', key: 'TR-1' } as never)
+      .mockResolvedValue(aRun({ id: 'run-1', key: 'TR-1' }) as never)
 
     render(
       <TestProviders client={createTestQueryClient()}>
@@ -266,7 +262,7 @@ describe('RunCreateDialog', () => {
     mockPlans(plans)
     const post = vi
       .spyOn(api, 'post')
-      .mockResolvedValue({ id: 'run-1', key: 'TR-1' } as never)
+      .mockResolvedValue(aRun({ id: 'run-1', key: 'TR-1' }) as never)
 
     render(
       <TestProviders client={createTestQueryClient()}>
@@ -412,7 +408,7 @@ describe('RunCreateDialog', () => {
 
     it('does not send overrideApprovalGate on an ordinary create', async () => {
       mockPlans(plans, ['case:approve'])
-      const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'run-1' } as never)
+      const post = vi.spyOn(api, 'post').mockResolvedValue(aRun({ id: 'run-1' }) as never)
 
       render(
         <TestProviders client={createTestQueryClient()}>
@@ -471,7 +467,7 @@ describe('RunCreateDialog', () => {
       const post = vi
         .spyOn(api, 'post')
         .mockRejectedValueOnce(gateRefusal())
-        .mockResolvedValue({ id: 'run-1' } as never)
+        .mockResolvedValue(aRun({ id: 'run-1' }) as never)
       const onCreated = vi.fn()
 
       render(

@@ -7,6 +7,7 @@ import type { PermissionKey, TestRunDetail } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aProject, aRun } from '../../test/fixtures'
 import { RunDetailPage } from './RunDetailPage'
 
 /**
@@ -65,7 +66,7 @@ function mockReads(
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes(`/runs/${RUN}`)) return runBody(status, startedAt, git)
-    if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }
@@ -129,7 +130,7 @@ describe('RunDetailPage — the run lifecycle controls', () => {
     // answers NOT_STARTED — and a client that "helpfully" sent NOT_STARTED here would be holding
     // its own copy of a rule it reads from a cache that may be one save behind.
     mockReads('ABORTED', null)
-    const put = vi.spyOn(api, 'put').mockResolvedValue({} as never)
+    const put = vi.spyOn(api, 'put').mockResolvedValue(aRun() as never)
     renderPage()
     await waitFor(() => expect(screen.getByTestId('RunDetail.Reopen')).toBeEnabled())
 
@@ -142,7 +143,7 @@ describe('RunDetailPage — the run lifecycle controls', () => {
 
   it('sends COMPLETED on Complete', async () => {
     mockReads('IN_PROGRESS', '2026-08-02T09:00:00Z')
-    const put = vi.spyOn(api, 'put').mockResolvedValue({} as never)
+    const put = vi.spyOn(api, 'put').mockResolvedValue(aRun() as never)
     renderPage()
     await permissionsResolved()
 

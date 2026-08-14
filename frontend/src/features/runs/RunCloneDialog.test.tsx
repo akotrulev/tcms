@@ -6,6 +6,7 @@ import type { PermissionKey, TestRun } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aRun } from '../../test/fixtures'
 import { RunCloneDialog } from './RunCloneDialog'
 
 /**
@@ -103,7 +104,7 @@ describe('RunCloneDialog', () => {
   })
 
   it('omits an untouched release and build rather than sending empty strings', async () => {
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'run-2', key: 'TR-8' } as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(aRun({ id: 'run-2', key: 'TR-8' }) as never)
     const onCloned = renderDialog()
 
     await screen.findByTestId('RunDetail.Clone.Name')
@@ -117,7 +118,7 @@ describe('RunCloneDialog', () => {
   })
 
   it('sends the release and build that were typed', async () => {
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'run-2' } as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(aRun({ id: 'run-2' }) as never)
     renderDialog()
 
     await userEvent.type(await screen.findByTestId('RunDetail.Clone.Release'), '4.3.1')
@@ -138,7 +139,7 @@ describe('RunCloneDialog', () => {
   describe('§6g gating', () => {
     it('does not send overrideApprovalGate on an ordinary clone', async () => {
       mockPermissions(['case:approve'])
-      const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'run-2' } as never)
+      const post = vi.spyOn(api, 'post').mockResolvedValue(aRun({ id: 'run-2' }) as never)
       renderDialog()
 
       await screen.findByTestId('RunDetail.Clone.Name')
@@ -154,7 +155,7 @@ describe('RunCloneDialog', () => {
       const post = vi
         .spyOn(api, 'post')
         .mockRejectedValueOnce(gateRefusal())
-        .mockResolvedValue({ id: 'run-2' } as never)
+        .mockResolvedValue(aRun({ id: 'run-2' }) as never)
       const onCloned = renderDialog()
 
       await screen.findByTestId('RunDetail.Clone.Name')

@@ -7,6 +7,7 @@ import type { AiProposal, PermissionKey } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aCase, aProject } from '../../test/fixtures'
 import { ProposalPage } from './ProposalPage'
 
 /**
@@ -63,7 +64,7 @@ function mockApi(proposal: AiProposal = PENDING, permissions: PermissionKey[] = 
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes('/ai-proposals/')) return proposal
-    if (path.startsWith('/projects/p1')) return { id: 'p1', key: 'OLB', name: 'Banking' }
+    if (path.startsWith('/projects/p1')) return aProject({ id: 'p1', key: 'OLB', name: 'Banking' })
     throw new Error(`unmocked read: ${path}`)
   }) as never)
 }
@@ -153,7 +154,7 @@ describe('ProposalPage', () => {
     mockApi()
     const post = vi
       .spyOn(api, 'post')
-      .mockResolvedValue({ id: 'case-9', key: 'TC-9' } as never)
+      .mockResolvedValue(aCase({ id: 'case-9', key: 'TC-9' }) as never)
     renderPage()
 
     await userEvent.click(await enabled('Proposal.Accept'))

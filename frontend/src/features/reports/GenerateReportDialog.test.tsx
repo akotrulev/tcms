@@ -5,6 +5,7 @@ import { ApiError, api } from '../../api/client'
 import { TestProviders } from '../../test/TestProviders'
 import { heldPermissions } from '../../test/permissions'
 import { createTestQueryClient } from '../../test/queryClient'
+import { aConfiguration, aDocPageSummary, aPlan, aRun, noCounts } from '../../test/fixtures'
 import { GenerateReportDialog } from './GenerateReportDialog'
 
 /**
@@ -46,7 +47,7 @@ import { GenerateReportDialog } from './GenerateReportDialog'
 const PROJECT = '11111111-1111-1111-1111-111111111111'
 
 const runs = [
-  {
+  aRun({
     id: 'run-1',
     key: 'TR-1',
     name: 'Regression 4.3.0',
@@ -54,31 +55,30 @@ const runs = [
     planKey: 'TP-1',
     status: 'IN_PROGRESS',
     releaseVersion: '4.3.0',
-    buildNumber: null,
-    commitSha: null,
-    branch: null,
-    source: 'MANUAL',
     startedAt: '2026-08-01T09:00:00Z',
-    completedAt: null,
-    configuration: { id: 'cfg-1', name: 'Default', isDefault: true },
-    counts: { total: 2, executed: 1, passed: 1, failed: 0, blocked: 0, skipped: 0, retest: 0, untested: 1 },
-  },
+    configuration: aConfiguration({ id: 'cfg-1' }),
+    // The six the contract declares. This fixture also carried `executed`, `retest` and
+    // `untested`, none of which `ResultCounts` has ever had: the server folds RETEST, UNTESTED and
+    // WIP into `notRun` (`ExecutionViews`), and the three invented ones were a vocabulary no
+    // endpoint can answer with.
+    counts: noCounts({ total: 2, passed: 1, notRun: 1 }),
+  }),
 ]
 
 const plans = [
-  { id: 'plan-1', key: 'TP-1', name: 'Release 4.3.0', status: 'ACTIVE' },
-  { id: 'plan-2', key: 'TP-2', name: 'Hardening', status: 'ACTIVE' },
+  aPlan({ id: 'plan-1', key: 'TP-1', name: 'Release 4.3.0', status: 'APPROVED' }),
+  aPlan({ id: 'plan-2', key: 'TP-2', name: 'Hardening', status: 'APPROVED' }),
 ]
 
 const pages = [
-  {
+  aDocPageSummary({
     id: 'page-1',
     key: 'DOC-1',
     title: 'Payments',
     slug: 'payments',
     status: 'PUBLISHED',
     updatedAt: '2026-08-01T09:00:00Z',
-  },
+  }),
 ]
 
 function mockReads(rows: unknown[], docPages: unknown[] = pages) {

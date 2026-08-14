@@ -8,6 +8,7 @@ import { api } from '../../api/client'
 import type { Condition, PermissionKey, StepSuggestion, Suite, TagUsage, TestCase } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
+import { aCase } from '../../test/fixtures'
 import { heldPermissions } from '../../test/permissions'
 import { CaseEditorPage } from './CaseEditorPage'
 
@@ -118,48 +119,23 @@ const projectTags: TagUsage[] = [
  * Everything a test actually asserts on is passed as an override, so a reader still sees the
  * distinguishing values at the call site. What is here is the ordinary answer for every other
  * field — and it is what a required field added to `TestCase` now collides with, in one place.
+ *
+ * **§197 moved the other thirty fields to `test/fixtures.ts`.** What is left is what this file
+ * means by *a saved case* — a case filed in a suite, saved once — over the contract's own least
+ * interesting body. The four write stubs below (`{ id: 'c9', key: 'TC-9', currentVersionNo: 1 }`
+ * and friends) now go through it too: a response body is a `TestCase` whether a test reads two of
+ * its fields or twenty.
  */
 function loadedCase(over: Partial<TestCase> = {}): TestCase {
-  return {
-    id: 'c1',
-    key: 'TC-1',
-    keySeq: 1,
+  return aCase({
     title: 'A saved case',
     suiteId: 'suite-1',
     suiteName: 'Refunds',
-    priority: 'MEDIUM',
-    lifecycleStatus: 'DRAFT',
-    automationStatus: 'MANUAL',
-    stepFormat: 'STRUCTURED',
-    owner: null,
-    createdBy: null,
-    features: [],
-    tags: [],
-    healthSignals: [],
-    lastResult: null,
-    updatedAt: '2026-08-01T12:00:00Z',
-    attachments: [],
-    flake: null,
-    classificationValueIds: [],
-    description: null,
-    objective: null,
-    expectedOutcome: null,
     severity: 'MEDIUM',
-    estimatedDurationSec: null,
-    automationTags: [],
-    automationKey: null,
-    notAutomatableReason: null,
-    gherkinSource: null,
-    steps: [],
-    preconditions: [],
-    postconditions: [],
-    declinedPreconditions: [],
-    declinedPostconditions: [],
-    relatedDocuments: [],
-    currentVersionNo: 1,
+    updatedAt: '2026-08-01T12:00:00Z',
     lockVersion: 1,
     ...over,
-  }
+  })
 }
 
 function mockReads(permissions: PermissionKey[] = ['case:create']) {
@@ -342,7 +318,7 @@ describe('CaseEditorPage — what reaches the API', () => {
   it('refuses to save a case whose only step is the blank row', async () => {
     const user = userEvent.setup()
     mockReads()
-    const post = vi.spyOn(api, 'post').mockResolvedValue({} as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(loadedCase() as never)
     renderEditor()
 
     await fillHeader(user)
@@ -598,7 +574,7 @@ describe('CaseEditorPage — conditions', () => {
   it('sends the attached ids as objects, and sends an EMPTY list rather than omitting it', async () => {
     const user = userEvent.setup()
     mockReads()
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'c9', key: 'TC-9', currentVersionNo: 1 } as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(loadedCase({ id: 'c9', key: 'TC-9', currentVersionNo: 1 }) as never)
     renderEditor()
 
     await fillHeader(user)
@@ -622,7 +598,7 @@ describe('CaseEditorPage — conditions', () => {
   it('reorders through the ▲▼ path, which is the keyboard and screen-reader route', async () => {
     const user = userEvent.setup()
     mockReads()
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'c9', key: 'TC-9', currentVersionNo: 1 } as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(loadedCase({ id: 'c9', key: 'TC-9', currentVersionNo: 1 }) as never)
     renderEditor()
 
     await fillHeader(user)
@@ -647,7 +623,7 @@ describe('CaseEditorPage — conditions', () => {
   it('detaching removes it from the payload', async () => {
     const user = userEvent.setup()
     mockReads()
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ id: 'c9', key: 'TC-9', currentVersionNo: 1 } as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(loadedCase({ id: 'c9', key: 'TC-9', currentVersionNo: 1 }) as never)
     renderEditor()
 
     await fillHeader(user)
@@ -1019,7 +995,7 @@ describe('CaseEditorPage — declining an inherited condition (§187)', () => {
     // over-decline — but the 400 lands on a save the author will read as broken.
     const user = userEvent.setup()
     mockDeclineReads(inheritedCase)
-    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ id: CASE_ID, currentVersionNo: 3 } as never)
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue(loadedCase({ id: CASE_ID, currentVersionNo: 3 }) as never)
     renderDeclineEditor()
 
     await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
@@ -1036,7 +1012,7 @@ describe('CaseEditorPage — declining an inherited condition (§187)', () => {
     // reports success and restores nothing. §95's `postconditions` defect, one field over.
     const user = userEvent.setup()
     mockDeclineReads(declinedCase)
-    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ id: CASE_ID, currentVersionNo: 3 } as never)
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue(loadedCase({ id: CASE_ID, currentVersionNo: 3 }) as never)
     renderDeclineEditor()
 
     await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
@@ -1053,7 +1029,7 @@ describe('CaseEditorPage — declining an inherited condition (§187)', () => {
     // instruction to switch every declined rule back on.
     const user = userEvent.setup()
     mockDeclineReads(declinedCase)
-    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ id: CASE_ID, currentVersionNo: 3 } as never)
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue(loadedCase({ id: CASE_ID, currentVersionNo: 3 }) as never)
     renderDeclineEditor()
 
     await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
@@ -1071,7 +1047,7 @@ describe('CaseEditorPage — declining an inherited condition (§187)', () => {
     // this one" into "this one for ever, unlinked from the folder".
     const user = userEvent.setup()
     mockDeclineReads(inheritedCase)
-    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ id: CASE_ID, currentVersionNo: 3 } as never)
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue(loadedCase({ id: CASE_ID, currentVersionNo: 3 }) as never)
     renderDeclineEditor()
 
     await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')

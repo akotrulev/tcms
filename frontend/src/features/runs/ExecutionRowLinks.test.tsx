@@ -6,6 +6,7 @@ import type { TestExecutionSummary, TestRunDetail } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aProject } from '../../test/fixtures'
 import { ExecutionGrid } from './ExecutionGrid'
 import { RunDetailPage } from './RunDetailPage'
 
@@ -129,7 +130,7 @@ describe('RunDetailPage — the same pair, from the other grid', () => {
     vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
       if (path.startsWith('/me/permissions')) return heldPermissions(['project:read'])
       if (path.includes(`/runs/${RUN}`)) return runBody()
-      if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+      if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
       return []
     }) as never)
   })

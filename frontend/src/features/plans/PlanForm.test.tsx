@@ -8,6 +8,7 @@ import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aPlan, aProject, planStatistics, projectSettings } from '../../test/fixtures'
 import { PlanStatisticsPage } from './PlanStatisticsPage'
 
 /**
@@ -63,29 +64,17 @@ function planBody(overrides: Partial<TestPlan> = {}): TestPlan {
 function mockReads(plan: TestPlan, permissions: PermissionKey[] = ['project:read', 'plan:edit']) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
-    if (path.includes(`/plans/${PLAN}/statistics`)) {
-      return {
-        counts: { total: 0, passed: 0, failed: 0, blocked: 0, skipped: 0, retest: 0, notRun: 0 },
-        coveragePercent: 0,
-        stale: false,
-        byConfiguration: [],
-        bySuite: [],
-        blockers: [],
-        notRun: [],
-        trend: [],
-        exitCriteria: [],
-        latestExecutionAt: null,
-      }
-    }
+    if (path.includes(`/plans/${PLAN}/statistics`)) return planStatistics({ planId: PLAN })
     if (path.includes(`/plans/${PLAN}`)) return plan
     // Before the project fallthrough, or `/projects/p1/artifacts` resolves to the PROJECT and the
     // table is handed an object where it expects rows — which surfaces as a region boundary and a
     // disabled-looking control three assertions later, not as a fixture error.
     // The plan LIST, for the register dialog's plan picker. A bare [] leaves the pre-selected
     // plan out of range of its own select — MUI says so on stderr and the control renders empty.
-    if (path.endsWith('/plans')) return [{ id: PLAN, key: 'TP-4', name: plan.name }]
+    if (path.endsWith('/plans')) return [aPlan({ id: PLAN, key: 'TP-4', name: plan.name })]
     if (path.includes('/artifacts') || path.includes('/doc-pages')) return []
-    if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+    if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
+    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }

@@ -7,6 +7,7 @@ import type { DocLink, PermissionKey, TestCase } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aProject, anExternalLink, projectSettings } from '../../test/fixtures'
 import { CaseDetailPage } from './CaseDetailPage'
 
 /**
@@ -139,7 +140,8 @@ function mockReads(links: DocLink[], permissions: PermissionKey[] = ['case:read'
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes('/cases/')) return caseBody(links)
-    if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+    if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
+    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }
@@ -328,8 +330,22 @@ describe('The Traceability panel renders all three target kinds', () => {
    */
   it('corrects an external link\u2019s claim in place', async () => {
     mockReads([gitLink])
+    // `ExternalLink`, which is what the endpoint answers — **not** the `DocLink` this double used
+    // to hand back. The two differ by the whole page/block half and by `stale`, and the difference
+    // is load-bearing: `useRelabelCaseExternalLink` puts the response into the cached case through
+    // `asDocLink`, so a fixture that was already a `DocLink` was testing the one path that adapter
+    // does not exist for.
     const patch = vi.spyOn(api, 'patch').mockResolvedValue(
-      { ...gitLink, relationship: 'VERIFIES' } as never,
+      anExternalLink({
+        id: gitLink.id,
+        targetKind: 'EXTERNAL_GIT',
+        relationship: 'VERIFIES',
+        externalRepo: gitLink.externalRepo,
+        externalPath: gitLink.externalPath,
+        externalLineStart: gitLink.externalLineStart,
+        externalLineEnd: gitLink.externalLineEnd,
+        externalCommitSha: gitLink.externalCommitSha,
+      }) as never,
     )
     renderPage()
 

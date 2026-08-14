@@ -8,6 +8,7 @@ import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aCase, aCaseSummary, aProject, aSuite, planStatistics, projectSettings } from '../../test/fixtures'
 import { PlanStatisticsPage } from './PlanStatisticsPage'
 
 /**
@@ -61,13 +62,13 @@ function planBody(overrides: Partial<TestPlan> = {}): TestPlan {
 }
 
 const SUITES = [
-  { id: 'suite-1', key: 'TS-1', name: 'Payments', caseCount: 12, parentId: null, path: '1' },
-  { id: 'suite-2', key: 'TS-2', name: 'Login', caseCount: 3, parentId: null, path: '2' },
+  aSuite({ id: 'suite-1', key: 'TS-1', name: 'Payments', caseCount: 12 }),
+  aSuite({ id: 'suite-2', key: 'TS-2', name: 'Login', caseCount: 3 }),
 ]
 
 const CASES = [
-  { id: 'case-1', key: 'TC-1', title: 'Refund a settled payment', suiteId: 'suite-1', tags: [] },
-  { id: 'case-2', key: 'TC-2', title: 'Sign in with SSO', suiteId: 'suite-2', tags: [] },
+  aCaseSummary({ id: 'case-1', key: 'TC-1', title: 'Refund a settled payment', suiteId: 'suite-1' }),
+  aCaseSummary({ id: 'case-2', key: 'TC-2', title: 'Sign in with SSO', suiteId: 'suite-2' }),
 ]
 
 function mockReads(
@@ -76,26 +77,14 @@ function mockReads(
 ) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
-    if (path.includes(`/plans/${PLAN}/statistics`)) {
-      return {
-        counts: { total: 0, passed: 0, failed: 0, blocked: 0, skipped: 0, retest: 0, notRun: 0 },
-        coveragePercent: 0,
-        stale: false,
-        byConfiguration: [],
-        bySuite: [],
-        blockers: [],
-        notRun: [],
-        trend: [],
-        exitCriteria: [],
-        latestExecutionAt: null,
-      }
-    }
+    if (path.includes(`/plans/${PLAN}/statistics`)) return planStatistics({ planId: PLAN })
     if (path.includes(`/plans/${PLAN}`)) return plan
     if (path.includes('/suites')) return SUITES
     if (path.includes('/tags')) return [{ tag: 'smoke', caseCount: 9 }, { tag: 'checkout', caseCount: 4 }]
-    if (path.includes('/cases')) return { items: CASES, page: 0, size: 20, total: CASES.length }
+    if (path.includes('/cases')) return { items: CASES, facets: [], page: 0, size: 20, total: CASES.length }
     if (path.endsWith('/plans')) return [plan]
-    if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+    if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
+    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }
@@ -177,7 +166,7 @@ describe('the Test cases tab', () => {
     mockReads(planBody())
     const post = vi
       .spyOn(api, 'post')
-      .mockResolvedValue({ id: 'case-new', key: 'TC-41' } as never)
+      .mockResolvedValue(aCase({ id: 'case-new', key: 'TC-41' }) as never)
     const patch = vi.spyOn(api, 'patch').mockResolvedValue(planBody() as never)
     renderPage()
 
@@ -396,7 +385,7 @@ describe('the Test cases tab', () => {
     const plan = planBody({ suiteIds: ['suite-1'], tags: ['smoke'] } as Partial<TestPlan>)
     vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
       if (path.startsWith('/me/permissions')) return heldPermissions(['project:read', 'plan:edit'])
-      if (path.includes(`/plans/${PLAN}/statistics`)) return { counts: {}, exitCriteria: [], bySuite: [], byConfiguration: [], blockers: [], notRun: [], trend: [], stale: false, coveragePercent: 0, latestExecutionAt: null }
+      if (path.includes(`/plans/${PLAN}/statistics`)) return planStatistics({ planId: PLAN })
       if (path.includes(`/plans/${PLAN}`)) return plan
       if (path.includes('/suites')) return SUITES
       if (path.includes('/tags')) return [{ tag: 'smoke', caseCount: 9 }]
@@ -405,15 +394,16 @@ describe('the Test cases tab', () => {
         // The suite read answers a case the tag read does not, and one they share. The shared row
         // is what makes the dedupe observable; without it a naive concat also passes.
         if (path.includes('suiteId=suite-1')) {
-          return { items: [CASES[0], { id: 'case-9', key: 'TC-9', title: 'Partial refund', suiteId: 'suite-1', tags: [] }], page: 0, size: 200, total: 2 }
+          return { items: [CASES[0], aCaseSummary({ id: 'case-9', key: 'TC-9', title: 'Partial refund', suiteId: 'suite-1', suiteName: 'Payments' })], facets: [], page: 0, size: 200, total: 2 }
         }
         if (path.includes('tag=smoke')) {
-          return { items: [{ id: 'case-9', key: 'TC-9', title: 'Partial refund', suiteId: 'suite-1', tags: ['smoke'] }, { id: 'case-7', key: 'TC-7', title: 'Retry a failed capture', suiteId: null, tags: ['smoke'] }], page: 0, size: 200, total: 2 }
+          return { items: [aCaseSummary({ id: 'case-9', key: 'TC-9', title: 'Partial refund', suiteId: 'suite-1', suiteName: 'Payments', tags: ['smoke'] }), aCaseSummary({ id: 'case-7', key: 'TC-7', title: 'Retry a failed capture', tags: ['smoke'] })], facets: [], page: 0, size: 200, total: 2 }
         }
-        return { items: CASES, page: 0, size: 20, total: CASES.length }
+        return { items: CASES, facets: [], page: 0, size: 20, total: CASES.length }
       }
       if (path.endsWith('/plans')) return [plan]
-      if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+      if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
+      if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
       return []
     }) as never)
     renderPage()

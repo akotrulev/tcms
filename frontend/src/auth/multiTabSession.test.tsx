@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../api/client'
 import type { CurrentUser } from '../api/types'
 import { theme } from '../app/theme'
+import { anAuthResult } from '../test/fixtures'
 import { createTestQueryClient } from '../test/queryClient'
 import { AuthProvider } from './AuthContext'
 import { SessionRecoveryProvider, SessionReplayBridge } from './SessionRecoveryProvider'
@@ -297,7 +298,7 @@ describe('a session transition in THIS tab', () => {
     vi.spyOn(api, 'post').mockImplementation(async (path: string) => {
       if (path === '/auth/logout') return undefined as never
       if (path !== '/auth/login') throw new Error(`unexpected POST ${path}`)
-      return { token: `token-for-${bob.email}`, user: bob } as never
+      return anAuthResult({ token: `token-for-${bob.email}`, user: bob }) as never
     })
   })
 

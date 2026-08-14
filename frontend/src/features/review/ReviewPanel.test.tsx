@@ -2,8 +2,9 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { PermissionKey, Review, ReviewComment } from '../../api/types'
+import type { PermissionKey, ProjectSettings, Review, ReviewComment } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
+import { aTeam, projectSettings } from '../../test/fixtures'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { ReviewPanel } from './ReviewPanel'
@@ -89,25 +90,21 @@ function thread(overrides: Partial<ReviewComment> = {}): ReviewComment {
  * the state a project that *turned review on* is in. The default-off state now has its own test
  * rather than being the accidental behaviour of a fallthrough.
  */
-function settings(overrides: Record<string, unknown> = {}) {
-  return {
+function settings(overrides: Partial<ProjectSettings> = {}): ProjectSettings {
+  return projectSettings({
     projectId: PROJECT,
     reviewEnabledCase: true,
     reviewEnabledSuite: true,
     reviewEnabledPlan: true,
     requiredPeerReviews: 0,
-    authorMayApproveOwnWork: false,
-    editAfterApproval: 'RETAIN',
-    updatedBy: null,
-    updatedAt: null,
     ...overrides,
-  }
+  })
 }
 
 function mockReads(
   reviews: Review[],
   keys: PermissionKey[],
-  projectSettings: Record<string, unknown> = settings(),
+  settingsBody: ProjectSettings = settings(),
   /**
    * What the assignment picker is offered.
    *
@@ -119,7 +116,7 @@ function mockReads(
 ) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(keys)
-    if (path.includes('/settings')) return projectSettings
+    if (path.includes('/settings')) return settingsBody
     if (path.includes('/reviews')) return reviews
     if (path.includes('/members')) return directory.members ?? []
     if (path.startsWith('/teams')) return directory.teams ?? []
@@ -534,7 +531,7 @@ describe('ReviewPanel — the record, and the sign-off it must not offer', () =>
   it('asks the selected person, and sends a userId rather than a teamId', async () => {
     mockReads([review()], ['plan:review'], settings(), {
       members: [person('Marco'), person('Bo')],
-      teams: [{ id: 't1', name: 'QA Chapter' }],
+      teams: [aTeam({ id: 't1', name: 'QA Chapter' })],
     })
     const post = vi.spyOn(api, 'post').mockResolvedValue(review() as never)
     renderPanel()
@@ -555,7 +552,7 @@ describe('ReviewPanel — the record, and the sign-off it must not offer', () =>
   it('asks the selected team, and sends a teamId rather than a userId', async () => {
     mockReads([review()], ['plan:review'], settings(), {
       members: [person('Marco')],
-      teams: [{ id: 't1', name: 'QA Chapter' }],
+      teams: [aTeam({ id: 't1', name: 'QA Chapter' })],
     })
     const post = vi.spyOn(api, 'post').mockResolvedValue(review() as never)
     renderPanel()

@@ -6,6 +6,7 @@ import type { UnmatchedTest } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aCaseSummary } from '../../test/fixtures'
 import { BindTestDialog } from './BindTestDialog'
 
 /**
@@ -32,9 +33,10 @@ const TEST: UnmatchedTest = {
 
 const CASES = {
   items: [
-    { id: 'case-1', key: 'TC-42', title: 'Refund the whole captured amount' },
-    { id: 'case-2', key: 'TC-43', title: 'Partial refund rounds correctly' },
+    aCaseSummary({ id: 'case-1', key: 'TC-42', title: 'Refund the whole captured amount' }),
+    aCaseSummary({ id: 'case-2', key: 'TC-43', title: 'Partial refund rounds correctly' }),
   ],
+  facets: [],
   total: 2,
   page: 0,
   size: 20,

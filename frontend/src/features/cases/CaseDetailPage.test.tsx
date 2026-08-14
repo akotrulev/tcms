@@ -6,6 +6,7 @@ import type { TestCase } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aProject, projectSettings } from '../../test/fixtures'
 import { CaseDetailPage } from './CaseDetailPage'
 
 /**
@@ -113,7 +114,8 @@ function mockReads(
       )
     }
     if (path.includes('/cases/')) return { ...caseBody(createdBy), ...overrides }
-    if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+    if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
+    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }
@@ -231,7 +233,8 @@ describe('CaseDetailPage — the attachment panel is gated on case:edit', () => 
     vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
       if (path.startsWith('/me/permissions')) return heldPermissions(['case:read'])
       if (path.includes('/cases/')) return caseBody(CALLER)
-      if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+      if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
+      if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
       return []
     }) as never)
     renderPage()

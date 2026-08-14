@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type { PermissionKey, Suite } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
+import { aSuite } from '../../test/fixtures'
 import { createTestQueryClient } from '../../test/queryClient'
 import { SuiteList } from './SuiteList'
 import { heldPermissions } from '../../test/permissions'
@@ -263,7 +264,7 @@ describe('SuiteList — the status ladder', () => {
 
   it('sends the target status as an absolute PUT, with no If-Match', async () => {
     withPermissions(['case:read', 'suite:manage'])
-    const put = vi.spyOn(api, 'put').mockResolvedValue({} as never)
+    const put = vi.spyOn(api, 'put').mockResolvedValue(aSuite() as never)
     renderList(at('DRAFT'))
     const user = await menuFor('Payments')
 

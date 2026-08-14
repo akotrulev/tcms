@@ -7,6 +7,7 @@ import type { BlockLink, DocPage, DocPageSummary, PermissionKey } from '../../ap
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aCaseSummary, aProject, aSuite } from '../../test/fixtures'
 import { DocsPage } from './DocsPage'
 
 /**
@@ -78,14 +79,15 @@ function mockReads(keys: PermissionKey[]) {
     if (path.endsWith('/doc-pages')) return [summary]
     if (path.includes('/cases')) {
       return {
-        items: [{ id: 'case-9', key: 'TC-42', title: 'Refund is refused after 30 days' }],
+        items: [aCaseSummary({ id: 'case-9', key: 'TC-42', title: 'Refund is refused after 30 days' })],
+        facets: [],
         page: 0,
         size: 20,
         total: 1,
       }
     }
-    if (path.endsWith('/suites')) return [{ id: 'suite-3', key: 'TS-3', name: 'Refunds' }]
-    if (path.startsWith('/projects/')) return { id: PROJECT, name: 'Banking' }
+    if (path.endsWith('/suites')) return [aSuite({ id: 'suite-3', key: 'TS-3', name: 'Refunds' })]
+    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }

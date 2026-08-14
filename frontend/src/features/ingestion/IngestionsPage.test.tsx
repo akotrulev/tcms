@@ -6,6 +6,7 @@ import type { AutomationMapping, IngestionJobSummary, PermissionKey } from '../.
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { aProject } from '../../test/fixtures'
 import { IngestionsPage } from './IngestionsPage'
 
 /**
@@ -75,7 +76,7 @@ function mockApi(permissions: PermissionKey[], jobs: IngestionJobSummary[] = [MA
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes('/ingestions')) return jobs
     if (path.includes('/automation-mappings')) return [BOUND, ORPHANED]
-    if (path.startsWith('/projects/p1')) return { id: 'p1', key: 'OLB', name: 'Banking' }
+    if (path.startsWith('/projects/p1')) return aProject({ id: 'p1', key: 'OLB', name: 'Banking' })
     throw new Error(`unmocked read: ${path}`)
   }) as never)
 }
