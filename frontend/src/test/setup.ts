@@ -6,15 +6,20 @@
  * changes how the app behaves under test is how a suite ends up green against a program that
  * does not exist.
  *
- * `contractDoubles` is the one import that does more than fill a gap, and it is here *because* of
- * the rule above rather than despite it: it changes nothing about the application and everything
- * about what a **test double** is allowed to claim, by comparing every body a mocked `api.*` call
- * serves against `openapi.yaml`. A suite green against a program that does not exist is exactly
- * what an unchecked fixture buys. It has to be installed globally — a check each file opts into is
- * a hand-maintained list — so this is the only place it can go; see that module's header.
+ * `contractDoubles` and `renderFailures` are the two imports that do more than fill a gap, and they
+ * are here *because* of the rule above rather than despite it: neither changes anything about the
+ * application, and between them they change what a green test is allowed to mean. The first compares
+ * every body a mocked `api.*` call serves — and every payload it is called with — against
+ * `openapi.yaml`; the second fails a test whose render tripped an error boundary, which is the same
+ * gap one layer down, because a boundary exists precisely so that a broken region stays invisible to
+ * the rest of the page. A suite green against a program that does not exist is what an unchecked
+ * fixture buys, and a suite green beside a panel that never rendered is what a caught throw buys.
+ * Both have to be installed globally — a check each file opts into is a hand-maintained list — so
+ * this is the only place either can go; see those modules' headers.
  */
 import '@testing-library/jest-dom/vitest'
 import './contractDoubles'
+import './renderFailures'
 import { cleanup, configure } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 

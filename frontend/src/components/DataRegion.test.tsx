@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, TimeoutError } from '../api/client'
 import { theme } from '../app/theme'
+import { renderingIntoAnErrorBoundary } from '../test/renderFailures'
 import { DataRegion, type DataRegionState } from './DataRegion'
 
 /**
@@ -270,6 +271,8 @@ describe('DataRegion', () => {
     )
 
     it('contains a throw from the children', () => {
+      // The tripped boundary is the subject: this test exists to assert that the region caught it.
+      renderingIntoAnErrorBoundary()
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       render(
@@ -294,6 +297,7 @@ describe('DataRegion', () => {
     })
 
     it('contains a throw from the emptiness predicate, which reads the body outside the children', () => {
+      renderingIntoAnErrorBoundary()
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       render(

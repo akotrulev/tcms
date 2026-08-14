@@ -140,7 +140,7 @@ npm run dev          # http://localhost:5173 — proxies /api to localhost:8080
                      # sign in by redeeming the /accept-invitation link provision-company prints
 npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
-npm run test:run     # Vitest + RTL, ~~1203~~ ~~1251~~ ~~1276~~ ~~1285~~ ~~1314~~ ~~1320~~ 1330 tests
+npm run test:run     # Vitest + RTL, ~~1203~~ ~~1251~~ ~~1276~~ ~~1285~~ ~~1314~~ ~~1320~~ ~~1330~~ 1335 tests
                      # (measured on shanks 2026-08-14) — also a gate. Since §197 the harness compares
                      # every body a mocked `api.*` call serves against openapi.yaml and fails the test
                      # that served a body the server could not send; since §198 it compares the VALUES
@@ -153,6 +153,13 @@ npm run test:run     # Vitest + RTL, ~~1203~~ ~~1251~~ ~~1276~~ ~~1285~~ ~~1314~
                      # code — the payload is what `api/queries/` and the form composed — and the first
                      # thing it found was `useCreatePlanCase` sending two of the four fields
                      # `TestCaseInput` requires, so the plan tab's Save had 400ed since §97.
+                     # **Since §201 a test whose render tripped an error boundary FAILS** unless it
+                     # calls `renderingIntoAnErrorBoundary()` and says why — a boundary exists so a
+                     # broken region stays invisible to the rest of the page, which is how 24 tests
+                     # passed for years beside a panel showing "We couldn't display this content".
+                     # A region whose *fetch* failed is NOT covered: `createTestQueryClient` installs
+                     # no error handlers, so the `throw new Error('unmocked read')` thirteen test
+                     # files wrote to be loud is swallowed by the query layer.
                      # ~~`CaseEditorPage.test.tsx` has a load-dependent flake on shanks: one test
                      # asserts a half-typed value under full-suite load and passes when the file
                      # runs alone. Measured against a stashed tree in §186; NOT fixed.~~ →
