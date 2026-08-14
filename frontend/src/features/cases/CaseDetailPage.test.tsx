@@ -113,9 +113,9 @@ function mockReads(
         qualifier ? { 'case:delete': qualifier } : {},
       )
     }
-    if (path.includes('/cases/')) return { ...caseBody(createdBy), ...overrides }
+    if (/\/cases\/[^/]+$/.test(path)) return { ...caseBody(createdBy), ...overrides }
     if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
-    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
+    if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }
@@ -232,9 +232,9 @@ describe('CaseDetailPage — the attachment panel is gated on case:edit', () => 
     // The guard: without it the test above passes against a panel gated on nothing at all.
     vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
       if (path.startsWith('/me/permissions')) return heldPermissions(['case:read'])
-      if (path.includes('/cases/')) return caseBody(CALLER)
+      if (/\/cases\/[^/]+$/.test(path)) return caseBody(CALLER)
       if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
-      if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
+      if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
       return []
     }) as never)
     renderPage()

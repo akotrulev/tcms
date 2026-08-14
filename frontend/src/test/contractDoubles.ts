@@ -2,6 +2,9 @@
  * Every response body a test double serves is compared against `openapi.yaml`, and a body the
  * server could not send fails the test that served it.
  *
+ * The comparison is `contractResponses.ts` and it asks six questions — two structural (§197) and
+ * four about the **values** (§198). This file is only the seam that gets it a body to look at.
+ *
  * ## Why this is a seam and not a helper the tests call
  *
  * The obvious shape is `mockGet('/cases', body)` — a helper each test opts into, typed or checked
@@ -189,8 +192,10 @@ afterEach(() => {
       + `${report}\n\n`
       + 'A double casts through `as never` to satisfy the generic client, so nothing compares what '
       + 'it serves against the contract except this. A missing required field is a component one '
-      + 'commit away from a TypeError (§195), and a field the contract does not declare is usually '
-      + 'a double answering a different endpoint, or a vocabulary the product removed (§98).\n\n'
+      + 'commit away from a TypeError (§195); a field the contract does not declare is usually a '
+      + 'double answering a different endpoint, or a vocabulary the product removed (§98); and a '
+      + 'value the contract does not admit — an enum member that is not one, a null in a field the '
+      + 'server always fills — is a screen rendering something the product cannot produce (§198).\n\n'
       + 'Repair the fixture — `src/test/fixtures.ts` has a complete factory for most shapes. If the '
       + 'contract is the side that is wrong, change it and regenerate both `schema.d.ts` copies. If '
       + 'the drifted body IS the subject of this test, call `servingADriftedBody()` and say why.',

@@ -87,7 +87,7 @@ function mockReads(keys: PermissionKey[]) {
       }
     }
     if (path.endsWith('/suites')) return [aSuite({ id: 'suite-3', key: 'TS-3', name: 'Refunds' })]
-    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
+    if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }

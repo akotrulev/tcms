@@ -74,7 +74,7 @@ function renderDashboard(dashboard: RepositoryDashboard = DASHBOARD) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(['project:read'])
     if (path.includes('/dashboard')) return dashboard
-    if (path.startsWith('/projects/')) return PROJECT
+    if (/^\/projects\/[^/]+$/.test(path)) return PROJECT
     throw new Error(`unmocked read: ${path}`)
   }) as never)
 

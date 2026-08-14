@@ -425,7 +425,7 @@ describe('Moving a card writes optimistically and rolls back (§106)', () => {
     vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
       if (path.startsWith('/me/permissions')) return heldPermissions(['project:read'])
       if (path.startsWith('/work-items')) return [TODO_CARD]
-      if (path.startsWith('/projects/')) return aProject({ id: 'p1', name: 'Banking' })
+      if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: 'p1', name: 'Banking' })
       return []
     }) as never)
   })

@@ -88,7 +88,7 @@ function mockReads(computedAt: string | null, stale = false) {
     }
     if (path.includes(`/plans/${PLAN}`)) return planBody()
     if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
-    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
+    if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }

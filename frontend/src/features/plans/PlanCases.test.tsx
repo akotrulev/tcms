@@ -84,7 +84,7 @@ function mockReads(
     if (path.includes('/cases')) return { items: CASES, facets: [], page: 0, size: 20, total: CASES.length }
     if (path.endsWith('/plans')) return [plan]
     if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
-    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
+    if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }
@@ -403,7 +403,7 @@ describe('the Test cases tab', () => {
       }
       if (path.endsWith('/plans')) return [plan]
       if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
-      if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
+      if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
       return []
     }) as never)
     renderPage()

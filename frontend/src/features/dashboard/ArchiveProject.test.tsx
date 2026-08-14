@@ -63,7 +63,7 @@ function mockReads(permissions: PermissionKey[], project: Project = LIVE, projec
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path === '/projects') return projects
     if (path.startsWith('/projects/p1/dashboard') || path.includes('/dashboard')) return DASHBOARD
-    if (path.startsWith('/projects/')) return project
+    if (/^\/projects\/[^/]+$/.test(path)) return project
     throw new Error(`unmocked read: ${path}`)
   }) as never)
 }

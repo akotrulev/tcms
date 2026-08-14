@@ -130,7 +130,7 @@ describe('RunDetailPage — the same pair, from the other grid', () => {
     vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
       if (path.startsWith('/me/permissions')) return heldPermissions(['project:read'])
       if (path.includes(`/runs/${RUN}`)) return runBody()
-      if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
+      if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
       return []
     }) as never)
   })

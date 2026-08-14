@@ -62,7 +62,7 @@ function mockReads(current: ProjectSettings, permissions: PermissionKey[] = ['pr
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions, {}, PROJECT)
     if (path.includes('/settings')) return current
-    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
+    if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }

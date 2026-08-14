@@ -19,7 +19,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { api } from '../api/client'
 import { contractPathOf, declaredPathCount, responseSchemaOf, violationsOf } from '../api/contractResponses'
 import { drainServedViolations, servingADriftedBody } from './contractDoubles'
-import { aProject } from './fixtures'
+import { aCase, aProject, aRun } from './fixtures'
 
 /**
  * Every test file, as source, read through Vite rather than `node:fs` — the same reason
@@ -175,5 +175,78 @@ describe('the comparison itself', () => {
     expect(violationsOf(run as Record<string, unknown>, { counts: {} })
       .filter((violation) => violation.where.startsWith('$.configuration.attributes')))
       .toEqual([])
+  })
+})
+
+/**
+ * The value questions (§198), which the structural pass could not ask.
+ *
+ * Every body below is built by spreading a factory and overriding one field, so the object handed to
+ * `violationsOf` is a plain literal rather than a cast — §196's rule — and the thing being asserted
+ * is the only thing that differs from a body the server could send.
+ */
+describe('the value the double serves', () => {
+  const project = responseSchemaOf('get', '/projects/{projectId}') as Record<string, unknown>
+  const run = responseSchemaOf('post', '/projects/{projectId}/runs') as Record<string, unknown>
+  const summary = responseSchemaOf('get', '/projects/{projectId}/cases/{caseId}') as Record<string, unknown>
+
+  it('reports an enum member the contract does not list', () => {
+    // The instance the rung was named for: `status: 'ACTIVE'` is not a `RunStatus`, and it sat in a
+    // fixture for four slices because nothing compared a value to anything.
+    expect(violationsOf(run, { ...aRun(), status: 'ACTIVE' })).toEqual([
+      {
+        where: '$.status',
+        message: expect.stringContaining('not one of the members the contract lists') as unknown as string,
+      },
+    ])
+  })
+
+  it('reports a null in a field the contract does not mark nullable', () => {
+    // Not the required check one field over: `'name' in body` is true, so every structural question
+    // this module asks is satisfied by a body that nulls what the server always fills.
+    expect(violationsOf(project, { ...aProject(), name: null })).toEqual([
+      { where: '$.name', message: expect.stringContaining('null, where the contract declares no') as unknown as string },
+    ])
+  })
+
+  it('reports a value of the wrong type', () => {
+    expect(violationsOf(project, { ...aProject(), caseCount: '4' })).toEqual([
+      { where: '$.caseCount', message: 'the string "4", where the contract declares `integer`.' },
+    ])
+    expect(violationsOf(project, { ...aProject(), archived: 'false' })).toEqual([
+      { where: '$.archived', message: 'the string "false", where the contract declares `boolean`.' },
+    ])
+  })
+
+  /**
+   * The hole §197's structural pass had, and the only thing this slice found in the tree: a
+   * `type: array` operation answered with an object was **skipped**, because the walker's array
+   * branch returned as soon as the value was not one. Ten files answered `/projects/{id}/statuses`,
+   * `/projects/{id}/reviews` and `/cases/{id}/versions` with the *project* body — §197's own
+   * ordering defect, on the endpoints where it could not be seen.
+   */
+  it('reports an object served where the contract declares an array', () => {
+    const statuses = responseSchemaOf('get', '/projects/{projectId}/statuses') as Record<string, unknown>
+    expect(violationsOf(statuses, aProject())).toEqual([
+      { where: '$', message: 'an object, where the contract declares `array`.' },
+    ])
+  })
+
+  it('reports a date-time that is not one, and accepts one that is', () => {
+    expect(violationsOf(summary, { ...aCase(), updatedAt: '2026-01-01' })).toEqual([
+      { where: '$.updatedAt', message: expect.stringContaining('not the `date-time`') as unknown as string },
+    ])
+    // The shape is right and the month is not, which is why `Date.parse` runs as well as the regex.
+    expect(violationsOf(summary, { ...aCase(), updatedAt: '2026-13-01T00:00:00Z' })).toHaveLength(1)
+    expect(violationsOf(summary, { ...aCase(), updatedAt: '2026-01-01T00:00:00.123+02:00' })).toEqual([])
+  })
+
+  /**
+   * The decision, pinned so that adding a `format: uuid` rule later reddens here rather than in 208
+   * fixtures at once. `'p1'` is not a UUID and is not going to become one: an id in this suite is
+   * something a reader recognises across four files, and the SPA treats it as opaque.
+   */
+  it('says nothing about an id that is not a UUID', () => {
+    expect(violationsOf(project, aProject())).toEqual([])
   })
 })

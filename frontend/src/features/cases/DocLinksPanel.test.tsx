@@ -139,9 +139,9 @@ function caseBody(links: DocLink[]): TestCase {
 function mockReads(links: DocLink[], permissions: PermissionKey[] = ['case:read', 'case:edit']) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
-    if (path.includes('/cases/')) return caseBody(links)
+    if (/\/cases\/[^/]+$/.test(path)) return caseBody(links)
     if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
-    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
+    if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }

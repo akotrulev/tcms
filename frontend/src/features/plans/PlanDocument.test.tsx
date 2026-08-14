@@ -121,7 +121,7 @@ function mockReads(document: DocPage | null, permissions: PermissionKey[] = ['pr
     if (path.includes('/doc-pages')) return PAGES
     if (path.includes(`/plans/${PLAN}`)) return planBody()
     if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
-    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
+    if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }

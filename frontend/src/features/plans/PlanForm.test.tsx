@@ -74,7 +74,7 @@ function mockReads(plan: TestPlan, permissions: PermissionKey[] = ['project:read
     if (path.endsWith('/plans')) return [aPlan({ id: PLAN, key: 'TP-4', name: plan.name })]
     if (path.includes('/artifacts') || path.includes('/doc-pages')) return []
     if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
-    if (path.startsWith('/projects/')) return aProject({ id: PROJECT, name: 'Banking' })
+    if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
 }

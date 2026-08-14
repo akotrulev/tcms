@@ -28,7 +28,7 @@
  *
  * ## What "violation" means here, and what it deliberately does not
  *
- * Two questions, both computed from the declared schema:
+ * Six questions, all computed from the declared schema. The first two are structural and are §197's:
  *
  *   - a **required** property the body does not carry — the failure §196 measured, arriving through
  *     the other door: a fixture that stands in for a response the day before a component reads the
@@ -38,10 +38,29 @@
  *     server was never asked (a `/projects/{id}` body served for `/projects/{id}/settings`), or a
  *     vocabulary the product removed and the fixture kept.
  *
- * Values are **not** type-checked. A `number` where the schema says string is a defect this could
- * report and does not, because the population it was written for is structural and a value check
- * would drag in format-level questions (`date-time`, `uuid`) whose false positives would arrive as
- * noise in 76 files at once. It is a rung, in the sense §53 uses the word.
+ * The other four are the **value**, and are §198's:
+ *
+ *   - a string the schema declares an `enum` for, whose value is not a member. This is the one the
+ *     rung was named for: `status: 'ACTIVE'` sat in `RunCreateDialog` for four slices, is not a
+ *     `PlanStatus`, and was found by a person reading rather than by anything running;
+ *   - a value of the wrong **type** — a `number` where the schema says string, an object where it
+ *     says array, `'0'` where it says integer;
+ *   - a **null** in a property the contract does not mark `nullable`. The mirror of the required
+ *     check and not the same question: `'owner' in body` is satisfied by `owner: null`, so a body
+ *     that nulls a field the server always fills passes every structural check there is;
+ *   - a `format: date-time` string that is not one. These reach `lib/format.ts`, which renders
+ *     `Invalid Date` rather than throwing, so a malformed instant is a screen defect that no test
+ *     asserting on *other* text would notice.
+ *
+ * **`format: uuid` is NOT checked, and that is a decision rather than an omission.** The contract
+ * declares it 208 times and not one id in this suite is a UUID — `'p1'`, `'c1'`, `'TS-1'` — because
+ * an id here is a thing a reader has to recognise across four files. Enforcing the format would
+ * rewrite every one of them as a 36-character string and buy nothing: the SPA treats an id as opaque
+ * (it goes into a URL and comes back), so unlike an enum member or a timestamp there is no code
+ * downstream that can tell the two apart. The other formats the document uses (`email`, `uri`,
+ * `int32`/`int64`) are three and five sites; the integers are covered by the type check and the rest
+ * are not worth a rule. `pattern` is three sites and is skipped on the same grounds as `uuid` — two
+ * of the three are display keys, which a fixture spells readably on purpose.
  *
  * `oneOf` / `anyOf` schemas are skipped rather than guessed at: reporting the union's *intersection*
  * of required properties would be wrong in one direction and reporting one arm's would be wrong in
@@ -144,6 +163,79 @@ function branches(schema: Node): Node[] {
   return all ? all.flatMap((branch) => branches(deref(branch))) : [schema]
 }
 
+/**
+ * The scalar constraints that apply at a node, read **through** `allOf` for the same reason
+ * `branches` exists.
+ *
+ * A nullable reference is spelled `allOf: [{ $ref: UserRef }]` plus `nullable: true` — 36 sites, and
+ * the only legal spelling in OpenAPI 3.0, because a `$ref` may carry no siblings. `deref` returns
+ * such a node unchanged (it has no direct `$ref`), so a reader that looked only at the node itself
+ * would find neither the `enum` under the reference nor, for `{ $ref: PlanStatus }` wrapped this way,
+ * the members it is meant to check against.
+ */
+interface Constraints {
+  enums?: unknown[]
+  type?: string
+  format?: string
+  nullable: boolean
+}
+
+function constraintsOf(schema: Node): Constraints {
+  let enums: unknown[] | undefined
+  let type: string | undefined
+  let format: string | undefined
+  let nullable = schema.nullable === true
+  for (const branch of branches(schema)) {
+    if (Array.isArray(branch.enum)) enums ??= branch.enum
+    if (typeof branch.type === 'string') type ??= branch.type
+    if (typeof branch.format === 'string') format ??= branch.format
+    if (branch.nullable === true) nullable = true
+  }
+  return { enums, type, format, nullable }
+}
+
+/** Does a value of this shape satisfy the declared JSON type? Unknown types accept everything. */
+function accepts(type: string, value: unknown): boolean {
+  switch (type) {
+    case 'string':
+      return typeof value === 'string'
+    case 'boolean':
+      return typeof value === 'boolean'
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value)
+    // JSON has one number type, so an integer is a number that happens to be whole. `1.5` for a
+    // count is a defect; `1` for a `number` is not.
+    case 'integer':
+      return typeof value === 'number' && Number.isInteger(value)
+    case 'array':
+      return Array.isArray(value)
+    case 'object':
+      return typeof value === 'object' && value !== null && !Array.isArray(value)
+    default:
+      return true
+  }
+}
+
+/** What a body actually carries, in the vocabulary the schema uses, so the two can be compared. */
+function shapeOf(value: unknown): string {
+  if (Array.isArray(value)) return 'an array'
+  if (value === null) return 'null'
+  if (typeof value === 'number') return Number.isInteger(value) ? `the integer ${value}` : `the number ${value}`
+  if (typeof value === 'string') return `the string ${JSON.stringify(value)}`
+  if (typeof value === 'boolean') return `the boolean ${value}`
+  if (typeof value === 'object') return 'an object'
+  return typeof value
+}
+
+/**
+ * An RFC 3339 instant, which is what `format: date-time` means and what `lib/format.ts` parses.
+ *
+ * The regex is the shape and `Date.parse` is the validity — `2026-13-01T00:00:00Z` satisfies the
+ * first and not the second, and a date fixture is exactly the kind of literal somebody types a month
+ * number into.
+ */
+const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/
+
 export interface Violation {
   /** Where in the body, as a path a reader can follow: `$.items[0].owner`. */
   where: string
@@ -162,13 +254,53 @@ function walk(schema: Node, value: unknown, where: string, out: Violation[], dep
   // nothing the API serves nests eight levels, and a self-referential schema would otherwise not
   // terminate. Doc blocks are the deepest at four.
   if (depth > 8) return
-  if (value === null || value === undefined) return
+  if (value === undefined) return
   if (schema.oneOf || schema.anyOf) return
 
-  if (schema.type === 'array') {
-    const items = schema.items ? deref(schema.items as Node) : undefined
+  const { enums, type, format, nullable } = constraintsOf(schema)
+
+  if (value === null) {
+    if (!nullable) {
+      out.push({
+        where,
+        message:
+          'null, where the contract declares no `nullable: true`. The server always sends a value '
+          + 'here, so a component may read straight through it.',
+      })
+    }
+    return
+  }
+
+  if (enums && !enums.includes(value)) {
+    out.push({
+      where,
+      message:
+        `${shapeOf(value)}, which is not one of the members the contract lists: `
+        + `${(enums as unknown[]).map((member) => JSON.stringify(member)).join(', ')}.`,
+    })
+    return
+  }
+
+  if (type && !accepts(type, value)) {
+    out.push({ where, message: `${shapeOf(value)}, where the contract declares \`${type}\`.` })
+    return
+  }
+
+  if (format === 'date-time' && typeof value === 'string' && (!INSTANT.test(value) || Number.isNaN(Date.parse(value)))) {
+    out.push({
+      where,
+      message:
+        `${shapeOf(value)}, which is not the \`date-time\` the contract declares. \`lib/format.ts\` `
+        + 'renders `Invalid Date` for one of these rather than throwing.',
+    })
+    return
+  }
+
+  if (type === 'array') {
+    const items = branches(schema).map((branch) => branch.items).find(Boolean)
     if (!items || !Array.isArray(value)) return
-    value.forEach((element, index) => walk(items, element, `${where}[${index}]`, out, depth + 1))
+    const element = deref(items as Node)
+    value.forEach((member, index) => walk(element, member, `${where}[${index}]`, out, depth + 1))
     return
   }
 
@@ -188,7 +320,12 @@ function walk(schema: Node, value: unknown, where: string, out: Violation[], dep
   // A schema with no declared properties describes something this check has nothing to say about:
   // a free-form object, an enum, a scalar.
   if (declared.size === 0) return
-  if (typeof value !== 'object' || Array.isArray(value)) return
+  // Reached only when the schema names properties without naming a `type`, which the type check
+  // above would otherwise have answered: declaring properties is what makes it an object.
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    out.push({ where, message: `${shapeOf(value)}, where the contract declares an object.` })
+    return
+  }
 
   const record = value as Record<string, unknown>
   for (const name of required) {
