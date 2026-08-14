@@ -109,9 +109,26 @@ npm run build                     # THE gate: tsc over source+tests, then emit. 
                                   # names the order client → cli → mcp; mcp is THIRD for the
                                   # same reason cli is second.
 npm run lint --workspaces         # oxlint, 0 warnings
-npm run test:run --workspaces     # ~~211~~ ~~241~~ ~~260~~ 269 tests (111 client / 77 cli / 81 mcp,
-                                  # measured on shanks 2026-08-14), ~1s — CI runs these, unlike the
-                                  # backend's. **Since §203 every exchange crossing a `fetch` double
+npm run test:run --workspaces     # ~~211~~ ~~241~~ ~~260~~ ~~269~~ 302 tests (119 client / 78 cli /
+                                  # 105 mcp, measured on shanks 2026-08-14), ~1s — CI runs these,
+                                  # unlike the backend's.
+                                  # **Since §205 `writeConformance.test.ts` exists in cli/ and mcp/**
+                                  # — eight comments had cited it (and a `conformance.test.ts`) since
+                                  # §139/§140 and neither file was real; the MCP's registry check
+                                  # read only its own declarations, so 8 of 22 write arms were driven
+                                  # by nothing. It drives every arm and asserts BOTH halves: the
+                                  # header the `kind` implies, and that the operation DECLARES that
+                                  # header. That second half found `tcms_report.generate` sending an
+                                  # `Idempotency-Key` to the one create endpoint of eleven that takes
+                                  # none — a retried 202 queues the report twice.
+                                  # **Also since §205: `client/src/test/citedFiles.test.ts` scans
+                                  # BOTH TypeScript stacks** (`packages/**` and `frontend/src/**`) and
+                                  # fails if a backtick-quoted filename in a comment is not a file.
+                                  # A struck-through name is excused — that notation already says it
+                                  # does not exist — otherwise it goes in the by-decision map with a
+                                  # reason. NOTE the blast radius: a stale citation in `frontend/`
+                                  # reddens the **packages** job.
+                                  # **Since §203 every exchange crossing a `fetch` double
                                   # here is compared against openapi.yaml — the body it SERVES and
                                   # the payload it was CALLED WITH** — §197–§199 arriving in this
                                   # stack, and it found 118 red of 241. The seam is

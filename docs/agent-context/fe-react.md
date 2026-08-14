@@ -2,7 +2,11 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-14 (**§204** — `packages/` only, **nothing in `frontend/` moved at all**,
+**Last verified:** 2026-08-14 (**§205** — three phases, `packages/` plus **three comment lines** in
+`frontend/src/test/`: two stale citations, nothing that ships and no test changed. But a new check in
+`packages/` **reads this tree** — `citedFiles.test.ts` asserts that every backtick-quoted filename in
+a comment under `frontend/src` is a real file, so **a stale citation here reddens the `packages` CI
+job, not this one**; see the §205 entry below; **§204** — `packages/` only, **nothing in `frontend/` moved at all**,
 including `src/api/contractBodies.ts`: the shared region is untouched and the new
 `successStatusesOf` lives *outside* it, because the SPA's double replaces a method on the `api`
 object and has no status to ask about; **§203** — `packages/` got §197–§199's instrument and **118 of its 241
@@ -22,10 +26,47 @@ surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the fl
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `c13c732` (§203 shipped and recorded; §204 is this commit — `packages/` only,
-**no file under `frontend/` changed**, so the suite is 1339 before and after and was not re-run as a
-gate for it)
+**Baseline commit:** `9b4f295` (§205 phase 3 shipped; the two `frontend/` edits it carries are
+comment text, so the suite is **1339 across 100** before and after — and it *was* re-run on `shanks`
+as a gate for it, unlike §204)
 (trust the body over the header and re-grep what a later commit could have moved).
+
+## §205 — A FILE NAMED IN A COMMENT HERE MUST EXIST, AND THE CHECK LIVES IN THE OTHER STACK
+
+**Nothing under `frontend/src` ships differently. Two citations were stale and are fixed. What is
+new for a frontend agent is the check, and where it runs.**
+
+`packages/client/src/test/citedFiles.test.ts` scans **every `.ts`/`.tsx` under `frontend/src`** (and
+every `.ts` under `packages/`) for a backtick-quoted path with a known extension, and asserts the
+file exists. 350 files, 140 distinct citations.
+
+- **It is one check, not a pair, and it runs in the `packages` job.** Unlike `contractBodies.ts` —
+  which is copied into both stacks because a Vite `?raw` import and two npm roots make an import
+  impossible in *production* code — this is a test reading files off disk, and both CI jobs check the
+  repository out whole. So a comment you write here that names a file which does not exist **fails a
+  job in the other stack**. That is stated in the check's own header as its cost.
+- **The escape hatch is this repo's own notation.** A struck-through name (`~~x~~ → y`) is already a
+  statement that the file does not exist, so those spans are excused. If the *absence* is the point
+  of a present-tense sentence — `ErrorBoundaries.tsx` naming `error.tsx` to say a Vite SPA has no
+  framework tier — it goes in `CITED_BUT_ABSENT_BY_DECISION` with the reason, pinned both ways.
+- **`schema.d.ts` is out of the corpus**, because it carries `openapi.yaml`'s prose, which cites
+  files freely and is a different rule's business. One consequence recorded rather than fixed: the
+  contract's `WorkItemStatus` description names a `boardColumns.test.ts` that **does not exist**.
+
+What it found here, neither of them this slice's own work:
+
+| citation | citer | truth |
+|---|---|---|
+| `contractResponses.ts` | `src/test/contractDoubles.ts` | renamed to `contractBodies.ts` in §199; that file's header has the rename struck through and this one was missed |
+| `renderFailures.test.ts` ×2 | `src/test/renderFailures.ts` | the file is `.tsx` |
+
+**One finding about `frontend/src/api/client.ts` that is NOT fixed here.** `Problem` declares five
+properties and requires four; this client reads `detail`, `title`, `errors` and the response status,
+and **drops `type`**. `@tcms/client`'s `TcmsApiError` carries it. Neither stack *reads* the value
+anywhere, so adding a field to `ApiError` would be a readerless one (§154, §165) — the question is
+whether `describeError.ts` can do something with a problem *kind* that it cannot do with a status,
+and the answer arrives with a consumer or not at all. `packages/client/src/problemShape.test.ts`
+carries the measurement.
 
 ## §203 — `contractBodies.ts` EXISTS TWICE AND THE TWO COPIES ARE COMPARED
 
