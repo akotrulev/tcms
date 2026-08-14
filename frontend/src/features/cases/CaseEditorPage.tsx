@@ -67,7 +67,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
-import { formatAge } from '../../lib/format';
+import { formatAge, plural } from '../../lib/format';
 import { automationLabels, priorityLabels, stepFormatLabels } from '../../lib/labels';
 import { selectTestId } from '../../lib/muiTestIds';
 import type { CaseConditionRef, Condition, StepSuggestion, TestCase } from '../../api/types';
@@ -531,6 +531,27 @@ function CaseEditorForm({
   const automationStatus = watch('automationStatus');
 
   /*
+    ================== The move this screen used to make quietly (§194) ==================
+
+    True while the Suite picker names a folder the case is not in yet — the editor's one preview
+    moment, and the analogue of the bulk dialog's dry run (§193). Until Save, the case is still
+    where it was and the Conditions panel below is still telling the truth; what has already been
+    decided is that every exception it holds ends.
+
+    `?? ''` on both sides, matching the picker's own encoding: '' is UNFILED and not "missing"
+    (§96), so a case filed nowhere compares equal to itself instead of reading as a move on mount.
+
+    THE PREDICTION THIS MAKES IS BOUNDED BY §98, and that is written down rather than assumed. A
+    move ends every stored decline because a decline names a `suite_condition` row, a suite is flat,
+    and two folders therefore share no attachment — `CaseConditions#ancestry` says a widening of
+    inheritance "is a decision with a slice behind it", and this is one of the places such a slice
+    has to come. The snackbar on the way out does NOT share the assumption: it reads what the saved
+    case no longer carries. So the record of what happened stays true under a widening while the
+    warning becomes the thing to fix, which is the right way round for the two to fail.
+  */
+  const movingFolder = mode === 'edit' && !!existing && (existing.suiteId ?? '') !== watch('suiteId');
+
+  /*
     ============================ The autosave buffer (§128) ============================
 
     `test_case_draft` is a real table with a real writer now, so the editor stops being a screen
@@ -624,7 +645,45 @@ function CaseEditorForm({
         // The version we read is sent back, so a concurrent save is rejected rather than
         // silently overwritten.
         const saved = await updateCase.mutateAsync({ ...payload, lockVersion: existing.lockVersion });
-        enqueueSnackbar(`Saved ${saved.key} as v${saved.currentVersionNo}`, { variant: 'success' });
+
+        /*
+          §194. The declines this save asked to keep that the saved case does not carry — MEASURED
+          off the response, not predicted from the move. The form binds the complete set on every
+          save, and the response's two declined lists are what survived; the difference is what the
+          request ended. Read off `data` rather than `payload`, which is a `Record<string, unknown>`
+          — the deduplication `toCasePayload` applies to the same field is a property of the set
+          difference here rather than a second copy of the rule.
+
+          Gated on the folder having actually changed, because that is the only operation §192 lets
+          end one, and because a response served by anything less than the whole contract shape
+          would otherwise read as "the server dropped them all". The gate decides whether the
+          question is asked; the response still answers it.
+
+          THE HOLE, stated rather than left to be found: both sides of this subtraction are what a
+          list shows, and a decline whose library entry was retired is on no list (§187). Such a
+          row ends with the move like any other and is counted by neither term. It is §193's LD-4
+          hole arriving on the other path, and closing it needs the server to say what it ended —
+          which is exactly the field the bulk result now has and this endpoint does not.
+        */
+        const kept = new Set(
+          [...(saved.declinedPreconditions ?? []), ...(saved.declinedPostconditions ?? [])]
+            .map((ref) => ref.id),
+        );
+        const ended =
+          mode === 'edit' && (existing.suiteId ?? '') !== data.suiteId
+            ? [...new Set(data.declinedConditionIds)].filter((id) => !kept.has(id))
+            : [];
+
+        // One snackbar, composed — `CaseListPage`'s treatment of the same event (§193), and not a
+        // success whatever the save otherwise did. It is the only record of it that survives the
+        // navigation on the next line.
+        enqueueSnackbar(
+          ended.length
+            ? `Saved ${saved.key} as v${saved.currentVersionNo}`
+              + ` · the move ended ${plural(ended.length, 'condition exception')}`
+            : `Saved ${saved.key} as v${saved.currentVersionNo}`,
+          { variant: ended.length ? 'warning' : 'success' },
+        );
         navigate(`/projects/${projectId}/cases/${saved.id}`);
       } else {
         const created = await createCase.mutateAsync(payload);
@@ -1343,8 +1402,54 @@ function CaseEditorForm({
                         : declines.value.filter((id: string) => id !== attachmentId),
                     );
 
+                  /*
+                    The rows the pending move will end (§194) — resolved from what is already on
+                    screen, which is why they can be NAMED. `inheritedPre`/`inheritedPost` carry the
+                    title the panel renders; a count on its own would leave the author to work out
+                    which of four rules they are about to lose.
+
+                    Here rather than in either panel: one array carries both kinds, so a per-panel
+                    alert would state the same event twice on a case declining one precondition and
+                    one postcondition, and each copy would name half of it.
+                  */
+                  const ending = movingFolder
+                    ? [...inheritedPre, ...inheritedPost].filter((ref) =>
+                        declines.value.includes(ref.id),
+                      )
+                    : [];
+
                   return (
                     <Stack sx={{ gap: 3 }}>
+                      {/*
+                        `warning`, on the same grounds §193 raised the bulk preview's alert to it: a
+                        skip is something the operation will not do, and this is something it will
+                        do that nobody asked for. The consequence sentence is the one the dialog
+                        uses, because it is the same consequence.
+                      */}
+                      {ending.length > 0 && (
+                        <Alert
+                          severity="warning"
+                          data-testid={`${TestIdPrefix}.Conditions.EndingDeclines`}
+                        >
+                          <AlertTitle>
+                            Moving this case ends {plural(ending.length, 'condition exception')}
+                          </AlertTitle>
+                          <Typography variant="body2">
+                            A folder&rsquo;s rule can only be declined by a case filed in that
+                            folder, so {ending.length === 1 ? 'this exception' : 'these exceptions'}
+                            {' '}end with the move. Moving it back will not bring
+                            {ending.length === 1 ? ' it' : ' them'} back.
+                          </Typography>
+                          <Box component="ul" sx={{ pl: 3, my: 1 }}>
+                            {ending.map((ref) => (
+                              <Typography component="li" variant="body2" key={ref.id}>
+                                {ref.title}
+                                {ref.inheritedFrom ? ` — from ${ref.inheritedFrom}` : null}
+                              </Typography>
+                            ))}
+                          </Box>
+                        </Alert>
+                      )}
                       <Controller
                         control={control}
                         name="preconditionIds"
@@ -1356,6 +1461,7 @@ function CaseEditorForm({
                             value={field.value}
                             inherited={inheritedPre}
                             declined={declines.value}
+                            leavingFolder={movingFolder}
                             onToggleDecline={toggle}
                             onChange={field.onChange}
                             known={createdConditions}
@@ -1375,6 +1481,7 @@ function CaseEditorForm({
                             value={field.value}
                             inherited={inheritedPost}
                             declined={declines.value}
+                            leavingFolder={movingFolder}
                             onToggleDecline={toggle}
                             onChange={field.onChange}
                             known={createdConditions}

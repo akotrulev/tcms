@@ -23,6 +23,11 @@
  * the unexplained blank this module exists to avoid.
  */
 import type { CaseFlake } from '../api/types';
+// Moved to `format.ts` in §194, when the case editor became its second consumer. Imported rather
+// than re-declared: a private copy here and a public one there is exactly the drift this project's
+// shared display layer exists to prevent, and the sibilant rule below is the evidence that a
+// re-implementation gets it wrong.
+import { plural } from './format';
 
 /**
  * How flaky, banded — for a chip's colour and word, never for a decision.
@@ -119,15 +124,3 @@ export function flakeEvidence(verdict: FlakeVerdict): string | null {
   }
 }
 
-/**
- * `1 result` / `3 results` / `4 switches`.
- *
- * The sibilant rule is here because the naive `+ 's'` produced **"4 switchs"** in this module's own
- * first run — every noun this file pluralises happened to be regular except the one that carries the
- * headline number. Not a general inflector: it covers the endings English adds `es` to, and a noun
- * that needs more than that should be passed already-plural rather than handled here.
- */
-function plural(n: number, noun: string): string {
-  if (n === 1) return `1 ${noun}`;
-  return `${n} ${noun}${/(?:s|x|z|ch|sh)$/.test(noun) ? 'es' : 's'}`;
-}

@@ -35,6 +35,21 @@
  * server serves separately are appended at the end of the group rather than interleaved: their
  * §6f order is resolved server-side over the suite chain and re-deriving it here would be the
  * second implementation `CaseDetailPage` refuses to write for the same list.
+ *
+ * ## `leavingFolder` — the toggle the picker has already decided (§194)
+ *
+ * This whole group belongs to the folder the case is filed in *now*. Move the Suite picker and the
+ * rows go on rendering the folder being left, which is correct until Save — but the switches stop
+ * meaning anything, because §192 ends every exception the destination does not impose. See the
+ * prop's own comment for why that is a defect and not a nicety.
+ *
+ * **What this panel deliberately does NOT do is show the destination's rules instead.** They are on
+ * the wire — `Suite.preconditions` / `.postconditions` carry the same `suite_condition` ids in the
+ * same `CaseConditionRef` shape, on a list the editor already holds — but assembling them into
+ * "what this case will inherit" means deduping against the case's own attachments, applying §6f's
+ * resolution order and dropping retired entries. That is the second implementation of the case
+ * endpoint's resolution the paragraph above refuses for a smaller list, and it would be built out
+ * of a bound (the suite list omits retired entries) that is not the one retention uses.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
@@ -127,6 +142,7 @@ export function ConditionsPanel({
   value,
   inherited,
   declined = [],
+  leavingFolder = false,
   onToggleDecline,
   onChange,
   onCreate,
@@ -154,6 +170,23 @@ export function ConditionsPanel({
    * the props would make that caller pass an empty array and a function that can never be called.
    */
   declined?: readonly string[];
+  /**
+   * The form has moved the case to a different folder, so **every toggle here is inert** until the
+   * save lands (§194).
+   *
+   * Separate from `disabled`, which turns off the whole panel. The case's own attachments are
+   * unaffected by a move and stay fully editable; what a move invalidates is the *inherited* group
+   * and the exceptions taken against it. The rows keep rendering because they are still true — the
+   * case is still filed where it was until Save — and greying only the switch says which half of
+   * the panel the picker has already decided.
+   *
+   * It is not a courtesy. `CaseEdit.normalizeDeclines` bounds the submitted set by what the
+   * DESTINATION folder imposes, and since §98 a suite is flat, so two folders share no attachment
+   * and the intersection is empty: a decline switched on here would be accepted by validation and
+   * then dropped by the same request. A control whose effect the save silently discards is worse
+   * than no control.
+   */
+  leavingFolder?: boolean;
   onToggleDecline?: (attachmentId: string, next: boolean) => void;
   onChange: (next: string[]) => void;
   onCreate: () => void;
@@ -276,11 +309,15 @@ export function ConditionsPanel({
                   */}
                   <Tooltip
                     title={
-                      isDeclined
-                        ? `This case ignores the ${ref.inheritedFrom ?? 'folder'} rule. `
-                          + 'Switch it back on to apply it again.'
-                        : `Turn this off for THIS CASE only. The ${ref.inheritedFrom ?? 'folder'} `
-                          + 'rule keeps applying to every other case beneath it.'
+                      leavingFolder
+                        ? `This case is moving out of ${ref.inheritedFrom ?? 'this folder'}, so `
+                          + 'the rule stops reaching it either way. Put it back where it was to '
+                          + 'change this.'
+                        : isDeclined
+                          ? `This case ignores the ${ref.inheritedFrom ?? 'folder'} rule. `
+                            + 'Switch it back on to apply it again.'
+                          : `Turn this off for THIS CASE only. The ${ref.inheritedFrom ?? 'folder'} `
+                            + 'rule keeps applying to every other case beneath it.'
                     }
                   >
                     <FormControlLabel
@@ -290,7 +327,7 @@ export function ConditionsPanel({
                         <Switch
                           size="small"
                           checked={!isDeclined}
-                          disabled={disabled}
+                          disabled={disabled || leavingFolder}
                           // The accessible name IS the handle a test uses — `getByRole('switch',
                           // { name })` — because MUI v7's Switch input slot types reject an
                           // arbitrary data attribute, and a label the screen reader reads is the

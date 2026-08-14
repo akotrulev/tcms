@@ -1046,3 +1046,269 @@ describe('CaseEditorPage — declining an inherited condition (§187)', () => {
     expect(body.preconditions).toEqual([])
   })
 })
+
+/**
+ * The move the editor used to make quietly (§194) — §193's item, on the single-case path.
+ *
+ * §192 made relocation the one operation in the product that ends a stored decision, and §193 gave
+ * the bulk action a preview and a record of it. `PATCH /cases/{id}` ends declines by exactly the
+ * same rule and said nothing about it on either side of the save. Worse than nothing, in fact:
+ *
+ *   1. **The inherited group is the folder the case is filed in NOW.** `inheritedPre` is built from
+ *      the loaded case, so moving the Suite picker leaves a panel full of the departing folder's
+ *      rules with live switches on them. `CaseEdit.normalizeDeclines` intersects the submitted set
+ *      with what the DESTINATION imposes, and since §98 two folders share no attachment — so a
+ *      decline toggled here is accepted by validation and dropped by the same request. A control
+ *      whose effect the save silently discards is the defect; the alert is the smaller half.
+ *   2. **The snackbar is the only record that survives the navigation** on the next line, exactly
+ *      as `CaseListPage`'s is for the bulk path.
+ *
+ * The two halves are deliberately built from different things and the last test here is what pins
+ * it: the alert PREDICTS from §98's flatness, the snackbar MEASURES what the response no longer
+ * carries. Give the server an answer that kept the decline and the alert still warns while the
+ * snackbar reports nothing — which is what "measured" has to mean.
+ */
+describe('CaseEditorPage — moving a case out of the folder it declines (§194)', () => {
+  const CASE_ID = 'c-194'
+
+  const moveSuites: Suite[] = [
+    { id: 'suite-1', name: 'Refunds', caseCount: 3, lifecycleStatus: 'DRAFT' } as Suite,
+    { id: 'suite-2', name: 'Chargebacks', caseCount: 1, lifecycleStatus: 'DRAFT' } as Suite,
+  ]
+
+  /** The declined row, as the server serves it: on `declinedPreconditions`, not `preconditions`. */
+  const declinedRow = {
+    id: 'attach-1',
+    position: 0,
+    conditionId: 'cond-1',
+    title: 'Log in as standard user',
+    body: ['Open the application'],
+    inline: false,
+    inherited: true,
+    inheritedFrom: 'Refunds',
+  }
+
+  /** Filed in Refunds, declining the one rule Refunds imposes. */
+  const declining = {
+    id: CASE_ID,
+    key: 'TC-194',
+    keySeq: 194,
+    title: 'Log in with a bad password',
+    suiteId: 'suite-1',
+    suiteName: 'Refunds',
+    objective: null,
+    description: null,
+    expectedOutcome: null,
+    priority: 'MEDIUM',
+    severity: 'MEDIUM',
+    automationStatus: 'MANUAL',
+    automationKey: null,
+    notAutomatableReason: null,
+    estimatedDurationSec: null,
+    stepFormat: 'STRUCTURED',
+    gherkinSource: null,
+    steps: [{ id: 's1', keyword: null, action: 'Open the login page', testData: null, expectedResult: null }],
+    classificationValueIds: [],
+    preconditions: [],
+    postconditions: [],
+    declinedPreconditions: [declinedRow],
+    declinedPostconditions: [],
+    tags: [],
+    lockVersion: 3,
+    currentVersionNo: 2,
+    lifecycleStatus: 'DRAFT',
+  } as unknown as TestCase
+
+  /** The same case with the rule in force — a move costs it nothing. */
+  const notDeclining = {
+    ...declining,
+    preconditions: [declinedRow],
+    declinedPreconditions: [],
+  } as unknown as TestCase
+
+  function mockMoveReads(theCase: TestCase) {
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path.startsWith('/me/permissions')) return heldPermissions(['case:edit'], {}, PROJECT)
+      if (path.includes('/draft')) return null
+      if (path.includes('/step-suggestions')) return corpus
+      if (path.includes('/conditions')) return library
+      if (path.includes('/suites')) return moveSuites
+      if (path.includes('/classification')) return []
+      if (path.includes('/tags')) return projectTags
+      if (path.includes(`/cases/${CASE_ID}`)) return theCase
+      return []
+    }) as never)
+  }
+
+  function renderMoveEditor() {
+    return render(
+      <TestProviders
+        client={createTestQueryClient()}
+        route={`/projects/${PROJECT}/cases/${CASE_ID}/edit`}
+      >
+        <SessionRecoveryContext.Provider value={sessionRecovery}>
+          <SnackbarProvider>
+            <Routes>
+              <Route
+                path="/projects/:projectId/cases/:caseId/edit"
+                element={<CaseEditorPage mode="edit" />}
+              />
+            </Routes>
+          </SnackbarProvider>
+        </SessionRecoveryContext.Provider>
+      </TestProviders>,
+    )
+  }
+
+  /** Drives the Placement picker to `name` — the MUI Select path `fillHeader` uses. */
+  async function pickSuite(user: ReturnType<typeof userEvent.setup>, name: RegExp) {
+    const field = screen.getByTestId('CaseEditor.Field.Suite')
+    await user.click(within(field.closest('.MuiInputBase-root') as HTMLElement).getByRole('combobox'))
+    await user.click(await screen.findByRole('option', { name }))
+  }
+
+  const alert = () => screen.queryByTestId('CaseEditor.Conditions.EndingDeclines')
+  const toggle = () => screen.getByRole('switch', { name: /applies to this case/i })
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('says nothing until the picker moves — the case is still where it was', async () => {
+    mockMoveReads(declining)
+    renderMoveEditor()
+
+    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
+    expect(alert()).not.toBeInTheDocument()
+    // And the toggle is the ordinary, working control it has been since §187.
+    expect(toggle()).toBeEnabled()
+  })
+
+  it('NAMES the exception the move will end, once the picker has moved', async () => {
+    // A count alone would leave the author to work out which of the rules on screen they are about
+    // to lose — `BulkResultView`'s "a bare `affected: 38` cannot be rendered as a preview" (§6f),
+    // applied to a list the editor already holds the titles for.
+    const user = userEvent.setup()
+    mockMoveReads(declining)
+    renderMoveEditor()
+
+    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
+    await pickSuite(user, /chargebacks/i)
+
+    const banner = await screen.findByTestId('CaseEditor.Conditions.EndingDeclines')
+    expect(banner).toHaveTextContent('Moving this case ends 1 condition exception')
+    expect(banner).toHaveTextContent('Log in as standard user')
+    expect(banner).toHaveTextContent(/will not bring it back/i)
+  })
+
+  it('a move that costs nothing says nothing — the event is the DECLINE ending, not the move', async () => {
+    const user = userEvent.setup()
+    mockMoveReads(notDeclining)
+    renderMoveEditor()
+
+    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
+    await pickSuite(user, /chargebacks/i)
+
+    await waitFor(() => expect(screen.getByTestId('CaseEditor.Field.Suite')).toHaveTextContent(/chargebacks/i))
+    expect(alert()).not.toBeInTheDocument()
+  })
+
+  it('withdraws the warning when the picker goes back — it is a preview, not a latch', async () => {
+    const user = userEvent.setup()
+    mockMoveReads(declining)
+    renderMoveEditor()
+
+    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
+    await pickSuite(user, /chargebacks/i)
+    await screen.findByTestId('CaseEditor.Conditions.EndingDeclines')
+
+    await pickSuite(user, /refunds/i)
+    await waitFor(() => expect(alert()).not.toBeInTheDocument())
+    expect(toggle()).toBeEnabled()
+  })
+
+  it('DISABLES the decline toggle while the move is pending, rather than accepting a discarded act', async () => {
+    // The defect this slice is mostly about. The rows below the picker belong to the folder being
+    // left; `normalizeDeclines` bounds the submitted set by the DESTINATION's attachments, which
+    // share nothing with them (§98), so a switch flipped here changes the request and not the case.
+    const user = userEvent.setup()
+    mockMoveReads(declining)
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ ...declining, currentVersionNo: 3 } as never)
+    renderMoveEditor()
+
+    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
+    await pickSuite(user, /chargebacks/i)
+
+    await waitFor(() => expect(toggle()).toBeDisabled())
+    // Asserted through the REQUEST, not the attribute alone: `disabled` is how the browser is asked
+    // to swallow the click, and what matters is that the set the save carries is the one the author
+    // last chose while the case was still in Refunds.
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+    await waitFor(() => expect(patch).toHaveBeenCalled())
+    const body = patch.mock.calls[0][1] as { declinedConditionIds: string[] }
+    expect(body.declinedConditionIds).toEqual(['attach-1'])
+  })
+
+  it('reports the cost on the way out, as a warning and in one composed snackbar', async () => {
+    // The only record that survives the navigate() on the next line — `CaseListPage`'s treatment of
+    // the same event (§193), on the path that has no dialog to close.
+    const user = userEvent.setup()
+    mockMoveReads(declining)
+    vi.spyOn(api, 'patch').mockResolvedValue({
+      ...declining,
+      suiteId: 'suite-2',
+      currentVersionNo: 3,
+      declinedPreconditions: [],
+      declinedPostconditions: [],
+    } as never)
+    renderMoveEditor()
+
+    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
+    await pickSuite(user, /chargebacks/i)
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    expect(await screen.findByText(/Saved TC-194 as v3 · the move ended 1 condition exception/)).toBeInTheDocument()
+  })
+
+  it('reports NOTHING when the response kept the decline — the snackbar is measured, not predicted', async () => {
+    // What makes the two halves different instruments. The alert predicts from §98's flatness; this
+    // reads what the saved case no longer carries. Hand back a server that kept the row and the
+    // record stays true while the prediction is the thing that was wrong — the right way round, and
+    // the reason `CaseConditions#ancestry`'s "a widening is a decision with a slice behind it" has
+    // somewhere to land.
+    const user = userEvent.setup()
+    mockMoveReads(declining)
+    vi.spyOn(api, 'patch').mockResolvedValue({
+      ...declining,
+      suiteId: 'suite-2',
+      currentVersionNo: 3,
+      declinedPreconditions: [declinedRow],
+      declinedPostconditions: [],
+    } as never)
+    renderMoveEditor()
+
+    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
+    await pickSuite(user, /chargebacks/i)
+    await screen.findByTestId('CaseEditor.Conditions.EndingDeclines')
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    expect(await screen.findByText('Saved TC-194 as v3')).toBeInTheDocument()
+    expect(screen.queryByText(/the move ended/)).not.toBeInTheDocument()
+  })
+
+  it('a save that does not move the case never asks the question', async () => {
+    // The gate on the subtraction. Without it a response served by anything less than the whole
+    // contract shape would read as "the server dropped every decline" on an ordinary title fix.
+    const user = userEvent.setup()
+    mockMoveReads(declining)
+    vi.spyOn(api, 'patch').mockResolvedValue({ ...declining, currentVersionNo: 3 } as never)
+    renderMoveEditor()
+
+    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
+    await user.type(screen.getByTestId('CaseEditor.Field.Title'), '!')
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    expect(await screen.findByText('Saved TC-194 as v3')).toBeInTheDocument()
+    expect(screen.queryByText(/the move ended/)).not.toBeInTheDocument()
+  })
+})

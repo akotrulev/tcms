@@ -183,6 +183,24 @@ export function formatCount(n: number | null | undefined): string {
 }
 
 /**
+ * `1 result` / `3 results` / `4 switches`.
+ *
+ * The sibilant rule is here because the naive `+ 's'` produced **"4 switchs"** in `lib/flake.ts`'s
+ * own first run — every noun that module pluralises happened to be regular except the one that
+ * carries the headline number. Not a general inflector: it covers the endings English adds `es` to,
+ * and a noun that needs more than that should be passed already-plural rather than handled here.
+ *
+ * **It lived private in `lib/flake.ts` until §194**, which is where it was written and where it was
+ * the only consumer. A second consumer is the moment this file's own header applies — one canonical
+ * format per data type, defined once — so it moved here rather than being copied, `formatCount`'s
+ * neighbour for the same reason: both turn a number into the words beside it.
+ */
+export function plural(n: number, noun: string): string {
+  if (n === 1) return `1 ${noun}`;
+  return `${n} ${noun}${/(?:s|x|z|ch|sh)$/.test(noun) ? 'es' : 's'}`;
+}
+
+/**
  * Releases must sort by precedence, never lexicographically — `4.10.0` comes *after*
  * `4.9.0`, and a string compare puts it before. Same class of bug as ordering by case key.
  */
