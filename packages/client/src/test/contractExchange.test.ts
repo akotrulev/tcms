@@ -84,6 +84,28 @@ describe('what it reports', () => {
     expect(drainContractViolations()[0]?.message).toContain('which is not one of the members');
   });
 
+  /*
+    The §204 rung, and it is a guard rather than a repair: nothing in this tree answers an undeclared
+    2xx, so the only evidence it works is a case that makes it fire. `POST …/comments` is the right
+    subject because it declares 201 **alone** — most creates here declare 200 and 201 both, which is
+    exactly why the population is zero and why the candidate that asked for this expected otherwise.
+  */
+  it('names a success status the operation does not declare', () => {
+    exchange({
+      method: 'POST',
+      pathname: '/api/v1/projects/p-1/reviews/r-1/comments',
+      requestBody: JSON.stringify({ body: 'Looks right.' }),
+      status: 200,
+      responseBody: undefined,
+    });
+
+    expect(drainContractViolations().map((violation) => violation.message)).toEqual([
+      'answered 200, and the contract declares 201 for that operation. A client may branch on '
+      + 'which — a create that replays an `Idempotency-Key` answers 200 where the first call '
+      + 'answered 201 — so a double serving the wrong one tests a response the server does not send.',
+    ]);
+  });
+
   it('compares the payload a call sent, and says so in the other direction', () => {
     exchange({
       method: 'POST',
@@ -140,6 +162,41 @@ describe('what it deliberately does not report', () => {
     });
 
     expect(drainContractViolations()).toEqual([]);
+  });
+
+  /*
+    The pair of the case above and the reason the whole population is zero. A create declares both,
+    because a replayed `Idempotency-Key` answers 200 — so neither arm may be reported.
+  */
+  it('accepts either arm of a create that declares 200 and 201', () => {
+    for (const status of [200, 201]) {
+      exchange({
+        method: 'POST',
+        pathname: '/api/v1/projects/p-1/suites',
+        requestBody: JSON.stringify({ name: 'Smoke' }),
+        status,
+        responseBody: suite(),
+      });
+
+      expect(drainContractViolations(), `status ${status}`).toEqual([]);
+    }
+  });
+
+  /*
+    A status the operation cannot answer stops the body comparison rather than adding to it — the
+    schema that would be reached describes a response the double is not claiming to be, so reporting
+    both would name one defect twice and send the reader to the fixture instead of to the status.
+  */
+  it('says nothing about the body once the status is the defect', () => {
+    exchange({
+      method: 'POST',
+      pathname: '/api/v1/projects/p-1/reviews/r-1/comments',
+      requestBody: JSON.stringify({ body: 'Looks right.' }),
+      status: 200,
+      responseBody: { nothing: 'the contract declares' },
+    });
+
+    expect(drainContractViolations()).toHaveLength(1);
   });
 
   it('leaves a 204 alone', () => {

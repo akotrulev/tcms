@@ -534,6 +534,56 @@ describe('suite writes', () => {
   });
 
   /*
+    §204. `POST …/suites` declares 200 **and** 201: the 201 created it, the 200 says the
+    `Idempotency-Key` had already created it and — the contract's own words — nothing was created by
+    this request. Both printed `Created  TS-7 — Smoke`, because `@tcms/client` returned `result.data`
+    and dropped the status, so no consumer in this tree could tell them apart. The population that
+    meets it is `--idempotency-key`, which is the scripted retry the header exists for.
+
+    Asserted as a pair, in one test, because the interesting claim is that the two differ — a test
+    that only pinned the replay would pass just as well if every create had started saying Replayed.
+  */
+  it('says Replayed rather than Created when the key had already created it', async () => {
+    const replay = recorder();
+    await mainWith(
+      ['suite', 'create', '--name', 'Smoke', '--idempotency-key', 'batch-7'],
+      replay,
+      api({ ...scaffolding(), 'POST /suites': { status: 200, body: SUITE } }).fetch,
+    );
+
+    const created = recorder();
+    await mainWith(
+      ['suite', 'create', '--name', 'Smoke', '--idempotency-key', 'batch-7'],
+      created,
+      api({ ...scaffolding(), 'POST /suites': { status: 201, body: SUITE } }).fetch,
+    );
+
+    expect(replay.stdout).toContain('Replayed');
+    expect(replay.stdout).not.toContain('Created');
+    expect(created.stdout).toContain('Created');
+    expect(created.stdout).not.toContain('Replayed');
+    // The key is what a caller acts on and it is the same either way, which is the whole point of
+    // the header — the word is the only thing that says which request allocated it.
+    expect(replay.stdout).toContain('TS-7');
+  });
+
+  /*
+    `--json` prints the resource, and the resource is byte-identical on a replay. That is not an
+    oversight to fix later: a machine reader consumes ids, and inventing a `replayed` key in the JSON
+    would be this client adding a field to a contract-shaped body (§165's shape from the wrong side).
+  */
+  it('leaves the --json form alone, because the resource is the same resource', async () => {
+    const out = recorder();
+    await mainWith(
+      ['suite', 'create', '--name', 'Smoke', '--idempotency-key', 'batch-7', '--json'],
+      out,
+      api({ ...scaffolding(), 'POST /suites': { status: 200, body: SUITE } }).fetch,
+    );
+
+    expect(JSON.parse(out.stdout)).toEqual(SUITE);
+  });
+
+  /*
     The case arm's defect, one field wide. `SuiteInput` requires `name`, so editing only the tag
     rules was a 400 about a field nobody mentioned; and `description` absent is *cleared*, so a
     rename emptied it. Both invisible to a stub, which answers 200 to whatever arrives.

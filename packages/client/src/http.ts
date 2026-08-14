@@ -78,6 +78,24 @@ export interface TcmsRequestOptions {
   idempotencyKey?: string;
   /** `lockVersion` from the paired read, sent as `If-Match`. See `core/concurrency.ts`. */
   ifMatch?: string | number;
+  /**
+   * Called with the status of a **successful** answer, once, before the body reaches the caller.
+   *
+   * It exists because `client.ts` returns `result.data` and drops everything else, so a success
+   * status was readable nowhere in this package — and on sixteen operations the contract says the
+   * two success statuses mean different things: 201 created it, 200 replayed an `Idempotency-Key`
+   * and *nothing was created by this request*. §204 found the CLI printing `Created` for both.
+   *
+   * A callback rather than a returned status, because that is the shape that survives the spread
+   * every call site writes (`tcms: { ...request, ...createIntent(…) }`): a field written onto the
+   * options object would be written onto the copy. `createIntent` is the only caller and
+   * {@link core/mutation.CreateIntent} is the readable form of it — a bare hook here would invite
+   * a second, per-call-site answer to a question the core already answers once.
+   *
+   * Not called on a refusal: `http.ts` has thrown by then, and a `TcmsApiError` already carries
+   * its status.
+   */
+  observeStatus?: (status: number) => void;
 }
 
 const OPTIONS_KEY = 'tcms';

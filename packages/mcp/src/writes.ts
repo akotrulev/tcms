@@ -47,6 +47,19 @@
  *
  * Both are consequences of decisions taken elsewhere and are listed as **Buildable** in the
  * surface spec's §3 table. They are recorded in §140's section file rather than quietly dropped.
+ *
+ * ## The replay these tools do not report, and why the CLI does
+ *
+ * §204 gave `createIntent` a reader for the 200-instead-of-201 that says an `Idempotency-Key` had
+ * already carried the intent out. **The CLI uses it and these tools do not**, and the difference is
+ * not laziness on this side: a CLI create *states in words* what it did (`Created  TS-7 — Smoke`),
+ * so on a replay that word was false. These answer `ok(resource)` — JSON, no prose, by `result.ts`'s
+ * argument that the reader is a model composing the next call — and the resource a replay returns is
+ * the resource a create returns, identically and correctly. Nothing here says anything untrue.
+ *
+ * Adding a `replayed` key beside it would be this adapter putting a field the contract does not
+ * declare into a contract-shaped body, which is what a model would then quote back into its next
+ * call. If a tool ever grows prose, this is the fact it has to carry.
  */
 import {
   caseInputFrom,

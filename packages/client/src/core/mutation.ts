@@ -76,9 +76,44 @@ export interface CreateOptions {
   key?: string | undefined;
 }
 
-/** The per-request options a create arm sends. */
-export function createIntent(options: CreateOptions = {}): TcmsRequestOptions {
-  return { idempotencyKey: options.key === undefined ? newIntentKey() : requireIntentKey(options.key) };
+/**
+ * The per-request options a create arm sends — and, after the call, what the server did with them.
+ *
+ * The reader half is the point. `Idempotency-Key`'s whole payoff is that the *second* attempt at one
+ * intent does not allocate a second thing, and the contract states that on sixteen operations by
+ * answering **200 instead of 201** with the wording *"nothing was created by this request"*. Until
+ * §204 no consumer in `packages/` could see it: `client.ts` returned `result.data` and dropped the
+ * status, so a replay and a create were the same resource arriving the same way, and the CLI printed
+ * `Created` for both.
+ *
+ * It is on the intent rather than on the response because the intent is the thing that *has* the
+ * question. A caller who did not supply a key cannot meaningfully be replayed — the CLI generates one
+ * per invocation, so the second run of the same command is a second intent and gets a second suite —
+ * and a caller who did supply one is by construction retrying, which is when the answer matters.
+ */
+export interface CreateIntent extends TcmsRequestOptions {
+  /**
+   * `true` once a 200 has come back: the key had already carried this intent out and this request
+   * allocated nothing. `false` for the 201 that did.
+   *
+   * Before the response it is `false`, which is the reading a caller wants — an intent that has not
+   * been carried out yet has not been replayed either — and it is why this is a method rather than a
+   * field a caller might read at the wrong moment and get `undefined` from.
+   */
+  wasReplay(): boolean;
+}
+
+export function createIntent(options: CreateOptions = {}): CreateIntent {
+  let replayed = false;
+  return {
+    idempotencyKey: options.key === undefined ? newIntentKey() : requireIntentKey(options.key),
+    // 200 is the only success a create has that is not the create. Written from the callback rather
+    // than read off a field because every call site spreads these options into a fresh object
+    // (`tcms: { ...request, ...createIntent(…) }`) — a field would be written onto that copy, and
+    // the closure is what the spread cannot break.
+    observeStatus: (status) => { replayed = status === 200; },
+    wasReplay: () => replayed,
+  };
 }
 
 /**

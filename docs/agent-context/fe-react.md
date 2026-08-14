@@ -2,7 +2,10 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-14 (**§203** — `packages/` got §197–§199's instrument and **118 of its 241
+**Last verified:** 2026-08-14 (**§204** — `packages/` only, **nothing in `frontend/` moved at all**,
+including `src/api/contractBodies.ts`: the shared region is untouched and the new
+`successStatusesOf` lives *outside* it, because the SPA's double replaces a method on the `api`
+object and has no status to ask about; **§203** — `packages/` got §197–§199's instrument and **118 of its 241
 tests were red**; the only thing that moved *here* is `src/api/contractBodies.ts`, whose marked region
 is now **byte-identical to a copy in `packages/` and compared line by line** — edit one, edit both,
 and keep it compiling under that stack's stricter flags; **§202** — the test query client, the render-failure seam, its own
@@ -19,9 +22,9 @@ surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the fl
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `e92d973` (§202 shipped and recorded; §203 is this commit — `packages/` plus
-**one** file here, `src/api/contractBodies.ts`, three lines of strictness and a sentinel pair, no
-behaviour and no test-count change: 1339 before and after)
+**Baseline commit:** `c13c732` (§203 shipped and recorded; §204 is this commit — `packages/` only,
+**no file under `frontend/` changed**, so the suite is 1339 before and after and was not re-run as a
+gate for it)
 (trust the body over the header and re-grep what a later commit could have moved).
 
 ## §203 — `contractBodies.ts` EXISTS TWICE AND THE TWO COPIES ARE COMPARED
@@ -41,16 +44,21 @@ sentinels the text is **byte-identical** to `packages/client/src/test/contractBo
   spells `| undefined` on its three optional members and why `contractPathOf` binds
   `url.split('?')[0] ?? url` rather than indexing inline. Writing looser code here compiles fine and
   breaks the other stack's build.
-- **What is outside the region is the difference between the stacks**: how each loads the document
-  (`?raw` here, `node:fs` there), and — there only — the `/api/v1` prefix `@tcms/client` sends and
-  the SPA does not.
+- **What is outside the region is the difference between the stacks**, and since §204 there are
+  three: how each loads the document (`?raw` here, `node:fs` there), and — there only — the `/api/v1`
+  prefix `@tcms/client` sends, and `successStatusesOf`. That last one is the shape of the rule: a
+  question **only one stack can ask** goes outside the region rather than into it. The SPA's double
+  replaces a method on the `api` object, which answers `{ data }`, so a copy of it here would be an
+  export with no possible caller.
 
 `packages/` got its own half of §197–§199 in the same slice and it found **118 red of 241**. Nothing
 about it changes how a test is written *here* — but if you are working in that stack: the seam is
 `packages/client/src/test/contractExchange.ts`, called from all **three** `fetch` doubles, the
 fixtures are `packages/client/src/test/fixtures.ts`, only a **2xx** answer is measured against the
-success schema, and the single hatch is `drivingTheTransport()`. `CLAUDE.md`'s `packages/` block
-carries the rest.
+success schema, and the single hatch is `drivingTheTransport()`. **Since §204 the status is compared
+too** — a 2xx a double answers with must be one the operation declares — and the population is
+**zero**: 17 of the 133 operations declare two success statuses and sixteen of those are creates
+declaring 200 *and* 201, because a replayed `Idempotency-Key` answers 200. `CLAUDE.md`'s `packages/` block carries the rest.
 
 ## §201 — A TEST WHOSE RENDER TRIPPED A BOUNDARY FAILS, UNLESS IT SAYS IT MEANT TO
 

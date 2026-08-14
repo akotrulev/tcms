@@ -143,6 +143,42 @@ describe('mutation intents', () => {
     expect(() => createIntent({ key: 'x'.repeat(MAX_IDEMPOTENCY_KEY + 1) })).toThrow(/at most/);
   });
 
+  /*
+    §204. The 200 arm of a create is the contract's way of saying the key had already done this and
+    nothing was allocated by this request, and until this rung no consumer in `packages/` could read
+    a success status at all.
+  */
+  it('reads a 200 on a create as a replay and a 201 as the create', () => {
+    const created = createIntent();
+    const replayed = createIntent();
+
+    // Before the answer, and it must not be `undefined`: an intent that has not been carried out
+    // has not been replayed either, and a caller printing a word wants a boolean.
+    expect(created.wasReplay()).toBe(false);
+
+    created.observeStatus?.(201);
+    replayed.observeStatus?.(200);
+
+    expect(created.wasReplay()).toBe(false);
+    expect(replayed.wasReplay()).toBe(true);
+  });
+
+  /*
+    Every create arm writes `tcms: { ...request, ...createIntent(…) }`, so the answer has to survive
+    being spread into a fresh object. It does because the hook is a closure over the intent rather
+    than a field on it — a field would be written onto the copy and read off the original.
+  */
+  it('still reports the replay when the options were spread into another object', () => {
+    const intent = createIntent({ key: 'batch-7' });
+    const request = { timeoutClass: 'interactive' as const };
+    const sent = { ...request, ...intent };
+
+    sent.observeStatus?.(200);
+
+    expect(intent.wasReplay()).toBe(true);
+    expect(sent.idempotencyKey).toBe('batch-7');
+  });
+
   it('sends If-Match from an explicit version and from a fresh read alike', () => {
     expect(editIntent({ explicit: 3 }, 'rename suite').ifMatch).toBe('3');
     expect(editIntent({ fresh: { lockVersion: 3 } }, 'rename suite').ifMatch).toBe('3');

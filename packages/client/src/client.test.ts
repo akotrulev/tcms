@@ -44,6 +44,34 @@ describe('createTcmsClient', () => {
     expect(stub.last.url).toBe('https://tcms.example.com/api/v1/me/permissions?projectId=p-1');
   });
 
+  /*
+    §204. This function returned `result.data` and dropped everything else, so a success status was
+    readable nowhere in the package — which on the sixteen creates that declare 200 *and* 201 is the
+    difference between "created" and "your Idempotency-Key had already done this".
+  */
+  it('reports the success status, which the returned body cannot carry', async () => {
+    const seen: number[] = [];
+    const stub = stubFetch({ status: 200, body: suite() });
+
+    await client(stub.fetch).POST('/projects/{projectId}/suites', {
+      params: { path: { projectId: 'p-1' } },
+      body: { name: 'Smoke' },
+      tcms: { observeStatus: (status) => seen.push(status) },
+    });
+
+    expect(seen).toEqual([200]);
+  });
+
+  it('does not report a status for a refusal, which throws with one of its own', async () => {
+    const seen: number[] = [];
+    const stub = stubFetch({ status: 403, body: { title: 'Forbidden', status: 403, detail: 'No.' } });
+
+    await expect(client(stub.fetch).GET('/me', { tcms: { observeStatus: (s) => seen.push(s) } }))
+      .rejects.toBeInstanceOf(TcmsApiError);
+
+    expect(seen).toEqual([]);
+  });
+
   it('passes per-request options through to the transport without sending them as a body', async () => {
     const stub = stubFetch({ status: 201, body: suite() });
 

@@ -44,7 +44,7 @@ export { ifMatchFor, isVersionConflict, versionOf } from './core/concurrency.js'
 export type { Concurrency, NoVersionReason } from './core/concurrency.js';
 
 export { createIntent, editIntent, requireExplicitVersion } from './core/mutation.js';
-export type { CreateOptions, EditVersion, WriteKind } from './core/mutation.js';
+export type { CreateIntent, CreateOptions, EditVersion, WriteKind } from './core/mutation.js';
 
 export { caseInputFrom, planInputFrom, suiteInputFrom } from './core/rewrite.js';
 

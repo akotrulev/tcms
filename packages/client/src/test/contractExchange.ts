@@ -12,6 +12,10 @@
  * askable that the SPA's cannot ask at all: the **status**. A 400 does not carry the success schema,
  * so only a 2xx answer is compared against it.
  *
+ * Since §204 the status is also compared **for its own sake**: a 2xx a double answers with must be
+ * one the operation declares. `checkStatus` carries why that is the success half only, and why its
+ * population turned out to be zero.
+ *
  * ## The population this exists for
  *
  * `packages/` doubles the API in three places — `stubFetch` in this package, and an `api(routes)`
@@ -57,7 +61,13 @@
  */
 import { afterEach, expect } from 'vitest';
 
-import { contractPathOfRequest, requestBodyOf, responseSchemaOf, violationsOf } from './contractBodies.js';
+import {
+  contractPathOfRequest,
+  requestBodyOf,
+  responseSchemaOf,
+  successStatusesOf,
+  violationsOf,
+} from './contractBodies.js';
 import type { Violation } from './contractBodies.js';
 
 export interface Exchange {
@@ -184,7 +194,8 @@ function checkSent(method: string, contractPath: string, body: string | null): v
 }
 
 /**
- * The body the double served, against the success response the operation declares.
+ * The body the double served, against the success response the operation declares — and, since §204,
+ * the **status** it served it with.
  *
  * Three things are skipped and each for its own reason. A **non-2xx** answer carries a refusal, not
  * this schema — `Problem` is a different shape and the tests that drive one are asserting the
@@ -194,6 +205,7 @@ function checkSent(method: string, contractPath: string, body: string | null): v
  */
 function checkServed(method: string, contractPath: string, exchange: Exchange): void {
   if (exchange.status < 200 || exchange.status >= 300) return;
+  if (!checkStatus(method, contractPath, exchange.status)) return;
   if (exchange.status === 204 || exchange.responseBody === undefined || exchange.responseBody === null) return;
 
   const schema = responseSchemaOf(method, contractPath);
@@ -209,6 +221,57 @@ function checkServed(method: string, contractPath: string, exchange: Exchange): 
   }
 
   report(method, contractPath, 'served', violationsOf(schema, exchange.responseBody, 'served'));
+}
+
+/**
+ * Is the 2xx a double answered with one the operation declares? False stops the body comparison.
+ *
+ * **Only the success half is asked, and that is a decision.** The contract's *error* status sets are
+ * known incomplete — §162 measured them as covering neither 403 nor 413 — so checking them would
+ * measure a gap in the document rather than a defect in the double; and a refusal is the *subject* of
+ * a good many tests here, several of which drive a status no operation could ever declare (a 502 of
+ * HTML from a proxy, the harness's own unstubbed 500). The success status is the opposite case: every
+ * operation in the document declares one, and which one it is is a thing the server decides and a
+ * caller can branch on.
+ *
+ * A wrong status stops the comparison rather than adding to it, for the reason `checkExchange` gives
+ * about an unresolvable path: the schema that would be reached is the one for a response the double
+ * is not claiming to be, so reporting both names one defect twice and sends the reader to the fixture
+ * instead of to the status.
+ *
+ * ## The population is zero, and §203 predicted otherwise
+ *
+ * The item this was built for said *"a stub answering `200` where the contract declares only `201` …
+ * several in this tree do exactly that"*. **None do**: across 44 distinct method/path/status triples
+ * the doubles produce, every 2xx is declared. The reason is one the item was written without
+ * measuring — of the 133 operations, 116 declare one success status and **17 declare two**, and
+ * sixteen of those seventeen are creates declaring 200 *and* 201, because a replayed
+ * `Idempotency-Key` answers 200 (§136, §144). So a stub answering 200 on a create is answering
+ * something the server really sends. `git log` calls that shape §156's, one list forward: a claim carried into a
+ * candidate list without re-reading the thing under it.
+ *
+ * So this is a guard rather than a repair — §201's outcome, one instrument over — and it was
+ * mutation-tested by putting a 200 on `POST …/reviews/{reviewId}/comments`, which declares 201 alone.
+ * The measurement is worth more than the guard: asking a question the seam had never asked is what
+ * found that **nothing in this package reads a success status at all**, which is §204's own slice.
+ */
+function checkStatus(method: string, contractPath: string, status: number): boolean {
+  const declared = successStatusesOf(method, contractPath);
+  // `undefined` is the no-such-operation case, which `checkSent` has already reported in its own
+  // words. Saying it again from this direction would be that same double-naming.
+  if (!declared || declared.includes(status)) return true;
+
+  reported.push({
+    method,
+    url: contractPath,
+    direction: 'served',
+    message:
+      `answered ${status}, and the contract declares ${declared.join(' and ')} for that operation. `
+      + 'A client may branch on which — a create that replays an `Idempotency-Key` answers 200 where '
+      + 'the first call answered 201 — so a double serving the wrong one tests a response the server '
+      + 'does not send.',
+  });
+  return false;
 }
 
 function parseJson(body: string | null): unknown {

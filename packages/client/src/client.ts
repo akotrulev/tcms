@@ -90,6 +90,18 @@ export function createTcmsClient(options: TcmsClientOptions): TcmsClient {
         path,
         withOptions(rest, (tcms as TcmsRequestOptions) ?? {}),
       );
+      /*
+        The status, before it is dropped.
+
+        `result.data` is the whole of what a caller has ever been given, and until §204 that was
+        also the whole of what this function kept — so a success status existed nowhere in this
+        package. That is fine for 122 of the 132 operations, which declare one; it is not fine for
+        the sixteen creates that declare **200 and 201**, where the contract says in as many words
+        that the 200 means the `Idempotency-Key` had already done this and nothing was created by
+        this request. Dropping it made a replay indistinguishable from a create for every consumer
+        `packages/` has.
+      */
+      (tcms as TcmsRequestOptions | undefined)?.observeStatus?.(result.response.status);
       // A 204 has no body and openapi-fetch reports `data: undefined`. The contract's deletes are
       // the only ones, and `undefined` is the honest value for them — not an empty object, which
       // a caller could destructure without noticing there was nothing there.

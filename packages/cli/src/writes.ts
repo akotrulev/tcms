@@ -34,6 +34,7 @@ import {
   requireProposableCase,
   resolveId,
   suiteInputFrom,
+  type CreateIntent,
   type EditVersion,
   type components,
 } from '@tcms/client';
@@ -163,6 +164,24 @@ function reportWrite(out: Output, json: boolean, result: unknown, lines: readonl
     return;
   }
   fields(out, lines);
+}
+
+/**
+ * The verb a create's first row carries — the one it did, or `Replayed` when it did not do it.
+ *
+ * Sixteen create operations answer **200 instead of 201** when the `Idempotency-Key` had already
+ * carried the intent out, and the contract's own words for that are *"nothing was created by this
+ * request"*. Every create arm here printed `Created` regardless, because `@tcms/client` dropped the
+ * status before any caller could see it (§204). That is a sentence a CI log keeps: a retried job
+ * claiming it created the run its earlier attempt created.
+ *
+ * The row appears in practice only for `--idempotency-key`, which is the whole population that can
+ * be replayed — a bare invocation generates a fresh key and is therefore a fresh intent. `--json` is
+ * untouched: it prints the resource, and the resource is identical either way, which is precisely the
+ * fact this word exists to state.
+ */
+function outcome(intent: CreateIntent, verb: string): string {
+  return intent.wasReplay() ? 'Replayed' : verb;
 }
 
 /* ------------------------------------------------------------------- cases ---- */
@@ -365,14 +384,15 @@ const caseProposal: Command = {
       ...(verdict === undefined ? {} : { verdict }),
     } as components['schemas']['AiProposalInput'];
 
+    const intent = createIntent({ key: text(options['idempotency-key']) });
     const filed = await client.POST('/projects/{projectId}/ai-proposals', {
       params: { path: { projectId } },
       body,
-      tcms: { ...request, ...createIntent({ key: text(options['idempotency-key']) }) },
+      tcms: { ...request, ...intent },
     });
 
     reportWrite(out, json, filed, [
-      ['Filed', show(filed.id)],
+      [outcome(intent, 'Filed'), show(filed.id)],
       ['Title', show(filed.testCase?.title)],
       ['Status', show(filed.status)],
       // Printed together, always, for the reason `VerdictChip` takes both props and has no way to
@@ -409,6 +429,7 @@ const suiteCreate: Command = {
     const { client, out, json, options, request } = context;
     const projectId = await projectOf(context);
 
+    const intent = createIntent({ key: text(options['idempotency-key']) });
     const created = await client.POST('/projects/{projectId}/suites', {
       params: { path: { projectId } },
       body: present({
@@ -423,13 +444,13 @@ const suiteCreate: Command = {
         preconditions: conditionsFrom(options['precondition']),
         postconditions: conditionsFrom(options['postcondition']),
       }) as components['schemas']['SuiteInput'],
-      tcms: { ...request, ...createIntent({ key: text(options['idempotency-key']) }) },
+      tcms: { ...request, ...intent },
     });
 
     reportWrite(out, json, created, [
       // The key is server-allocated per company (§6t), so it is the first thing a caller learns
       // and the only handle every later command takes.
-      ['Created', `${show(created.key)} — ${show(created.name)}`],
+      [outcome(intent, 'Created'), `${show(created.key)} — ${show(created.name)}`],
       ['Status', show(created.lifecycleStatus)],
       ['Lock version', show(created.lockVersion)],
     ]);
@@ -587,6 +608,7 @@ const docCreate: Command = {
     const title = text(options['title']) ?? (typeof fromFile['title'] === 'string' ? fromFile['title'] : undefined);
     if (title === undefined) throw new UsageError('--title is required, or name one in --file.');
 
+    const intent = createIntent({ key: text(options['idempotency-key']) });
     const created = await client.POST('/projects/{projectId}/doc-pages', {
       params: { path: { projectId } },
       body: present({
@@ -596,11 +618,11 @@ const docCreate: Command = {
           ? undefined
           : await resolveId({ client, projectId, value: parent, entity: 'DOC_PAGE' }),
       }) as components['schemas']['DocPageInput'],
-      tcms: { ...request, ...createIntent({ key: text(options['idempotency-key']) }) },
+      tcms: { ...request, ...intent },
     });
 
     reportWrite(out, json, created, [
-      ['Created', `${show(created.key)} — ${show(created.title)}`],
+      [outcome(intent, 'Created'), `${show(created.key)} — ${show(created.title)}`],
       ['Status', show(created.status)],
       ['Blocks', show(created.blocks.length)],
       ['Lock version', show(created.lockVersion)],
@@ -765,6 +787,7 @@ const planCreate: Command = {
     const { client, out, json, options, request } = context;
     const projectId = await projectOf(context);
 
+    const intent = createIntent({ key: text(options['idempotency-key']) });
     const created = await client.POST('/projects/{projectId}/plans', {
       params: { path: { projectId } },
       body: present({
@@ -775,11 +798,11 @@ const planCreate: Command = {
         suiteIds: await resolveMany(context, projectId, options['suite'], 'SUITE'),
         caseIds: await resolveMany(context, projectId, options['case'], 'CASE'),
       }) as components['schemas']['TestPlanInput'],
-      tcms: { ...request, ...createIntent({ key: text(options['idempotency-key']) }) },
+      tcms: { ...request, ...intent },
     });
 
     reportWrite(out, json, created, [
-      ['Created', `${show(created.key)} — ${show(created.name)}`],
+      [outcome(intent, 'Created'), `${show(created.key)} — ${show(created.name)}`],
       ['Status', show(created.status)],
       ['Cases', show(created.caseCount)],
     ]);
@@ -923,6 +946,7 @@ const runCreate: Command = {
     const projectId = await projectOf(context);
     const plan = text(options['plan']);
 
+    const intent = createIntent({ key: text(options['idempotency-key']) });
     const created = await client.POST('/projects/{projectId}/runs', {
       params: { path: { projectId } },
       body: present({
@@ -941,11 +965,11 @@ const runCreate: Command = {
         commitSha: nullableText(options['commit']),
         branch: nullableText(options['branch']),
       }) as components['schemas']['TestRunInput'],
-      tcms: { ...request, ...createIntent({ key: text(options['idempotency-key']) }) },
+      tcms: { ...request, ...intent },
     });
 
     reportWrite(out, json, created, [
-      ['Created', `${show(created.key)} — ${show(created.name)}`],
+      [outcome(intent, 'Created'), `${show(created.key)} — ${show(created.name)}`],
       ['Status', show(created.status)],
       ['Plan', show(created.planKey)],
     ]);

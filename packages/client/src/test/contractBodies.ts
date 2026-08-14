@@ -19,12 +19,18 @@
  * cost of the copy is paid once, by a test, rather than on the day somebody teaches one walker about
  * a schema keyword and not the other.
  *
- * ## What differs, and it is only ever these two things
+ * ## What differs, and each difference has to earn its place
  *
- * How the document is obtained, and the **prefix**. Everything this stack sends carries the contract's
- * own `servers` entry — `/api/v1/me`, not `/me` — because `@tcms/client` composes a real absolute URL
- * where the SPA hands its client a contract-relative one. Both live outside the region: the loader
- * above it, `strippedPath` below.
+ * Two of the three are about *reaching* the document rather than reading it: how it is obtained, and
+ * the **prefix**. Everything this stack sends carries the contract's own `servers` entry —
+ * `/api/v1/me`, not `/me` — because `@tcms/client` composes a real absolute URL where the SPA hands
+ * its client a contract-relative one. Both live outside the region: the loader above it,
+ * `contractPathOfRequest` below.
+ *
+ * The third is `successStatusesOf`, added in §204, and it is outside the region because the SPA's
+ * seam has **no status to ask about** — its double replaces a method on the `api` object, which
+ * returns `{ data }`. Copying it across would put an uncallable export in the other stack, which is
+ * the readerless shape §165 and §154 each paid for.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -391,6 +397,30 @@ function walk(
 }
 
 /* ==== SHARED REGION END ==== */
+
+/**
+ * The 2xx statuses an operation declares, in document order.
+ *
+ * Outside the shared region because it answers a question the SPA's seam **cannot ask**: over there
+ * the double replaces a method on the `api` object, which returns `{ data }` and no status at all —
+ * so a copy of this in `frontend/`'s walker would be an export with no possible caller. Here the
+ * double is a `fetch` and the status is one of its arguments.
+ *
+ * `undefined` means the path declares no such operation, which `checkSent` already reports in its own
+ * words; an empty array means an operation with no 2xx response at all, which no operation in this
+ * document has.
+ */
+export function successStatusesOf(method: string, contractPath: string): number[] | undefined {
+  const operation = OPERATIONS.has(method)
+    ? (spec().paths[contractPath]?.[method] as Node | undefined)
+    : undefined;
+  const responses = operation?.responses as Record<string, Node> | undefined;
+  if (!responses) return undefined;
+  return Object.keys(responses)
+    .filter((code) => code.startsWith('2'))
+    .map(Number)
+    .filter((code) => Number.isInteger(code));
+}
 
 /**
  * The contract path a URL sent by `@tcms/client` resolves to, with the server prefix taken off.

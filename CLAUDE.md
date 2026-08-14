@@ -109,7 +109,7 @@ npm run build                     # THE gate: tsc over source+tests, then emit. 
                                   # names the order client → cli → mcp; mcp is THIRD for the
                                   # same reason cli is second.
 npm run lint --workspaces         # oxlint, 0 warnings
-npm run test:run --workspaces     # ~~211~~ ~~241~~ 260 tests (104 client / 75 cli / 81 mcp,
+npm run test:run --workspaces     # ~~211~~ ~~241~~ ~~260~~ 269 tests (111 client / 77 cli / 81 mcp,
                                   # measured on shanks 2026-08-14), ~1s — CI runs these, unlike the
                                   # backend's. **Since §203 every exchange crossing a `fetch` double
                                   # here is compared against openapi.yaml — the body it SERVES and
@@ -125,9 +125,16 @@ npm run test:run --workspaces     # ~~211~~ ~~241~~ 260 tests (104 client / 75 c
                                   # measured against the success schema, so a test driving a refusal
                                   # needs no hatch; the one hatch is `drivingTheTransport()`, for a
                                   # test whose subject is a header, a timeout or a cancellation.
+                                  # **Since §204 the STATUS is compared too** — a 2xx a double
+                                  # answers with must be one the operation declares. Population
+                                  # zero: 16 creates declare 200 AND 201, because a replayed
+                                  # Idempotency-Key answers 200, so a 200 on a create is fine.
                                   # The comparison itself is `client/src/test/contractBodies.ts`,
                                   # whose marked region is BYTE-IDENTICAL to `frontend/`'s copy and
                                   # pinned by `contractPairing.test.ts` — edit one, edit both.
+                                  # `successStatusesOf` sits OUTSIDE that region on purpose: a
+                                  # question only one stack can ask does not go in it (the SPA's
+                                  # double answers `{ data }` and has no status). Same file, §204.
 cd client && npm run gen:api      # THE SECOND COPY of schema.d.ts. Regenerate BOTH after any
                                   # openapi.yaml change; schemaFreshness.test.ts fails otherwise.
 node cli/dist/main.js help        # TCMS_URL + TCMS_TOKEN drive it
