@@ -44,9 +44,13 @@ import java.util.Locale;
  * enum is its semantic order — most-urgent-first for priority, earliest-lifecycle-first for the
  * other two — which is stated on those types and is the thing a reader has to be able to trust.
  *
- * <p><strong>The SPA's mock sorts these alphabetically</strong> ({@code localeCompare} in
+ * <p>~~<strong>The SPA's mock sorts these alphabetically</strong> ({@code localeCompare} in
  * {@code handlers.ts}), so mock and live disagree here on purpose. The mock is the one that is
- * wrong; recorded rather than matched.
+ * wrong; recorded rather than matched.~~ → <strong>superseded 2026-08-06</strong>: the mock layer
+ * is deleted, so this ordering has one implementation and nothing left to disagree with it. Left
+ * here struck rather than removed because the disagreement is the evidence for the paragraph above
+ * — a second implementation did reach for {@code localeCompare} first, which is what makes the
+ * CASE expression a decision rather than a preference.
  *
  * <h2>{@code suiteName} is a scalar subquery, not a join</h2>
  *
@@ -58,8 +62,7 @@ import java.util.Locale;
  *
  * <p>{@code owner} would need {@code app_user} inside this module's ORDER BY. {@code lastResult}
  * and {@code healthSignals} are already {@code sortable: false} in {@code CaseGrid.tsx};
- * {@code owner} is not, so clicking that header reorders by key — in live mode <em>and</em> in mock
- * mode, whose handler falls back the same way. Identical in both, and a real gap: recorded in the
+ * {@code owner} is not, so clicking that header reorders by key. A real gap: recorded in the
  * handoff rather than papered over here.
  */
 final class CaseSort {

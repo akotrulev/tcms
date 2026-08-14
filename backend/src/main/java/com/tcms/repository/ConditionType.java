@@ -35,9 +35,11 @@ public enum ConditionType {
      * <p>{@code BOTH} itself resolves to {@code BOTH} alone, on the same reading: it asks for the
      * entries usable in either position, which is exactly the ones declared that way.
      *
-     * <p><strong>The SPA's mock matches the type exactly</strong> ({@code handlers.ts}) and its
+     * <p>~~<strong>The SPA's mock matches the type exactly</strong> ({@code handlers.ts}) and its
      * fixtures contain no {@code BOTH} row, so the difference is invisible there. It is recorded
-     * here rather than mirrored, because mirroring it would mean copying a defect for symmetry.
+     * here rather than mirrored, because mirroring it would mean copying a defect for symmetry.~~
+     * → <strong>superseded 2026-08-06</strong>: the mock layer is deleted, so this widening has one
+     * implementation and the invisibility it describes is gone with the fixtures that caused it.
      *
      * @param requested the query parameter, or null when the caller expressed no opinion — in
      *                  which case every type matches. Never an empty set: an empty collection

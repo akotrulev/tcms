@@ -22,7 +22,7 @@
  * reaches first. A filename is the cheapest possible instance and the only one a machine can settle
  * outright: the claim is `this path exists`, and the filesystem answers.
  *
- * ## The corpus is both TypeScript stacks, from one place
+ * ## Four corpora, one place
  *
  * `frontend/src` is scanned here rather than by a copy over there, and that is deliberate. The
  * walker in `contractBodies.ts` had to be copied and paired because a Vite `?raw` import and two npm
@@ -34,10 +34,45 @@
  * job.** That is the wrong job for the blame to land in, and it is still better than two scanners
  * that agree until somebody teaches one about a new extension.
  *
- * The two generated files are excluded: `schema.ts` and `schema.d.ts` carry `openapi.yaml`'s own
- * prose, which cites files freely and is not this corpus's to police. `backend/` is excluded too,
- * for a different reason — javadoc cites with `{@link}` and `{@code}`, so the same question there is
- * a different scanner and belongs to a rule of its own.
+ * **`docs/specs` is the third corpus and §205 was wrong to leave it out.** That header said the
+ * contract's prose *"is not this corpus's to police"* on the grounds that the two generated files
+ * carry it — which is an argument for not scanning the **copies**, and §205 read it as an argument
+ * for not scanning the source. The population was one: `WorkItemStatus` said
+ * ~~boardColumns.test.ts~~ *"now derives the board's columns from this enum"* for a hundred and
+ * fifty sections, and no such file has ever existed — the check it describes is real in two places
+ * and neither is a test. It is the corpus whose prose the most readers meet — `npm run gen:api`
+ * copies every description verbatim into `schema.d.ts` **and** `schema.ts`, so one stale sentence
+ * here is three stale sentences on disk and the two downstream ones cannot be repaired where they
+ * are read.
+ *
+ * So the generated pair stays excluded, now for the reason that always applied: a copy reports its
+ * source's defect a second time and cannot be the place it is fixed.
+ *
+ * ## `backend/src` is the fourth, and it is scanned from here on purpose
+ *
+ * §205 left it out saying the same question there *"belongs to a rule of its own"*, which is true of
+ * the **scanner** — javadoc writes `{@code}` where the others write a backtick, so this file grew a
+ * second pattern — and false of the **home**. A Java rule was the obvious place and it is the one
+ * place the rule cannot work, for a reason this repository already owns: §185's Gradle-cache trap.
+ * A `Test` task's declared inputs are its classpath and its resources, and **a comment-only edit to
+ * a `.java` file leaves the compiled class byte-identical**, so `:test` reports UP-TO-DATE and the
+ * rule never runs.
+ *
+ * Measured rather than reasoned about, because §162's lesson is that an argument naming the wrong
+ * mechanism reads as coverage: `./gradlew test --tests ConfigConventionTest` ran and passed, one
+ * word of `CaseSort`'s javadoc changed, and the identical command answered `> Task :test UP-TO-DATE`
+ * in one second. `:compileJava` did re-run. Nothing downstream of it noticed. So a javadoc rule in
+ * the backend suite would be green by cache against exactly the one edit that can break it — which
+ * is worse than §185's case, where the rules at least fail when their subject changes, since there
+ * the subject was a file Gradle could be told about and here it is the source tree itself.
+ *
+ * Vitest has no such cache, so the check runs on every `npm run test:run` and reads the tree as it
+ * is on disk. The cost is the one already stated one paragraph up, one stack wider: **a stale
+ * javadoc citation in `backend/` reddens the `packages` job.**
+ *
+ * `{@link}` is deliberately not scanned. It resolves against the compiler's symbol table, so a
+ * stale one is already a build failure — and that is the whole shape of this corpus's finding, since
+ * what javadoc gets wrong is what it writes in the form nothing reads.
  *
  * ## The escape hatch is the repository's own notation
  *
@@ -75,28 +110,75 @@ const PRUNED = new Set([
   'node_modules', 'dist', 'build', '.git', '.gradle', '.idea', 'coverage', '.vite',
 ]);
 
-/** Where comments are read from. Generated files are not in it — see the header. */
-const CORPUS: { root: string; extensions: string[]; skip: string[] }[] = [
-  {
-    root: 'packages',
-    extensions: ['.ts'],
-    skip: ['packages/client/src/schema.ts'],
-  },
-  {
-    root: 'frontend/src',
-    extensions: ['.ts', '.tsx'],
-    skip: ['frontend/src/api/schema.d.ts'],
-  },
-];
+/**
+ * A path this repository could plausibly contain, by its extension.
+ *
+ * One list for every corpus rather than one per language, because the *notation* is repo-wide and
+ * an extension only a Java comment is likely to name still resolves the same way. Widening it for
+ * `backend/` is what surfaced `pom.xml` in `frontend/src/lib/labels.ts`, which had been outside the
+ * pattern and is one of the two entries below.
+ */
+const EXTENSIONS = 'ts|tsx|yaml|yml|json|sql|java|md|css|html|xml|kts|properties';
+const PATH = `([A-Za-z0-9_][A-Za-z0-9_./-]*\\.(?:${EXTENSIONS}))`;
 
 /**
- * A backtick-quoted path with a known extension.
+ * A backtick-quoted path.
  *
  * Backticks only, and that is what keeps the reader honest without a whitelist: this repository
  * writes every identifier and path in a comment as code, so an unquoted filename in a sentence is
  * prose about a hypothetical and quoting it is the act of claiming the file is real.
  */
-const CITATION = /`([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:ts|tsx|yaml|yml|json|sql|java|md|css|html))`/g;
+const BACKTICKED = new RegExp('`' + PATH + '`', 'g');
+
+/**
+ * Javadoc's spelling of exactly that claim, and the reason `backend/` needed a second pattern.
+ *
+ * `{@code}` is the markup a Java comment reaches for where the other three corpora reach for a
+ * backtick — and it is the *unchecked* one. `{@link Foo}` resolves against the compiler's own symbol
+ * table, so a stale one is already a build failure; `{@code Foo.java}` is a formatting instruction
+ * and means nothing to anybody. So the citations javadoc can get wrong are precisely the ones
+ * written in the form nothing reads, which is why §205 predicted this corpus would be the
+ * non-empty one. Backticks are scanned there too — a handful of comments use them — for the cost of
+ * one array element.
+ */
+const JAVADOC_CODE = new RegExp('\\{@code\\s+' + PATH + '\\}', 'g');
+
+/** Where comments are read from. Generated files are not in it — see the header. */
+const CORPUS: { root: string; extensions: string[]; skip: string[]; patterns: RegExp[] }[] = [
+  {
+    root: 'packages',
+    extensions: ['.ts'],
+    skip: ['packages/client/src/schema.ts'],
+    patterns: [BACKTICKED],
+  },
+  {
+    root: 'frontend/src',
+    extensions: ['.ts', '.tsx'],
+    skip: ['frontend/src/api/schema.d.ts'],
+    patterns: [BACKTICKED],
+  },
+  /*
+    The directory rather than `openapi.yaml` alone, for `build.gradle.kts`'s reason one stack over: a
+    second contract artifact added here is one this check would want to see, and a hand-kept tally of
+    filenames is what §152–§156 replaced four times.
+  */
+  {
+    root: 'docs/specs',
+    extensions: ['.yaml', '.yml'],
+    skip: [],
+    patterns: [BACKTICKED],
+  },
+  /*
+    `backend/src`, both source sets: a test's javadoc argues from the same files a main one does, and
+    §205's own population was three-quarters test code.
+  */
+  {
+    root: 'backend/src',
+    extensions: ['.java'],
+    skip: [],
+    patterns: [BACKTICKED, JAVADOC_CODE],
+  },
+];
 
 /** A superseded claim, in this repo's notation. Non-greedy and multi-line — a span often is. */
 const STRUCK = /~~[\s\S]*?~~/g;
@@ -104,10 +186,16 @@ const STRUCK = /~~[\s\S]*?~~/g;
 /**
  * Citations that name no file in this repository on purpose, with the reason.
  *
- * Two kinds, and neither is something strikethrough could express. The first three are
- * present-tense statements that this project **has no such file** — the point of the sentence is the
- * absence, so striking the name would say the opposite. The fourth names a file in a dependency's
- * own source. The fifth is a file this repository deleted and whose deletion is the subject.
+ * Four kinds, and none is something strikethrough could express. The first three are present-tense
+ * statements that this project **has no such file** — the point of the sentence is the absence, so
+ * striking the name would say the opposite. The fourth names a file in a dependency's own source.
+ * The fifth is a file this repository deleted and whose deletion is the subject.
+ *
+ * The last two are the kind the widened corpus found, and they are the one this product is *for*:
+ * **a file in the caller's project, not in ours.** A test management system reads other people's
+ * build output and is configured against other people's build files, so `testng-results.xml` and
+ * `pom.xml` are named correctly, precisely, and by a comment that is doing its job. There is no
+ * notation for that — striking them would say the format does not exist — so they are entries.
  */
 const CITED_BUT_ABSENT_BY_DECISION: Record<string, string> = {
   'error.tsx':
@@ -124,18 +212,30 @@ const CITED_BUT_ABSENT_BY_DECISION: Record<string, string> = {
   'src/mocks/handlers/injection.ts':
     'Deleted with the whole mock layer on 2026-08-06, and `lib/devFaults.ts` names it because the '
     + 'deletion is the point: the fault seam moved in front of `fetch` so it faults the real backend.',
+  'testng-results.xml':
+    'TestNG\'s own output file, named by `TestNgReportParser` and `ReportFormat` as the thing this '
+    + 'product ingests. A file in the caller\'s CI workspace, which is where an ingestion format '
+    + 'lives; this repository has never contained one and should not.',
+  'pom.xml':
+    'Maven\'s build file, named by `lib/labels.ts` to say why the four ingestion-format labels keep '
+    + 'each project\'s own capitalisation — a person matches the label against the tool they '
+    + 'configured. Also the caller\'s file, and this repository builds with Gradle.',
 };
 
 describe('a file a comment names', () => {
-  const files = CORPUS.flatMap((entry) =>
-    walk(join(REPO, entry.root))
+  const perCorpus = CORPUS.map((entry) => ({
+    root: entry.root,
+    patterns: entry.patterns,
+    files: walk(join(REPO, entry.root))
       .map((absolute) => relative(REPO, absolute))
       .filter((path) => entry.extensions.some((extension) => path.endsWith(extension)))
-      .filter((path) => !entry.skip.includes(path)));
+      .filter((path) => !entry.skip.includes(path)),
+  }));
+  const files = perCorpus.flatMap((entry) => entry.files);
 
   const everything = new Set(walk(REPO).map((absolute) => relative(REPO, absolute)));
 
-  const cited = files.flatMap((path) => {
+  const cited = perCorpus.flatMap((corpus) => corpus.files.flatMap((path) => {
     const text = readFileSync(join(REPO, path), 'utf8');
     const struck = [...text.matchAll(STRUCK)].map((match) => ({
       from: match.index,
@@ -155,15 +255,27 @@ describe('a file a comment names', () => {
         + 'has paired with the next span instead',
     ).toBeLessThan(0.4);
 
-    return [...text.matchAll(CITATION)]
+    return corpus.patterns.flatMap((pattern) => [...text.matchAll(pattern)]
       .filter((match) => !struck.some((span) => match.index >= span.from && match.index < span.to))
-      .map((match) => ({ path, name: match[1] ?? '' }));
-  });
+      .map((match) => ({ path, root: corpus.root, name: match[1] ?? '' })));
+  }));
 
-  it('reads a corpus, and finds citations in it', () => {
+  it('reads every corpus, and finds citations in each', () => {
     // Two vacuity guards, because either one alone can be satisfied by a scan that found nothing.
     // A regex that stopped matching and a walk that returned nothing look identical from the
     // outside, and both look identical to a repository in which every citation resolves.
+    //
+    // PER CORPUS, and that is the part §205 got wrong by counting the whole population: with more
+    // than one root, an entry whose directory was renamed contributes zero files and the total
+    // still clears a threshold the biggest root meets on its own. Which is this check's own defect
+    // one layer up — a guard against a silent empty scan, silently scanning less than it says.
+    for (const corpus of perCorpus) {
+      expect(corpus.files.length, `${corpus.root} contributed no files`).toBeGreaterThan(0);
+      expect(
+        new Set(cited.filter((entry) => entry.root === corpus.root).map((entry) => entry.name)).size,
+        `${corpus.root} contributed no citations`,
+      ).toBeGreaterThan(0);
+    }
     expect(files.length).toBeGreaterThan(300);
     expect(new Set(cited.map((entry) => entry.name)).size).toBeGreaterThan(30);
   });

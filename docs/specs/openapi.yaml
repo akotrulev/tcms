@@ -10765,8 +10765,13 @@ components:
         this API, and appears **nowhere on screen** — invisible rather than misplaced, which
         is the worse of the two failures. That made adding it a contract change *plus* a
         label *plus* a grid column, and shipping only the first is how the invisible card
-        gets there. All three land together, and `boardColumns.test.ts` now derives the
-        board's columns from this enum so the next member cannot arrive without one.
+        gets there. All three land together, and since §54 the third piece cannot be
+        forgotten separately: `workItemColumns` in `frontend/src/lib/labels.ts` is the keys
+        of a map declared `satisfies Record<WorkItemStatus, string>`, so labelling a new
+        member gives it a column in the same edit, and `BoardPage.tsx` asserts the result
+        still covers the enum. Both are compile errors, not tests — stated that way because
+        §205's rule found this sentence naming a ~~boardColumns.test.ts~~ that has never
+        existed, while the check it describes had been real in two places all along.
 
         Ordered as §6l lists them, and the order on the wire is not the display order —
         `BoardPage`'s `COLUMNS` owns that. The enum's job is the vocabulary.
