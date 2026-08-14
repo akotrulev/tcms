@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
-import type { TestCase } from '../../api/types'
+import type { CaseConditionRef, TestCase } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { CaseCloneDialog } from './CaseCloneDialog'
@@ -10,7 +10,8 @@ import { CaseCloneDialog } from './CaseCloneDialog'
 /**
  * Cloning a case (§129 phase 3).
  *
- * Four behaviours are pinned, and none of them is visible to `tsc` or oxlint:
+ * Five behaviours are pinned, and none of them is visible to `tsc` or oxlint (the fifth is §195's
+ * and has its own block below, with its own reasons):
  *
  *   1. **The title is suggested, and the suggestion is editable before it becomes a row.** The
  *      server refuses to invent one precisely so a human sees it first; a dialog that opened with
@@ -24,6 +25,8 @@ import { CaseCloneDialog } from './CaseCloneDialog'
  *      nobody reads on the day it matters.
  *   4. **A field error lands on its field.** `title` has a control, so a banner would detach the
  *      server's sentence from the input it is about.
+ *   5. **The Folder picker decides whether the source's condition exceptions come across**, and the
+ *      dialog says so before the copy is made rather than after (§195).
  */
 
 const PROJECT = '11111111-1111-1111-1111-111111111111'
@@ -33,6 +36,25 @@ const suites = [
   { id: 'suite-2', key: 'TS-2', name: 'Refunds', caseCount: 4 },
 ]
 
+/**
+ * The two decline lists are spelled out rather than left off, and the `as TestCase` above is why
+ * they have to be: the cast makes a required field optional to `tsc`, so the fixture can promise a
+ * shape the component then destructures. Omitting them was fine while nothing read them and became
+ * a TypeError the moment §195's alert spread them — §38's family, at the fixture end.
+ */
+function declined(over: Partial<CaseConditionRef> = {}): CaseConditionRef {
+  return {
+    id: 'attach-1',
+    position: 1,
+    title: 'The merchant account is in live mode',
+    body: ['Switch the account out of sandbox.'],
+    inline: false,
+    inherited: true,
+    inheritedFrom: 'Payments',
+    ...over,
+  }
+}
+
 function sourceCase(over: Partial<TestCase> = {}): TestCase {
   return {
     id: 'case-1',
@@ -41,6 +63,8 @@ function sourceCase(over: Partial<TestCase> = {}): TestCase {
     suiteId: 'suite-1',
     suiteName: 'Payments',
     automationStatus: 'MANUAL',
+    declinedPreconditions: [],
+    declinedPostconditions: [],
     ...over,
   } as TestCase
 }
@@ -114,6 +138,66 @@ describe('CaseCloneDialog', () => {
     await waitFor(() => expect(post).toHaveBeenCalled())
     const [, body] = post.mock.calls[0] as [string, Record<string, unknown>]
     expect(body.suiteId).toBe('suite-2')
+  })
+
+  /**
+   * §195 — the Folder picker decides whether the source's condition exceptions come across, and
+   * these four are the whole of the claim. None is visible to `tsc` or oxlint: the alert typechecks
+   * whether it is rendered unconditionally, never, or on the wrong side of the comparison.
+   */
+  describe('the exceptions a copy filed elsewhere will not carry', () => {
+    const withDeclines = () =>
+      sourceCase({
+        declinedPreconditions: [declined()],
+        declinedPostconditions: [
+          declined({ id: 'attach-2', title: 'The settlement batch is closed' }),
+        ],
+      })
+
+    async function pickFolder(testId: string) {
+      await screen.findByTestId('CaseDetail.Clone.Title')
+      await userEvent.click(screen.getByRole('combobox', { name: /folder/i }))
+      await userEvent.click(await screen.findByTestId(testId))
+    }
+
+    it('names them once a different folder is picked', async () => {
+      renderDialog(withDeclines())
+      await pickFolder('CaseDetail.Clone.Suite.TS-2')
+
+      const alert = await screen.findByTestId('CaseDetail.Clone.NotCarriedDeclines')
+      // Named, not counted: "2 exceptions" leaves the reader unable to find out which two.
+      expect(alert).toHaveTextContent('2 condition exceptions')
+      expect(alert).toHaveTextContent('The merchant account is in live mode')
+      expect(alert).toHaveTextContent('The settlement batch is closed')
+      // The source keeps them — a clone destroys nothing, and the alert must not read as a loss.
+      expect(alert).toHaveTextContent(/TC-7 keeps its exceptions/)
+    })
+
+    it('says nothing while the copy is going to the source folder', async () => {
+      renderDialog(withDeclines())
+      // Paired with the test above: an unconditional alert passes that one and fails this. This is
+      // the state the dialog opens in, and it is the state in which the declines DO come across.
+      await screen.findByTestId('CaseDetail.Clone.Title')
+      expect(screen.queryByTestId('CaseDetail.Clone.NotCarriedDeclines')).not.toBeInTheDocument()
+    })
+
+    it('says nothing when the source folder is picked from the list by name', async () => {
+      renderDialog(withDeclines())
+      await pickFolder('CaseDetail.Clone.Suite.TS-1')
+
+      // The picker's own '' encoding is "same as the source", but choosing that same folder
+      // explicitly is not a move either — the server compares ids, and so does this.
+      expect(screen.queryByTestId('CaseDetail.Clone.NotCarriedDeclines')).not.toBeInTheDocument()
+    })
+
+    it('says nothing about a case that declines nothing', async () => {
+      renderDialog(sourceCase())
+      await pickFolder('CaseDetail.Clone.Suite.TS-2')
+
+      // Empty is the ordinary state, so the alert must be keyed on the declines and not on the move
+      // — a folder change alone would put a warning about nothing on most clones in the product.
+      expect(screen.queryByTestId('CaseDetail.Clone.NotCarriedDeclines')).not.toBeInTheDocument()
+    })
   })
 
   it('warns that the automation key is dropped — only for an automated source', async () => {

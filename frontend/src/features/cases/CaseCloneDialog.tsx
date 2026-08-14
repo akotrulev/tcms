@@ -1,5 +1,6 @@
 import {
   Alert,
+  AlertTitle,
   Box,
   Button,
   Dialog,
@@ -10,6 +11,7 @@ import {
   MenuItem,
   Stack,
   TextField,
+  Typography,
 } from '@mui/material';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
@@ -21,6 +23,7 @@ import type { TestCase } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
 import { copyOf } from '../../lib/clone';
 import { describeError } from '../../lib/describeError';
+import { plural } from '../../lib/format';
 
 /**
  * Cloning a test case (§129 phase 3) — the first consumer of `POST /cases/{caseId}/clone`, which
@@ -52,6 +55,33 @@ import { describeError } from '../../lib/describeError';
  * The note renders **only for a source that is `AUTOMATED`** — for every other status nothing is
  * downgraded, and a permanent sentence about automation on a manual case is noise that teaches
  * readers to skip the box the one time it matters.
+ *
+ * ## The Folder picker decides whether the source's condition exceptions come across (§195)
+ *
+ * `CaseCloneService` copies the source's declines **only when the copy lands in the source's own
+ * folder** — `clonedDeclines` is guarded by `Objects.equals(targetSuiteId, source.getSuiteId())`,
+ * and the contract says the same thing on `TestCase.declinedPreconditions`. So this dialog had a
+ * closing caption promising that "conditions come across" and a control two fields above it that
+ * decides half of that sentence, with nothing joining the two.
+ *
+ * That is §194's shape at the other write path, and this is the second half of it: the editor warns
+ * when a *move* ends a case's exceptions, and until now the clone said nothing when the copy simply
+ * never gets them. Both are the same event to a reader — a case that stops declining a rule it used
+ * to decline — and only one of the two screens was mentioning it.
+ *
+ * **The prediction here is EXACT, where the editor's is a bound.** `CaseEditorPage`'s alert reads
+ * §98's flatness to conclude that a move ends every decline, so a widening of inheritance would make
+ * it over-state; this one reads a rule the server states unconditionally in one `equals`, so there
+ * is nothing for a schema change to falsify. That is why there is no measured counterpart on the way
+ * out — the alert cannot drift from the writer, and, unlike a move, **a clone destroys nothing**:
+ * the source keeps every exception it had, so there is no event that needs a record after the fact.
+ * The dialog is simply the last moment somebody can decide not to, which is §193's argument for the
+ * bulk preview.
+ *
+ * It shares the editor's one bound, and for the same reason: `declinedPreconditions` omits a decline
+ * whose library entry has been retired, so the list below is what a list shows and can under-count.
+ * Naming the rules rather than counting them is deliberate — "the copy will not carry 2 exceptions"
+ * leaves the reader unable to find out which two.
  */
 
 /** Mirrors `TestCaseCloneInput.title.maxLength`, itself `CaseEdit.MAX_TITLE`. */
@@ -126,6 +156,7 @@ export function CaseCloneDialog({
     handleSubmit,
     setError,
     setFocus,
+    watch,
     formState: { errors },
   } = useForm<CloneFormInput>({
     resolver: zodResolver(CloneSchema),
@@ -156,6 +187,27 @@ export function CaseCloneDialog({
   });
 
   const sourceFolder = testCase.suiteName ?? 'Not filed';
+
+  /*
+    True while the picker names a folder the source is not in (§195) — the clone's analogue of the
+    editor's `movingFolder`, with this dialog's own encoding rather than the editor's.
+
+    '' means "same as the source" HERE, not UNFILED (§96) — the two dialogs spell the empty option
+    differently because they are answering different questions, and the difference is load-bearing
+    in exactly this expression. Picking the source's own folder from the list is therefore not a
+    move either: it resolves to the same id the server compares against.
+  */
+  const destination = watch('suiteId');
+  const landingElsewhere = destination !== '' && destination !== testCase.suiteId;
+
+  /*
+    The exceptions the copy will not carry — the case's declined inherited rules, both kinds in one
+    list. One alert rather than two for `CaseEditorPage`'s reason: the reader is being told about
+    one event, and splitting it by PRE/POST states it twice and names half of it each time.
+  */
+  const notCarried = landingElsewhere
+    ? [...testCase.declinedPreconditions, ...testCase.declinedPostconditions]
+    : [];
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
@@ -212,6 +264,38 @@ export function CaseCloneDialog({
               ))}
             </TextField>
 
+            {/*
+              Directly under the control that decides it, not down beside the closing caption: the
+              consequence of a picker belongs where the picker is, and the caption is the sentence
+              this alert is the exception to.
+
+              `warning` on §193's and §194's grounds — a skip is something an operation will not do,
+              and this is something it will do that nobody asked for. The rules are named from
+              `inheritedFrom`, which is the folder the exception was taken from and therefore the
+              answer to "which of my four rules is this".
+            */}
+            {notCarried.length > 0 && (
+              <Alert severity="warning" data-testid={`${TestId}.NotCarriedDeclines`}>
+                <AlertTitle>
+                  The copy will not carry {plural(notCarried.length, 'condition exception')}
+                </AlertTitle>
+                <Typography variant="body2">
+                  A folder&rsquo;s rule can only be declined by a case filed in that folder, so the
+                  copy follows {notCarried.length === 1 ? 'its' : 'their'} new folder&rsquo;s rules
+                  in full. <Identifier>{testCase.key}</Identifier> keeps{' '}
+                  {notCarried.length === 1 ? 'its exception' : 'its exceptions'}.
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, my: 1 }}>
+                  {notCarried.map((ref) => (
+                    <Typography component="li" variant="body2" key={ref.id}>
+                      {ref.title}
+                      {ref.inheritedFrom ? ` — from ${ref.inheritedFrom}` : null}
+                    </Typography>
+                  ))}
+                </Box>
+              </Alert>
+            )}
+
             {testCase.automationStatus === 'AUTOMATED' && (
               <Alert severity="info" data-testid={`${TestId}.AutomationNote`}>
                 The automation key is not copied — it identifies one case to CI, and two cases
@@ -220,9 +304,16 @@ export function CaseCloneDialog({
               </Alert>
             )}
 
+            {/*
+              "the conditions it attaches itself" rather than "conditions" (§195). The unqualified
+              word was the claim the Folder picker falsifies: a case's OWN attachments are copied
+              whatever folder the copy lands in, while the standing rules it inherits are always the
+              destination's — and its exceptions to them are the alert above.
+            */}
             <DialogContentText variant="caption">
-              The steps, classification, conditions, tags and attached files come across. The review
-              state starts at draft, and the source keeps its version and execution history.
+              The steps, classification, tags, attached files and the conditions the case attaches
+              itself come across; the standing rules it inherits are its new folder&rsquo;s. The
+              review state starts at draft, and the source keeps its version and execution history.
             </DialogContentText>
           </Stack>
         </DialogContent>
