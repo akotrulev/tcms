@@ -2,7 +2,12 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-14 (**§205** — three phases, `packages/` plus **three comment lines** in
+**Last verified:** 2026-08-14 (**§206** — **nothing under `frontend/src` moved**, and one thing a
+frontend agent must know did: `citedFiles.test.ts`'s corpus is **four** roots now, not two —
+`docs/specs/*.yaml` and `backend/src/**` joined it, and a cited path ending in `/` is checked as a
+directory. The contract finding §205 recorded and left (`WorkItemStatus` naming a
+~~boardColumns.test.ts~~) is fixed at the source and both `schema` copies regenerated, comments
+only; **§205** — three phases, `packages/` plus **three comment lines** in
 `frontend/src/test/`: two stale citations, nothing that ships and no test changed. But a new check in
 `packages/` **reads this tree** — `citedFiles.test.ts` asserts that every backtick-quoted filename in
 a comment under `frontend/src` is a real file, so **a stale citation here reddens the `packages` CI
@@ -26,9 +31,9 @@ surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the fl
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `9b4f295` (§205 phase 3 shipped; the two `frontend/` edits it carries are
-comment text, so the suite is **1339 across 100** before and after — and it *was* re-run on `shanks`
-as a gate for it, unlike §204)
+**Baseline commit:** `c6fbefd` (§206 phase 3 shipped; the only `frontend/` file it touches is the
+generated `src/api/schema.d.ts`, a comments-only regeneration, and the suite was re-run on `shanks`
+for phase 1 at **1339 across 100** — unchanged)
 (trust the body over the header and re-grep what a later commit could have moved).
 
 ## §205 — A FILE NAMED IN A COMMENT HERE MUST EXIST, AND THE CHECK LIVES IN THE OTHER STACK
@@ -49,9 +54,14 @@ file exists. 350 files, 140 distinct citations.
   statement that the file does not exist, so those spans are excused. If the *absence* is the point
   of a present-tense sentence — `ErrorBoundaries.tsx` naming `error.tsx` to say a Vite SPA has no
   framework tier — it goes in `CITED_BUT_ABSENT_BY_DECISION` with the reason, pinned both ways.
-- **`schema.d.ts` is out of the corpus**, because it carries `openapi.yaml`'s prose, which cites
-  files freely and is a different rule's business. One consequence recorded rather than fixed: the
-  contract's `WorkItemStatus` description names a `boardColumns.test.ts` that **does not exist**.
+- **`schema.d.ts` is out of the corpus**, because it carries `openapi.yaml`'s prose. ~~which cites
+  files freely and is a different rule's business~~ → **§206: the reason was wrong and the finding
+  §205 recorded here proves it.** Not scanning a *generated copy* is right; not scanning the
+  *source* was not, and `docs/specs/*.yaml` is a corpus now. The consequence this bullet recorded
+  rather than fixed — the contract's `WorkItemStatus` naming a ~~boardColumns.test.ts~~ that does
+  not exist — is fixed: the check it described is real in two places, `workItemColumns` in
+  `lib/labels.ts` (the keys of a map declared `satisfies Record<WorkItemStatus, string>`) and
+  `BoardPage.tsx`'s `_everyStatusHasAColumn`, and both are compile errors rather than tests.
 
 What it found here, neither of them this slice's own work:
 

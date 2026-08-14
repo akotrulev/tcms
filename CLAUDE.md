@@ -121,13 +121,21 @@ npm run test:run --workspaces     # ~~211~~ ~~241~~ ~~260~~ ~~269~~ 302 tests (1
                                   # header. That second half found `tcms_report.generate` sending an
                                   # `Idempotency-Key` to the one create endpoint of eleven that takes
                                   # none — a retried 202 queues the report twice.
-                                  # **Also since §205: `client/src/test/citedFiles.test.ts` scans
-                                  # BOTH TypeScript stacks** (`packages/**` and `frontend/src/**`) and
-                                  # fails if a backtick-quoted filename in a comment is not a file.
-                                  # A struck-through name is excused — that notation already says it
-                                  # does not exist — otherwise it goes in the by-decision map with a
-                                  # reason. NOTE the blast radius: a stale citation in `frontend/`
-                                  # reddens the **packages** job.
+                                  # **Also since §205: `client/src/test/citedFiles.test.ts` fails if
+                                  # a path a comment names is not on disk.** A struck-through name is
+                                  # excused — that notation already says it does not exist —
+                                  # otherwise it goes in the by-decision map with a reason.
+                                  # ~~It scans BOTH TypeScript stacks~~ → **§206: FOUR corpora** —
+                                  # `packages/**`, `frontend/src/**`, `docs/specs/*.yaml` (the
+                                  # contract's own prose, which `gen:api` copies verbatim into both
+                                  # `schema` files) and **`backend/src/**`**, where javadoc cites
+                                  # with `{@code}` — the form nothing resolves, unlike `{@link}`.
+                                  # A trailing `/` makes it a directory citation, checked the same
+                                  # way. NOTE the blast radius: a stale citation in `frontend/` or
+                                  # `backend/` reddens the **packages** job. That is deliberate for
+                                  # `backend/`: `:test`'s inputs are the classpath, so a rename
+                                  # elsewhere changes no backend input and a Java rule would be
+                                  # green by cache — measured, §206.
                                   # **Since §203 every exchange crossing a `fetch` double
                                   # here is compared against openapi.yaml — the body it SERVES and
                                   # the payload it was CALLED WITH** — §197–§199 arriving in this
