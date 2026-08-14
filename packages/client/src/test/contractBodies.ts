@@ -30,7 +30,8 @@
  * The third is `successStatusesOf`, added in §204, and it is outside the region because the SPA's
  * seam has **no status to ask about** — its double replaces a method on the `api` object, which
  * returns `{ data }`. Copying it across would put an uncallable export in the other stack, which is
- * the readerless shape §165 and §154 each paid for.
+ * the readerless shape §165 and §154 each paid for. `declaredHeadersOf` (§205) is the fourth and
+ * sits there on the same rule: **a question only one stack can ask does not go in the region.**
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -420,6 +421,38 @@ export function successStatusesOf(method: string, contractPath: string): number[
     .filter((code) => code.startsWith('2'))
     .map(Number)
     .filter((code) => Number.isInteger(code));
+}
+
+/**
+ * The header parameters an operation declares, lower-cased, in document order.
+ *
+ * Outside the shared region for `successStatusesOf`'s reason, one argument further along: the SPA's
+ * double replaces a method on the `api` object, and a header never reaches it — `frontend/src/api/client.ts`
+ * composes them *inside* the call the double replaced. Here the double is a `fetch` and the headers are
+ * one of its arguments, so this is a question only this stack can ask, and a copy over there would be an
+ * export with no possible caller.
+ *
+ * Path-level parameters are merged with the operation's, which is what the spec says an operation
+ * accepts; a `$ref` is followed because every header in this document is declared once under
+ * `components/parameters` and referenced.
+ *
+ * `undefined` means the path declares no such operation — the case `checkSent` already reports in its
+ * own words.
+ */
+export function declaredHeadersOf(method: string, contractPath: string): string[] | undefined {
+  const item = spec().paths[contractPath];
+  const operation = item && OPERATIONS.has(method) ? (item[method] as Node | undefined) : undefined;
+  if (!operation) return undefined;
+
+  const declared = [
+    ...((item?.parameters as Node[] | undefined) ?? []),
+    ...((operation.parameters as Node[] | undefined) ?? []),
+  ];
+
+  return declared
+    .map((parameter) => deref(parameter))
+    .filter((parameter) => parameter.in === 'header')
+    .map((parameter) => String(parameter.name).toLowerCase());
 }
 
 /**

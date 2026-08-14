@@ -1,12 +1,17 @@
 /**
- * The write commands, and the check that decides whether the next one is safe.
+ * The write commands — what each one sends, and what it refuses to send.
  *
- * `header conformance` is the surface spec's §8.3 — *assert every create arm sends a key and
- * every edit arm sends `If-Match`, over the registry rather than per tool*. It walks `COMMANDS`
- * and drives each declared write through a recording `fetch`, so a twelfth write command that
- * forgets a header fails the build instead of quietly overwriting somebody's edit in the field.
- * The same shape as `RepositoryTransactionTest` deriving its repository list from the live
- * context, and for §108's reason: a check that reads a maintained list is a check on the list.
+ * ~~`header conformance` is the surface spec's §8.3~~ → **it lives in `writeConformance.test.ts`
+ * since §205**, which is the name four comments in this package had been giving it since §139 while
+ * it sat here among forty behaviour tests. That file walks `COMMANDS`, drives each declared write
+ * through a recording `fetch`, and asserts both halves of the rule — the header the `kind` implies,
+ * and that the operation it wrote to declares one. The same shape as `RepositoryTransactionTest`
+ * deriving its repository list from the live context, and for §108's reason: a check that reads a
+ * maintained list is a check on the list.
+ *
+ * What stays here is the per-command behaviour: which fields a round-trip carries, what an empty
+ * body is refused with, what a replay prints. The two are different questions and only one of them
+ * is answerable over the registry.
  */
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -33,7 +38,6 @@ import {
   step,
   suite,
 } from '../../client/src/test/fixtures.js';
-import { COMMANDS } from './commands.js';
 import { EXIT } from './main.js';
 import { PROJECT, api, mainWith, recorder } from './test/harness.js';
 
@@ -903,166 +907,3 @@ describe('review comment', () => {
       .toBe(EXIT.usage);
   });
 });
-
-/* ------------------------------------------------------- the computed check ---- */
-
-describe('header conformance', () => {
-  const writes = COMMANDS.filter((command) => command.write !== undefined);
-
-  it('finds every write command in the registry', () => {
-    expect(writes.length).toBeGreaterThan(0);
-  });
-
-  it.each(writes.map((command) => [command.name, command] as const))(
-    '%s sends what its declaration implies',
-    async (_name, command) => {
-      const invocation = INVOCATIONS[command.name];
-      if (!invocation) {
-        throw new Error(
-          `'${command.name}' declares a write and this test does not know how to invoke it. `
-            + 'Add it to INVOCATIONS — the check exists so a new write command cannot ship '
-            + 'without its headers being asserted.',
-        );
-      }
-
-      const out = recorder();
-      const stub = api({ ...scaffolding(), ...invocation.routes });
-      const code = await mainWith(invocation.argv(), out, stub.fetch);
-      expect(`${String(code)} ${out.stderr}`).toBe('0 ');
-
-      const sent = stub.write(invocation.path);
-      const key = sent.headers.get('Idempotency-Key');
-      const ifMatch = sent.headers.get('If-Match');
-
-      switch (command.write?.kind) {
-        case 'create':
-          expect(key, `${command.name} must carry Idempotency-Key`).toBeTruthy();
-          break;
-        case 'edit':
-          expect(ifMatch, `${command.name} must carry If-Match`).toBeTruthy();
-          break;
-        case 'state':
-        case 'delete':
-          // Neither, and asserted rather than left unsaid: the contract records that these are
-          // preconditioned on the state, so a header here would refuse a request over a version
-          // the caller never claimed to have based anything on.
-          expect([key, ifMatch]).toEqual([null, null]);
-          break;
-      }
-    },
-  );
-
-  it('declares a permission for every write, since the 403 body names none', () => {
-    for (const command of writes) {
-      expect(command.write?.permission, command.name).toMatch(/^[a-z]+:[a-z]+$/);
-    }
-  });
-});
-
-/**
- * How to invoke each write command, keyed by name.
- *
- * A table, and it is the one part of this check that is hand-maintained — which is why the test
- * above **fails on an unknown command** rather than skipping it. A conformance check that
- * silently ignores what it does not recognise is a check on the table.
- */
-interface Invocation {
-  argv: () => string[];
-  path: string;
-  routes: Record<string, { status: number; body?: unknown }>;
-}
-
-const INVOCATIONS: Record<string, Invocation> = {
-  'case edit': {
-    argv: () => ['case', 'edit', 'TC-42', '--title', 'x'],
-    path: '/cases/c-9',
-    routes: { 'PATCH /cases/c-9': { status: 200, body: CASE } },
-  },
-  'case propose': {
-    argv: () => ['case', 'propose', '--file', tempJson('case.json', PROPOSABLE)],
-    path: '/ai-proposals',
-    routes: { 'POST /ai-proposals': { status: 201, body: PROPOSAL } },
-  },
-  'suite create': {
-    argv: () => ['suite', 'create', '--name', 'Smoke'],
-    path: '/suites',
-    routes: { 'POST /suites': { status: 201, body: SUITE } },
-  },
-  'suite edit': {
-    argv: () => ['suite', 'edit', 'TS-7', '--name', 'Smoke again'],
-    path: '/suites/s-1',
-    routes: { 'PATCH /suites/s-1': { status: 200, body: SUITE } },
-  },
-  'suite status': {
-    argv: () => ['suite', 'status', 'TS-7', '--status', 'IN_REVIEW'],
-    path: '/suites/s-1/status',
-    routes: { 'PUT /suites/s-1/status': { status: 200, body: SUITE } },
-  },
-  'doc create': {
-    argv: () => ['doc', 'create', '--title', 'Payments spec'],
-    path: '/doc-pages',
-    routes: { 'POST /doc-pages': { status: 201, body: PAGE } },
-  },
-  'doc edit': {
-    argv: () => ['doc', 'edit', 'DOC-3', '--title', 'Payments spec v2'],
-    path: '/doc-pages/d-1',
-    routes: { 'PATCH /doc-pages/d-1': { status: 200, body: PAGE } },
-  },
-  'doc link': {
-    argv: () => ['doc', 'link', 'DOC-3', '--block', 'b-1', '--case', 'TC-42'],
-    path: '/blocks/b-1/links',
-    routes: {
-      'POST /blocks/b-1/links': {
-        status: 201,
-        body: {
-          id: 'l-1',
-          sourceType: 'TEST_CASE',
-          sourceId: 'c-9',
-          sourceKey: 'TC-42',
-          sourceTitle: 'Login works',
-          relationship: 'VERIFIES',
-        },
-      },
-    },
-  },
-  'doc unlink': {
-    argv: () => ['doc', 'unlink', 'DOC-3', '--link', 'l-1'],
-    path: '/links/l-1',
-    routes: { 'DELETE /links/l-1': { status: 204 } },
-  },
-  'plan create': {
-    argv: () => ['plan', 'create', '--name', 'Release 4.2'],
-    path: '/plans',
-    routes: { 'POST /plans': { status: 201, body: PLAN } },
-  },
-  'plan edit': {
-    argv: () => ['plan', 'edit', 'TP-1', '--name', 'Release 4.3'],
-    path: '/plans/tp-1',
-    routes: { 'PATCH /plans/tp-1': { status: 200, body: PLAN } },
-  },
-  'plan status': {
-    argv: () => ['plan', 'status', 'TP-1', '--status', 'IN_REVIEW'],
-    path: '/plans/tp-1/status',
-    routes: { 'PUT /plans/tp-1/status': { status: 200, body: PLAN } },
-  },
-  'run create': {
-    argv: () => ['run', 'create', '--name', 'Nightly'],
-    path: '/runs',
-    routes: { 'POST /runs': { status: 201, body: RUN } },
-  },
-  'run status': {
-    argv: () => ['run', 'status', 'TR-5', '--status', 'COMPLETED'],
-    path: '/runs/tr-5/status',
-    routes: { 'PUT /runs/tr-5/status': { status: 200, body: RUN } },
-  },
-  'result record': {
-    argv: () => ['result', 'record', 'TR-5', 'TC-42', '--status', 'Passed'],
-    path: '/executions/e-1',
-    routes: { 'PATCH /executions/e-1': { status: 200, body: EXECUTION } },
-  },
-  'review comment': {
-    argv: () => ['review', 'comment', 'TC-42', '--body', 'Looks right.'],
-    path: '/comments',
-    routes: { 'POST /comments': { status: 201, body: REVIEW } },
-  },
-};

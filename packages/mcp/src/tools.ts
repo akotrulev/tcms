@@ -1,10 +1,14 @@
 /**
  * The registry — one list, and the two lookups everything else derives from.
  *
- * Same arrangement as `@tcms/cli`'s `commands.ts` and for the same reason: `conformance.test.ts`
- * walks this list and asserts the properties the surface spec requires of *every* tool (§8.3's
- * header coverage, §8.4's refusal copy, §6's 2KB description ceiling), so a tool that forgets one
- * fails the build rather than being found by an agent in the field.
+ * Same arrangement as `@tcms/cli`'s `commands.ts` and for the same reason: two checks walk this
+ * list and assert the properties the surface spec requires of *every* tool — `writeConformance.test.ts`
+ * for §8.3's header coverage, `writes.test.ts` for §8.4's refusal copy and §6's 2KB description
+ * ceiling — so a tool that forgets one fails the build rather than being found by an agent in the
+ * field.
+ *
+ * They were one check citing a file that did not exist until §205, and the half that read only
+ * declarations was the half that shipped.
  *
  * The count is 21 and it is an **outcome**, not a target — surface spec §2: *a tool never spans
  * two permissions on its write path*, because `tools/list` is permission-filtered and a tool

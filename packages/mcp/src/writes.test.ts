@@ -1,11 +1,19 @@
 /**
- * The write tools, and the two properties that must hold over the whole registry.
+ * The write tools — what each arm sends, and the shape the registry itself has to have.
  *
- * `header conformance` is the surface spec's §8.3 — *assert every create arm sends a key and every
- * edit arm sends `If-Match`, over the tool registry rather than per tool*. It is the same check
- * the CLI runs over its command registry, deliberately: the two surfaces share a command core
+ * ~~`header conformance` is the surface spec's §8.3 — *assert every create arm sends a key and
+ * every edit arm sends `If-Match`, over the tool registry rather than per tool*. It is the same
+ * check the CLI runs over its command registry, deliberately: the two surfaces share a command core
  * precisely so that a rule proved on one holds on the other, and two conformance tests that
- * disagreed about what a create is would be the thing that lets them drift.
+ * disagreed about what a create is would be the thing that lets them drift.~~
+ *
+ * → **§205: that paragraph was true of its intent and false of its content.** What sat here under
+ * that name read the registry's *declarations* — that every arm's `kind` is one the table knows,
+ * that every permission is well-formed and inside its tool's gate — and asserted **nothing about a
+ * header**, while the CLI's drove each command and read what arrived. So the two did disagree, in
+ * exactly the way the sentence warned about, for sixty-five sections. §8.3 now lives in
+ * `writeConformance.test.ts`, one file in each package, and what remains below is the declaration
+ * check under a name that says so.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -556,12 +564,17 @@ describe('tcms_review_verdict', () => {
   });
 });
 
-describe('header conformance — surface spec §8.3', () => {
+describe('registry declarations', () => {
   /*
     Derived from the registry, so a tool added later is checked without anybody remembering to
     add it here. It fails on a tool it does not recognise rather than skipping it: a conformance
     check that silently ignores what it cannot classify is a check that stops working the first
     time somebody adds a shape it did not anticipate.
+
+    **These are questions about the declaration, not about the request** — which is the distinction
+    §205 had to draw the hard way, because this block was named for the request and answered none
+    of it. A `kind` this table knows and a `run` that never sends the header are perfectly
+    consistent with each other. `writeConformance.test.ts` is the half that drives.
   */
   const HEADERS: Record<string, { idempotency: boolean; ifMatch: boolean }> = {
     create: { idempotency: true, ifMatch: false },

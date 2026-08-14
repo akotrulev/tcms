@@ -3,7 +3,7 @@
  *
  * The shape mirrors `@tcms/cli`'s `Command` on purpose — a `gate` where the CLI has nothing (a
  * person reads `--help` and finds out by trying), and the same `WriteDeclaration` the CLI carries
- * so `conformance.test.ts` can assert the headers each arm implies over *both* registries with
+ * so `writeConformance.test.ts` can assert the headers each arm implies over *both* registries with
  * one rule. Surface spec §8.3.
  *
  * ## The gate is a listing rule, and it is NOT authorization
@@ -66,7 +66,7 @@ export interface ToolDefinition {
    *
    * **Truncated at 2KB by the host**, so a description that runs long is not merely verbose —
    * its last sentence does not arrive, and the last sentence is where the caveats go.
-   * `conformance.test.ts` measures every one of these.
+   * `writes.test.ts`'s `the surface as a whole` measures every one of these.
    */
   description: string;
   gate: ToolGate;

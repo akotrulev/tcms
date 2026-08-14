@@ -5,7 +5,8 @@
  * `Idempotency-Key`, an **edit** carries `If-Match`, and a **state** transition carries neither
  * because its precondition is the state rather than a version the client read. They live in
  * `@tcms/client`'s `core/mutation.ts` so this surface and the CLI cannot disagree about them, and
- * `conformance.test.ts` asserts each arm sends what its declaration implies.
+ * `writeConformance.test.ts` asserts each arm sends what its declaration implies — and, since §205,
+ * that the operation it writes to declares the header at all.
  *
  * ## Where the version comes from, and the one place it must be demanded
  *
@@ -1132,8 +1133,21 @@ const report: ToolDefinition = {
     + 'credential and is not something a tool call can hand you.',
   gate: { mode: 'all', permissions: ['report:view', 'report:export'] },
   arms: [
-    // A generation allocates a job row, so it is a create and carries a key: an agent that
-    // retries a lost 202 must not queue the work twice.
+    /*
+      ~~A generation allocates a job row, so it is a create and carries a key: an agent that
+      retries a lost 202 must not queue the work twice.~~ → **it carried one and the endpoint has
+      never read it** (§205). `POST …/reports/generate` declares no `Idempotency-Key` parameter —
+      it is one of the twelve creates in the contract that does not — and `ReportController.generate`
+      takes no such header, so the sentence above described a protection nothing provided: a retried
+      202 **does** queue the work twice. The key is no longer sent, because a header the server
+      ignores is the mistake the parameter's own description names, and because sending it made the
+      shortfall look closed to anybody reading this file.
+
+      It is still a **create**: it allocates a row, and pretending otherwise to make the rule fit
+      would be the declaration bending to the check. `writeConformance.test.ts` records the gap as
+      a decision with what it costs, and closing it is a column on `report_job` plus a replay lookup
+      plus a contract change — a slice, not a line here.
+    */
     { action: 'generate', kind: 'create', permission: 'report:export' },
   ],
   inputSchema: {
@@ -1172,7 +1186,8 @@ const report: ToolDefinition = {
         definitionId: str(input, 'definitionId'),
         parameters: input['parameters'],
       }) as { format: 'PDF' | 'MD' | 'HTML' },
-      tcms: { ...session.request, ...createIntent({ key: session.callId }) },
+      // No `Idempotency-Key`: this endpoint declares none and reads none. See the arm above.
+      tcms: session.request,
     });
   },
 };
