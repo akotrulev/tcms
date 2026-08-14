@@ -54,8 +54,9 @@ public interface ConditionRepository extends JpaRepository<Condition, UUID> {
      * hundreds of rows rather than the instance.
      *
      * <p>Consequences of that choice, both real and both deliberate: the search is over the
-     * <strong>title only</strong> (matching the SPA's mock, which the picker was built against),
-     * and it is a substring match rather than a stemmed one — "logging" does not find "log in".
+     * <strong>title only</strong> — the shape the picker was built and driven against, back when
+     * the SPA's mock served this search — and it is a substring match rather than a stemmed one:
+     * "logging" does not find "log in".
      * Both close when the {@code @@} path lands.
      *
      * <h2>The ranking MOVED to the service in §95</h2>

@@ -9,7 +9,9 @@ import java.util.Locale;
  * whose wire values are <strong>lower case</strong>.
  *
  * <p>The contract has spelled them {@code heading · paragraph · list · code · table · image} since
- * the mock era, the SPA branches on those strings, and the MSW fixtures are written in them. Every
+ * the mock era and the SPA still branches on those strings — ~~and the MSW fixtures are written in
+ * them~~, which stopped being a reason when the mock layer was deleted and was never the load-bearing
+ * half: the SPA's branches are what a respelling would break. Every
  * other enum on the wire is upper case, so this is a genuine inconsistency in the contract — and
  * the wrong place to fix it is here. Changing the spelling would be a breaking contract change to
  * repair a cosmetic asymmetry, in the one slice that is trying to make the endpoint real.

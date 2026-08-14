@@ -92,11 +92,14 @@ public record CaseQuery(
     }
 
     /**
-     * {@code TC-1}, and the underscore spelling the SPA's mock also accepts.
+     * {@code TC-1}, and the underscore spelling.
      *
      * <p>Case-insensitive because the string arrives from a paste out of a Jira ticket or a commit
      * message as often as from typing, and refusing {@code tc-1} would be refusing the same
-     * identifier in different clothes.
+     * identifier in different clothes. The underscore is there for the same reason and no other:
+     * ~~the SPA's mock also accepts it~~ was the whole argument until the mock was deleted, and it
+     * was never a good one — a spelling is accepted because a person types it, not because a second
+     * implementation happened to.
      */
     private static final Pattern CASE_KEY = Pattern.compile("^TC[_-]?(\\d+)$", Pattern.CASE_INSENSITIVE);
 

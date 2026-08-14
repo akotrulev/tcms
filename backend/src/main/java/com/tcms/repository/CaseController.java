@@ -213,8 +213,8 @@ public class CaseController {
      * generates it when the editor mounts and reuses it across retries, which is what makes pressing
      * Save again after a timeout safe. A replay answers <strong>200</strong> with the case that intent
      * already created, so a client can distinguish "this call made it" from "this call found it", and
-     * a retry is not recorded anywhere as a second creation. The MSW mock has answered exactly this
-     * since Phase 1; until now the real server ignored the header entirely.
+     * a retry is not recorded anywhere as a second creation. The MSW mock answered exactly this from
+     * Phase 1 until it was deleted; the real server ignored the header entirely until this slice.
      *
      * <p>{@code Location} names the created case, which is what 201 means. The SPA reads the body
      * rather than the header — it needs the whole case to seed its cache — so this is for every other

@@ -42,8 +42,9 @@ import java.util.UUID;
  * {@link CaseConditionInput} states why: nothing can render one, so storing it would be a
  * successful save the author can never see again.
  *
- * <p>Accepting them and dropping them is the failure the SPA's own mock handler comments on: a save
- * that reports success and discards a value the user typed. The user then has no way to discover it
+ * <p>Accepting them and dropping them is the failure the SPA's own mock handler used to comment on,
+ * and it does not need the attribution: a save that reports success and discards a value the user
+ * typed. The user then has no way to discover it
  * except by reloading, and the value they discover missing is one they will retype. Refusing loudly
  * is worse UX than working and better than lying, and it is a boundary a later slice deletes in one
  * place.

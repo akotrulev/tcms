@@ -128,8 +128,9 @@ final class LifecycleLadder {
      *
      * @param noun what to call the artifact in a refusal — {@code "suite"} or {@code "case"}. The
      *             messages are the ladder's rather than each caller's, because the same failure must
-     *             not read as two different problems depending on which screen reached it (§52), and
-     *             the mock has to be able to copy exactly one wording.
+     *             not read as two different problems depending on which screen reached it (§52).
+     *             ~~And the mock has to be able to copy exactly one wording.~~ → the mock was
+     *             deleted on 2026-08-06; §52's reason never needed the second one.
      */
     static Decision decide(LifecycleStatus current, LifecycleStatus requested, String noun) {
         if (current == requested) {

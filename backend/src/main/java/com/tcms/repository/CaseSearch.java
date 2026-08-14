@@ -107,9 +107,10 @@ public class CaseSearch {
      * <p>Filtering by {@code lifecycleStatus=DRAFT} leaves the lifecycle facet showing DRAFT alone.
      * The other convention — each facet computed with its own filter dropped, so the counts show
      * what selecting a different value <em>would</em> give — is more useful and is four more
-     * queries, one per facet. This matches the SPA's mock, which is the shape the UI was built and
-     * driven against; changing the semantics is a product decision with a UI consequence, not a
-     * detail to slip into the first implementation.
+     * queries, one per facet. This is the shape the UI was built and driven against, back when the
+     * SPA's mock computed the facets; changing the semantics is a product decision with a UI
+     * consequence, not a detail to slip into the first implementation. That the mock is now deleted
+     * removes the second implementation, not the decision — the screens still read these counts.
      *
      * <p>Values with no matching case are absent rather than present with zero — a {@code GROUP BY}
      * cannot invent rows for groups that do not exist. The SPA renders a facet value's count beside

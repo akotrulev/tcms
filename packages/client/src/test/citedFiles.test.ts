@@ -54,17 +54,24 @@
  * the **scanner** — javadoc writes `{@code}` where the others write a backtick, so this file grew a
  * second pattern — and false of the **home**. A Java rule was the obvious place and it is the one
  * place the rule cannot work, for a reason this repository already owns: §185's Gradle-cache trap.
- * A `Test` task's declared inputs are its classpath and its resources, and **a comment-only edit to
- * a `.java` file leaves the compiled class byte-identical**, so `:test` reports UP-TO-DATE and the
- * rule never runs.
+ * A `Test` task's declared inputs are its classpath and its resources, so it sees a `.java` file
+ * only through the class compiled from it — and it does not see this rule's subject at all.
  *
- * Measured rather than reasoned about, because §162's lesson is that an argument naming the wrong
- * mechanism reads as coverage: `./gradlew test --tests ConfigConventionTest` ran and passed, one
- * word of `CaseSort`'s javadoc changed, and the identical command answered `> Task :test UP-TO-DATE`
- * in one second. `:compileJava` did re-run. Nothing downstream of it noticed. So a javadoc rule in
- * the backend suite would be green by cache against exactly the one edit that can break it — which
- * is worse than §185's case, where the rules at least fail when their subject changes, since there
- * the subject was a file Gradle could be told about and here it is the source tree itself.
+ * Two ways that bites, and the second is the one that matters:
+ *
+ * 1. **An edit that changes a comment's text without changing its line count leaves the class
+ *    byte-identical.** Measured: `./gradlew test --tests ConfigConventionTest` ran and passed, one
+ *    word of `CaseSort`'s javadoc changed, and the identical command answered
+ *    `> Task :test UP-TO-DATE` in one second. `:compileJava` re-ran; nothing downstream noticed.
+ *    (Add or remove a *line* and the line-number table shifts, the class differs, and the suite does
+ *    re-run — §206's own nine repairs did — so this half is a trap, not a wall.)
+ * 2. **A stale citation is usually not caused by an edit to the citing file at all.** It is caused
+ *    by a rename somewhere else, and `backend/`'s declared inputs are a Dockerfile, two compose
+ *    files, `deploy`, `docs/specs` and exactly one `.ts` file. Delete ~~handlers.ts~~ — which is
+ *    what happened — and no backend input changes by one byte, whichever way the line numbers fall.
+ *
+ * Which is worse than §185's case, where the rules at least fail when their subject changes: there
+ * the subject was a file Gradle could be told about, and here it is the whole repository.
  *
  * Vitest has no such cache, so the check runs on every `npm run test:run` and reads the tree as it
  * is on disk. The cost is the one already stated one paragraph up, one stack wider: **a stale
@@ -96,6 +103,28 @@
  * statement that this project *has no such file*, and a citation into somebody else's source tree.
  * It is pinned both ways (§162) — an entry naming a file that now exists fails, because a
  * one-directional ignore list cannot report a member that stopped needing to be on it.
+ *
+ * ## Directories are the same claim, and the reach the rule does not have
+ *
+ * A cited path ending in `/` is checked the same way, which took a branch in {@link PATH} and a
+ * trailing marker in {@link walk}. Its whole population is three entries, so as a *finder* it is a
+ * guard. What it is worth having for is the one it names: `src/mocks/`, the SPA's deleted mock
+ * layer, cited by a backend test that is entirely right about it.
+ *
+ * That is worth stating precisely, because the sweep it prompted is the larger half of §206 and it
+ * is the half this file cannot do. Fifteen comments in `backend/src/main` argued from the mock, a
+ * second implementation deleted on 2026-08-06 — and only **two** named a file, which is why the
+ * rule found two. Nine of the rest made a present-tense claim about it: that the search matches it,
+ * that the facets match it, that it *has to be able to copy exactly one wording*. Every one of those
+ * was a live constraint resting on something that no longer exists, and none of them is reachable by
+ * asking the filesystem a question, because none of them names a path.
+ *
+ * So the reach is: **this rule catches a dead reference, not a dead reason.** It found the two
+ * doorways into a room fifteen sentences wide, which is the argument for having it and the exact
+ * measure of what it does not cover. A wordlist rule over the concept was considered and rejected —
+ * the mock layer is deleted and cannot come back, so a permanent scanner for the word would be
+ * guarding a closed door, and this repository has already paid for an ignore list naming the wrong
+ * mechanism (§162's `CONTAINER_ERROR_PATH`).
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -119,7 +148,21 @@ const PRUNED = new Set([
  * pattern and is one of the two entries below.
  */
 const EXTENSIONS = 'ts|tsx|yaml|yml|json|sql|java|md|css|html|xml|kts|properties';
-const PATH = `([A-Za-z0-9_][A-Za-z0-9_./-]*\\.(?:${EXTENSIONS}))`;
+
+/**
+ * A path, either kind — a filename with one of those extensions, or anything ending in `/`.
+ *
+ * **The trailing slash is the whole of the directory half**, and it is the reason this stayed one
+ * pattern rather than becoming a second rule. A comment writes `src/mocks/` with the slash exactly
+ * when it means the directory, so the notation already separates the two claims and neither needs a
+ * whitelist of known folder names. Without it the branch would have to guess whether `core/rewrite`
+ * is a path or a sentence, which is the kind of guess that grows an ignore list.
+ *
+ * Measured before it was written, because a rule whose failures are mostly noise gets silenced:
+ * fifteen directories are cited across the four corpora and three do not resolve. All three are
+ * below, and one of them is the finding.
+ */
+const PATH = `([A-Za-z0-9_][A-Za-z0-9_./-]*(?:\\.(?:${EXTENSIONS})|/))`;
 
 /**
  * A backtick-quoted path.
@@ -191,11 +234,16 @@ const STRUCK = /~~[\s\S]*?~~/g;
  * striking the name would say the opposite. The fourth names a file in a dependency's own source.
  * The fifth is a file this repository deleted and whose deletion is the subject.
  *
- * The last two are the kind the widened corpus found, and they are the one this product is *for*:
- * **a file in the caller's project, not in ours.** A test management system reads other people's
- * build output and is configured against other people's build files, so `testng-results.xml` and
- * `pom.xml` are named correctly, precisely, and by a comment that is doing its job. There is no
- * notation for that — striking them would say the format does not exist — so they are entries.
+ * Three of the rest are the kind the widened corpus found, and they are the one this product is
+ * *for*: **a path in the caller's project, not in ours.** A test management system reads other
+ * people's build output and is configured against other people's build files, so
+ * `testng-results.xml`, `pom.xml` and `allure-results/` are named correctly, precisely, and by
+ * comments that are doing their job. There is no notation for that — striking them would say the
+ * format does not exist — so they are entries.
+ *
+ * `dist/` is the one entry that is none of those: the path is this repository's and the scanner is
+ * what cannot see it, because the walk prunes build output. It is written that way rather than by
+ * un-pruning `dist`, which would make the check's answer depend on whether anyone had run a build.
  */
 const CITED_BUT_ABSENT_BY_DECISION: Record<string, string> = {
   'error.tsx':
@@ -220,6 +268,20 @@ const CITED_BUT_ABSENT_BY_DECISION: Record<string, string> = {
     'Maven\'s build file, named by `lib/labels.ts` to say why the four ingestion-format labels keep '
     + 'each project\'s own capitalisation — a person matches the label against the tool they '
     + 'configured. Also the caller\'s file, and this repository builds with Gradle.',
+  'allure-results/':
+    'Allure\'s own output directory, named by `AllureReportParser` as the thing this product ingests '
+    + '— the third entry of that kind, after `testng-results.xml` and `pom.xml`, and the reason that '
+    + 'kind is worth naming: a test management system cites the caller\'s tree constantly.',
+  'dist/':
+    'This repository\'s, and pruned by the walk above along with `node_modules` — it holds build '
+    + 'output, exists only after `npm run build`, and is absent on a fresh checkout. Cited by both '
+    + '`harness.ts` copies for where the compiled entry point a spawned CLI runs comes from. The '
+    + 'entry says the scanner cannot see it, not that it is missing.',
+  'src/mocks/':
+    'Deleted with the whole mock layer on 2026-08-06 (§107), and `ContractParameterBindingTest` '
+    + 'names it because the deletion is what removed the last legitimate reason for a declared '
+    + 'operation to have no handler — which is why that test stopped skipping them. The one comment '
+    + 'in `backend/` that names the mock layer and is right about it.',
 };
 
 describe('a file a comment names', () => {
@@ -227,13 +289,13 @@ describe('a file a comment names', () => {
     root: entry.root,
     patterns: entry.patterns,
     files: walk(join(REPO, entry.root))
-      .map((absolute) => relative(REPO, absolute))
+      .map(repoRelative)
       .filter((path) => entry.extensions.some((extension) => path.endsWith(extension)))
       .filter((path) => !entry.skip.includes(path)),
   }));
   const files = perCorpus.flatMap((entry) => entry.files);
 
-  const everything = new Set(walk(REPO).map((absolute) => relative(REPO, absolute)));
+  const everything = new Set(walk(REPO).map(repoRelative));
 
   const cited = perCorpus.flatMap((corpus) => corpus.files.flatMap((path) => {
     const text = readFileSync(join(REPO, path), 'utf8');
@@ -320,12 +382,26 @@ describe('a file a comment names', () => {
   });
 });
 
+/**
+ * Every path under `root`, directories included and marked with a trailing `/`.
+ *
+ * The marker is what lets one set answer both questions: a citation ends in `/` when it means a
+ * directory, so `src/mocks/` is looked for among the entries that end in one and `labels.ts` among
+ * the entries that do not. A directory recorded without it would let a file called `mocks` satisfy
+ * a citation of the folder.
+ */
+/** Repo-relative, keeping the trailing `/` that `path.relative` normalises away. */
+function repoRelative(absolute: string): string {
+  const path = relative(REPO, absolute);
+  return absolute.endsWith('/') ? `${path}/` : path;
+}
+
 function walk(root: string): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     if (PRUNED.has(entry.name)) continue;
     const path = join(root, entry.name);
-    if (entry.isDirectory()) found.push(...walk(path));
+    if (entry.isDirectory()) found.push(`${path}/`, ...walk(path));
     else if (entry.isFile()) found.push(path);
   }
   return found;

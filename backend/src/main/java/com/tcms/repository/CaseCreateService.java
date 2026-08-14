@@ -33,8 +33,10 @@ import org.springframework.transaction.annotation.Transactional;
  *       CaseVersions#initial} exists because {@code decide()} would number it v2 — see its header for
  *       why reproducing the pre-versioning gap on a brand-new case is not defensible.</li>
  *   <li><strong>A retry must not create a second case.</strong> The SPA sends one
- *       {@code Idempotency-Key} per intent and the mock has always honoured it; nothing on the server
- *       did until this slice, so mock mode was proving a property live mode lacked.</li>
+ *       {@code Idempotency-Key} per intent and the mock honoured it; nothing on the server did until
+ *       this slice, so mock mode was proving a property live mode lacked. The mock is gone and the
+ *       server's half is the whole of it now, which is why the property is pinned by a test rather
+ *       than by a second implementation agreeing with the first.</li>
  * </ol>
  *
  * <h2>The permission is {@code case:create}, and one qualifier on it is NOT implemented</h2>

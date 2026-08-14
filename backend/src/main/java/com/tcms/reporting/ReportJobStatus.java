@@ -12,8 +12,9 @@ package com.tcms.reporting;
  * <p>Nothing can cancel a job in v1 — the worker is single-threaded and a claimed job finishes
  * inside one tick — and a state no code can reach renders <em>identically</em> to a state the
  * product cannot produce yet. The client's own enum is these four (the contract's
- * {@code ReportJob.status}), and the mock's {@code QUEUED} is a fifth spelling that has never been
- * one of them.
+ * {@code ReportJob.status}), and the mock's {@code QUEUED} was a fifth spelling that was never one
+ * of them — recorded in the past tense because the mock layer was deleted on 2026-08-06, so there
+ * is no second vocabulary left to disagree with this one.
  */
 public enum ReportJobStatus {
 
