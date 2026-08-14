@@ -54,15 +54,16 @@ Roles are ordered least-permissioned first. Rows are grouped by how widely a per
 | `evidence:attach` | — | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `suite:manage` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `case:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `case:delete` | — | — | OWN | ✓ | ✓ | ✓ |
+| `case:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `library:manage` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `case:review` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `suite:review` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `plan:review` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `plan:create` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `plan:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `plan:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `run:execute` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `evidence:delete` | — | — | OWN | ✓ | ✓ | ✓ |
+| `evidence:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `defect:create` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `workitem:manage` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `doc:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
@@ -71,7 +72,6 @@ Roles are ordered least-permissioned first. Rows are grouped by how widely a per
 | `case:approve` | — | — | — | ✓ | ✓ | ✓ |
 | `suite:approve` | — | — | — | ✓ | ✓ | ✓ |
 | `plan:approve` | — | — | — | ✓ | ✓ | ✓ |
-| `plan:delete` | — | — | — | ✓ | ✓ | ✓ |
 | `run:close` | — | — | — | ✓ | ✓ | ✓ |
 | `result:amend` | — | — | — | ✓ | ✓ | ✓ |
 | `doc:publish` | — | — | — | ✓ | ✓ | ✓ |
@@ -124,7 +124,8 @@ RLS would be permanently unreachable.
   automatically on joining, filtered out of `GET /roles`, refused by `POST /role-assignments`.
 - **`Agent` is an eighth row that is not one of the six either** (`V40`): the ceiling an API token
   carries for agent access — **Test Engineer minus `library:manage`, `case:delete`,
-  `evidence:delete` and `company:read`**, enumerated in the roles spec §A6a. Like `Company Member`
+  `evidence:delete`, `plan:delete` and `company:read`** (five since `V51`; the role gained nothing,
+  Test Engineer gained `plan:delete`), enumerated in the roles spec §A6a. Like `Company Member`
   it is `assignable = false` and `POST /role-assignments` refuses it; **unlike** it, `GET /roles`
   returns it and a token may carry it, because the token-issue form is the only place it is ever
   chosen. An `Agent` token must carry an expiry. **`Automation Service` is the third `assignable =
@@ -139,7 +140,10 @@ RLS would be permanently unreachable.
   never union, so a token can exceed neither its role nor its owner, and demoting a person shrinks
   every token they issued.
 - **`OWN` narrows through the intersection too** (`PermissionQualifier.narrowedBy`): a company-wide
-  `ALL` capped by a role's `OWN` is `OWN`.
+  `ALL` capped by a role's `OWN` is `OWN`. **No grant carries `OWN` since `V51` (2026-08-14)** —
+  CRUD on plans, cases and steps belongs to every non-Viewer contributor no matter who created the
+  row — so this describes a mechanism kept deliberately unpopulated, not a live narrowing. The
+  qualifier still in play is `PLAN_SCOPE`.
 - **`case:comment` is one key covering cases, suites and plans.** `suite:comment` / `plan:comment`
   deliberately do not exist — they would be seeded to nobody, making a comment on a folder a 403 no
   administrator could grant their way out of. `evidence:read` was rejected for the same reason.

@@ -2,7 +2,16 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-14 (**§206** — **nothing under `frontend/src` moved**, and one thing a
+**Last verified:** 2026-08-14 (**§207** — **the permission model changed and this tree's BEHAVIOUR
+did not**: no grant carries `OWN` any more, so `useCan.canOnAuthored` answers exactly what `can`
+answers and every delete affordance simply enables for a non-Viewer — `plan:delete` reached Test
+Engineer and `PlanStatisticsPage`'s existing key gate lit up with no edit. **Do not delete the
+`authorId` plumbing**: the qualifier is server-side DATA, so a client that hard-coded "authorship
+never matters" would show an enabled Delete that 403s the day a grant carries `OWN` again. **No
+frontend test failed**, because the four gate tests mock the qualifier rather than reading the
+catalogue — they now exercise a hypothetical grant and are the only coverage of the retained
+mechanism. Four prose sites and two test headers changed; `schema.d.ts` regenerated for five
+description blocks. See the §207 entry below; **§206** — **nothing under `frontend/src` moved**, and one thing a
 frontend agent must know did: `citedFiles.test.ts`'s corpus is **four** roots now, not two —
 `docs/specs/*.yaml` and `backend/src/**` joined it, and a cited path ending in `/` is checked as a
 directory. The contract finding §205 recorded and left (`WorkItemStatus` naming a
@@ -31,10 +40,55 @@ surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the fl
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `c6fbefd` (§206 phase 3 shipped; the only `frontend/` file it touches is the
-generated `src/api/schema.d.ts`, a comments-only regeneration, and the suite was re-run on `shanks`
-for phase 1 at **1339 across 100** — unchanged)
+**Baseline commit:** `507c80b` (§207 — **no `frontend/` behaviour changed**: four prose sites, two
+test headers and a comments-only regeneration of `src/api/schema.d.ts`. Suite re-run on `shanks` at
+**1339 across 100** — unchanged, and see the §207 entry for why none of the gate tests moved. Before
+it: ~~`c6fbefd`, §206 phase 3~~, likewise `schema.d.ts` only.)
 (trust the body over the header and re-grep what a later commit could have moved).
+
+## §207 — NO GRANT IS `OWN`-QUALIFIED, AND THE `authorId` PLUMBING STAYS ANYWAY
+
+**Nothing in this tree changed behaviour.** Four prose sites, two test headers, and a regenerated
+`schema.d.ts`. Read this before touching a permission gate.
+
+**The rule:** CRUD on plans, cases and steps belongs to **every user who is not a Viewer, no matter
+who created the row** (`V51`, roles spec §A3/§A5). `case:delete` and `evidence:delete` lost the
+`OWN` qualifier; Test Engineer gained `plan:delete`. After it, **no grant in the catalogue carries
+`OWN`.**
+
+What that means here:
+
+| | now |
+|---|---|
+| `useCan.canOnAuthored(k, author)` | answers exactly what `can(k)` answers, for every key and row |
+| `PermissionGate` with `authorId` | the authorship term is a no-op; the button enables for any holder |
+| `PlanStatisticsPage`'s Delete | **lit up with no edit** — it already gated on `plan:delete` alone |
+| `canOnScope` / `PLAN_SCOPE` | **unchanged and still populated** (`artifact:edit`). Do not confuse the two axes. |
+
+### Do NOT delete the `authorId` plumbing
+
+`useCan.canOnAuthored`, `reasonOnAuthored`, and the `authorId` prop passed at `CaseDetailPage`'s
+Delete and `EvidencePanel`'s Remove are all retained **on purpose**. The qualifier is *server-side
+data*, not a client constant — the server keeps `PermissionQualifier.OWN` and
+`IdentityProjectAccess.canDoOnAuthored` wired for exactly the same reason. A client that hard-codes
+"authorship never matters" re-creates §66's defect **inverted**: an enabled Delete that 403s.
+
+`?? null` vs `?? undefined` still matters and still means two different things (§66) — `undefined`
+tells `PermissionGate` the affordance is *not* author-qualified; `null` is a *supplied* author
+matching nobody. Unchanged by §207.
+
+### No frontend test failed, and that is worth knowing rather than lucky
+
+`useCan.test.tsx`, `PermissionGate.test.tsx`, `CaseDetailPage.test.tsx` and `EvidencePanel.test.tsx`
+all **mock** the qualifier (`answer(['case:delete'], { 'case:delete': 'OWN' })`) instead of reading
+the seeded catalogue. So they kept passing, and they are now the **only** coverage of a mechanism no
+shipped role reaches. Their headers say so. If you are tempted to "update them to reality" by
+dropping the `OWN` mocks, you would be deleting that coverage. #confirmed
+
+`createdBy` **stays on the wire** — no longer load-bearing for authorization, kept as a display
+field (author ≠ owner, they diverge on reassignment; `CaseVersionPanel` renders it).
+
+---
 
 ## §205 — A FILE NAMED IN A COMMENT HERE MUST EXIST, AND THE CHECK LIVES IN THE OTHER STACK
 

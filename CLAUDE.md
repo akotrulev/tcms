@@ -423,7 +423,9 @@ instance-level table, because a nullable `company_id` under RLS is permanently u
 
 **Authoritative source is `docs/specs/2026-07-30-tcms-roles-permissions-naming.md` §A3** — this is a
 convenience copy, also in `README.md`. If they disagree the spec wins and the copies are the bug.
-55 permissions, all seeded by `V3__seed_permissions_and_roles.sql`; no migration has added one since.
+55 permissions, all seeded by `V3__seed_permissions_and_roles.sql`; no migration has added one since —
+though `V51` **moved three grants between roles**, which is a different thing and the one this table
+gets wrong most easily.
 
 Roles are ordered least-permissioned first; rows run broadest-held to narrowest. `✓` granted ·
 `—` not granted · anything else is a qualifier that narrows the grant.
@@ -438,12 +440,12 @@ Roles are ordered least-permissioned first; rows run broadest-held to narrowest.
 | `run:create` · `result:submit` · `evidence:attach` | — | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `suite:manage` · `case:edit` · `library:manage` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `case:review` · `suite:review` · `plan:review` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `plan:create` · `plan:edit` · `run:execute` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `plan:create` · `plan:edit` · `plan:delete` · `run:execute` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `defect:create` · `workitem:manage` · `doc:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `case:delete` · `evidence:delete` | — | — | OWN | ✓ | ✓ | ✓ |
+| `case:delete` · `evidence:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `artifact:edit` | — | — | plan scope only | ✓ | ✓ | ✓ |
 | `case:approve` · `suite:approve` · `plan:approve` | — | — | — | ✓ | ✓ | ✓ |
-| `suite:delete` · `plan:delete` · `artifact:delete` | — | — | — | ✓ | ✓ | ✓ |
+| `suite:delete` · `artifact:delete` | — | — | — | ✓ | ✓ | ✓ |
 | `run:close` · `result:amend` · `doc:publish` | — | — | — | ✓ | ✓ | ✓ |
 | `project:audit` · `project:settings` · `project:members` · `integration:manage` | — | — | — | ✓ | ✓ | ✓ |
 
@@ -470,11 +472,16 @@ Five things that change how the table reads:
   (`V40`, `V41`).
   `Company Member` (`V15`) is the `company:read` baseline joining confers; **`Agent`** (`V40`) is
   the token-only ceiling for agent access — **Test Engineer minus `library:manage`, `case:delete`,
-  `evidence:delete` and `company:read`**, enumerated once in the roles spec **§A6a** and derived
-  from the catalogue by `SeedDataTest.agentIsTestEngineerMinusThree`, not copied into a fourth
-  table. `library:manage` is dropped because §A3 gates it by an *impact modal* an API caller never
-  sees; the two deletes because `OWN` follows `api_token.owner_id`, so an agent would delete what
-  the human authored. **`Automation Service` is the third (`V41`) and behaves like `Agent`.**
+  `evidence:delete`, `plan:delete` and `company:read`** (~~four~~ **five since `V51`**), enumerated
+  once in the roles spec **§A6a** and derived from the catalogue by
+  `SeedDataTest.agentIsTestEngineerMinusFive`, not copied into a fourth table. `library:manage` is
+  dropped because §A3 gates it by an *impact modal* an API caller never sees; ~~the two deletes
+  because `OWN` follows `api_token.owner_id`, so an agent would delete what the human authored~~ →
+  **that premise died with `V51` — the three deletes are dropped because agent access creates, reads
+  and edits and does NOT delete.** `plan:delete` had to be *promoted* into that list the moment Test
+  Engineer gained it: it had been excluded only by inheritance, and the delta check is what caught
+  it — a subset check would have stayed green while the stated reason evaporated.
+  **`Automation Service` is the third (`V41`) and behaves like `Agent`.**
   **Assignability, issuability, listedness and revocability are FOUR different questions** — the two
   ceilings are non-assignable but issuable **and listed**, so `GET /roles` must keep returning them,
   and only `RoleGrantService`'s **grant** path may read the flag. `V40` §2 and `V41` §1 name the four
@@ -484,7 +491,20 @@ Five things that change how the table reads:
   `evaluate(ownerId, projectId) ∩ permissionsOf(token.roleId) ∩ [the token's project]`. Intersection,
   never union — so a token exceeds neither its role nor its owner, and demoting a person shrinks
   every token they issued. `OWN` narrows through it too (`PermissionQualifier.narrowedBy`): a
-  company-wide `ALL` capped by a role's `OWN` is `OWN`.
+  company-wide `ALL` capped by a role's `OWN` is `OWN`. **Nothing carries `OWN` since `V51`** — see
+  the bullet below.
+- **NO GRANT IS `OWN`-QUALIFIED (`V51`, §207).** CRUD on plans, cases and steps belongs to every
+  non-Viewer contributor **no matter who first created the row** — so `case:delete` and
+  `evidence:delete` lost the qualifier and Test Engineer gained `plan:delete`. The mechanism is kept
+  **deliberately unpopulated**: the qualifier is *data*, so deleting `PermissionQualifier.OWN` or
+  `IdentityProjectAccess.canDoOnAuthored` is what would make a future `OWN` grant fail **open**, and
+  `PLAN_SCOPE` keeps the same column and seam in use anyway. `SeedDataTest.ownIsCarriedByNoGrant`
+  pins the empty population in both directions so it reads as a decision, not a seeding bug. The
+  authorship *plumbing* on both sides stays wired for the same reason — `CaseDeleteService`'s gate,
+  its `NotTheAuthor` refusal, `useCan.canOnAuthored`, and the `authorId` every `PermissionGate`
+  delete site passes. **`suite:delete` / `artifact:delete` stay Lead-only (shared structure, not
+  authored content) and so do `run:close` / `result:amend` (judgements about the work), and
+  author-cannot-approve-own-work is untouched — approving is not CRUD.**
 - **`case:comment` is one key covering cases, suites and plans.** `suite:comment` / `plan:comment`
   deliberately do not exist, and `evidence:read` was rejected on the same grounds: a key seeded to
   nobody is a 403 no administrator can grant their way out of. Resolving a thread is *not*

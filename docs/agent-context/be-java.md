@@ -2,16 +2,112 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-14 (**§206** — **no Java behaviour moved**, twenty javadocs did and one field became package-private for a check that had never existed, and a new rule in `packages/` now reads every `.java` file: a path a comment names must exist, `{@code}` included and `{@link}` excluded — see the §206 section immediately below, which is the one thing to read before writing a comment; the nine repairs are sentences that justified server behaviour by the SPA's mock, deleted 2026-08-06; **§200** — `CaseEdit.validate` takes a `ProcedureRule`: steps-for-STRUCTURED and scenario-for-GHERKIN are ONE rule with two spellings, `REQUIRED` on `PATCH`, `DEFERRED` on `POST` **and inside `CaseEdit.of`** — the third arm is not a second decision and is the half that would have shipped broken, because `of` re-validates a stored row and a stub would have been skipped by every authored bulk action under a message the update path refuses; `case_health.incomplete`'s two unreachable terms get a producer with the predicate unchanged, and the `APPROVED` gate is what makes the deferral cheap; **§194** — `frontend/` only, **no Java, no contract, no migration**: the case editor greys the decline switch while a move is pending, because `CaseEdit.normalizeDeclines` bounds the submitted set by the *destination* folder and a flat suite shares no attachment — so the server was already discarding what that control accepted; **§193** — the bulk result names the cases a move takes a decline from, the read must happen before the mutation because §192's write-back answers the question itself, and one projection serves both the write and the report; **§192** — a decline lives exactly as long as its folder imposes the rule, `reconcileOptouts` carries two bounds whose order is the rule, `declinableAttachmentIds` is now `reachingAt` returning both sets, and `V50` sweeps what the writers cannot reach; **§190** — a table comment is checked against the catalog, `V49` restated two of them, and a full stop is not a qualifier; **§188** — both column rules' corpora are `src/main`, `@Version` is skipped by the writer rule, a test that SELECTs a column is no longer that column's reader, and an explicit `= null` is a writer to a bytecode rule; **§187** — `case_condition_optout` has a writer at last, the declined rows are served on two lists of their own because `preconditions` is what a run pins, the hash must be what the case declines *after* the save, and a table whose only writer is a fixture reads as written to the column rule; **§186** — `suite_condition` has a writer at last, a suite serves two condition lists instead of one, and its reconcile must rewrite in place because `case_condition_optout` points at the rows; **§185** — the blob roots are provisioned by the image and pinned by a rule, a bind mount and a named volume behave oppositely, the store refuses to start on an unusable root, and a text rule reading a file outside `src/` is green by cache unless `build.gradle.kts` declares it; **§184** — `DashboardService.health` is the only ordering of health tiles, it is package-private for its own test, and its second comparator key had never been observed; **§182** — `case_health` has no open work left: every column is derived, `HealthSignal` has an eleventh member, and the boundary test stopped needing a witness; **§181** — every health signal has a writer, `ORPHANED` means the owner is no longer in the company's directory, and `incomplete` changed which by-decision map it is in; **§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
+**Last verified:** 2026-08-14 (**§207** — **the permission model changed and almost no code did**:
+`V51` moves three grants, after which **NO grant carries `OWN`** and the whole authorship-qualifier
+mechanism is live-but-unpopulated on purpose — `PermissionQualifier.OWN`,
+`IdentityProjectAccess.canDoOnAuthored`'s `OWN` arm, `CaseDeleteService`'s authorship gate and its
+`NotTheAuthor` outcome are all retained and unreachable from seeded data, because the qualifier is
+DATA and deleting the arm is what makes a future `OWN` grant fail OPEN; a Test Engineer now deletes
+any case, any evidence and any plan; `LifecycleLadder` carries a RECORDED, UNFIXED incoherence
+(deprecating still costs the approve key while deleting no longer does); and `V12`/`V40`/`V3` still
+argue the old model and must NOT be edited — Flyway checksums an applied migration. See the §207
+section below before touching anything permission-shaped; **§206** — **no Java behaviour moved**, twenty javadocs did and one field became package-private for a check that had never existed, and a new rule in `packages/` now reads every `.java` file: a path a comment names must exist, `{@code}` included and `{@link}` excluded — see the §206 section immediately below, which is the one thing to read before writing a comment; the nine repairs are sentences that justified server behaviour by the SPA's mock, deleted 2026-08-06; **§200** — `CaseEdit.validate` takes a `ProcedureRule`: steps-for-STRUCTURED and scenario-for-GHERKIN are ONE rule with two spellings, `REQUIRED` on `PATCH`, `DEFERRED` on `POST` **and inside `CaseEdit.of`** — the third arm is not a second decision and is the half that would have shipped broken, because `of` re-validates a stored row and a stub would have been skipped by every authored bulk action under a message the update path refuses; `case_health.incomplete`'s two unreachable terms get a producer with the predicate unchanged, and the `APPROVED` gate is what makes the deferral cheap; **§194** — `frontend/` only, **no Java, no contract, no migration**: the case editor greys the decline switch while a move is pending, because `CaseEdit.normalizeDeclines` bounds the submitted set by the *destination* folder and a flat suite shares no attachment — so the server was already discarding what that control accepted; **§193** — the bulk result names the cases a move takes a decline from, the read must happen before the mutation because §192's write-back answers the question itself, and one projection serves both the write and the report; **§192** — a decline lives exactly as long as its folder imposes the rule, `reconcileOptouts` carries two bounds whose order is the rule, `declinableAttachmentIds` is now `reachingAt` returning both sets, and `V50` sweeps what the writers cannot reach; **§190** — a table comment is checked against the catalog, `V49` restated two of them, and a full stop is not a qualifier; **§188** — both column rules' corpora are `src/main`, `@Version` is skipped by the writer rule, a test that SELECTs a column is no longer that column's reader, and an explicit `= null` is a writer to a bytecode rule; **§187** — `case_condition_optout` has a writer at last, the declined rows are served on two lists of their own because `preconditions` is what a run pins, the hash must be what the case declines *after* the save, and a table whose only writer is a fixture reads as written to the column rule; **§186** — `suite_condition` has a writer at last, a suite serves two condition lists instead of one, and its reconcile must rewrite in place because `case_condition_optout` points at the rows; **§185** — the blob roots are provisioned by the image and pinned by a rule, a bind mount and a named volume behave oppositely, the store refuses to start on an unusable root, and a text rule reading a file outside `src/` is green by cache unless `build.gradle.kts` declares it; **§184** — `DashboardService.health` is the only ordering of health tiles, it is package-private for its own test, and its second comparator key had never been observed; **§182** — `case_health` has no open work left: every column is derived, `HealthSignal` has an eleventh member, and the boundary test stopped needing a witness; **§181** — every health signal has a writer, `ORPHANED` means the owner is no longer in the company's directory, and `incomplete` changed which by-decision map it is in; **§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
 last two came off `case_doc_link`, the statement's *order* inside the recompute is load-bearing, and
 `UNLINKED` counts every relationship while the coverage sites count one; **§177** — `test_run.commit_sha` / `.branch` have a writer, the git-object regex is a pinned second copy, and the clone inherits neither; **§176** — the four contract-binding rules are two questions over two populations, and a bound-and-undeclared query parameter fails the build; **§175** — one `TeamRef`, in `com.tcms.api`, with two inline schemas made `$ref`s and `isLead` off the wire; **§174** — `doc_link.relationship` is the one mutable column, `V48` records who moved it, and both ends got the endpoint; **§171** — the form parts nobody compared: the four multipart bodies are exempt from *pairing* and no longer exempt from *comparison*; **§170** — the population the pairing rule could not see: every object schema, named and inline, is paired or excused, and two ingestion inputs nothing read are gone; **§169** — the capability the schema designed and nobody built: `doc_link`'s two external target kinds get a writer, and the divergence map empties; **§168** — the coverage marker, whose obstacle had already moved; **§167** — `relatedDocuments` is served, and the mirror table `lastResult` argued against; **§166** — the result every case said it never had, and the seam that stayed write-only; **§165** — the members nobody compared, and the three arguments that blamed a module for not existing; **§164** — the two types that agreed by accident, and the schema in no pairing check; **§163** — the request echo nobody wrote, and the decision §162 left declared; **§162** — one media type for every refusal, the two envelopes nobody compared, and the exemptions that excused nothing; **§161** — the by-decision audit, and the contract-versus-server enum rule; **§160** — the verbatim CI upload gets a store, a key and a download, and the §67 blocker that expired in §125; **§159** — the project archive operation, and the state a test fixture was the only thing that could produce; **§158** — the second of §156's five, and the tooltip that explained a comparison nobody makes; **§157** — the first of §156's five, and the signal the panel and the banner already disagreed about; **§156** — the columns nothing writes, and the all-clear five checks never earned; **§155** — the guard two entities mapped and neither maintained, and the wrong instrument for the right race; **§154** — the columns nothing reads, and the check that read its own argument; **§153** — the seams only a test exercises, and the guard whose test stayed behind; **§152** — the seams nobody calls, and a javadoc revised into being wrong; **§151** — the release that sorted after its own candidate, and the `~` that measures as a no-op; **§150** — the unit-test lane, and the two things `ReleaseSortKey`'s javadoc got wrong; **§149** — the other half of §148's rule, and the `errors` value that was a count; **§148** — the 401 and 404 carry no body, and the check that reads the source; **§147** — one `UserRef`, and the tally computed; **§146** — one error envelope, and the fifth foundation module; **§145** — the second live pass, and the contract operation nothing served; **§144** — the contract's required set, and the `PATCH` that is not partial; **§143** — the first live pass of `packages/`, and the ERROR-dispatch 401; **§142** — deploying the MCP server, no Java changed; **§141** — the per-token rate limit and the clock method that throws; **§138** — `ai_proposal` and the review boundary; **§136** — Idempotency-Key on suites and doc pages; **§134 phases 1–2** — Automation Service non-assignable; **§133 phases 1–3** — the `Agent` role; **§131 phases 1–2** — the outbox; **§129 phases 1–2** — clone case / plan / run; **§128** — the case
 draft buffer; **§127 phase 1** — the table and image block payloads; **§126 phases 1–4** —
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `c6fbefd` (§206 phase 3; before it the header sat at ~~`be8c1a6` (§199)~~ and
-lagged the body by six sections, which is the normal state and exactly why the rule below exists.)
+**Baseline commit:** `507c80b` (§207, the slice commit; the docs commit that carries this very line
+lands immediately after it, so the header is one behind by construction. Before it the header sat at
+~~`c6fbefd` (§206 phase 3)~~ and before that ~~`be8c1a6` (§199)~~, lagging the body by six sections —
+the normal state, and exactly why the rule below exists.)
 Per `CLAUDE.md`, **trust the body over the header** and re-grep what a later commit could have moved.
+
+---
+
+## §207 — `OWN` IS A LIVE MECHANISM WITH ZERO GRANTS, AND THREE MIGRATIONS LIE ABOUT IT
+
+**Read this before any change to permissions, role seeding, or a delete gate.**
+
+### The state, as of `V51`
+
+| Key | Test Engineer | Note |
+|---|---|---|
+| `case:delete` · `evidence:delete` | ✓ (was `OWN`) | qualifier removed |
+| `plan:delete` | ✓ (was **not held**) | a *tier* gate, not a qualifier |
+| `case:create` · `case:edit` · `plan:create` · `plan:edit` | ✓ | unchanged |
+| `suite:delete` · `artifact:delete` | — | shared **structure**, Lead-only, unchanged |
+| `run:close` · `result:amend` | — | judgements about the **work**, unchanged |
+
+**Steps have no permission key** and never did — part of the case, written by `CaseUpdateService`,
+gated by `case:edit`. Do not go looking for `step:*`.
+
+The rule in one line: **CRUD on plans, cases and steps belongs to every non-Viewer contributor, no
+matter who created the row.** Author-cannot-approve-own-work is untouched — approving is not CRUD,
+and it is now the *only* place authorship decides anything.
+
+### The mechanism is loaded and unused, deliberately — do not "clean it up"
+
+`OWN` is still a legal `CHECK` value, still a `PermissionQualifier` member, still resolved by
+`IdentityProjectAccess.canDoOnAuthored:111`, and `CaseDeleteService` still routes through
+`projects.writeGrantedByAuthorship`. The SPA still passes `authorId` at every delete site. All of it
+is unreachable from the shipped catalogue.
+
+Three reasons it stays, in order of weight:
+
+1. **The qualifier is DATA.** Deleting the arm is what would make a future `OWN` grant fail **open**
+   at whichever gate forgot it.
+2. `PLAN_SCOPE` (`V19`) is the same mechanism and *is* populated (`artifact:edit`, Test Engineer and
+   Agent), so the column and seam earn their keep regardless.
+3. Rebuilding it later costs a migration + gate + contract change; keeping it costs a comment.
+
+`SeedDataTest.ownIsCarriedByNoGrant` pins the empty population **in both directions** — no `OWN`
+grant, *and* `DISTINCT qualifier` is exactly `{ALL, PLAN_SCOPE}`. The second half exists because a
+typo in the column name would make the first half pass. #confirmed
+
+### `V12`, `V40` and `V3` still argue the pre-`V51` model and are NOT edited
+
+Flyway checksums an applied migration, so editing one breaks every already-migrated database. `V12`
+has exactly one commit in its entire history — that is the convention. They are history the way
+`V1`'s `suite_condition` comment is after `V49`. **`V51`'s header is the redirect** for anyone who
+arrives at `V12` by grep, and the roles spec wins wherever they disagree. The only restatement
+possible was a fresh `COMMENT ON COLUMN role_permission.qualifier` (replace-only), which `V51` does.
+
+### `Agent` is Test Engineer minus FIVE, and the fifth arrived by test failure
+
+`V40` **enumerates** Agent's 23 keys, so Test Engineer gaining `plan:delete` gave no agent anything
+in the data. Two things still broke:
+
+- `V40` justified dropping `case:delete`/`evidence:delete` by *"`OWN` follows `api_token.owner_id`"*
+  — an argument `V51` deletes the premise of. Re-based: **agent access creates, reads and edits; it
+  does not delete.**
+- `plan:delete` sat under *"never held, **inherited from Test Engineer's own boundary**"*, which
+  excludes a key only while the contributor lacks it. Promoted to an explicit drop.
+
+**Neither was found by reading.** `agentIsTestEngineerMinusThree` (now `…MinusFive`) is a **delta**
+check, and its own 2026-08-08 comment predicted this exact scenario. **Generalise it: when a rule
+reads "X minus the things that…", assert the delta, never the subset** — a subset check cannot
+distinguish "still correct" from "correct for a reason that no longer exists". #confirmed
+
+### A recorded, unfixed incoherence in `LifecycleLadder`
+
+`permissionFor` charges the **approve** key for the move to `DEPRECATED`, on the argument that
+retiring is the soft form of a Lead-only delete. Half that premise is gone: **a Test Engineer may
+now delete a colleague's case and may not deprecate it** — the stronger act is cheaper than the
+weaker one. Still coherent for a *suite* (`suite:delete` unchanged). Left standing because moving it
+is a change to the **approval ladder**, out of §207's scope; the javadoc says so at the site so the
+surviving prose is not read as a live argument. #confirmed
+
+### Where the prose was re-based (all comment-only)
+
+`CaseDeleteService` · `CaseController` · `TestCase` · `TestCaseSummaryView` · `TestCaseDetailView` ·
+`CaseCreateService` · `CaseAttachmentService` · `SuiteWriteService` · `SuiteVersions` ·
+`IdentityProjectAccess`. **`createdBy` stays on the wire** — no longer load-bearing for
+authorization, kept as a display field (author ≠ owner; `CaseVersionPanel` renders it).
+
+Five `openapi.yaml` descriptions moved too, so **both `schema` copies were regenerated** — contract
+prose is copied verbatim by `gen:api`, which makes it code for this purpose.
 
 ---
 
