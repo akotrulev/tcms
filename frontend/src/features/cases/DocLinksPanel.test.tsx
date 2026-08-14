@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { DocLink, TestCase } from '../../api/types'
+import type { DocLink, PermissionKey, TestCase } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -132,10 +132,10 @@ function caseBody(links: DocLink[]): TestCase {
     relatedDocuments: links,
     declinedPreconditions: [],
     declinedPostconditions: [],
-  } as TestCase
+  }
 }
 
-function mockReads(links: DocLink[], permissions: string[] = ['case:read', 'case:edit']) {
+function mockReads(links: DocLink[], permissions: PermissionKey[] = ['case:read', 'case:edit']) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes('/cases/')) return caseBody(links)

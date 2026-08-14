@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { ApiToken } from '../../api/types'
+import type { ApiToken, PermissionKey } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -79,7 +79,7 @@ const USERS = [
   },
 ]
 
-function mockApi(permissions: string[], tokens: ApiToken[] = [LIVE, EXPIRED, REVOKED]) {
+function mockApi(permissions: PermissionKey[], tokens: ApiToken[] = [LIVE, EXPIRED, REVOKED]) {
   return vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions, {}, null)
     if (path.startsWith('/api-tokens')) return tokens

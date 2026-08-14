@@ -92,7 +92,7 @@ function caseBody(createdBy: string | null): TestCase {
     // the same way `relatedDocuments` above landed in §167.
     declinedPreconditions: [],
     declinedPostconditions: [],
-  } as TestCase
+  }
 }
 
 /**

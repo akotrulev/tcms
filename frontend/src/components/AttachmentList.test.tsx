@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as client from '../api/client'
 import { api } from '../api/client'
-import type { Attachment } from '../api/types'
+import type { Attachment, PermissionKey } from '../api/types'
 import { TestProviders } from '../test/TestProviders'
 import { createTestQueryClient } from '../test/queryClient'
 import { heldPermissions } from '../test/permissions'
@@ -52,10 +52,10 @@ function attachment(overrides: Partial<Attachment> = {}): Attachment {
     uploadedAt: '2026-08-01T09:00:00Z',
     uploadedBy: person(CALLER),
     ...overrides,
-  } as Attachment
+  }
 }
 
-function mockPermissions(keys: string[]) {
+function mockPermissions(keys: PermissionKey[]) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(keys)
     return []

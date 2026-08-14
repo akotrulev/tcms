@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { DocPage, DocPageSummary } from '../../api/types'
+import type { DocPage, DocPageSummary, PermissionKey } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -27,10 +27,11 @@ const summary: DocPageSummary = {
   id: 'page-1',
   key: 'DOC-1',
   title: 'Refund policy',
+  slug: 'refund-policy',
   parentId: null,
   status: 'DRAFT',
   updatedAt: '2026-08-01T00:00:00Z',
-} as DocPageSummary
+}
 
 function page(attachments: DocPage['attachments']): DocPage {
   return {
@@ -39,10 +40,10 @@ function page(attachments: DocPage['attachments']): DocPage {
     attachments,
     currentVersionNo: 1,
     lockVersion: 1,
-  } as unknown as DocPage
+  }
 }
 
-function mockReads(keys: string[], attachments: DocPage['attachments'] = []) {
+function mockReads(keys: PermissionKey[], attachments: DocPage['attachments'] = []) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(keys)
     if (path.includes('/doc-pages/')) return page(attachments)

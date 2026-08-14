@@ -31,14 +31,20 @@ const PLAN = 'tp1'
 
 /**
  * The COMPLETE plan body, copied from `PlanLifecycle.test.tsx` rather than trimmed to what this
- * test reads — and its own comment says why: the fields §97 phase 2 made required on `TestPlan` go
- * missing silently behind `as unknown as TestPlan`, and the page then crashes on mount reading
- * them. Trimming this fixture cost this test three red runs before the cast was the suspect.
+ * test reads — and its own comment says why: the fields §97 phase 2 made required on `TestPlan`
+ * went missing silently behind `as unknown as TestPlan`, and the page then crashed on mount
+ * reading them. Trimming this fixture cost this test three red runs before the cast was the
+ * suspect.
+ *
+ * **The cast is gone as of §196** — the declared return type now binds, so a field added to
+ * `TestPlan` is a build error on this line instead of a mount-time crash. `keySeq` is what it
+ * would have caught: §165 put it on the contract and this fixture never gained it.
  */
 function planBody(): TestPlan {
   return {
     id: PLAN,
     key: 'TP-4',
+    keySeq: 4,
     name: 'Release 4.4 regression',
     status: 'DRAFT',
     milestoneName: null,
@@ -58,7 +64,7 @@ function planBody(): TestPlan {
     outOfScopeText: null,
     currentVersionNo: 1,
     lockVersion: 1,
-  } as unknown as TestPlan
+  }
 }
 
 function mockReads(computedAt: string | null, stale = false) {

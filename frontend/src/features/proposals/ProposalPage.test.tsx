@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
-import type { AiProposal } from '../../api/types'
+import type { AiProposal, PermissionKey } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -57,9 +57,9 @@ const PENDING: AiProposal = {
   decidedBy: null,
   decisionNote: null,
   acceptedCase: null,
-} as AiProposal
+}
 
-function mockApi(proposal: AiProposal = PENDING, permissions = ['case:read', 'case:create']) {
+function mockApi(proposal: AiProposal = PENDING, permissions: PermissionKey[] = ['case:read', 'case:create']) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes('/ai-proposals/')) return proposal
@@ -207,7 +207,7 @@ describe('ProposalPage', () => {
       decidedBy: { id: 'user-1', displayName: 'R. Reviewer', email: 'r@acme.test', avatarUrl: null },
       decidedAt: '2026-08-08T10:00:00Z',
       acceptedCase: { id: 'case-9', key: 'TC-9' },
-    } as AiProposal)
+    })
     renderPage()
 
     expect(await screen.findByTestId('Proposal.AcceptedCase')).toHaveTextContent('TC-9')
@@ -223,7 +223,7 @@ describe('ProposalPage', () => {
       decidedBy: { id: 'user-1', displayName: 'R. Reviewer', email: 'r@acme.test', avatarUrl: null },
       decidedAt: '2026-08-08T10:00:00Z',
       acceptedCase: null,
-    } as AiProposal)
+    })
     renderPage()
 
     expect(await screen.findByTestId('Proposal.Accepted')).toHaveTextContent(
@@ -232,7 +232,7 @@ describe('ProposalPage', () => {
   })
 
   it('keeps an unreadable payload decidable rather than showing an error page', async () => {
-    mockApi({ ...PENDING, testCase: null } as AiProposal)
+    mockApi({ ...PENDING, testCase: null })
     renderPage()
 
     expect(await screen.findByTestId('Proposal.Unreadable')).toBeInTheDocument()

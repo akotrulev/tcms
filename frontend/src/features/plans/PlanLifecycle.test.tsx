@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
-import type { PlanStatus, TestPlan } from '../../api/types'
+import type { PermissionKey, PlanStatus, TestPlan } from '../../api/types'
 import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
@@ -36,6 +36,7 @@ function planBody(status: PlanStatus): TestPlan {
   return {
     id: PLAN,
     key: 'TP-4',
+    keySeq: 4,
     name: 'Release 4.4 regression',
     status,
     milestoneName: null,
@@ -47,8 +48,10 @@ function planBody(status: PlanStatus): TestPlan {
     entryCriteria: [],
     exitCriteria: [],
     configurations: [],
-    // Required on `TestPlan` since §97 phase 2. The `as unknown as TestPlan` cast below is what let
-    // them go missing, and the page crashed on mount reading them — §65's fixture-cast class again.
+    // Required on `TestPlan` since §97 phase 2. The `as unknown as TestPlan` cast that used to
+    // close this object is what let them go missing, and the page crashed on mount reading them —
+    // §65's fixture-cast class. **The cast is gone as of §196**, so the declared return type binds
+    // and the next required field is a build error here rather than a crash there.
     suiteIds: [],
     caseIds: [],
     tags: [],
@@ -57,12 +60,12 @@ function planBody(status: PlanStatus): TestPlan {
     outOfScopeText: null,
     currentVersionNo: 1,
     lockVersion: 1,
-  } as unknown as TestPlan
+  }
 }
 
 function mockReads(
   status: PlanStatus,
-  permissions: string[] = ['project:read', 'plan:edit', 'plan:approve', 'plan:delete'],
+  permissions: PermissionKey[] = ['project:read', 'plan:edit', 'plan:approve', 'plan:delete'],
 ) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)

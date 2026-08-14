@@ -32,7 +32,7 @@ function link(over: Partial<DocLink>): DocLink {
     externalCommitSha: null,
     externalUrl: null,
     ...over,
-  } as unknown as DocLink
+  }
 }
 
 describe('describeLinkTarget', () => {

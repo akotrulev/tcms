@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
-import type { PlanStatus, TestPlan } from '../../api/types'
+import type { PermissionKey, PlanStatus, TestPlan } from '../../api/types'
 import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
@@ -46,6 +46,7 @@ function planBody(overrides: Partial<TestPlan> = {}): TestPlan {
   return {
     id: PLAN,
     key: 'TP-4',
+    keySeq: 4,
     name: 'Release 4.4 regression',
     status: 'DRAFT' as PlanStatus,
     milestoneName: null,
@@ -67,10 +68,10 @@ function planBody(overrides: Partial<TestPlan> = {}): TestPlan {
     currentVersionNo: 1,
     lockVersion: 7,
     ...overrides,
-  } as unknown as TestPlan
+  }
 }
 
-function mockReads(plan: TestPlan, permissions: string[] = ['project:read', 'plan:edit']) {
+function mockReads(plan: TestPlan, permissions: PermissionKey[] = ['project:read', 'plan:edit']) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes('/statistics')) {

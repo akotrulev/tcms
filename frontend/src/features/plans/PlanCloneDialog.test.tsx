@@ -19,8 +19,40 @@ import { PlanCloneDialog } from './PlanCloneDialog'
 
 const PROJECT = '11111111-1111-1111-1111-111111111111'
 
+/**
+ * The source plan, spelled out and **not cast** — §79's rule, applied here by §196.
+ *
+ * Three fields is all this dialog reads, and the other nineteen were absent behind an `as TestPlan`
+ * that told the compiler otherwise. The dialog is the *last* screen where that is harmless: the
+ * moment it names something about the plan it is copying — as `CaseCloneDialog` began doing in
+ * §195 — the fixture answers `undefined` where the server always sends a value.
+ */
 function sourcePlan(over: Partial<TestPlan> = {}): TestPlan {
-  return { id: 'plan-1', key: 'TP-3', name: 'Regression 4.3', ...over } as TestPlan
+  return {
+    id: 'plan-1',
+    key: 'TP-3',
+    keySeq: 3,
+    name: 'Regression 4.3',
+    status: 'DRAFT',
+    milestoneName: null,
+    milestoneDate: null,
+    caseCount: 0,
+    passRate: null,
+    coverage: null,
+    description: null,
+    entryCriteria: [],
+    exitCriteria: [],
+    configurations: [],
+    suiteIds: [],
+    caseIds: [],
+    tags: [],
+    sections: [],
+    scopeText: null,
+    outOfScopeText: null,
+    currentVersionNo: 1,
+    lockVersion: 1,
+    ...over,
+  }
 }
 
 function renderDialog(onCloned = vi.fn()) {

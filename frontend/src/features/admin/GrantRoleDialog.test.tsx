@@ -6,6 +6,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { GrantRoleDialog } from './GrantRoleDialog'
 import { heldPermissions } from '../../test/permissions'
+import type { PermissionKey } from '../../api/types'
 
 /**
  * The one dialog whose gate is chosen by its own form state.
@@ -82,7 +83,7 @@ const projects = [
  * dependent gate is that the two answers differ, and a single permission list would let this
  * suite pass while the dialog asked the wrong endpoint.
  */
-function mockReads({ company, project }: { company: string[]; project: string[] }) {
+function mockReads({ company, project }: { company: PermissionKey[]; project: PermissionKey[] }) {
   const read = async (path: string) => {
     if (path.startsWith('/me/permissions')) {
       return path.includes('projectId')

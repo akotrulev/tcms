@@ -42,7 +42,7 @@ function evidence(createdBy: string | null, id = 'e1'): Evidence {
     caption: null,
     createdBy: createdBy === null ? null : person(createdBy),
     createdAt: '2026-07-28T09:14:00Z',
-  } as Evidence
+  }
 }
 
 /**

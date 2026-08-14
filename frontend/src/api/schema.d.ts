@@ -11153,7 +11153,19 @@ export interface components {
             /** Format: date */
             dueDate?: string | null;
             overdue: boolean;
-            assignee?: components["schemas"]["UserRef"];
+            /**
+             * @description Null for work nobody has taken — an execution in a run nobody has divided up,
+             *     a stale case with no owner. `WorkItemView.assignee` is a record component, so
+             *     the key is always present and the value is what carries the answer.
+             *
+             *     **It was a bare `$ref` until §196**, which generates as optional-and-not-null,
+             *     so the one shape this field takes most often was the one the contract could not
+             *     spell. Found from the client end: a board fixture wrote `assignee: null` behind
+             *     an `as WorkItem` cast, and removing the cast is what made the disagreement a
+             *     compile error. Same family as §148 — the contract was wrong and both sides had
+             *     quietly arranged themselves around it.
+             */
+            assignee?: components["schemas"]["UserRef"] | null;
             /** Format: uuid */
             projectId: string;
             projectKey: string;

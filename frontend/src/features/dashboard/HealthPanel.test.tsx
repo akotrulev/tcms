@@ -39,7 +39,7 @@ const dashboard = (partial: Partial<RepositoryDashboard>): RepositoryDashboard =
     },
     recentActivity: [],
     ...partial,
-  }) as RepositoryDashboard
+  })
 
 function renderPanel(data: RepositoryDashboard) {
   return render(

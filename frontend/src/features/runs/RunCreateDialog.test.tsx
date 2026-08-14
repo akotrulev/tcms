@@ -6,6 +6,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { heldPermissions } from '../../test/permissions'
 import { createTestQueryClient } from '../../test/queryClient'
 import { RunCreateDialog } from './RunCreateDialog'
+import type { PermissionKey } from '../../api/types'
 
 /**
  * Starting a run — the dialog that materialises a checklist.
@@ -67,7 +68,7 @@ const caseRows = [
   { id: 'case-2', key: 'TC-2', title: 'Partial refund rounds' },
 ]
 
-function mockPlans(rows: unknown[], held: string[] = []) {
+function mockPlans(rows: unknown[], held: PermissionKey[] = []) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.includes('/plans')) return rows
     // §82. Answered explicitly rather than through the `[]` fallthrough, because the override

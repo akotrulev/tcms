@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { CaseFlake, TestCase } from '../../api/types'
+import type { CaseFlake, PermissionKey, TestCase } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -40,16 +40,55 @@ function flakeRow(over: Partial<CaseFlake> = {}): CaseFlake {
   }
 }
 
+/**
+ * The case the panel hangs off. **Four fields were all this file needed and all it declared**,
+ * behind an `as TestCase` that §196 removed — the panel reads `flake` and nothing else, and the
+ * other thirty-three are here so that the day it reads a thirty-fourth this is a build error rather
+ * than a `undefined` the assertion happens not to look at.
+ */
 function caseBody(flake: CaseFlake | null): TestCase {
   return {
     id: 'c1',
     key: 'TC-1',
+    keySeq: 1,
     title: 'Full refund of a settled card payment succeeds',
+    suiteId: 's1',
+    suiteName: 'Refunds',
+    priority: 'HIGH',
+    lifecycleStatus: 'APPROVED',
+    automationStatus: 'MANUAL',
+    stepFormat: 'STRUCTURED',
+    owner: null,
+    createdBy: null,
+    features: [],
+    tags: [],
+    healthSignals: [],
+    lastResult: null,
+    updatedAt: '2026-07-28T12:00:00Z',
+    attachments: [],
     flake,
-  } as TestCase
+    classificationValueIds: [],
+    description: null,
+    objective: null,
+    expectedOutcome: null,
+    severity: null,
+    estimatedDurationSec: null,
+    automationTags: [],
+    automationKey: null,
+    notAutomatableReason: null,
+    gherkinSource: null,
+    steps: [],
+    preconditions: [],
+    postconditions: [],
+    declinedPreconditions: [],
+    declinedPostconditions: [],
+    relatedDocuments: [],
+    currentVersionNo: 1,
+    lockVersion: 1,
+  }
 }
 
-function mockPermissions(held: string[] = ['case:read', 'case:edit']) {
+function mockPermissions(held: PermissionKey[] = ['case:read', 'case:edit']) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(held)
     return []

@@ -274,6 +274,9 @@ describe('DocPageEditorPage', () => {
  * the field could be read and never authored. A round trip with one end missing.
  */
 describe('DocPageEditorPage — the payload-carrying block types', () => {
+  // Declared and NOT cast, like `page` above — §79's rule, applied here by §196. The `as DocPage`
+  // that used to close these two objects reached the *blocks* as well, which is how both of them
+  // came to be missing the `links` and `coverage` the comment on `page` says arrived in §168.
   const withTable: DocPage = {
     ...page,
     blocks: [
@@ -287,9 +290,11 @@ describe('DocPageEditorPage — the payload-carrying block types', () => {
           ['Tier', 'Daily limit'],
           ['Basic', '1000'],
         ],
+        links: [],
+        coverage: null,
       },
     ],
-  } as DocPage
+  }
 
   const withImage: DocPage = {
     ...page,
@@ -301,6 +306,8 @@ describe('DocPageEditorPage — the payload-carrying block types', () => {
         level: null,
         text: 'The checkout screen',
         attachmentId: 'file-1',
+        links: [],
+        coverage: null,
       },
     ],
     attachments: [
@@ -314,7 +321,7 @@ describe('DocPageEditorPage — the payload-carrying block types', () => {
         uploadedBy: null,
       },
     ],
-  } as DocPage
+  }
 
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -365,9 +372,17 @@ describe('DocPageEditorPage — the payload-carrying block types', () => {
     const withList: DocPage = {
       ...page,
       blocks: [
-        { id: 'block-list', position: 0, blockType: 'list', level: 1, text: 'The refund is partial.' },
+        {
+          id: 'block-list',
+          position: 0,
+          blockType: 'list',
+          level: 1,
+          text: 'The refund is partial.',
+          links: [],
+          coverage: null,
+        },
       ],
-    } as DocPage
+    }
     const patch = vi.spyOn(api, 'patch').mockResolvedValue({ ...withList, currentVersionNo: 4 } as never)
     renderEditor(withList)
 
@@ -398,7 +413,7 @@ describe('DocPageEditorPage — the payload-carrying block types', () => {
     // A block names an attachment the page already owns, so the upload lives on the page's own
     // panel — which owns the size limit, the empty-file refusal and the 413. An upload control
     // here would be a second copy of all three.
-    renderEditor({ ...withImage, attachments: [] } as DocPage)
+    renderEditor({ ...withImage, attachments: [] })
 
     expect(await screen.findByTestId('DocEditor.Block.File.None')).toBeInTheDocument()
   })

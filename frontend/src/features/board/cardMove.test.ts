@@ -34,7 +34,7 @@ function card(partial: Partial<WorkItem> = {}): WorkItem {
     linkedKey: null,
     allowedTransitions: ['IN_PROGRESS', 'DONE'] as WorkItemStatus[],
     ...partial,
-  } as WorkItem
+  }
 }
 
 describe('resolveCardMove — the three ways a drag ends in nothing', () => {

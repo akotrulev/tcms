@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { IngestionJob } from '../../api/types'
+import type { IngestionJob, PermissionKey } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -47,7 +47,7 @@ const JOB: IngestionJob = {
   createdAt: '2026-08-06T09:00:00Z',
 }
 
-function mockApi(permissions: string[], job: IngestionJob = JOB) {
+function mockApi(permissions: PermissionKey[], job: IngestionJob = JOB) {
   return vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes('/ingestions/')) return job

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { TestRunDetail } from '../../api/types'
+import type { PermissionKey, TestRunDetail } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -42,7 +42,7 @@ function runBody(
     name: 'Regression 4.4.0',
     planId: null,
     planKey: null,
-    configuration: { id: 'cfg-1', name: 'Chrome / Linux', isDefault: true, attributes: [] },
+    configuration: { id: 'cfg-1', name: 'Chrome / Linux', isDefault: true, attributes: {} },
     status,
     releaseVersion: '4.4.0',
     buildNumber: null,
@@ -53,13 +53,13 @@ function runBody(
     completedAt: status === 'COMPLETED' || status === 'ABORTED' ? '2026-08-02T10:00:00Z' : null,
     counts: { total: 1, passed: 0, failed: 0, blocked: 0, skipped: 0, notRun: 1 },
     executions: [],
-  } as unknown as TestRunDetail
+  }
 }
 
 function mockReads(
   status: TestRunDetail['status'],
   startedAt: string | null,
-  permissions: string[] = ['project:read', 'run:close', 'result:submit'],
+  permissions: PermissionKey[] = ['project:read', 'run:close', 'result:submit'],
   git: { commitSha: string | null; branch: string | null } = { commitSha: null, branch: null },
 ) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {

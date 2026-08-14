@@ -37,10 +37,13 @@ const suites = [
 ]
 
 /**
- * The two decline lists are spelled out rather than left off, and the `as TestCase` above is why
- * they have to be: the cast makes a required field optional to `tsc`, so the fixture can promise a
- * shape the component then destructures. Omitting them was fine while nothing read them and became
- * a TypeError the moment §195's alert spread them — §38's family, at the fixture end.
+ * The two decline lists used to be spelled out *because* of an `as TestCase` below: the cast made a
+ * required field optional to `tsc`, so the fixture could promise a shape the component then
+ * destructured. Omitting them was fine while nothing read them and became a TypeError the moment
+ * §195's alert spread them — §38's family, at the fixture end.
+ *
+ * **§196 removed the cast**, so every required field is spelled out and none of them is spelled out
+ * by choice any more. The next one the contract adds is a build error on `sourceCase` below.
  */
 function declined(over: Partial<CaseConditionRef> = {}): CaseConditionRef {
   return {
@@ -59,14 +62,43 @@ function sourceCase(over: Partial<TestCase> = {}): TestCase {
   return {
     id: 'case-1',
     key: 'TC-7',
+    keySeq: 7,
     title: 'Full refund of a settled card payment succeeds',
     suiteId: 'suite-1',
     suiteName: 'Payments',
+    priority: 'HIGH',
+    lifecycleStatus: 'APPROVED',
     automationStatus: 'MANUAL',
+    stepFormat: 'STRUCTURED',
+    owner: null,
+    createdBy: null,
+    features: [],
+    tags: [],
+    healthSignals: [],
+    lastResult: null,
+    updatedAt: '2026-08-01T12:00:00Z',
+    attachments: [],
+    flake: null,
+    classificationValueIds: [],
+    description: null,
+    objective: null,
+    expectedOutcome: null,
+    severity: null,
+    estimatedDurationSec: null,
+    automationTags: [],
+    automationKey: null,
+    notAutomatableReason: null,
+    gherkinSource: null,
+    steps: [],
+    preconditions: [],
+    postconditions: [],
     declinedPreconditions: [],
     declinedPostconditions: [],
+    relatedDocuments: [],
+    currentVersionNo: 1,
+    lockVersion: 1,
     ...over,
-  } as TestCase
+  }
 }
 
 function mockReads() {

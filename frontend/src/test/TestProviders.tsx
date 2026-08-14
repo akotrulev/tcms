@@ -52,15 +52,30 @@ export function TestProviders({
 
   if (userId === undefined) return tree
 
-  // Only the `user.id` is populated: nothing under test reads the rest, and filling in a plausible
-  // display name and team list would invite a test to assert against a fixture that no screen
-  // actually receives this way.
+  /*
+    Only the `id` carries meaning — nothing under test reads the rest, and a plausible display name
+    would invite a test to assert against a fixture no screen actually receives this way. So the
+    other four required fields are deliberately *inert* values rather than absent ones.
+
+    They used to be absent, behind an `as CurrentUser` that §196 removed. That cast was the one
+    place in the harness where the session could disagree with `CurrentUser` and nothing would say
+    so: `teams` is a required array, so a component that mapped it would have thrown here on a
+    session the server can never send — and `isSystemAdmin` absent is falsy, which is an *answer*
+    to an authorisation question that nobody wrote down.
+  */
+  const user: CurrentUser = {
+    id: userId,
+    displayName: 'Test user',
+    email: 'test-user@example.test',
+    isSystemAdmin: false,
+    teams: [],
+  }
   const session: AuthValue = {
-    user: { id: userId } as CurrentUser,
+    user,
     status: 'ready',
     // Resolves with the same stub user the provider exposes: `login` returns the signed-in user so
     // the caller can label the credential it offers the password manager.
-    login: async () => ({ id: userId }) as CurrentUser,
+    login: async () => user,
     logout: () => {},
   }
   return <AuthContext value={session}>{tree}</AuthContext>

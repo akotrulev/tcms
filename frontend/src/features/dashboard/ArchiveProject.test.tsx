@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { Project, RepositoryDashboard } from '../../api/types'
+import type { PermissionKey, Project, RepositoryDashboard } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -37,11 +37,11 @@ const LIVE: Project = {
   archived: false,
   caseCount: 12,
   myRole: 'Test Lead',
-} as Project
+}
 
 const RETIRED: Project = { ...LIVE, id: 'p2', key: 'OLD', name: 'Retired Platform', archived: true }
 
-const DASHBOARD = {
+const DASHBOARD: RepositoryDashboard = {
   generatedAt: '2026-08-01T09:00:00Z',
   lifecycle: [],
   health: [],
@@ -56,9 +56,9 @@ const DASHBOARD = {
     coveragePercent: 0,
   },
   recentActivity: [],
-} as unknown as RepositoryDashboard
+}
 
-function mockReads(permissions: string[], project: Project = LIVE, projects: Project[] = [LIVE]) {
+function mockReads(permissions: PermissionKey[], project: Project = LIVE, projects: Project[] = [LIVE]) {
   return vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path === '/projects') return projects

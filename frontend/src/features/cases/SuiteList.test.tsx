@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { Suite } from '../../api/types'
+import type { PermissionKey, Suite } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { SuiteList } from './SuiteList'
@@ -142,7 +142,7 @@ describe('SuiteList — order', () => {
  * The ladder in the rail — §6g's moves, and the three that a target-decides reading gets wrong.
  */
 describe('SuiteList — the status ladder', () => {
-  const withPermissions = (keys: string[]) => {
+  const withPermissions = (keys: PermissionKey[]) => {
     vi.spyOn(api, 'get').mockResolvedValue(heldPermissions(keys, {}, PROJECT) as never)
   }
 

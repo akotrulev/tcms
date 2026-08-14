@@ -100,6 +100,35 @@ function step(position: number, statusId: string | null, comment: string | null 
   }
 }
 
+/**
+ * One execution as `GET …/executions/{id}` serves it — **declared, never cast** (§79's rule,
+ * applied here by §196). The panel reads `steps` and nothing else, and the two fields this used to
+ * carry behind an `as unknown as TestExecution` left the other seventeen absent.
+ */
+function execution(id: string, steps: StepResult[]): TestExecution {
+  return {
+    id,
+    caseId: 'case-1',
+    caseKey: 'TC-1',
+    caseTitle: 'Full refund of a settled card payment succeeds',
+    caseVersionNo: 1,
+    status: null,
+    assignee: null,
+    executedBy: null,
+    executedAt: null,
+    durationMs: null,
+    defects: [],
+    comment: null,
+    releaseVersion: null,
+    stepFormat: 'STRUCTURED',
+    preconditions: [],
+    postconditions: [],
+    steps,
+    evidence: [],
+    lockVersion: 1,
+  }
+}
+
 /** The steps each execution id answers with, keyed by id; anything absent answers `[]`. */
 function mockReads(steps: Record<string, StepResult[]>, options: { stepsFail?: boolean } = {}) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
@@ -107,7 +136,7 @@ function mockReads(steps: Record<string, StepResult[]>, options: { stepsFail?: b
     if (path.includes('/executions/')) {
       if (options.stepsFail) throw new Error('boom')
       const id = path.split('/executions/')[1]
-      return { id, steps: steps[id] ?? [] } as unknown as TestExecution
+      return execution(id, steps[id] ?? [])
     }
     return []
   }) as never)

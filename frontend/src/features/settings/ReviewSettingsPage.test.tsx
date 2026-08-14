@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { ProjectSettings } from '../../api/types'
+import type { PermissionKey, ProjectSettings } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -57,7 +57,7 @@ function settings(overrides: Partial<ProjectSettings> = {}): ProjectSettings {
   each of those was one build error in one place rather than a page of runtime failures with zero
   type errors.
 */
-function mockReads(current: ProjectSettings, permissions: string[] = ['project:settings']) {
+function mockReads(current: ProjectSettings, permissions: PermissionKey[] = ['project:settings']) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions, {}, PROJECT)
     if (path.includes('/settings')) return current

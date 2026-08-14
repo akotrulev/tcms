@@ -6,6 +6,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { RegisterArtifactDialog } from './ArtifactDialogs'
 import { heldPermissions } from '../../test/permissions'
+import type { PermissionKey } from '../../api/types'
 
 /**
  * Registering an artifact — the form whose fields decide what its other fields mean.
@@ -61,7 +62,7 @@ const registered = {
  * and the reason this dialog can disable a control instead of waiting for the server to refuse it.
  */
 function mockPermissions(
-  permissions: string[],
+  permissions: PermissionKey[],
   qualified: Record<string, 'OWN' | 'PLAN_SCOPE'> = {},
 ) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {

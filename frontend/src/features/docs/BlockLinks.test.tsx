@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { BlockLink, DocPage, DocPageSummary } from '../../api/types'
+import type { BlockLink, DocPage, DocPageSummary, PermissionKey } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -26,10 +26,11 @@ const summary: DocPageSummary = {
   id: 'page-1',
   key: 'DOC-1',
   title: 'Refund policy',
+  slug: 'refund-policy',
   parentId: null,
   status: 'PUBLISHED',
   updatedAt: '2026-08-01T00:00:00Z',
-} as DocPageSummary
+}
 
 const link: BlockLink = {
   id: 'link-1',
@@ -59,7 +60,7 @@ function page(links: BlockLink[]): DocPage {
     attachments: [],
     currentVersionNo: 1,
     lockVersion: 1,
-  } as unknown as DocPage
+  }
 }
 
 /**
@@ -69,7 +70,7 @@ function page(links: BlockLink[]): DocPage {
  */
 let served: BlockLink[] = []
 
-function mockReads(keys: string[]) {
+function mockReads(keys: PermissionKey[]) {
   served = []
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(keys)

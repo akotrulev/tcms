@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
-import type { Team } from '../../api/types'
+import type { PermissionKey, Team } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -60,7 +60,7 @@ const ORPHAN: Team = {
   projects: [],
 }
 
-function mockApi(companyPermissions: string[], teams: Team[] = [QA, PAYMENTS]) {
+function mockApi(companyPermissions: PermissionKey[], teams: Team[] = [QA, PAYMENTS]) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) {
       // Company scope: the page's gates all ask `projectId="company"`.

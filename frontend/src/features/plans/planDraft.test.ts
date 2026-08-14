@@ -48,6 +48,7 @@ function planBody(overrides: Partial<TestPlan> = {}): TestPlan {
   return {
     id: 'tp1',
     key: 'TP-4',
+    keySeq: 4,
     name: 'Release 4.4',
     status: 'DRAFT',
     milestoneName: null,
@@ -68,7 +69,7 @@ function planBody(overrides: Partial<TestPlan> = {}): TestPlan {
     currentVersionNo: 1,
     lockVersion: 7,
     ...overrides,
-  } as unknown as TestPlan
+  }
 }
 
 /** A draft with one filled-in case row under `section`, plus the permanent trailing blank. */

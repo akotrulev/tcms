@@ -40,8 +40,9 @@ function block(overrides: Partial<DocBlock> = {}): DocBlock {
     rows: null,
     attachmentId: null,
     links: [],
+    coverage: null,
     ...overrides,
-  } as DocBlock
+  }
 }
 
 function file(overrides: Partial<Attachment> = {}): Attachment {
@@ -54,7 +55,7 @@ function file(overrides: Partial<Attachment> = {}): Attachment {
     uploadedAt: '2026-08-01T09:00:00Z',
     uploadedBy: null,
     ...overrides,
-  } as Attachment
+  }
 }
 
 function renderBlock(one: DocBlock, attachments: Attachment[] = []) {

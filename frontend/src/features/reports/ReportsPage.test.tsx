@@ -5,6 +5,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { heldPermissions } from '../../test/permissions'
 import { createTestQueryClient } from '../../test/queryClient'
 import { ReportsPage } from './ReportsPage'
+import type { PermissionKey } from '../../api/types'
 
 /**
  * The reports screen.
@@ -27,7 +28,7 @@ import { ReportsPage } from './ReportsPage'
 
 const PROJECT = '11111111-1111-1111-1111-111111111111'
 
-function mockReads(held: string[]) {
+function mockReads(held: PermissionKey[]) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.includes('/me/permissions')) return heldPermissions(held, {}, PROJECT)
     if (path.endsWith('/reports')) return []

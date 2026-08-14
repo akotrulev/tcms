@@ -29,14 +29,16 @@ import { DashboardPage } from './DashboardPage'
  * string in `lifecycleVar`.
  */
 
-const PROJECT = {
+const PROJECT: Project = {
   id: 'p1',
   key: 'OLB',
   name: 'Acme Online Banking',
   archived: false,
-} as Project
+  caseCount: 0,
+  myRole: null,
+}
 
-const DASHBOARD = {
+const DASHBOARD: RepositoryDashboard = {
   generatedAt: '2026-08-01T09:00:00Z',
   lifecycle: [
     { key: 'IN_REVIEW', count: 4, severity: 'INFO', filter: { lifecycleStatus: ['IN_REVIEW'] } },
@@ -66,7 +68,7 @@ const DASHBOARD = {
     coveragePercent: 0,
   },
   recentActivity: [],
-} as unknown as RepositoryDashboard
+}
 
 function renderDashboard(dashboard: RepositoryDashboard = DASHBOARD) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
@@ -142,7 +144,7 @@ describe('Dashboard tiles and segments are named from this app’s own catalogue
           filter: { healthSignal: ['SIGNAL_FROM_THE_FUTURE'] },
         },
       ],
-    } as unknown as RepositoryDashboard)
+    })
 
     const tile = await screen.findByTestId('Dashboard.Health.Tile.SIGNAL_FROM_THE_FUTURE')
 

@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { Review, ReviewComment } from '../../api/types'
+import type { PermissionKey, Review, ReviewComment } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -106,7 +106,7 @@ function settings(overrides: Record<string, unknown> = {}) {
 
 function mockReads(
   reviews: Review[],
-  keys: string[],
+  keys: PermissionKey[],
   projectSettings: Record<string, unknown> = settings(),
   /**
    * What the assignment picker is offered.

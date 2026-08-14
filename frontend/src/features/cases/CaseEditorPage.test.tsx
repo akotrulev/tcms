@@ -5,7 +5,7 @@ import { Route, Routes } from 'react-router-dom'
 import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { Condition, StepSuggestion, Suite, TagUsage, TestCase } from '../../api/types'
+import type { Condition, PermissionKey, StepSuggestion, Suite, TagUsage, TestCase } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -36,13 +36,24 @@ import { CaseEditorPage } from './CaseEditorPage'
 
 const PROJECT = 'p1'
 
+/*
+  Declared as `Suite[]` and NOT cast — §79's rule, which the three fixtures below it have stated
+  since §79 and this one broke until §196. The `as Suite` that used to close each element is what
+  let six required fields go missing ten lines above the first statement of the rule.
+*/
 const suites: Suite[] = [
   {
     id: 'suite-1',
+    key: 'TS-1',
     name: 'Refunds',
     caseCount: 3,
+    tagRules: [],
+    caseIds: [],
     lifecycleStatus: 'DRAFT',
-  } as Suite,
+    preconditions: [],
+    postconditions: [],
+    lockVersion: 1,
+  },
 ]
 
 /*
@@ -96,7 +107,62 @@ const projectTags: TagUsage[] = [
   { tag: 'regression', caseCount: 4 },
 ]
 
-function mockReads(permissions: string[] = ['case:create']) {
+/**
+ * A case as `GET …/cases/{id}` serves it — **one complete body for the whole file** (§196).
+ *
+ * The three fixtures that used to stand in for a loaded case each spelled out the fields their own
+ * describe block reads and closed with `as unknown as TestCase`, so between them they were missing
+ * ten, fourteen and thirty-four required fields. None of that was visible: the cast is the third
+ * statement of §79's rule in this file being contradicted by the file itself.
+ *
+ * Everything a test actually asserts on is passed as an override, so a reader still sees the
+ * distinguishing values at the call site. What is here is the ordinary answer for every other
+ * field — and it is what a required field added to `TestCase` now collides with, in one place.
+ */
+function loadedCase(over: Partial<TestCase> = {}): TestCase {
+  return {
+    id: 'c1',
+    key: 'TC-1',
+    keySeq: 1,
+    title: 'A saved case',
+    suiteId: 'suite-1',
+    suiteName: 'Refunds',
+    priority: 'MEDIUM',
+    lifecycleStatus: 'DRAFT',
+    automationStatus: 'MANUAL',
+    stepFormat: 'STRUCTURED',
+    owner: null,
+    createdBy: null,
+    features: [],
+    tags: [],
+    healthSignals: [],
+    lastResult: null,
+    updatedAt: '2026-08-01T12:00:00Z',
+    attachments: [],
+    flake: null,
+    classificationValueIds: [],
+    description: null,
+    objective: null,
+    expectedOutcome: null,
+    severity: 'MEDIUM',
+    estimatedDurationSec: null,
+    automationTags: [],
+    automationKey: null,
+    notAutomatableReason: null,
+    gherkinSource: null,
+    steps: [],
+    preconditions: [],
+    postconditions: [],
+    declinedPreconditions: [],
+    declinedPostconditions: [],
+    relatedDocuments: [],
+    currentVersionNo: 1,
+    lockVersion: 1,
+    ...over,
+  }
+}
+
+function mockReads(permissions: PermissionKey[] = ['case:create']) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions, {}, PROJECT)
     if (path.includes('/step-suggestions')) return corpus
@@ -254,7 +320,7 @@ describe('CaseEditorPage — what reaches the API', () => {
     mockReads()
     const post = vi
       .spyOn(api, 'post')
-      .mockResolvedValue({ id: 'c1', key: 'TC-1', currentVersionNo: 1 } as unknown as TestCase)
+      .mockResolvedValue(loadedCase({ currentVersionNo: 1 }))
     renderEditor()
 
     await fillHeader(user)
@@ -299,7 +365,7 @@ describe('CaseEditorPage — tags and the unfiled case (§96)', () => {
     mockReads()
     const post = vi
       .spyOn(api, 'post')
-      .mockResolvedValue({ id: 'c1', key: 'TC-1', currentVersionNo: 1 } as unknown as TestCase)
+      .mockResolvedValue(loadedCase({ currentVersionNo: 1 }))
     renderEditor()
 
     await fillHeader(user)
@@ -329,7 +395,7 @@ describe('CaseEditorPage — tags and the unfiled case (§96)', () => {
     mockReads()
     const post = vi
       .spyOn(api, 'post')
-      .mockResolvedValue({ id: 'c1', key: 'TC-1', currentVersionNo: 1 } as unknown as TestCase)
+      .mockResolvedValue(loadedCase({ currentVersionNo: 1 }))
     renderEditor()
 
     await fillHeader(user)
@@ -383,7 +449,7 @@ describe('CaseEditorPage — tags and the unfiled case (§96)', () => {
     mockReads()
     const post = vi
       .spyOn(api, 'post')
-      .mockResolvedValue({ id: 'c1', key: 'TC-1', currentVersionNo: 1 } as unknown as TestCase)
+      .mockResolvedValue(loadedCase({ currentVersionNo: 1 }))
     renderEditor()
 
     await fillHeader(user)
@@ -402,7 +468,7 @@ describe('CaseEditorPage — tags and the unfiled case (§96)', () => {
     mockReads()
     const post = vi
       .spyOn(api, 'post')
-      .mockResolvedValue({ id: 'c1', key: 'TC-1', currentVersionNo: 1 } as unknown as TestCase)
+      .mockResolvedValue(loadedCase({ currentVersionNo: 1 }))
     renderEditor()
 
     await user.type(screen.getByTestId('CaseEditor.Field.Title'), 'Unfiled for now')
@@ -667,31 +733,18 @@ describe('CaseEditorPage — conditions', () => {
 describe('the draft buffer', () => {
   const EXISTING_CASE = 'c-42'
 
-  const savedCase = {
+  const savedCase = loadedCase({
     id: EXISTING_CASE,
     key: 'TC-42',
+    keySeq: 42,
     title: 'The saved title',
-    suiteId: 'suite-1',
     objective: 'What the server has stored',
-    description: null,
-    expectedOutcome: null,
-    priority: 'MEDIUM',
-    severity: 'MEDIUM',
-    automationStatus: 'MANUAL',
-    automationKey: null,
-    notAutomatableReason: null,
-    estimatedDurationSec: null,
-    stepFormat: 'STRUCTURED',
-    gherkinSource: null,
-    steps: [{ id: 's1', keyword: null, action: 'A saved step', testData: null, expectedResult: null }],
-    classificationValueIds: [],
-    preconditions: [],
-    postconditions: [],
-    tags: [],
+    steps: [
+      { id: 's1', position: 0, keyword: null, action: 'A saved step', testData: null, expectedResult: null },
+    ],
     lockVersion: 3,
     currentVersionNo: 2,
-    lifecycleStatus: 'DRAFT',
-  } as unknown as TestCase
+  })
 
   /** A buffered draft, as `GET …/draft` serves it. */
   function draft(overrides: Record<string, unknown> = {}) {
@@ -866,26 +919,15 @@ describe('CaseEditorPage — declining an inherited condition (§187)', () => {
   const CASE_ID = 'c-187'
 
   /** SECOND is attached at the folder; the case declines nothing yet. */
-  const inheritedCase = {
+  const inheritedCase = loadedCase({
     id: CASE_ID,
     key: 'TC-187',
     keySeq: 187,
     title: 'Log in with a bad password',
-    suiteId: 'suite-1',
     suiteName: 'Payments',
-    objective: null,
-    description: null,
-    expectedOutcome: null,
-    priority: 'MEDIUM',
-    severity: 'MEDIUM',
-    automationStatus: 'MANUAL',
-    automationKey: null,
-    notAutomatableReason: null,
-    estimatedDurationSec: null,
-    stepFormat: 'STRUCTURED',
-    gherkinSource: null,
-    steps: [{ id: 's1', keyword: null, action: 'Open the login page', testData: null, expectedResult: null }],
-    classificationValueIds: [],
+    steps: [
+      { id: 's1', position: 0, keyword: null, action: 'Open the login page', testData: null, expectedResult: null },
+    ],
     preconditions: [
       {
         id: 'attach-1',
@@ -898,21 +940,16 @@ describe('CaseEditorPage — declining an inherited condition (§187)', () => {
         inheritedFrom: 'Payments',
       },
     ],
-    postconditions: [],
-    declinedPreconditions: [],
-    declinedPostconditions: [],
-    tags: [],
     lockVersion: 3,
     currentVersionNo: 2,
-    lifecycleStatus: 'DRAFT',
-  } as unknown as TestCase
+  })
 
   /** The same case with the attachment already declined — what a reload serves after a save. */
-  const declinedCase = {
+  const declinedCase: TestCase = {
     ...inheritedCase,
     preconditions: [],
     declinedPreconditions: inheritedCase.preconditions,
-  } as unknown as TestCase
+  }
 
   function mockDeclineReads(theCase: TestCase) {
     vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
@@ -1072,8 +1109,19 @@ describe('CaseEditorPage — moving a case out of the folder it declines (§194)
   const CASE_ID = 'c-194'
 
   const moveSuites: Suite[] = [
-    { id: 'suite-1', name: 'Refunds', caseCount: 3, lifecycleStatus: 'DRAFT' } as Suite,
-    { id: 'suite-2', name: 'Chargebacks', caseCount: 1, lifecycleStatus: 'DRAFT' } as Suite,
+    suites[0],
+    {
+      id: 'suite-2',
+      key: 'TS-2',
+      name: 'Chargebacks',
+      caseCount: 1,
+      tagRules: [],
+      caseIds: [],
+      lifecycleStatus: 'DRAFT',
+      preconditions: [],
+      postconditions: [],
+      lockVersion: 1,
+    },
   ]
 
   /** The declined row, as the server serves it: on `declinedPreconditions`, not `preconditions`. */
@@ -1089,42 +1137,25 @@ describe('CaseEditorPage — moving a case out of the folder it declines (§194)
   }
 
   /** Filed in Refunds, declining the one rule Refunds imposes. */
-  const declining = {
+  const declining = loadedCase({
     id: CASE_ID,
     key: 'TC-194',
     keySeq: 194,
     title: 'Log in with a bad password',
-    suiteId: 'suite-1',
-    suiteName: 'Refunds',
-    objective: null,
-    description: null,
-    expectedOutcome: null,
-    priority: 'MEDIUM',
-    severity: 'MEDIUM',
-    automationStatus: 'MANUAL',
-    automationKey: null,
-    notAutomatableReason: null,
-    estimatedDurationSec: null,
-    stepFormat: 'STRUCTURED',
-    gherkinSource: null,
-    steps: [{ id: 's1', keyword: null, action: 'Open the login page', testData: null, expectedResult: null }],
-    classificationValueIds: [],
-    preconditions: [],
-    postconditions: [],
+    steps: [
+      { id: 's1', position: 0, keyword: null, action: 'Open the login page', testData: null, expectedResult: null },
+    ],
     declinedPreconditions: [declinedRow],
-    declinedPostconditions: [],
-    tags: [],
     lockVersion: 3,
     currentVersionNo: 2,
-    lifecycleStatus: 'DRAFT',
-  } as unknown as TestCase
+  })
 
   /** The same case with the rule in force — a move costs it nothing. */
-  const notDeclining = {
+  const notDeclining: TestCase = {
     ...declining,
     preconditions: [declinedRow],
     declinedPreconditions: [],
-  } as unknown as TestCase
+  }
 
   function mockMoveReads(theCase: TestCase) {
     vi.spyOn(api, 'get').mockImplementation((async (path: string) => {

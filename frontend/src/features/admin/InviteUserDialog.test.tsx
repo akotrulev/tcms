@@ -6,6 +6,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { InviteUserDialog } from './InviteUserDialog'
 import { heldPermissions } from '../../test/permissions'
+import type { PermissionKey } from '../../api/types'
 
 /**
  * Inviting a colleague — the write that gets a second person into the company at all.
@@ -35,7 +36,7 @@ const invited = {
 }
 
 /** The gate reads `company:members` at company scope, and nothing else here reads anything. */
-function mockPermissions(permissions: string[]) {
+function mockPermissions(permissions: PermissionKey[]) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions, {}, null)
     throw new Error(`unmocked read: ${path}`)

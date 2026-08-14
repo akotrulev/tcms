@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
-import type { DocPage, TestPlan } from '../../api/types'
+import type { DocPage, PermissionKey, TestPlan } from '../../api/types'
 import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
@@ -35,6 +35,7 @@ function planBody(): TestPlan {
   return {
     id: PLAN,
     key: 'TP-4',
+    keySeq: 4,
     name: 'Release 4.4 regression',
     status: 'DRAFT',
     milestoneName: null,
@@ -54,7 +55,7 @@ function planBody(): TestPlan {
     outOfScopeText: null,
     currentVersionNo: 1,
     lockVersion: 7,
-  } as unknown as TestPlan
+  }
 }
 
 const PAGES = [
@@ -63,7 +64,7 @@ const PAGES = [
   { id: 'dp2', key: 'DOC-2', title: 'Refunds v2 requirements', subjectType: 'TEST_PLAN', subjectId: 'tp-other' },
 ]
 
-const LINKED_PAGE = {
+const LINKED_PAGE: DocPage = {
   id: 'dp1',
   key: 'DOC-1',
   title: 'Payments v4 requirements',
@@ -76,15 +77,32 @@ const LINKED_PAGE = {
   lockVersion: 2,
   updatedAt: '2026-08-01T09:00:00Z',
   blocks: [
-    { id: 'b1', blockType: 'heading', level: 1, text: 'Scope of the change', links: [] },
-    { id: 'b2', blockType: 'paragraph', level: null, text: 'Refunds move to the new ledger.', links: [] },
+    {
+      id: 'b1',
+      position: 0,
+      blockType: 'heading',
+      level: 1,
+      text: 'Scope of the change',
+      links: [],
+      coverage: null,
+    },
+    {
+      id: 'b2',
+      position: 1,
+      blockType: 'paragraph',
+      level: null,
+      text: 'Refunds move to the new ledger.',
+      links: [],
+      coverage: null,
+    },
   ],
-} as unknown as DocPage
+  attachments: [],
+}
 
 /**
  * @param document what `GET /plans/{id}/document` answers — a page, or a 404 for a plan with none.
  */
-function mockReads(document: DocPage | null, permissions: string[] = ['project:read', 'doc:edit']) {
+function mockReads(document: DocPage | null, permissions: PermissionKey[] = ['project:read', 'doc:edit']) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes(`/plans/${PLAN}/document`)) {

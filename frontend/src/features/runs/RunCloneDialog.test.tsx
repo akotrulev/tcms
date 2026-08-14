@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
-import type { TestRun } from '../../api/types'
+import type { PermissionKey, TestRun } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -33,13 +33,23 @@ function sourceRun(over: Partial<TestRun> = {}): TestRun {
     id: 'run-1',
     key: 'TR-7',
     name: 'Regression 4.3.0',
+    planId: null,
+    planKey: null,
+    configuration: { id: 'cfg-1', name: 'Chrome / Linux', isDefault: true, attributes: {} },
+    status: 'COMPLETED',
     releaseVersion: '4.3.0',
     buildNumber: '4470',
+    commitSha: null,
+    branch: null,
+    source: 'MANUAL',
+    startedAt: '2026-08-01T09:00:00Z',
+    completedAt: '2026-08-01T17:00:00Z',
+    counts: { passed: 0, failed: 0, blocked: 0, skipped: 0, notRun: 0, total: 0 },
     ...over,
-  } as TestRun
+  }
 }
 
-function mockPermissions(held: string[] = []) {
+function mockPermissions(held: PermissionKey[] = []) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.includes('/me/permissions')) return heldPermissions(held, {}, PROJECT)
     return []

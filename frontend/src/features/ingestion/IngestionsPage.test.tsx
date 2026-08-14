@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { AutomationMapping, IngestionJobSummary } from '../../api/types'
+import type { AutomationMapping, IngestionJobSummary, PermissionKey } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -70,7 +70,7 @@ const ORPHANED: AutomationMapping = {
   caseKey: null,
 }
 
-function mockApi(permissions: string[], jobs: IngestionJobSummary[] = [MATCHED, NO_RUN, DELETED_RUN]) {
+function mockApi(permissions: PermissionKey[], jobs: IngestionJobSummary[] = [MATCHED, NO_RUN, DELETED_RUN]) {
   return vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes('/ingestions')) return jobs

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
-import type { ClassificationDimension } from '../../api/types'
+import type { ClassificationDimension, PermissionKey } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -68,7 +68,7 @@ const dimensions: ClassificationDimension[] = [
  * Answering the same array to both is the shortcut roles spec §A3 records rejecting, and a mock
  * that did it here would make every assertion below pass whichever permission the page asked for.
  */
-function mockApi(onProject: string[], inCompany: string[]) {
+function mockApi(onProject: PermissionKey[], inCompany: PermissionKey[]) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions?')) return heldPermissions(onProject, {}, PROJECT)
     if (path.startsWith('/me/permissions')) return heldPermissions(inCompany, {}, null)
