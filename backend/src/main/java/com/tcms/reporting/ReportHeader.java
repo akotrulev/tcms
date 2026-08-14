@@ -81,7 +81,7 @@ public record ReportHeader(
      *
      * <p>Derived here rather than in each renderer, so three formats cannot print three different
      * subsets of it — and so {@link #selection()} is appended in one place with one label. The
-     * {@code ReportHeaderTest} check that every component of this record reaches the rendered
+     * {@code ReportRenderingTest} check that every component of this record reaches the rendered
      * output goes through this method, which is what makes a new field a failing test rather than a
      * field nobody prints.
      */

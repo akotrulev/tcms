@@ -94,7 +94,7 @@ public class ApiTokenAuthenticationFilter extends OncePerRequestFilter {
     private final ApiTokenAuthenticationService authentication;
 
     /**
-     * The application clock, not {@code Instant.now()} — §60's rule, and {@code ArchitectureTest}
+     * The application clock, not {@code Instant.now()} — §60's rule, and {@code ArchitectureRulesTest}
      * enforces it. The pair below is never compared against anything, but a second time source in
      * the codebase is exactly how the microsecond defect got in.
      */

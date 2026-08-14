@@ -17,7 +17,7 @@ package com.tcms.storage;
  * that actually mattered.
  *
  * <p><strong>{@link #name()} is the column value.</strong> The constants are therefore spelled
- * exactly as {@code V39}'s {@code CHECK} spells them, and {@code AttachmentOwnerTest} asserts the
+ * exactly as {@code V39}'s {@code CHECK} spells them, and {@code CaseAttachmentEndpointTest} asserts the
  * two sets are equal by reading the constraint out of the live database — the §120 rule that a
  * catalogue-wide invariant needs a computed check rather than a careful reading. Adding a value here
  * without a migration, or a value there without a factory, fails the build.

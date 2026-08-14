@@ -125,6 +125,30 @@
  * the mock layer is deleted and cannot come back, so a permanent scanner for the word would be
  * guarding a closed door, and this repository has already paid for an ignore list naming the wrong
  * mechanism (§162's `CONTAINER_ERROR_PATH`).
+ *
+ * ## A class named as a check is the same claim again, and the biggest population of the three
+ *
+ * {@link JAVADOC_TEST_CLASS} takes `{@code SomethingTest}`, appends the extension, and asks the
+ * filesystem for the file that would declare it. **Eight of sixty-five did not resolve** — more than both path halves found
+ * together, in the corpus where a comment names the check that guards it most often.
+ *
+ * Six were a name that had drifted: `ArchitectureTest` for `ArchitectureRulesTest`,
+ * `PlanStatisticsTest` for `PlanStatisticsEndpointTest`, `AttachmentOwnerTest` for the assertion
+ * inside `CaseAttachmentEndpointTest`, `ReportHeaderTest` for `ReportRenderingTest`,
+ * ~~FilesystemEvidenceStoreTest~~ for a file renamed in §125, and `ApiSurfaceTest` — twice — for a
+ * guarantee that belongs to **Spring**, which refuses to build an ambiguous mapping at all. That
+ * last one is the interesting kind: a framework property written as a local check, so a reader
+ * looking for the test that enforces it finds nothing and concludes nothing does.
+ *
+ * One was `UnmatchedTest`, a contract schema and not a class at all — the entry below.
+ *
+ * **And one was §205's shape exactly.** `AggregateExecutionReport.WORST_FIRST` said it was *"pinned
+ * by ~~AggregateExecutionPolicyTest~~ against `StatusKind`'s own value set so a kind added to the
+ * product cannot silently fall through to the `ELSE` and rank as the best possible result"*. No
+ * class of that name has ever existed and nothing else made that comparison, so the sentence was
+ * the entire pin: a `StatusKind` added and forgotten would rank as the best result a case can have,
+ * silently, in the callout whose whole job is naming the worst. `StatusKind` has grown a member
+ * before. The check exists as of §206, in the class the comment names.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -186,19 +210,61 @@ const BACKTICKED = new RegExp('`' + PATH + '`', 'g');
  */
 const JAVADOC_CODE = new RegExp('\\{@code\\s+' + PATH + '\\}', 'g');
 
+/**
+ * `{@code SomethingTest}` — a Java class named as a check, resolved against the file that would
+ * declare it.
+ *
+ * A class is not a path, so this is a third pattern rather than a branch of {@link PATH}: the
+ * citation is `SuiteScopeAgreementTest` and what has to exist is the file declaring it, so the
+ * extension is appended before the lookup. Anywhere in the repository — a Java class's file
+ * lives at a path determined by its package, and this rule is not the place to re-implement that.
+ *
+ * **Only `*Test`, and the boundary is the point.** 739 class-shaped `{@code}` tokens occur in
+ * `backend/src` and 392 of them name nothing in this repository — enum constants (`ABORTED`), SQL
+ * keywords (`CASE`, `DISTINCT`), migrations (`V26`), contract schemas (`TestCaseSummary`), JDK and
+ * Spring types (`HttpHeaders`, `ProblemDetail`). A rule over all of them needs an ignore list
+ * bigger than the finding, which is the shape that gets a check silenced rather than fixed.
+ *
+ * `*Test` is the tractable subset for a reason that is not convenience: **it is the subset where
+ * `{@link}` is impossible.** Test classes are not on `src/main`'s compile classpath, so a javadoc
+ * in `main` that wants to name the check guarding it *cannot* use the checked form — and this
+ * repository names its checks from the code they guard constantly. That is precisely a population
+ * of references the compiler is structurally unable to see, which is the same argument the header
+ * makes for `{@code}` over `{@link}`, one turn tighter.
+ *
+ * It found eight of sixty-five, and one of them was not a name at all — see
+ * {@link CITED_BUT_ABSENT_BY_DECISION}.
+ */
+const JAVADOC_TEST_CLASS = /\{@code\s+([A-Z][A-Za-z0-9]*Test)\}/g;
+
 /** Where comments are read from. Generated files are not in it — see the header. */
-const CORPUS: { root: string; extensions: string[]; skip: string[]; patterns: RegExp[] }[] = [
+type Pattern = {
+  /** Captures the cited name in group 1. */
+  find: RegExp;
+  /**
+   * Appended before the name is looked up, so a class citation resolves to the file that declares
+   * it. Empty for the patterns that already capture a path.
+   */
+  suffix: string;
+};
+
+const CITED_PATH = { find: BACKTICKED, suffix: '' };
+const CITED_PATH_IN_JAVADOC = { find: JAVADOC_CODE, suffix: '' };
+const CITED_TEST_CLASS = { find: JAVADOC_TEST_CLASS, suffix: '.java' };
+
+/** Where comments are read from. Generated files are not in it — see the header. */
+const CORPUS: { root: string; extensions: string[]; skip: string[]; patterns: Pattern[] }[] = [
   {
     root: 'packages',
     extensions: ['.ts'],
     skip: ['packages/client/src/schema.ts'],
-    patterns: [BACKTICKED],
+    patterns: [CITED_PATH],
   },
   {
     root: 'frontend/src',
     extensions: ['.ts', '.tsx'],
     skip: ['frontend/src/api/schema.d.ts'],
-    patterns: [BACKTICKED],
+    patterns: [CITED_PATH],
   },
   /*
     The directory rather than `openapi.yaml` alone, for `build.gradle.kts`'s reason one stack over: a
@@ -209,7 +275,7 @@ const CORPUS: { root: string; extensions: string[]; skip: string[]; patterns: Re
     root: 'docs/specs',
     extensions: ['.yaml', '.yml'],
     skip: [],
-    patterns: [BACKTICKED],
+    patterns: [CITED_PATH],
   },
   /*
     `backend/src`, both source sets: a test's javadoc argues from the same files a main one does, and
@@ -219,7 +285,7 @@ const CORPUS: { root: string; extensions: string[]; skip: string[]; patterns: Re
     root: 'backend/src',
     extensions: ['.java'],
     skip: [],
-    patterns: [BACKTICKED, JAVADOC_CODE],
+    patterns: [CITED_PATH, CITED_PATH_IN_JAVADOC, CITED_TEST_CLASS],
   },
 ];
 
@@ -277,6 +343,11 @@ const CITED_BUT_ABSENT_BY_DECISION: Record<string, string> = {
     + 'output, exists only after `npm run build`, and is absent on a fresh checkout. Cited by both '
     + '`harness.ts` copies for where the compiled entry point a spawned CLI runs comes from. The '
     + 'entry says the scanner cannot see it, not that it is missing.',
+  'UnmatchedTest.java':
+    'NOT A CLASS — a contract schema whose name happens to end in Test, cited by `UnmatchedTestView` '
+    + 'and saying so in the same sentence ("in `docs/specs/openapi.yaml`"). The `*Test` pattern '
+    + 'cannot tell a JUnit class from a noun phrase about a test that could not be placed, and '
+    + 'narrowing the regex to exclude it would exclude real classes too.',
   'src/mocks/':
     'Deleted with the whole mock layer on 2026-08-06 (§107), and `ContractParameterBindingTest` '
     + 'names it because the deletion is what removed the last legitimate reason for a declared '
@@ -317,9 +388,9 @@ describe('a file a comment names', () => {
         + 'has paired with the next span instead',
     ).toBeLessThan(0.4);
 
-    return corpus.patterns.flatMap((pattern) => [...text.matchAll(pattern)]
+    return corpus.patterns.flatMap((pattern) => [...text.matchAll(pattern.find)]
       .filter((match) => !struck.some((span) => match.index >= span.from && match.index < span.to))
-      .map((match) => ({ path, root: corpus.root, name: match[1] ?? '' })));
+      .map((match) => ({ path, root: corpus.root, name: `${match[1] ?? ''}${pattern.suffix}` })));
   }));
 
   it('reads every corpus, and finds citations in each', () => {

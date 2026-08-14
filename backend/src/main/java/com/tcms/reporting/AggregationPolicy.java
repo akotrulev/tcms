@@ -25,7 +25,7 @@ import java.util.Optional;
  * {@code api} only if the <em>contract</em> defines it and more than one module serves it. The
  * contract does define {@code AggregationPolicy}, but this module and {@code execution} do not
  * <em>serve</em> one shape — they each own a vocabulary that must stay equal, which is what
- * {@code AggregateExecutionPolicyTest} pins. Moving it would make one module's enum the other's,
+ * {@code AggregateExecutionCrossCheckTest} pins. Moving it would make one module's enum the other's,
  * and the cross-check below would then compare a thing to itself.
  *
  * <p><strong>What is duplicated is the vocabulary. What is NOT duplicated is the algorithm</strong>,
@@ -37,7 +37,7 @@ import java.util.Optional;
  * <em>each other</em> rather than against literals.
  *
  * <p><strong>Four values and no more.</strong> A value added to one copy and not the other is a
- * report that silently refuses a policy the plan page offers, so {@code AggregateExecutionPolicyTest}
+ * report that silently refuses a policy the plan page offers, so {@code AggregateExecutionCrossCheckTest}
  * pins the two name sets equal — the check that makes a duplicated enum survivable, since nothing
  * else in the build can see that these two files are supposed to be the same list. It earned its
  * keep on 2026-08-07: {@code BEST} was removed (plan §8 #47) and that check is what makes removing

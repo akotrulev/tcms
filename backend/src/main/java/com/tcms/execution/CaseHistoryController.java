@@ -30,7 +30,9 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>No mapping collides with {@code repository.CaseController}: it owns
  * {@code /cases}, {@code /cases/{caseId}}, {@code /versions}, and the three writes, and declares
  * nothing under {@code /history}. Two controllers may share a prefix; only an identical pattern is
- * ambiguous, and {@code ApiSurfaceTest} would fail the context if one ever became so.
+ * ambiguous, and if one ever became so <strong>Spring refuses to build the mapping at all</strong>
+ * — every context test fails, not one dedicated check. See {@code SuiteHistoryController}, which
+ * carried the same sentence naming the same ~~ApiSurfaceTest~~ (§206).
  *
  * <p>404, never 403, on the read — an absent case, one in another company, one in a sibling project,
  * one soft-deleted, and a project the caller holds no grant on all collapse into an empty

@@ -23,8 +23,10 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>No mapping collides with {@code repository.SuiteController}: it owns {@code /suites},
  * {@code /suites/{suiteId}} and the two writes, and declares nothing under {@code /history}. Two
- * controllers may share a prefix; only an identical pattern is ambiguous, and {@code ApiSurfaceTest}
- * would fail the context if one ever became so.
+ * controllers may share a prefix; only an identical pattern is ambiguous, and if one ever became so
+ * <strong>Spring refuses to build the mapping at all</strong> — so every test that boots the
+ * context fails, not one dedicated check. ~~ApiSurfaceTest~~ named a class that has never existed
+ * and made a framework guarantee read as a local one (§206).
  *
  * <p><strong>No query parameters, and one was deleted from the contract to keep it that way.</strong>
  * A {@code versionNo} filter had been declared here since the first draft and nothing ever sent it;

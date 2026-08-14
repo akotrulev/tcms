@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
  *
  * <h2>The clock is the injected one</h2>
  *
- * <p>§60's rule ({@code ArchitectureTest} enforces it): one time source, injected, never
+ * <p>§60's rule ({@code ArchitectureRulesTest} enforces it): one time source, injected, never
  * {@code Instant.now()} at a call site. A monotonic source — {@code System.nanoTime} — is the
  * textbook choice for measuring an interval and is deliberately not used here: it cannot be
  * advanced from a test, so every assertion about refill would become a {@code Thread.sleep}, and a

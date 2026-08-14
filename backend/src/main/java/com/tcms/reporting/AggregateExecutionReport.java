@@ -110,13 +110,16 @@ class AggregateExecutionReport implements ReportComputation {
      * {@code CASE}.
      *
      * <p>Duplicated for the same reason the enum above it is, and pinned by
-     * {@code AggregateExecutionPolicyTest} against {@code StatusKind}'s own value set so a kind
+     * {@code AggregateExecutionCrossCheckTest} against {@code StatusKind}'s own value set so a kind
      * added to the product cannot silently fall through to the {@code ELSE} and rank as the best
-     * possible result. The ranking itself is argued in {@code PlanStatisticsService}: blocked is
+     * possible result. ~~AggregateExecutionPolicyTest~~ is what this said until §206, and no class
+     * of that name has ever existed: the pin was a sentence. It is a test as of §206 — which is why
+     * this field is package-private rather than {@code private}, the one change that costs anything.
+     * The ranking itself is argued in {@code PlanStatisticsService}: blocked is
      * worse than owed a verdict, retest worse than never touched, skipped better than either
      * because skipping is a decision.
      */
-    private static final List<StatusKind> WORST_FIRST = List.of(
+    static final List<StatusKind> WORST_FIRST = List.of(
             StatusKind.FAILED,
             StatusKind.BLOCKED,
             StatusKind.RETEST,

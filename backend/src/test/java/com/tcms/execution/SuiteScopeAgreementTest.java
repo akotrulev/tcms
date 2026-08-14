@@ -40,7 +40,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * equivalent, which makes this class stricter, not redundant.
  *
  * <p>So the drift has to be caught by a test rather than prevented by sharing code. That is the
- * same device {@code PlanStatisticsTest} uses for the three plan-scope expansions, and the failure
+ * same device {@code PlanStatisticsEndpointTest} uses for the three plan-scope expansions, and the failure
  * it guards against is silent in the worst possible way: a plan scoped on a tag-defined suite would
  * create a run of <em>fewer cases than the suite holds</em>, reported as a successful run covering
  * a plan, with two screens each showing a plausible number and neither identifiable as the wrong

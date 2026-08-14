@@ -21,7 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
  * exercising it through an endpoint would prove the endpoint works without ever saying which half
  * refused — which is the half that matters here.
  *
- * <h2>It was {@code FilesystemEvidenceStoreTest}, and it was the only test either adapter had</h2>
+ * <h2>It was ~~FilesystemEvidenceStoreTest~~, and it was the only test either adapter had</h2>
  *
  * <p>{@code FilesystemReportStore} carried the identical body and the identical traversal check,
  * written twice, and <strong>nothing had ever asserted that the second copy refuses anything</strong>

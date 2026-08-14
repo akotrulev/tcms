@@ -147,7 +147,7 @@ class CaseFacts {
      * duplicated predicate for a dependency the architecture test refuses. So the two are kept
      * honest by a test rather than by sharing code: {@code SuiteScopeAgreementTest} asserts both
      * resolutions answer the same set over one fixture — the same device
-     * {@code PlanStatisticsTest} uses for the three expansions below.
+     * {@code PlanStatisticsEndpointTest} uses for the three expansions below.
      *
      * <p><strong>§98 removed the subtree and the correction to the plan that came with it.</strong>
      * The predicate used to wrap all three arms in {@code EXISTS (SELECT 1 FROM suite d … d.path <@
@@ -494,7 +494,7 @@ class CaseFacts {
      * and this returns its rows. A plan whose statistics said "312 cases" while its own detail said
      * 307 would have two numbers on two screens with nothing to identify the wrong one, which is
      * exactly the defect §32 found on the suite tree. Kept adjacent so the predicate cannot drift;
-     * {@code PlanStatisticsTest} asserts the two agree over the same fixture.
+     * {@code PlanStatisticsEndpointTest} asserts the two agree over the same fixture.
      *
      * <p>Ordered by {@code key_seq} for {@link #caseIdsInPlanScope}'s reason — a not-run list is read
      * as a work list, and {@code TC-10000} sorts before {@code TC-9999} as text.

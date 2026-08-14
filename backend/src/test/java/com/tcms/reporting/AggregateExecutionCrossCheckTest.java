@@ -7,6 +7,7 @@ import com.tcms.execution.PlanStatisticsService;
 import com.tcms.execution.PlanStatisticsView;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectRepository;
+import com.tcms.project.StatusKind;
 import com.tcms.tenancy.Company;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.CompanyRepository;
@@ -255,6 +256,37 @@ class AggregateExecutionCrossCheckTest extends IntegrationTestBase {
                 + reported.getOrDefault("WIP", 0L);
         assertThat(nonVerdicts)
                 .as("not-run, under %s", policy).isEqualTo(plan.counts().notRun());
+    }
+
+    /**
+     * The severity ladder names every {@link StatusKind}, so nothing can fall through to the
+     * {@code ELSE}.
+     *
+     * <p><strong>This class was named as the thing that pins it and did not pin it.</strong>
+     * {@code AggregateExecutionReport.WORST_FIRST}'s javadoc said it was *"pinned by
+     * ~~AggregateExecutionPolicyTest~~ against {@code StatusKind}'s own value set"* — a class that
+     * has never existed, found by §206's rule reading {@code {@code}} citations. Everything else in
+     * this file compares two implementations of one rule; this compares one implementation against
+     * the vocabulary it claims to cover, which nothing did.
+     *
+     * <p>The failure it prevents is the one the comment describes and is worth restating, because
+     * it is silent: {@code WORST_FIRST} becomes a SQL {@code CASE} whose {@code ELSE} is the
+     * best-possible rank. A kind added to {@code StatusKind} and forgotten here does not error —
+     * it ranks as the <em>best</em> result a case has, so the worst-first callout starts reporting
+     * green for the rows that carry it. {@code StatusKind} has grown a member before —
+     * {@code WIP}, seeded by {@code V32}.
+     *
+     * <p>No Spring, no fixture, no transaction: it is two lists. It sits in this class rather than
+     * in a new one because this is the class the comment names, and a check nobody can find from
+     * the code it guards is the shape §206 exists to end.
+     */
+    @Test
+    @DisplayName("the severity ladder covers every StatusKind — nothing reaches the ELSE")
+    void theLadderNamesEveryKind() {
+        assertThat(AggregateExecutionReport.WORST_FIRST)
+                .as("every StatusKind must be ranked, or it falls through the SQL CASE to the "
+                        + "best-possible rank and the worst-first callout under-reports it")
+                .containsExactlyInAnyOrder(StatusKind.values());
     }
 
     @org.junit.jupiter.api.Nested
