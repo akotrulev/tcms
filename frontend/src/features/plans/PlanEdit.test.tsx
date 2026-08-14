@@ -10,6 +10,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { aProject, planStatistics, projectSettings } from '../../test/fixtures'
 import { PlanStatisticsPage } from './PlanStatisticsPage'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The plan editor — **the affordance behind two columns that had no writer at all until §74**.
@@ -263,6 +264,8 @@ describe('the Plan tab', () => {
   })
 
   it('renders a field error on the control it names', async () => {
+    // The refused write is the subject: this asserts where its field error lands.
+    drivingAFailedWrite()
     mockReads(planBody())
     vi.spyOn(api, 'patch').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', { name: ['That name is already taken.'] }, null, null, 'Validation failed'),
@@ -276,6 +279,8 @@ describe('the Plan tab', () => {
   })
 
   it('puts a refusal with no text field of its own beside the list it is about', async () => {
+    // The refused write is the subject: a refusal with no input of its own still has a place.
+    drivingAFailedWrite()
     mockReads(planBody())
     vi.spyOn(api, 'patch').mockRejectedValue(
       new ApiError(

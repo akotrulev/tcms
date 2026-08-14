@@ -8,6 +8,7 @@ import type { EffectivePermissions, PermissionKey } from '../api/types'
 import { TestProviders } from '../test/TestProviders'
 import { createTestQueryClient } from '../test/queryClient'
 import { PermissionGate } from './PermissionGate'
+import { drivingAFailedRead } from '../test/renderFailures'
 
 /**
  * The one component that turns a denied permission into a disabled control with a reason.
@@ -199,6 +200,8 @@ describe('PermissionGate', () => {
     })
 
     it('renders enabled when the permission call failed — the fall-open path, on screen', async () => {
+      // The failed permission read is the subject: this is the fall-open path, on screen.
+      drivingAFailedRead()
       vi.spyOn(api, 'get').mockRejectedValue(new TypeError('Failed to fetch'))
 
       renderGated(

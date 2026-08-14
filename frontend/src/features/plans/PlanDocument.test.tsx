@@ -10,6 +10,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { aDocPageSummary, aProject, planStatistics, projectSettings } from '../../test/fixtures'
 import { PlanStatisticsPage } from './PlanStatisticsPage'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The **Business requirements** tab (§97 phase 5, D4′) — a page the plan *adopts*, shown read-only.
@@ -194,6 +195,8 @@ describe('the Business requirements tab', () => {
   })
 
   it('renders the 409 in the panel, naming what refused it', async () => {
+    // The refused write is the subject: the 409's sentence is what is being rendered.
+    drivingAFailedWrite()
     mockReads(null)
     vi.spyOn(api, 'put').mockRejectedValue(
       new ApiError(

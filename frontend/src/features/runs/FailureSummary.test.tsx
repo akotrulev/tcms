@@ -5,6 +5,7 @@ import type { CaseStatus, StepResult, TestExecution, TestExecutionSummary, TestR
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { FailureSummary } from './FailureSummary'
+import { drivingAFailedRead } from '../../test/renderFailures'
 
 /**
  * The run's failure summary — **the state matrix and the two counting rules**.
@@ -236,6 +237,8 @@ describe('FailureSummary', () => {
   })
 
   it('renders a failed step read as a failure, never as "nothing failed"', async () => {
+    // The failed step read is the subject: reading it as "nothing failed" is the defect.
+    drivingAFailedRead()
     mockReads({}, { stepsFail: true })
     renderPanel(run([summary('TC-1', 'FAILED')]))
 

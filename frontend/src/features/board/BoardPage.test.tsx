@@ -12,6 +12,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { workItemColumns } from '../../lib/labels'
 import { aProject } from '../../test/fixtures'
 import { Board, BoardPage } from './BoardPage'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The board had **zero tests** until §53, and that is why this file leads with the reason.
@@ -450,6 +451,8 @@ describe('Moving a card writes optimistically and rolls back (§106)', () => {
   })
 
   it('puts the card back and says why when the server refuses', async () => {
+    // The refused write is the subject: the rollback is what it triggers.
+    drivingAFailedWrite()
     vi.spyOn(api, 'patch').mockRejectedValue(
       // (status, detail, fieldErrors, correlationId, retryAfter, title) — the board renders
       // `detail`, which is the sentence about THIS card rather than the kind of problem.
@@ -493,6 +496,8 @@ describe('Moving a card writes optimistically and rolls back (§106)', () => {
     thing that can put the card back — and makes the assertion synchronous.
   */
   it('restores the exact cache snapshot rather than guessing what the card was', async () => {
+    // The refused write is the subject: the rollback is what it triggers.
+    drivingAFailedWrite()
     const client = createTestQueryClient()
     const key = ['work-items', 'p1', false]
     client.setQueryData(key, [TODO_CARD])

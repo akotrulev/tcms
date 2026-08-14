@@ -5,6 +5,7 @@ import type { Attachment, DocBlock } from '../api/types'
 import { TestProviders } from '../test/TestProviders'
 import { createTestQueryClient } from '../test/queryClient'
 import { DocBlockBody } from './DocBlockBody'
+import { drivingAFailedRead } from '../test/renderFailures'
 
 /**
  * The one renderer for all six block types, and specifically the four things about it that no
@@ -172,6 +173,8 @@ describe('DocBlockBody', () => {
   })
 
   it('offers the download when the image cannot be rendered, instead of an apology', async () => {
+    // The failed blob read is the subject: the download offer is what replaces the image.
+    drivingAFailedRead()
     vi.spyOn(client, 'fetchArtifact').mockRejectedValue(new Error('nope'))
 
     renderBlock(

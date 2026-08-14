@@ -9,6 +9,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { aProject } from '../../test/fixtures'
 import { ClassificationSettingsPage } from './ClassificationSettingsPage'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The vocabulary editor — and the one property no gate can see: **which permission each dimension's
@@ -203,6 +204,8 @@ describe('ClassificationSettingsPage — retiring', () => {
   })
 
   it('keeps the dialog open and shows the server sentence when the value still has children', async () => {
+    // The refused write is the subject: the dialog stays open and says why.
+    drivingAFailedWrite()
     mockApi(['project:settings'], ['company:read'])
     // The payload the server actually sends since §149 — a sentence, not the bare `'2'` this
     // fixture used to supply and then assert. That pairing is what let the page and the API

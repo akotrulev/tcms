@@ -2,7 +2,12 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-14 (**§201** — two new files in `src/test/`, one line of `setup.ts` and two
+**Last verified:** 2026-08-14 (**§202** — the test query client, the render-failure seam, its own
+test file and 58 hatch calls across 33 test files, nothing that ships: **a test whose *request*
+failed fails too**, because the door §201 called a design constraint was one sentence doing two jobs
+— reporting needs no notification provider — and the population of unintended failures is **zero**
+while the eight tests that were passing beside a panel which could not load are now nine of nine;
+**§201** — two new files in `src/test/`, one line of `setup.ts` and two
 of `DataRegion.test.tsx`, nothing that ships: **a test whose render tripped an error boundary fails
 now unless it says it meant to**, collected off `window.__tcmsErrors` rather than off the DOM, and the
 suite's population of unintended trips is **zero**; **§200** — two `frontend/` files and no component moved: **the plan tab's Save works**, because the *server* deferred the rule §199 could not reach — `POST /cases` no longer requires a `STRUCTURED` case to carry steps, so `useCreatePlanCase` creates a **DRAFT stub** the case editor is the place to finish; `caseSchema.ts` stays STRICTER than the server on purpose and now says why (the editor renders a step field, so an empty answer is an answer, and relaxing it would make the one surface built for writing a case the surface that saves an empty one); **§199** — the harness, the comparison it calls, one new `lib/` constant and two files that ship: **the body a double is CALLED with is compared too**, so what the SPA would put on the wire is checked against the operation's `requestBody` — and the first thing it found was that the plan tab's Save has sent a payload the server refuses since §97; **§198** — test code, the test harness and the comparison it calls, nothing that ships: **the double's body is checked for its VALUES too** — enum members, types, nulls in non-`nullable` fields and `date-time` strings — and the thing that found was §197's own silent branch, `type: array` answered with an object, plus the version panel that had been rendering its error branch in 24 tests; **§197** — test code, the test harness and one line of `vitest.config.ts`, nothing that ships: **every response body a test double serves is compared against `openapi.yaml` at the moment it is served**, because `as never` is the one fixture population no compiler can reach — 251 tests across 34 files were red the moment the seam went in, and `src/test/fixtures.ts` now holds the complete factories; **§196** — test code, the test harness and one contract *nullable*, no component moved: **a fixture standing in for a contract type is declared, never cast**, which §79 decided and nothing enforced until `contractFixtures.test.ts` — 57 casts across 31 files removed, and `heldPermissions` now takes `PermissionKey[]`; **§195** — the clone dialog's Folder picker decides whether the source's condition exceptions come across, and it says so before the copy is made; the audit behind it swept the whole `useForm` lane and found one instance; **§194** — the Conditions panel is the folder the case is filed in *now*, so a pending move greys the decline switch it would otherwise discard, and the warning predicts while the snackbar measures; **§193** — the bulk preview names the cases a `MOVE_TO_SUITE` takes a condition exception from and warns *before* the commit, and the commit snackbar is a warning rather than a success; **§191** — test code only, no `src` change outside `CaseEditorPage.test.tsx`: the load-dependent *assertion* failure in that file is a detached node in a debounce-fed popup, not a half-typed value, and it is fixed — see the §191 warning below, and do not read it as the §129 timeout cliff, which is still open; **§189** — `packages/` only, no `frontend/src` change: the CLI and the MCP server can decline a case's inherited condition and change a suite's, and the two condition ids are not interchangeable; **§187** — an inherited condition carries an opt-out switch, a declined row stays in the panel greyed rather than leaving it, and the case detail page names the folder a turned-off rule still applies to; **§186** — the suite dialog edits the suite's conditions with the case editor's own panel, and `SuiteInput` stops being hand-written; **§184** — neither screen ranks a health severity: `severityRank` is deleted and the panel renders the server's order verbatim; **§183** — one severity→colour table in `lib/statusColors.ts`, and INFO stops being amber; **§182** — the health signal whose words left out the gate that gives it its meaning; the `INCOMPLETE` label and tooltip, and nothing else in `src/`; **§181** — the health signal whose words named the one state nothing can produce; the `ORPHANED` label and tooltip, and nothing else in `src/`; **§180** — the dashboard stopped sending words and colours: tiles and segments are labelled from their `key`, and the two colour maps moved to `lib/statusColors.ts`; **§179** — `SEVERE_SIGNALS` is deleted: a chip's colour comes off the wire, and the grid's one visible chip is the worst one; **§178** — two health chips start appearing and `SEVERE_SIGNALS` disagrees with the server about two members; **§177** — the run's git coordinate: a third header line, two dialog fields, and `describeRunCode` beside `describeLinkTarget`; **§175** — `TeamRef` is one generated type and `CurrentUser.teams[].isLead` is gone; no `src/` change; **§174** — the relationship correctable in place at both ends, and a MUI `Chip` whose `disabled` was decorative; **§173** — one confirmation raised by both link screens, and the text form of a link target; **§172** — the block-link screen: two hooks that had no caller anywhere in `src/` now have one, and `doc_link` can be written from the documentation side at last; **§169** — the Traceability panel's two external branches ran against data for the first time, and a write hook that must NOT invalidate; **§168** — `CoverageMarker` came alive after 168 sections rendering against a field nothing sent; **§166**–**§167** — no frontend component moved, one test fixture each; **§165** — no frontend source moved, and TWO SCREENS ARE RENDERING A FALSEHOOD — see the entry below; **§162**–**§164** — no frontend source moved, refusal bodies only; **§161** — no frontend source moved; `schema.d.ts` regenerated, comments only; **§160** — the posted CI report becomes a download, keyed on a URL the server composes; **§159** — the archived project, marked on two screens and retired from one; **§158** — the health tooltip that described a comparison the server does not make; **§149** — an `errors` value is the server's sentence, printed as it arrives; **§148** — no detail on a 404, ever; **§144** — `TestCaseInput` requires four fields, not one; **§138** — the review queue for generated cases; **§137** — a THIRD TypeScript stack, `packages/`, which is not this one; **§133 phases 2–3** — the `Agent` role's frontend half; **§132 phases 2–3** — the token-attribution caption and the Last used column; **§129 phase 3** — the three clone dialogs; **§128** — the case editor's autosave buffer; **§127 phases 2–3** —
@@ -11,9 +16,8 @@ surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the fl
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `06f957c` (§200 shipped and recorded; §201 is this commit — `src/test/` only,
-plus two lines of `src/components/DataRegion.test.tsx`, nothing under `src/` that ships, test count
-1330 → 1335)
+**Baseline commit:** `6684539` (§201 shipped and recorded; §202 is this commit — `src/test/` plus a
+hatch call in 33 test files, nothing under `src/` that ships, test count 1335 → 1339)
 (trust the body over the header and re-grep what a later commit could have moved).
 
 ## §201 — A TEST WHOSE RENDER TRIPPED A BOUNDARY FAILS, UNLESS IT SAYS IT MEANT TO
@@ -37,18 +41,46 @@ what the tree did with it.**
   `cleanup` owns an `afterEach` this module does not — so a `queryByTestId('…RenderError')` sweep
   would race a hook order and report on survivors. `reportClientError` fires at the throw and carries
   the region's `testId` in `context`.
-- **`IS_A_RENDER_THROW` is a `Record<ErrorSource, boolean>` and must stay one.** A `Set` of the three
-  would go quiet on a fourth boundary tier while staying green; the `Record` makes a new `ErrorSource`
-  member a compile error there.
-- **A region whose *fetch* failed is NOT seen by this**, and the reason is `createTestQueryClient`
-  installing no error handlers — deliberately, so the notification provider is not needed in every
-  test tree. So no `query`/`mutation` report is ever collected under test, and the
-  `throw new Error('unmocked read: …')` that **thirteen test files** wrote to be loud produces no
-  report at all: it becomes a rejected query, the region renders its error branch, and whether anybody
-  notices depends on whether an assertion happens to point at that region. Recorded as the next rung.
+- **`KIND_OF` is a `Record<ErrorSource, FailureKind | null>` and must stay one.** A `Set` would go
+  quiet on a fourth boundary tier while staying green; the `Record` makes a new `ErrorSource` member a
+  compile error there. (It was `IS_A_RENDER_THROW`, a `Record<…, boolean>`, until §202.)
+- ~~**A region whose *fetch* failed is NOT seen by this**, because `createTestQueryClient` installs no
+  error handlers.~~ → **superseded 2026-08-14 by §202: it is seen. Read the entry below.**
 - **`resetReportedErrors()` runs in a `beforeEach` now** — first caller it has ever had. The sink
   dedupes on `source:name:message` and never forgets, so without it the second test in a file to hit
   the same broken panel collects nothing.
+
+## §202 — A TEST WHOSE *REQUEST* FAILED FAILS TOO, AND THERE ARE THREE HATCHES
+
+**Read this with §201 above — one module, one `afterEach`, two halves. If you are writing a test that
+drives a failure on purpose, the hatch you need is here.**
+
+- **`src/test/queryClient.ts` now installs a `QueryCache` and a `MutationCache`** whose `onError`
+  calls `reportClientError` and stops. §201 read that file's *"no global error handlers"* as a design
+  constraint; it was one sentence doing two jobs — **raising a notification** needs the provider,
+  **reporting** needs nothing — and the app's own `onError` does them in that order.
+- **The three hatches are not interchangeable, and this is the design rather than a nicety.**
+  `renderingIntoAnErrorBoundary()` · `drivingAFailedRead()` · `drivingAFailedWrite()`, each excusing
+  its own kind for one test, each called with a reason at the site. **44 of the 61 opt-outs are a
+  refused write**, and such a test says nothing about whether the panels beside the dialog were
+  allowed to fail their reads — which is where §198's defect lived — so one shared hatch would have
+  disarmed the check in the place it was written for.
+- **58 call sites across 33 test files** (58 not 60: one is an `it.each` of three). Every one of the
+  61 reds was deliberate; the population of *unintended* failures is **zero**, as it was for §201's
+  half.
+- **What it buys, measured:** deleting the `/users` arm of `ApiTokensPage.test.tsx`'s double reddens
+  **1 test of 9** in §201's state and **9 of 9** now — eight were passing beside a panel that could
+  not load its owner names. §201's *"the seven tests failed on their assertions"* was a reading, not a
+  measurement; it is one.
+- **Do not construct a `QueryClient` in a test.** `createTestQueryClient` is the only one with the
+  caches, so a hand-built client is invisible to this check — silently. `renderFailures.test.tsx`
+  sweeps every test source for `new QueryClient(` and requires the list to be **empty**, and requires
+  ≥50 of the 100 files to reach the helper (59 do today).
+- **`unexcused(reports, meant)` is exported for its own test**, because *"the check decided not to
+  fail"* cannot be observed from a green run any other way. Everything else in that file drives a real
+  throw or a real query — the vacuity rule §201 wrote, and §202's own request cases were the thing it
+  was warning about: they *were* two hand-made `reportClientError` calls, hand-made because the path
+  they classified did not exist.
 
 ## §200 — THE PLAN TAB'S SAVE WORKS, AND `caseSchema.ts` IS DELIBERATELY STRICTER THAN THE SERVER
 

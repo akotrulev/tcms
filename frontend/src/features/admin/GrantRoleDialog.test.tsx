@@ -7,6 +7,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { GrantRoleDialog } from './GrantRoleDialog'
 import { heldPermissions } from '../../test/permissions'
 import type { PermissionKey } from '../../api/types'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The one dialog whose gate is chosen by its own form state.
@@ -236,6 +237,8 @@ describe('GrantRoleDialog', () => {
   })
 
   it('lands a server field error on the control that caused it', async () => {
+    // The refused write is the subject: this asserts where its field error lands.
+    drivingAFailedWrite()
     mockReads({ company: ['company:members'], project: ['project:members'] })
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', {

@@ -10,6 +10,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { aProject, planStatistics, projectSettings } from '../../test/fixtures'
 import { PlanStatisticsPage } from './PlanStatisticsPage'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The plan's ladder controls — **the affordance for a column that had no writer until §73**.
@@ -195,6 +196,8 @@ describe('PlanStatisticsPage — the plan lifecycle controls', () => {
   })
 
   it('renders the ladder refusal beside the buttons rather than as a toast', async () => {
+    // The refused write is the subject: where its message goes is the assertion.
+    drivingAFailedWrite()
     mockReads('DRAFT')
     // A real `ApiError`, not a shaped object: `describeError` narrows on the class, so a
     // look-alike falls through to the network-fault copy and the assertion would be about the
@@ -226,6 +229,8 @@ describe('PlanStatisticsPage — the plan lifecycle controls', () => {
    */
 
   it('renders the delete refusal inside the dialog, which stays open', async () => {
+    // The refused write is the subject: the dialog stays open and says why.
+    drivingAFailedWrite()
     // The 409 the client cannot predict: nothing on this screen knows the plan's run count, so
     // unlike a permission this refusal has no gate that could have disabled the control.
     mockReads('APPROVED')

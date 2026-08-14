@@ -8,6 +8,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { aRun } from '../../test/fixtures'
 import { RunCloneDialog } from './RunCloneDialog'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * Cloning a run (§129 phase 3) — the highest-value of the three clones.
@@ -151,6 +152,8 @@ describe('RunCloneDialog', () => {
     })
 
     it('offers the override to a caller holding case:approve, and retries with the flag', async () => {
+      // The gate's refusal is the subject: it is the thing that raises the override.
+      drivingAFailedWrite()
       mockPermissions(['case:approve'])
       const post = vi
         .spyOn(api, 'post')
@@ -175,6 +178,8 @@ describe('RunCloneDialog', () => {
     })
 
     it('disables the override for a caller without case:approve rather than hiding it', async () => {
+      // The gate's refusal is the subject: it is what puts the disabled override on screen.
+      drivingAFailedWrite()
       mockPermissions(['run:create'])
       vi.spyOn(api, 'post').mockRejectedValue(gateRefusal())
       renderDialog()

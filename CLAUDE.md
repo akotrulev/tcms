@@ -140,7 +140,7 @@ npm run dev          # http://localhost:5173 — proxies /api to localhost:8080
                      # sign in by redeeming the /accept-invitation link provision-company prints
 npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
-npm run test:run     # Vitest + RTL, ~~1203~~ ~~1251~~ ~~1276~~ ~~1285~~ ~~1314~~ ~~1320~~ ~~1330~~ 1335 tests
+npm run test:run     # Vitest + RTL, ~~1203~~ ~~1251~~ ~~1276~~ ~~1285~~ ~~1314~~ ~~1320~~ ~~1330~~ ~~1335~~ 1339 tests
                      # (measured on shanks 2026-08-14) — also a gate. Since §197 the harness compares
                      # every body a mocked `api.*` call serves against openapi.yaml and fails the test
                      # that served a body the server could not send; since §198 it compares the VALUES
@@ -157,9 +157,16 @@ npm run test:run     # Vitest + RTL, ~~1203~~ ~~1251~~ ~~1276~~ ~~1285~~ ~~1314~
                      # calls `renderingIntoAnErrorBoundary()` and says why — a boundary exists so a
                      # broken region stays invisible to the rest of the page, which is how 24 tests
                      # passed for years beside a panel showing "We couldn't display this content".
-                     # A region whose *fetch* failed is NOT covered: `createTestQueryClient` installs
-                     # no error handlers, so the `throw new Error('unmocked read')` thirteen test
-                     # files wrote to be loud is swallowed by the query layer.
+                     # ~~A region whose *fetch* failed is NOT covered: `createTestQueryClient`
+                     # installs no error handlers.~~ → **superseded by §202: it IS covered.** That
+                     # helper installs both caches now and they report to the same sink — reporting
+                     # never needed the notification provider, only *raising* one did. So a test whose
+                     # read or write failed fails too, unless it calls `drivingAFailedRead()` or
+                     # `drivingAFailedWrite()` and says why. THREE hatches, not one, because 44 of the
+                     # 61 opt-outs are a refused write and such a test says nothing about the panels
+                     # beside the dialog. **Never build your own `QueryClient` in a test** — only that
+                     # helper's has the caches, so a hand-built one is invisible to the check, and
+                     # `renderFailures.test.tsx` sweeps every test source to keep that list empty.
                      # ~~`CaseEditorPage.test.tsx` has a load-dependent flake on shanks: one test
                      # asserts a half-typed value under full-suite load and passes when the file
                      # runs alone. Measured against a stashed tree in §186; NOT fixed.~~ →

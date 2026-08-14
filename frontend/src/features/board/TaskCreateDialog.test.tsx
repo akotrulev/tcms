@@ -6,6 +6,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { aWorkItem } from '../../test/fixtures'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TaskCreateDialog } from './TaskCreateDialog'
+import { drivingAFailedRead } from '../../test/renderFailures'
 
 /**
  * Adding a task, and the assignee picker §54 built.
@@ -136,6 +137,8 @@ describe('TaskCreateDialog — the assignee picker', () => {
   })
 
   it('still creates the task when the members list fails to load', async () => {
+    // The failed members read is the subject: the dialog has to stay usable without it.
+    drivingAFailedRead()
     vi.spyOn(api, 'get').mockRejectedValue(new Error('members unavailable'))
     const post = vi.spyOn(api, 'post').mockResolvedValue(aWorkItem({ id: 't1', title: 'X' }) as never)
 

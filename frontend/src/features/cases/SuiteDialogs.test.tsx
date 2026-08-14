@@ -6,6 +6,7 @@ import type { CaseConditionRef, Condition, Suite, TagUsage } from '../../api/typ
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { CreateSuiteDialog, RenameSuiteDialog } from './SuiteDialogs'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The suite form's **tag rules** — the membership arm that turns a folder into a query (§96).
@@ -270,6 +271,8 @@ describe('SuiteDialogs — conditions', () => {
   })
 
   it('lands a rejected condition on its own panel, not in the form-level alert', async () => {
+    // The refused write is the subject: this asserts which panel the error lands on.
+    drivingAFailedWrite()
     // The server reports under `preconditions` and the form holds `preconditionIds`. Without the
     // mapping the message would go to the root alert — visible, but not beside the list it is
     // about, on a dialog that now has three lists.

@@ -7,6 +7,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { aCase, aSuite } from '../../test/fixtures'
 import { CaseCloneDialog } from './CaseCloneDialog'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * Cloning a case (§129 phase 3).
@@ -248,6 +249,8 @@ describe('CaseCloneDialog', () => {
   })
 
   it('lands a title error on the title field rather than in the banner', async () => {
+    // The refused write is the subject: this asserts where its field error lands.
+    drivingAFailedWrite()
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', {
         title: ['A case with this title already exists in that folder.'],
@@ -265,6 +268,8 @@ describe('CaseCloneDialog', () => {
   })
 
   it('puts a refusal with no field — a 403 — in the banner', async () => {
+    // The refused write is the subject: a refusal naming no field still has to be shown.
+    drivingAFailedWrite()
     vi.spyOn(api, 'post').mockRejectedValue(new ApiError(403, 'You cannot create cases here.'))
     renderDialog(sourceCase())
 

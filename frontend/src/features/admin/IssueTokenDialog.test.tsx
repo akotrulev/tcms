@@ -6,6 +6,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { IssueTokenDialog } from './IssueTokenDialog'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * Issuing a credential — the app's only screen that displays a secret, and the only one where
@@ -282,6 +283,8 @@ describe('IssueTokenDialog', () => {
   })
 
   it('lands a server field error on the input that caused it', async () => {
+    // The refused write is the subject: this asserts where its field error lands.
+    drivingAFailedWrite()
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', {
         name: ['This company already has a live token called "Nightly regression".'],
@@ -301,6 +304,8 @@ describe('IssueTokenDialog', () => {
   })
 
   it('puts a refusal with no field in the form-level alert', async () => {
+    // The refused write is the subject: a refusal naming no field still has to be shown.
+    drivingAFailedWrite()
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(403, 'You do not have permission to issue API tokens here.'),
     )

@@ -7,6 +7,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { TeamsPage } from './TeamsPage'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The org chart's write affordances — **§71's own test file, and it exists for §66's reason.**
@@ -179,6 +180,8 @@ describe('TeamsPage — the org chart becomes editable', () => {
   })
 
   it('shows the 409 blockers on the delete dialog rather than a generic failure', async () => {
+    // The refused write is the subject: the 409's blockers are what is being rendered.
+    drivingAFailedWrite()
     mockApi(['company:read', 'company:members', 'company:teams'])
     vi.spyOn(api, 'del').mockRejectedValue(
       new ApiError(409, 'Clear what still points at this team before deleting it.', {
@@ -199,6 +202,8 @@ describe('TeamsPage — the org chart becomes editable', () => {
   })
 
   it('lands a duplicate-name refusal on the name input, not in a banner', async () => {
+    // The refused write is the subject: this asserts where its field error lands.
+    drivingAFailedWrite()
     mockApi(['company:read', 'company:members', 'company:teams'])
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(400, 'Some of the details need correcting.', {

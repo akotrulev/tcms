@@ -9,6 +9,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { aProject, aRun } from '../../test/fixtures'
 import { RunDetailPage } from './RunDetailPage'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The run's lifecycle controls — **the affordance for a column that had no writer until §72**.
@@ -169,6 +170,8 @@ describe('RunDetailPage — the run lifecycle controls', () => {
   })
 
   it('renders the refusal beside the button rather than as a toast', async () => {
+    // The refused write is the subject: where its message goes is the assertion.
+    drivingAFailedWrite()
     mockReads('NOT_STARTED', null)
     vi.spyOn(api, 'put').mockRejectedValue(
       Object.assign(new Error('conflict'), {

@@ -8,6 +8,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { aCaseSummary, aPlan, aRun, aSuite } from '../../test/fixtures'
 import { RunCreateDialog } from './RunCreateDialog'
 import type { PermissionKey } from '../../api/types'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * Starting a run — the dialog that materialises a checklist.
@@ -283,6 +284,8 @@ describe('RunCreateDialog', () => {
   })
 
   it('§177: the server\'s commitSha refusal lands on the commit field, not the root alert', async () => {
+    // The refused write is the subject: this asserts which field the refusal lands on.
+    drivingAFailedWrite()
     mockPlans(plans)
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', {
@@ -308,6 +311,8 @@ describe('RunCreateDialog', () => {
   })
 
   it('lands a scope error on its own control — §99 gave caseIds and tags a place to go', async () => {
+    // The refused write is the subject: this asserts which control the error lands on.
+    drivingAFailedWrite()
     mockPlans(plans)
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', {
@@ -335,6 +340,8 @@ describe('RunCreateDialog', () => {
   })
 
   it('puts a field error with no input — configurationId — in the form-level banner', async () => {
+    // The refused write is the subject: a field with no input on screen still has a place.
+    drivingAFailedWrite()
     mockPlans(plans)
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', {
@@ -360,6 +367,8 @@ describe('RunCreateDialog', () => {
   })
 
   it('lands a name error on the name input, not in the banner', async () => {
+    // The refused write is the subject: this asserts where its field error lands.
+    drivingAFailedWrite()
     mockPlans(plans)
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', {
@@ -423,6 +432,8 @@ describe('RunCreateDialog', () => {
     })
 
     it('shows the refusal and offers the override to a caller holding case:approve', async () => {
+      // The gate's refusal is the subject: it is the thing that raises the override.
+      drivingAFailedWrite()
       mockPlans(plans, ['case:approve'])
       vi.spyOn(api, 'post').mockRejectedValue(gateRefusal())
 
@@ -443,6 +454,8 @@ describe('RunCreateDialog', () => {
     })
 
     it('disables the override for a caller without case:approve, rather than hiding it', async () => {
+      // The gate's refusal is the subject: it is what puts the disabled override on screen.
+      drivingAFailedWrite()
       mockPlans(plans, ['run:create'])
       vi.spyOn(api, 'post').mockRejectedValue(gateRefusal())
 
@@ -463,6 +476,8 @@ describe('RunCreateDialog', () => {
     })
 
     it('retries with the flag and the CURRENT form values, and creates the run', async () => {
+      // The gate's refusal is the subject: the retry under test only exists because of it.
+      drivingAFailedWrite()
       mockPlans(plans, ['case:approve'])
       const post = vi
         .spyOn(api, 'post')

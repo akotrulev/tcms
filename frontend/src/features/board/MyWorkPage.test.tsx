@@ -7,6 +7,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { TestProviders } from '../../test/TestProviders'
 import { Board } from './BoardPage'
 import { MyWorkPage } from './MyWorkPage'
+import { drivingAFailedRead } from '../../test/renderFailures'
 
 /**
  * §6l's cross-project "My Work" board (§83).
@@ -175,6 +176,8 @@ describe('The states this screen must not confuse', () => {
   })
 
   it('surfaces a failed read as failed, without unmounting the page chrome', async () => {
+    // The failed read is the subject: this asserts the region's failed state, not its data.
+    drivingAFailedRead()
     vi.spyOn(api, 'get').mockRejectedValue(new Error('network down'))
     renderPage()
 

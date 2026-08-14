@@ -7,6 +7,7 @@ import { heldPermissions } from '../../test/permissions'
 import { createTestQueryClient } from '../../test/queryClient'
 import { aConfiguration, aDocPageSummary, aPlan, aRun, noCounts } from '../../test/fixtures'
 import { GenerateReportDialog } from './GenerateReportDialog'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * Asking for a report.
@@ -200,6 +201,8 @@ describe('GenerateReportDialog', () => {
   })
 
   it("puts the server's format refusal on the format field, where the picker is", async () => {
+    // The refused write is the subject: this asserts which field the refusal lands on.
+    drivingAFailedWrite()
     mockReads(runs)
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', {

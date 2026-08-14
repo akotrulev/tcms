@@ -8,6 +8,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { aCase } from '../../test/fixtures'
 import { blankCaseRow, draftFromPlan, type PlanDraft } from './planDraft'
 import { usePlanSave } from './usePlanSave'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The plan detail's one Save — **two endpoints, one order, and a report per step**.
@@ -128,6 +129,8 @@ describe('usePlanSave', () => {
   })
 
   it('sends the same key again on a retry, so a second Save creates nothing twice', async () => {
+    // The failed save is the subject: the retry under test only exists because of it.
+    drivingAFailedWrite()
     const post = vi
       .spyOn(api, 'post')
       .mockImplementation((async () => aCase({ id: 'case-1', key: 'TC-1' })) as never)
@@ -152,6 +155,8 @@ describe('usePlanSave', () => {
   })
 
   it('reports the cases it created when the plan step fails', async () => {
+    // The failed step is the subject: what the hook reports about it is the assertion.
+    drivingAFailedWrite()
     vi.spyOn(api, 'post').mockImplementation((async (_p: string, body: unknown) =>
       aCase({ id: 'case-x', key: `TC-${(body as { title: string }).title}` })) as never)
     vi.spyOn(api, 'patch').mockRejectedValue(new Error('nope'))
@@ -166,6 +171,8 @@ describe('usePlanSave', () => {
   })
 
   it('stops at the row that failed and names it', async () => {
+    // The failed row is the subject: stopping at it is the assertion.
+    drivingAFailedWrite()
     vi.spyOn(api, 'post').mockImplementation((async (_p: string, body: unknown) => {
       const title = (body as { title: string }).title
       if (title === 'b') throw new Error('refused')

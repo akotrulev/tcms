@@ -7,6 +7,7 @@ import type { Team, WorkItem } from '../../api/types'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TestProviders } from '../../test/TestProviders'
 import { TeamBoardPage } from './TeamBoardPage'
+import { drivingAFailedRead } from '../../test/renderFailures'
 
 /**
  * §6l's team board (§84) — the third and last of its boards to get a screen.
@@ -131,6 +132,8 @@ describe('What the team board asks the server for', () => {
   })
 
   it('still renders the board when the org chart fails, because the name is chrome', async () => {
+    // The failed chart read is the subject: the board has to render without it.
+    drivingAFailedRead()
     // The name comes from a second, independent read. Wiring it through a `DataRegion` — or
     // letting it gate the board — would mean a failed org-chart load blanking a board that
     // loaded perfectly well, which is the failure `DataRegion`'s own scoping rule exists to stop.
@@ -144,6 +147,8 @@ describe('What the team board asks the server for', () => {
 
 describe('The three answers this screen must keep apart', () => {
   it('reads a 404 as "no such team", with the way back', async () => {
+    // The failed read is the subject: this is one of the three answers the screen keeps apart.
+    drivingAFailedRead()
     // THE HEADLINE. The server's 404 carries no body, so the shared copy would say
     // "Not found — Not Found". A reader who followed a stale link needs to be told the team is
     // gone and where the list is; both are things the client knows and the response does not.
@@ -173,6 +178,8 @@ describe('The three answers this screen must keep apart', () => {
   })
 
   it('surfaces an ordinary failure as failed, without unmounting the page chrome', async () => {
+    // The failed read is the subject: this is one of the three answers the screen keeps apart.
+    drivingAFailedRead()
     // A 500 or a dropped connection is neither of the above: it is retryable, and it must NOT
     // borrow the 404's sentence — "no such team" for a server that fell over is a lie that sends
     // the reader to look for a team that is still there.

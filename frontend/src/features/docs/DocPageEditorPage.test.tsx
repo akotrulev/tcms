@@ -8,6 +8,7 @@ import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { DocPageEditor } from './DocPageEditorPage'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The documentation editor.
@@ -218,6 +219,8 @@ describe('DocPageEditorPage', () => {
   })
 
   it('renders the link refusal on the form rather than swallowing it', async () => {
+    // The refused write is the subject: swallowing it is the defect being tested for.
+    drivingAFailedWrite()
     vi.spyOn(api, 'patch').mockRejectedValue(
       // The TITLE matters as much as the detail. `describeError` tells the two 409s apart by it:
       // untitled, this would have rendered as the lost-update copy — "reload to see their
@@ -247,6 +250,8 @@ describe('DocPageEditorPage', () => {
   })
 
   it('lands a block-keyed field error on the block it is about', async () => {
+    // The refused write is the subject: this asserts which block the error lands on.
+    drivingAFailedWrite()
     vi.spyOn(api, 'patch').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', {
         'blocks[1].text': ['Enter text.'],

@@ -7,6 +7,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { aPlan } from '../../test/fixtures'
 import { PlanCloneDialog } from './PlanCloneDialog'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * Cloning a plan (§129 phase 3).
@@ -108,6 +109,8 @@ describe('PlanCloneDialog', () => {
   })
 
   it('lands a name error on the field and a 403 in the banner', async () => {
+    // The two refused writes are the subject: this asserts where each one lands.
+    drivingAFailedWrite()
     vi.spyOn(api, 'post').mockRejectedValueOnce(
       new ApiError(400, 'Check the highlighted fields.', { name: ['That name is already used.'] }),
     )

@@ -8,6 +8,7 @@ import { BulkActionDialog } from './BulkActionDialog'
 import { lifecycleLabels } from '../../lib/labels'
 import { heldPermissions } from '../../test/permissions'
 import type { PermissionKey } from '../../api/types'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * Bulk edits — preview-then-commit, and the one option in the dialog that is a permission gate.
@@ -333,6 +334,8 @@ describe('BulkActionDialog', () => {
 
   describe('refusals', () => {
     it('lands a 400 on the control it names', async () => {
+      // The refused write is the subject: this asserts which control the 400 lands on.
+      drivingAFailedWrite()
       vi.spyOn(api, 'post').mockRejectedValue(
         new ApiError(400, 'Check the highlighted fields.', {
           lifecycleStatus: ['Choose a status.'],
@@ -348,6 +351,8 @@ describe('BulkActionDialog', () => {
     })
 
     it('shows a bodiless 403 in the dialog alert rather than swallowing it', async () => {
+      // The refused write is the subject: a 403 with no body still has to be shown.
+      drivingAFailedWrite()
       // A refusal naming no field must not vanish — a rejected operation showing nothing at all is
       // worse than a vague message.
       vi.spyOn(api, 'post').mockRejectedValue(

@@ -6,6 +6,7 @@ import type { User } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { RemoveUserDialog } from './RemoveUserDialog'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * Removing a person from the company — the confirmation for the one write here that takes access
@@ -71,6 +72,8 @@ describe('RemoveUserDialog', () => {
   })
 
   it('renders the self-removal refusal on the dialog, and stays open', async () => {
+    // The refused write is the subject: the dialog stays open and says why.
+    drivingAFailedWrite()
     vi.spyOn(api, 'del').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', {
         userId: ['You cannot remove yourself from this company. Ask another administrator to do it.'],
@@ -89,6 +92,8 @@ describe('RemoveUserDialog', () => {
   })
 
   it('falls back to the described error when the failure carries no field errors', async () => {
+    // The refused write is the subject: this asserts the described-error fallback.
+    drivingAFailedWrite()
     vi.spyOn(api, 'del').mockRejectedValue(
       new ApiError(403, 'You do not have permission to manage access here.'),
     )

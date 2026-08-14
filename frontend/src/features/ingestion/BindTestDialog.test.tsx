@@ -8,6 +8,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { aCaseSummary } from '../../test/fixtures'
 import { BindTestDialog } from './BindTestDialog'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The binder — and the one assertion this whole file exists for.
@@ -107,6 +108,8 @@ describe('BindTestDialog', () => {
   })
 
   it('keeps the dialog open and names the refusal when the server rejects the case', async () => {
+    // The refused write is the subject: the dialog stays open and says why.
+    drivingAFailedWrite()
     mockApi()
     vi.spyOn(api, 'post').mockRejectedValue(
       Object.assign(new Error('bad'), { status: 400, body: {} }),

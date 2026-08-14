@@ -6,6 +6,7 @@ import type { EffectivePermissions, PermissionKey } from '../api/types'
 import { TestProviders } from '../test/TestProviders'
 import { createTestQueryClient } from '../test/queryClient'
 import { useCan } from './useCan'
+import { drivingAFailedRead } from '../test/renderFailures'
 
 /**
  * The effective-permission gate (§31), which decides eleven write affordances.
@@ -146,6 +147,8 @@ describe('useCan', () => {
       ['a 403 on the permissions endpoint itself', new ApiError(403, 'no')],
       ['a network fault', new TypeError('Failed to fetch')],
     ])('falls OPEN on %s, so nobody is told they may not do their job', async (_label, error) => {
+      // The failed permission read is the subject: falling open is what all three cases must produce.
+      drivingAFailedRead()
       vi.spyOn(api, 'get').mockRejectedValue(error)
 
       const { result } = renderHook(() => useCan(PROJECT), { wrapper: ({ children }) => wrapper(children) })
@@ -158,6 +161,8 @@ describe('useCan', () => {
     })
 
     it('costs at most one 403 in a dialog, which is how the app behaved before the gate existed', async () => {
+      // The failed permission read is the subject: this measures what falling open costs.
+      drivingAFailedRead()
       vi.spyOn(api, 'get').mockRejectedValue(new ApiError(503, 'unavailable'))
 
       const { result } = renderHook(() => useCan(PROJECT), { wrapper: ({ children }) => wrapper(children) })
@@ -279,6 +284,8 @@ describe('useCan', () => {
     })
 
     it('follows the same three states as `can` — closed while pending, open on failure', async () => {
+      // The failed permission read is the subject: the open-on-failure state is one of the three.
+      drivingAFailedRead()
       const pending = deferred<EffectivePermissions>()
       const get = vi.spyOn(api, 'get').mockReturnValue(pending.promise as Promise<never>)
 
@@ -396,6 +403,8 @@ describe('useCan', () => {
     })
 
     it('follows the same three states — closed while pending, open on failure', async () => {
+      // The failed permission read is the subject: the open-on-failure state is one of the three.
+      drivingAFailedRead()
       const pending = deferred<EffectivePermissions>()
       const get = vi.spyOn(api, 'get').mockReturnValue(pending.promise as Promise<never>)
 

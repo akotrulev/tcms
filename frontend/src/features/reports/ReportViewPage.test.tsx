@@ -8,6 +8,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { aProject } from '../../test/fixtures'
 import { ReportViewPage } from './ReportViewPage'
+import { drivingAFailedRead } from '../../test/renderFailures'
 
 /**
  * The on-screen report — a job first, a report second.
@@ -175,6 +176,8 @@ describe('ReportViewPage', () => {
   })
 
   it('explains the 403 rather than showing the generic permission error', async () => {
+    // The failed model read is the subject: its 403 is what the page has to explain.
+    drivingAFailedRead()
     answerReads(job())
     vi.spyOn(client, 'fetchArtifactJson').mockRejectedValue(new ApiError(403, 'Forbidden'))
 
@@ -203,6 +206,8 @@ describe('ReportViewPage', () => {
     and the two must never be confusable.
   */
   it('renders a drifted stored model as a failed read, not as an empty report', async () => {
+    // The failed read is the subject: a drifted body must read as failed rather than empty.
+    drivingAFailedRead()
     answerReads(job())
     vi.spyOn(client, 'fetchArtifactJson').mockResolvedValue({ report: { title: 'Half a model' } })
 

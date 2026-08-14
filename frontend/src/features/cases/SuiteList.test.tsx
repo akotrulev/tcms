@@ -8,6 +8,7 @@ import { aSuite } from '../../test/fixtures'
 import { createTestQueryClient } from '../../test/queryClient'
 import { SuiteList } from './SuiteList'
 import { heldPermissions } from '../../test/permissions'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The suite rail, flat since §98.
@@ -286,6 +287,8 @@ describe('SuiteList — the status ladder', () => {
   })
 
   it('renders the refusal in the rail, naming the suite it is about', async () => {
+    // The refused write is the subject: the rail is where its message has to appear.
+    drivingAFailedWrite()
     withPermissions(['case:read', 'suite:manage'])
     vi.spyOn(api, 'put').mockRejectedValue(
       Object.assign(new Error('conflict'), {

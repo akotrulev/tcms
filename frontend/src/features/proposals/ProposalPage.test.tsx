@@ -9,6 +9,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { aCase, aProject } from '../../test/fixtures'
 import { ProposalPage } from './ProposalPage'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The decision screen — where §6w.6's boundary is actually enforced by a person clicking.
@@ -131,6 +132,8 @@ describe('ProposalPage', () => {
   })
 
   it('RENDERS THE FIELD ERRORS FROM A REFUSED ACCEPT, and keeps Reject live', async () => {
+    // The refused write is the subject: its field errors are what is being rendered.
+    drivingAFailedWrite()
     // THE HEADLINE. The payload is stored unvalidated on purpose, so this 400 is the designed
     // outcome for a proposal whose suite was deleted after it was filed — and the errors are the
     // most useful thing on the screen, because the reviewer's next move is Reject.

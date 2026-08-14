@@ -7,6 +7,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { InviteUserDialog } from './InviteUserDialog'
 import { heldPermissions } from '../../test/permissions'
 import type { PermissionKey } from '../../api/types'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * Inviting a colleague — the write that gets a second person into the company at all.
@@ -147,6 +148,8 @@ describe('InviteUserDialog', () => {
   })
 
   it('lands a server field error on the input that caused it', async () => {
+    // The refused write is the subject: this asserts where its field error lands.
+    drivingAFailedWrite()
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', {
         email: ['Enter a valid email address.'],
@@ -162,6 +165,8 @@ describe('InviteUserDialog', () => {
   })
 
   it('puts a refusal with no field in the form-level alert', async () => {
+    // The refused write is the subject: a refusal naming no field still has to be shown.
+    drivingAFailedWrite()
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(403, 'You do not have permission to manage access here.'),
     )

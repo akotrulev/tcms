@@ -7,6 +7,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { RegisterArtifactDialog } from './ArtifactDialogs'
 import { heldPermissions } from '../../test/permissions'
 import type { PermissionKey } from '../../api/types'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * Registering an artifact — the form whose fields decide what its other fields mean.
@@ -175,6 +176,8 @@ describe('RegisterArtifactDialog', () => {
   })
 
   it('puts the scope-qualified 403 on the scope selector rather than in a banner', async () => {
+    // The refused write is the subject: this asserts which control the 403 lands on.
+    drivingAFailedWrite()
     // THE test of this file. The server distinguishes "you hold nothing" (bodiless 403) from "you
     // hold it, not here" (403 with an errors map), and only the second is actionable.
     vi.spyOn(api, 'post').mockRejectedValue(

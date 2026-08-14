@@ -10,6 +10,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { aPlan, aProject, planStatistics, projectSettings } from '../../test/fixtures'
 import { PlanStatisticsPage } from './PlanStatisticsPage'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The plan detail's **form spine** (§97 phase 4) — the draft above the tabs, the banner that names
@@ -176,6 +177,8 @@ describe('the plan detail form spine', () => {
   })
 
   it('reports a failed save without clearing the draft', async () => {
+    // The failed save is the subject: the draft surviving it is the assertion.
+    drivingAFailedWrite()
     mockReads(planBody())
     vi.spyOn(api, 'patch').mockRejectedValue(new Error('server said no'))
     renderPage()
