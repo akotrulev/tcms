@@ -11,6 +11,12 @@
  *
  * The one thing that must not diverge is the *reading* of that format, so
  * `problemShape.test.ts` derives the field list from the contract rather than from either copy.
+ *
+ * ~~so `problemShape.test.ts` derives the field list~~ → **it did not exist until §205**, and the
+ * sentence had been standing in for it since §137. It exists now, it pins this side both ways, and
+ * the first thing it recorded is that the two readings had already diverged: the SPA's reads four of
+ * the five properties and drops `type`, which `Problem` declares as required. Its own header carries
+ * the measurement and why enforcing the pair costs more than a five-property object is worth.
  */
 
 /**

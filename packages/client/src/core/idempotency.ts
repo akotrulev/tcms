@@ -19,8 +19,12 @@ import { TcmsClientError } from '../errors.js';
  * §136 found `MAX_IDEMPOTENCY_KEY = 200` declared in seven services across four modules with
  * nothing comparing them, and answered it with a computed check that pins the contract's
  * `maxLength` to the code's cap. This constant is an eighth declaration of the same number, on
- * the other side of the wire — so `idempotency.test.ts` reads it out of `openapi.yaml` rather
- * than trusting it, which is the same check arriving from the client side.
+ * the other side of the wire — so ~~`idempotency.test.ts`~~ **`core.test.ts`'s
+ * `matches the maxLength the contract declares`** reads it out of `openapi.yaml` rather than
+ * trusting it, which is the same check arriving from the client side.
+ *
+ * (The old name was §205's cheapest find: the check was real and the file it named never existed.
+ * `core/` is tested as one file, which is why the pointer is a test name rather than a path.)
  */
 export const MAX_IDEMPOTENCY_KEY = 200;
 

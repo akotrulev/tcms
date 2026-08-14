@@ -424,6 +424,27 @@ export function successStatusesOf(method: string, contractPath: string): number[
 }
 
 /**
+ * The property names and the `required` list of one named component schema.
+ *
+ * Outside the shared region on the region's own economics rather than on `successStatusesOf`'s
+ * argument: the SPA *could* ask this, and does not. The region is byte-identical and paired line by
+ * line, so a line only one stack calls is a line the other maintains for nothing — which is the
+ * readerless shape the pairing rule exists beside, not a version of it. If `frontend/` ever wants
+ * it, it moves in and the pairing test says so on the same commit.
+ *
+ * Written for `problemShape.test.ts`, which asks it of `Problem`.
+ */
+export function schemaProperties(name: string): { properties: string[]; required: string[] } {
+  const schemas = spec().components.schemas as Record<string, Node> | undefined;
+  const schema = schemas?.[name];
+  if (!schema) throw new Error(`openapi.yaml declares no schema '${name}'.`);
+  return {
+    properties: Object.keys((schema.properties as Node | undefined) ?? {}),
+    required: ((schema.required as string[] | undefined) ?? []).slice(),
+  };
+}
+
+/**
  * The header parameters an operation declares, lower-cased, in document order.
  *
  * Outside the shared region for `successStatusesOf`'s reason, one argument further along: the SPA's

@@ -28,7 +28,17 @@ import type { WriteKind } from '@tcms/client';
 
 import type { Qualifier, Session } from './session.js';
 
-/** JSON Schema, as it goes on the wire. Hand-written rather than derived — see `schemas.ts`. */
+/**
+ * JSON Schema, as it goes on the wire.
+ *
+ * ~~Hand-written rather than derived — see `schemas.ts`.~~ → **there is no `schemas.ts` and there
+ * never was** (§205). Every input schema is written out beside the tool that takes it, in `reads.ts`
+ * and `writes.ts`, and *that is the decision*: a tool argument is not a contract schema. It takes
+ * display keys where the API takes UUIDs, it flattens `CaseConditionInput` to bare ids, and its
+ * `description` is written for a model rather than for a person reading the API docs — so deriving
+ * these from `openapi.yaml` would produce a surface no caller on this transport can use. What must
+ * agree with the contract is what goes *out*, and §203's exchange check is what asks that.
+ */
 export interface JsonSchema {
   type: 'object';
   properties: Record<string, unknown>;
