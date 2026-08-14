@@ -41,10 +41,14 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <ol>
  *   <li><strong>Deleting a suite that still holds FILED cases.</strong> The cascade is
- *       deliberately not built here: a delete that soft-deletes the cases in a suite unmakes
- *       <em>other people's</em> work through a permission whose sibling, {@code case:delete},
- *       carries an {@code OWN} qualifier precisely to prevent that — and with no preview of what it
- *       is about to touch. A non-empty suite answers 409 naming the count. The cascade belongs to a
+ *       deliberately not built here: a delete that soft-deletes the cases in a suite would unmake
+ *       a pile of work <em>with no preview of what it is about to touch</em>. <del>Through a
+ *       permission whose sibling, {@code case:delete}, carries an {@code OWN} qualifier precisely to
+ *       prevent that.</del> → that half of the argument died with {@code V51} (§207); {@code
+ *       case:delete} is unqualified now, so the objection is no longer "it reaches other people's
+ *       cases" but "it reaches an unbounded set the caller never named" — which is the part that was
+ *       always doing the work, and which a per-case delete does not have. A non-empty suite answers
+ *       409 naming the count. The cascade belongs to a
  *       slice that can show its work; the contract already has the shape for it in
  *       {@code BulkResult}.
  *       <p><strong>Only the filing arm blocks (§98), and the other two deliberately do not.</strong>

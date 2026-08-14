@@ -61,15 +61,22 @@ export interface Gate {
    * The same question asked **about a row's author** — the client half of the server's
    * `canDoOnAuthored`, and {@link canOnScope}'s twin over the other restrictive axis.
    *
-   * A Test Engineer's `case:delete` is `OWN` (roles spec §A5), so {@link can} says true — they do
-   * delete cases — while deleting a *colleague's* case is refused. Until `createdBy` reached the
-   * wire the client could not tell those apart, so Delete enabled on every row and the caller
-   * learned which were theirs by being refused.
+   * **No grant is `OWN`-qualified since `V51` (§207)**, so this currently answers exactly what
+   * {@link can} answers, for every permission and every row. It is kept rather than deleted for
+   * the reason the server keeps its arm: the qualifier is *data*, and a client that hard-coded
+   * "authorship never matters" would silently disagree with a future `OWN` grant — showing an
+   * enabled Delete that 403s, which is the failure this hook exists to prevent, only inverted.
    *
-   * **`authorId` may be null and that arm is the interesting one.** `test_case.created_by` is
-   * nullable, and the server answers a null author `false` for an `OWN` grant — a grant covering
-   * "your own work" must not stretch to work nobody can attribute. Passing the author through
-   * unchanged, rather than defaulting it, is what keeps the two sides agreeing on that row.
+   * ~~A Test Engineer's `case:delete` is `OWN` (roles spec §A5), so {@link can} says true — they
+   * do delete cases — while deleting a *colleague's* case is refused. Until `createdBy` reached
+   * the wire the client could not tell those apart, so Delete enabled on every row and the caller
+   * learned which were theirs by being refused.~~ That was the state from §65 until 2026-08-14.
+   *
+   * **`authorId` may be null and that arm is the interesting one** *if a grant ever carries `OWN`
+   * again.* `test_case.created_by` is nullable, and the server answers a null author `false` for
+   * an `OWN` grant — a grant covering "your own work" must not stretch to work nobody can
+   * attribute. Passing the author through unchanged, rather than defaulting it, is what keeps the
+   * two sides agreeing on that row.
    */
   canOnAuthored: (permission: PermissionKey, authorId: string | null | undefined) => boolean;
   /** The tooltip for an authorship-denied action, distinguishing "not held" from "not yours". */

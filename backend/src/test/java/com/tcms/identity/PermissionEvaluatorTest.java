@@ -480,10 +480,14 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
         PermissionSet engineer = evaluateIn(ACME, TEAM_ENGINEER, ACME_PROJECT);
         PermissionSet lead = evaluateIn(ACME, LEAD, ACME_PROJECT);
 
-        // 1. creative vs destructive — never blocked from producing, only from unmaking
-        //    someone else's work.
+        // 1. content vs shared structure and judgement — V51 (§207) rewrote this line. A Test
+        //    Engineer has full CRUD over the repository's CONTENT, including content somebody else
+        //    authored; what stays Lead-only is shared structure (a suite is the grouping many
+        //    people file into) and judgements about the work (whether a cycle is finished, whether
+        //    a recorded outcome may be overwritten). plan:delete moved OUT of this line.
         assertThat(engineer.hasAll("case:create", "case:edit", "plan:create", "run:create")).isTrue();
-        assertThat(engineer.hasAny("suite:delete", "plan:delete", "run:close", "result:amend")).isFalse();
+        assertThat(engineer.hasAll("case:delete", "evidence:delete", "plan:delete")).isTrue();
+        assertThat(engineer.hasAny("suite:delete", "run:close", "result:amend")).isFalse();
         assertThat(lead.hasAll("suite:delete", "plan:delete", "run:close", "result:amend")).isTrue();
 
         // 2. review vs approve — contributors review, only Lead+ signs off.
@@ -577,12 +581,24 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a Test Engineer's case:delete is OWN — the whole point of V12")
-        void engineerDeletesOnlyTheirOwn() {
-            // Through a TEAM grant, so the qualifier is proven to survive the hop rather than
-            // being read only off a direct assignment.
+        @DisplayName("a Test Engineer's case:delete is ALL — V51 reversed V12's whole point")
+        void engineerDeletesAnybodys() {
+            // Was OWN from V12 until V51 (§207): CRUD on plans, cases and steps belongs to every
+            // non-Viewer contributor no matter who created the row. Through a TEAM grant, kept from
+            // the original, so the value is still proven to survive the hop rather than being read
+            // only off a direct assignment — the hop is what a qualifier could be lost on, and a
+            // grant that arrives ALL because the team term was dropped would look identical here.
+            // SeedDataTest.ownIsCarriedByNoGrant is the one that reads the seed; this reads the
+            // evaluator.
             assertThat(qualifierIn(ACME, TEAM_ENGINEER, ACME_PROJECT, "case:delete"))
-                    .isEqualTo(PermissionQualifier.OWN);
+                    .isEqualTo(PermissionQualifier.ALL);
+        }
+
+        @Test
+        @DisplayName("evidence:delete moved with it — the other half of V51")
+        void engineerDeletesAnybodysEvidence() {
+            assertThat(qualifierIn(ACME, TEAM_ENGINEER, ACME_PROJECT, "evidence:delete"))
+                    .isEqualTo(PermissionQualifier.ALL);
         }
 
         @Test

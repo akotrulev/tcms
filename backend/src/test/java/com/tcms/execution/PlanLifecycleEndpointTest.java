@@ -444,18 +444,24 @@ class PlanLifecycleEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a Test Engineer holds plan:edit and is refused the delete — 403, row untouched")
-        void engineerCannotDelete() throws Exception {
+        @DisplayName("a Test Engineer deletes a plan a LEAD authored — granted by V51")
+        void engineerDeletesAnybodysPlan() throws Exception {
+            // Asserted 403 until V51 (§207). This is the TIER half of that slice and the one with
+            // no precedent anywhere else: Test Engineer never held plan:delete at all, so this
+            // endpoint has never once answered a contributor with a 204 before now. The plan is
+            // authored by LEAD deliberately — "no matter who first created it" is the requirement,
+            // and a self-authored plan would prove only half of it.
             UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
 
-            // The same caller moves this plan's status all day, which is what makes the refusal a
-            // statement about plan:delete rather than about the project.
+            // The same caller moves this plan's status all day. That used to be what made the
+            // refusal a statement about plan:delete rather than about the project; it now rules out
+            // the mirror reading, that the 204 came from some blanket project-level allowance.
             assertThat(setStatus(ENGINEER, ACME, ACME_BANKING, plan, "IN_REVIEW")
                     .getResponse().getStatus()).isEqualTo(200);
 
             assertThat(delete(ENGINEER, ACME, ACME_BANKING, plan).getResponse().getStatus())
-                    .isEqualTo(403);
-            assertThat(deletedAtOf(plan)).isNull();
+                    .isEqualTo(204);
+            assertThat(deletedAtOf(plan)).isNotNull();
         }
 
         @Test

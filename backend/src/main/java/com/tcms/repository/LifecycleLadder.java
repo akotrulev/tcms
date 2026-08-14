@@ -183,13 +183,31 @@ final class LifecycleLadder {
      *   <li><strong>Granting the sign-off</strong> — {@code APPROVED}. §6g: only Admin and Test Lead
      *       may perform the final transition.</li>
      *   <li><strong>Retiring the artifact</strong> — {@code DEPRECATED}. The soft form of a delete,
-     *       and the delete is Lead-only ({@code suite:delete} outright, {@code case:delete}
-     *       {@code OWN}-qualified), so leaving the retire at the edit key would route around both.
-     *       This tightens what a Test Engineer could do to a <em>draft</em> case through the bulk
-     *       endpoint, deliberately: deprecating a colleague's draft is retiring their work, not
-     *       producing. The {@code OWN}-qualified refinement — an author may retire their own — is
-     *       the natural next rung and needs the authorship term {@code AuthorshipGate} already
-     *       holds; it is not built here.</li>
+     *       and <del>the delete is Lead-only ({@code suite:delete} outright, {@code case:delete}
+     *       {@code OWN}-qualified), so leaving the retire at the edit key would route around
+     *       both</del>.
+     *
+     *       <p><strong>KNOWN INCOHERENCE SINCE {@code V51} (§207), LEFT STANDING DELIBERATELY AND
+     *       NOT ENDORSED.</strong> Half that premise is gone: {@code case:delete} is now a plain
+     *       grant every Test Engineer holds over every case. So a contributor may <em>delete</em> a
+     *       colleague's case outright and may <em>not</em> deprecate it — the stronger act is
+     *       cheaper than the weaker one, and the "routes around the delete" argument now runs
+     *       backwards on a case. It still holds for a suite, where {@code suite:delete} is Lead-only
+     *       and unchanged.
+     *
+     *       <p>Not repaired here because §207's requirement is about CRUD, and moving this gate is a
+     *       change to the <em>approval ladder</em> — the key it costs is {@code case:approve}, by
+     *       §72's placement decision, and that ladder was explicitly out of scope. The repair, when
+     *       someone takes it, is to decide whether retiring is an edit or an approval on its own
+     *       terms rather than by reference to what a delete costs. Recorded so the next reader does
+     *       not take the surviving prose as a live argument. Handoff §207 carries it as a named
+     *       follow-up.
+     *
+     *       <p>The rest is unchanged: this tightens what a Test Engineer could do to a <em>draft</em>
+     *       case through the bulk endpoint, deliberately. <del>The {@code OWN}-qualified refinement —
+     *       an author may retire their own — is the natural next rung.</del> → no longer available as
+     *       a rung: no grant carries {@code OWN} after {@code V51}, so a refinement built on it would
+     *       be reintroducing authorship-scoped writes that §207 removed.</li>
      *   <li><strong>Taking either back</strong> — any move down out of a state at or above
      *       {@code APPROVED}. This is the arm that was missing on a case.</li>
      * </ol>

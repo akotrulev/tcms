@@ -299,7 +299,9 @@ public class TestCase {
      *   <li><strong>{@code ownerId = creatorId}.</strong> {@code ownerId} is refused as a request
      *       field — choosing another person's case needs a membership check this slice does not build
      *       — but a case with no owner at all is a row nobody is answerable for, and authorship is
-     *       what {@code case:delete}'s {@code OWN} qualifier will resolve against. The author owns
+     *       what <del>{@code case:delete}'s {@code OWN} qualifier will resolve against</del> — since
+     *       {@code V51} nothing authorizes on it, and the reason stands without that: somebody has to
+     *       be answerable for the row, the more so now that anyone may delete it. The author owns
      *       what they wrote until something reassigns it.</li>
      * </ul>
      *
@@ -566,9 +568,18 @@ public class TestCase {
      * Who wrote this case, or null on a row that predates {@code POST}.
      *
      * <p>Read by exactly one caller — {@link CaseDeleteService}, which hands it to the authorship
-     * gate because {@code case:delete} is {@code OWN}-qualified for Test Engineer (roles spec §A5).
-     * It is deliberately <em>not</em> on {@link TestCaseSummaryView} or the detail view: an author is
-     * not a field the API serves, and a null one would have to mean something on a screen.
+     * gate. <del>Because {@code case:delete} is {@code OWN}-qualified for Test Engineer (roles spec
+     * §A5).</del> → since {@code V51} no grant is {@code OWN}-qualified, so the gate resolves to a
+     * plain yes for every seeded role and this value no longer decides anything. It is still passed
+     * because the qualifier is data, not a constant — see
+     * {@link com.tcms.identity.IdentityProjectAccess#canDoOnAuthored}.
+     *
+     * <p><del>It is deliberately <em>not</em> on {@link TestCaseSummaryView} or the detail view: an
+     * author is not a field the API serves, and a null one would have to mean something on a
+     * screen.</del> → wrong since §66: {@code createdBy} IS on both, and this sentence outlived the
+     * slice that put it there. It is served as a display field — the author is not the owner, and
+     * {@code CaseVersionPanel} renders it — which is why §207 did not take it off the wire when it
+     * stopped being load-bearing for authorization.
      */
     public UUID getCreatedBy() {
         return createdBy;

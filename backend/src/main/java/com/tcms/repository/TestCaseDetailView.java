@@ -132,12 +132,18 @@ public record TestCaseDetailView(
         // MISSING HERE until 2026-08-02 — §66 put it on the wire for the grid and this view, which
         // shares the contract schema, kept omitting the key.
         //
-        // It is not a cosmetic omission: the case detail is the only screen with a delete
-        // affordance, its gate is `case:delete` qualified OWN, and the SPA passes
+        // It was not a cosmetic omission WHILE THE GATE READ IT: the case detail is the only screen
+        // with a delete affordance, its gate was `case:delete` qualified OWN, and the SPA passes
         // `data.createdBy?.id ?? null`. An absent key reads as null, null is a SUPPLIED author that
         // matches nobody, and the gate therefore refused a Test Engineer their own case — the exact
         // inverse of what §66 shipped. Nothing caught it: `tsc` allows optional chaining on a
         // required field, and the page's own test supplies a fixture that has the key.
+        //
+        // V51 (§207) removed the qualifier, so that defect can no longer occur and the key is no
+        // longer load-bearing for authorization. It stays REQUIRED anyway, for two reasons that
+        // outlive the gate: the contract declares it on TestCaseSummary and this view shares that
+        // schema, and the author is a display field in its own right — not the owner, and the two
+        // diverge the moment a case is reassigned.
         UserRef createdBy,
         String testType,
         String testLevel,

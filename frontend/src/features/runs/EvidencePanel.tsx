@@ -204,8 +204,11 @@ function EvidenceRow({
       </Stack>
 
       {/*
-        `authorId` is what makes this an OWN-qualified gate: `evidence:delete` is held outright by
-        leads and above, and by a Test Engineer only over evidence they attached (roles spec §A5).
+        ~~`authorId` is what makes this an OWN-qualified gate: `evidence:delete` is held outright by
+        leads and above, and by a Test Engineer only over evidence they attached (roles spec §A5).~~
+        → V51 (§207) removed that qualifier along with `case:delete`'s, so this resolves to the
+        plain grant today. The argument passes anyway, for the reason CaseDetailPage's Delete gate
+        gives: the qualifier is server-side data, not a client constant.
 
         `?? null` and NOT `?? undefined` — §66. PermissionGate switches on `authorId !== undefined`,
         so `undefined` means "this affordance is not author-qualified" and would hand every row the

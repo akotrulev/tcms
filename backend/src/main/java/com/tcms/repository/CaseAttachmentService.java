@@ -33,10 +33,15 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <h2>The gate is {@code case:edit} on BOTH writes, and the {@code OWN} arm is deliberately absent</h2>
  *
- * <p>The tempting move is to copy {@code evidence:delete}'s authorship arm — a Test Engineer may
+ * <p><strong>Settled by {@code V51} (§207), which removed the arm this section was arguing
+ * against.</strong> {@code evidence:delete} no longer carries an authorship qualifier either — no
+ * grant does — so there is nothing left to copy and the conclusion here was simply reached early.
+ * The original reasoning, kept because it is the one that generalises:
+ *
+ * <p><del>The tempting move is to copy {@code evidence:delete}'s authorship arm — a Test Engineer may
  * remove evidence they attached and not a colleague's. It is wrong here, and the reason is what the
  * two things <em>are</em>. Evidence is a record of something that happened, and unmaking somebody
- * else's record is the line the roles spec §A3 draws. <strong>A case attachment is part of the case
+ * else's record is the line the roles spec §A3 draws.</del> <strong>A case attachment is part of the case
  * definition</strong>, which {@code case:edit} already owns wholesale: a Test Engineer holding it may
  * today rewrite every step, the title, the objective and the preconditions of a lead's case.
  *

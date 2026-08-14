@@ -574,13 +574,19 @@ public class CaseController {
      * content had it before pressing delete. A 200 carrying the tombstone would invite a screen that
      * renders a deleted case as if it were current.
      *
-     * <h2>Two 403s with two sentences, from one permission</h2>
+     * <h2>Two 403s with two sentences, from one permission — and only one of them still fires</h2>
      *
-     * <p>{@code case:delete} is {@code OWN}-qualified for Test Engineer (roles spec §A5), so
-     * "refused" has two meanings and they must not be worded alike. A Test Engineer told "you do not
-     * have permission to delete test cases in this project" would go and ask an admin for a
-     * permission they already hold, about a case they are looking at, having deleted three of their
-     * own that morning. See {@link CaseDeleteService} for the split.
+     * <p><del>{@code case:delete} is {@code OWN}-qualified for Test Engineer (roles spec §A5)</del> →
+     * <strong>it is not, since {@code V51} (§207): CRUD on plans, cases and steps belongs to every
+     * non-Viewer contributor no matter who created the row.</strong> The refusal that remains is the
+     * plain one — the caller does not hold {@code case:delete} here at all.
+     *
+     * <p>The second sentence is kept and is now unreachable from seeded data, for the reason
+     * {@link CaseDeleteService} gives: the qualifier is data, so a future {@code OWN} grant must find
+     * the wording already in place rather than fail open. When it was reachable it read "you can only
+     * delete test cases you created", because a Test Engineer told "you do not have permission to
+     * delete test cases in this project" would go and ask an admin for a permission they already
+     * hold, about a case they are looking at, having deleted three of their own that morning.
      *
      * <h2>No {@code If-Match}</h2>
      *

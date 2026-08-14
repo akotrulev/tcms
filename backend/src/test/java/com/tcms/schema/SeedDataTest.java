@@ -222,14 +222,21 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("Agent is Test Engineer minus exactly three — derived, not enumerated")
-    void agentIsTestEngineerMinusThree() throws SQLException {
+    @DisplayName("Agent is Test Engineer minus exactly five — derived, not enumerated")
+    void agentIsTestEngineerMinusFive() throws SQLException {
         // DERIVED from the two grants rather than transcribed, because the point of the role is the
-        // DELTA: it is a ceiling defined as "the contributor role, minus the three things an API
-        // caller must not do". A fourth enumeration of 23 keys would be a fourth thing that can
-        // drift from the spec, and the drift that matters here is the one that happens LATER — a
-        // permission added to Test Engineer by a future migration lands in a credential's ceiling
-        // if this is a subset check, and shows up here as a failure if it is a delta check.
+        // DELTA: it is a ceiling defined as "the contributor role, minus the things an API caller
+        // must not do". A fourth enumeration of 23 keys would be a fourth thing that can drift from
+        // the spec, and the drift that matters here is the one that happens LATER — a permission
+        // added to Test Engineer by a future migration lands in a credential's ceiling if this is a
+        // subset check, and shows up here as a failure if it is a delta check.
+        //
+        // THAT IS EXACTLY WHAT V51 DID, and it is the whole argument for this test's shape. §207
+        // granted plan:delete to Test Engineer. Agent enumerates its own 23 keys, so no agent
+        // gained anything in the data — but V40 had listed plan:delete under "never held, INHERITED
+        // FROM TEST ENGINEER'S OWN BOUNDARY", and that inheritance stops excluding a key the moment
+        // the contributor holds it. A subset check would have stayed green while the spec's stated
+        // reason for the exclusion had quietly evaporated. Three became five here instead.
         Set<String> agent = grantsOf(AGENT);
         Set<String> engineer = grantsOf(TEST_ENGINEER);
 
@@ -239,11 +246,17 @@ class SeedDataTest extends IntegrationTestBase {
                 .as("""
                         What Agent drops from Test Engineer. library:manage because roles spec §A3 \
                         gates it by an impact modal rather than by permission and an API caller \
-                        never sees that modal; case:delete and evidence:delete because both are OWN \
-                        for Test Engineer and OWN follows api_token.owner_id — so the agent would \
-                        delete what the HUMAN authored. company:read because a token is not a \
-                        member (V40 §6).""")
-                .containsExactly("case:delete", "company:read", "evidence:delete", "library:manage");
+                        never sees that modal; company:read because a token is not a member \
+                        (V40 §6); case:delete, evidence:delete and plan:delete because AGENT ACCESS \
+                        CREATES, READS AND EDITS AND DOES NOT DELETE (§207). That last reason is \
+                        newer than the role. V40 justified the two deletes by OWN resolving against \
+                        created_by while a token's owner is api_token.owner_id, and V51 deleted the \
+                        premise of that argument by removing the qualifier — the exclusion survived \
+                        the reasoning that produced it, which is why the reason is restated here \
+                        rather than left to be re-derived from a migration that now misleads.""")
+                .containsExactly(
+                        "case:delete", "company:read", "evidence:delete", "library:manage",
+                        "plan:delete");
 
         Set<String> added = new TreeSet<>(agent);
         added.removeAll(engineer);
@@ -256,7 +269,12 @@ class SeedDataTest extends IntegrationTestBase {
                 .isEmpty();
 
         assertThat(agent)
-                .as("the three an agent must never do, held by nobody below Test Lead anyway")
+                .as("""
+                        What an agent must never do. Every key here EXCEPT plan:delete is also held \
+                        by nobody below Test Lead, so the delta check above would catch its \
+                        appearance anyway and this is belt-and-braces. plan:delete is the one that \
+                        is genuinely load-bearing since V51: Test Engineer holds it now, so this is \
+                        the only assertion standing between a credential and deleting a plan.""")
                 .doesNotContain("case:approve", "suite:approve", "plan:approve",
                         "run:close", "result:amend", "doc:publish",
                         "suite:delete", "plan:delete", "artifact:delete",
@@ -314,14 +332,28 @@ class SeedDataTest extends IntegrationTestBase {
         Set<String> engineer = grantsOf(TEST_ENGINEER);
         Set<String> lead = grantsOf(TEST_LEAD);
 
-        // 1. Creative vs destructive — never blocked from producing, only from unmaking
-        //    someone else's work.
+        // 1. Shared structure and judgements about the work are Lead-only — NOT "destructive", and
+        //    not authorship. V51 (§207) took plan:delete out of this line and case:delete's OWN
+        //    qualifier out of the model entirely: CRUD on plans, cases and steps belongs to every
+        //    non-Viewer contributor regardless of who created the row. What is left here is two
+        //    decisions about structure every plan shares (a suite is the grouping, a project-scope
+        //    artifact is inherited read-only by every plan) and two judgements about the work.
         assertThat(engineer)
-                .as("the destructive four are Lead-only")
-                .doesNotContain("suite:delete", "plan:delete", "run:close", "result:amend");
+                .as("the Lead-only three, and plan:delete is deliberately NOT among them since V51")
+                .doesNotContain("suite:delete", "run:close", "result:amend");
         assertThat(engineer)
                 .as("but every creative permission is held")
                 .contains("suite:manage", "case:create", "case:edit", "plan:create", "run:execute");
+        assertThat(engineer)
+                .as("""
+                        The V51 grants, asserted positively so that a migration reverting them is \
+                        caught here and not only as a side effect somewhere else. Two different \
+                        changes are being guarded: plan:delete is a TIER gate Test Engineer did not \
+                        hold at all, so revoking it would show up as an absence here; case:delete \
+                        and evidence:delete were already present and what V51 changed was their \
+                        QUALIFIER, which this assertion cannot see — ownIsCarriedByNoGrant is what \
+                        catches those two going back to OWN.""")
+                .contains("plan:delete", "case:delete", "evidence:delete");
 
         // 2. Review vs approve.
         assertThat(engineer).contains("case:review", "suite:review", "plan:review");
@@ -568,6 +600,47 @@ class SeedDataTest extends IntegrationTestBase {
                         restriction for the key; do NOT make the merge pick a winner, which would \
                         make an authorization decision depend on enum declaration order.""")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("OWN is carried by no grant — empty by decision (V51), and pinned so it stays that way")
+    void ownIsCarriedByNoGrant() throws SQLException {
+        // The population V51 emptied, asserted in BOTH directions, because an empty set is the one
+        // result that proves nothing on its own: a seeding bug that dropped every OWN row and a
+        // decision that removed the only two look identical from here.
+        //
+        // The direction that matters is the future one. `OWN` is still a legal CHECK value, still a
+        // PermissionQualifier member, and IdentityProjectAccess.canDoOnAuthored still resolves it —
+        // kept on purpose against the next permission that needs "only what you wrote". So the
+        // mechanism is loaded and unused, which is exactly the state in which a later migration can
+        // requalify a grant and reintroduce authorship-scoped CRUD without anyone deciding to. This
+        // fails on that migration and names the decision it would be reversing.
+        //
+        // NOT a claim that OWN should never be used again. A grant appearing here is a failure only
+        // in the sense that it must be a DELIBERATE edit to this assertion and to roles spec §A5 —
+        // the same bar V40's enumeration sets for widening a credential.
+        assertThat(queryStrings("""
+                SELECT r.name || ' / ' || rp.permission_key
+                  FROM role_permission rp
+                  JOIN role r ON r.id = rp.role_id
+                 WHERE rp.qualifier = 'OWN'
+                 ORDER BY 1
+                """))
+                .as("""
+                        Grants carrying the OWN qualifier. V51 (§207) removed the only two — Test \
+                        Engineer's case:delete and evidence:delete — because CRUD on plans, cases \
+                        and steps belongs to every non-Viewer contributor no matter who created the \
+                        row. A row here means authorship-scoped CRUD is back; roles spec §A5 must \
+                        say so first.""")
+                .isEmpty();
+
+        assertThat(queryStrings("SELECT DISTINCT qualifier FROM role_permission ORDER BY 1"))
+                .as("""
+                        The qualifiers actually in play. Asserted so that the emptiness above is \
+                        read as "OWN specifically has no rows" rather than "the query is wrong" — \
+                        PLAN_SCOPE is populated (V19, Test Engineer and Agent on artifact:edit), so \
+                        a typo in the column or table name shows up as this list being empty too.""")
+                .containsExactly("ALL", "PLAN_SCOPE");
     }
 
     @Test

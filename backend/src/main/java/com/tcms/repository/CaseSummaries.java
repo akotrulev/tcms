@@ -135,10 +135,10 @@ public class CaseSummaries {
                         // resolves. Both are honest; see TestCaseSummaryView.
                         row.getOwnerId() == null ? null : peopleById.get(row.getOwnerId()),
                         // Null for a case written before authorship was recorded, and null for one
-                        // whose author's account no longer resolves. The first is the arm the
-                        // delete gate turns on: canDoOnAuthored answers a null author `false` for
-                        // an OWN grant, so the SPA must be able to see the absence rather than
-                        // infer it from a missing key.
+                        // whose author's account no longer resolves. ~~The first is the arm the
+                        // delete gate turns on.~~ → V51 (§207) removed the OWN qualifier, so no
+                        // gate reads this any more; it is served as a display field, and the SPA
+                        // must still see the absence rather than infer it from a missing key.
                         row.getCreatedBy() == null ? null : peopleById.get(row.getCreatedBy()),
                         classified.single(row.getId(), DimensionKeys.TEST_TYPE),
                         classified.single(row.getId(), DimensionKeys.TEST_LEVEL),

@@ -37,28 +37,39 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * {@code DELETE /projects/{projectId}/cases/{caseId}} — and the {@code OWN} qualifier it is the
- * first caller of.
+ * {@code DELETE /projects/{projectId}/cases/{caseId}} — <del>and the {@code OWN} qualifier it is the
+ * first caller of</del> → <strong>and, since {@code V51} (§207), the proof that authorship does
+ * <em>not</em> decide it.</strong>
+ *
+ * <p>This class was written to pin the opposite. {@code case:delete} was {@code OWN}-qualified for
+ * Test Engineer from {@code V12} until {@code V51}, and the assertions below were the only thing
+ * standing between a contributor and a colleague's case. The requirement reversed: CRUD on plans,
+ * cases and steps belongs to every non-Viewer contributor no matter who first created the row. The
+ * tests are inverted rather than deleted, because "a Test Engineer deletes a colleague's case" is
+ * now the behaviour somebody could regress by reinstating a qualifier, and it needs a witness for
+ * the same reason its opposite did.
  *
  * <h2>The failures this class exists to catch</h2>
  *
  * <ol>
- *   <li><strong>The qualifier ignored.</strong> Gate the delete on {@code case:delete} alone and
- *       every Test Engineer can unmake every colleague's case — the one thing roles spec §A3's
- *       principle names, and the only assertion in the suite that would notice is
- *       {@link Authorship#engineerCannotDeleteSomeoneElses}. Every other test here still passes: a
- *       lead can still delete, an engineer can still delete their own.</li>
- *   <li><strong>The qualifier over-applied.</strong> The mirror failure, and the more likely one to
- *       ship unnoticed because it only refuses: a Test Lead or a Company Admin restricted to their
- *       own cases can no longer clean up after anyone. Asserted from both roles.</li>
- *   <li><strong>An unattributable row treated as the caller's.</strong> {@code created_by} is null
- *       on every case written before {@code POST} existed. {@code OWN} covering them is the failure
- *       that fails <em>open</em>.</li>
- *   <li><strong>One 403 for two situations.</strong> A Viewer and an author-restricted engineer are
- *       different facts, and the second one told "you cannot delete cases here" goes to ask an admin
- *       for a permission they already hold.</li>
+ *   <li><strong>Authorship reintroduced.</strong> Requalify the grant, or hard-code an author
+ *       comparison at the gate, and a contributor can no longer clean up a shared repository. The
+ *       assertion is {@link Authorship#engineerDeletesSomeoneElses}, and note what it does NOT
+ *       depend on: it drives HTTP, so it fails for a qualifier in the seed
+ *       ({@code SeedDataTest.ownIsCarriedByNoGrant} catches that one first) <em>and</em> for an
+ *       authorship check written in Java that no seed data can see.</li>
+ *   <li><strong>The delete widened past the Viewer line.</strong> The mirror failure. "Not a
+ *       Viewer" is the whole boundary now, so the Viewer 403 is carrying more weight than it used
+ *       to — it is the only refusal left on this endpoint that is about the caller rather than the
+ *       route.</li>
+ *   <li><strong>An unattributable row treated as special.</strong> {@code created_by} is null on
+ *       every case written before {@code POST} existed. Those rows were the <em>hardest</em> case
+ *       under {@code OWN} and are now the same as any other; a gate still consulting the author
+ *       refuses them, which is how a half-reverted change would present.</li>
  *   <li><strong>A hard delete.</strong> Past runs pin the version they executed; the row must
- *       survive with {@code deleted_at} set, and no read may return it.</li>
+ *       survive with {@code deleted_at} set, and no read may return it. This matters MORE after
+ *       {@code V51}, not less: soft delete is the thing the reversal's argument leans on for
+ *       recoverability now that the qualifier is gone.</li>
  *   <li><strong>A delete that reaches across the two path segments.</strong> The project gate is not
  *       the case gate: {@code /projects/{granted}/cases/{ungranted}} must be a 404.</li>
  * </ol>
@@ -68,7 +79,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * happened, and §29 hit it again: green alone, red in the full suite.
  */
 @AutoConfigureMockMvc
-@DisplayName("Case delete — soft, gated, and OWN-qualified for a Test Engineer")
+@DisplayName("Case delete — soft, gated on case:delete, and NOT scoped to the author (V51)")
 class CaseDeleteEndpointTest extends IntegrationTestBase {
 
     private static final UUID ACME = UUID.fromString("d4000000-0000-4000-8000-00000000000a");
@@ -81,7 +92,10 @@ class CaseDeleteEndpointTest extends IntegrationTestBase {
 
     /** Test Lead — holds {@code case:delete} unqualified. */
     private static final UUID LEAD = UUID.fromString("d4003000-0000-4000-8000-000000000001");
-    /** Test Engineer — holds {@code case:delete} as {@code OWN}. The persona of this class. */
+    /**
+     * Test Engineer — holds {@code case:delete} <del>as {@code OWN}</del> unqualified since
+     * {@code V51}. The persona of this class, and the one whose reach changed.
+     */
     private static final UUID ENGINEER = UUID.fromString("d4003000-0000-4000-8000-000000000002");
     /** A second Test Engineer, so "someone else's case" is authored by a real account. */
     private static final UUID COLLEAGUE = UUID.fromString("d4003000-0000-4000-8000-000000000003");
@@ -105,7 +119,7 @@ class CaseDeleteEndpointTest extends IntegrationTestBase {
     private static final UUID ENGINEER_CASE = UUID.fromString("d4005000-0000-4000-8000-000000000001");
     /** A second one, so a test that deletes need not fight one that asserts the row is intact. */
     private static final UUID ENGINEER_CASE_2 = UUID.fromString("d4005000-0000-4000-8000-000000000002");
-    /** Authored by {@link #COLLEAGUE} — the case an OWN-qualified caller must not touch. */
+    /** Authored by {@link #COLLEAGUE} — <del>the case an OWN-qualified caller must not touch</del>. */
     private static final UUID COLLEAGUE_CASE = UUID.fromString("d4005000-0000-4000-8000-000000000003");
     /** A second of the colleague's, for the assertions that consume one. */
     private static final UUID COLLEAGUE_CASE_2 = UUID.fromString("d4005000-0000-4000-8000-000000000004");
@@ -329,7 +343,7 @@ class CaseDeleteEndpointTest extends IntegrationTestBase {
     // =====================================================================
 
     @Nested
-    @DisplayName("OWN — a Test Engineer deletes their own work and nobody else's")
+    @DisplayName("Authorship does not decide it — a Test Engineer deletes anyone's case (V51)")
     class Authorship {
 
         @Test
@@ -341,67 +355,93 @@ class CaseDeleteEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a Test Engineer may NOT delete a colleague's — THE assertion of this class")
-        void engineerCannotDeleteSomeoneElses() throws Exception {
-            // Roles spec §A5 and §A3's principle: a Test Engineer is never blocked from producing,
-            // only from unmaking SOMEONE ELSE'S work. Drop the qualifier and this is the only test
-            // in the suite that goes red.
+        @DisplayName("a Test Engineer deletes a COLLEAGUE'S — THE assertion of this class, inverted")
+        void engineerDeletesSomeoneElses() throws Exception {
+            // §207. This asserted 403 from §65 until V51, and it was the single test the whole OWN
+            // qualifier existed to satisfy. The requirement it now encodes: a shared test repository
+            // whose rows answer to their author is a set of private notebooks in one table, and the
+            // duplicate a colleague left behind is exactly the row somebody else has to remove.
+            //
+            // It drives HTTP rather than reading the grant, which is what makes it worth keeping
+            // after the reversal: SeedDataTest.ownIsCarriedByNoGrant catches a requalified GRANT,
+            // and only this catches an authorship comparison hard-coded in Java, which no amount of
+            // seed data can see.
             MvcResult result = delete(ENGINEER, ACME, ACME_BANKING, COLLEAGUE_CASE);
 
+            assertThat(result.getResponse().getStatus()).isEqualTo(204);
+            assertThat(isLive(ACME, COLLEAGUE_CASE)).isFalse();
+        }
+
+        @Test
+        @DisplayName("deleting a peer's case attributes the removal to the DELETER, not the author")
+        void aColleaguesCaseRecordsWhoRemovedIt() throws Exception {
+            // The recoverability the V51 argument leans on, plus the attribution it newly needs.
+            // Under OWN, whoever deleted a case had written it, so updated_by and created_by were
+            // the same person and nothing distinguished them. They diverge now, and this is the row
+            // an administrator restoring a case reads to find out who removed somebody else's work.
+            assertThat(delete(ENGINEER, ACME, ACME_BANKING, COLLEAGUE_CASE_2).getResponse().getStatus())
+                    .isEqualTo(204);
+
+            assertThat(isLive(ACME, COLLEAGUE_CASE_2))
+                    .as("soft — the row survives, which is what makes the reversal recoverable")
+                    .isFalse();
+            assertThat(caseColumn(ACME, COLLEAGUE_CASE_2, "CAST(updated_by AS text)"))
+                    .as("TestCase.softDelete records the actor; the author stays on created_by")
+                    .isEqualTo(ENGINEER.toString());
+            assertThat(caseColumn(ACME, COLLEAGUE_CASE_2, "CAST(created_by AS text)"))
+                    .isEqualTo(COLLEAGUE.toString());
+        }
+
+        @Test
+        @DisplayName("a Viewer is still refused, and that 403 is now the whole boundary")
+        void aViewerIsStillRefused() throws Exception {
+            // What is left of the gate. Every non-Viewer contributor deletes; the Viewer does not,
+            // and there is no longer a second, softer refusal beside this one — the message that
+            // said "you can only delete test cases you created" is unreachable from seeded data
+            // (CaseDeleteService keeps it for a future OWN grant, deliberately).
+            MvcResult result = delete(VIEWER, ACME, ACME_BANKING, ENGINEER_CASE_2);
+
             assertThat(result.getResponse().getStatus()).isEqualTo(403);
-            assertThat(isLive(ACME, COLLEAGUE_CASE)).isTrue();
+            assertThat(isLive(ACME, ENGINEER_CASE_2)).isTrue();
+            assertThat(json.readTree(result.getResponse().getContentAsString()).get("detail").asText())
+                    .as("names no permission key — a key is not actionable by someone who cannot "
+                            + "grant it to themselves")
+                    .doesNotContain("case:delete");
         }
 
         @Test
-        @DisplayName("the refusal is the authorship and not the permission — the same caller may edit it")
-        void theRefusedEngineerStillReachesTheCase() throws Exception {
-            // Proves the 403 above is the qualifier at work rather than a missing grant, a broken
-            // route or a bad token: the same engineer edits the same colleague's case, because
-            // case:edit is deliberately NOT OWN-qualified (roles spec §A5, superseded 2026-07-31).
-            assertThat(patchTitle(ENGINEER, ACME, ACME_BANKING, COLLEAGUE_CASE, "Edited by a peer")
-                    .getResponse().getStatus())
-                    .isEqualTo(200);
-        }
-
-        @Test
-        @DisplayName("the two refusals carry different messages")
-        void aRestrictedAuthorIsNotToldTheyHoldNothing() throws Exception {
-            String viewer = delete(VIEWER, ACME, ACME_BANKING, ENGINEER_CASE)
-                    .getResponse().getContentAsString();
-            String engineer = delete(ENGINEER, ACME, ACME_BANKING, COLLEAGUE_CASE)
-                    .getResponse().getContentAsString();
-
-            assertThat(engineer)
-                    .as("an engineer who deletes their own cases every day, told they cannot "
-                            + "delete cases, goes to ask an admin for a permission they hold")
-                    .isNotEqualTo(viewer);
-            assertThat(json.readTree(engineer).get("detail").asText())
-                    .contains("only delete test cases you created");
-        }
-
-        @Test
-        @DisplayName("a case with no recorded author is NOT the engineer's own")
-        void anUnattributableCaseIsNobodysOwn() throws Exception {
-            // created_by is null on every case older than POST. Treating null as "mine" is the
-            // failure that fails OPEN, on exactly the rows nobody can vouch for.
+        @DisplayName("a case with no recorded author is deleted like any other")
+        void anUnattributableCaseIsNoLongerSpecial() throws Exception {
+            // created_by is null on every case older than POST. Under OWN these were the hardest
+            // rows — unattributable, so nobody's own, so refused to the contributor and 403 by
+            // design. They are now ordinary, and this is the assertion that catches a HALF-reverted
+            // change: a gate still consulting the author passes every test above and refuses here,
+            // because null equals nobody.
             assertThat(delete(ENGINEER, ACME, ACME_BANKING, ORPHAN_CASE).getResponse().getStatus())
-                    .isEqualTo(403);
-            assertThat(isLive(ACME, ORPHAN_CASE)).isTrue();
+                    .isEqualTo(204);
+            assertThat(isLive(ACME, ORPHAN_CASE)).isFalse();
         }
 
         @Test
-        @DisplayName("a Test Lead still deletes that same orphan — the restriction is the caller's")
-        void aLeadIsNotRestrictedByAuthorship() throws Exception {
-            assertThat(delete(LEAD, ACME, ACME_BANKING, ORPHAN_CASE).getResponse().getStatus())
+        @DisplayName("a Test Lead deletes the same rows — the tier above lost nothing")
+        void aLeadStillDeletesAnything() throws Exception {
+            // The mirror of the widening. V51 raised the contributor to the lead's reach on this
+            // key; it must not have done it by lowering the lead.
+            assertThat(delete(LEAD, ACME, ACME_BANKING, COLLEAGUE_CASE).getResponse().getStatus())
                     .isEqualTo(204);
         }
 
         @Test
         @DisplayName("a Company Admin who also holds a Test Engineer grant keeps the unqualified one")
         void anExtraWeakerGrantTakesNothingAway() throws Exception {
-            // Strongest wins, over HTTP. A merge that let the weaker PROJECT-scope grant win would
-            // mean granting a Company Admin a project role quietly demotes them.
-            assertThat(delete(ADMIN, ACME, ACME_BANKING, COLLEAGUE_CASE).getResponse().getStatus())
+            // Strongest wins, over HTTP. NOTE this assertion went vacuous at V51 and is kept
+            // knowingly: both grants are ALL now, so it can no longer fail for the reason it was
+            // written (a merge letting the weaker PROJECT-scope grant win, quietly demoting a
+            // Company Admin who is given a project role). PermissionQualifierTest and
+            // SeedDataTest.noPermissionCarriesTwoDifferentRestrictiveQualifiers cover the merge on
+            // the qualifier that IS still populated. Deleting this would leave the HTTP-level
+            // regression uncovered the day any grant becomes restrictive again.
+            assertThat(delete(ADMIN, ACME, ACME_BANKING, ENGINEER_CASE).getResponse().getStatus())
                     .isEqualTo(204);
         }
     }
@@ -500,7 +540,10 @@ class CaseDeleteEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("a refused delete writes no audit row")
         void nothingIsRecordedForARefusal() throws Exception {
-            delete(ENGINEER, ACME, ACME_BANKING, COLLEAGUE_CASE);
+            // Only the Viewer refuses now. The engineer-on-a-colleague's-case arm was here until
+            // V51 (§207) and had to go, because that call is a 204 — leaving it would have made
+            // this test assert "no audit row" about a delete that succeeded, which is the exact
+            // inverse of what it exists for.
             delete(VIEWER, ACME, ACME_BANKING, ENGINEER_CASE);
 
             assertThat(auditEvents(ACME)).doesNotContainKey("case.deleted");
@@ -523,28 +566,6 @@ class CaseDeleteEndpointTest extends IntegrationTestBase {
             throws Exception {
         return mvc.perform(MockMvcRequestBuilders
                         .get("/api/v1/projects/" + projectId + "/cases/" + caseId)
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId)))
-                .andReturn();
-    }
-
-    private MvcResult patchTitle(
-            UUID userId, UUID companyId, UUID projectId, UUID caseId, String title)
-            throws Exception {
-
-        // A whole valid edit, because a partial one is a 400 and would make this test pass for the
-        // wrong reason — a refused engineer and a rejected payload are both "not 200".
-        String body = "{"
-                + "\"title\":\"" + title + "\","
-                + "\"suiteId\":\"" + PAYMENTS + "\","
-                + "\"priority\":\"MEDIUM\","
-                + "\"automationStatus\":\"MANUAL\","
-                + "\"stepFormat\":\"STRUCTURED\","
-                + "\"steps\":[{\"action\":\"Open the screen\"}]"
-                + "}";
-        return mvc.perform(MockMvcRequestBuilders
-                        .patch("/api/v1/projects/" + projectId + "/cases/" + caseId)
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content(body)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId)))
                 .andReturn();
     }

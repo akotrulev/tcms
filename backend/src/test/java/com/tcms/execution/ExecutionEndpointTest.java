@@ -1072,23 +1072,23 @@ class ExecutionEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a tester cannot remove a colleague's evidence, and is told the right reason")
-        void refusesSomeoneElses() throws Exception {
+        @DisplayName("a tester removes a COLLEAGUE'S evidence — inverted by V51")
+        void removesSomeoneElses() throws Exception {
+            // Asserted 403 with "you can only remove evidence you attached" from §67 until V51
+            // (§207), which took the OWN qualifier off evidence:delete along with case:delete's.
+            // Inverted rather than deleted: this is now the behaviour a reinstated qualifier would
+            // break, and it needs a witness for the same reason its opposite did.
             UUID id = attachedId(LEAD, EXEC_A, "the-leads.png");
 
-            MvcResult refused = deleteEvidence(ENGINEER, ACME, EXEC_A, id);
+            MvcResult removed = deleteEvidence(ENGINEER, ACME, EXEC_A, id);
 
-            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
-            // The sentence matters as much as the status. "You do not have permission to remove
-            // evidence" is FALSE for this caller — they remove their own all day — and false in
-            // the direction that sends them to ask an administrator for something they hold.
-            assertThat(body(refused).get("detail").asText())
-                    .contains("only remove evidence you attached");
+            assertThat(removed.getResponse().getStatus()).isEqualTo(204);
 
-            // And the row survives. A refusal that answered 403 and deleted anyway is the failure
-            // this test exists for, and the status alone cannot tell the two apart.
+            // And the row is actually gone. The mirror of the assertion this replaced: a 204 that
+            // deleted nothing is as wrong as a 403 that deleted anyway, and the status alone
+            // cannot tell either pair apart.
             assertThat(body(get(LEAD, ACME, executionPath(RUN, EXEC_A))).get("evidence"))
-                    .hasSize(1);
+                    .isEmpty();
         }
 
         @Test
@@ -1105,8 +1105,8 @@ class ExecutionEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("evidence with no recorded author is nobody's own work, and OWN does not cover it")
-        void refusesUnattributedForAnOwnGrant() throws Exception {
+        @DisplayName("evidence with no recorded author is removed like any other, since V51")
+        void removesUnattributedEvidence() throws Exception {
             UUID id = attachedId(ENGINEER, EXEC_A, "orphan.png");
             // Nothing the API offers can produce this row — created_by is always the caller. Which
             // is precisely why it is the arm no fixture contains and the one most likely to be
@@ -1118,15 +1118,12 @@ class ExecutionEndpointTest extends IntegrationTestBase {
                         "UPDATE evidence SET created_by = NULL WHERE id = '" + id + "'");
             }
 
-            MvcResult refused = deleteEvidence(ENGINEER, ACME, EXEC_A, id);
-
-            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
-            assertThat(body(refused).get("detail").asText())
-                    .contains("only remove evidence you attached");
-
-            // The lead is still not blocked by it: an unqualified grant does not consult
-            // authorship at all, so a null author is irrelevant rather than disqualifying.
-            assertThat(deleteEvidence(LEAD, ACME, EXEC_A, id).getResponse().getStatus())
+            // Under OWN this was a 403 — a grant over "your own work" must not stretch to work
+            // nobody can attribute, so an unattributed row was refused to the very contributor who
+            // attached it. V51 (§207) makes it ordinary. Kept as the HALF-REVERT detector: a gate
+            // still consulting the author passes every other test in this class and fails here,
+            // because null equals nobody.
+            assertThat(deleteEvidence(ENGINEER, ACME, EXEC_A, id).getResponse().getStatus())
                     .isEqualTo(204);
         }
 

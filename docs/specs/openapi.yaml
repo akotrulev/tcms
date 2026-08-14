@@ -1039,14 +1039,19 @@ paths:
       summary: Delete an empty suite
       description: |
         Soft-deletes a suite. Requires `suite:delete`, which is held by leads and above and **not**
-        by Test Engineer — deleting is the one repository action a contributor is blocked from, so
-        they can organise the tree freely without being able to unmake someone else's work
-        (roles spec §6b).
+        by Test Engineer — ~~deleting is the one repository action a contributor is blocked from, so
+        they can organise the tree freely without being able to unmake someone else's work~~ →
+        since `V51` a contributor deletes cases freely, whoever authored them, so the line here is
+        no longer "deleting" but **shared structure**: a suite is the collection many people file
+        into, and removing it changes something other people's work hangs off (roles spec §A3.5).
 
         **The suite must be empty**: a suite holding live *filed* cases answers `409` naming how
-        many. A cascade would soft-delete other people's *cases* through a collection action with no
-        preview, routing around the `OWN` qualifier that `case:delete` carries for exactly that
-        reason. Cascading deletion waits for a slice that can show what it is about to touch.
+        many. A cascade would soft-delete an unbounded set of *cases* through a collection action
+        with no preview of what it is about to touch — which is the objection, and it is not about
+        whose cases they are. (Until `V51` this read "routing around the `OWN` qualifier that
+        `case:delete` carries"; that qualifier is gone, and a per-case delete the caller names one
+        row at a time was never the problem.) Cascading deletion waits for a slice that can show
+        its work.
 
         **Only the filing arm blocks, and the other two deliberately do not** (§98). A case *added*
         to this suite, or *matched* by one of its `tagRules`, is not held here — it lives elsewhere
@@ -1437,11 +1442,15 @@ paths:
         resolving what they covered, so the row survives, no read returns it, and the
         display and automation keys stay reserved.
 
-        Requires `case:delete`, which is **`OWN`-qualified for Test Engineer** (roles spec
-        §A5): a lead deletes any case, a test engineer only cases they authored. Both
-        refusals are `403` and they carry **different messages** — "you cannot delete cases
-        here" is false for an engineer who deletes their own every day, and would send them
-        to ask for a permission they hold.
+        Requires `case:delete`, and **authorship does not narrow it**: any caller holding the
+        key deletes any case in the project, whoever wrote it. It was `OWN`-qualified for Test
+        Engineer until `V51` (roles spec §A5) — reversed because this product's subject is a
+        *shared* test repository, and the duplicate a colleague left behind is exactly the row
+        somebody else has to remove. Soft delete is what keeps that recoverable.
+
+        One `403`, therefore: the caller does not hold `case:delete` here. A second, narrower
+        refusal exists in the code for a future `OWN` grant and is unreachable from the
+        shipped role catalogue.
 
         No `If-Match`: there is no lost-delete for a precondition to prevent, and a stale
         version would refuse the delete over an edit the caller does not care about.
@@ -1594,14 +1603,14 @@ paths:
         Decision round 3's #49 — `attachment.owner_type = 'CASE'`, declared by `V1` and
         writerless for the whole life of the product until this endpoint.
 
-        **Requires `case:edit`, and the delete below requires the same key with no `OWN`
-        arm.** That is the decision, and it is deliberately *not* `evidence:delete`'s shape.
-        Evidence is a record of something that happened, and unmaking somebody else's record
-        is the line the roles spec §A3 draws. A case attachment is part of the **case
-        definition**, which `case:edit` already owns wholesale — a Test Engineer holding it
-        may rewrite every step, the title and the preconditions of a lead's case. An
-        authorship arm would make removing the screenshot *stricter than removing the step
-        that references it*, which is incoherent in the direction that reads as security.
+        **Requires `case:edit`, and the delete below requires the same key with no authorship
+        arm.** Settled by `V51`, which removed the last `OWN` grant in the catalogue — including
+        `evidence:delete`'s, the shape this endpoint declined to copy. The conclusion was simply
+        reached early, and the reasoning is the one that generalises: a case attachment is part
+        of the **case definition**, which `case:edit` already owns wholesale — a Test Engineer
+        holding it may rewrite every step, the title and the preconditions of a lead's case. An
+        authorship arm would make removing the screenshot *stricter than removing the step that
+        references it*, which is incoherent in the direction that reads as security.
 
         **No new permission was invented.** The roles spec is authoritative and has no
         `attachment:*` key; one seeded to nobody is a `403` no administrator can grant their
@@ -2703,9 +2712,12 @@ paths:
       operationId: deletePlan
       summary: Delete a test plan
       description: |
-        `plan:delete` — Instance Admin, Company Admin and Test Lead (roles spec §A4). A Test
-        Engineer holds `plan:create` and `plan:edit` and **not** this one: a contributor is never
-        blocked from producing, only from unmaking.
+        `plan:delete` — Instance Admin, Company Admin, Test Lead **and, since `V51`, Test
+        Engineer** (roles spec §A4). ~~A Test Engineer holds `plan:create` and `plan:edit` and
+        **not** this one: a contributor is never blocked from producing, only from unmaking.~~
+        Reversed: a contributor who may author a plan and edit it may retire one, whoever wrote
+        it. The lead line now sits at shared *structure* (`suite:delete`, `artifact:delete`) and
+        at judgements about the work (`run:close`, `result:amend`), not at deletion as such.
 
         **Refused with `409` while any live run was created from the plan**, naming how many.
         `test_run.plan_id` references the plan and the run list keeps rendering its key, so
@@ -3300,16 +3312,15 @@ paths:
       operationId: deleteEvidence
       summary: Remove evidence
       description: |
-        Needs `evidence:delete`, which is **`OWN`-qualified for Test Engineer** (roles spec §A5):
-        they may remove evidence they attached and not a colleague's.
+        Needs `evidence:delete`, and **authorship does not narrow it**: any caller holding the key
+        removes any evidence on the run, whoever attached it. It was `OWN`-qualified for Test
+        Engineer until `V51` (roles spec §A5), and moved with `case:delete` — see that endpoint
+        for the argument.
 
-        **The two refusals carry different sentences**, because they are different facts about
-        the caller. "You do not have permission to remove evidence" is false for someone who
-        removes their own attachments all day, and false in the direction that sends them to ask
-        an administrator for a permission they already hold.
-
-        Evidence with **no recorded author** is not covered by an `OWN` grant — a grant over
-        "your own work" must not stretch to work nobody can attribute.
+        One `403`, therefore: the caller does not hold `evidence:delete` here. Evidence with **no
+        recorded author** is deleted like any other; under the old grant those rows were the
+        hardest case, because a grant over "your own work" must not stretch to work nobody can
+        attribute.
 
         The delete is **hard**, unlike a case's. A screenshot removed on request has to actually
         leave the disk; a soft-deleted row pointing at retained bytes is a deletion that did not

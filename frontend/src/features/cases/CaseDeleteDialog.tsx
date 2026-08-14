@@ -25,21 +25,21 @@ import { describeError } from '../../lib/describeError';
  *
  * ## The failure stays on the dialog
  *
- * `case:delete` is `OWN`-qualified for a Test Engineer (roles spec §A5), so a caller who holds the
+ * ~~`case:delete` is `OWN`-qualified for a Test Engineer (roles spec §A5), so a caller who holds the
  * permission can still be refused — for this case, because someone else wrote it. That 403 carries
- * the only sentence that explains it ("You can only delete test cases you created").
+ * the only sentence that explains it ("You can only delete test cases you created").~~
  *
- * **The client can now predict that refusal and mostly does.** ~~`GET /me/permissions` answers
- * keys, not qualifiers, so the button is correctly enabled right up to the refusal.~~ → superseded:
- * §65 put the qualifier on the wire and this slice put the case's `createdBy` beside it, so the
- * Delete button on the detail screen is disabled with the reason on it rather than inviting the
- * click. This dialog is reachable only past that gate.
+ * **→ superseded 2026-08-14 (`V51`, §207): authorship no longer refuses anything.** CRUD on plans,
+ * cases and steps belongs to every non-Viewer contributor whoever created the row, so the
+ * authorship 403 is unreachable from the shipped role catalogue and that sentence is one the server
+ * keeps for a future `OWN` grant rather than one this dialog will show.
  *
- * **Rendering the refusal here is still load-bearing, and the reason changed rather than went
- * away.** The gate is an affordance layer over a *snapshot*: authorship is read from the case the
- * screen loaded, so a case re-authored — or a grant narrowed — between load and click still lands
- * here, and `useCan` falls **open** on a failed permissions query by policy. A toast at the corner,
- * or a dialog that closes on error, and the sentence explaining an unexpected refusal is gone.
+ * **Rendering the refusal here is still load-bearing, and the reason is now the whole reason rather
+ * than the second one.** The gate upstream is an affordance layer over a *snapshot*: the permission
+ * set is read once, so a grant **revoked** between load and click still lands here, and `useCan`
+ * falls **open** on a failed permissions query by policy — that open-fallback is what guarantees
+ * some callers reach this dialog without the permission at all. A toast at the corner, or a dialog
+ * that closes on error, and the sentence explaining an unexpected refusal is gone.
  */
 export function CaseDeleteDialog({
   open,

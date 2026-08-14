@@ -10,8 +10,13 @@ import { EvidencePanel } from './EvidencePanel'
 /**
  * The evidence strip — and specifically the **second** gate in the app that asks about the row.
  *
- * `evidence:delete` is `OWN`-qualified for a Test Engineer (roles spec §A5), exactly like
- * `case:delete`. `PermissionGate` has its own tests for the verdict; these exist for the
+ * **These drive a qualifier no seeded role carries any more** — `evidence:delete` lost its `OWN`
+ * arm at `V51` (§207) alongside `case:delete`. They pass unchanged because they mock the qualifier
+ * instead of reading the catalogue, and they are kept for the same reason `CaseDetailPage.test.tsx`
+ * is: the wiring they cover is retained deliberately, so removing it must still fail something.
+ *
+ * With that grant in play, `evidence:delete` behaves exactly like `case:delete` did.
+ * `PermissionGate` has its own tests for the verdict; these exist for the
  * **wiring**, which is a different defect and the one with the worse history — a call site that
  * drops `authorId` falls back to the unqualified verdict *silently*, because an omitted prop
  * correctly means "this permission is not author-qualified" for every other gate in the app.

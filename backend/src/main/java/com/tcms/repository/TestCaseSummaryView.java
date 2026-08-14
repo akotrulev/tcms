@@ -29,15 +29,18 @@ import java.util.UUID;
  *               condition — the response does not make a claim the data never made.
  * @param createdBy <strong>who wrote the case, which is not {@link #owner}</strong> — that is who
  *               is responsible for it now, and the two diverge the moment a case is reassigned.
- *               This one is the field authorization turns on: {@code case:delete} is
+ *               <del>This one is the field authorization turns on: {@code case:delete} is
  *               {@code OWN}-qualified for a Test Engineer (roles spec §A5) and
  *               {@code CaseDeleteService} compares {@code test_case.created_by}, so without this on
  *               the wire the SPA had no way to ask the question the server answers — the Delete
  *               button enabled on every case and the caller found out which were theirs by being
- *               refused. Nullable for the same reason the column is: a row written before
- *               authorship was recorded has no author, and
- *               {@code IdentityProjectAccess.canDoOnAuthored} answers such a row {@code false} for
- *               an {@code OWN} grant. Resolved through the <em>same</em> batch as {@link #owner} —
+ *               refused.</del> → <strong>authorization no longer turns on it ({@code V51}, §207):
+ *               CRUD on plans, cases and steps belongs to every non-Viewer contributor whoever
+ *               created the row.</strong> It stays on the wire as a DISPLAY field — the author is
+ *               not the owner, and the two diverge on reassignment — which is the sentence above,
+ *               and it was always the better reason. Nullable for the same reason the column is: a
+ *               row written before authorship was recorded has no author. Resolved through the
+ *               <em>same</em> batch as {@link #owner} —
  *               see {@link CaseSummaries}, where a second lookup would be the N+1 that this class
  *               spends four bulk queries avoiding.
  * @param testType nullable — a case need not be classified, and nothing forces it to be

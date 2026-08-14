@@ -902,10 +902,12 @@ class CaseListEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("an unauthored case is listed with a null createdBy, not hidden")
         void unauthoredCasesAreListed() throws Exception {
-            // created_by is nullable — a row written before authorship was recorded has none. The
-            // SPA renders those with Delete DISABLED for an OWN-qualified caller, mirroring
-            // canDoOnAuthored's `userId.equals(null)` → false: a grant covering "your own work"
-            // must not stretch to work nobody can attribute.
+            // created_by is nullable — a row written before authorship was recorded has none.
+            // ~~The SPA renders those with Delete DISABLED for an OWN-qualified caller, mirroring
+            // canDoOnAuthored's `userId.equals(null)` → false.~~ → V51 (§207): no grant is
+            // OWN-qualified, so Delete is enabled on these rows like any other and the null is now
+            // purely a display concern. The shape assertion below is what still matters, and it
+            // never depended on the gate: present-and-null, so the SPA reads one shape either way.
             JsonNode row = byKey(itemsAs(LEAD, ACME, ACME_BANKING, ""), "TC-4");
 
             assertThat(row.has("createdBy"))

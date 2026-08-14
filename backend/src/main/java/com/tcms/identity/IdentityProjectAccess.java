@@ -97,7 +97,15 @@ public class IdentityProjectAccess implements ProjectAccess {
      *   <li>{@link PermissionQualifier#OWN} compares the row's author. {@code authorId} may be null
      *       — a row written before authorship was recorded — and {@code equals} on the caller's id
      *       answers false for it, which is the intended direction: a grant that covers "your own
-     *       work" must not stretch to work nobody can attribute.</li>
+     *       work" must not stretch to work nobody can attribute.
+     *       <p><strong>No seeded grant carries {@code OWN} since {@code V51}</strong> (§207: CRUD on
+     *       plans, cases and steps belongs to every non-Viewer contributor no matter who created the
+     *       row), so this arm is unreachable from the shipped catalogue in the same way
+     *       {@code PLAN_SCOPE} is below. It stays wired rather than being removed because the
+     *       qualifier is DATA: deleting the arm would make a future {@code OWN} grant fail
+     *       <em>open</em> at whichever gate forgot it, and the whole point of resolving this from
+     *       {@code role_permission} is that a grant means what the row says. {@code SeedDataTest}
+     *       pins the empty population so the emptiness cannot drift back silently.</p></li>
      * </ul>
      */
     @Override

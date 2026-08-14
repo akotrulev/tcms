@@ -44,8 +44,9 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li>moving a case between suites — the case-move slice, which changes two suites' membership;</li>
  *   <li>reparenting or reordering a suite — the move slice this one deliberately left out;</li>
- *   <li>deleting a case out of a suite — the delete slice that {@code case:delete}'s {@code OWN}
- *       qualifier is still owed.</li>
+ *   <li>deleting a case out of a suite — the delete slice <del>that {@code case:delete}'s
+ *       {@code OWN} qualifier is still owed</del>, which shipped and then lost the qualifier
+ *       entirely at {@code V51} (§207).</li>
  * </ul>
  *
  * <p>Each of those is where a {@code decide()} sibling of {@link CaseVersions#decide} belongs. There

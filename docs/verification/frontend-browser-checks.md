@@ -2393,3 +2393,26 @@ plausible in the wrong order. The only observer is a reader who knows what order
 | `§184 TO-1` | **L4**, in a project raising signals of more than one severity (any of `§157 SA-1` / `§178 SL-1` / `§181 OS-1` / `§182 CC-1` will do, and the lane will have several by then): open the dashboard and read the "Needs attention" tiles **left to right** | Red first, then amber, then blue — **worst first**, whatever the counts say. A project whose 156 unlinked cases tile ahead of its two whose spec changed underneath them is the §179 regression at the case grid, one screen over and a whole panel wide. Read the tiles' left borders rather than their words: after §183 the border is the severity. |
 | `§184 TO-2` | **L4**, and **may not be reachable — say so rather than passing it**: with **two tiles of the same severity and different counts** on the panel, check the bigger count is the left one | The comparator's second key, which no screen has ever shown. It needs two same-severity signals raised at once — e.g. `OUTDATED_SPEC_CHANGED` and `CONDITION_DRIFT`, both ERROR, from `§169`'s and `§158`'s fixtures. If the lane cannot produce them, record that: `HealthTileOrderTest` asserts this key on the server, so the open question is only whether the panel renders what it is given, which `TO-3` answers from the other end. |
 | `§184 TO-3` | **L4**: with two or more tiles showing, open **devtools → Network**, re-request the dashboard and compare the `health` array's order to the tiles' order on screen | **Identical, element for element.** This is the row that actually tests §184: the panel is now transparent, and the assertion is that it re-orders nothing. Until this slice a client-side sort sat between the two, and it was a no-op only by the accident of a stable sort agreeing with the server's first key — so the response and the screen agreed for a reason nobody had written down. |
+
+## §207 — the Delete a contributor could not press, on the two screens that now offer it
+
+**Four rows, none run** (§65). Ids are `§207 AQ-*`; `AQ` is unused elsewhere in this file.
+
+**No new fixture, but this lane needs something no other row has needed: TWO people.** Every check
+below is about a case or plan authored by *somebody else*, so the lane must have a second account
+that has written content — `provision-company` creates one admin, so the second contributor comes
+from an invitation the pass redeems, and whichever of them authored the fixture must be recorded.
+If the pass cannot produce two authors, say so rather than driving these as one person: a Delete
+that works on your own case proves nothing here, because it worked before §207 too.
+
+**What changed is an enabling, so the failure mode is invisible.** A Delete button that *should*
+be enabled and is not looks exactly like a Delete button that is correctly gated — there is no
+error, no console entry, and the tooltip explains itself plausibly. That is why `AQ-1` reads the
+tooltip and not only the `disabled` attribute.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§207 AQ-1` | **L2**, signed in as a **Test Engineer**, on a case authored by a *different* account: open the case detail and look at Delete | **Enabled**, with no tooltip explaining a refusal. Before §207 this was disabled with "You can only delete test cases you created". This is the whole slice on one screen. Check the tooltip and not just the pixel — the button is also disabled while `useCan` is pending, which looks the same for a moment. |
+| `§207 AQ-2` | **L2**, same caller, press it and confirm the dialog | **204, the case leaves the list**, and the dialog reports no error. The `CaseDeleteDialog` refusal path still exists for a revoked grant, so a 403 here would render *in the dialog* rather than as a toast — read the dialog, not the corner. |
+| `§207 AQ-3` | **L4**, signed in as a **Test Engineer**, on a **plan** authored by a different account: open the plan and look at Delete | **Enabled.** This is the row with no server-side precedent — Test Engineer never held `plan:delete` at all, so the button has never once been live for this role and nothing in the SPA changed to make it so. It works only if the grant landed; a disabled button here means `V51`'s `INSERT` did not run on this database. |
+| `§207 AQ-4` | **L2**, signed in as a **Viewer**, on any case: look at Delete | **Disabled**, with a tooltip that does **not** name `case:delete`. The boundary §207 leaves in place, and the only refusal this endpoint can still produce. If AQ-1 passes and this one does too, the line moved exactly as far as intended and no further. |

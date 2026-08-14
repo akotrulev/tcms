@@ -55,8 +55,9 @@ import org.springframework.transaction.annotation.Transactional;
  * project. It is unreachable through a client today (API tokens are M3; the only authenticator is a
  * password login, so the role can only be attached by hand-written SQL), and the honest options were
  * to say so or to invent a {@code suite.is_quarantine} column to gate a caller that cannot yet exist.
- * It belongs to the ingestion slice, which can create the folder and prove the gate — like the
- * {@code OWN} qualifier still owed to {@code case:delete}.
+ * It belongs to the ingestion slice, which can create the folder and prove the gate. <del>Like the
+ * {@code OWN} qualifier still owed to {@code case:delete}.</del> → that debt was paid by {@code V12}
+ * and then written off by {@code V51} (§207), so it is no longer the comparison to reach for.
  *
  * <h2>Everything else is slice 7's, deliberately</h2>
  *

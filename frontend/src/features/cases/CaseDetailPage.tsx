@@ -160,12 +160,20 @@ export function CaseDetailPage() {
                     }
                   </PermissionGate>
                   {/*
-                    The one gate in the app that asks about the ROW, not just the caller.
-                    `case:delete` is OWN-qualified for a Test Engineer (roles spec §A5), so holding
-                    it is not the same as holding it *here* — and `data.createdBy` is passed through
-                    including when it is null, because an unauthored case is one the OWN grant does
-                    not reach. Before `createdBy` was on the wire this button enabled on every case
-                    and the caller discovered whose was whose by being refused.
+                    Asks about the ROW as well as the caller — and since V51 (§207) the row half
+                    no longer changes the answer: `case:delete` is unqualified for every role that
+                    holds it, so any non-Viewer contributor deletes any case.
+
+                    ~~`case:delete` is OWN-qualified for a Test Engineer (roles spec §A5), so
+                    holding it is not the same as holding it *here*. Before `createdBy` was on the
+                    wire this button enabled on every case and the caller discovered whose was
+                    whose by being refused.~~ That was true from §65 until 2026-08-14.
+
+                    `authorId` is still passed, deliberately. The qualifier is data on the server
+                    (see IdentityProjectAccess.canDoOnAuthored), so a future OWN grant must find
+                    this gate already asking the question — hard-coding "authorship never matters"
+                    is what would re-create the original defect inverted: an enabled Delete that
+                    403s. It costs one already-loaded field.
                   */}
                   <PermissionGate
                     projectId={projectId}

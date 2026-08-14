@@ -15,21 +15,37 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Removing a case from the repository — <strong>the first caller of the {@code OWN} qualifier the
- * roles spec has specified since M0.</strong>
+ * Removing a case from the repository — <del>the first caller of the {@code OWN} qualifier the roles
+ * spec has specified since M0</del> → <strong>as of {@code V51} (§207) the only caller of a qualifier
+ * nothing carries.</strong>
  *
- * <h2>Two refusals, and they are not the same refusal</h2>
+ * <h2>{@code case:delete} is no longer authorship-scoped</h2>
  *
- * <p>{@code case:delete} is held by leads and above outright, and by Test Engineer <em>for cases they
- * wrote</em> (roles spec §A5). So there are two ways to be told no, and they answer 403 with
- * different sentences because they are different facts about the caller:
+ * <p>It was, for Test Engineer, from {@code V12} until {@code V51}: authorship conferred full control
+ * of a case and a contributor could not unmake a colleague's. That is reversed. <strong>CRUD on
+ * plans, cases and steps belongs to every non-Viewer contributor no matter who first created the
+ * row</strong> — this product's subject is a <em>shared</em> test repository, and the duplicate a
+ * colleague left behind last quarter is exactly the row somebody else has to remove. Soft delete is
+ * what makes that recoverable; the qualifier was the wrong instrument for it. Roles spec §A3.5 and
+ * §A5 carry the argument, and it is the same one that de-qualified {@code case:edit} on 2026-07-31.
+ *
+ * <h2>Two refusals, and only one of them can still happen</h2>
+ *
+ * <p>The gate below is unchanged and still asks the authorship question, because the qualifier is
+ * DATA — see {@link com.tcms.identity.IdentityProjectAccess#canDoOnAuthored} for why the arm stays
+ * wired against an empty population rather than being deleted. So the two 403s remain distinct
+ * sentences, and one of them is now unreachable from the shipped catalogue:
  *
  * <ul>
- *   <li><strong>Not held at all.</strong> A Viewer. Nothing they can do changes the answer.</li>
- *   <li><strong>Held, but only over their own work.</strong> A Test Engineer looking at a
- *       colleague's case. The same person deletes their own cases all day, so "you do not have
- *       permission to delete test cases" would be false — and false in the direction that sends
- *       someone to ask an admin for a permission they already hold.</li>
+ *   <li><strong>Not held at all.</strong> A Viewer. Nothing they can do changes the answer. This is
+ *       the only refusal seeded data can produce today.</li>
+ *   <li><strong>Held, but only over their own work</strong> ({@link Outcome.NotTheAuthor}).
+ *       Reachable only if a future migration requalifies a grant to {@code OWN}. Kept because
+ *       deleting it is what would make such a migration fail <em>open</em> here, and because the
+ *       message is what makes that grant comprehensible to the person hitting it: the same caller
+ *       deletes their own cases all day, so "you do not have permission to delete test cases" would
+ *       be false — and false in the direction that sends someone to ask an admin for a permission
+ *       they already hold.</li>
  * </ul>
  *
  * <p>Neither message names a permission key, for the reason every other 403 here does not:
@@ -62,8 +78,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class CaseDeleteService {
 
     /**
-     * Roles spec §A5 — and the one permission in the catalogue whose grant may be qualified, which
-     * is why this service uses the authorship gate and every other write uses the plain one.
+     * Roles spec §A5. <del>The one permission in the catalogue whose grant may be qualified</del> →
+     * since {@code V51} no grant is {@code OWN}-qualified at all, so the authorship gate this service
+     * uses resolves to the plain one for every seeded role. It is kept because it reads the
+     * qualifier from data rather than assuming it.
      */
     private static final String DELETE_CASE = "case:delete";
 

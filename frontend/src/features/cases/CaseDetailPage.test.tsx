@@ -12,8 +12,16 @@ import { CaseDetailPage } from './CaseDetailPage'
 /**
  * The case detail — and specifically **the one gate in the app that asks about the row**.
  *
- * `case:delete` is `OWN`-qualified for a Test Engineer (roles spec §A5), so whether Delete is
- * offered depends on who wrote *this* case, not only on what the caller holds. `PermissionGate`
+ * **These drive a qualifier no seeded role carries any more.** `case:delete` was `OWN` for Test
+ * Engineer until `V51` (§207); CRUD on plans, cases and steps now belongs to every non-Viewer
+ * contributor whoever wrote the row. The tests are unchanged and still pass because they **mock**
+ * the qualifier rather than reading the catalogue — and they are kept for what they actually
+ * assert: that this page passes `authorId` through. That wiring is retained on purpose (the
+ * qualifier is server-side data), so it needs coverage exactly as much as before, and this is now
+ * the only thing that would catch its removal.
+ *
+ * With that grant in play — whether from a future migration or from the mock below — whether Delete
+ * is offered depends on who wrote *this* case, not only on what the caller holds. `PermissionGate`
  * has its own tests for the verdict; these exist for the **wiring**, which is a different defect
  * and the one with the worse history:
  *
