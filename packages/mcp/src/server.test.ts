@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import { TcmsApiError, TcmsTimeoutError } from '@tcms/client';
 
+import { caseDetail, casePage, caseSummary } from '../../client/src/test/fixtures.js';
 import { failed } from './result.js';
 import { buildServer } from './server.js';
 import { AGENT_KEYS, agentRoutes, api, permissions, sessionWith, withApi, type Api } from './test/harness.js';
@@ -32,13 +33,13 @@ async function connect(stub: Api): Promise<Client> {
 
 // `automationStatus: 'NONE'` and `stepFormat: 'STEPS'` were here too, and neither is a value
 // this API has — see `writes.test.ts`. A stub agrees with everything, so nothing noticed.
-const CASE_ROW = {
-  id: 'c-1', key: 'TC-42', keySeq: 42, title: 'Login', suiteId: null, suiteName: null,
-  priority: 'HIGH', lifecycleStatus: 'APPROVED', automationStatus: 'MANUAL',
-  stepFormat: 'STRUCTURED',
-  owner: null, createdBy: null, features: [], tags: [], healthSignals: [],
+const CASE_ROW = caseSummary({
+  title: 'Login',
+  suiteId: null,
+  suiteName: null,
+  lifecycleStatus: 'APPROVED',
   updatedAt: '2026-08-01T10:00:00Z',
-};
+});
 
 /**
  * The detail the edit arm reads before it writes.
@@ -47,14 +48,7 @@ const CASE_ROW = {
  * **not** default a missing array to `[]` — a server that omitted `steps` would otherwise have
  * every step on the case deleted by the next edit, silently.
  */
-const CASE_DETAIL = {
-  ...CASE_ROW,
-  description: null, objective: null, expectedOutcome: null, severity: null,
-  gherkinSource: null, automationKey: null, automationTags: [], notAutomatableReason: null,
-  estimatedDurationSec: null, classificationValueIds: [], tags: [], steps: [],
-  preconditions: [], postconditions: [], attachments: [], flake: null,
-  currentVersionNo: 1, lockVersion: 1,
-};
+const CASE_DETAIL = caseDetail({ ...CASE_ROW, severity: null });
 
 describe('initialize', () => {
   it('carries the capability summary in the server instructions', async () => {
@@ -111,7 +105,7 @@ describe('tools/list', () => {
 describe('tools/call', () => {
   it('answers a read as JSON text the model can quote into the next call', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 25, total: 1 } },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 25 }) },
     }));
     const client = await connect(stub);
 
@@ -160,7 +154,7 @@ describe('tools/call', () => {
 
   it('names the permission of the ARM that ran, not the tool\'s first gate key', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
       'GET /cases/c-1': { status: 200, body: CASE_DETAIL },
       'PATCH /cases/c-1': { status: 403, body: { title: 'Forbidden', status: 403, detail: 'You do not have permission to do this.' } },
     }));

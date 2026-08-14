@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import { createTcmsClient } from './client.js';
 import { TcmsApiError } from './errors.js';
+import { currentUser, permissions, project, suite } from './test/fixtures.js';
 import { stubFetch } from './test/stubFetch.js';
 import type { components } from './schema.js';
 
@@ -15,10 +16,7 @@ const client = (fetch: typeof globalThis.fetch) =>
 
 describe('createTcmsClient', () => {
   it('composes the contract prefix and returns the response body', async () => {
-    const stub = stubFetch({
-      status: 200,
-      body: { id: 'u-1', email: 'ana@acme.test', name: 'Ana', companyId: 'c-1' },
-    });
+    const stub = stubFetch({ status: 200, body: currentUser() });
 
     const me = await client(stub.fetch).GET('/me');
 
@@ -27,7 +25,7 @@ describe('createTcmsClient', () => {
   });
 
   it('fills path parameters from the typed init', async () => {
-    const stub = stubFetch({ status: 200, body: { id: 'p-1', key: 'OLB', name: 'Online Banking' } });
+    const stub = stubFetch({ status: 200, body: project() });
 
     await client(stub.fetch).GET('/projects/{projectId}', {
       params: { path: { projectId: 'p-1' } },
@@ -37,7 +35,7 @@ describe('createTcmsClient', () => {
   });
 
   it('serializes query parameters', async () => {
-    const stub = stubFetch({ status: 200, body: { permissions: [] } });
+    const stub = stubFetch({ status: 200, body: permissions([]) });
 
     await client(stub.fetch).GET('/me/permissions', {
       params: { query: { projectId: 'p-1' } },
@@ -47,7 +45,7 @@ describe('createTcmsClient', () => {
   });
 
   it('passes per-request options through to the transport without sending them as a body', async () => {
-    const stub = stubFetch({ status: 201, body: { id: 's-1' } });
+    const stub = stubFetch({ status: 201, body: suite() });
 
     await client(stub.fetch).POST('/projects/{projectId}/suites', {
       params: { path: { projectId: 'p-1' } },
@@ -110,11 +108,11 @@ describe('the contract is enforced by the type system', () => {
   });
 
   it('types the response from the contract, not from the call site', async () => {
-    const stub = stubFetch({ status: 200, body: {} });
-    const project = await client(stub.fetch).GET('/projects/{projectId}', {
+    const stub = stubFetch({ status: 200, body: project() });
+    const answer = await client(stub.fetch).GET('/projects/{projectId}', {
       params: { path: { projectId: 'p-1' } },
     });
 
-    expectTypeOf(project).toEqualTypeOf<components['schemas']['Project']>();
+    expectTypeOf(answer).toEqualTypeOf<components['schemas']['Project']>();
   });
 });

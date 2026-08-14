@@ -998,7 +998,23 @@ const reviewVerdict: ToolDefinition = {
     properties: {
       action: ACTION(['verdict', 'resolve'], 'What to do.'),
       subject: idProperty('case, suite or plan under review — by display key', 'TC-42'),
-      verdict: { type: 'string', description: 'For `verdict`: APPROVED or CHANGES_REQUESTED.' },
+      /*
+        ~~`APPROVED`~~ → **`LGTM`**, §203. `ReviewParticipationInput.verdict` has been
+        `LGTM | CHANGES_REQUESTED` since the schema was written and this property told every caller
+        to send a member that does not exist — so the one word a model would most likely pick for
+        "I approve" earned a 400 from the server, on a tool whose own description said *"a verdict is
+        LGTM or changes-requested"* two lines up. The value is forwarded verbatim by `requireStr`,
+        so the description was the whole of the contract the caller had.
+
+        Declared as an `enum` rather than corrected in prose: an MCP host validates the input schema
+        before the call, so a wrong member is now refused here rather than at the server, and the
+        next word that drifts is a compile-adjacent failure instead of a sentence nobody re-reads.
+      */
+      verdict: {
+        type: 'string',
+        enum: ['LGTM', 'CHANGES_REQUESTED'],
+        description: 'For `verdict`: LGTM or CHANGES_REQUESTED.',
+      },
       comment: { type: 'string' },
       commentId: { type: 'string', description: 'For `resolve`: the thread to mark.' },
       resolved: { type: 'boolean', description: 'For `resolve`: false re-opens it. Default true.' },

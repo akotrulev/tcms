@@ -6,6 +6,12 @@
  * against the same idea of what a request is. Two recorders that disagreed about whether a header
  * arrived would be the one thing these tests exist to notice.
  */
+/*
+  Reached by a relative path across the package boundary — the CLI harness carries the argument for
+  why, in the same words. The comparison must exist once; `dist/` deliberately does not carry it.
+*/
+import { checkExchange } from '../../../client/src/test/contractExchange.js';
+import { currentUser, permissions, project } from '../../../client/src/test/fixtures.js';
 import { openSession, type Reach, type Session } from '../session.js';
 
 export interface SentRequest {
@@ -41,7 +47,7 @@ export function api(routes: Record<string, Answer>): Api {
     const request = input instanceof Request ? input : new Request(input, init);
     const url = new URL(request.url);
     if (url.origin !== new URL(BASE_URL).origin) return passthrough(input, init);
-    sent.push({
+    const recorded: SentRequest = {
       path: url.pathname,
       search: url.search,
       method: request.method,
@@ -49,12 +55,22 @@ export function api(routes: Record<string, Answer>): Api {
       // into an explicit init and passes the URL as a string.
       headers: new Headers(init?.headers ?? request.headers),
       body: await bodyOf(init?.body),
-    });
+    };
+    sent.push(recorded);
 
     const entries = Object.entries(live).map(([key, answer]) => ({ ...parse(key), answer }));
     const match =
       entries.find(({ method, suffix }) => method === request.method && url.pathname.endsWith(suffix))
       ?? entries.find(({ method, suffix }) => method === undefined && url.pathname.endsWith(suffix));
+
+    // Both directions against `openapi.yaml`, §203 — the CLI harness carries the note.
+    checkExchange({
+      method: recorded.method,
+      pathname: recorded.path,
+      requestBody: recorded.body,
+      status: match?.answer.status ?? 500,
+      responseBody: match?.answer.body,
+    });
 
     if (!match) {
       return new Response(JSON.stringify({ detail: `no stub for ${request.method} ${url.pathname}` }), {
@@ -102,22 +118,16 @@ function parse(key: string): { method?: string; suffix: string } {
 
 export const BASE_URL = 'https://tcms.example.com';
 
-export const ME = {
-  id: 'u-1',
-  email: 'ana@acme.test',
-  displayName: 'Ana Engineer',
-  isSystemAdmin: false,
-  status: 'ACTIVE',
-};
+/*
+  Both from `@tcms/client`'s fixture factories since §203, rather than written out here.
 
-export const PROJECT = {
-  id: 'p-1',
-  key: 'OLB',
-  name: 'Online Banking',
-  archived: false,
-  caseCount: 3,
-  myRole: 'Test Engineer',
-};
+  `ME` used to carry a `status: 'ACTIVE'`, which `CurrentUser` does not declare and the server has
+  never sent — it was here, unnoticed, in front of **91 tests**. That is the undeclared-property
+  finding in its typical form: not a typo, a field somebody reasonably expected the endpoint to have.
+*/
+export const ME = currentUser();
+
+export const PROJECT = project();
 
 /** The `Agent` grant as §A6a enumerates it — Test Engineer minus four. */
 export const AGENT_KEYS = [
@@ -128,15 +138,8 @@ export const AGENT_KEYS = [
   'artifact:read', 'artifact:edit', 'defect:create', 'workitem:manage',
 ] as const;
 
-export function permissions(
-  keys: readonly string[],
-  qualifiers: Readonly<Record<string, 'ALL' | 'OWN' | 'PLAN_SCOPE'>> = {},
-): { projectId: string | null; permissions: { key: string; qualifier: string }[] } {
-  return {
-    projectId: PROJECT.id,
-    permissions: keys.map((key) => ({ key, qualifier: qualifiers[key] ?? 'ALL' })),
-  };
-}
+/** Re-exported so the test files that build one keep importing it from here. */
+export { permissions };
 
 /** The three reads every session's probe makes, answered for a well-formed `Agent` token. */
 export function agentRoutes(extra: Record<string, Answer> = {}): Record<string, Answer> {

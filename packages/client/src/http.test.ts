@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { TcmsApiError, TcmsClientError, TcmsTimeoutError, isTransient, retryAfterMs } from './errors.js';
 import { createTransport, resolveBaseUrl, withOptions } from './http.js';
+import { drivingTheTransport } from './test/contractExchange.js';
+import { currentUser } from './test/fixtures.js';
 import { stubFetch } from './test/stubFetch.js';
 
 const options = (fetch: typeof globalThis.fetch, overrides: Record<string, unknown> = {}) => ({
@@ -46,7 +48,7 @@ describe('resolveBaseUrl', () => {
 
 describe('the transport', () => {
   it('attaches the credential and the user agent to every request', async () => {
-    const stub = stubFetch({ status: 200, body: { id: 'u1' } });
+    const stub = stubFetch({ status: 200, body: currentUser() });
     await createTransport(options(stub.fetch)).fetch('https://tcms.example.com/api/v1/me');
 
     expect(stub.last.headers.get('authorization')).toBe('Bearer tcms_abc');
@@ -55,7 +57,7 @@ describe('the transport', () => {
   });
 
   it('reads a function token per request, so a rotated credential takes effect', async () => {
-    const stub = stubFetch({ status: 200, body: {} }, { status: 200, body: {} });
+    const stub = stubFetch({ status: 200, body: currentUser() }, { status: 200, body: currentUser() });
     let current = 'tcms_first';
     const transport = createTransport(options(stub.fetch, { token: () => current }));
 
@@ -70,7 +72,7 @@ describe('the transport', () => {
   });
 
   it('refuses to send an empty credential rather than an anonymous request', async () => {
-    const stub = stubFetch({ status: 200, body: {} });
+    const stub = stubFetch({ status: 200, body: currentUser() });
     const transport = createTransport(options(stub.fetch, { token: '' }));
 
     await expect(transport.fetch('https://tcms.example.com/api/v1/me')).rejects.toThrow(
@@ -80,6 +82,8 @@ describe('the transport', () => {
   });
 
   it('sends Idempotency-Key and If-Match only when the caller supplied them', async () => {
+    // The two headers are the subject; the POST carries no body because none is needed to send one.
+    drivingTheTransport();
     const stub = stubFetch({ status: 200, body: {} }, { status: 200, body: {} });
     const transport = createTransport(options(stub.fetch));
 
@@ -99,6 +103,8 @@ describe('the transport', () => {
   });
 
   it('sends If-Match for lockVersion 0, which a truthiness check would drop', async () => {
+    // `/x` is a URL because the transport needs one, not because the contract declares it.
+    drivingTheTransport();
     const stub = stubFetch({ status: 200, body: {} });
     await createTransport(options(stub.fetch)).fetch(
       'https://tcms.example.com/api/v1/x',
@@ -111,6 +117,9 @@ describe('the transport', () => {
 
 describe('a refusal', () => {
   it('becomes a TcmsApiError carrying the problem document', async () => {
+    // The refusal is the subject. The POST that provokes it sends nothing, which is not a payload
+    // the server would accept and is not what this asserts on.
+    drivingTheTransport();
     const stub = stubFetch({
       status: 400,
       body: {
@@ -188,6 +197,8 @@ describe('a refusal', () => {
 
 describe('a request that does not answer', () => {
   it('becomes a TcmsTimeoutError that says the write may have landed', async () => {
+    // A request that never answers. What it carried is scenery.
+    drivingTheTransport();
     const stub = stubFetch({ hangs: true });
     const transport = createTransport(options(stub.fetch));
 

@@ -9,6 +9,26 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import {
+  caseDetail,
+  bulkResult,
+  caseStatus,
+  casePage,
+  caseSummary,
+  condition,
+  docBlock,
+  docPage,
+  docPageSummary,
+  execution,
+  executionSummary,
+  plan,
+  proposal,
+  review,
+  run as runFixture,
+  runDetail,
+  step,
+  suite,
+} from '../../client/src/test/fixtures.js';
 import { armFor } from './server.js';
 import { TOOLS } from './tools.js';
 import { WRITE_TOOLS } from './writes.js';
@@ -36,49 +56,30 @@ async function run(
   sent a real `NONE` at a real server and got a 400 (dressed as a 401, which was the other half
   of that slice). A fixture is a claim about the server and this one was false in three places.
 */
-const CASE_ROW = {
-  id: 'c-1', key: 'TC-42', keySeq: 42, title: 'Login', suiteId: 's-1', suiteName: 'Auth',
-  priority: 'HIGH', lifecycleStatus: 'DRAFT', automationStatus: 'MANUAL', stepFormat: 'STRUCTURED',
-  owner: null, createdBy: null, features: [], tags: [], healthSignals: [],
+const CASE_ROW = caseSummary({
+  title: 'Login',
+  suiteName: 'Auth',
   updatedAt: '2026-08-01T10:00:00Z',
-};
+});
 /** A WHOLE detail — the edit arm reads this and sends it back, so its shape is the assertion. */
-const CASE_DETAIL = {
+const CASE_DETAIL = caseDetail({
   ...CASE_ROW,
   description: 'The happy path.',
-  objective: null,
-  expectedOutcome: null,
   severity: null,
-  gherkinSource: null,
-  automationKey: null,
   automationTags: ['@smoke'],
-  ownerId: 'u-1',
-  notAutomatableReason: null,
-  estimatedDurationSec: null,
-  classificationValueIds: [],
   tags: ['auth'],
-  steps: [
-    {
-      id: 'st-1', position: 1, keyword: null, action: 'Sign in',
-      testData: null, expectedResult: 'In.', sharedStepId: null,
-    },
-  ],
-  preconditions: [],
-  postconditions: [],
+  steps: [step({ id: 'st-1', expectedResult: 'In.' })],
   // A stored decline, so "the round-trip does not assert declines" is a claim about a case that
   // has one rather than about an empty array (§189).
   declinedPreconditions: [
-    {
-      id: 'sc-2', position: 1, conditionId: 'cond-2', title: 'Seed the ledger',
-      body: [], inline: false, inherited: true, inheritedFrom: 'Billing',
-    },
+    condition({
+      id: 'sc-2', conditionId: 'cond-2', title: 'Seed the ledger',
+      inline: false, inherited: true, inheritedFrom: 'Billing',
+    }),
   ],
-  declinedPostconditions: [],
-  attachments: [],
-  flake: null,
   currentVersionNo: 4,
   lockVersion: 4,
-};
+});
 /** `caseInputFrom(CASE_DETAIL)` — the unchanged round-trip, minus the two refused fields. */
 const CASE_ECHO = {
   title: 'Login',
@@ -116,23 +117,20 @@ const PROPOSABLE = {
  * suite the server has not served since — the shape of stale fixture `writes.test.ts` opens by
  * warning about, in a file whose whole subject is round-tripping a resource faithfully.
  */
-const SUITE_ROW = {
-  id: 's-1', key: 'TS-7', name: 'Auth', description: null, caseCount: 2,
-  lifecycleStatus: 'DRAFT', tagRules: [], caseIds: [],
-  preconditions: [], postconditions: [], lockVersion: 2,
-};
-const PLAN_ROW = {
-  id: 'tp-1', key: 'TP-1', name: 'Release 4.2', status: 'DRAFT',
-  milestoneName: 'GA', milestoneDate: '2026-09-01', caseCount: 3, passRate: null, coverage: null,
+const SUITE_ROW = suite({ key: 'TS-7', name: 'Auth', caseCount: 2, lockVersion: 2 });
+const RUN = runFixture({ id: 'r-1', key: 'TR-1', name: 'Regression', status: 'IN_PROGRESS' });
+
+const PASSED = caseStatus({ id: 'st-1', color: '#0a0' });
+
+const PLAN_ROW = plan({
+  milestoneName: 'GA', milestoneDate: '2026-09-01', caseCount: 3,
   description: 'The regression pass before GA.',
   // Reachable from no tool argument at all, which is what made them the sharpest half of the
   // plan defect: EVERY edit this server made emptied both, and no caller could have avoided it.
   scopeText: 'Checkout, payments, refunds.',
   outOfScopeText: 'Anything behind the beta flag.',
-  entryCriteria: [], exitCriteria: [], configurations: [],
-  suiteIds: [], caseIds: [], tags: [], sections: [],
   currentVersionNo: 2, lockVersion: 7,
-};
+});
 /** `planInputFrom(PLAN_ROW)` — every scalar, and none of the lists. */
 const PLAN_ECHO = {
   name: 'Release 4.2',
@@ -142,17 +140,20 @@ const PLAN_ECHO = {
   scopeText: 'Checkout, payments, refunds.',
   outOfScopeText: 'Anything behind the beta flag.',
 };
-const PAGE = {
-  id: 'd-1', key: 'DOC-1', title: 'Spec', status: 'DRAFT', lockVersion: 5,
-  blocks: [{ id: 'b-1', blockType: 'PARAGRAPH', text: 'The user signs in.' }],
-};
+/** The LIST row, which carries no blocks and no lock version — a different shape from the detail. */
+const PAGE_ROW = docPageSummary({ id: 'd-1', key: 'DOC-1', title: 'Spec', slug: 'spec' });
+
+const PAGE = docPage({
+  id: 'd-1', key: 'DOC-1', title: 'Spec', slug: 'spec', lockVersion: 5,
+  blocks: [docBlock({ id: 'b-1', text: 'The user signs in.' })],
+});
 
 describe('tcms_write_case', () => {
   it('files a proposal rather than creating a case, and carries an idempotency key', async () => {
     const stub = api(agentRoutes({
       'POST /ai-proposals': {
         status: 201,
-        body: { id: 'ap-1', status: 'PENDING', verdict: 'UNVERIFIED', verdictSource: null },
+        body: proposal(),
       },
     }));
 
@@ -172,7 +173,7 @@ describe('tcms_write_case', () => {
 
   it('does not default the verdict, because silence and UNVERIFIED are different claims', async () => {
     const stub = api(agentRoutes({
-      'POST /ai-proposals': { status: 201, body: { id: 'ap-1', status: 'PENDING' } },
+      'POST /ai-proposals': { status: 201, body: proposal() },
     }));
 
     await run(stub, 'tcms_write_case', { action: 'propose', testCase: PROPOSABLE });
@@ -186,7 +187,7 @@ describe('tcms_write_case', () => {
   */
   it('refuses a proposal the accept could never take, and files nothing', async () => {
     const stub = api(agentRoutes({
-      'POST /ai-proposals': { status: 201, body: { id: 'ap-1', status: 'PENDING' } },
+      'POST /ai-proposals': { status: 201, body: proposal() },
     }));
 
     await expect(run(stub, 'tcms_write_case', {
@@ -199,7 +200,7 @@ describe('tcms_write_case', () => {
 
   it('edits with an If-Match read for itself when no lockVersion was given', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
       'GET /cases/c-1': { status: 200, body: CASE_DETAIL },
       'PATCH /cases/c-1': { status: 200, body: { ...CASE_DETAIL, lockVersion: 5 } },
     }));
@@ -227,7 +228,7 @@ describe('tcms_write_case', () => {
 
   it('prefers a lockVersion the caller holds, and still reads the case for its body', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
       'GET /cases/c-1': { status: 200, body: CASE_DETAIL },
       'PATCH /cases/c-1': { status: 200, body: CASE_DETAIL },
     }));
@@ -247,7 +248,7 @@ describe('tcms_write_case', () => {
 
   it('keeps null and absent apart on the suite, because they are different requests', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
       'GET /cases/c-1': { status: 200, body: CASE_DETAIL },
       'PATCH /cases/c-1': { status: 200, body: CASE_DETAIL },
     }));
@@ -264,7 +265,7 @@ describe('tcms_write_case', () => {
   */
   it('declines the attachments named, as a complete set, and asserts nothing when none are named', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
       'GET /cases/c-1': { status: 200, body: CASE_DETAIL },
       'PATCH /cases/c-1': { status: 200, body: CASE_DETAIL },
     }));
@@ -293,7 +294,7 @@ describe('tcms_write_case', () => {
 
   it('refuses an edit that would send nothing', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
     }));
 
     // A `PATCH` with an empty body is accepted by the contract and changes nothing while
@@ -304,8 +305,8 @@ describe('tcms_write_case', () => {
 
   it('submits for review through the one bulk action whose gate does not depend on its payload', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
-      'POST /cases/bulk': { status: 200, body: { changed: 1 } },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
+      'POST /cases/bulk': { status: 200, body: bulkResult({ total: 1, changed: ['TC-42'] }) },
     }));
 
     await run(stub, 'tcms_write_case', { action: 'submit', case: 'TC-42' });
@@ -317,7 +318,7 @@ describe('tcms_write_case', () => {
 
 describe('tcms_write_doc_page', () => {
   it('demands the caller\'s own lockVersion when replacing blocks', async () => {
-    const stub = api(agentRoutes({ '/doc-pages': { status: 200, body: [PAGE] } }));
+    const stub = api(agentRoutes({ '/doc-pages': { status: 200, body: [PAGE_ROW] } }));
 
     /*
       The one place §139's rule bites on this surface: a `blocks` array is the whole page and a
@@ -331,7 +332,7 @@ describe('tcms_write_doc_page', () => {
 
   it('reads its own version for a title-only edit, which is a delta', async () => {
     const stub = api(agentRoutes({
-      '/doc-pages': { status: 200, body: [PAGE] },
+      '/doc-pages': { status: 200, body: [PAGE_ROW] },
       'GET /doc-pages/d-1': { status: 200, body: PAGE },
       'PATCH /doc-pages/d-1': { status: 200, body: { ...PAGE, title: 'Renamed' } },
     }));
@@ -346,9 +347,15 @@ describe('tcms_write_doc_page', () => {
 
   it('links a case to a block with the contract\'s default relationship stated', async () => {
     const stub = api(agentRoutes({
-      '/doc-pages': { status: 200, body: [PAGE] },
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
-      'POST /links': { status: 201, body: { id: 'l-1', sourceType: 'TEST_CASE', sourceKey: 'TC-42', relationship: 'VERIFIES' } },
+      '/doc-pages': { status: 200, body: [PAGE_ROW] },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
+      'POST /links': {
+        status: 201,
+        body: {
+          id: 'l-1', sourceType: 'TEST_CASE', sourceId: 'c-1', sourceKey: 'TC-42',
+          sourceTitle: 'Login', relationship: 'VERIFIES',
+        },
+      },
     }));
 
     await run(stub, 'tcms_write_doc_page', { action: 'link', page: 'DOC-1', block: 'b-1', case: 'TC-42' });
@@ -358,7 +365,7 @@ describe('tcms_write_doc_page', () => {
   });
 
   it('refuses a link that names both a case and a suite, or neither', async () => {
-    const stub = api(agentRoutes({ '/doc-pages': { status: 200, body: [PAGE] } }));
+    const stub = api(agentRoutes({ '/doc-pages': { status: 200, body: [PAGE_ROW] } }));
 
     await expect(run(stub, 'tcms_write_doc_page', { action: 'link', page: 'DOC-1', block: 'b-1' }))
       .rejects.toThrow(/exactly one/);
@@ -368,7 +375,7 @@ describe('tcms_write_doc_page', () => {
 describe('tcms_write_suite', () => {
   it('creates with a key, and sends the membership as the complete set it is', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
       'POST /suites': { status: 201, body: SUITE_ROW },
     }));
 
@@ -471,14 +478,14 @@ describe('tcms_write_plan', () => {
 describe('tcms_record_result', () => {
   it('finds the execution from the run and the case, and names the status by name', async () => {
     const stub = api(agentRoutes({
-      '/runs': { status: 200, body: [{ id: 'r-1', key: 'TR-1', name: 'Regression', status: 'IN_PROGRESS' }] },
+      '/runs': { status: 200, body: [RUN] },
       'GET /runs/r-1': {
         status: 200,
-        body: { id: 'r-1', key: 'TR-1', name: 'Regression', executions: [{ id: 'e-1', caseId: 'c-1', caseKey: 'TC-42' }] },
+        body: runDetail({ ...RUN, executions: [executionSummary({ id: 'e-1' })] }),
       },
-      '/statuses': { status: 200, body: [{ id: 'st-1', name: 'Passed', kind: 'PASSED', color: '#0a0', countsAsPass: true, isFinal: true }] },
-      'GET /executions/e-1': { status: 200, body: { id: 'e-1', caseKey: 'TC-42', lockVersion: 3 } },
-      'PATCH /executions/e-1': { status: 200, body: { id: 'e-1', caseKey: 'TC-42', lockVersion: 4, status: { name: 'Passed' } } },
+      '/statuses': { status: 200, body: [PASSED] },
+      'GET /executions/e-1': { status: 200, body: execution({ id: 'e-1', lockVersion: 3 }) },
+      'PATCH /executions/e-1': { status: 200, body: execution({ id: 'e-1', lockVersion: 4, status: PASSED }) },
     }));
 
     await run(stub, 'tcms_record_result', { run: 'TR-1', case: 'TC-42', status: 'passed' });
@@ -492,9 +499,9 @@ describe('tcms_record_result', () => {
 
   it('refuses a status this project does not have, and lists the ones it does', async () => {
     const stub = api(agentRoutes({
-      '/runs': { status: 200, body: [{ id: 'r-1', key: 'TR-1', name: 'R', status: 'IN_PROGRESS' }] },
-      'GET /runs/r-1': { status: 200, body: { id: 'r-1', key: 'TR-1', name: 'R', executions: [{ id: 'e-1', caseId: 'c-1', caseKey: 'TC-42' }] } },
-      '/statuses': { status: 200, body: [{ id: 'st-1', name: 'Passed', kind: 'PASSED', color: '#0a0', countsAsPass: true, isFinal: true }] },
+      '/runs': { status: 200, body: [RUN] },
+      'GET /runs/r-1': { status: 200, body: runDetail({ ...RUN, executions: [executionSummary({ id: 'e-1' })] }) },
+      '/statuses': { status: 200, body: [PASSED] },
     }));
 
     await expect(run(stub, 'tcms_record_result', { run: 'TR-1', case: 'TC-42', status: 'Green' }))
@@ -511,18 +518,20 @@ describe('tcms_record_result', () => {
 describe('tcms_review_verdict', () => {
   it('acts on the OPEN review, not the newest one', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
       'GET /reviews': {
         status: 200,
         body: [
-          { id: 'rv-2', state: 'APPROVED', comments: [] },
-          { id: 'rv-1', state: 'IN_REVIEW', comments: [] },
+          review({ id: 'rv-2', state: 'APPROVED' }),
+          review({ id: 'rv-1', state: 'IN_REVIEW' }),
         ],
       },
-      'POST /participations': { status: 201, body: { id: 'rv-1', state: 'IN_REVIEW' } },
+      'POST /participations': { status: 201, body: review({ id: 'rv-1' }) },
     }));
 
-    await run(stub, 'tcms_review_verdict', { action: 'verdict', subject: 'TC-42', verdict: 'APPROVED' });
+    // ~~`APPROVED`~~ → `LGTM`, §203: the enum has two members and that was not one of them. The
+    // tool's own schema said APPROVED, so this test pinned the word that earned a 400.
+    await run(stub, 'tcms_review_verdict', { action: 'verdict', subject: 'TC-42', verdict: 'LGTM' });
 
     // A review is history once it closes — the endpoint answers 409 on a closed one — so "the
     // latest row" and "the one that can still be written to" are different questions.
@@ -538,8 +547,8 @@ describe('tcms_review_verdict', () => {
 
   it('explains that a closed review cannot be joined', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
-      'GET /reviews': { status: 200, body: [{ id: 'rv-2', state: 'APPROVED', comments: [] }] },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
+      'GET /reviews': { status: 200, body: [review({ id: 'rv-2', state: 'APPROVED' })] },
     }));
 
     await expect(run(stub, 'tcms_review_comment', { subject: 'TC-42', body: 'hi' }))

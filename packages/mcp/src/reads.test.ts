@@ -10,6 +10,17 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import {
+  caseDetail,
+  caseHistory,
+  casePage,
+  caseStatus,
+  caseSummary,
+  dashboard,
+  dimension,
+  suite,
+  workItem,
+} from '../../client/src/test/fixtures.js';
 import { READ_TOOLS } from './reads.js';
 import type { ToolDefinition } from './tool.js';
 import { PROJECT, agentRoutes, api, sessionWith, withApi, type Api } from './test/harness.js';
@@ -36,17 +47,26 @@ function queryOf(stub: Api, suffix: string): URLSearchParams {
   return new URLSearchParams(sent.search);
 }
 
-const CASE_ROW = {
-  id: 'c-1', key: 'TC-42', keySeq: 42, title: 'Login with a valid password',
-  suiteId: 's-1', suiteName: 'Authentication', priority: 'HIGH', lifecycleStatus: 'APPROVED',
-  automationStatus: 'AUTOMATED', stepFormat: 'STEPS', owner: null, createdBy: null,
-  features: [], tags: ['smoke'], healthSignals: [], updatedAt: '2026-08-01T10:00:00Z',
-};
+/*
+  `stepFormat` was ~~`STEPS`~~ until §203. `StepFormat` is `STRUCTURED | GHERKIN` and has been since
+  the schema was written; the shorter word was never a member and eight tests served it.
+*/
+const CASE_ROW = caseSummary({
+  title: 'Login with a valid password',
+  suiteName: 'Authentication',
+  lifecycleStatus: 'APPROVED',
+  automationStatus: 'AUTOMATED',
+  tags: ['smoke'],
+  updatedAt: '2026-08-01T10:00:00Z',
+});
 
-const SUITE_ROW = {
-  id: 's-1', key: 'TS-7', name: 'Authentication', description: null, caseCount: 12,
-  lifecycleStatus: 'APPROVED', tagRules: [], lockVersion: 3,
-};
+const SUITE_ROW = suite({
+  key: 'TS-7',
+  name: 'Authentication',
+  caseCount: 12,
+  lifecycleStatus: 'APPROVED',
+  lockVersion: 3,
+});
 
 describe('tcms_orient', () => {
   it('answers the project shape from five reads in one call', async () => {
@@ -54,14 +74,14 @@ describe('tcms_orient', () => {
       '/projects/p-1': { status: 200, body: { ...PROJECT, description: null } },
       '/classification': {
         status: 200,
-        body: [{
-          id: 'd-1', name: 'Feature', cardinality: 'MULTI', hierarchical: true, locked: false,
+        body: [dimension({
+          id: 'd-1', key: 'feature', name: 'Feature', cardinality: 'MULTI', hierarchical: true,
           values: [{ id: 'v-1', parentId: null, name: 'Login', path: 'Access/Login', color: null }],
-        }],
+        })],
       },
       '/statuses': {
         status: 200,
-        body: [{ id: 'st-1', name: 'Passed', kind: 'PASSED', color: '#0a0', countsAsPass: true, isFinal: true }],
+        body: [caseStatus({ id: 'st-1', color: '#0a0' })],
       },
       '/suites': { status: 200, body: [SUITE_ROW] },
       '/tags': { status: 200, body: [{ tag: 'smoke', caseCount: 12 }] },
@@ -85,7 +105,7 @@ describe('tcms_search_cases', () => {
   it('puts every filter it was given into the query', async () => {
     const stub = api(agentRoutes({
       '/suites': { status: 200, body: [SUITE_ROW] },
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 25, total: 1 } },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 25 }) },
     }));
 
     await run(stub, 'tcms_search_cases', {
@@ -106,7 +126,7 @@ describe('tcms_search_cases', () => {
 
   it('sends no filter it was not given', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [], page: 0, size: 25, total: 0 } },
+      '/cases': { status: 200, body: casePage([], { size: 25 }) },
     }));
 
     await run(stub, 'tcms_search_cases', {});
@@ -121,7 +141,7 @@ describe('tcms_search_cases', () => {
 
   it('reports whether more matched than came back', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 25, total: 812 } },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 25, total: 812 }) },
     }));
 
     const answer = await run(stub, 'tcms_search_cases', {});
@@ -138,16 +158,13 @@ describe('tcms_search_cases', () => {
     const stub = api(agentRoutes({
       '/cases': {
         status: 200,
-        body: {
-          items: [{
-            ...CASE_ROW,
-            healthSignals: [
-              { signal: 'STALE_AUTOMATION', severity: 'ERROR' },
-              { signal: 'UNLINKED', severity: 'INFO' },
-            ],
-          }],
-          page: 0, size: 25, total: 1,
-        },
+        body: casePage([caseSummary({
+          ...CASE_ROW,
+          healthSignals: [
+            { signal: 'STALE_AUTOMATION', severity: 'ERROR' },
+            { signal: 'UNLINKED', severity: 'INFO' },
+          ],
+        })], { size: 25 }),
       },
     }));
 
@@ -160,8 +177,8 @@ describe('tcms_search_cases', () => {
 describe('tcms_open_case', () => {
   it('reads only the detail unless history or versions were asked for', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
-      '/cases/c-1': { status: 200, body: { ...CASE_ROW, lockVersion: 4, steps: [] } },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
+      '/cases/c-1': { status: 200, body: caseDetail({ ...CASE_ROW, lockVersion: 4 }) },
     }));
 
     const answer = await run(stub, 'tcms_open_case', { case: 'TC-42' });
@@ -173,9 +190,9 @@ describe('tcms_open_case', () => {
 
   it('fans out when they were', async () => {
     const stub = api(agentRoutes({
-      '/cases': { status: 200, body: { items: [CASE_ROW], page: 0, size: 1, total: 1 } },
-      '/cases/c-1': { status: 200, body: { ...CASE_ROW, lockVersion: 4, steps: [] } },
-      '/history': { status: 200, body: { entries: [] } },
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
+      '/cases/c-1': { status: 200, body: caseDetail({ ...CASE_ROW, lockVersion: 4 }) },
+      '/history': { status: 200, body: caseHistory() },
       '/versions': { status: 200, body: [] },
     }));
 
@@ -194,9 +211,8 @@ describe('tcms_open_case', () => {
 
 describe('the four lists the contract does not paginate', () => {
   it('windows them client-side and says how many there were', async () => {
-    const rows = Array.from({ length: 60 }, (_, index) => ({
-      ...SUITE_ROW, id: `s-${index}`, key: `TS-${index}`,
-    }));
+    const rows = Array.from({ length: 60 }, (_, index) =>
+      suite({ ...SUITE_ROW, id: `s-${index}`, key: `TS-${index}` }));
     const stub = api(agentRoutes({ '/suites': { status: 200, body: rows } }));
 
     const answer = await run(stub, 'tcms_list_suites', { size: 10, page: 1 }) as {
@@ -214,12 +230,12 @@ describe('the four lists the contract does not paginate', () => {
 describe('tcms_triage', () => {
   it('answers the dashboard and the quarantined cases, and asks for no more than that', async () => {
     const stub = api(agentRoutes({
-      '/dashboard': { status: 200, body: { total: 812, byLifecycle: [] } },
+      '/dashboard': { status: 200, body: dashboard() },
       '/work-items': {
         status: 200,
         body: [
-          { id: 'w-1', kind: 'QUARANTINE', title: 'TC-42 is quarantined', description: 'Flaky since 2026-07', status: 'TODO' },
-          { id: 'w-2', kind: 'REVIEW', title: 'Review TS-7', description: '', status: 'TODO' },
+          workItem({ id: 'w-1', kind: 'QUARANTINE', title: 'TC-42 is quarantined', description: 'Flaky since 2026-07' }),
+          workItem({ id: 'w-2', kind: 'REVIEW', title: 'Review TS-7', description: '' }),
         ],
       },
     }));

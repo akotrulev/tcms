@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createTcmsClient } from '../client.js';
 import { TcmsApiError, TcmsClientError } from '../errors.js';
+import { casePage, caseSummary, project, suite } from '../test/fixtures.js';
 import { stubFetch } from '../test/stubFetch.js';
 import { ifMatchFor, isVersionConflict, versionOf } from './concurrency.js';
 import { KEY_PREFIXES, classify, isUuid, parseDisplayKey } from './identifiers.js';
@@ -495,7 +496,7 @@ describe('resolveId', () => {
   it('resolves a case key through the q short-circuit', async () => {
     const stub = stubFetch({
       status: 200,
-      body: { page: 0, size: 1, total: 1, facets: [], items: [{ id: 'c-1', key: 'TC-42' }] },
+      body: casePage([caseSummary({ id: 'c-1', key: 'TC-42' })], { size: 1 }),
     });
 
     const id = await resolveId({
@@ -509,7 +510,7 @@ describe('resolveId', () => {
   it('resolves a suite key from the unpaginated list', async () => {
     const stub = stubFetch({
       status: 200,
-      body: [{ id: 's-1', key: 'TS-1' }, { id: 's-7', key: 'TS-7' }],
+      body: [suite({ id: 's-1', key: 'TS-1' }), suite({ id: 's-7', key: 'TS-7' })],
     });
 
     const id = await resolveId({
@@ -530,8 +531,8 @@ describe('resolveId', () => {
 
 describe('resolveProject', () => {
   const projects = [
-    { id: 'p-1', key: 'OLB', name: 'Online Banking' },
-    { id: 'p-2', key: 'PAY', name: 'Payments' },
+    project({ id: 'p-1', key: 'OLB', name: 'Online Banking' }),
+    project({ id: 'p-2', key: 'PAY', name: 'Payments' }),
   ];
 
   it('infers the project when exactly one is visible', async () => {

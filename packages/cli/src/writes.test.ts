@@ -14,6 +14,25 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import {
+  casePage,
+  caseDetail,
+  caseStatus,
+  caseSummary,
+  condition,
+  docBlock,
+  docPage,
+  docPageSummary,
+  execution,
+  executionSummary,
+  plan,
+  proposal,
+  review,
+  run,
+  runDetail,
+  step,
+  suite,
+} from '../../client/src/test/fixtures.js';
 import { COMMANDS } from './commands.js';
 import { EXIT } from './main.js';
 import { PROJECT, api, mainWith, recorder } from './test/harness.js';
@@ -26,7 +45,7 @@ import { PROJECT, api, mainWith, recorder } from './test/harness.js';
   the server requires agreed with a client that sent nothing. The arms now read this and send it
   back (`core/rewrite.ts`), which only proves anything if the fixture is shaped like the resource.
 */
-const CASE = {
+const CASE = caseDetail({
   id: 'c-9',
   key: 'TC-42',
   keySeq: 42,
@@ -38,58 +57,37 @@ const CASE = {
   severity: 'MEDIUM',
   stepFormat: 'STRUCTURED',
   automationStatus: 'MANUAL',
-  automationKey: null,
   automationTags: ['@smoke'],
-  notAutomatableReason: null,
-  gherkinSource: null,
   description: 'The happy path.',
   objective: 'Prove a known user gets in.',
   expectedOutcome: 'The dashboard renders.',
   estimatedDurationSec: 90,
-  owner: null,
-  createdBy: null,
-  ownerId: 'u-1',
-  testType: null,
-  testLevel: null,
-  features: [],
   classificationValueIds: ['cv-1'],
   tags: ['smoke'],
-  healthSignals: [],
   steps: [
-    {
+    step({
       id: 'st-1',
-      position: 1,
-      keyword: null,
       action: 'Sign in',
       testData: 'ops@acme.test',
       expectedResult: 'The dashboard renders.',
-      sharedStepId: null,
-    },
+    }),
   ],
-  preconditions: [],
-  postconditions: [],
   // A stored decline, so the round-trip assertions below are about a case that HAS one. With
   // both arrays empty, "the projection does not send declines" and "this case has none to send"
   // are the same green.
   declinedPreconditions: [
-    {
+    condition({
       id: 'sc-2',
-      position: 1,
       conditionId: 'cond-2',
       title: 'Seed the ledger',
-      body: [],
       inline: false,
       inherited: true,
       inheritedFrom: 'Billing',
-    },
+    }),
   ],
-  declinedPostconditions: [],
-  attachments: [],
-  flake: null,
   currentVersionNo: 3,
-  updatedAt: '2026-08-08T09:00:00Z',
   lockVersion: 3,
-};
+});
 
 /** The whole editable set as `caseInputFrom` projects it — what an unchanged round-trip sends. */
 const CASE_ECHO = {
@@ -129,29 +127,15 @@ const PROPOSABLE = {
   steps: [{ action: 'Sign in', expectedResult: 'The dashboard renders.' }],
 };
 
-const PROPOSAL = {
-  id: 'ap-1',
-  status: 'PENDING',
-  verdict: 'UNVERIFIED',
-  verdictSource: 'NONE',
-  createdAt: '2026-08-08T10:00:00Z',
-  filedByAgent: true,
-  testCase: PROPOSABLE,
-};
+const PROPOSAL = proposal({ createdAt: '2026-08-08T10:00:00Z' });
 
-const SUITE = {
-  id: 's-1',
+const SUITE = suite({
   key: 'TS-7',
-  name: 'Smoke',
   description: 'What we check on every build.',
-  caseCount: 4,
-  lifecycleStatus: 'DRAFT',
   tagRules: ['smoke'],
   caseIds: ['c-9'],
-  preconditions: [],
-  postconditions: [],
   lockVersion: 2,
-};
+});
 
 /** `suiteInputFrom(SUITE)` — the unchanged round-trip. */
 const SUITE_ECHO = {
@@ -161,20 +145,16 @@ const SUITE_ECHO = {
   caseIds: ['c-9'],
 };
 
-const PAGE = {
+const PAGE = docPage({
   id: 'd-1',
   key: 'DOC-3',
   title: 'Payments spec',
-  status: 'DRAFT',
-  blocks: [{ id: 'b-1', blockType: 'paragraph', text: 'Refunds settle in 3 days.' }],
+  slug: 'payments-spec',
+  blocks: [docBlock({ id: 'b-1', text: 'Refunds settle in 3 days.' })],
   lockVersion: 5,
-};
+});
 
-const PLAN = {
-  id: 'tp-1',
-  key: 'TP-1',
-  name: 'Release 4.2',
-  status: 'DRAFT',
+const PLAN = plan({
   description: 'The regression pass before GA.',
   milestoneName: 'GA',
   milestoneDate: '2026-09-01',
@@ -182,19 +162,10 @@ const PLAN = {
   // the plan defect: every `plan edit` emptied both and nobody could have avoided it.
   scopeText: 'Checkout, payments, refunds.',
   outOfScopeText: 'Anything behind the beta flag.',
-  entryCriteria: [],
-  exitCriteria: [],
-  configurations: [],
-  suiteIds: [],
-  caseIds: [],
-  tags: [],
-  sections: [],
-  passRate: null,
-  coverage: null,
   caseCount: 12,
   currentVersionNo: 2,
   lockVersion: 7,
-};
+});
 
 /** `planInputFrom(PLAN)` — every scalar, and none of the lists. */
 const PLAN_ECHO = {
@@ -206,39 +177,34 @@ const PLAN_ECHO = {
   outOfScopeText: 'Anything behind the beta flag.',
 };
 
-const RUN = {
-  id: 'tr-5',
-  key: 'TR-5',
-  name: 'Nightly',
-  status: 'IN_PROGRESS',
-  executions: [{ id: 'e-1', caseId: 'c-9', caseKey: 'TC-42', caseTitle: 'Login works' }],
-};
+/*
+  Two shapes, because the endpoints answer two. `GET /runs` and the two writes answer `TestRun`;
+  only `GET /runs/{id}` answers the detail, and its `executions` are SUMMARIES — no steps, no
+  evidence, no lock version. One constant served for all of them made every list look like the
+  detail, which is the shape a caller would try to edit from.
+*/
+const RUN = run({ id: 'tr-5', key: 'TR-5', status: 'IN_PROGRESS' });
 
+const RUN_DETAIL = runDetail({
+  ...RUN,
+  executions: [executionSummary({ id: 'e-1', caseId: 'c-9' })],
+});
+
+/*
+  `PASSED` and `FAILED`, not ~~`PASS`/`FAIL`~~. `StatusKind` has never had the shorter spelling and
+  this fixture carried it from §137 until §203 found it — the sharpest thing about it is that
+  nothing downstream would have noticed either: `reads.ts` prints `entry.kind` verbatim, so the
+  column would have read `PASS` in a test and `PASSED` in the field.
+*/
+const PASSED = caseStatus({ id: 'st-1', name: 'Passed', kind: 'PASSED', color: '#0a0' });
 const STATUSES = [
-  { id: 'st-1', name: 'Passed', kind: 'PASS', color: '#0a0', countsAsPass: true, isFinal: true },
-  { id: 'st-2', name: 'Failed', kind: 'FAIL', color: '#a00', countsAsPass: false, isFinal: true },
+  PASSED,
+  caseStatus({ id: 'st-2', name: 'Failed', kind: 'FAILED', color: '#a00', countsAsPass: false }),
 ];
 
-const EXECUTION = {
-  id: 'e-1',
-  caseId: 'c-9',
-  caseKey: 'TC-42',
-  caseTitle: 'Login works',
-  status: STATUSES[0],
-  lockVersion: 1,
-};
+const EXECUTION = execution({ id: 'e-1', caseId: 'c-9', status: PASSED });
 
-const REVIEW = {
-  id: 'rv-1',
-  subjectType: 'CASE',
-  subjectId: 'c-9',
-  subjectVersionNo: 3,
-  state: 'IN_REVIEW',
-  createdAt: '2026-08-08T09:00:00Z',
-  assignees: [],
-  participations: [],
-  comments: [],
-};
+const REVIEW = review({ subjectId: 'c-9', subjectVersionNo: 3 });
 
 /** The reads every command makes on its way to a write: project resolution and key lookup. */
 function scaffolding(): Record<string, { status: number; body?: unknown }> {
@@ -246,17 +212,19 @@ function scaffolding(): Record<string, { status: number; body?: unknown }> {
     '/projects': { status: 200, body: [PROJECT] },
     'GET /cases': {
       status: 200,
-      body: { page: 0, size: 1, total: 1, facets: [], items: [CASE] },
+      body: casePage([caseSummary({ id: 'c-9', key: 'TC-42' })], { size: 1 }),
     },
     'GET /cases/c-9': { status: 200, body: CASE },
     'GET /suites': { status: 200, body: [SUITE] },
     'GET /suites/s-1': { status: 200, body: SUITE },
-    'GET /doc-pages': { status: 200, body: [PAGE] },
+    // The LIST answers `DocPageSummary`, which carries neither blocks nor a lock version — the
+    // detail is a different shape and serving it here made the list look richer than it is.
+    'GET /doc-pages': { status: 200, body: [docPageSummary({ id: 'd-1', key: 'DOC-3', title: 'Payments spec', slug: 'payments-spec' })] },
     'GET /doc-pages/d-1': { status: 200, body: PAGE },
     'GET /plans': { status: 200, body: [PLAN] },
     'GET /plans/tp-1': { status: 200, body: PLAN },
     'GET /runs': { status: 200, body: [RUN] },
-    'GET /runs/tr-5': { status: 200, body: RUN },
+    'GET /runs/tr-5': { status: 200, body: RUN_DETAIL },
     'GET /executions/e-1': { status: 200, body: EXECUTION },
     'GET /statuses': { status: 200, body: STATUSES },
     'GET /reviews': { status: 200, body: [REVIEW] },
@@ -412,7 +380,9 @@ describe('case edit', () => {
   it('refuses a --file edit that names no --lock-version, and makes no request', async () => {
     const out = recorder();
     const stub = api(scaffolding());
-    const file = tempJson('case.json', { title: 'From a file' });
+    // A complete input, because that is what a person's file is: the `--file` arm sends it
+    // verbatim, so a four-field literal here would be a payload the server refuses.
+    const file = tempJson('case.json', { ...PROPOSABLE, title: 'From a file' });
 
     expect(await mainWith(['case', 'edit', 'TC-42', '--file', file], out, stub.fetch)).toBe(EXIT.failed);
     expect(out.stderr).toMatch(/silently overwrites whoever saved in between/);
@@ -422,7 +392,9 @@ describe('case edit', () => {
   it('sends the version the caller names, without reading a fresher one', async () => {
     const out = recorder();
     const stub = api({ ...scaffolding(), 'PATCH /cases/c-9': { status: 200, body: CASE } });
-    const file = tempJson('case.json', { title: 'From a file' });
+    // A complete input, because that is what a person's file is: the `--file` arm sends it
+    // verbatim, so a four-field literal here would be a payload the server refuses.
+    const file = tempJson('case.json', { ...PROPOSABLE, title: 'From a file' });
 
     expect(await mainWith(
       ['case', 'edit', 'TC-42', '--file', file, '--lock-version', '2'],
@@ -700,7 +672,14 @@ describe('doc writes', () => {
       ...scaffolding(),
       'POST /blocks/b-1/links': {
         status: 201,
-        body: { id: 'l-1', sourceType: 'TEST_CASE', sourceKey: 'TC-42', relationship: 'VERIFIES' },
+        body: {
+          id: 'l-1',
+          sourceType: 'TEST_CASE',
+          sourceId: 'c-9',
+          sourceKey: 'TC-42',
+          sourceTitle: 'Login works',
+          relationship: 'VERIFIES',
+        },
       },
     });
 
@@ -985,7 +964,14 @@ const INVOCATIONS: Record<string, Invocation> = {
     routes: {
       'POST /blocks/b-1/links': {
         status: 201,
-        body: { id: 'l-1', sourceType: 'TEST_CASE', sourceKey: 'TC-42', relationship: 'VERIFIES' },
+        body: {
+          id: 'l-1',
+          sourceType: 'TEST_CASE',
+          sourceId: 'c-9',
+          sourceKey: 'TC-42',
+          sourceTitle: 'Login works',
+          relationship: 'VERIFIES',
+        },
       },
     },
   },

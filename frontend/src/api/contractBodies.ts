@@ -119,6 +119,25 @@ function spec(): Document {
   return document
 }
 
+/* ==== SHARED REGION START ====
+ *
+ * This region exists **twice**, character for character: `frontend/src/api/contractBodies.ts` and
+ * `packages/client/src/test/contractBodies.ts`. Two stacks double the same server against the same
+ * contract, and neither can import the other — separate npm roots, a Vite-only `?raw` import on one
+ * side, and two CI jobs each of which installs a tree the other never sees.
+ *
+ * So it is copied, and **paired**: `packages/client/src/test/contractPairing.test.ts` compares the
+ * two slices and names the first line that differs. That is the trade the two `schema.d.ts` copies
+ * already make, checked the same way — because a copy nothing pairs is §196's two tsconfig lists,
+ * and the walker going quiet about a keyword on one stack only is exactly what that costs.
+ *
+ * Everything in here touches `spec()` and `Node` and nothing else. What differs between the stacks
+ * is outside it: how the document is obtained, and — in `packages/` — the `/api/v1` prefix its URLs
+ * carry, which the SPA does not send.
+ *
+ * Editing anything below means editing both. The pairing test names the line.
+ */
+
 /** As spelled in an OpenAPI path item; anything else under a path is metadata. */
 const OPERATIONS = new Set(['get', 'put', 'post', 'patch', 'delete'])
 
@@ -159,7 +178,8 @@ function pathMatchers(): { path: string; regex: RegExp }[] {
 
 /** The contract path a request URL resolves to, query string discarded. */
 export function contractPathOf(url: string): string | undefined {
-  return pathMatchers().find((matcher) => matcher.regex.test(url.split('?')[0]))?.path
+  const path = url.split('?')[0] ?? url
+  return pathMatchers().find((matcher) => matcher.regex.test(path))?.path
 }
 
 /**
@@ -173,8 +193,9 @@ export function responseSchemaOf(method: string, contractPath: string): Node | u
   const responses = operation?.responses as Record<string, Node> | undefined
   if (!responses) return undefined
   const status = Object.keys(responses).find((code) => code.startsWith('2'))
-  if (!status) return undefined
-  const content = deref(responses[status]).content as Record<string, Node> | undefined
+  const response = status === undefined ? undefined : responses[status]
+  if (!response) return undefined
+  const content = deref(response).content as Record<string, Node> | undefined
   const schema = content?.['application/json']?.schema
   return schema ? deref(schema as Node) : undefined
 }
@@ -229,9 +250,12 @@ function branches(schema: Node): Node[] {
  * the members it is meant to check against.
  */
 interface Constraints {
-  enums?: unknown[]
-  type?: string
-  format?: string
+  // Spelled `| undefined` rather than left to `?` alone because the shared region has to compile
+  // under `packages/`'s `exactOptionalPropertyTypes`, where assigning `undefined` to an optional
+  // property is an error unless the type admits it.
+  enums?: unknown[] | undefined
+  type?: string | undefined
+  format?: string | undefined
   nullable: boolean
 }
 
@@ -427,3 +451,5 @@ function walk(
     if (name in record) walk(property, record[name], `${where}.${name}`, out, depth + 1, direction)
   }
 }
+
+/* ==== SHARED REGION END ==== */

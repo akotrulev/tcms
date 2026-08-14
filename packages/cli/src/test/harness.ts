@@ -9,6 +9,16 @@
  * keep the whole request, and two recorders that disagree about what a request is would be the
  * one thing these tests exist to notice.
  */
+/*
+  Reached by a relative path across the package boundary, which is deliberate and is the only such
+  import in this tree. The comparison must exist **once** — three `fetch` doubles that disagree about
+  what the server sends is the defect it was built to find — and it cannot travel through
+  `@tcms/client`'s public export: `dist/` excludes `src/test` on purpose, and a checker that reads a
+  550 kB YAML through a devDependency has no business in a published package. Test code importing
+  test code is the narrow case where reaching past the export is right.
+*/
+import { checkExchange } from '../../../client/src/test/contractExchange.js';
+import { project } from '../../../client/src/test/fixtures.js';
 import { main } from '../main.js';
 import type { Output } from '../output.js';
 
@@ -62,7 +72,7 @@ export function api(routes: Record<string, Answer>): Api {
     const request = input instanceof Request ? input : new Request(input, init);
     const url = new URL(request.url);
     urls.push(`${url.pathname}${url.search}`);
-    sent.push({
+    const recorded: SentRequest = {
       path: url.pathname,
       search: url.search,
       method: request.method,
@@ -75,7 +85,8 @@ export function api(routes: Record<string, Answer>): Api {
       // unbuffered so an evidence upload is not held in this process. A recorder that read only
       // the string form saw `null` on every write and every body assertion passed vacuously.
       body: await bodyOf(init?.body),
-    });
+    };
+    sent.push(recorded);
 
     // Method-keyed routes win, so `'PATCH /cases/c-9'` can answer differently from the `GET` the
     // same command makes at the same URL for its lockVersion.
@@ -83,6 +94,17 @@ export function api(routes: Record<string, Answer>): Api {
     const match =
       entries.find(({ method, suffix }) => method === request.method && url.pathname.endsWith(suffix))
       ?? entries.find(({ method, suffix }) => method === undefined && url.pathname.endsWith(suffix));
+
+    // Both directions against `openapi.yaml`, §203. The unstubbed 500 below is compared too — its
+    // *request* half is the interesting one, and its answer is not a 2xx, so nothing goes looking
+    // for a success schema in it.
+    checkExchange({
+      method: recorded.method,
+      pathname: recorded.path,
+      requestBody: recorded.body,
+      status: match?.answer.status ?? 500,
+      responseBody: match?.answer.body,
+    });
 
     if (!match) {
       return new Response(JSON.stringify({ detail: `no stub for ${request.method} ${url.pathname}` }), {
@@ -130,14 +152,8 @@ function parse(key: string): { method?: string; suffix: string } {
 
 export const env = { TCMS_URL: 'https://tcms.example.com', TCMS_TOKEN: 'tcms_abc' };
 
-export const PROJECT = {
-  id: 'p-1',
-  key: 'OLB',
-  name: 'Online Banking',
-  archived: false,
-  caseCount: 3,
-  myRole: 'Test Engineer',
-};
+/** `@tcms/client`'s factory since §203 — the same body the MCP harness serves for this endpoint. */
+export const PROJECT = project();
 
 /**
  * Runs `main` against an injected `fetch`.

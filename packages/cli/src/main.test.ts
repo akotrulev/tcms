@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { caseDetail, casePage, caseSummary, condition, currentUser, permissions, suite } from '../../client/src/test/fixtures.js';
 import { EXIT, main } from './main.js';
 import { PROJECT, api, env, mainWith, recorder } from './test/harness.js';
 
@@ -16,27 +17,24 @@ import { PROJECT, api, env, mainWith, recorder } from './test/harness.js';
  * same library entry attached at two suites is two attachments, and declining one must leave the
  * other in force.
  */
-const CASE_DETAIL = {
+const CASE_DETAIL = caseDetail({
   id: 'c-9',
   key: 'TC-42',
   title: 'Login works',
   lifecycleStatus: 'APPROVED',
-  tags: [],
   preconditions: [
-    {
+    condition({
       id: 'sc-1',
-      position: 1,
       conditionId: 'cond-1',
       title: 'Log in',
       body: ['Sign in as ops@acme.test'],
       inline: false,
       inherited: true,
       inheritedFrom: 'Billing',
-    },
+    }),
   ],
-  postconditions: [],
   declinedPreconditions: [
-    {
+    condition({
       id: 'sc-2',
       position: 2,
       conditionId: 'cond-2',
@@ -45,11 +43,10 @@ const CASE_DETAIL = {
       inline: false,
       inherited: true,
       inheritedFrom: 'Billing',
-    },
+    }),
   ],
-  declinedPostconditions: [],
   lockVersion: 3,
-};
+});
 
 describe('argument handling', () => {
   it('prints usage and exits 2 when given nothing', async () => {
@@ -125,17 +122,11 @@ describe('whoami', () => {
   it('prints permission keys, with the qualifier when it narrows them', async () => {
     const out = recorder();
     const stub = api({
-      '/me': { status: 200, body: { id: 'u-1', email: 'ana@acme.test', displayName: 'Ana', isSystemAdmin: false, status: 'ACTIVE' } },
+      '/me': { status: 200, body: currentUser() },
       '/projects': { status: 200, body: [PROJECT] },
       '/me/permissions': {
         status: 200,
-        body: {
-          projectId: null,
-          permissions: [
-            { key: 'case:read', qualifier: 'ALL' },
-            { key: 'case:delete', qualifier: 'OWN' },
-          ],
-        },
+        body: permissions(['case:read', 'case:delete'], { 'case:delete': 'OWN' }, null),
       },
     });
 
@@ -172,7 +163,7 @@ describe('reads', () => {
     const out = recorder();
     const stub = api({
       '/projects': { status: 200, body: [PROJECT] },
-      '/suites': { status: 200, body: [{ id: 's-1', key: 'TS-1', name: 'Smoke', caseCount: 4, lifecycleStatus: 'APPROVED' }] },
+      '/suites': { status: 200, body: [suite({ key: 'TS-1', lifecycleStatus: 'APPROVED' })] },
     });
 
     expect(await mainWith(['suite', 'list'], out, stub.fetch)).toBe(EXIT.ok);
@@ -194,7 +185,7 @@ describe('reads', () => {
     const out = recorder();
     const stub = api({
       '/projects': { status: 200, body: [PROJECT] },
-      '/cases': { status: 200, body: { page: 0, size: 1, total: 1, facets: [], items: [{ id: 'c-9', key: 'TC-42' }] } },
+      '/cases': { status: 200, body: casePage([caseSummary({ id: 'c-9', key: 'TC-42' })], { size: 1 }) },
       '/cases/c-9': { status: 200, body: CASE_DETAIL },
     });
 
@@ -218,7 +209,7 @@ describe('reads', () => {
     const out = recorder();
     const stub = api({
       '/projects': { status: 200, body: [PROJECT] },
-      '/cases': { status: 200, body: { page: 0, size: 1, total: 1, facets: [], items: [{ id: 'c-9', key: 'TC-42' }] } },
+      '/cases': { status: 200, body: casePage([caseSummary({ id: 'c-9', key: 'TC-42' })], { size: 1 }) },
       '/cases/c-9': { status: 200, body: CASE_DETAIL },
     });
 
@@ -243,22 +234,17 @@ describe('reads', () => {
     const out = recorder();
     const stub = api({
       '/projects': { status: 200, body: [PROJECT] },
-      '/suites': { status: 200, body: [{ id: 's-1', key: 'TS-7', name: 'Smoke', caseCount: 2, lifecycleStatus: 'DRAFT', tagRules: [], caseIds: [], preconditions: [], postconditions: [], lockVersion: 4 }] },
+      '/suites': { status: 200, body: [suite({ key: 'TS-7', caseCount: 2, lockVersion: 4 })] },
       '/suites/s-1': {
         status: 200,
-        body: {
-          id: 's-1',
+        body: suite({
           key: 'TS-7',
-          name: 'Smoke',
           description: 'What we check on every build.',
           caseCount: 2,
-          lifecycleStatus: 'DRAFT',
           tagRules: ['smoke'],
-          caseIds: [],
-          preconditions: [{ id: 'sc-1', position: 1, conditionId: 'cond-1', title: 'Log in', body: [], inline: false, inherited: false }],
-          postconditions: [],
+          preconditions: [condition({ id: 'sc-1', conditionId: 'cond-1', title: 'Log in', inline: false })],
           lockVersion: 4,
-        },
+        }),
       },
     });
 
@@ -299,7 +285,7 @@ describe('reads', () => {
     const out = recorder();
     const stub = api({
       '/projects': { status: 200, body: [PROJECT] },
-      '/cases': { status: 200, body: { page: 0, size: 25, total: 0, facets: [], items: [] } },
+      '/cases': { status: 200, body: casePage([], { size: 25 }) },
     });
 
     expect(await mainWith(

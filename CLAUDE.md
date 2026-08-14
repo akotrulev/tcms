@@ -109,8 +109,25 @@ npm run build                     # THE gate: tsc over source+tests, then emit. 
                                   # names the order client → cli → mcp; mcp is THIRD for the
                                   # same reason cli is second.
 npm run lint --workspaces         # oxlint, 0 warnings
-npm run test:run --workspaces     # ~~211~~ 241 tests (75 client / 85 cli / 81 mcp, measured on
-                                  # shanks 2026-08-14), ~1s — CI runs these, unlike the backend's
+npm run test:run --workspaces     # ~~211~~ ~~241~~ 260 tests (104 client / 75 cli / 81 mcp,
+                                  # measured on shanks 2026-08-14), ~1s — CI runs these, unlike the
+                                  # backend's. **Since §203 every exchange crossing a `fetch` double
+                                  # here is compared against openapi.yaml — the body it SERVES and
+                                  # the payload it was CALLED WITH** — §197–§199 arriving in this
+                                  # stack, and it found 118 red of 241. The seam is
+                                  # `client/src/test/contractExchange.ts`, called from all three
+                                  # doubles (`stubFetch`, plus an `api(routes)` harness in each of
+                                  # cli/ and mcp/); build a fourth and `contractExchange.test.ts`
+                                  # fails naming the file. Use `client/src/test/fixtures.ts` — a
+                                  # complete factory per resource — and mind WHICH SHAPE an endpoint
+                                  # answers: a list is a `*Summary`, and serving the detail for one
+                                  # is 24 undeclared properties a row. Only a **2xx** answer is
+                                  # measured against the success schema, so a test driving a refusal
+                                  # needs no hatch; the one hatch is `drivingTheTransport()`, for a
+                                  # test whose subject is a header, a timeout or a cancellation.
+                                  # The comparison itself is `client/src/test/contractBodies.ts`,
+                                  # whose marked region is BYTE-IDENTICAL to `frontend/`'s copy and
+                                  # pinned by `contractPairing.test.ts` — edit one, edit both.
 cd client && npm run gen:api      # THE SECOND COPY of schema.d.ts. Regenerate BOTH after any
                                   # openapi.yaml change; schemaFreshness.test.ts fails otherwise.
 node cli/dist/main.js help        # TCMS_URL + TCMS_TOKEN drive it
