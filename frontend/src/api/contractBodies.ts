@@ -1,5 +1,14 @@
 /**
- * Does this response body describe something the server could actually send?
+ * Does this body describe something the server could actually send — or actually accept?
+ *
+ * Two directions over one comparison. A **response** body is what a double serves and the SPA reads
+ * (§197, §198); a **request** body is what the SPA sends and the server reads (§199). The questions
+ * are the same six and the walker is one, because a JSON schema does not know which way the bytes
+ * were going; only the wording of a violation differs, and it differs because the reader's next move
+ * does — a served body is repaired in a fixture, a sent one is usually repaired in `api/queries/`.
+ *
+ * ~~`contractResponses.ts`~~ → renamed in §199, when the second direction landed: a module named
+ * for one half of what it does is §152's shape.
  *
  * ## The population this exists for
  *
@@ -65,6 +74,26 @@
  * `oneOf` / `anyOf` schemas are skipped rather than guessed at: reporting the union's *intersection*
  * of required properties would be wrong in one direction and reporting one arm's would be wrong in
  * the other, and a check that reports a defect nobody can fix is worse than one that says nothing.
+ *
+ * ## The request direction, and the one question that changes meaning
+ *
+ * All six questions are asked of a request body unchanged, and five of them mean the same thing from
+ * the other end. The **undeclared property** is the one that gets sharper: a response carrying a
+ * field the contract does not declare is usually a double answering the wrong endpoint, but a
+ * *request* carrying one is a value the SPA composed, serialized, and sent to a server that will
+ * discard it without comment. Jackson is configured to ignore what it does not know, so the symptom
+ * is a control that reports success and changes nothing — §186's `SuiteInput`, which was a
+ * hand-written literal typed as the endpoint's input and had stopped being it.
+ *
+ * **A `PATCH` here is not a delta and the `required` check therefore applies to one.** The contract
+ * says so in as many words on the case endpoint — *"the body is the whole editable set"*, because
+ * Jackson gives absent and null the same Java value — so a partial patch is a request that clears
+ * every field it omits, which is exactly what the required question reports.
+ *
+ * **A `multipart/form-data` body is refused rather than checked**, on §198's `uuid` grounds: what the
+ * caller hands `api.upload` is a `FormData`, whose parts are strings and `File`s with no JSON shape
+ * to compare, and the three sites that use it send one part called `file`. Comparing it would be a
+ * second instrument, not this one with a wider argument.
  */
 import { parse } from 'yaml'
 import specText from '../../../docs/specs/openapi.yaml?raw'
@@ -148,6 +177,32 @@ export function responseSchemaOf(method: string, contractPath: string): Node | u
   const content = deref(responses[status]).content as Record<string, Node> | undefined
   const schema = content?.['application/json']?.schema
   return schema ? deref(schema as Node) : undefined
+}
+
+/**
+ * What an operation declares it will accept.
+ *
+ * Four answers rather than a schema-or-nothing, because the seam's next move differs for each and
+ * collapsing them would report the wrong thing three times: an operation that takes **no** body at
+ * all is a legitimate `api.post(url)`; a **multipart** one is deliberately unchecked; and a URL that
+ * resolves to no operation is already reported one layer up, so this only sees the method being
+ * wrong for a path that exists.
+ */
+export type RequestBody =
+  | { kind: 'json'; schema: Node }
+  | { kind: 'multipart' }
+  | { kind: 'none' }
+  | { kind: 'no-operation' }
+
+export function requestBodyOf(method: string, contractPath: string): RequestBody {
+  const operation = OPERATIONS.has(method) ? (spec().paths[contractPath]?.[method] as Node | undefined) : undefined
+  if (!operation) return { kind: 'no-operation' }
+  const body = operation.requestBody as Node | undefined
+  if (!body) return { kind: 'none' }
+  const content = deref(body).content as Record<string, Node> | undefined
+  const schema = content?.['application/json']?.schema
+  if (!schema) return { kind: 'multipart' }
+  return { kind: 'json', schema: deref(schema as Node) }
 }
 
 /**
@@ -242,14 +297,44 @@ export interface Violation {
   message: string
 }
 
+/**
+ * Which way the body was travelling.
+ *
+ * It changes three sentences and nothing else. A violation is read by somebody deciding what to
+ * repair, and "absent from the body this double served" sends them to a fixture while "absent from
+ * the payload this call sent" sends them to the code that built it — which for a request is usually
+ * `api/queries/` rather than a test at all.
+ */
+export type Direction = 'served' | 'sent'
+
+const WORDS = {
+  served: {
+    missing: 'required by the contract, absent from the body this double served',
+    undeclared: 'served by this double, declared nowhere in the contract',
+    null: 'The server always sends a value here, so a component may read straight through it.',
+  },
+  sent: {
+    missing: 'required by the contract, absent from the payload this call sent',
+    undeclared: 'sent by this call, declared nowhere in the contract',
+    null: 'Jackson reads an absent field and an explicit null as the same value, so this clears it.',
+  },
+} satisfies Record<Direction, Record<string, string>>
+
 /** Every way this body disagrees with the schema. Empty is the answer for a body the server sends. */
-export function violationsOf(schema: Node, body: unknown): Violation[] {
+export function violationsOf(schema: Node, body: unknown, direction: Direction = 'served'): Violation[] {
   const out: Violation[] = []
-  walk(schema, body, '$', out, 0)
+  walk(schema, body, '$', out, 0, direction)
   return out
 }
 
-function walk(schema: Node, value: unknown, where: string, out: Violation[], depth: number): void {
+function walk(
+  schema: Node,
+  value: unknown,
+  where: string,
+  out: Violation[],
+  depth: number,
+  direction: Direction,
+): void {
   // A guard against a `$ref` cycle in the document rather than a limit on how deep a body may be:
   // nothing the API serves nests eight levels, and a self-referential schema would otherwise not
   // terminate. Doc blocks are the deepest at four.
@@ -263,9 +348,7 @@ function walk(schema: Node, value: unknown, where: string, out: Violation[], dep
     if (!nullable) {
       out.push({
         where,
-        message:
-          'null, where the contract declares no `nullable: true`. The server always sends a value '
-          + 'here, so a component may read straight through it.',
+        message: `null, where the contract declares no \`nullable: true\`. ${WORDS[direction].null}`,
       })
     }
     return
@@ -300,7 +383,7 @@ function walk(schema: Node, value: unknown, where: string, out: Violation[], dep
     const items = branches(schema).map((branch) => branch.items).find(Boolean)
     if (!items || !Array.isArray(value)) return
     const element = deref(items as Node)
-    value.forEach((member, index) => walk(element, member, `${where}[${index}]`, out, depth + 1))
+    value.forEach((member, index) => walk(element, member, `${where}[${index}]`, out, depth + 1, direction))
     return
   }
 
@@ -330,23 +413,17 @@ function walk(schema: Node, value: unknown, where: string, out: Violation[], dep
   const record = value as Record<string, unknown>
   for (const name of required) {
     if (!(name in record)) {
-      out.push({
-        where: `${where}.${name}`,
-        message: 'required by the contract, absent from the body this double served',
-      })
+      out.push({ where: `${where}.${name}`, message: WORDS[direction].missing })
     }
   }
   if (!open) {
     for (const name of Object.keys(record)) {
       if (!declared.has(name)) {
-        out.push({
-          where: `${where}.${name}`,
-          message: 'served by this double, declared nowhere in the contract',
-        })
+        out.push({ where: `${where}.${name}`, message: WORDS[direction].undeclared })
       }
     }
   }
   for (const [name, property] of declared) {
-    if (name in record) walk(property, record[name], `${where}.${name}`, out, depth + 1)
+    if (name in record) walk(property, record[name], `${where}.${name}`, out, depth + 1, direction)
   }
 }

@@ -1,6 +1,6 @@
 /**
- * The seam's own tests: it reports what it should, stays quiet on a body the server could send, and
- * still covers the suite it was installed for.
+ * The seam's own tests: it reports what it should, stays quiet on a body the server could send — or
+ * accept — and still covers the suite it was installed for.
  *
  * ## Why a seam needs a vacuity guard more than a check does
  *
@@ -17,13 +17,20 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { api } from '../api/client'
-import { contractPathOf, declaredPathCount, responseSchemaOf, violationsOf } from '../api/contractResponses'
+import type { Attachment } from '../api/types'
+import {
+  contractPathOf,
+  declaredPathCount,
+  requestBodyOf,
+  responseSchemaOf,
+  violationsOf,
+} from '../api/contractBodies'
 import { drainServedViolations, servingADriftedBody } from './contractDoubles'
 import { aCase, aProject, aRun } from './fixtures'
 
 /**
  * Every test file, as source, read through Vite rather than `node:fs` — the same reason
- * `contractResponses.ts` reads the spec that way: this file is compiled by `tsconfig.app.json`,
+ * `contractBodies.ts` reads the spec that way: this file is compiled by `tsconfig.app.json`,
  * which must not have `types: ["node"]`, and `import.meta.glob` needs neither.
  */
 const testSources = import.meta.glob('../**/*.test.{ts,tsx}', {
@@ -62,6 +69,15 @@ describe('the contract-doubles seam', () => {
         + 'doubles made that way, so it now covers nothing while reporting nothing. Teach '
         + 'contractDoubles.ts about whatever replaced it.',
     ).toBeGreaterThanOrEqual(45)
+
+    // The request half has its own population and it is a third the size, so the read count above
+    // would stay comfortable while every write double disappeared. Measured at 36 files (§199).
+    const writing = files.filter(([, source]) => /vi\.spyOn\(api, '(post|patch|put)'/.test(source))
+    expect(
+      writing.length,
+      'almost no test file drives a write through `vi.spyOn(api, …)` any more, so nothing compares '
+        + 'the payloads this SPA composes against the contract.',
+    ).toBeGreaterThanOrEqual(25)
   })
 
   it('reports an incomplete body, naming the field and the operation', async () => {
@@ -140,6 +156,168 @@ describe('the contract-doubles seam', () => {
     await api.get('/projects/p1')
 
     expect(drainServedViolations()).toEqual([])
+  })
+})
+
+/**
+ * The other direction (§199): the payload the code under test handed the double, against what the
+ * operation says it accepts.
+ *
+ * Every test here drives a **real** `api.post`/`patch`/`upload` through a real spy, for the reason
+ * the read half does: a unit test of `violationsOf` alone would pass with the wrapper unplugged, and
+ * the wrapper is the half that can silently stop reading the argument it reads.
+ */
+describe('the payload the caller sends', () => {
+  it('reports a required field the payload leaves out, naming the operation', async () => {
+    vi.spyOn(api, 'post').mockResolvedValue(aCase())
+
+    await api.post('/projects/p1/cases', { title: 'A case' })
+
+    const served = drainServedViolations()
+    expect(served.every((violation) => violation.direction === 'sent')).toBe(true)
+    expect(served.map((violation) => violation.message)).toEqual([
+      '$.stepFormat — required by the contract, absent from the payload this call sent',
+      '$.priority — required by the contract, absent from the payload this call sent',
+      '$.automationStatus — required by the contract, absent from the payload this call sent',
+    ])
+    expect(served.every((violation) => violation.url === '/projects/{projectId}/cases')).toBe(true)
+  })
+
+  it('reports a property the operation does not declare', async () => {
+    vi.spyOn(api, 'patch').mockResolvedValue(aCase())
+
+    // `ownerId` IS on `TestCaseInput`; `owner` is the read model's field, which is the mistake a
+    // round-trip makes — echo the resource back and half of it is not an input at all.
+    await api.patch('/projects/p1/cases/c1', {
+      title: 'A case',
+      stepFormat: 'STRUCTURED',
+      priority: 'MEDIUM',
+      automationStatus: 'MANUAL',
+      owner: { id: 'u1', displayName: 'A. Tester' },
+    })
+
+    expect(drainServedViolations().map((violation) => violation.message)).toEqual([
+      '$.owner — sent by this call, declared nowhere in the contract',
+    ])
+  })
+
+  it('says nothing about a payload the server would accept', async () => {
+    vi.spyOn(api, 'post').mockResolvedValue(aCase())
+
+    await api.post('/projects/p1/cases', {
+      title: 'A case',
+      stepFormat: 'STRUCTURED',
+      priority: 'MEDIUM',
+      automationStatus: 'MANUAL',
+    })
+
+    expect(drainServedViolations()).toEqual([])
+  })
+
+  /**
+   * The check runs **before** the double does, so the error path of every mutation in the suite is
+   * covered too — which is where a payload defect is most likely to hide, because a test asserting a
+   * failure asserts nothing about what was sent.
+   */
+  it('checks the payload even when the double rejects', async () => {
+    vi.spyOn(api, 'post').mockRejectedValue(new Error('400'))
+
+    await expect(api.post('/projects/p1/cases', { title: 'A case' })).rejects.toThrow('400')
+
+    expect(drainServedViolations()).not.toHaveLength(0)
+  })
+
+  /**
+   * `{}` and no argument at all are the same request — `JSON.stringify(body ?? {})` — so the empty
+   * one is silence by decision rather than by oversight. `useAcceptProposal` posts `{}` to an
+   * operation that declares no body, and telling it to send nothing would name a difference that
+   * does not reach the wire.
+   */
+  it('reports a body sent where the operation declares none, and ignores an empty one', async () => {
+    vi.spyOn(api, 'post').mockResolvedValue(aCase())
+
+    await api.post('/projects/p1/ai-proposals/ap1/accept', {})
+    expect(drainServedViolations()).toEqual([])
+
+    await api.post('/projects/p1/ai-proposals/ap1/accept', { note: 'why' })
+    expect(drainServedViolations().map((violation) => violation.message)).toEqual([
+      'the contract declares no request body for that operation, and this call sent one. The '
+      + 'server reads none of it.',
+    ])
+  })
+
+  /**
+   * `api.get(path, options)` and `api.del(path, options)` carry `RequestOptions` where the writes
+   * carry a body, and a seam that read position 1 without asking which verb it was would compare a
+   * timeout budget against a schema — noise on the two most-used verbs in the suite.
+   */
+  it('does not read a read verb’s options as a payload', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue(aProject())
+    vi.spyOn(api, 'del').mockResolvedValue(undefined)
+
+    await api.get('/projects/p1', { timeoutMs: 1 })
+    await api.del('/projects/p1/cases/c1', { timeoutMs: 1 })
+
+    expect(drainServedViolations()).toEqual([])
+  })
+
+  it('leaves a multipart upload alone', async () => {
+    const attachment: Attachment = {
+      id: 'a1',
+      filename: 'shot.png',
+      contentType: 'image/png',
+      sizeBytes: 12,
+      url: '/api/v1/attachments/a1',
+      uploadedAt: '2026-01-01T00:00:00Z',
+      uploadedBy: null,
+    }
+    vi.spyOn(api, 'upload').mockResolvedValue(attachment)
+
+    const form = new FormData()
+    form.append('file', new Blob(['x']), 'shot.png')
+    await api.upload('/projects/p1/cases/c1/attachments', form)
+
+    expect(drainServedViolations()).toEqual([])
+  })
+
+  it('is suspended by the same escape hatch the served half uses', async () => {
+    servingADriftedBody()
+    vi.spyOn(api, 'post').mockResolvedValue(aCase())
+
+    await api.post('/projects/p1/cases', { nothing: 'the server would accept' })
+
+    expect(drainServedViolations()).toEqual([])
+  })
+})
+
+describe('what an operation declares it accepts', () => {
+  it('tells apart JSON, multipart, no body, and no such operation', () => {
+    expect(requestBodyOf('post', '/projects/{projectId}/cases').kind).toBe('json')
+    expect(requestBodyOf('post', '/projects/{projectId}/cases/{caseId}/attachments').kind).toBe('multipart')
+    expect(requestBodyOf('get', '/projects/{projectId}/cases').kind).toBe('none')
+    // The path exists and the method does not — `delete` is declared here, `put` is not.
+    expect(requestBodyOf('put', '/projects/{projectId}/cases/{caseId}').kind).toBe('no-operation')
+  })
+
+  /**
+   * A `PATCH` on this API is not a delta, and the required check therefore applies to one. The
+   * contract says so on this very operation — Jackson gives absent and null the same Java value, so
+   * a partial patch clears every field it omits.
+   */
+  it('holds a PATCH to the same required set as its POST', () => {
+    const patch = requestBodyOf('patch', '/projects/{projectId}/cases/{caseId}')
+    expect(patch.kind).toBe('json')
+    const found = violationsOf(
+      patch.kind === 'json' ? patch.schema : {},
+      { title: 'A case' },
+      'sent',
+    )
+    expect(found.map((violation) => violation.where)).toEqual([
+      '$.stepFormat',
+      '$.priority',
+      '$.automationStatus',
+    ])
+    expect(found[0]?.message).toContain('the payload this call sent')
   })
 })
 

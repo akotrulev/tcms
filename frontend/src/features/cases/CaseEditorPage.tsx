@@ -67,6 +67,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
+import { NEW_CASE_DEFAULTS } from '../../lib/caseDefaults';
 import { formatAge, plural } from '../../lib/format';
 import { automationLabels, priorityLabels, stepFormatLabels } from '../../lib/labels';
 import { selectTestId } from '../../lib/muiTestIds';
@@ -419,15 +420,18 @@ function CaseEditorForm({
       objective: existing?.objective ?? '',
       description: existing?.description ?? '',
       expectedOutcome: existing?.expectedOutcome ?? '',
-      priority: existing?.priority ?? 'MEDIUM',
-      automationStatus: existing?.automationStatus ?? 'MANUAL',
+      // The three §144 fields default from `NEW_CASE_DEFAULTS`, which the plan tab's title-only
+      // create sends verbatim: two screens author a case from nothing, and one answer to what it
+      // says before the author does (§199).
+      priority: existing?.priority ?? NEW_CASE_DEFAULTS.priority,
+      automationStatus: existing?.automationStatus ?? NEW_CASE_DEFAULTS.automationStatus,
       automationKey: existing?.automationKey ?? '',
       notAutomatableReason: existing?.notAutomatableReason ?? '',
       estimatedDurationSec:
         existing?.estimatedDurationSec === null || existing?.estimatedDurationSec === undefined
           ? ''
           : String(existing.estimatedDurationSec),
-      stepFormat: existing?.stepFormat ?? 'STRUCTURED',
+      stepFormat: existing?.stepFormat ?? NEW_CASE_DEFAULTS.stepFormat,
       gherkinSource: existing?.gherkinSource ?? '',
       // The case's steps, plus the trailing blank row — on a new case that IS the whole list, which
       // is why the editor no longer opens on nothing at all. Before §94 a new case rendered zero

@@ -9,6 +9,7 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { useRef } from 'react';
+import { NEW_CASE_DEFAULTS } from '../../lib/caseDefaults';
 import { TIMEOUTS, api, newIntentKey, qs } from '../client';
 import type {
   Attachment,
@@ -638,6 +639,20 @@ export function useCaseHistory(
  *
  * So the key is **the draft row's**, minted when the row appeared and carried until it is saved —
  * one key per row per intent to create *that* case. See `planDraft.NewCaseRow`.
+ *
+ * ## The payload is a title and `NEW_CASE_DEFAULTS`, and it used to be a title alone
+ *
+ * `TestCaseInput` requires four fields (§144), and this hook sent two from §97 until §199 — so every
+ * Save on the Test cases tab that had a row typed in it answered **400** on three fields the author
+ * was never shown and could not have filled. §144 audited the clients that send this shape and fixed
+ * three of them; all three were in `packages/`, and this one is in the SPA that §144's own text calls
+ * the client which *"satisfies that by construction"* — true of the editor, which submits every field
+ * it renders, and never true of here.
+ *
+ * It went unseen because nothing compared a **sent** body to the contract until §199, and because the
+ * browser lane that drives this screen (`A2 — plans`) is the one the queue has been stopped at since
+ * §186. The gate it would have to fail is a live one: a `toHaveBeenCalledWith` in a green test is the
+ * suite agreeing with the payload rather than the server doing so.
  */
 export function useCreatePlanCase(projectId: string) {
   const client = useQueryClient();
@@ -646,7 +661,11 @@ export function useCreatePlanCase(projectId: string) {
       intentKey,
       ...input
     }: { intentKey: string; title: string; suiteId: string | null }) =>
-      api.post<TestCase>(`${base(projectId)}/cases`, input, { idempotencyKey: intentKey }),
+      api.post<TestCase>(
+        `${base(projectId)}/cases`,
+        { ...NEW_CASE_DEFAULTS, ...input },
+        { idempotencyKey: intentKey },
+      ),
     // The form renders the per-step outcome itself, naming what was created before the failure.
     meta: { handled: true },
     onSuccess: (created) => {

@@ -1,9 +1,19 @@
 /**
- * Every response body a test double serves is compared against `openapi.yaml`, and a body the
- * server could not send fails the test that served it.
+ * Every body that crosses a test double is compared against `openapi.yaml` — the response it serves
+ * and, since §199, the request it was **called with** — and a body the server could not send, or
+ * could not accept, fails the test.
  *
- * The comparison is `contractResponses.ts` and it asks six questions — two structural (§197) and
- * four about the **values** (§198). This file is only the seam that gets it a body to look at.
+ * The comparison is `contractBodies.ts` and it asks six questions — two structural (§197) and four
+ * about the **values** (§198). This file is only the seam that gets it a body to look at.
+ *
+ * ## The two directions are not the same kind of finding
+ *
+ * A **response** violation is a fixture defect: a body a test wrote, standing in for one the server
+ * would send. A **request** violation is usually not test code at all — the payload arrives at the
+ * double having been composed by `api/queries/`, a `useForm` submit handler and whatever the
+ * component did to the form's values, so what is being compared is the thing the SPA would have put
+ * on the wire. Same instrument, same six questions; the response half checks what the suite claims
+ * about the server, and the request half checks what the product actually sends it.
  *
  * ## Why this is a seam and not a helper the tests call
  *
@@ -34,15 +44,17 @@
  *
  * ## The escape hatch, and why it is a function rather than a list
  *
- * `servingADriftedBody()` suspends the check for one test. It exists because a body the contract
- * cannot describe is *the subject* of a few tests — the client's own handling of a response whose
- * shape drifted is a behaviour this app has, and a test for it must be able to serve one. It is a
- * call inside the test that needs it, so the reason is written where the exception is taken and it
- * cannot silently widen to a file, a directory, or a pattern.
+ * `servingADriftedBody()` suspends the check for one test — **both directions**, since §199. It
+ * exists because a body the contract cannot describe is *the subject* of a few tests: the client's
+ * own handling of a response whose shape drifted is a behaviour this app has, and a test for it must
+ * be able to serve one; a test that deliberately sends a payload the server refuses is the same
+ * thing from the other end. It is a call inside the test that needs it, so the reason is written
+ * where the exception is taken and it cannot silently widen to a file, a directory, or a pattern.
  */
 import { afterEach, expect, vi } from 'vitest'
 import { api } from '../api/client'
-import { contractPathOf, responseSchemaOf, violationsOf } from '../api/contractResponses'
+import type { Violation } from '../api/contractBodies'
+import { contractPathOf, requestBodyOf, responseSchemaOf, violationsOf } from '../api/contractBodies'
 
 /** Client verb → the OpenAPI operation key it sends, as `contractIntrospection` derives it. */
 const METHODS: Record<string, string> = {
@@ -54,10 +66,21 @@ const METHODS: Record<string, string> = {
   upload: 'post',
 }
 
+/**
+ * The verbs whose **second argument is a body**, which is not the same list as the verbs that send
+ * one. `api.get(path, options)` and `api.del(path, options)` take `RequestOptions` in that position,
+ * so reading it as a payload would compare a timeout budget against a schema; `api.upload` really
+ * does take a body there and it is a `FormData`, which `requestBodyOf` reports as multipart and this
+ * seam therefore never walks.
+ */
+const SENDS_A_BODY = new Set(['post', 'patch', 'put', 'upload'])
+
 export interface Served {
   verb: string
   url: string
   message: string
+  /** Which half of the exchange this is, for the report and for the seam's own tests. */
+  direction: 'served' | 'sent'
 }
 
 let violations: Served[] = []
@@ -86,7 +109,7 @@ export function drainServedViolations(): Served[] {
   return served
 }
 
-function check(verb: string, url: unknown, body: unknown): void {
+function checkServed(verb: string, url: unknown, body: unknown): void {
   if (suspended || typeof url !== 'string' || body === undefined || body === null) return
   const method = METHODS[verb]
   if (!method) return
@@ -96,6 +119,7 @@ function check(verb: string, url: unknown, body: unknown): void {
     violations.push({
       verb,
       url,
+      direction: 'served',
       message:
         'resolves to no path in openapi.yaml. Either the double answers a URL the SPA no longer '
         + 'calls, or the path was renamed on one side only.',
@@ -108,14 +132,65 @@ function check(verb: string, url: unknown, body: unknown): void {
     violations.push({
       verb,
       url: contractPath,
+      direction: 'served',
       message:
         'the contract declares no JSON success body for that operation, and this double served one.',
     })
     return
   }
 
-  for (const violation of violationsOf(schema, body)) {
-    violations.push({ verb, url: contractPath, message: `${violation.where} — ${violation.message}` })
+  report(verb, contractPath, 'served', violationsOf(schema, body, 'served'))
+}
+
+/**
+ * The payload the code under test handed the double, against what the operation says it accepts.
+ *
+ * Called **before** the double's own implementation runs, so a test whose double rejects — the error
+ * path of every mutation in the suite — still has the payload it sent compared. What is checked is
+ * what `client.ts` would have serialized, which is why an absent body is walked as `{}`: `post` and
+ * its two siblings send `JSON.stringify(body ?? {})`, so a call that passes nothing to an operation
+ * requiring a body does not send nothing, it sends an empty object the server refuses with a 400.
+ */
+function checkSent(verb: string, url: unknown, body: unknown): void {
+  if (suspended || typeof url !== 'string' || !SENDS_A_BODY.has(verb)) return
+  const method = METHODS[verb]
+  if (!method) return
+
+  const contractPath = contractPathOf(url)
+  // A URL that resolves to nothing, and a method the path does not declare, are both already
+  // reported — by the response half above and by `contractOperations.test.ts`, which reads the call
+  // sites statically. Saying it twice would name one defect as two.
+  if (!contractPath) return
+  const declared = requestBodyOf(method, contractPath)
+
+  if (declared.kind === 'none') {
+    // `{}` and nothing at all are the same request — `JSON.stringify(body ?? {})` — so an operation
+    // that takes no body is only being sent one when the object has something in it. Reporting the
+    // empty case would report a call that is byte-identical to the one it is telling you to write.
+    if (body !== undefined && !isEmptyObject(body)) {
+      violations.push({
+        verb,
+        url: contractPath,
+        direction: 'sent',
+        message:
+          'the contract declares no request body for that operation, and this call sent one. The '
+          + 'server reads none of it.',
+      })
+    }
+    return
+  }
+  if (declared.kind !== 'json') return
+
+  report(verb, contractPath, 'sent', violationsOf(declared.schema, body ?? {}, 'sent'))
+}
+
+function isEmptyObject(body: unknown): boolean {
+  return typeof body === 'object' && body !== null && !Array.isArray(body) && Object.keys(body).length === 0
+}
+
+function report(verb: string, contractPath: string, direction: 'served' | 'sent', found: Violation[]): void {
+  for (const violation of found) {
+    violations.push({ verb, url: contractPath, direction, message: `${violation.where} — ${violation.message}` })
   }
 }
 
@@ -145,8 +220,9 @@ function instrument(spy: Spy, verb: string): void {
 
   const wrapImplementation = (original: AnyFn) => (fn: AnyFn) =>
     original.call(spy, async (...args: unknown[]) => {
+      checkSent(verb, args[0], args[1])
       const body = await fn(...args)
-      check(verb, args[0], body)
+      checkServed(verb, args[0], body)
       return body
     })
 
@@ -182,20 +258,28 @@ afterEach(() => {
 
   if (served.length === 0) return
 
-  const report = served
-    .map((violation) => `  ${violation.verb.toUpperCase()} ${violation.url}\n    ${violation.message}`)
+  const lines = served
+    .map((violation) =>
+      `  ${violation.direction === 'sent' ? 'sent to' : 'served for'} `
+      + `${violation.verb.toUpperCase()} ${violation.url}\n    ${violation.message}`)
     .join('\n')
 
+  const sent = served.filter((violation) => violation.direction === 'sent').length
+
   expect.fail(
-    `This test served ${served.length} response ${served.length === 1 ? 'body' : 'bodies'} the `
-      + 'server could not send:\n\n'
-      + `${report}\n\n`
+    `This test moved ${served.length} ${served.length === 1 ? 'body' : 'bodies'} the server could `
+      + `not ${sent === served.length ? 'accept' : sent === 0 ? 'send' : 'send or accept'}:\n\n`
+      + `${lines}\n\n`
       + 'A double casts through `as never` to satisfy the generic client, so nothing compares what '
       + 'it serves against the contract except this. A missing required field is a component one '
       + 'commit away from a TypeError (§195); a field the contract does not declare is usually a '
       + 'double answering a different endpoint, or a vocabulary the product removed (§98); and a '
       + 'value the contract does not admit — an enum member that is not one, a null in a field the '
       + 'server always fills — is a screen rendering something the product cannot produce (§198).\n\n'
+      + 'A **sent** body is the other direction and usually not a fixture at all: it is what '
+      + '`api/queries/` and the form above it composed, so the repair is normally in the code under '
+      + 'test rather than in this file. A property the contract does not declare is one the server '
+      + 'discards without complaint (§199).\n\n'
       + 'Repair the fixture — `src/test/fixtures.ts` has a complete factory for most shapes. If the '
       + 'contract is the side that is wrong, change it and regenerate both `schema.d.ts` copies. If '
       + 'the drifted body IS the subject of this test, call `servingADriftedBody()` and say why.',
