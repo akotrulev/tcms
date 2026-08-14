@@ -118,7 +118,10 @@ npm run dev          # http://localhost:5173 — proxies /api to localhost:8080
                      # sign in by redeeming the /accept-invitation link provision-company prints
 npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
-npm run test:run     # Vitest + RTL, ~~1203~~ ~~1251~~ ~~1276~~ 1285 tests (measured 2026-08-13) — also a gate.
+npm run test:run     # Vitest + RTL, ~~1203~~ ~~1251~~ ~~1276~~ ~~1285~~ 1314 tests (measured on shanks
+                     # 2026-08-14) — also a gate. Since §197 the harness compares every body a
+                     # mocked `api.*` call serves against openapi.yaml and fails the test that
+                     # served a body the server could not send; use `src/test/fixtures.ts`.
                      # ~~`CaseEditorPage.test.tsx` has a load-dependent flake on shanks: one test
                      # asserts a half-typed value under full-suite load and passes when the file
                      # runs alone. Measured against a stashed tree in §186; NOT fixed.~~ →
