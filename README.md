@@ -33,7 +33,9 @@ Roles are ordered least-permissioned first. Rows are grouped by how widely a per
 `✓` granted · `—` not granted · anything else is a qualifier that narrows the grant.
 
 > **Authoritative source is `docs/specs/2026-07-30-tcms-roles-permissions-naming.md` §A3.** This
-> table is a convenience copy. If they disagree, the spec wins and this table is the bug.
+> table is a convenience copy. If they disagree, the spec wins and this table is the bug — and
+> since §215 the build says so: `packages/client/src/test/matrixCopies.test.ts` compares all three
+> scopes below against §A3 cell by cell, both ways, so a copy that goes stale reddens CI.
 > 55 permissions, all seeded by `V3__seed_permissions_and_roles.sql`; no migration has added one
 > since. There is no wildcard permission, and **code checks permissions, never role names**.
 

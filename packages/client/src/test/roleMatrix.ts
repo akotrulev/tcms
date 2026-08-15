@@ -4,7 +4,11 @@
  * `docs/specs/2026-07-30-tcms-roles-permissions-naming.md` §A3 is the authority over the catalogue
  * — CLAUDE.md and README carry convenience copies and say in as many words that the spec wins and
  * the copies are the bug. So a rule about what the prose may claim reads **the spec**, not a third
- * copy of the matrix.
+ * copy of the matrix. ~~And nothing compares the two copies to it.~~ → **§215 does**
+ * (`packages/client/src/test/matrixCopies.test.ts`), over all three scopes and all 55 keys, which
+ * is what {@link specMatrix} is here for: {@link roleMatrix} answers *who holds what* and takes the
+ * `PROJECT` tables alone, and a rule about a **copy** has to read every cell of every table,
+ * including the qualifier text a boolean throws away.
  *
  * That is the whole argument for parsing a markdown table, and it is worth being explicit about
  * what the alternative would have been. ~~§211's rule compares tool descriptions against
@@ -61,6 +65,23 @@ const COLUMNS = ['IA', 'CA', 'TL', 'TE', 'AS', 'V'] as const;
 export type Role = (typeof COLUMNS)[number];
 
 /**
+ * Every column heading §A3 grants through, the six plus the one only its `COMPANY` table has.
+ *
+ * `Every member` is not a seventh tier — it is `V15`'s non-assignable **Company Member** baseline,
+ * and the spec says so in the paragraph under the table. It is here because
+ * {@link specMatrix} is total over the catalogue and that column carries `company:read`.
+ */
+export const SPEC_ROLES = [...COLUMNS, 'Every member'] as const;
+
+export type SpecRole = (typeof SPEC_ROLES)[number];
+
+/** A column that grants nothing — the prose the `COMPANY` and `SYSTEM` tables end in. */
+const PROSE_COLUMN = 'Covers';
+
+/** The catalogue, as §A3 has printed it since `V3` and as every copy of it claims. */
+export const CATALOGUE_SIZE = 55;
+
+/**
  * Test Lead minus Test Engineer, as `V52` (§210) left it: giving approvals, and adding and managing
  * permission on the project. Asserted rather than assumed — see the header.
  */
@@ -69,8 +90,110 @@ const LEAD_ONLY = [
   'project:audit', 'project:settings', 'project:members', 'integration:manage',
 ];
 
-const HEADER = /^\|\s*Permission\s*\|\s*IA\s*\|\s*CA\s*\|\s*TL\s*\|\s*TE\s*\|\s*AS\s*\|\s*V\s*\|/;
 const KEY = /`([a-z]+:[a-z]+)`/g;
+
+/** A grant cell that says the role does not hold the key. §A3's legend spells it exactly one way. */
+export const NOT_GRANTED = '—';
+
+/** One row of one §A3 table: the keys its first cell names, and the cell each column gave them. */
+export interface MatrixRow {
+  keys: string[];
+  cells: Map<SpecRole, string>;
+  /** The table this row came from carries all six `PROJECT` columns. */
+  project: boolean;
+}
+
+/**
+ * Every §A3 row, read between the `### A3.` and `### A4.` headings and keyed by **column heading**.
+ *
+ * Keying by heading rather than by position is what lets one parse serve three tables of different
+ * shapes, and it is why an unknown heading is a hard failure: a column nobody compares reads
+ * exactly like universal agreement, which is the failure mode every rule in this package is
+ * written against. `SeedDataTest.matrixFromTheSpec` reads the same document the same way, one
+ * stack over, and says the same thing about it.
+ */
+export function specRows(): MatrixRow[] {
+  const lines = readFileSync(join(REPO, ROLES_SPEC), 'utf8').split('\n');
+  const start = lines.findIndex((line) => line.startsWith('### A3.'));
+  const end = lines.findIndex((line) => line.startsWith('### A4.'));
+  if (start < 0 || end < start) {
+    throw new Error(
+      `${ROLES_SPEC} has no '### A3.' … '### A4.' span, so this instrument read nothing. The `
+        + 'section was renumbered or renamed — follow it here and in '
+        + '`SeedDataTest.matrixFromTheSpec`, which bounds the same region.',
+    );
+  }
+
+  const rows: MatrixRow[] = [];
+  let headings: string[] = [];
+  for (const line of lines.slice(start, end)) {
+    if (!line.startsWith('|')) { headings = []; continue; }
+
+    const cells = line.split('|').slice(1, -1).map((cell) => cell.trim());
+    if (cells[0] === 'Permission') { headings = cells; continue; }
+    // The `|---|:--:|` separator under every header, and any `|`-led line before one was seen.
+    if (headings.length === 0 || cells.every((cell) => /^:?-+:?$/.test(cell))) continue;
+
+    const keys = [...(cells[0] ?? '').matchAll(KEY)].map((match) => match[1] as string);
+    if (keys.length === 0) {
+      throw new Error(
+        `${ROLES_SPEC} §A3 row '${cells[0]}' names no backticked permission key. The row shape `
+          + 'changed, and a parse that skips a row reads as agreement about every cell in it.',
+      );
+    }
+
+    const grants = new Map<SpecRole, string>();
+    headings.forEach((heading, column) => {
+      if (column === 0 || heading === PROSE_COLUMN) return;
+      if (!(SPEC_ROLES as readonly string[]).includes(heading)) {
+        throw new Error(
+          `${ROLES_SPEC} §A3 has a column headed '${heading}' and this instrument does not know `
+            + 'which role that is. Add it to SPEC_ROLES — and to `SeedDataTest.SPEC_COLUMNS`, '
+            + 'which needs the seeded role name for the same column — or, if a seventh tier '
+            + 'really arrived, take that decision first (spec §A2).',
+        );
+      }
+      grants.set(heading as SpecRole, cells[column] ?? NOT_GRANTED);
+    });
+    rows.push({ keys, cells: grants, project: COLUMNS.every((role) => grants.has(role)) });
+  }
+  return rows;
+}
+
+/**
+ * The whole catalogue as §A3 prints it — key by key, column by column, cell text kept.
+ *
+ * The text rather than a boolean, because a qualifier narrows a grant without removing it
+ * (`quarantine only`, Automation Service's `case:create` — the one live instance) and a copy that
+ * says `plan scope only` where the spec says `✓` is wrong in the way `V52` had to repair by hand.
+ * A role a table has no column for gets no entry: `company:read` is answered for `IA`, `CA` and
+ * `Every member` and by nobody else, which is the shape of the document and not a gap in it.
+ */
+export function specMatrix(): Map<string, Map<SpecRole, string>> {
+  const matrix = new Map<string, Map<SpecRole, string>>();
+  for (const row of specRows()) {
+    for (const key of row.keys) {
+      if (matrix.has(key)) {
+        throw new Error(
+          `${ROLES_SPEC} §A3 names \`${key}\` in two tables. A key is answered by exactly one `
+            + 'scope, so one of the two rows is a stray copy — and merging them here would let a '
+            + 'copy of the matrix agree with whichever half suited it.',
+        );
+      }
+      matrix.set(key, row.cells);
+    }
+  }
+
+  if (matrix.size !== CATALOGUE_SIZE) {
+    throw new Error(
+      `${ROLES_SPEC} §A3 parsed as ${matrix.size} keys and the catalogue is ${CATALOGUE_SIZE}. `
+        + 'Either a table stopped matching this parse, or a migration really did add a key — in '
+        + 'which case `SeedDataTest.catalogueMatchesTheContract` moves first, because it is the '
+        + 'one that reads the seeded rows.',
+    );
+  }
+  return matrix;
+}
 
 /**
  * The `PROJECT`-scope matrix, role by role.
@@ -81,35 +204,23 @@ const KEY = /`([a-z]+:[a-z]+)`/g;
  * `PROJECT`-scope question by construction.
  */
 export function roleMatrix(): Record<Role, Set<string>> {
-  const text = readFileSync(join(REPO, ROLES_SPEC), 'utf8');
   const held = Object.fromEntries(COLUMNS.map((role) => [role, new Set<string>()])) as
     Record<Role, Set<string>>;
 
-  let inTable = false;
-  for (const line of text.split('\n')) {
-    if (HEADER.test(line)) { inTable = true; continue; }
-    if (!line.startsWith('|')) { inTable = false; continue; }
-    if (!inTable) continue;
-
-    const cells = line.split('|').slice(1, -1).map((cell) => cell.trim());
-    if (cells.length !== COLUMNS.length + 1) continue;
-    // The `|---|:--:|` separator under every header.
-    if (cells.every((cell) => /^:?-+:?$/.test(cell))) continue;
-
-    const keys = [...(cells[0] ?? '').matchAll(KEY)].map((match) => match[1] as string);
-    COLUMNS.forEach((role, column) => {
+  for (const row of specRows()) {
+    if (!row.project) continue;
+    for (const role of COLUMNS) {
       // Anything that is not the em dash is a grant — `✓`, or a qualifier that narrows one.
-      // `—` is the only spelling of "not granted" §A3 uses, and the legend says so.
-      if ((cells[column + 1] ?? '—') === '—') return;
-      for (const key of keys) held[role].add(key);
-    });
+      if ((row.cells.get(role) ?? NOT_GRANTED) === NOT_GRANTED) continue;
+      for (const key of row.keys) held[role].add(key);
+    }
   }
 
   if (held.TE.size < 25 || held.TL.size < 30 || held.V.size < 5) {
     throw new Error(
       `${ROLES_SPEC} §A3 parsed as TL=${held.TL.size} TE=${held.TE.size} V=${held.V.size} keys, `
-        + 'which is too few to be the matrix. Either the tables changed shape or the heading '
-        + `pattern stopped matching — this instrument reads rows under \`${HEADER.source}\`.`,
+        + 'which is too few to be the matrix. Either the tables changed shape or a `PROJECT` table '
+        + `stopped carrying all six of [${COLUMNS.join(', ')}], which is what marks one.`,
     );
   }
 

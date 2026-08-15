@@ -492,9 +492,15 @@ gets wrong most easily.
 both ways** — `SeedDataTest.theSeededMatrixIsTheSpecsMatrix`, with `MATRIX_DIVERGENCE_BY_DECISION`
 for the three that diverge on purpose (`company:read` seeded per role, where §A3's COMPANY table
 has only `Every member`). Before it that arrow was four *property* assertions and three of them
-named the spec in their failure message without opening it. **This copy and README's are still
+named the spec in their failure message without opening it. ~~**This copy and README's are still
 copies and nothing compares either** — the parser that would is in `SeedDataTest`, so it is
-cheap; it has not been done.
+cheap; it has not been done.~~ → **done in §215, and NOT in `SeedDataTest`**:
+`packages/client/src/test/matrixCopies.test.ts` reads this table, README's, and all three scopes of
+§A3, and compares every cell **both ways, text and all** — a qualifier narrows a grant without
+removing it, so `plan scope only` where the spec says `✓` is a finding. It lives in `packages/`
+because two documents on disk need no database, and the backend suite is the one `ci.yml` does not
+run. **`SYSTEM` scope below is a sentence rather than a table and is compared anyway** — leaving it
+out would leave seven of the 55 keys unchecked in the copy an agent meets first.
 
 Roles are ordered least-permissioned first; rows run broadest-held to narrowest. `✓` granted ·
 `—` not granted · anything else is a qualifier that narrows the grant.
