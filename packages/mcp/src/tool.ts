@@ -58,6 +58,21 @@ export interface ToolArm {
   action: string;
   kind: WriteKind;
   permission: string;
+  /**
+   * The input fields that name the row this arm acts on — **required on a `delete`**.
+   *
+   * The consent prompt has to say *which* row is about to go, and until §211 it guessed: a
+   * hand-written list of field names (`caseKey`, `planKey`, `slug`, `targetId`) that no tool on
+   * this surface declares, so the one delete arm that existed raised a confirmation naming the
+   * operation and nothing else. A person cannot answer that, which is the whole failure the
+   * prompt was built to avoid.
+   *
+   * Declared per arm rather than sniffed off the input for the reason the old comment gave and
+   * got right: a shared tool's schema also carries prose, and dumping every argument into a
+   * confirmation puts a case body in a dialog. `writes.test.ts` asserts every delete arm names at
+   * least one, and that each name is a property the tool actually declares.
+   */
+  targets?: readonly string[];
 }
 
 /** `all`: every permission is required to list. `any`: one is enough — see `tcms_review_verdict`. */

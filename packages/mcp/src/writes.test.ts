@@ -604,6 +604,27 @@ describe('registry declarations', () => {
     }
   });
 
+  it('gives every delete arm the fields its confirmation prompt has to name — §211', () => {
+    /*
+      The prompt asks a person to approve removing a row, so it must say WHICH row. Nothing
+      derived it: `server.ts` carried a hand-written list of eight field names, not one of which
+      any tool on this surface declares, so `unlink` prompted with the operation and an empty
+      target for as long as the gate had existed. The rule is two questions — the arm names
+      fields, and the fields are real — because the first alone is satisfied by a typo.
+    */
+    const deletes = WRITE_TOOLS.flatMap((candidate) =>
+      (candidate.arms ?? []).filter((arm) => arm.kind === 'delete').map((arm) => ({ candidate, arm })));
+    expect(deletes.length).toBeGreaterThan(0);
+
+    for (const { candidate, arm } of deletes) {
+      const id = `${candidate.name}.${arm.action}`;
+      expect(arm.targets ?? [], `${id} names no target`).not.toHaveLength(0);
+      for (const field of arm.targets ?? []) {
+        expect(Object.keys(candidate.inputSchema.properties), id).toContain(field);
+      }
+    }
+  });
+
   it('routes an action to its own arm, so a refusal names the permission that was refused', () => {
     const writeCase = tool('tcms_write_case');
     expect(armFor(writeCase, { action: 'propose' })?.permission).toBe('case:create');

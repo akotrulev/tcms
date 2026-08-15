@@ -165,6 +165,35 @@ describe('consent before a delete — §210', () => {
     'DELETE /links/l-1': { status: 204 },
   });
 
+  it('names the row in the prompt, which is the difference between a question and a formality — §211', async () => {
+    const stub = api(ROUTES);
+    const session = await sessionWith(stub);
+    const server = buildServer(session);
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+
+    let asked = '';
+    const client = new Client({ name: 'test-host', version: '0.0.0' }, { capabilities: { elicitation: {} } });
+    client.setRequestHandler(ElicitRequestSchema, (request) => {
+      asked = request.params.message;
+      return { action: 'decline' as const };
+    });
+    await Promise.all([
+      server.connect(serverSide as Parameters<typeof server.connect>[0]),
+      client.connect(clientSide as Parameters<typeof client.connect>[0]),
+    ]);
+
+    await withApi(stub, () => client.callTool(UNLINK));
+
+    /*
+      Asserted on the arguments and not merely on "the prompt is non-empty". Until §211 the message
+      read `Confirm deletion — write documentation, and link cases to it (unlink)` and stopped
+      there: `identifying` matched against eight field names this surface has never used, so the
+      one question the gate exists to ask was one a person had no way to answer.
+    */
+    expect(asked).toContain('page: DOC-1');
+    expect(asked).toContain('link: l-1');
+  });
+
   it('deletes once a person has said yes', async () => {
     const stub = api(ROUTES);
     const client = await hostThatAnswers(stub, 'accept');

@@ -168,7 +168,7 @@ async function withheldConsent(
   input: Record<string, unknown>,
 ): Promise<CallToolResult | undefined> {
   const what = `${tool.title.charAt(0).toLowerCase()}${tool.title.slice(1)} (${arm.action})`;
-  const target = identifying(input);
+  const target = identifying(arm, input);
 
   if (!server.getClientCapabilities()?.elicitation) {
     return {
@@ -214,11 +214,18 @@ async function withheldConsent(
  * The fields that tell a person *which* row is about to go.
  *
  * A confirmation naming only the operation is one a user cannot answer, so the prompt echoes the
- * identifying arguments back. Restricted to a known list rather than dumping the whole input:
- * these are display keys and ids, and a delete arm's payload can otherwise carry prose.
+ * identifying arguments back — read off {@link ToolArm.targets}, which the arm declares.
+ *
+ * ~~Restricted to a known list rather than dumping the whole input.~~ → **the list was right about
+ * the danger and wrong about every field name (§211).** It named `caseKey`, `planKey`, `suiteKey`,
+ * `runKey`, `slug`, `id`, `targetId` and `projectKey`; this surface's arguments are `case`,
+ * `plan`, `suite`, `run`, `page`, `link`. Not one of the eight is declared by any tool here, so
+ * `unlink` — the only delete arm there was — prompted with an empty target for as long as the gate
+ * existed. The restriction stands and its reason is unchanged; what changed is that the arm now
+ * says which fields those are, and a test fails when it does not.
  */
-function identifying(input: Record<string, unknown>): string {
-  return ['projectKey', 'key', 'caseKey', 'planKey', 'suiteKey', 'runKey', 'slug', 'id', 'targetId']
+function identifying(arm: ToolArm, input: Record<string, unknown>): string {
+  return (arm.targets ?? [])
     .filter((field) => typeof input[field] === 'string' || typeof input[field] === 'number')
     .map((field) => `${field}: ${String(input[field])}`)
     .join(', ');

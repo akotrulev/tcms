@@ -510,7 +510,7 @@ const writeDocPage: ToolDefinition = {
     // none: linking the same source to the same block twice writes nothing and answers 200 with
     // the existing link, which is the property a key would have bought.
     { action: 'link', kind: 'state', permission: 'doc:edit' },
-    { action: 'unlink', kind: 'delete', permission: 'doc:edit' },
+    { action: 'unlink', kind: 'delete', permission: 'doc:edit', targets: ['page', 'link'] },
   ],
   inputSchema: {
     type: 'object',
