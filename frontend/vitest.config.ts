@@ -86,13 +86,26 @@ export default mergeConfig(
        * dependent cliff and this number is how far the cliff is from the slowest test, which means
        * **any slice that adds tests anywhere can redden a file it never touched.**
        *
-       * Raising it again is the recorded remedy and it is still treating the symptom. The real fix
+       * Raising it again is the recorded remedy and it is still treating the symptom. ~~The real fix
        * is that two tests type whole sentences character-by-character through React's scheduler:
        * `userEvent.type(el, text)` is dozens of real-timer round trips, and `paste` or a direct
-       * change event would assert the same thing in a fraction of the time. That is a change to
+       * change event would assert the same thing in a fraction of the time.~~ That is a change to
        * `DocPageEditorPage.test.tsx`'s approach rather than to a budget, it is out of the evidence
        * slice's scope, and it is written down here so the next person raising this number sees that
        * it has now been raised twice for one cause.
+       *
+       * **→ superseded: that remedy was finally measured, and it is not one.** `CaseEditorPage.test.tsx`
+       * timed out on master twice in one evening, so the levers this comment recommends were tried
+       * against it before its budget was raised: `delay: null` on all 34 setups moved the file
+       * 108 s → 98 s, and replacing every `user.type` with `click` + `paste` moved it 108 s → 95 s
+       * while breaking two tests. The premise is what was wrong — a keystroke into that screen's
+       * step field costs ~190 ms of which **~16 ms is React**, so it was never "round trips through
+       * React's scheduler"; it is jsdom event dispatch and userEvent's own per-key bookkeeping, and
+       * nothing a test file writes moves it. **So this number stays at 30 s and the one file that
+       * cannot live inside it carries its own `vi.setConfig` instead** — the measurements are in its
+       * header. What is still open is the other reading of the same evidence: the runner is 3.7×
+       * slower than a laptop for the same file, and if a timeout ever lands on a file that is *not*
+       * that one, the answer is capping vitest's worker count, not a fourth raise here.
        */
       testTimeout: 30_000,
       coverage: {

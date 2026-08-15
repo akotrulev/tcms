@@ -35,6 +35,42 @@ import { CaseEditorPage } from './CaseEditorPage'
  * jsdom proves the library works, not that this screen wired it up.
  */
 
+/**
+ * **This file's own per-test budget, 60 s against the suite's 30 s.**
+ *
+ * It is the slowest file in the suite by a wide margin — **44 tests, 397 s on the `tcms-lab`
+ * runner** against 108 s on a MacBook — and that 3.7× is what turns a 4 s test into a timeout. It
+ * has now reddened master twice in one evening on *different* tests inside it (runs 31899541092 and
+ * 31905976838), always *Test timed out*, never an assertion.
+ *
+ * Raised here rather than in `vitest.config.ts` because the other 106 files do not have this
+ * problem and should keep failing at 30 s. That config's own comment records the global number
+ * being raised twice for this cause and warns the next person that it is a symptom — which is why
+ * the cheap remedies were measured before this line was written, rather than after:
+ *
+ * | Lever | Effect |
+ * |---|---|
+ * | `userEvent.setup({ delay: null })` on all 34 setups | 108 s → 98 s |
+ * | every `user.type` replaced by `click` + `paste` | 108 s → 95 s, and 2 tag tests break |
+ * | — | |
+ * | one render of the editor | ~1.0 s |
+ * | one keystroke into a step's action field | ~190 ms, of which **React commits are ~16 ms** |
+ * | one keystroke into the plain Title field | ~30 ms, of which React commits are <1 ms |
+ * | `api.get` calls while typing | **zero** |
+ *
+ * So the config's recorded remedy — *"`paste` or a direct change event would assert the same thing
+ * in a fraction of the time"* — **is not one, and neither is the page's render cost.** Under 10% of
+ * a keystroke is React. The rest is jsdom event dispatch and userEvent's per-key bookkeeping
+ * through the deep MUI Autocomplete the step field is built on, and nothing in this file's control
+ * moves it.
+ *
+ * What this budget does NOT cover is the runner being oversubscribed, which is the other reading of
+ * that 3.7×: `shanks` is a 6-core box also hosting the Remote Control sessions. If the timeout
+ * moves to a file that is *not* this one, that is the answer, and the fix is capping vitest's
+ * worker count rather than raising another number.
+ */
+vi.setConfig({ testTimeout: 60_000 })
+
 const PROJECT = 'p1'
 
 /*
