@@ -141,6 +141,18 @@ tcms:
     connect-timeout: PT5S
     read-timeout: PT10S
 
+  ldap:
+    # The same argument as oidc above, one protocol over: the directory host was chosen by a
+    # client's own administrator. A JNDI context with neither timeout set blocks for ever.
+    connect-timeout: PT3S
+    read-timeout: PT5S
+    # NOT a lockout on this product's own credential — local sign-in deliberately has none. Every
+    # failed bind increments the CUSTOMER'S directory counter, so an endpoint with no bound here is
+    # a way to lock a company's staff out of Active Directory from the internet, and the harm lands
+    # on a system this product does not own and cannot unlock.
+    max-bind-attempts: 5
+    bind-lockout: PT60S
+
     # How long a fetched openid-configuration is reused. Not zero, or every callback costs an extra
     # round trip to a third party; not indefinite, or a rotated jwks_uri needs a restart.
     discovery-ttl: PT15M

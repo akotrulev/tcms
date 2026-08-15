@@ -14,6 +14,22 @@ spring-boot-starter-data-jpa = { module = "org.springframework.boot:spring-boot-
 spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
 spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
 spring-boot-starter-mail = { module = "org.springframework.boot:spring-boot-starter-mail" }
+
+# Spring LDAP over JNDI, for the directory sign-in flow (§223). Version-managed by the Boot BOM,
+# like every other Spring artifact here.
+#
+# spring-ldap-core RATHER THAN spring-boot-starter-data-ldap, and it is not a style choice: the
+# starter drags in Spring Data LDAP, whose auto-configuration builds ONE context source from
+# `spring.ldap.urls`. This product has no single directory — it has one per provider per company,
+# with the URL, the bind DN and the credential read from an RLS-protected row at sign-in time. The
+# starter's shape would be a bean nothing uses and a boot-time property nobody can supply.
+# (There is also no `spring-boot-starter-ldap`; the plan named an artifact that does not exist.)
+#
+# UnboundID is the test-scope in-process directory server: it speaks the protocol and serves LDAPS
+# with a generated certificate, so the tests drive the ENCRYPTED path production drives rather than
+# a plaintext one production never takes.
+spring-ldap-core = { module = "org.springframework.ldap:spring-ldap-core" }
+unboundid-ldapsdk = { module = "com.unboundid:unboundid-ldapsdk" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
 
 # spring-security-crypto is pulled in transitively by the starter; it stays listed here

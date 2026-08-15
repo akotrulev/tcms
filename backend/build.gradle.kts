@@ -22,6 +22,7 @@ dependencies {
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.spring.boot.starter.actuator)
     implementation(libs.spring.boot.starter.mail)
+    implementation(libs.spring.ldap.core)
     implementation(libs.modulith.starter.core)
 
     implementation(libs.spring.security.crypto)
@@ -38,6 +39,7 @@ dependencies {
     testImplementation(libs.testcontainers.junit)
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.archunit.junit5)
+    testImplementation(libs.unboundid.ldapsdk)
     testImplementation(libs.assertj.core)
     testImplementation(libs.greenmail.junit5)
     testImplementation(libs.spring.security.test)

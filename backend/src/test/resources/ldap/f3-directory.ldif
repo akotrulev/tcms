@@ -1,0 +1,52 @@
+# The directory LdapDirectoryTest and LdapLoginEndpointTest bind against.
+#
+# Fixture UUID prefix f3 (f3000000-...), hand-managed and with no check behind it — see the
+# lane-ownership section of docs/plans/2026-08-15-m4-external-identity-ldap-ad.md. It has collided
+# five times (§19 … §62). Plan 1 took f2.
+#
+# `twin-a` and `twin-b` share one mail address ON PURPOSE: a stale duplicate is the ordinary way a
+# real directory ends up with two entries a filter matches, and binding as "the first one" would
+# pick a person by result ordering. LdapDirectory refuses instead.
+
+dn: dc=acme,dc=test
+objectClass: top
+objectClass: domain
+dc: acme
+
+dn: ou=people,dc=acme,dc=test
+objectClass: top
+objectClass: organizationalUnit
+ou: people
+
+dn: uid=dana,ou=people,dc=acme,dc=test
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: dana
+cn: Dana Director
+sn: Director
+mail: dana@acme.test
+userPassword: directory-password
+
+dn: uid=twin-a,ou=people,dc=acme,dc=test
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: twin-a
+cn: Twin A
+sn: A
+mail: twin@acme.test
+userPassword: twin-password
+
+dn: uid=twin-b,ou=people,dc=acme,dc=test
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: twin-b
+cn: Twin B
+sn: B
+mail: twin@acme.test
+userPassword: twin-password
