@@ -273,6 +273,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/ldap/{providerId}/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign in against a directory
+         * @description Binds to the provider's directory as the person signing in, and — exactly as
+         *     `POST /auth/login` does — answers with a **TCMS** session. The directory credential is used
+         *     for one bind and is never stored, never logged, and never returned.
+         *
+         *     This is a `POST` with a body rather than a redirect because `LDAP` is a **credential** flow:
+         *     there is no third party to send a browser to, which is the whole difference between this
+         *     operation and `/auth/sso/{providerId}/authorize`.
+         *
+         *     **`401` with no body for every failure** — unknown provider, disabled provider, unreachable
+         *     directory, no such entry, wrong password, an entry matched more than once, no TCMS account,
+         *     JIT off, deactivated account, membership since removed. `POST /auth/login`'s rule, on a
+         *     surface a stranger can reach.
+         *
+         *     Repeated failures are refused **without contacting the directory** after a small number of
+         *     attempts for one identifier at one provider. That bound exists to protect the *customer's*
+         *     directory: every failed bind increments its lockout counter, so an unthrottled endpoint here
+         *     is a way to lock out a company's staff from the internet.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    providerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: email */
+                        email: string;
+                        /** Format: password */
+                        password: string;
+                        /** @default false */
+                        rememberMe?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Signed in. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AuthResult"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                /**
+                 * @description Refused, with no body and no cause — see this operation's description for the nine
+                 *     conditions that reach it and why they are one answer.
+                 */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/invitations/{token}": {
         parameters: {
             query?: never;
@@ -11743,7 +11822,7 @@ export interface components {
             providers: components["schemas"]["SsoProviderChoice"][];
         };
         /**
-         * @description One sign-in button. **No company id and no company name** — a domain may be claimed by
+         * @description One sign-in route. **No company id and no company name** — a domain may be claimed by
          *     several companies, and naming them would publish the client roster this shape exists to
          *     withhold.
          */
@@ -11759,20 +11838,32 @@ export interface components {
              *     typed an address at their domain.
              */
             displayName: string;
+            /**
+             * @description Which control the sign-in screen renders: `OIDC` is a button that navigates to the
+             *     issuer, `LDAP` is a password field on this screen. **It is not a company identifier** —
+             *     it says which protocol a route speaks, and nothing about who operates it or how many
+             *     companies claim the domain, so it is disclosed on the same terms as `displayName`.
+             */
+            kind: components["schemas"]["IdentityProviderKind"];
         };
         /**
-         * @description `OIDC` is implemented; `LDAP` is the schema's other member and has no implementation yet.
-         *     **There is no SAML member** — resolved question #40 ruled it out of scope, and a value
+         * @description Which protocol this provider speaks, and therefore **which fields on this schema are
+         *     populated and how a person signs in through it**. `OIDC` redirects the browser to a third
+         *     party that collects the password; `LDAP` collects the directory password here and binds with
+         *     it. **There is no SAML member** — resolved question #40 ruled it out of scope, and a value
          *     nothing can create is a state the code must branch on for no reason.
          * @enum {string}
          */
         IdentityProviderKind: "OIDC" | "LDAP";
         /**
-         * @description One external issuer a company authenticates its own people against.
+         * @description One external authority a company authenticates its own people against — an OIDC issuer or a
+         *     directory, which is what `kind` says and what decides which half of these fields is
+         *     populated.
          *
-         *     **There is no client-secret field here or on any other read path.** `clientSecretSet` is
-         *     what replaces it: a form needs to know whether one is stored so it can say "leave blank to
-         *     keep", and that is a boolean, not the value.
+         *     **Neither credential appears here or on any other read path** — not the client secret, not
+         *     the bind password. `clientSecretSet` and `bindPasswordSet` are what replace them: a form
+         *     needs to know whether one is stored so it can say "leave blank to keep", and that is a
+         *     boolean, not the value.
          */
         IdentityProvider: {
             /** Format: uuid */
@@ -11781,14 +11872,55 @@ export interface components {
             key: string;
             kind: components["schemas"]["IdentityProviderKind"];
             displayName: string;
-            /** @description Always `https` — the signing keys every assertion is checked against come from it. */
+            /**
+             * @description Where the authority lives, and its meaning follows `kind`. For `OIDC` it is the issuer,
+             *     always `https` — the signing keys every assertion is checked against come from it. For
+             *     `LDAP` it is the directory URL, and it is `ldaps://…` or `ldap://…` with `startTls`:
+             *     a plain bind puts the person's own directory password on the wire, and there is no flag
+             *     that permits it.
+             */
             issuerUri: string;
-            clientId: string;
+            /** @description OIDC only. Null on an `LDAP` provider, which has no relying-party identity. */
+            clientId: string | null;
             /**
              * @description Whether a secret is stored. `false` means a public client using PKCE alone, which is a
              *     configuration rather than an omission.
              */
             clientSecretSet: boolean;
+            /**
+             * @description LDAP only. The service account this instance searches as, before the person's own bind.
+             *     Null means an anonymous search, which some directories permit and Active Directory
+             *     does not.
+             */
+            bindDn: string | null;
+            /**
+             * @description Whether a bind password is stored — `clientSecretSet`'s counterpart, and a boolean for
+             *     the same reason: no read path echoes the value back.
+             */
+            bindPasswordSet: boolean;
+            /**
+             * @description LDAP only. Whether to upgrade an `ldap://` connection with StartTLS. An `ldaps://` URL
+             *     is already encrypted and does not use it. False on an `OIDC` provider.
+             */
+            startTls: boolean;
+            /** @description LDAP only. The subtree searched for the person signing in — `ou=people,dc=acme,dc=test`. */
+            userSearchBase: string | null;
+            /**
+             * @description LDAP only. **Must contain `{0}`**, which is where the typed address is substituted with
+             *     RFC 4515 escaping applied. A filter that interpolated it any other way would be an
+             *     injection point on an unauthenticated surface.
+             */
+            userSearchFilter: string | null;
+            /**
+             * @description LDAP only. Which attribute holds the directory's immutable identifier — `objectGUID` on
+             *     Active Directory, `entryUUID` on OpenLDAP. **Never a DN**: a DN encodes tree position, so
+             *     moving somebody between OUs would orphan their account and their authorship.
+             */
+            userIdAttribute: string | null;
+            /** @description LDAP only. Which attribute carries the address — `mail` on both common directories. */
+            emailAttribute: string | null;
+            /** @description LDAP only. Which attribute carries the person's name, for the membership this creates. */
+            displayNameAttribute: string | null;
             /**
              * @description Whether a first-time signer with no invitation gets an account — with exactly what
              *     accepting an invitation grants and nothing more (roles spec §A7).
@@ -11822,15 +11954,33 @@ export interface components {
             key: string;
             kind: components["schemas"]["IdentityProviderKind"];
             displayName: string;
-            /** @description Must begin `https://`. */
+            /**
+             * @description Must begin `https://` on an `OIDC` provider, and be `ldaps://` — or `ldap://` with
+             *     `startTls` — on an `LDAP` one.
+             */
             issuerUri: string;
-            clientId: string;
+            /** @description OIDC only. Null on an `LDAP` provider, which has no relying-party identity. */
+            clientId: string | null;
             /**
              * @description The plaintext, sent when it is set or rotated. **Null or empty keeps the stored
              *     secret** rather than clearing it — no read path can echo it back, so a caller has
              *     nothing to resend. Encrypted at rest, never hashed: a token exchange needs it back.
              */
             clientSecret: string | null;
+            bindDn: string | null;
+            /**
+             * @description The plaintext service-account password, sent when it is set or rotated. **Null or empty
+             *     keeps the stored one** rather than clearing it — `clientSecret`'s rule exactly, for
+             *     `clientSecret`'s reason: no read path can echo it back, so a caller has nothing to
+             *     resend. Encrypted at rest, never hashed.
+             */
+            bindPassword: string | null;
+            startTls: boolean | null;
+            userSearchBase: string | null;
+            userSearchFilter: string | null;
+            userIdAttribute: string | null;
+            emailAttribute: string | null;
+            displayNameAttribute: string | null;
             jitProvisioning: boolean | null;
             autoLinkVerifiedEmail: boolean | null;
             groupClaim: string | null;

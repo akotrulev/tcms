@@ -130,6 +130,16 @@ export function ProviderFormDialog({
         Omitting the property is not available: it is on the schema's `required` list.
       */
       clientSecret: trimmedSecret === '' ? null : trimmedSecret,
+      // The directory half of the schema. This dialog still only registers issuers, so it sends
+      // the eight of them empty — the controls that populate them are the next phase.
+      bindDn: null,
+      bindPassword: null,
+      startTls: false,
+      userSearchBase: null,
+      userSearchFilter: null,
+      userIdAttribute: null,
+      emailAttribute: null,
+      displayNameAttribute: null,
       jitProvisioning,
       autoLinkVerifiedEmail,
       groupClaim: groupClaim.trim() === '' ? null : groupClaim.trim(),

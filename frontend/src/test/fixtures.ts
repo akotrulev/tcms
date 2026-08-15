@@ -403,6 +403,14 @@ export function anIdentityProvider(overrides: Partial<IdentityProvider> = {}): I
     issuerUri: 'https://issuer.acme.test/realms/acme',
     clientId: 'tcms',
     clientSecretSet: true,
+    bindDn: null,
+    bindPasswordSet: false,
+    startTls: false,
+    userSearchBase: null,
+    userSearchFilter: null,
+    userIdAttribute: null,
+    emailAttribute: null,
+    displayNameAttribute: null,
     jitProvisioning: false,
     autoLinkVerifiedEmail: false,
     groupClaim: null,
@@ -413,13 +421,47 @@ export function anIdentityProvider(overrides: Partial<IdentityProvider> = {}): I
   }
 }
 
-/** One sign-in button, as discovery answers it: an id to navigate to and a label to render. */
+/**
+ * A configured directory, disabled — `anIdentityProvider`'s other kind.
+ *
+ * The eight LDAP columns and the eight OIDC ones are one row and one schema, so this is the same
+ * factory with the halves swapped rather than a second shape. `bindPasswordSet` is a boolean here
+ * for `clientSecretSet`'s reason: no read path echoes either credential back.
+ */
+export function aDirectoryProvider(
+  overrides: Partial<IdentityProvider> = {},
+): IdentityProvider {
+  return anIdentityProvider({
+    id: 'f3000000-0000-4000-8000-000000000001',
+    key: 'acme-directory',
+    kind: 'LDAP',
+    displayName: 'Acme Directory',
+    issuerUri: 'ldaps://dc.acme.test:636',
+    clientId: null,
+    clientSecretSet: false,
+    bindDn: 'cn=service,dc=acme,dc=test',
+    bindPasswordSet: true,
+    startTls: false,
+    userSearchBase: 'ou=people,dc=acme,dc=test',
+    userSearchFilter: '(|(userPrincipalName={0})(mail={0}))',
+    userIdAttribute: 'objectGUID',
+    emailAttribute: 'mail',
+    displayNameAttribute: 'displayName',
+    ...overrides,
+  })
+}
+
+/**
+ * One sign-in route, as discovery answers it: an id, a label, and which control to render —
+ * `OIDC` navigates to the issuer, `LDAP` switches the form to a directory password.
+ */
 export function anSsoProviderChoice(
   overrides: Partial<SsoProviderChoice> = {},
 ): SsoProviderChoice {
   return {
     id: 'f2000000-0000-4000-8000-000000000001',
     displayName: 'Acme Corporate SSO',
+    kind: 'OIDC',
     ...overrides,
   }
 }
