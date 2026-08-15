@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Alert, Box, Button, Checkbox, FormControlLabel, Stack, TextField, Typography } from '@mui/material';
-import type { FocusEvent } from 'react';
+import type { ChangeEvent, FocusEvent } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -9,6 +10,7 @@ import { useSsoProviders } from '../../api/queries';
 import { Identifier } from '../../components/Identifier';
 import { useAuth } from '../../auth/useAuth';
 import { offerToSaveCredentials } from '../../lib/credentials';
+import { rememberSsoReturnPath } from './ssoReturnPath';
 
 /**
  * One Zod schema, one inferred type. The same schema would validate on the server if this
@@ -79,12 +81,35 @@ export function LoginPage() {
   };
 
   /**
+   * Editing the address takes the buttons down until the next blur asks again. Without this the
+   * screen went on offering one address's providers while a different address sat in the field —
+   * a button that would start a sign-in the person in front of it did not ask for.
+   */
+  const onEmailChange = () => {
+    if (!discovery.isIdle) discovery.reset();
+  };
+
+  /**
    * Set when they arrived straight from redeeming an invitation. Accepting answers 204 rather
    * than a session (one token-issuing path), so this screen has to explain why they are being
    * asked to sign in immediately after choosing a password — otherwise it reads as the accept
    * having failed.
    */
   const acceptedEmail = navState?.acceptedEmail;
+
+  /**
+   * A prefilled address never blurs, so blur alone would leave the one person who arrived with
+   * their email already in the field — the just-accepted invitee — as the one person never shown
+   * their company's sign-in buttons. Asked once on mount; the ref is for StrictMode's second
+   * effect pass, which must not post the address twice.
+   */
+  const askedForPrefill = useRef(false);
+  const mutate = discovery.mutate;
+  useEffect(() => {
+    if (askedForPrefill.current) return;
+    askedForPrefill.current = true;
+    if (acceptedEmail?.includes('@')) mutate(acceptedEmail);
+  }, [acceptedEmail, mutate]);
 
   const {
     register,
@@ -153,6 +178,14 @@ export function LoginPage() {
         message: describeSignInFailure(error),
       });
       setFocus('password');
+      /*
+        A rejected local sign-in is the one other moment somebody has told this screen a whole
+        address without blurring the field: a password manager fills both inputs and submits. At a
+        company whose accounts exist only through its issuer, every local attempt 401s — so this is
+        exactly when the person needs their buttons, and staying silent here left them with a wrong
+        sentence and no way in. Same endpoint, same silence about every unhappy answer.
+      */
+      if (discovery.isIdle && data.email.includes('@')) discovery.mutate(data.email);
     }
   });
 
@@ -262,6 +295,15 @@ export function LoginPage() {
                 void register('email').onBlur(event);
                 onEmailBlur(event);
               }}
+              /*
+                Same arrangement as onBlur, for the same reason: `register` supplies the onChange
+                that keeps react-hook-form's value current, so replacing it would disconnect the
+                field.
+              */
+              onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+                void register('email').onChange(event);
+                onEmailChange();
+              }}
             />
 
             <TextField
@@ -328,11 +370,18 @@ export function LoginPage() {
                   the browser itself at that issuer's login page. Against the API origin, which is
                   why `BASE` is exported rather than spelled again here.
                 */
-                onClick={() =>
+                onClick={() => {
+                  /*
+                    The router state dies with this navigation — the browser is leaving for the
+                    issuer — so the deep link the auth gate preserved is handed to sessionStorage
+                    for the callback page to consume. Local sign-in carries the same fact in
+                    `navigate(from)` below.
+                  */
+                  rememberSsoReturnPath(from);
                   window.location.assign(
                     `${BASE}/auth/sso/${encodeURIComponent(provider.id)}/authorize`,
-                  )
-                }
+                  );
+                }}
               >
                 Continue with {provider.displayName}
               </Button>

@@ -46,9 +46,19 @@ import org.springframework.stereotype.Component;
  * <h2>The decoder is cached and the nonce check deliberately is not in it</h2>
  *
  * <p>Building a {@link NimbusJwtDecoder} per callback refetches the JWKS on every single sign-in.
- * So one decoder is kept per provider, carrying the checks that are constant for that provider —
- * signature, timestamp, issuer, audience. The nonce is per-request by definition and is compared
- * after decoding, which is why it is the one check written out here rather than configured.
+ * So one decoder is kept per <strong>configuration</strong> — issuer, client id, JWKS URI — carrying
+ * the checks that are constant for that configuration: signature, timestamp, issuer, audience. The
+ * nonce is per-request by definition and is compared after decoding, which is why it is the one
+ * check written out here rather than configured.
+ *
+ * <p><strong>The key is the configuration and not the provider id</strong>, because a provider is a
+ * database row an administrator edits: keyed by id, the decoder built from the first callback would
+ * go on validating against the old issuer, the old audience and the old {@code jwks_uri} until the
+ * JVM restarts — silently defeating both the edit and {@code OidcProperties#discoveryTtl}, whose
+ * whole purpose is that a moved {@code jwks_uri} is picked up without a restart. Keyed by what is
+ * checked, an edit simply arrives here as a key that has no decoder yet; the entry for the old
+ * configuration goes unused, and the key space is bounded the way {@link OidcDiscovery}'s cache is —
+ * by the set of distinct configurations administrators have typed.
  */
 @Component
 public class OidcIdTokenVerifier {
@@ -60,7 +70,15 @@ public class OidcIdTokenVerifier {
                            String nonce) {
     }
 
-    private final ConcurrentMap<UUID, JwtDecoder> decoders = new ConcurrentHashMap<>();
+    /** What a cached decoder was built from — see the class header for why this is not the id. */
+    private record DecoderKey(String issuerUri, String clientId, String jwksUri) {
+
+        static DecoderKey of(Expected expected) {
+            return new DecoderKey(expected.issuerUri(), expected.clientId(), expected.jwksUri());
+        }
+    }
+
+    private final ConcurrentMap<DecoderKey, JwtDecoder> decoders = new ConcurrentHashMap<>();
 
     /**
      * @return the verified token, or empty for <em>any</em> reason it was not acceptable. One
@@ -68,9 +86,14 @@ public class OidcIdTokenVerifier {
      */
     public Optional<Jwt> verify(Expected expected, String idToken) {
         return verifyWith(
-                decoders.computeIfAbsent(expected.providerId(), ignored -> decoderFor(expected)),
+                decoders.computeIfAbsent(DecoderKey.of(expected), ignored -> decoderFor(expected)),
                 expected,
                 idToken);
+    }
+
+    /** How many distinct configurations have a decoder — for the test that pins the cache key. */
+    int cachedDecoders() {
+        return decoders.size();
     }
 
     /**

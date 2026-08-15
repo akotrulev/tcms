@@ -133,6 +133,30 @@ class OidcIdTokenVerifierTest {
         assertThat(verifier.verifyWith(decoder(), expected(), null)).isEmpty();
     }
 
+    @Test
+    @DisplayName("an edited provider gets a fresh decoder — the cache keys on the configuration, not the row id")
+    void anEditedProviderIsNotServedItsOldChecks() {
+        /*
+          A provider is a database row an administrator edits. Keyed by provider id, the decoder
+          built on the first callback kept the old issuer, audience and jwks_uri until restart —
+          so a reconfigured provider went on being verified against the identity it no longer has.
+          The malformed token below is refused before any key is fetched, so this drives the cache
+          without a network.
+        */
+        OidcIdTokenVerifier fresh = new OidcIdTokenVerifier();
+        OidcIdTokenVerifier.Expected before = expected();
+        OidcIdTokenVerifier.Expected edited = new OidcIdTokenVerifier.Expected(
+                PROVIDER, "https://idp.acme.test/realms/renamed", CLIENT_ID,
+                "https://idp.acme.test/jwks", NONCE);
+
+        fresh.verify(before, "not-a-jwt");
+        fresh.verify(before, "not-a-jwt");
+        assertThat(fresh.cachedDecoders()).isEqualTo(1);
+
+        fresh.verify(edited, "not-a-jwt");
+        assertThat(fresh.cachedDecoders()).isEqualTo(2);
+    }
+
     private Optional<Jwt> verify(JWTClaimsSet claims) throws Exception {
         SignedJWT jwt = new SignedJWT(
                 new JWSHeader.Builder(JWSAlgorithm.RS256).type(JOSEObjectType.JWT).build(), claims);

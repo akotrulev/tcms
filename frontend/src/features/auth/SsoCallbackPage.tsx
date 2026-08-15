@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../auth/useAuth';
 import { Identifier } from '../../components/Identifier';
+import { consumeSsoReturnPath } from './ssoReturnPath';
 
 /**
  * Where an external sign-in lands (§6r, §222).
@@ -36,11 +37,19 @@ export function SsoCallbackPage() {
   /** Captured before anything can wipe it. See the header. */
   const fragment = useRef(new URLSearchParams(window.location.hash.replace(/^#/, '')));
   const started = useRef(false);
+  /*
+    Where the sign-in returns to — the deep link `LoginPage` stashed before handing the browser to
+    the issuer, `/` when nothing was. Consumed inside the `started` guard rather than during render,
+    because consuming removes it and a double-invoked render would read it gone.
+  */
+  const returnTo = useRef('/');
   const [outcome, setOutcome] = useState<'pending' | 'signed-in' | 'failed'>('pending');
 
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+
+    returnTo.current = consumeSsoReturnPath();
 
     // Out of the address bar first, and unconditionally: a live session survives a copy-paste, a
     // screen share and the browser's own history until it is gone from here.
@@ -61,7 +70,7 @@ export function SsoCallbackPage() {
     );
   }, [adoptSession]);
 
-  if (outcome === 'signed-in') return <Navigate to="/" replace />;
+  if (outcome === 'signed-in') return <Navigate to={returnTo.current} replace />;
 
   if (outcome === 'failed') {
     // `replace`, so the browser's back button does not return to a callback whose `state` the

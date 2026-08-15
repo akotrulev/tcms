@@ -49,4 +49,17 @@ public interface SsoLoginAttemptRepository extends JpaRepository<SsoLoginAttempt
              where a.id = :id
                and a.consumedAt is null""")
     int consume(@Param("id") UUID id, @Param("now") Instant now);
+
+    /**
+     * Drops every attempt that expired before {@code cutoff} — {@link SsoLoginAttemptPurge}'s one
+     * call, over the {@code sso_login_attempt_expires_idx} index {@code V53} created for it.
+     *
+     * <p>Expiry alone decides. A consumed attempt also passes its {@code expires_at} within
+     * {@code tcms.oidc.attempt-validity} of being written, so consumed and abandoned rows leave by
+     * the same door and no second predicate is needed.
+     */
+    @Modifying
+    @Transactional
+    @Query("delete from SsoLoginAttempt a where a.expiresAt < :cutoff")
+    int deleteExpiredBefore(@Param("cutoff") Instant cutoff);
 }

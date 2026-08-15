@@ -8,6 +8,7 @@ import { theme } from '../../app/theme'
 import { AuthContext, type AuthValue } from '../../auth/authContextValue'
 import { aCurrentUser } from '../../test/fixtures'
 import { SsoCallbackPage } from './SsoCallbackPage'
+import { consumeSsoReturnPath, rememberSsoReturnPath } from './ssoReturnPath'
 
 /**
  * The route an external sign-in lands on — and the five things about it that are silent when wrong.
@@ -55,6 +56,8 @@ function renderCallback(adoptSession: AuthValue['adoptSession']) {
             <Route path="/sso/callback" element={<SsoCallbackPage />} />
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<SignIn />} />
+            {/* Sentinel for the stashed deep link — see 'returns to the deep link' below. */}
+            <Route path="/projects/p1/runs/r9" element={<div data-testid="Landing.DeepLink" />} />
           </Routes>
         </MemoryRouter>
       </ThemeProvider>
@@ -71,6 +74,7 @@ describe('SsoCallbackPage', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     window.history.replaceState(null, '', '/')
+    sessionStorage.clear()
   })
 
   it('adopts the session in the fragment and lands on the app', async () => {
@@ -135,5 +139,28 @@ describe('SsoCallbackPage', () => {
     renderCallback(adopt)
 
     expect(await screen.findByTestId('Landing.SsoFailed')).toHaveTextContent('sso-failed')
+  })
+
+  it('returns to the deep link the sign-in screen stashed', async () => {
+    // The auth gate's `from` cannot ride the router through the issuer round trip — the browser
+    // leaves this app entirely — so LoginPage stashes it and this page consumes it.
+    rememberSsoReturnPath('/projects/p1/runs/r9')
+    landingOn('#token=a-session-token')
+
+    renderCallback(vi.fn().mockResolvedValue(aCurrentUser()))
+
+    expect(await screen.findByTestId('Landing.DeepLink')).toBeInTheDocument()
+    // Consumed: a later sign-in with no stash of its own lands on the root, not on this one's.
+    expect(consumeSsoReturnPath()).toBe('/')
+  })
+
+  it('discards the stash on a failed sign-in rather than saving it for a stranger', async () => {
+    rememberSsoReturnPath('/projects/p1/runs/r9')
+    landingOn('#error=sso_failed')
+
+    renderCallback(vi.fn())
+
+    expect(await screen.findByTestId('Landing.SsoFailed')).toHaveTextContent('sso-failed')
+    expect(consumeSsoReturnPath()).toBe('/')
   })
 })
