@@ -2493,3 +2493,48 @@ charter can author on its own:
 | `§218 NT-5` | **L1**, as a **Test Engineer**: find **Notifications** in the rail and open it | The entry is **present** and the page shows a sentence naming who can configure channels — **not** an empty table, **not** a 403 toast, **not** a missing rail item. Then check the network tab: **no request to `/notification-channels` was made at all.** This is the whole read-gate decision; a fetch fired here would 403 and raise a global "Something didn't load" over a screen working exactly as designed. |
 | `§218 NT-6` | **A3**, as a **Test Lead**: add a second Slack channel pointed at `https://hooks.slack.test/services/DEAD`, subscribe it to **Run completed**, then complete a run. Wait for the outbox to drain, press **History** on that row | A delivery row with **Failed**, a **Tries** count that climbs across the backoff ladder, and an error in **What came back**. ⚠️ **Read that error character by character**: it must contain **no** `hooks.slack.test` path — `SecretRedaction` strips it on the way in, and this is the leak that is invisible in a green run, sitting in a table an operator browses and a backup copies. A URL here is a finding, not a cosmetic one. |
 | `§218 NT-7` | On the channel from `NT-2`, which has never had an event fire: press **History** | The *no-records* empty state reading **"Nothing sent yet"** — and the body must distinguish it from a channel that does not work, because a row appears as soon as an attempt is *made*. Paired with `NT-6` deliberately: the same panel has to say two different things, and a single "no data" message for both is how a working channel and a dead one become indistinguishable. |
+
+## §217 — signing in through somebody else's issuer, with no screen to do it on
+
+**Seven rows, none run** (§65). Ids are `§217 SO-*`; `SO` is unused elsewhere in this file — grep
+before minting a prefix (`§154`'s banner).
+
+Lane: **L4**, all seven, at the very end of it and before `F`. Three reasons, and none of them is
+convenience. The lane needs a **second running service** (Keycloak), which is what `L4` is for —
+"what only a real instance produces". It needs the pass to **sign out and hand the browser to
+another origin**, which no earlier lane can afford. And `SO-5` may **create an account by JIT**, so
+it has to land after every lane that counts members.
+
+**⚠️ Read this before writing a row off as a UI bug: the SPA has no SSO surface of any kind.**
+`grep -rl` over `frontend/src` finds `identity-provider` and `/auth/sso` in **`schema.d.ts` alone** —
+the generated types and nothing that imports them. There is no sign-in button, no provider list on
+the login screen, no `/sso/callback` route, and no admin screen for `POST /identity-providers`.
+That is not an oversight this queue should file seven times: §217's plan says in its own self-review
+that *"the frontend login-screen work is a `fe-react` lane, not this one"*, and no plan covers that
+lane yet. **So these rows drive the flow through the address bar and the console, and what they are
+actually measuring is where the missing screen has to attach.** `SO-3` is the one that names the
+gap precisely enough to build against.
+
+**Setup this lane needs and no other lane creates:**
+
+- **Keycloak, and a provider row inserted by SQL.** `docker compose up` starts the issuer; the exact
+  two `INSERT`s, the reason they cannot go through the product, and the reason they must run as
+  `postgres` rather than `tcms_owner` are in [`deploy/keycloak/README.md`](../../deploy/keycloak/README.md).
+  **The inability to configure this provider through the product is itself the finding** — the CRUD
+  refuses a non-`https://` issuer (`§217 FD-14` pins that gate) and the reference issuer compose
+  ships is plain HTTP.
+- **An account at `kim@acme.test` that the pass controls**, for `SO-4` to link to. The charter
+  namespaces addresses per pass (`…@v109.test`), so either add `acme.test` *and* the pass's own
+  domain to `company_email_domain` and use a pass-local Keycloak user, or accept that this lane
+  writes one `acme.test` account. Say which was done in the sitting's findings file — §110 F4 cost a
+  persona to exactly this ambiguity.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§217 SO-1` | Sign out. On the sign-in screen, type `kim@acme.test` and look for a provider button; then, with devtools open, watch what the screen requests | **No button, and no request to `/auth/providers` at all.** The row exists to record the shape of the absence rather than to fail: `POST /auth/providers` is built, gated open and answers a list, and nothing calls it. What the sign-in screen must grow is a call on blur of the email field and a button per element of the answer — and it must render **identically** for a domain that maps to nothing, because that endpoint is deliberately not an oracle for which companies exist here (§6r). A screen that showed *"no provider for that domain"* would undo the property the server pays for. |
+| `§217 SO-2` | Paste `http://localhost:8080/api/v1/auth/sso/<providerId>/authorize` into the address bar, with the provider id from the row you inserted | The browser lands on **Keycloak's own login page**, at `keycloak.localtest.me:8081`. Before typing anything, read the URL: `response_type=code`, `code_challenge_method=S256`, a `state`, a `nonce`, and `redirect_uri` **exactly** `http://localhost:8080/api/v1/auth/sso/callback`. A mismatch here is refused by Keycloak with its own error page rather than by TCMS, and that page — *"Invalid parameter: redirect_uri"* — is the tell that `TCMS_API_BASE_URL` does not match what the realm registered. |
+| `§217 SO-3` | Complete the Keycloak login as `kim` / `keycloak` and let the redirect run | ⚠️ **The row that matters most, and it is expected to look broken.** The browser ends at `http://localhost:5173/sso/callback#token=…&expiresAt=…` and the SPA **has no such route**, so it renders the not-found page while a valid session sits in the address bar unread. **The sign-in worked; nothing consumed it.** Copy the fragment: this is the exact contract the `fe-react` lane must implement — read `#token` and `#expiresAt`, put them where the session context expects them, `history.replaceState` the fragment away, and navigate. Record the rendered page and the full URL in the findings file; they are the specification for work no plan has written yet. |
+| `§217 SO-4` | Still on that landing URL, open devtools → Network, and look at the request for the SPA document itself. Then check the address bar once more | **The fragment is in the URL and in *no* request.** No `token=` in the document request, none in any subsequent XHR, none in a `Referer`. This is `§217 FD-13` from the only side that can actually observe it: that mutation row is *expected green* because neither stack asserts which separator is used, and a browser is the one place the difference between `#` and `?` is visible. If the token appears in a request line, it is in this instance's access log, in the proxy's, and in the first outbound link the SPA renders. |
+| `§217 SO-5` | In `psql`, set the provider's `auto_link_verified_email = FALSE` and `jit_provisioning = TRUE`. Sign out of Keycloak (its admin console → Sessions, or a fresh private window), then repeat `SO-2`/`SO-3` as `sam` / `keycloak` — the **unverified** user | A session is issued and `sam@acme.test` exists as a **new** account: JIT does not consult `email_verified`, only linking does. Then in `psql`: exactly one `user_identity` row, **no `role_assignment` row at all**, and a membership row that is `ACTIVE`. ⚠️ **The absent grant is the assertion.** §217 corrected the plan here — `InvitationService.accept` creates no `RoleAssignment`, so a Viewer grant would make SSO a side door to more capability than an invitation. A row in `role_assignment` for this user is a regression, not a convenience. |
+| `§217 SO-6` | Put `auto_link_verified_email` back to `TRUE`, `jit_provisioning` back to `FALSE`. In a fresh private window sign in as `sam` again — now with an account that exists but whose Keycloak email is unverified — after deleting sam's `user_identity` row | Refused: the browser lands on `http://localhost:5173/sso/callback#error=sso_failed` and, again, the SPA's not-found page. ⚠️ **Read the fragment character by character.** One marker, no reason, no provider name, no email — the same string this endpoint gives for a disabled provider, an expired attempt and a deactivated account. Anything finer here is the oracle §6r spends the whole refusal design closing. Whatever the `fe-react` lane renders for `#error=` must be one sentence for all of them. |
+| `§217 SO-7` | Take the *whole* callback URL from a completed `SO-3` — `?code=…&state=…` — and paste it into the address bar a second time | The same generic `#error=sso_failed` landing. The `state` was consumed on the first pass, and the row is the browser half of `§217 FD-10`, which is expected green because nothing drives one callback twice. This is the cheapest observation of the single-use guarantee that exists, and it takes one paste — but it proves the *replay* leg only. Two **concurrent** callbacks racing one `state` are what the conditional `UPDATE` is really for, and a browser cannot drive that; it stays an integration-test gap. |

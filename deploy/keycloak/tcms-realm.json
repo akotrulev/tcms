@@ -1,0 +1,68 @@
+{
+  "realm": "tcms",
+  "enabled": true,
+  "displayName": "TCMS local development issuer",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "accessTokenLifespan": 300,
+  "clients": [
+    {
+      "clientId": "tcms-backend",
+      "name": "TCMS backend",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "redirectUris": [
+        "http://localhost:8080/api/v1/auth/sso/callback",
+        "http://localhost:9080/api/v1/auth/sso/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "kim",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "kim@acme.test",
+      "firstName": "Kim",
+      "lastName": "Nakamura",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "keycloak",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "sam",
+      "enabled": true,
+      "emailVerified": false,
+      "email": "sam@acme.test",
+      "firstName": "Sam",
+      "lastName": "Okonkwo",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "keycloak",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}
