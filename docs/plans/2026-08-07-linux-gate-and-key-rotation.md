@@ -239,6 +239,16 @@ placeholder throws at bind time and the context refuses to start. `compose.prod.
 `docker compose config` in the deploy path, before the pull, which is the good direction — but it
 means the very next release is blocked until this is done. It is not a task that can be carried.
 
+**And since §216, a box whose env file *carries the leaked value* cannot be deployed to either.**
+That closes the shortest route out of the paragraph above: reading this page, finding the string, and
+pasting it into `/etc/tcms/tcms.env` to make the startup failure go away. `JwtProperties` refuses the
+published key — and any key beginning with `?` or `-`, which is what a resolved `${VAR:?…}` or
+`${VAR:-…}` leaves behind — so the app fails to start with a message naming the §108 defect and
+telling you to run `openssl rand -base64 48`. The check is `isSecretUsable`, and it is a *bind-time*
+refusal, so it arrives in the container logs rather than at `compose config`. **The `.bak` file step 1
+tells you to make is therefore a rollback you can no longer boot from** if the box was on the leaked
+key. That is deliberate — see *If it does not come up* below.
+
 ## The cost, stated plainly
 
 **Rotating logs every user out.** No data is lost — tokens are stateless and no session is stored
@@ -326,9 +336,17 @@ Two failure shapes and they read differently:
 - **A validation failure on `@Size(min = 32)`** — the value reached the app and is too short. An
   `openssl rand -base64 48` value is 64 characters, so this means the line was truncated, most likely
   by an editor wrapping it.
+- **A validation failure naming `secretUsable`** (§216) — the value reached the app and is one the
+  application refuses: the published §108 key, or a key starting with `?` or `-`, which means an env
+  file was written from a shell-syntax placeholder rather than from `openssl`. The fix is to generate
+  a real key; there is no way to override this and there is deliberately no flag for it.
 
-Restoring the backup from step 1 returns you to the previous state, including the leaked key. That is
-a rollback for an outage, not a resolution.
+~~Restoring the backup from step 1 returns you to the previous state, including the leaked key. That
+is a rollback for an outage, not a resolution.~~ → **superseded 2026-08-15 (§216): if the box was on
+the leaked key, that backup will not start.** The refusal is unconditional, so the previous state is
+no longer reachable — which is the intended direction and worth knowing *before* you need it. Your
+rollback for an outage is a freshly generated key, which costs the same sign-out the rotation costs
+and is what you were doing anyway. Keep the `.bak` for the *other* variables in the file.
 
 ## Afterwards
 

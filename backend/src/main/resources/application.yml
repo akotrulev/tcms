@@ -101,6 +101,17 @@ tcms:
       # unresolvable placeholder throws at bind time and the context does not start.
       # IntegrationTestBase supplies its own value via @DynamicPropertySource, so the
       # suite is unaffected. Do not "helpfully" add a default back.
+      #
+      # SINCE §216 THE VALUE ITSELF IS REFUSED, not just this spelling. Fixing the
+      # spelling closed the way the string got MINTED and left every way it can still
+      # be SUPPLIED — a restored pre-2026-08-06 backup, or an operator resolving a
+      # startup failure by pasting the value out of this file. JwtProperties
+      # #isSecretUsable rejects it, and rejects any key starting with `?` or `-`,
+      # which is what a resolved ${VAR:?…} / ${VAR:-…} leaves behind. The quoted
+      # 59-character string above is what that check is compared against, so DO NOT
+      # REWORD IT — JwtPropertiesTest#theRefusedKeyIsTheOneThatShipped reads it from
+      # this file, indentation and all, so the constant cannot drift into an
+      # approximation of the incident.
       # ############################################################################
       secret: ${TCMS_JWT_SECRET}
       issuer: ${TCMS_JWT_ISSUER:tcms}

@@ -43,6 +43,13 @@ import org.junit.jupiter.api.Test;
  * That combination is the working agreement's own rule in its purest form:
  * <strong>a catalogue-wide invariant needs a computed check, not a careful reading.</strong>
  *
+ * <p><strong>What this class cannot see, and where the other half lives (§216).</strong> Every
+ * rule here is a property of the <em>source text</em>, so together they stop §108 being
+ * re-authored and say nothing about the value a host actually supplies — which is the state a
+ * restored backup or a pasted value puts an instance in, and the string in question clears
+ * {@code @NotBlank} and {@code @Size} at 59 characters. {@link com.tcms.auth.JwtProperties}
+ * refuses it at bind time now, and {@code JwtPropertiesTest} is the observer for that half.
+ *
  * <p>This test boots no Spring context and needs no database — every rule is a property of the
  * source text, so it runs in milliseconds. That matters: the check that is cheap is the check
  * that survives.
