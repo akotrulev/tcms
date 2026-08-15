@@ -111,7 +111,15 @@ Stated precisely, because the loose form is wrong: **a tool may merge arms only 
 can reach the tool holds all the arms' permissions together.** Three consequences, all real:
 
 - `tcms_write_doc_page` merges create, edit, link-block and unlink-block. All four are `doc:edit`.
-  One gate, one tool.
+  ~~One gate, one tool.~~ → **five arms and two gates since §212**: `publish` joined them, and the
+  merge is legal only because `V52` (§210) granted `doc:publish` to Test Engineer. Before it, that
+  key was Lead-only while `doc:edit` was held by everyone who writes, so folding the two would have
+  hidden the whole tool from every contributor — this rule's first consequence, exactly. **A tier
+  widening is what makes an arm mergeable**, and it is the second time: `suite:delete` joined
+  `tcms_write_suite` in §211 on the same migration. `tcms_write_run` is the third, taking
+  `run:close` beside `run:create` — where the role that would have broken the merge is
+  `Automation Service`, which holds the first without the second and is not a reachable
+  intersection because `V41` made it non-assignable.
 - `tcms_review_comment` and `tcms_review_verdict` are **two tools, and the first draft of this
   document had them as one.** The merge looked safe from the catalogue — no role holds a `*:review`
   without `case:comment` — and it is wrong, because the catalogue is not what a token holds. **The
@@ -162,7 +170,7 @@ Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema**
 | 6 | `tcms_list_library` | `case:read` | `GET …/conditions`, `GET …/shared-steps` | **Buildable** (read-only by design — §0.5) |
 | 7 | `tcms_doc_tree` | `doc:read` | `GET …/doc-pages` | **Buildable** |
 | 8 | `tcms_open_doc_page` | `doc:read` | `GET …/doc-pages/{pageId}` | **Buildable** |
-| 9 | `tcms_write_doc_page` | `doc:edit` | `POST`/`PATCH …/doc-pages`, block link `POST`/`DELETE` | **Buildable after §4.2** |
+| 9 | `tcms_write_doc_page` | `doc:edit` ~~alone~~ + `doc:publish` (§212) | `POST`/`PATCH …/doc-pages`, block link `POST`/`DELETE`, `PUT …/doc-pages/{pageId}/status` | **Buildable after §4.2** |
 | 10 | `tcms_write_case` | `case:create` + `case:edit` | `POST`/`PATCH …/cases`, submit-for-review | **edit arm buildable; create arm blocked — §5** |
 | 11 | `tcms_write_suite` | `suite:manage` | `POST`/`PATCH …/suites`, membership, `PUT …/status` (submit / withdraw only) | **Buildable after §4.2** |
 | 12 | `tcms_review_comment` | `case:comment` | `GET …/reviews`, `POST …/comments` | **Buildable** |
@@ -170,7 +178,7 @@ Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema**
 | 14 | `tcms_list_plans` | `case:read` | `GET …/plans`, `…/{planId}`, `…/statistics` | **Buildable** |
 | 15 | `tcms_write_plan` | `plan:create` + `plan:edit` | `POST`/`PATCH …/plans`, `PUT …/status` (submit / withdraw only) | **Buildable** |
 | 16 | `tcms_open_run` | `case:read` | `GET …/runs`, `…/{runId}`, `…/executions/{executionId}` | **Buildable** |
-| 17 | `tcms_write_run` | `run:create` | `POST …/runs`, `POST …/runs/{runId}/clone` | **Buildable** |
+| 17 | `tcms_write_run` | `run:create` ~~alone~~ + `run:close` (§212) | `POST …/runs`, `POST …/runs/{runId}/clone`, `PUT …/runs/{runId}/status` | **Buildable** |
 | 18 | `tcms_record_result` | `run:execute` + `result:submit` + `evidence:attach` | `PATCH …/executions/{executionId}`, `POST …/evidence` | **Buildable** |
 | 19 | `tcms_triage` | `case:read` + `report:view` | dashboard, quarantine state, `GET …/ingestions`, `…/automation-mappings` | **Buildable** |
 | 20 | `tcms_write_work_item` | `workitem:manage` + `defect:create` | `POST`/`PATCH /work-items` | **Buildable** |

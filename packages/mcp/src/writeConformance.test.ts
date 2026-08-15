@@ -324,6 +324,12 @@ const INVOCATIONS: Record<string, Invocation> = {
     path: '/links/l-1',
     routes: { ...PAGES, 'DELETE /links/l-1': { status: 204 } },
   },
+  'tcms_write_doc_page.publish': {
+    tool: 'tcms_write_doc_page',
+    input: { action: 'publish', page: 'DOC-1', status: 'PUBLISHED' },
+    path: '/doc-pages/dp-1/status',
+    routes: { ...PAGES, 'PUT /doc-pages/dp-1/status': { status: 200, body: PAGE } },
+  },
   'tcms_write_plan.create': {
     tool: 'tcms_write_plan',
     input: { action: 'create', name: 'Release 4.2' },
@@ -363,6 +369,12 @@ const INVOCATIONS: Record<string, Invocation> = {
     input: { action: 'clone', run: 'TR-1', name: 'Nightly, again' },
     path: '/runs/r-1/clone',
     routes: { ...RUNS, 'POST /runs/r-1/clone': { status: 201, body: RUN } },
+  },
+  'tcms_write_run.status': {
+    tool: 'tcms_write_run',
+    input: { action: 'status', run: 'TR-1', status: 'COMPLETED' },
+    path: '/runs/r-1/status',
+    routes: { ...RUNS, 'PUT /runs/r-1/status': { status: 200, body: RUN } },
   },
   'tcms_record_result.record': {
     tool: 'tcms_record_result',

@@ -568,12 +568,25 @@ const writeDocPage: ToolDefinition = {
   name: 'tcms_write_doc_page',
   title: 'Write documentation, and link cases to it',
   description:
-    'Four actions on one gate: create a page, edit one, link a case or suite to a block, and '
-    + 'unlink. **A block omitted from `blocks` is DELETED** — the array is the whole page in '
-    + 'order — so read the page first and send back everything you are keeping, together with the '
-    + 'lockVersion that read returned. Linking is how a case is tied to a requirement: this '
-    + 'product has no separate criterion record, so the block IS the requirement.',
-  gate: { mode: 'all', permissions: ['doc:edit'] },
+    'Five actions: create a page, edit one, link a case or suite to a block, unlink, and `publish` '
+    + '— which moves the page between DRAFT, PUBLISHED and ARCHIVED. **A block omitted from '
+    + '`blocks` is DELETED** — the array is the whole page in order — so read the page first and '
+    + 'send back everything you are keeping, together with the lockVersion that read returned. '
+    + 'Linking is how a case is tied to a requirement: this product has no separate criterion '
+    + 'record, so the block IS the requirement. Publishing is a separate act from writing and '
+    + 'costs a separate key; it is not an approval and does not stand in for a review.',
+  /*
+    Two keys merged, and it is `V52` (§210) that makes it legal — `doc:publish` was Lead-only as
+    "the human's signal that a document is ready" while `doc:edit` is held by everyone who writes,
+    so this merge would have hidden the whole tool from every contributor. Checked against §2's
+    set rather than the catalogue: no role among `Agent ∩ the five assignable` now holds one of
+    these without the other — Viewer holds neither and Test Engineer up hold both — so the arms
+    merge, exactly as `suite:delete` did in §211 and for the same reason.
+
+    The keys stay two. Publishing writes no content and editing moves no state, and a company that
+    wants them held by different people has the catalogue to arrange it.
+  */
+  gate: { mode: 'all', permissions: ['doc:edit', 'doc:publish'] },
   arms: [
     { action: 'create', kind: 'create', permission: 'doc:edit' },
     { action: 'edit', kind: 'edit', permission: 'doc:edit' },
@@ -582,14 +595,21 @@ const writeDocPage: ToolDefinition = {
     // the existing link, which is the property a key would have bought.
     { action: 'link', kind: 'state', permission: 'doc:edit' },
     { action: 'unlink', kind: 'delete', permission: 'doc:edit', targets: ['page', 'link'] },
+    { action: 'publish', kind: 'state', permission: 'doc:publish' },
   ],
   inputSchema: {
     type: 'object',
     additionalProperties: false,
     required: ['action'],
     properties: {
-      action: ACTION(['create', 'edit', 'link', 'unlink'], 'What to do.'),
+      action: ACTION(['create', 'edit', 'link', 'unlink', 'publish'], 'What to do.'),
       page: idProperty('documentation page — required for everything but create', 'DOC-1'),
+      status: {
+        type: 'string',
+        description:
+          'For `publish`: PUBLISHED, DRAFT (unpublish) or ARCHIVED. Setting the status a page '
+          + 'already has is not an error.',
+      },
       title: { type: 'string' },
       parent: idProperty('parent page, for create', 'DOC-1'),
       blocks: {
@@ -630,6 +650,20 @@ const writeDocPage: ToolDefinition = {
       client: session.client, projectId, value: requireStr(input, 'page'), entity: 'DOC_PAGE',
     });
     const path = { projectId, pageId };
+
+    if (action === 'publish') {
+      return session.client.PUT('/projects/{projectId}/doc-pages/{pageId}/status', {
+        params: { path },
+        // Neither header, and the contract is explicit about why this is a separate endpoint
+        // rather than a field on the `PATCH`: one endpoint whose gate depends on which fields the
+        // body happened to carry is one whose 403 no client can predict. The state is absolute,
+        // so there is no delta for an `If-Match` to guard.
+        body: {
+          status: requireStr(input, 'status') as components['schemas']['DocPageStatusInput']['status'],
+        },
+        tcms,
+      });
+    }
 
     if (action === 'link') {
       const caseKey = str(input, 'case');
@@ -814,26 +848,49 @@ const writePlan: ToolDefinition = {
 
 const writeRun: ToolDefinition = {
   name: 'tcms_write_run',
-  title: 'Create a test run, or clone one',
+  title: 'Create a test run, clone one, or end it',
   description:
     'A run is a fixed selection of cases to execute. `tags` on a run point the opposite way from a '
     + 'case filter: every live case carrying ANY of them, union not intersection. Cloning takes '
     + "the original's selection under a new name, which is how a re-test of the same scope is "
-    + 'made. Closing or reopening a run is not on this surface yet — the credential holds '
-    + 'run:close, but no tool here calls it.',
-  gate: { mode: 'all', permissions: ['run:create'] },
+    + 'made. `status` ends a run — COMPLETED or ABORTED — or reopens one with IN_PROGRESS; a '
+    + 'closed run refuses further results with a 409 until it is reopened. A run STARTS by itself '
+    + 'when the first result lands and never ends by itself, so finishing the last case is not '
+    + 'finishing the run.',
+  /*
+    Two keys merged, and it is `V52` that makes it legal — §211 named this gap and called it "one
+    `state` arm", which it is only because the tier moved. Before `V52` `run:close` was Lead-only
+    while `run:create` is a contributor's *and a CI credential's*, so the merge would have hidden
+    the create tool from everybody below a lead.
+
+    The intersection to check is §2's, not the catalogue's: `Agent ∩ each of the five ASSIGNABLE
+    roles`. `Automation Service` holds `run:create` without `run:close` and is the one role this
+    merge would break — and it is not in that set, because `V41` made it non-assignable and an MCP
+    token carries `Agent`. §134 is load-bearing here for the fourth separate time on this surface;
+    collapse the two token roles and this merge takes `tcms_write_run` away from CI.
+  */
+  gate: { mode: 'all', permissions: ['run:create', 'run:close'] },
   arms: [
     { action: 'create', kind: 'create', permission: 'run:create' },
     { action: 'clone', kind: 'create', permission: 'run:create' },
+    { action: 'status', kind: 'state', permission: 'run:close' },
   ],
   inputSchema: {
     type: 'object',
     additionalProperties: false,
-    required: ['action', 'name'],
+    required: ['action'],
     properties: {
-      action: ACTION(['create', 'clone'], 'What to do.'),
-      name: { type: 'string', description: 'The new run\'s name. Required for both actions.' },
-      run: idProperty('run to clone', 'TR-1'),
+      action: ACTION(['create', 'clone', 'status'], 'What to do.'),
+      name: { type: 'string', description: 'The new run\'s name. Required for create and clone.' },
+      status: {
+        type: 'string',
+        description:
+          'For `status`: COMPLETED or ABORTED to end the run, IN_PROGRESS or NOT_STARTED to '
+          + 'reopen it. The two reopening spellings mean the same thing — the server derives the '
+          + 'live state from whether the run ever started — and setting the status a run already '
+          + 'has is not an error.',
+      },
+      run: idProperty('run to clone or to set the status of', 'TR-1'),
       plan: idProperty('plan to run', 'TP-1'),
       suites: { type: 'array', items: { type: 'string' } },
       cases: { type: 'array', items: { type: 'string' } },
@@ -858,6 +915,24 @@ const writeRun: ToolDefinition = {
     const projectId = session.projectId();
     const action = requireStr(input, 'action');
     const tcms = session.request;
+
+    if (action === 'status') {
+      const runId = await resolveId({
+        client: session.client, projectId, value: requireStr(input, 'run'), entity: 'RUN',
+      });
+      return session.client.PUT('/projects/{projectId}/runs/{runId}/status', {
+        params: { path: { projectId, runId } },
+        // Neither header, for the reason the contract states on this endpoint and `tcms_write_suite`
+        // states one noun over: the request names an absolute target state rather than a delta
+        // against something the client read, so there is no version for an `If-Match` to assert
+        // and nothing for an `Idempotency-Key` to deduplicate — setting the status a run already
+        // has answers 200 and writes no second row.
+        body: {
+          status: requireStr(input, 'status') as components['schemas']['RunStatusInput']['status'],
+        },
+        tcms,
+      });
+    }
 
     if (action === 'clone') {
       const runId = await resolveId({
