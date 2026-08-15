@@ -1,9 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Alert, Box, Button, Checkbox, FormControlLabel, Stack, TextField, Typography } from '@mui/material';
+import type { FocusEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { ApiError } from '../../api/client';
+import { ApiError, BASE } from '../../api/client';
+import { useSsoProviders } from '../../api/queries';
 import { Identifier } from '../../components/Identifier';
 import { useAuth } from '../../auth/useAuth';
 import { offerToSaveCredentials } from '../../lib/credentials';
@@ -45,7 +47,36 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const navState = location.state as { from?: string; acceptedEmail?: string } | null;
+  const navState = location.state as {
+    from?: string;
+    acceptedEmail?: string;
+    ssoFailed?: boolean;
+  } | null;
+
+  /**
+   * Which buttons this address reaches, asked on blur.
+   *
+   * **Every unhappy answer renders as nothing at all**, and that is the point rather than an
+   * oversight: `POST /auth/providers` answers 200 with an empty list for an unclaimed domain, a
+   * disabled provider and a malformed address alike, because a sign-in surface must not be an
+   * oracle for which companies exist here (§6r). A screen that said "no single sign-on for that
+   * domain" would hand back exactly the fact the endpoint spends its whole design withholding — so
+   * an empty list, a failed request and a question never asked all look identical below.
+   */
+  const discovery = useSsoProviders();
+  const providers = discovery.data?.providers ?? [];
+
+  /** Set when {@link SsoCallbackPage} sent them back. One sentence, no cause — see that file. */
+  const ssoFailed = navState?.ssoFailed === true;
+
+  /**
+   * Discovery runs on blur, not per keystroke: the endpoint takes a whole address, and asking on
+   * every character posts a stranger's half-typed address to the server a dozen times.
+   */
+  const onEmailBlur = (event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const email = event.target.value.trim();
+    if (email.includes('@')) discovery.mutate(email);
+  };
 
   /**
    * Set when they arrived straight from redeeming an invitation. Accepting answers 204 rather
@@ -188,9 +219,18 @@ export function LoginPage() {
             </Alert>
           )}
 
-          {errors.root && (
+          {(errors.root ?? ssoFailed) && (
             <Alert severity="error" role="alert" sx={{ mb: 2 }} data-testid={`${TestIdPrefix}.Error`}>
-              {errors.root.message}
+              {/*
+                The submitted form's own failure wins when there is one — somebody who has just
+                pressed Sign in is asking about that attempt, not about the redirect that brought
+                them here. Either way it is one sentence naming no cause, for `describeSignInFailure`'s
+                reason and, for the federated half, §6r's: disabled provider, expired attempt,
+                replayed `state`, unverified email, deactivated account and no invitation are one
+                opaque marker on the wire, and a screen that guessed between them would rebuild the
+                oracle the refusal design exists to close.
+              */}
+              {errors.root?.message ?? "We couldn't sign you in with single sign-on."}
             </Alert>
           )}
 
@@ -213,6 +253,15 @@ export function LoginPage() {
                 formHelperText: { role: errors.email ? 'alert' : undefined },
               }}
               {...register('email')}
+              /*
+                AFTER the spread, and it calls react-hook-form's own handler itself: `register`
+                supplies an `onBlur` that `mode: 'onBlur'` validation depends on, so a handler that
+                merely replaced it would silently turn validation off for this field.
+              */
+              onBlur={(event) => {
+                void register('email').onBlur(event);
+                onEmailBlur(event);
+              }}
             />
 
             <TextField
@@ -254,9 +303,42 @@ export function LoginPage() {
           </Stack>
         </Box>
 
-        <Typography variant="caption" sx={{ display: 'block', mt: 2, color: 'text.secondary' }}>
-          Local account. Single sign-on arrives with the integrations release.
-        </Typography>
+        {/*
+          Nothing renders in the empty case and nothing renders in the failed case. That is the
+          whole of the silence this screen owes the discovery endpoint, and it is one `&&`.
+
+          The standing caption that used to sit here — "Single sign-on arrives with the integrations
+          release" — went with this block: it had been false since §217 shipped the flow.
+        */}
+        {providers.length > 0 && (
+          <Stack sx={{ gap: 1, mt: 2 }} data-testid={`${TestIdPrefix}.Providers`}>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              Or continue with
+            </Typography>
+            {providers.map((provider) => (
+              <Button
+                key={provider.id}
+                variant="outlined"
+                size="large"
+                fullWidth
+                data-testid={`${TestIdPrefix}.Provider`}
+                /*
+                  A NAVIGATION, not a fetch. The endpoint answers 302 to a THIRD-PARTY origin; a
+                  `fetch` would follow it into a CORS failure at the issuer, and the point is to put
+                  the browser itself at that issuer's login page. Against the API origin, which is
+                  why `BASE` is exported rather than spelled again here.
+                */
+                onClick={() =>
+                  window.location.assign(
+                    `${BASE}/auth/sso/${encodeURIComponent(provider.id)}/authorize`,
+                  )
+                }
+              >
+                Continue with {provider.displayName}
+              </Button>
+            ))}
+          </Stack>
+        )}
       </Box>
     </Box>
   );

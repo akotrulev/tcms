@@ -20,7 +20,15 @@
 import { maybeFault } from '../lib/devFaults';
 import { safeStorage } from '../lib/safeStorage';
 
-const BASE = '/api/v1';
+/**
+ * The API's own prefix, relative so the dev proxy and the deployment both reach it.
+ *
+ * Exported because one call this app makes is **not** a `fetch`: the SSO authorize endpoint answers
+ * a 302 to a third-party origin, so the browser has to be sent there rather than a response read
+ * back (§222). That is the only legitimate caller — anything else that needs this prefix wants
+ * `api.*`, which applies it already.
+ */
+export const BASE = '/api/v1';
 
 /**
  * Budgets per endpoint class, not one global constant — a typeahead that waits 10s is
