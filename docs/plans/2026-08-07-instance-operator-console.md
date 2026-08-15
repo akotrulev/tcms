@@ -6,6 +6,15 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` (inline, the default) to implement this plan task-by-task. Only if delegation clearly pays for itself and the user asks for it, use `ep-delegate-to-subagents` (cost-aware). Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **This plan is scheduled, not queued.** It was written during M3 and deliberately deferred — see "Scheduling" below. Do not begin executing it because it is the newest file in `docs/plans/`.
+>
+> **M6 STARTED 2026-08-15. READ `docs/plans/2026-08-15-m6e-operator-console-revalidation.md` FIRST.**
+> This plan's own `:30` asks for a re-grep before execution; that file is it. Five of six Orientation
+> findings hold, one is incomplete, and six amendments change what gets built — including **Task 1
+> moving out of this plan entirely** (it is `docs/plans/2026-08-15-m6b-company-lifecycle-and-branding.md`
+> Task 1), **the second sign-off at `:84` being overturned** (`instance:read` is added to the
+> catalogue, so the read gate is not `company:create`), and **the next free Flyway version being V56,
+> not V39**. This plan is Plan E of the master plan,
+> `docs/plans/2026-08-15-m6-multi-company-activation.md`.
 
 **Goal:** Move company provisioning and user invitation out of the operator CLI and into an Instance-Admin-only web console, and give a fresh instance its first operator by emailing a one-shot activation link to the instance's own configured sender address on first boot.
 

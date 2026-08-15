@@ -64,6 +64,14 @@ class SchemaConventionTest extends IntegrationTestBase {
             // name, owner, role or project. Every authorization fact still comes from the
             // POLICED api_token row, read after the context is open. Recorded in ERD §0.1.
             "api_token_lookup",
+            // The same decision a third time, made in V53. An OIDC callback carries a
+            // `state` and nothing else — no session, no company — so the in-flight
+            // authorization request it names has to be resolvable with no context open.
+            // Under RLS that read returns zero rows and SSO sign-in fails closed for
+            // everyone, permanently. company_id is a TARGET, the company the attempt is
+            // against, and the row holds nothing identifying: no email, no subject, no
+            // user id, because at insert time none of them are known. Recorded in ERD §0.1.
+            "sso_login_attempt",
             "instance_setting",           // infrastructure
             "instance_audit_event",       // operator actions across companies
             "flyway_schema_history");     // infrastructure
@@ -264,16 +272,29 @@ class SchemaConventionTest extends IntegrationTestBase {
                 .as("fixture precondition: policies must have been found, or this asserts nothing")
                 // 56 from V1, + project_settings (V23), + review_assignment (V25),
                 // + report_job (V27), + suite_case and suite_tag_rule (V31), + case_flake (V38),
-                // + ai_proposal (V43), + case_doc_link (V46), + notification_channel,
+                // + ai_proposal (V43), + case_doc_link (V46), + identity_provider,
+                // user_identity and company_email_domain (V53), + notification_channel,
                 // notification_subscription and notification_delivery (V54).
+                //
+                // §217 and §218 landed three tables each on a base of 64, so both branches
+                // wrote 67 — they disagreed about the schema and AGREED about the literal.
+                // Git merged the assertion line with no conflict and marked only the comment
+                // beside it, which is the one place a reader would not look.
+                //
+                // The count caught it, which is the point: the query is every policy in the
+                // schema, so `checked` is 70 and a merged 67 is RED. What the merge cost is
+                // attribution rather than correctness — the failure appears on a branch where
+                // neither lane's own build was ever red, and reads as "somebody broke RLS"
+                // rather than "two correct numbers were added and not summed". Resolved to 70.
                 // A new company-owned table moves this number, deliberately: the count is what
                 // makes the predicate check non-vacuous, and a table added without its policy would
                 // otherwise pass by not being looked at.
                 //
                 // V36's api_token_lookup is NOT here and must not be: it is instance-level, the
                 // twelfth entry on ERD §0.1's exception list, and instanceLevelTablesAreNotRlsProtected
-                // below asserts it from the other side.
-                .isEqualTo(67);
+                // below asserts it from the other side. V53's sso_login_attempt is the thirteenth
+                // and is absent for the same reason.
+                .isEqualTo(70);
     }
 
     @Test
