@@ -27,6 +27,19 @@ export interface AuthValue {
    * from context instead would read `null`.
    */
   login: (email: string, password: string, rememberMe: boolean) => Promise<CurrentUser>;
+  /**
+   * Adopts a session this app did not mint the credential for — today, the one that arrives in the
+   * `#token=` fragment after an external sign-in (§6r, §222).
+   *
+   * Separate from {@link login} rather than a second call path into it: `login` posts a password
+   * and receives a user, this receives a token and must go and ask who it belongs to. What the two
+   * share is everything after that, which is why the token is written in exactly one place either
+   * way — a caller that reached storage directly would leave `user` null, `status` stale and
+   * sibling tabs uncorrected.
+   *
+   * Rejects when the server will not confirm the token, having cleared it.
+   */
+  adoptSession: (token: string) => Promise<CurrentUser>;
   logout: () => void;
 }
 

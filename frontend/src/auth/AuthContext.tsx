@@ -164,6 +164,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return result.user;
   }, []);
 
+  /**
+   * The external-sign-in landing (§6r, §222). The fragment carries a token and nothing else, so
+   * unlike `login` this has to ask the server who it is — which is the mechanism this provider
+   * already calls correct above: restoring a session is a server question.
+   *
+   * A rejected `/me` **clears the token**, and unlike the mount-time confirmation it clears on any
+   * failure rather than on a 401 alone. The asymmetry is deliberate: there, a token already in
+   * storage is a session the user had, and a backend restart must not sign everybody out; here
+   * there is nothing to preserve — a credential that has never once been confirmed buys a shell
+   * that cannot make a single successful request, and the caller can start the sign-in again.
+   *
+   * The fragment also carries `expiresAt`, and nothing reads it — here or anywhere. The session's
+   * end is the server's to enforce (8h/30d, plus the `pv` epoch); a second copy of it on the client
+   * is a number that drifts on clock skew and that nothing acts on.
+   */
+  const adoptSession = useCallback(
+    async (token: string) => {
+      safeStorage.set(TOKEN_KEY, token);
+      setStatus('restoring');
+      try {
+        const fresh = await api.get<CurrentUser>('/me');
+        safeStorage.setJSON(USER_KEY, fresh);
+        setUser(fresh);
+        // After storage is written, never before — `login` says why: a sibling re-confirms the
+        // session storage holds at request time, so a broadcast that overtook the write would have
+        // it confirm the session it already had.
+        publishSession({ type: 'signed-in', email: fresh.email });
+        return fresh;
+      } catch (error) {
+        clearSession();
+        throw error;
+      } finally {
+        setStatus('ready');
+      }
+    },
+    [clearSession],
+  );
+
   const logout = useCallback(() => {
     clearSession();
     publishSession({ type: 'signed-out' });
@@ -173,8 +211,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession]);
 
   const value = useMemo<AuthValue>(
-    () => ({ user, status, login, logout }),
-    [user, status, login, logout],
+    () => ({ user, status, login, adoptSession, logout }),
+    [user, status, login, adoptSession, logout],
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;

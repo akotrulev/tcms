@@ -76,6 +76,9 @@ export function TestProviders({
     // Resolves with the same stub user the provider exposes: `login` returns the signed-in user so
     // the caller can label the credential it offers the password manager.
     login: async () => user,
+    // Resolves with the same stub user for `login`'s reason. A test whose subject IS the adoption
+    // supplies its own double rather than asserting against this one.
+    adoptSession: async () => user,
     logout: () => {},
   }
   return <AuthContext value={session}>{tree}</AuthContext>
