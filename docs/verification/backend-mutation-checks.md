@@ -2621,6 +2621,14 @@ because what stops it is RLS rather than a branch: company A's provider assertin
 exists in company B must not resolve to B's user. `FederatedIdentityServiceTest`'s header says why
 it is absent there. It is the single most important row in the browser/Keycloak queue.
 
+## §225 — the transaction-scoped memo and the V56 scope-shape triggers
+
+| id | Mutation | Expected red | Why this matters |
+|---|---|---|---|
+| `§225 PM-1` | In `RoleGrantService.revoke`, delete the `permissions.forgetMemoizedAnswers()` call | `RoleGrantEndpointTest` — the lockout tests, and `PermissionEvaluatorTest.TransactionScopedMemo.mutationInsideTheTransactionNeedsTheForgetSeam` | The self-lockout check re-asks the gate question after the delete, in the same transaction; without the seam it is answered from the memo populated by the gate — from before the delete — and never trips. A caller can then revoke the grant carrying their own ability to revoke, leaving a company with no administrator. |
+| `§225 PM-2` | In `PermissionEvaluator.MemoKey`, drop the `token` component | **Predicted: zero reds.** No test drives two token principals through one transaction | The measured number is the deliverable. If this mutates green, the credential's presence in the key is defended by review alone — worth knowing, since two resolutions under different credentials sharing an entry is a cap bypass. A test would need `TokenContext` swapped mid-transaction, which no production path does. |
+| `§225 PM-3` | In `V56`, delete the `role_assignment_scope_shape` trigger (Testcontainers migrates fresh, so editing the migration is observable) | `RoleScopeShapeTest.companyRoleNamingAProjectIsRefused` and `systemRoleInRoleAssignmentIsRefused` | The trigger is the only refusal below `RoleGrantService.scopeError`; without it a hand-written COMPANY-role-on-a-project row resolves as project permissions and replaces the subject's inherited default via the override switch. |
+
 ## §224 — the decoder that outlived its provider, and the table with no deleter
 
 | id | Mutation | Expected red | Why this matters |

@@ -296,6 +296,12 @@ npm run gen:api      # regenerate src/api/schema.d.ts after ANY openapi.yaml cha
 
 ### Running the gates on `shanks` instead of locally (set up 2026-08-12)
 
+**Tests are to be run on shanks, not locally — a standing directive, restated by the user
+2026-08-15, not a suggestion.** Do not run `./gradlew build`/`test` or the npm suites on the Mac;
+sync-and-run them on shanks via `~/bin/tcms-remote` as below. The one carve-out (same day, same
+user): *a few* targeted tests may run locally **for debugging** — the gates themselves stay on
+shanks.
+
 **Write the code here, run the builds and tests on `shanks`.** There is no Claude Code setting for
 this — the Bash tool always runs on the Mac — so it is a sync-and-run wrapper, `~/bin/tcms-remote`
 **on the MacBook** (machine-local personal tooling, not in this repo; recreate it from this section

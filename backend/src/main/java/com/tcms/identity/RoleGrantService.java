@@ -268,6 +268,9 @@ public class RoleGrantService {
         // than on commit after the response has been assembled — the controller's handler catches
         // it either way, but a flush keeps the failure next to the statement that caused it.
         RoleAssignment saved = roleAssignments.saveAndFlush(granted);
+        // The transaction just changed what a grant question answers, and viewOf re-derives the
+        // caller's reach — which, for a caller granting to themselves, now includes this row.
+        permissions.forgetMemoizedAnswers();
         audit(AUDIT_GRANTED, saved, userId, now);
         return new Grant.Created(directory.viewOf(saved, userId));
     }
@@ -332,6 +335,10 @@ public class RoleGrantService {
         roleAssignments.delete(grant);
         roleAssignments.flush();
 
+        // Without this, the lockout question below is answered from the memo populated by the
+        // gate above — from BEFORE the delete — and the check never trips. See
+        // PermissionEvaluator#forgetMemoizedAnswers for the rule this is the instance of.
+        permissions.forgetMemoizedAnswers();
         if (!stillHoldsTheGate(userId, projectId)) {
             // Rolls the delete AND its audit row back — an audit entry for a revoke that did not
             // happen is worse than none, because it is the record everybody trusts.

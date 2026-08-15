@@ -857,6 +857,91 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
     }
 
     // =========================================================================
+    // The transaction-scoped memo
+    // =========================================================================
+
+    /**
+     * Every other test in this class calls the evaluator outside any shared transaction, so each
+     * call opens its own and the memo never spans two of them — which is why none of those tests
+     * changed when the memo arrived. These are the ones that put two calls in ONE transaction,
+     * where the memo is observable.
+     */
+    @Nested
+    @DisplayName("The transaction-scoped memo")
+    class TransactionScopedMemo {
+
+        @Test
+        @DisplayName("a repeated question in one transaction is answered with the same instance")
+        void memoizesWithinOneTransaction() {
+            inCompany(ACME, () -> tx.executeWithoutResult(status -> {
+                PermissionSet first = evaluator.evaluate(LEAD, ACME_PROJECT);
+                PermissionSet second = evaluator.evaluate(LEAD, ACME_PROJECT);
+
+                assertThat(second)
+                        .as("one transaction, one resolution — the memo's whole claim")
+                        .isSameAs(first);
+            }));
+        }
+
+        @Test
+        @DisplayName("two questions differing only in scope do not collide in the memo")
+        void projectAndCompanyQuestionsStayDistinct() {
+            inCompany(ACME, () -> tx.executeWithoutResult(status -> {
+                PermissionSet onProject = evaluator.evaluate(LEAD, ACME_PROJECT);
+                PermissionSet companyWide = evaluator.evaluateCompanyWide(LEAD);
+
+                // A Test Lead's project grant must not leak into the company-level answer via a
+                // shared memo entry — the same boundary evaluateCompanyWide's header draws,
+                // asserted against the cache key rather than the resolution.
+                assertThat(onProject.has("project:settings")).isTrue();
+                assertThat(companyWide.has("project:settings")).isFalse();
+            }));
+        }
+
+        @Test
+        @DisplayName("the memo dies with its transaction, so a grant change lands on the next one")
+        void doesNotOutliveTheTransaction() {
+            PermissionSet before = evaluateIn(ACME, LEAD, ACME_PROJECT);
+            assertThat(before.has("case:edit")).isTrue();
+
+            inCompany(ACME, () -> tx.executeWithoutResult(status ->
+                    roleAssignments.findById(assignmentId("a1"))
+                            .ifPresent(roleAssignments::delete)));
+
+            // The @BeforeEach seed's findById guard restores the grant for the next test.
+            assertThat(evaluateIn(ACME, LEAD, ACME_PROJECT).isEmpty())
+                    .as("a revoke is effective on the very next transaction — the property "
+                            + "RoleGrantService's no-session-revocation decision rests on")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("a grant mutation inside the transaction needs forgetMemoizedAnswers")
+        void mutationInsideTheTransactionNeedsTheForgetSeam() {
+            inCompany(ACME, () -> tx.executeWithoutResult(status -> {
+                PermissionSet before = evaluator.evaluate(LEAD, ACME_PROJECT);
+                assertThat(before.has("case:edit")).isTrue();
+
+                roleAssignments.findById(assignmentId("a1")).ifPresent(roleAssignments::delete);
+                roleAssignments.flush();
+
+                assertThat(evaluator.evaluate(LEAD, ACME_PROJECT))
+                        .as("pinned, not merely tolerated: the transaction reads its pre-write "
+                                + "answer until the seam is called, which is exactly why "
+                                + "RoleGrantService calls it before the self-lockout check")
+                        .isSameAs(before);
+
+                evaluator.forgetMemoizedAnswers();
+                assertThat(evaluator.evaluate(LEAD, ACME_PROJECT).isEmpty())
+                        .as("after the seam, the same transaction sees its own write")
+                        .isTrue();
+
+                status.setRollbackOnly();
+            }));
+        }
+    }
+
+    // =========================================================================
     // helpers
     // =========================================================================
 

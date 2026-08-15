@@ -10,8 +10,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * The single place effective permissions are computed (plan §6b, roles spec A1).
@@ -67,14 +70,31 @@ import org.springframework.transaction.annotation.Transactional;
  * scoped them to the argument, and the caller would get an empty set that looks like a
  * missing grant. Taking one source removes the disagreement rather than detecting it.
  *
+ * <h2>Memoized per transaction — which is NOT the cache the table comment specifies</h2>
+ *
+ * <p>Within one transaction, the same question is answered once: a resolved
+ * {@link PermissionSet} is kept in a map bound to the transaction and read back for a repeated
+ * key. It exists because one request legitimately asks several times — a gated write asks
+ * {@code canView}, then {@code canDo}, then often {@code qualifierOf}, each a full resolution of
+ * the same terms — and {@code AdminReach} multiplies that by every project in the company. The
+ * memo dies with the transaction, so it cannot serve one request's answer to another, cannot
+ * outlive a grant change (the next request re-reads), and needs no invalidation protocol —
+ * with <strong>one exception</strong>: a service that mutates a grant-bearing table and asks
+ * again <em>in the same transaction</em> must call {@link #forgetMemoizedAnswers()} between the
+ * write and the question, or it is answered from before its own write. {@code RoleGrantService}
+ * is the one such service today, and its self-lockout check is the call site.
+ *
  * <h2>Not yet done here</h2>
  *
  * <p>One thing this deliberately does not implement, recorded rather than forgotten:
  * <ul>
- *   <li><strong>Caching</strong>. The table comment specifies a cache keyed on
+ *   <li><strong>Cross-request caching</strong>. The table comment specifies a cache keyed on
  *       {@code (company_id, user_id, project_id)} — company id included — invalidated on
  *       any write to the five grant-bearing tables. Correctness first: an uncached
- *       evaluator is slow, a wrongly-keyed cache is a cross-company leak.</li>
+ *       evaluator is slow, a wrongly-keyed cache is a cross-company leak. The memo above is
+ *       not it and must not grow into it — a lifetime longer than the transaction is what
+ *       requires the invalidation protocol, and the safe place to add that is a deliberate
+ *       slice, not a widened scope here.</li>
  * </ul>
  */
 @Service
@@ -126,7 +146,14 @@ public class PermissionEvaluator {
                             + "question than the caller asked.");
         }
         UUID companyId = CompanyContext.require();
+        return memoized(
+                new MemoKey(MemoKey.Scope.PROJECT, companyId, userId, projectId,
+                        TokenContext.currentOrNull()),
+                () -> resolveOnProject(companyId, userId, projectId));
+    }
 
+    /** {@link #evaluate}'s resolution, behind the memo. Every comment in it predates the split. */
+    private PermissionSet resolveOnProject(UUID companyId, UUID userId, UUID projectId) {
         // A token that names a project is inert on every other one, and the refusal happens here
         // rather than after the intersection: the project bound is about WHICH project, not about
         // which permissions, so intersecting first would answer "you hold case:read" about a
@@ -274,6 +301,14 @@ public class PermissionEvaluator {
     @Transactional(readOnly = true)
     public PermissionSet evaluateCompanyWide(UUID userId) {
         UUID companyId = CompanyContext.require();
+        return memoized(
+                new MemoKey(MemoKey.Scope.COMPANY, companyId, userId, null,
+                        TokenContext.currentOrNull()),
+                () -> resolveCompanyWide(companyId, userId));
+    }
+
+    /** {@link #evaluateCompanyWide}'s resolution, behind the memo. */
+    private PermissionSet resolveCompanyWide(UUID companyId, UUID userId) {
         Optional<Map<String, PermissionQualifier>> systemTerm = systemTermIfAccountActive(userId);
         if (systemTerm.isEmpty()) {
             return PermissionSet.empty(catalogue);
@@ -298,9 +333,96 @@ public class PermissionEvaluator {
      */
     @Transactional(readOnly = true)
     public PermissionSet evaluateInstanceWide(UUID userId) {
-        return systemTermIfAccountActive(userId)
-                .map(held -> PermissionSet.of(catalogue, cappedToToken(held)))
-                .orElseGet(() -> PermissionSet.empty(catalogue));
+        // No company in the key on purpose: this answer never reads CompanyContext, so keying it
+        // on whichever company happens to be open would compute one answer and store it twice.
+        return memoized(
+                new MemoKey(MemoKey.Scope.SYSTEM, null, userId, null, TokenContext.currentOrNull()),
+                () -> systemTermIfAccountActive(userId)
+                        .map(held -> PermissionSet.of(catalogue, cappedToToken(held)))
+                        .orElseGet(() -> PermissionSet.empty(catalogue)));
+    }
+
+    /**
+     * Answers a repeated question from the transaction's memo instead of re-resolving it.
+     *
+     * <p>The map is bound to the current transaction through
+     * {@link TransactionSynchronizationManager} and unbound when the transaction completes, so its
+     * lifetime is exactly the transaction's — on a pooled thread nothing survives to the next
+     * request. Outside any transaction (which no production path reaches; every entry point here
+     * is {@code @Transactional}) it resolves directly and memoizes nothing, so correctness never
+     * depends on the memo existing.
+     *
+     * <p>{@link PermissionSet} is immutable, so handing the same instance to every asker in the
+     * transaction is safe. The key carries the token principal (a record, compared by value)
+     * because the answer is capped to it — two resolutions under different credentials must not
+     * share an entry, even though no request today swaps its credential mid-transaction.
+     */
+    private PermissionSet memoized(MemoKey key, Supplier<PermissionSet> resolve) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return resolve.get();
+        }
+        Map<MemoKey, PermissionSet> memo = boundMemo();
+        if (memo == null) {
+            memo = new HashMap<>();
+            TransactionSynchronizationManager.bindResource(MEMO, memo);
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    TransactionSynchronizationManager.unbindResourceIfPossible(MEMO);
+                }
+            });
+        }
+        PermissionSet remembered = memo.get(key);
+        if (remembered != null) {
+            return remembered;
+        }
+        PermissionSet resolved = resolve.get();
+        memo.put(key, resolved);
+        return resolved;
+    }
+
+    /**
+     * Drops every memoized answer for the rest of the current transaction.
+     *
+     * <p><strong>The one obligation the memo imposes:</strong> a service that mutates a
+     * grant-bearing table ({@code role_assignment}, {@code instance_role_assignment},
+     * {@code team_membership}, {@code role_permission}, {@code company_membership}) and asks this
+     * evaluator again <em>inside the same transaction</em> must call this between the write and
+     * the question — otherwise the question is answered from before its own write.
+     * {@code RoleGrantService} is the only such service today, and its self-lockout check is what
+     * breaks first if the call goes missing: the check would read the caller's pre-revoke
+     * permissions and never trip, which {@code RoleGrantEndpointTest}'s lockout tests catch.
+     */
+    public void forgetMemoizedAnswers() {
+        Map<MemoKey, PermissionSet> memo = boundMemo();
+        if (memo != null) {
+            memo.clear();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<MemoKey, PermissionSet> boundMemo() {
+        return TransactionSynchronizationManager.isSynchronizationActive()
+                ? (Map<MemoKey, PermissionSet>) TransactionSynchronizationManager.getResource(MEMO)
+                : null;
+    }
+
+    /** The memo's resource binding key — one per process, private to this class. */
+    private static final Object MEMO = new Object();
+
+    /**
+     * One question's identity in the memo. The scope discriminator keeps the three entry points
+     * from colliding on the nullable columns alone; the token principal is part of the identity
+     * because {@link #cappedToToken} makes it part of the answer.
+     */
+    private record MemoKey(
+            Scope scope,
+            UUID companyId,
+            UUID userId,
+            UUID projectId,
+            TokenContext.ApiTokenPrincipal token) {
+
+        private enum Scope { PROJECT, COMPANY, SYSTEM }
     }
 
     /**
