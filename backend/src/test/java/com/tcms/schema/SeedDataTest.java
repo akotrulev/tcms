@@ -222,21 +222,31 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("Agent is Test Engineer minus exactly five — derived, not enumerated")
-    void agentIsTestEngineerMinusFive() throws SQLException {
-        // DERIVED from the two grants rather than transcribed, because the point of the role is the
-        // DELTA: it is a ceiling defined as "the contributor role, minus the things an API caller
-        // must not do". A fourth enumeration of 23 keys would be a fourth thing that can drift from
-        // the spec, and the drift that matters here is the one that happens LATER — a permission
-        // added to Test Engineer by a future migration lands in a credential's ceiling if this is a
-        // subset check, and shows up here as a failure if it is a delta check.
+    @DisplayName("Agent is Test Engineer minus one unreachable key — nothing is withheld (V52)")
+    void agentIsTestEngineerMinusNothingItCouldUse() throws SQLException {
+        // STILL a delta check, and the delta is now empty by decision rather than by five stated
+        // exclusions. V52 (§210) settled that an agent is the same as an engineer, with delete
+        // operations gated by USER CONSENT IN THE MCP TOOL DEFINITIONS instead of by the catalogue.
         //
-        // THAT IS EXACTLY WHAT V51 DID, and it is the whole argument for this test's shape. §207
-        // granted plan:delete to Test Engineer. Agent enumerates its own 23 keys, so no agent
-        // gained anything in the data — but V40 had listed plan:delete under "never held, INHERITED
-        // FROM TEST ENGINEER'S OWN BOUNDARY", and that inheritance stops excluding a key the moment
-        // the contributor holds it. A subset check would have stayed green while the spec's stated
-        // reason for the exclusion had quietly evaporated. Three became five here instead.
+        // Read the shape of this test before changing it. The obvious simplification — assert Agent
+        // is a subset of Test Engineer, or drop the test now that nothing is withheld — is the one
+        // that fails at the moment it matters. Equality is the invariant; a subset check would stay
+        // green while a future migration widened Test Engineer and left Agent behind, which is a
+        // ceiling that has silently stopped tracking the role it is defined as. V52 statement 3
+        // derives Agent's grants FROM Test Engineer's precisely so the data cannot drift, and this
+        // is the assertion that catches a later migration that enumerates instead.
+        //
+        // The history is worth keeping because the test's shape came out of it: V40 defined Agent as
+        // "Test Engineer minus three", and computing the delta rather than checking a subset is what
+        // caught V51 granting plan:delete to Test Engineer (§207) — an exclusion whose stated reason
+        // had evaporated while the enumeration stayed green. Three became five, and now five becomes
+        // zero.
+        //
+        // WHAT THIS TEST NO LONGER GUARDS, stated so its absence is not read as an oversight: an
+        // agent credential can now delete every case, plan, suite, artifact and evidence row its
+        // owner can. The consent prompt that replaces this ceiling lives in the MCP server, and the
+        // `tcms_` bearer authenticates against /api/* without it — see V52's header and roles spec
+        // §A6a for the objection, which was raised, recorded and overruled rather than missed.
         Set<String> agent = grantsOf(AGENT);
         Set<String> engineer = grantsOf(TEST_ENGINEER);
 
@@ -244,41 +254,41 @@ class SeedDataTest extends IntegrationTestBase {
         removed.removeAll(agent);
         assertThat(removed)
                 .as("""
-                        What Agent drops from Test Engineer. library:manage because roles spec §A3 \
-                        gates it by an impact modal rather than by permission and an API caller \
-                        never sees that modal; company:read because a token is not a member \
-                        (V40 §6); case:delete, evidence:delete and plan:delete because AGENT ACCESS \
-                        CREATES, READS AND EDITS AND DOES NOT DELETE (§207). That last reason is \
-                        newer than the role. V40 justified the two deletes by OWN resolving against \
-                        created_by while a token's owner is api_token.owner_id, and V51 deleted the \
-                        premise of that argument by removing the qualifier — the exclusion survived \
-                        the reasoning that produced it, which is why the reason is restated here \
-                        rather than left to be re-derived from a migration that now misleads.""")
-                .containsExactly(
-                        "case:delete", "company:read", "evidence:delete", "library:manage",
-                        "plan:delete");
+                        Permissions Test Engineer holds and Agent does not. Exactly one since V52, \
+                        and it is a REACHABILITY exclusion rather than a ceiling: a PROJECT-scope \
+                        grant of company:read is unanswerable by evaluateCompanyWide, and a token \
+                        has no membership row and so no V15 baseline to hold it reachably the way a \
+                        human contributor does (§43, and companyReadIsAlwaysExplicit, which is what \
+                        caught this on V52's first run). Any OTHER key here means a migration \
+                        granted the contributor something and did not carry it across — the role has \
+                        stopped tracking what it is defined as, which reads on the roles screen as \
+                        an agent that mysteriously cannot do its owner's job.""")
+                .containsExactly("company:read");
 
         Set<String> added = new TreeSet<>(agent);
         added.removeAll(engineer);
         assertThat(added)
                 .as("""
-                        Agent must be a strict SUBSET of Test Engineer. A permission the agent holds \
-                        and the contributor does not means the ceiling has stopped being a ceiling — \
-                        an agent could then do something the person driving it cannot, which is the \
-                        one property the whole design rests on.""")
+                        Permissions Agent holds and Test Engineer does not. This is the direction \
+                        that must never have a row, before V52 and after it: an agent that can do \
+                        something the contributor role cannot has stopped being a ceiling at all. \
+                        The token intersection (plan §6p) still narrows to the ISSUER's own grant, \
+                        so this would not by itself let an agent exceed its owner — but it would \
+                        mean the role no longer describes what it claims to.""")
                 .isEmpty();
 
         assertThat(agent)
                 .as("""
-                        What an agent must never do. Every key here EXCEPT plan:delete is also held \
-                        by nobody below Test Lead, so the delta check above would catch its \
-                        appearance anyway and this is belt-and-braces. plan:delete is the one that \
-                        is genuinely load-bearing since V51: Test Engineer holds it now, so this is \
-                        the only assertion standing between a credential and deleting a plan.""")
+                        The two things an agent still must not do, and they are the tier line rather \
+                        than a ceiling of its own: approvals and project configuration are Test \
+                        Lead's, so a contributor-shaped role cannot hold them. Asserted here as well \
+                        as in testEngineerToTestLeadBoundary because THIS is the role a credential \
+                        carries: if the tier line ever moves, the blast radius includes every \
+                        outstanding agent token, and that should fail in the test named after the \
+                        credential too.""")
                 .doesNotContain("case:approve", "suite:approve", "plan:approve",
-                        "run:close", "result:amend", "doc:publish",
-                        "suite:delete", "plan:delete", "artifact:delete",
-                        "project:settings", "project:members", "integration:manage");
+                        "project:settings", "project:members", "project:audit",
+                        "integration:manage");
     }
 
     @Test
@@ -327,54 +337,71 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("Test Engineer → Test Lead: the three boundary lines from spec A4")
+    @DisplayName("Test Engineer → Test Lead: exactly approvals and project configuration (V52)")
     void testEngineerToTestLeadBoundary() throws SQLException {
         Set<String> engineer = grantsOf(TEST_ENGINEER);
         Set<String> lead = grantsOf(TEST_LEAD);
 
-        // 1. Shared structure and judgements about the work are Lead-only — NOT "destructive", and
-        //    not authorship. V51 (§207) took plan:delete out of this line and case:delete's OWN
-        //    qualifier out of the model entirely: CRUD on plans, cases and steps belongs to every
-        //    non-Viewer contributor regardless of who created the row. What is left here is two
-        //    decisions about structure every plan shares (a suite is the grouping, a project-scope
-        //    artifact is inherited read-only by every plan) and two judgements about the work.
-        assertThat(engineer)
-                .as("the Lead-only three, and plan:delete is deliberately NOT among them since V51")
-                .doesNotContain("suite:delete", "run:close", "result:amend");
-        assertThat(engineer)
-                .as("but every creative permission is held")
-                .contains("suite:manage", "case:create", "case:edit", "plan:create", "run:execute");
-        assertThat(engineer)
+        // THE WHOLE BOUNDARY, as a closed set rather than as three descriptions. V52 (§210) redrew
+        // it: a Test Lead is a Test Engineer plus giving approvals and managing access to the
+        // project, and nothing else.
+        //
+        // The exactness is the point, and it is what the previous shape could not do. This test used
+        // to assert three separate lines with contains/doesNotContain, which pins the keys somebody
+        // thought to name and says nothing about a key nobody did — so a migration granting the lead
+        // a sixth kind of power passed. Both directions of an exact set are now closed: a key that
+        // leaves the lead's exclusive list has been given to contributors, and a key that joins it
+        // has been taken away from them. Either is a tier decision and needs roles spec §A4 edited
+        // first.
+        //
+        // Line 1 of the old three is GONE, not relaxed. It was "creative vs destructive" (V3, V12),
+        // then "content vs shared structure and judgement" (V51, eight days ago), and the
+        // requirement behind V52 removes it outright: a contributor creates, edits and deletes. Two
+        // attempts to state that line in six weeks is the argument for not attempting a third.
+        Set<String> leadOnly = new TreeSet<>(lead);
+        leadOnly.removeAll(engineer);
+        assertThat(leadOnly)
                 .as("""
-                        The V51 grants, asserted positively so that a migration reverting them is \
-                        caught here and not only as a side effect somewhere else. Two different \
-                        changes are being guarded: plan:delete is a TIER gate Test Engineer did not \
-                        hold at all, so revoking it would show up as an absence here; case:delete \
-                        and evidence:delete were already present and what V51 changed was their \
-                        QUALIFIER, which this assertion cannot see — ownIsCarriedByNoGrant is what \
-                        catches those two going back to OWN.""")
-                .contains("plan:delete", "case:delete", "evidence:delete");
-
-        // 2. Review vs approve.
-        assertThat(engineer).contains("case:review", "suite:review", "plan:review");
-        assertThat(engineer.stream().filter(key -> key.endsWith(":approve")).toList())
-                .as("only Lead+ signs off")
-                .isEmpty();
-        assertThat(lead).contains("case:approve", "suite:approve", "plan:approve");
-
-        // 3. Content vs configuration.
-        assertThat(engineer)
-                .as("project configuration and the audit trail are Lead-only")
-                .doesNotContain(
-                        "project:settings", "project:members", "project:audit", "integration:manage");
+                        Everything a Test Lead may do that a Test Engineer may not. EXACTLY seven \
+                        keys, and they are the two things spec §A4 now names: giving approvals, and \
+                        adding and managing permission on the project. A key appearing here is a \
+                        capability taken away from contributors; a key disappearing is one handed to \
+                        them. Neither is a migration side effect worth discovering later.""")
+                .containsExactly(
+                        "case:approve", "integration:manage", "plan:approve",
+                        "project:audit", "project:members", "project:settings", "suite:approve");
 
         assertThat(lead)
                 .as("""
                         Test Lead must be a strict superset of Test Engineer. A permission the \
                         contributor holds and the lead does not is always a transcription slip — the \
                         tiers differ by what is ADDED, never by what is taken away.""")
-                .containsAll(engineer)
-                .hasSizeGreaterThan(engineer.size());
+                .containsAll(engineer);
+
+        // The positive half. The delta above is a subtraction, so it stays green if BOTH roles lose
+        // a key — which is exactly what a careless revoke looks like. These name the grants V52
+        // moved down, so reverting one fails here rather than silently rebalancing the delta.
+        assertThat(engineer)
+                .as("""
+                        The V52 grants, asserted positively. suite:delete and artifact:delete were \
+                        Lead-only as SHARED STRUCTURE; run:close and result:amend as JUDGEMENTS \
+                        ABOUT THE WORK; doc:publish as a readiness signal. All five are a \
+                        contributor's now, because the requirement draws the line at approvals and \
+                        configuration and nowhere else.""")
+                .contains("suite:delete", "artifact:delete", "run:close", "result:amend",
+                        "doc:publish");
+        assertThat(engineer)
+                .as("and the V51 grants, which V52 does not disturb")
+                .contains("plan:delete", "case:delete", "evidence:delete");
+        assertThat(engineer)
+                .as("every creative permission is held")
+                .contains("suite:manage", "case:create", "case:edit", "plan:create", "run:execute");
+        assertThat(engineer)
+                .as("contributors review; only Lead+ signs off")
+                .contains("case:review", "suite:review", "plan:review");
+        assertThat(engineer.stream().filter(key -> key.endsWith(":approve")).toList())
+                .as("author-cannot-approve-own-work is untouched, and so is who may approve at all")
+                .isEmpty();
     }
 
     @Test
@@ -636,25 +663,71 @@ class SeedDataTest extends IntegrationTestBase {
 
         assertThat(queryStrings("SELECT DISTINCT qualifier FROM role_permission ORDER BY 1"))
                 .as("""
-                        The qualifiers actually in play. Asserted so that the emptiness above is \
-                        read as "OWN specifically has no rows" rather than "the query is wrong" — \
-                        PLAN_SCOPE is populated (V19, Test Engineer and Agent on artifact:edit), so \
-                        a typo in the column or table name shows up as this list being empty too.""")
-                .containsExactly("ALL", "PLAN_SCOPE");
+                        The qualifiers actually in play. Since V52 that is ALL and nothing else, so \
+                        this no longer distinguishes "OWN has no rows" from "the query is wrong" — \
+                        everyQualifierIsAll is the assertion that carries that job now, and it \
+                        counts rows rather than reading a column that could be misnamed.""")
+                .containsExactly("ALL");
     }
 
     @Test
-    @DisplayName("Test Engineer edits a plan's artifacts and not the project's — the V19 grant")
-    void testEngineerHoldsArtifactEditOnlyAtPlanScope() throws SQLException {
-        // The roles spec's Artifacts table states this as `plan scope only`, and V12's two-value
-        // CHECK could not express it. It is asserted as DATA rather than through the endpoint
-        // because the endpoint's gate reads this row: a test that only drove HTTP would pass on a
-        // day the grant said ALL and the gate had been written to match it.
+    @DisplayName("every grant is unqualified — both qualifiers empty by decision (V52)")
+    void everyQualifierIsAll() throws SQLException {
+        // The column-wide version of ownIsCarriedByNoGrant, and it exists because V52 emptied the
+        // other value too. `artifact:edit` was the only key that ever carried PLAN_SCOPE — Test
+        // Engineer's grant (V19) and Agent's copy of it (V40) — and §210 de-qualified both: a
+        // contributor creates, edits and deletes, unqualified, so the project-scope artifact every
+        // plan inherits read-only is no longer a separate tier of edit.
         //
-        // The direction matters. Test Engineer's grant was ALL until V19 — V12's backfill default,
-        // correct for every row that existed then — so this does not fail closed. An artifact:edit
-        // gate written against the old data lets a Test Engineer rewrite the test strategy that
-        // every cycle inherits read-only (plan §6n), which is a silent widening, not an outage.
+        // WHAT THIS MEANS FOR THE MECHANISM, stated because it changes the argument for keeping it.
+        // V51 gave three reasons for retaining an unpopulated OWN; reason 2 was "PLAN_SCOPE is the
+        // same shape and IS populated, so the column and the resolution seam are earning their keep
+        // regardless". That reason expired here. PermissionQualifier's two restrictive members,
+        // IdentityProjectAccess.canDoOnAuthored and the plan-scope resolution arm are now ALL
+        // unreachable from seeded data, and they are kept on the two reasons that survive: the
+        // qualifier is DATA, so deleting an arm makes a future qualified grant fail OPEN at
+        // whichever gate forgot it; and rebuilding either narrowing later costs a migration, a gate
+        // change and a contract change.
+        //
+        // So this is deliberately a check on the DATA and not a licence to delete the code. A row
+        // appearing here is not a failure in the sense of a bug — it is a requirement that the
+        // migration adding it also edited roles spec §A5, because a qualified grant is a narrowing
+        // no screen renders and no reader expects.
+        assertThat(queryStrings("""
+                SELECT r.name || ' / ' || rp.permission_key || ' = ' || rp.qualifier
+                  FROM role_permission rp
+                  JOIN role r ON r.id = rp.role_id
+                 WHERE rp.qualifier <> 'ALL'
+                 ORDER BY 1
+                """))
+                .as("""
+                        Every qualified grant in the catalogue. Empty since V52. OWN emptied at V51 \
+                        (§207, CRUD is not authorship-scoped); PLAN_SCOPE emptied at V52 (§210, \
+                        artifact:edit is unqualified for contributors). A row here means a narrowing \
+                        came back — decide it in the spec first.""")
+                .isEmpty();
+
+        assertThat(queryStrings("SELECT count(*)::text FROM role_permission"))
+                .as("""
+                        The sanity half, and the reason the assertion above is not self-proving: an \
+                        empty result and a misnamed table produce the same green. This counts the \
+                        rows the query above filters, so a typo shows up as a zero.""")
+                .doesNotContain("0");
+    }
+
+    @Test
+    @DisplayName("artifact:edit is unqualified for every role that holds it (V52)")
+    void artifactEditIsUnqualifiedEverywhere() throws SQLException {
+        // The inverse of what this test asserted from V19 until V52, and kept rather than deleted
+        // because the DIRECTION is what matters. Test Engineer's grant was ALL until V19 narrowed
+        // it, PLAN_SCOPE until V52 widened it back, and the widening is a SILENT one: an
+        // artifact:edit gate written against the old data simply stops narrowing, with no error
+        // anywhere. Nothing 500s, nothing 403s, and the project-scope artifact every cycle inherits
+        // read-only (plan §6n) becomes editable by a contributor.
+        //
+        // That is a real capability change, decided in §210 — a contributor edits, unqualified —
+        // and this assertion is where it is written down as data. Restoring the qualifier means
+        // editing the spec's Artifacts table first.
         assertThat(queryStrings("""
                 SELECT r.name || ' / ' || rp.permission_key || ' = ' || rp.qualifier
                   FROM role_permission rp
@@ -663,17 +736,15 @@ class SeedDataTest extends IntegrationTestBase {
                  ORDER BY r.name
                 """))
                 .as("""
-                        Every grant of artifact:edit. Test Engineer must be PLAN_SCOPE; the three \
-                        roles that own the project's shared documents must be ALL. A role appearing \
-                        here that the spec's Artifacts table does not grant is the defect — the \
-                        spec is authoritative. Agent (V40) reuses Test Engineer's EXACT spelling: \
-                        a near-miss would trip noPermissionCarriesTwoDifferentRestrictiveQualifiers \
-                        instead, which is that check working.""")
+                        Every grant of artifact:edit. All five must be ALL since V52. A role \
+                        appearing here that the spec's Artifacts table does not grant is the defect \
+                        — the spec is authoritative. Agent is Test Engineer entire since V52, so its \
+                        row is the contributor's spelling by construction, not by transcription.""")
                 .containsExactly(
-                        "Agent / artifact:edit = PLAN_SCOPE",
+                        "Agent / artifact:edit = ALL",
                         "Company Admin / artifact:edit = ALL",
                         "Instance Admin / artifact:edit = ALL",
-                        "Test Engineer / artifact:edit = PLAN_SCOPE",
+                        "Test Engineer / artifact:edit = ALL",
                         "Test Lead / artifact:edit = ALL");
     }
 
