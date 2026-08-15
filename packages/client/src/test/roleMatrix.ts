@@ -15,11 +15,24 @@
  * {@link agentKeys} now**, so there is no second place. The spec is the place it cannot be.
  *
  * **What this does not read is the seeded data.** `V3` and `V52` are the rows Postgres actually
- * holds, and only `SeedDataTest` can compare the two — it derives Test Lead minus Test Engineer
- * from the live catalogue and asserts §A4's seven keys exactly, in both directions. So the chain is
+ * holds, and only `SeedDataTest` can compare the two. So the chain is
  * `migration → SeedDataTest → spec → this file`, and this file's link is the last one: it settles
  * *prose against the spec*, and takes on faith that the backend suite settles the spec against the
  * data. A spec that drifts from `V52` fails there, loudly, in the stack that owns the grant.
+ *
+ * ~~It derives Test Lead minus Test Engineer from the live catalogue and asserts §A4's seven keys
+ * exactly, in both directions.~~ → **that sentence was true and it was not the chain.** §214
+ * measured what the middle link actually compared: one delta of one pair, plus three hand-written
+ * lists that name the spec in their failure message and never open it. The other 385 cells of the
+ * matrix were compared to nothing on either side of the arrow, while this file parsed the same
+ * document to police prose in four corpora. `SeedDataTest.theSeededMatrixIsTheSpecsMatrix` is the
+ * comparison now, cell by cell, both ways — and the divergence it found is three inert
+ * `company:read` rows the spec explains in the paragraph under the table that cannot express them.
+ *
+ * The window under it is unchanged and is worth stating where somebody reading this file will meet
+ * it: that comparison lives in the **backend** suite, and `ci.yml` runs no backend test. Between a
+ * bad spec edit and the 01:17 UTC nightly, both rules in this package answer confidently out of a
+ * wrong document.
  *
  * ## The parse, and why it is allowed to be this literal
  *

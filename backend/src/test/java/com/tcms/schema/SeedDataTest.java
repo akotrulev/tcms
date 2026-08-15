@@ -42,6 +42,16 @@ import org.junit.jupiter.api.Test;
  * check rather than a careful reading. The frontend holds the third corner with
  * {@code satisfies Record<PermissionKey, Area>} in {@code lib/permissions.ts}, which is a
  * compile error on drift.
+ *
+ * <p>~~The boundary properties are how the spec's own tables are held to~~ →
+ * <del>they were not, and two documents said otherwise for four days</del>.
+ * {@link #theSeededMatrixIsTheSpecsMatrix} (§214) is the comparison the property assertions had
+ * been standing in for: every cell of §A3, seven roles, both directions. Before it, a property
+ * test pinned the one delta somebody was arguing about and the other 385 cells were compared to
+ * nothing — while {@code packages/client/src/test/roleMatrix.ts} parsed that same document to
+ * decide what prose in four corpora may claim. The property assertions are kept and are not
+ * redundant: an equality says two documents differ, and they say <em>why</em> a cell is what it
+ * is.
  */
 @DisplayName("Seed reference data — the permission catalogue and the six built-in roles (V3)")
 class SeedDataTest extends IntegrationTestBase {
@@ -58,6 +68,61 @@ class SeedDataTest extends IntegrationTestBase {
 
     /** V40's non-assignable ceiling — carried by API tokens only, never held by a person. */
     private static final String AGENT = "Agent";
+
+    /** The roles spec, whose §A3 decides the whole matrix. */
+    private static final String ROLES_SPEC =
+            "docs/specs/2026-07-30-tcms-roles-permissions-naming.md";
+
+    /**
+     * §A3's column headings, as the role names the {@code role} table holds.
+     *
+     * <p>Three tables with three different shapes: the eight {@code PROJECT} tables carry the six
+     * abbreviations, the {@code COMPANY} table carries {@code Every member} — which is V15's
+     * {@code Company Member} baseline and not a seventh tier — and the {@code SYSTEM} table carries
+     * {@code IA} alone. A heading outside this map fails the parse rather than being skipped: a
+     * column nobody compares is the shape this whole test was written against.
+     *
+     * <p>{@code Agent} is deliberately absent, because §A3 does not have a column for it. It is
+     * §A6a's derived role and {@link #agentIsTestEngineerMinusNothingItCouldUse} is what pins it.
+     */
+    private static final Map<String, String> SPEC_COLUMNS = Map.of(
+            "IA", INSTANCE_ADMIN,
+            "CA", COMPANY_ADMIN,
+            "TL", TEST_LEAD,
+            "TE", TEST_ENGINEER,
+            "AS", AUTOMATION_SERVICE,
+            "V", VIEWER,
+            "Every member", COMPANY_MEMBER);
+
+    /** A `key` in the first cell of an §A3 row, of which there may be several. */
+    private static final Pattern SPEC_KEY = Pattern.compile("`([a-z]+:[a-z]+)`");
+
+    private static final String COMPANY_READ_IS_SEEDED_PER_ROLE = """
+            V3 seeds company:read onto five of the six built-in roles and §A3's COMPANY table has \
+            no column that can say so — it says `Every member`, which is V15's baseline role. The \
+            paragraph under that table records both halves: "The per-role grants above are \
+            unchanged and still correct; what carries the permission company-wide is the Company \
+            Member baseline". The row is INERT rather than wrong — a PROJECT-scope grant of a \
+            COMPANY-scope key is unreachable from evaluateCompanyWide — and companyReadIsAlwaysExplicit \
+            is what pins it as deliberate. Removing it is a migration and a spec edit, not a \
+            correction here.""";
+
+    /**
+     * Cells where the seeded grant and §A3's table differ on purpose, keyed {@code role / key}.
+     *
+     * <p>Pinned in BOTH directions by {@link #theSeededMatrixIsTheSpecsMatrix}: an entry that stops
+     * diverging fails the build the same way an unexplained divergence does. §162's rule — a
+     * one-directional ignore list cannot report a member that stopped needing to be on it — and the
+     * reason {@code ArchitectureRulesTest}'s and {@code ContractEnumTest}'s both-ways maps were the
+     * populations that held when it swept them.
+     *
+     * <p>All three members are the same fact, and the spec states it in prose immediately under the
+     * table that cannot express it.
+     */
+    private static final Map<String, String> MATRIX_DIVERGENCE_BY_DECISION = Map.of(
+            TEST_LEAD + " / company:read", COMPANY_READ_IS_SEEDED_PER_ROLE,
+            TEST_ENGINEER + " / company:read", COMPANY_READ_IS_SEEDED_PER_ROLE,
+            VIEWER + " / company:read", COMPANY_READ_IS_SEEDED_PER_ROLE);
 
     private static Connection connection;
 
@@ -157,6 +222,85 @@ class SeedDataTest extends IntegrationTestBase {
                         maintained: decide which grouping is right, then fix the other side — the \
                         seed with a corrective migration, or the .ts file.""")
                 .isEqualTo(permissionAreasFromTheSpa());
+    }
+
+    @Test
+    @DisplayName("every cell of spec §A3 is the grant the database holds — seven roles, both ways")
+    void theSeededMatrixIsTheSpecsMatrix() throws SQLException, IOException {
+        // The link everything else in this repository assumes exists.
+        //
+        // Two headers describe a chain — `migration -> SeedDataTest -> spec -> the packages rules`
+        // (roleMatrix.ts, and handoff §213) — and until this test the middle arrow was four
+        // assertions about PROPERTIES, not a comparison of the table. testEngineerToTestLeadBoundary
+        // pins one delta of one pair; automationServiceIsTheSmallestRole and
+        // viewerIsReadOnlyPlusCommentAndExport pin two hand-written lists that name the spec in
+        // their message and never read it; instanceAdminHoldsEveryPermission derives from the
+        // catalogue. Everything else — 385 cells over seven roles — was compared to nothing. A
+        // migration that granted Company Admin one key the spec withholds, or a spec edit that
+        // quietly widened Viewer, passed every test in this class, and then BOTH `packages/` rules
+        // went on answering questions about the catalogue out of the widened document.
+        //
+        // So this is the comparison the surrounding assertions have been standing in for. It does
+        // not replace them: a property test says WHY a cell is what it is and fails with the
+        // argument attached, which is worth more than an equality when the cell is the tier line.
+        // What it adds is the cells nobody thought to name.
+        //
+        // The population, measured before the test was written rather than after it ran green:
+        // three cells, all one documented fact, all in MATRIX_DIVERGENCE_BY_DECISION. So this is a
+        // guard in §201's and §204's sense — a way the two could disagree is removed, rather than a
+        // disagreement repaired — and saying so plainly is the point of measuring first.
+        Map<String, String> unexplained = new TreeMap<>();
+        Set<String> explained = new TreeSet<>();
+
+        for (Map.Entry<String, Set<String>> row : matrixFromTheSpec().entrySet()) {
+            String role = row.getKey();
+            Set<String> declared = row.getValue();
+            Set<String> seeded = grantsOf(role);
+
+            Set<String> extra = new TreeSet<>(seeded);
+            extra.removeAll(declared);
+            Set<String> missing = new TreeSet<>(declared);
+            missing.removeAll(seeded);
+
+            for (String key : extra) {
+                record(unexplained, explained, role, key,
+                        "the database grants it and §A3's row for it says —");
+            }
+            for (String key : missing) {
+                record(unexplained, explained, role, key,
+                        "§A3 grants it and no migration has ever seeded it");
+            }
+        }
+
+        assertThat(unexplained)
+                .as("""
+                        Cells where the seeded catalogue and roles spec §A3 disagree. The SPEC IS \
+                        AUTHORITATIVE (CLAUDE.md's precedence table, and the spec's own header), so \
+                        the repair is normally a corrective migration — but decide which side is \
+                        wrong before writing one, because the other direction is a document that \
+                        two `packages/` rules parse to decide what prose may claim about a role. A \
+                        divergence that is deliberate goes in MATRIX_DIVERGENCE_BY_DECISION with \
+                        the argument for it, not into this assertion.""")
+                .isEmpty();
+
+        assertThat(explained)
+                .as("""
+                        MATRIX_DIVERGENCE_BY_DECISION entries that no longer describe a divergence. \
+                        The seed and the spec now agree at these cells, so the argument for the \
+                        exception has outlived the exception — delete the entry. §162: a \
+                        one-directional ignore list cannot report a member that stopped needing to \
+                        be on it, which is why this half exists at all.""")
+                .containsExactlyInAnyOrderElementsOf(MATRIX_DIVERGENCE_BY_DECISION.keySet());
+    }
+
+    private static void record(Map<String, String> unexplained, Set<String> explained,
+            String role, String key, String how) {
+        String cell = role + " / " + key;
+        if (MATRIX_DIVERGENCE_BY_DECISION.containsKey(cell)) {
+            explained.add(cell);
+            return;
+        }
+        unexplained.put(cell, how);
     }
 
     @Test
@@ -946,6 +1090,119 @@ class SeedDataTest extends IntegrationTestBase {
         }
         assertThat(areas).as("parsed no permission areas out of lib/permissions.ts").isNotEmpty();
         return areas;
+    }
+
+    /**
+     * The permission matrix as roles spec §A3 draws it, role name to granted keys.
+     *
+     * <p>Parsed from the markdown for the same reason {@link #permissionKeysFromContract} parses
+     * the YAML and {@link #permissionAreasFromTheSpa} parses the TypeScript: the spec is the
+     * authority the other three transcriptions defer to, so a comparison against a fourth copy of
+     * it would be worth nothing. {@code packages/client/src/test/roleMatrix.ts} parses the same
+     * tables for the `PROJECT` scope alone; this reads all three scopes, because the seeded rows it
+     * is compared against do not stop at one.
+     *
+     * <p>A parser that silently reads nothing looks exactly like a matrix that agrees, which is the
+     * failure mode every check in this class is written against — so the parse asserts its own
+     * yield three ways: 55 distinct keys (the catalogue, pinned independently by
+     * {@link #catalogueMatchesTheContract}), no empty role, and an unrecognised column heading
+     * fails rather than being skipped.
+     */
+    private static Map<String, Set<String>> matrixFromTheSpec() throws IOException {
+        List<String> lines = Files.readAllLines(locateRepositoryFile(ROLES_SPEC));
+        int start = headingIndex(lines, "### A3.");
+        int end = headingIndex(lines, "### A4.");
+
+        Map<String, Set<String>> held = new TreeMap<>();
+        SPEC_COLUMNS.values().forEach(role -> held.put(role, new TreeSet<>()));
+
+        Set<String> keysSeen = new TreeSet<>();
+        List<String> columns = List.of();
+        for (String line : lines.subList(start, end)) {
+            if (!line.startsWith("|")) {
+                columns = List.of();
+                continue;
+            }
+            List<String> cells = cellsOf(line);
+            if (cells.isEmpty()) {
+                continue;
+            }
+            if ("Permission".equals(cells.get(0))) {
+                columns = cells;
+                continue;
+            }
+            // A table's `|---|:--:|` separator, and any `|`-led line before a header was seen.
+            if (columns.isEmpty() || cells.stream().allMatch(cell -> cell.matches(":?-+:?"))) {
+                continue;
+            }
+
+            List<String> keys = new ArrayList<>();
+            Matcher matcher = SPEC_KEY.matcher(cells.get(0));
+            while (matcher.find()) {
+                keys.add(matcher.group(1));
+            }
+            assertThat(keys)
+                    .as("§A3 row '%s' declares no backticked permission key — the row shape "
+                            + "changed, and a parse that skips it reads as universal agreement",
+                            cells.get(0))
+                    .isNotEmpty();
+            keysSeen.addAll(keys);
+
+            for (int column = 1; column < columns.size(); column++) {
+                String heading = columns.get(column);
+                // The COMPANY and SYSTEM tables end in a prose column that grants nothing.
+                if ("Covers".equals(heading)) {
+                    continue;
+                }
+                String role = SPEC_COLUMNS.get(heading);
+                assertThat(role)
+                        .as("§A3 has a column headed '%s' and this test does not know which seeded "
+                                + "role that is. A column nobody compares is exactly what this "
+                                + "test exists to stop — add it to SPEC_COLUMNS, or, if a seventh "
+                                + "tier really arrived, take the decision first (spec §A2).",
+                                heading)
+                        .isNotNull();
+                // `—` is the only spelling of "not granted" §A3 uses, and its legend says so;
+                // anything else is a grant, possibly narrowed by a rule rather than by the
+                // qualifier column (Automation Service's `case:create`, the one live instance).
+                String cell = column < cells.size() ? cells.get(column) : "—";
+                if (!"—".equals(cell)) {
+                    held.get(role).addAll(keys);
+                }
+            }
+        }
+
+        assertThat(keysSeen)
+                .as("§A3 parsed as %d keys and the catalogue is 55. Either a table stopped matching "
+                        + "the parse or the spec lost a row — both are findings, and neither is "
+                        + "fixed by relaxing this number.", keysSeen.size())
+                .hasSize(55);
+        held.forEach((role, keys) -> assertThat(keys)
+                .as("§A3 parsed no grant at all for %s, which no role in this product has", role)
+                .isNotEmpty());
+        return held;
+    }
+
+    private static List<String> cellsOf(String row) {
+        String[] parts = row.split("\\|", -1);
+        if (parts.length < 3) {
+            return List.of();
+        }
+        return List.of(parts).subList(1, parts.length - 1).stream().map(String::trim).toList();
+    }
+
+    private static int headingIndex(List<String> lines, String heading) {
+        int index = -1;
+        for (int line = 0; line < lines.size() && index < 0; line++) {
+            if (lines.get(line).startsWith(heading)) {
+                index = line;
+            }
+        }
+        assertThat(index)
+                .as("%s no longer contains a '%s' heading — fix this parse rather than deleting "
+                        + "the comparison", ROLES_SPEC, heading)
+                .isNotNegative();
+        return index;
     }
 
     private static Path locateContract() {
