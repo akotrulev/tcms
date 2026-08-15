@@ -372,6 +372,44 @@ export type NotificationDeliveryStatus = S['NotificationDeliveryStatus'];
  */
 export type NotificationEventType = S['NotificationEventType'];
 
+// external identity (§222) — the issuers a company authenticates its own people against
+/**
+ * One sign-in button, as an anonymous caller is allowed to see it.
+ *
+ * Two fields, and the shape is the design: there is no company id and no company name here,
+ * because a domain may be claimed by several companies and naming them would publish the client
+ * roster `POST /auth/providers` exists to withhold (§6r).
+ */
+export type SsoProviderChoice = S['SsoProviderChoice'];
+/**
+ * What discovery answers — **always present, often empty**, and an empty list is the answer for an
+ * unclaimed domain, a disabled provider and a malformed address alike. A screen that told those
+ * apart would rebuild the oracle the endpoint's whole design closes.
+ */
+export type SsoProviderDiscovery = S['SsoProviderDiscovery'];
+/**
+ * A configured issuer, **with no property that could carry its client secret**.
+ *
+ * `clientSecretSet` is the boolean that replaces it: a form needs to know whether one is stored so
+ * it can say "leave blank to keep", and that question is answerable without the value. There is no
+ * read path anywhere in this API that echoes the secret back.
+ */
+export type IdentityProvider = S['IdentityProvider'];
+/**
+ * The write shape — a full replacement in which **five properties are required and nullable**, and
+ * that combination is what a form here has to get right.
+ *
+ * `clientSecret` is the consequential one: `null` is a *keep*, not a clear, because no read path
+ * can echo the stored value back and an administrator renaming a provider has nothing to resend.
+ * Omitting the property instead would be a body the contract refuses — it is on the `required`
+ * list — so the keep is spelled `null`, not absence. This is the opposite arrangement from
+ * {@link NotificationChannelInput}, where the property is optional and absence is the keep.
+ */
+export type IdentityProviderInput = S['IdentityProviderInput'];
+export type IdentityProviderKind = S['IdentityProviderKind'];
+/** The domains one company claims, as a whole set — both the request and the response shape. */
+export type EmailDomains = S['EmailDomains'];
+
 // work
 export type WorkItem = S['WorkItem'];
 export type WorkItemStatus = S['WorkItemStatus'];

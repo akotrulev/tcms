@@ -1,7 +1,12 @@
 /** Who the caller is, how they got in, and what they may do. */
 import { useMutation, useQuery, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import { api, qs } from '../client';
-import type { CurrentUser, EffectivePermissions, InvitationPreview } from '../types';
+import type {
+  CurrentUser,
+  EffectivePermissions,
+  InvitationPreview,
+  SsoProviderDiscovery,
+} from '../types';
 import { keys } from './keys';
 
 export function useCurrentUser(): UseQueryResult<CurrentUser> {
@@ -105,6 +110,27 @@ export function useMyCompanyPermissions(enabled = true): UseQueryResult<Effectiv
     queryFn: ({ signal }) => api.get<EffectivePermissions>('/me/permissions', { signal }),
     enabled,
     staleTime: 5 * 60_000,
+    meta: { handled: true },
+  });
+}
+
+/**
+ * Which sign-in buttons an address reaches (§222).
+ *
+ * **A mutation for a read, deliberately.** The operation is a `POST` because an email address in a
+ * query string lands in access logs, browser history and `Referer` headers — and this one is typed
+ * by somebody who has not signed in and may never do so. Nothing about it is cacheable per key
+ * either: the key would *be* the address.
+ *
+ * `meta: { handled: true }`: the sign-in form owns every outcome, and every outcome here is
+ * silence. A notification saying single sign-on could not be checked tells an anonymous caller
+ * something about this instance and helps nobody — and the endpoint answers 200 with an empty list
+ * for an unclaimed domain, a disabled provider and a malformed address alike (§6r), so a failure
+ * and an empty answer must be indistinguishable on screen.
+ */
+export function useSsoProviders(): UseMutationResult<SsoProviderDiscovery, Error, string> {
+  return useMutation({
+    mutationFn: (email: string) => api.post<SsoProviderDiscovery>('/auth/providers', { email }),
     meta: { handled: true },
   });
 }

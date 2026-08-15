@@ -31,6 +31,7 @@ import type {
   CurrentUser,
   DocPageSummary,
   ExternalLink,
+  IdentityProvider,
   NotificationChannel,
   NotificationDelivery,
   NotificationSubscription,
@@ -38,6 +39,7 @@ import type {
   Project,
   ProjectSettings,
   ResultCounts,
+  SsoProviderChoice,
   Suite,
   Team,
   TestCase,
@@ -382,4 +384,42 @@ export function aCurrentUser(overrides: Partial<CurrentUser> = {}): CurrentUser 
 
 export function anAuthResult(overrides: Partial<AuthResult> = {}): AuthResult {
   return { token: 'token', expiresAt: AT, user: aCurrentUser(), ...overrides }
+}
+
+/**
+ * A configured issuer, disabled — the state registration always produces.
+ *
+ * **There is no secret to override**, and that is the shape rather than an omission of this
+ * factory's: `IdentityProvider` carries `clientSecretSet` and no property that could hold a
+ * credential, so a fixture that grew one would be a build error here rather than a secret in a
+ * response body.
+ */
+export function anIdentityProvider(overrides: Partial<IdentityProvider> = {}): IdentityProvider {
+  return {
+    id: 'f2000000-0000-4000-8000-000000000001',
+    key: 'acme-sso',
+    kind: 'OIDC',
+    displayName: 'Acme Corporate SSO',
+    issuerUri: 'https://issuer.acme.test/realms/acme',
+    clientId: 'tcms',
+    clientSecretSet: true,
+    jitProvisioning: false,
+    autoLinkVerifiedEmail: false,
+    groupClaim: null,
+    enabled: false,
+    createdAt: AT,
+    updatedAt: AT,
+    ...overrides,
+  }
+}
+
+/** One sign-in button, as discovery answers it: an id to navigate to and a label to render. */
+export function anSsoProviderChoice(
+  overrides: Partial<SsoProviderChoice> = {},
+): SsoProviderChoice {
+  return {
+    id: 'f2000000-0000-4000-8000-000000000001',
+    displayName: 'Acme Corporate SSO',
+    ...overrides,
+  }
 }

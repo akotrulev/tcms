@@ -32,6 +32,7 @@ export {
   useInvitationPreview,
   useMyCompanyPermissions,
   useMyPermissions,
+  useSsoProviders,
 } from './identity';
 export {
   useClassification,
@@ -185,12 +186,16 @@ export {
 } from './reporting';
 export {
   useApiTokens,
+  useEmailDomains,
   useGrantRole,
   useCreateTeam,
   useDeleteTeam,
   useInviteUser,
+  useIdentityProviders,
   useIssueApiToken,
   useRevokeApiToken,
+  useSaveEmailDomains,
+  useSaveIdentityProvider,
   usePutTeamMember,
   useRemoveTeamMember,
   useRemoveUser,

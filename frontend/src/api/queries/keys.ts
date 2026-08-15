@@ -187,6 +187,22 @@ export const keys = {
    * entry for the whole company and nothing to key it by.
    */
   apiTokens: ['api-tokens'] as const,
+  /**
+   * The company's identity providers (§222). Company-scoped like {@link apiTokens} and for the same
+   * reason: a provider belongs to the company, and no project segment narrows it. Refused rather
+   * than narrowed for a caller without `company:idp`, so its consumers gate the fetch.
+   */
+  identityProviders: ['identity-providers'] as const,
+  /**
+   * The domains the company claims.
+   *
+   * A sub-resource of the providers on the wire, and deliberately **not** a key under theirs.
+   * TanStack matches an invalidation by prefix, so `['identity-providers', 'email-domains']` —
+   * the obvious spelling, and the one that mirrors the URL — would be swept away by every
+   * `invalidateQueries(keys.identityProviders)`. The two are edited apart, so a save on one must
+   * leave the other's cache alone.
+   */
+  emailDomains: ['identity-provider-email-domains'] as const,
   workItems: (p: string, mine: boolean) => ['work-items', p, mine] as const,
   /**
    * The prefix every board shares — invalidate this and all three refresh.

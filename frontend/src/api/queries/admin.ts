@@ -10,6 +10,9 @@ import { api } from '../client';
 import type {
   ApiToken,
   ApiTokenInput,
+  EmailDomains,
+  IdentityProvider,
+  IdentityProviderInput,
   IssuedApiToken,
   Role,
   RoleAssignment,
@@ -378,6 +381,84 @@ export function useRevokeApiToken(): UseMutationResult<void, Error, string> {
     meta: { handled: true },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.apiTokens });
+    },
+  });
+}
+
+/**
+ * The company's identity providers (§222) — `company:idp`'s first read in this SPA.
+ *
+ * **`enabled` is the gate's verdict, not a convenience**, and it is `useApiTokens`' argument
+ * arriving unchanged: `GET /identity-providers` *refuses* a caller without `company:idp` rather
+ * than answering an empty list, so firing it ungated turns a correct 403 into "Something didn't
+ * load" across a page that is working as designed.
+ *
+ * **Disabled providers are in this list and stay in it.** A list that hid them could not be used to
+ * enable one — and registration always produces a disabled provider, so the first row an
+ * administrator ever sees here would otherwise be invisible.
+ */
+export function useIdentityProviders(enabled: boolean): UseQueryResult<IdentityProvider[]> {
+  return useQuery({
+    queryKey: keys.identityProviders,
+    queryFn: ({ signal }) => api.get<IdentityProvider[]>('/identity-providers', { signal }),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/** The domains this company claims. Gated for `useIdentityProviders`' reason — same permission. */
+export function useEmailDomains(enabled: boolean): UseQueryResult<EmailDomains> {
+  return useQuery({
+    queryKey: keys.emailDomains,
+    queryFn: ({ signal }) => api.get<EmailDomains>('/identity-providers/email-domains', { signal }),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Registers or reconfigures a provider. One hook for both, because the screen has one form: the
+ * only difference is whether an id exists, and `key`/`kind` are ignored on the edit anyway.
+ *
+ * **A null `clientSecret` is a keep, not a clear** — no read path can echo the secret back, so an
+ * administrator renaming a provider has nothing to resend. The property is *required* by
+ * `IdentityProviderInput`, so unlike a notification channel's secret the keep cannot be spelled as
+ * an omission; the form sends `null` and the server leaves the stored value alone.
+ */
+export function useSaveIdentityProvider(): UseMutationResult<
+  IdentityProvider,
+  Error,
+  { providerId?: string; input: IdentityProviderInput }
+> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ providerId, input }) =>
+      providerId
+        ? api.put<IdentityProvider>(`/identity-providers/${encodeURIComponent(providerId)}`, input)
+        : api.post<IdentityProvider>('/identity-providers', input),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.identityProviders });
+    },
+  });
+}
+
+/**
+ * Replaces the whole claimed set — the unit an administrator thinks in, and there is no lifecycle
+ * on a claim to preserve.
+ *
+ * Only the domains are invalidated. Claiming a domain changes which addresses discovery resolves to
+ * this company's providers and changes no provider, so sweeping the provider list here would refetch
+ * a list that cannot have moved.
+ */
+export function useSaveEmailDomains(): UseMutationResult<EmailDomains, Error, string[]> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (domains: string[]) =>
+      api.put<EmailDomains>('/identity-providers/email-domains', { domains }),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.emailDomains });
     },
   });
 }
