@@ -2620,3 +2620,10 @@ honest state and it is what the browser/Keycloak pass in Task 8 exists to change
 because what stops it is RLS rather than a branch: company A's provider asserting a `sub` that
 exists in company B must not resolve to B's user. `FederatedIdentityServiceTest`'s header says why
 it is absent there. It is the single most important row in the browser/Keycloak queue.
+
+## §224 — the decoder that outlived its provider, and the table with no deleter
+
+| id | Mutation | Expected red | Why this matters |
+|---|---|---|---|
+| `§224 SP-1` | In `OidcIdTokenVerifier`, change the cache key back to `expected.providerId()` | ✅ **RUN 2026-08-15 — RED by construction.** `OidcIdTokenVerifierTest.anEditedProviderIsNotServedItsOldChecks` (the mutation is exactly the state the test was written against) | Keyed by row id, the decoder built on a provider's first callback kept the old issuer, audience and `jwks_uri` until JVM restart — so the admin screen's whole reason to exist (editing `issuerUri`/`clientId`) silently did not take effect, and `OidcProperties.discoveryTtl`'s stated purpose (*"a rotated `jwks_uri` must eventually be picked up without a restart"*) was defeated one class downstream of where it is enforced. |
+| `§224 SP-2` | Delete the `@Scheduled` annotation from `SsoLoginAttemptPurge.purgeExpired` | **Predicted: zero reds — and that is the row.** `SsoLoginAttemptPurgeTest` calls the method directly, so the *wiring* is defended by review alone | Nothing else ever deletes an attempt row, and the writer is unauthenticated: every anonymous `GET …/authorize` that resolves an enabled provider inserts one. Un-wired, the table `V53` calls "empty in steady state" grows with crawler traffic until an operator notices the disk. The live observation is cheap: on a running stack, `SELECT count(*) FROM sso_login_attempt WHERE expires_at < now() - interval '2 hours'` must be **0** once the app has been up past the first hourly tick. |
