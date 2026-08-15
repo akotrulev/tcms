@@ -2666,7 +2666,7 @@ git commit -m "§NNN phase 8 — the Kind select stops being a one-option contro
 - Modify: `frontend/src/features/auth/LoginPage.test.tsx`
 - Modify: `frontend/src/test/fixtures.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```tsx
   it('renders a directory provider as a mode switch, not a navigation', async () => {
@@ -2720,7 +2720,7 @@ git commit -m "§NNN phase 8 — the Kind select stops being a one-option contro
   });
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 ```bash
 cd frontend && npm run test:run -- LoginPage
@@ -2728,7 +2728,7 @@ cd frontend && npm run test:run -- LoginPage
 
 Expected: FAIL — every provider is currently a navigation.
 
-- [ ] **Step 3: The mutation**
+- [x] **Step 3: The mutation**
 
 In `api/queries/auth.ts`, beside the existing sign-in seam:
 
@@ -2756,7 +2756,7 @@ export function useDirectoryLogin(): UseMutationResult<
 }
 ```
 
-- [ ] **Step 4: The mode switch**
+- [x] **Step 4: The mode switch**
 
 `LoginPage` grows one piece of state — `const [directory, setDirectory] = useState<SsoProviderChoice | null>(null)` —
 and three consequences:
@@ -2775,7 +2775,7 @@ the two would differ only by a label nobody reads.
 The refusal copy is the existing one, unchanged and deliberately: a directory refusal and a local
 refusal must read identically, or the pair of them tells a stranger which accounts are federated.
 
-- [ ] **Step 5: Run the tests and the gates**
+- [x] **Step 5: Run the tests and the gates**
 
 ```bash
 cd frontend && npm run test:run && npm run build && npm run lint
@@ -2784,7 +2784,7 @@ cd frontend && npm run test:run && npm run build && npm run lint
 Expected: PASS, 0 warnings. `renderFailures.test.tsx` sweeps for hand-built query clients — use
 `createTestQueryClient`.
 
-- [ ] **Step 6: Add the browser-queue rows**
+- [x] **Step 6: Add the browser-queue rows**
 
 Append to `docs/verification/frontend-browser-checks.md`, in the lane whose state has a provisioned
 company with an enabled provider, with stable ids continuing the file's sequence:
@@ -2802,7 +2802,7 @@ than skipping it silently — the options are an `osixia/openldap` service in `c
 Keycloak, or driving these four rows against a customer directory in the lab, and it is the browser
 pass's charter to choose.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/ docs/verification/frontend-browser-checks.md

@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
 import { theme } from '../../app/theme'
 import { AuthContext, type AuthValue } from '../../auth/authContextValue'
-import { aCurrentUser, anSsoProviderChoice } from '../../test/fixtures'
+import { aCurrentUser, anAuthResult, anSsoProviderChoice } from '../../test/fixtures'
 import { createTestQueryClient } from '../../test/queryClient'
 import { drivingAFailedWrite } from '../../test/renderFailures'
 import { LoginPage } from './LoginPage'
@@ -32,12 +32,13 @@ const PROVIDER_ID = 'f2000000-0000-4000-8000-000000000001'
 function renderLogin(
   locationState?: Record<string, unknown>,
   login: AuthValue['login'] = async () => aCurrentUser(),
+  adoptSession: AuthValue['adoptSession'] = async () => aCurrentUser(),
 ) {
   const session: AuthValue = {
     user: null,
     status: 'ready',
     login,
-    adoptSession: async () => aCurrentUser(),
+    adoptSession,
     logout: () => {},
   }
   return render(
@@ -222,5 +223,109 @@ describe('LoginPage — single sign-on', () => {
     // auth gate's `from` across the round trip, for `SsoCallbackPage` to consume.
     expect(consumeSsoReturnPath()).toBe('/projects/p1/runs/r9')
     expect(assign).toHaveBeenCalled()
+  })
+
+  // ===================================================================
+  // The directory mode — §223. An LDAP provider is a mode switch on this
+  // screen, not a navigation: there is no third party to send a browser to.
+  // ===================================================================
+
+  /** Discovery answers a directory; the ldap login endpoint answers a session. */
+  function stubDirectoryDiscovery(loginAnswer: () => Promise<unknown> = async () => anAuthResult()) {
+    return vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
+      if (url === '/auth/providers') {
+        return {
+          providers: [
+            anSsoProviderChoice({ id: PROVIDER_ID, displayName: 'Acme Directory', kind: 'LDAP' }),
+          ],
+        }
+      }
+      return loginAnswer()
+    })
+  }
+
+  it('renders a directory provider as a mode switch, not a navigation', async () => {
+    const user = userEvent.setup()
+    stubDirectoryDiscovery()
+    const assign = vi.fn()
+    vi.spyOn(window, 'location', 'get').mockReturnValue({
+      ...window.location,
+      assign,
+    } as unknown as Location)
+
+    renderLogin()
+    await enterAddress(user, 'dana@acme.test')
+    await user.click(await screen.findByTestId('Login.Provider'))
+
+    expect(assign).not.toHaveBeenCalled()
+    expect(screen.getByText(/signing in with your acme directory password/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/directory password/i)).toBeInTheDocument()
+  })
+
+  it('posts the directory password to the provider’s own endpoint and adopts the session', async () => {
+    const user = userEvent.setup()
+    const post = stubDirectoryDiscovery()
+    const adoptSession = vi.fn(async () => aCurrentUser())
+
+    renderLogin(undefined, undefined, adoptSession)
+    await enterAddress(user, 'dana@acme.test')
+    await user.click(await screen.findByTestId('Login.Provider'))
+    await user.type(screen.getByTestId('Login.PasswordField'), 'directory-password')
+    await user.click(screen.getByTestId('Login.SubmitButton'))
+
+    expect(post).toHaveBeenCalledWith(`/auth/ldap/${PROVIDER_ID}/login`, {
+      email: 'dana@acme.test',
+      password: 'directory-password',
+      rememberMe: true,
+    })
+    // The token goes through adoptSession — tcms.token keeps exactly one writer.
+    await waitFor(() => expect(adoptSession).toHaveBeenCalledWith(anAuthResult().token))
+  })
+
+  it('a refused directory sign-in says one sentence and names no cause', async () => {
+    const user = userEvent.setup()
+    // The failed write IS the subject: the refusal must reach the screen as the same sentence a
+    // wrong TCMS password produces, or the pair of them tells a stranger which accounts are
+    // federated.
+    drivingAFailedWrite()
+    stubDirectoryDiscovery(async () => {
+      throw new ApiError(401, '')
+    })
+
+    renderLogin()
+    await enterAddress(user, 'dana@acme.test')
+    await user.click(await screen.findByTestId('Login.Provider'))
+    await user.type(screen.getByTestId('Login.PasswordField'), 'wrong')
+    await user.click(screen.getByTestId('Login.SubmitButton'))
+
+    const alert = await screen.findByTestId('Login.Error')
+    expect(alert).toHaveTextContent("That email and password don't match an account.")
+    expect(alert).not.toHaveTextContent(/directory|provider|ldap|bind/i)
+  })
+
+  it('backs out to the local password without a reload', async () => {
+    const user = userEvent.setup()
+    stubDirectoryDiscovery()
+
+    renderLogin()
+    await enterAddress(user, 'dana@acme.test')
+    await user.click(await screen.findByTestId('Login.Provider'))
+    await user.click(screen.getByTestId('Login.UseLocalPassword'))
+
+    expect(screen.queryByTestId('Login.DirectoryMode')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/^password/i)).toBeInTheDocument()
+  })
+
+  it('drops directory mode when the address is edited, with the buttons', async () => {
+    const user = userEvent.setup()
+    stubDirectoryDiscovery()
+
+    renderLogin()
+    await enterAddress(user, 'dana@acme.test')
+    await user.click(await screen.findByTestId('Login.Provider'))
+    await user.type(screen.getByTestId('Login.EmailField'), 'x')
+
+    // A directory chosen for one address must not collect a different address's password.
+    await waitFor(() => expect(screen.queryByTestId('Login.DirectoryMode')).not.toBeInTheDocument())
   })
 })

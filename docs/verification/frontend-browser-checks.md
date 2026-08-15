@@ -2605,3 +2605,22 @@ it holds only when the sign-in started from `/login` directly. `SF-1` is the gen
 | `§224 SF-1` | While signed out, paste a deep URL — a specific run or case under `/projects/…` — into the address bar. Get bounced to the sign-in screen, type the claimed-domain address, and go through the **provider button**. Watch `sessionStorage` before the redirect leaves | The app lands **back on the pasted URL**, signed in — not on the project list. Before the redirect, `sessionStorage` holds the path under `tcms.sso.return-path`; after the landing it is **gone** (consumed, so a later sign-in cannot replay it). ⚠️ The stash carries a **path**: put `https://evil.test/x` into that key by hand, complete a sign-in, and the app must land on `/` — a stored absolute URL followed here is an open redirect assembled out of a convenience. |
 | `§224 SF-2` | Accept an invitation, arrive on the sign-in screen with the address **prefilled**, and touch nothing | The provider buttons appear **without any blur** — discovery fires once on mount for the prefilled address (one `POST /auth/providers` in devtools, not two). Until §224 the just-accepted invitee was the one person never shown their company's buttons, because a prefilled field never blurs. |
 | `§224 SF-3` | Let a password manager autofill both fields and submit a wrong password. Then, separately: type a claimed-domain address, tab out so the buttons appear, and edit one character of the address | After the 401: the one-sentence failure **and** the provider buttons, arriving from a discovery fired by the rejected attempt — an SSO-only company's people otherwise dead-end here with a wrong sentence and no way in. After the edit: the buttons **disappear** until the next blur asks again — a button still offering the previous address's providers starts a sign-in nobody asked for. |
+
+## §223 — the directory sign-in, and the button that switches instead of navigating
+
+**Four rows, none run** (§65). Ids are `§223 LD-*`; `LD` is unused elsewhere in this file.
+
+**This row set needs a fixture no lane creates today: a company with an enabled LDAP provider and
+a reachable directory.** The compose stack has Keycloak and no LDAP server. The options are an
+`osixia/openldap` service in `compose.yaml` beside Keycloak, or driving these four rows against a
+customer directory in the lab — it is this pass's charter to choose, and "not driven, and here is
+why" is a legitimate outcome where a silent skip is not. The suite already drives the whole flow
+against an in-memory LDAPS server (`LdapLoginEndpointTest`), so what these rows add is the browser's
+own half: the mode switch, the copy, and the absence of any navigation.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§223 LD-1` | Type an address at a claimed domain whose company has an enabled LDAP provider, tab out, and click the provider button | A button labelled from `displayName`; clicking it **switches the form** — the heading gains *"Signing in with your … password."*, the password label becomes **Directory password** — and the address bar does not move. A navigation here is the OIDC control on the wrong kind. |
+| `§223 LD-2` | Submit a wrong password in directory mode | **One sentence, identical to a wrong TCMS password** — "That email and password don't match an account." Anything naming the directory, the provider or a bind is an oracle for which accounts are federated. |
+| `§223 LD-3` | Click **Use my TCMS password instead**, then sign in locally | Local sign-in works from the same screen with no reload — the mode note and the Directory-password label are gone, and the same two inputs carry the local attempt. |
+| `§223 LD-4` | A company with both an OIDC and an LDAP provider enabled: type the address, tab out | **Two buttons; one navigates, one switches.** The OIDC one leaves for the issuer as `§222 SS-4` proved; the LDAP one stays and switches the form. This is `SsoProviderChoice.kind` doing its one job on screen. |

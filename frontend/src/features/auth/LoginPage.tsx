@@ -1,12 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Alert, Box, Button, Checkbox, FormControlLabel, Stack, TextField, Typography } from '@mui/material';
 import type { ChangeEvent, FocusEvent } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError, BASE } from '../../api/client';
-import { useSsoProviders } from '../../api/queries';
+import { useDirectoryLogin, useSsoProviders } from '../../api/queries';
+import type { SsoProviderChoice } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
 import { useAuth } from '../../auth/useAuth';
 import { offerToSaveCredentials } from '../../lib/credentials';
@@ -45,9 +46,20 @@ function describeSignInFailure(error: unknown): string {
 }
 
 export function LoginPage() {
-  const { user, login } = useAuth();
+  const { user, login, adoptSession } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  /**
+   * The directory whose password this screen is currently collecting, or null for the local form.
+   *
+   * An LDAP provider is a MODE SWITCH rather than a navigation — there is no third party to send
+   * the browser to, which is the whole difference between the two kinds (§223 D1). One pair of
+   * inputs, not two: the email is already typed and is what discovery routed on, so directory mode
+   * reuses both controls rather than adding a second password field that differs only by label.
+   */
+  const [directory, setDirectory] = useState<SsoProviderChoice | null>(null);
+  const directoryLogin = useDirectoryLogin();
 
   const navState = location.state as {
     from?: string;
@@ -87,6 +99,9 @@ export function LoginPage() {
    */
   const onEmailChange = () => {
     if (!discovery.isIdle) discovery.reset();
+    // The same fact for the mode switch: a directory chosen for one address must not collect a
+    // different address's password.
+    setDirectory(null);
   };
 
   /**
@@ -142,6 +157,23 @@ export function LoginPage() {
 
   const onSubmit = handleSubmit(async (data) => {
     try {
+      if (directory) {
+        /*
+          The directory half. The endpoint answers AuthResult — the same body local sign-in
+          returns — and `adoptSession` is the seam that writes it, so `tcms.token` still has
+          exactly one writer. The password is NOT offered to the browser's manager: it is the
+          customer's directory credential, not an account on this product.
+        */
+        const result = await directoryLogin.mutateAsync({
+          providerId: directory.id,
+          email: data.email,
+          password: data.password,
+          rememberMe: data.rememberMe,
+        });
+        await adoptSession(result.token);
+        navigate(from, { replace: true });
+        return;
+      }
       const signedIn = await login(data.email, data.password, data.rememberMe);
       /*
         Offer the credential to the browser's password manager, and only now — the contract of the
@@ -242,9 +274,19 @@ export function LoginPage() {
             p: 3,
           }}
         >
-          <Typography variant="h2" component="h1" sx={{ mb: 2.5 }}>
+          <Typography variant="h2" component="h1" sx={{ mb: directory ? 1 : 2.5 }}>
             Sign in
           </Typography>
+
+          {directory && (
+            <Typography
+              variant="body2"
+              sx={{ mb: 2, color: 'text.secondary' }}
+              data-testid={`${TestIdPrefix}.DirectoryMode`}
+            >
+              Signing in with your {directory.displayName} password.
+            </Typography>
+          )}
 
           {acceptedEmail && (
             <Alert severity="success" sx={{ mb: 2 }} data-testid={`${TestIdPrefix}.Accepted`}>
@@ -307,7 +349,7 @@ export function LoginPage() {
             />
 
             <TextField
-              label="Password"
+              label={directory ? 'Directory password' : 'Password'}
               type="password"
               autoComplete="current-password"
               id="current-password"
@@ -342,6 +384,16 @@ export function LoginPage() {
             >
               {isSubmitting ? 'Signing in…' : 'Sign in'}
             </Button>
+
+            {directory && (
+              <Button
+                size="small"
+                onClick={() => setDirectory(null)}
+                data-testid={`${TestIdPrefix}.UseLocalPassword`}
+              >
+                Use my TCMS password instead
+              </Button>
+            )}
           </Stack>
         </Box>
 
@@ -371,6 +423,15 @@ export function LoginPage() {
                   why `BASE` is exported rather than spelled again here.
                 */
                 onClick={() => {
+                  /*
+                    Which CONTROL a provider is follows its kind (§223): an LDAP route has no
+                    third party to send the browser to, so it switches this form into directory
+                    mode rather than navigating.
+                  */
+                  if (provider.kind === 'LDAP') {
+                    setDirectory(provider);
+                    return;
+                  }
                   /*
                     The router state dies with this navigation — the browser is leaving for the
                     issuer — so the deep link the auth gate preserved is handed to sessionStorage

@@ -29,6 +29,7 @@ export { base, keys } from './keys';
 export {
   useAcceptInvitation,
   useCurrentUser,
+  useDirectoryLogin,
   useInvitationPreview,
   useMyCompanyPermissions,
   useMyPermissions,

@@ -2,6 +2,7 @@
 import { useMutation, useQuery, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import { api, qs } from '../client';
 import type {
+  AuthResult,
   CurrentUser,
   EffectivePermissions,
   InvitationPreview,
@@ -131,6 +132,29 @@ export function useMyCompanyPermissions(enabled = true): UseQueryResult<Effectiv
 export function useSsoProviders(): UseMutationResult<SsoProviderDiscovery, Error, string> {
   return useMutation({
     mutationFn: (email: string) => api.post<SsoProviderDiscovery>('/auth/providers', { email }),
+    meta: { handled: true },
+  });
+}
+
+/**
+ * Signing in against a company's own directory (§223).
+ *
+ * A `POST` and not a navigation, which is the whole difference between the two kinds of provider:
+ * an LDAP route has no third party to send a browser to, so the password is collected on the
+ * sign-in screen. The answer is `AuthResult` — the same body `POST /auth/login` returns — and the
+ * screen hands its token to `adoptSession`, so there is still exactly one writer of `tcms.token`.
+ *
+ * `meta: { handled: true }` for the local sign-in's reason: the form owns every outcome, the 401
+ * is empty by design, and a corner notification would say nothing the one sentence does not.
+ */
+export function useDirectoryLogin(): UseMutationResult<
+  AuthResult,
+  Error,
+  { providerId: string; email: string; password: string; rememberMe: boolean }
+> {
+  return useMutation({
+    mutationFn: ({ providerId, ...credentials }) =>
+      api.post<AuthResult>(`/auth/ldap/${encodeURIComponent(providerId)}/login`, credentials),
     meta: { handled: true },
   });
 }
