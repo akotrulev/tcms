@@ -42,7 +42,7 @@ import { parse } from 'yaml';
 /** A node of the parsed document. Untyped by intent — this walks a schema, it does not model one. */
 type Node = Record<string, unknown>;
 
-interface Document {
+export interface Document {
   paths: Record<string, Node>;
   components: Node;
   servers?: { url?: string }[];
@@ -499,4 +499,16 @@ let prefix: string | undefined;
 function serverPrefix(): string {
   prefix ??= (spec().servers?.[0]?.url ?? '').replace(/\/$/, '');
   return prefix;
+}
+
+/**
+ * The parsed contract itself.
+ *
+ * Outside the shared region for `successStatusesOf`'s reason, one step further along: the SPA's copy
+ * exists to check one exchange at a time and has no use for the whole document. `responseCredentials.test.ts`
+ * walks every operation, so it needs the document rather than one schema, and re-reading 550 kB of
+ * YAML in a second module would parse the contract twice per test run.
+ */
+export function contractDocument(): Document {
+  return spec();
 }
