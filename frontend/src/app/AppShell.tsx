@@ -32,6 +32,7 @@ import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import InventoryOutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined';
+import LoginOutlinedIcon from '@mui/icons-material/LoginOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -292,6 +293,13 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
           list would have told, and the screen itself already says who to ask.
         */
         { label: 'API tokens', to: '/admin/tokens', icon: <KeyOutlinedIcon fontSize="small" /> },
+        /*
+          Company, beside the two above, and **ungated for the same reason they are**: the screen
+          renders its own refusal naming who can configure a provider, which is
+          `NotificationSettingsPage`'s precedent and what makes a pasted link behave the same for
+          everybody. Hiding it would teach a Test Lead this product has no single sign-on at all.
+        */
+        { label: 'Single sign-on', to: '/admin/sso', icon: <LoginOutlinedIcon fontSize="small" /> },
       ],
     },
   ];
