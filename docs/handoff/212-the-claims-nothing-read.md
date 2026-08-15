@@ -55,9 +55,10 @@ Seven more were repaired in the same pass and are **outside the rule's reach** �
 `packages/client/src/test/tierClaims.test.ts`, over the four corpora `citedFiles.test.ts` already
 reads. Its instrument is `roleMatrix.ts`, which **parses the roles spec's §A3 tables**.
 
-1. **It reads the spec, not a copy.** §211's rule compares against `AGENT_KEYS`, a hand-kept
+1. **It reads the spec, not a copy.** §211's rule compares against `AGENT_KEYS`, ~~a hand-kept
    constant whose own comment says it is *"only as current as the last slice that moved a grant
-   remembered to update it."* A second such constant, in a second package, for a rule sweeping four
+   remembered to update it."*~~ → **§213 made that constant read this same parse**, so the second
+   place is gone. A second such constant, in a second package, for a rule sweeping four
    corpora, is a third place for the catalogue to be wrong. The chain is
    `migration → SeedDataTest → spec → this rule`, and only the last link is new: `SeedDataTest`
    still pins the seeded rows, and this pins the prose against the spec.
@@ -174,7 +175,11 @@ six `description` strings.
 - **The roles spec is not in the corpus, deliberately** — it is the document the rule parses, and a
   rule that read its prose against its own tables would settle a question with the answer. Its §A3
   legend is exactly where a stale claim did survive this pass until it was found by hand.
-- **`AGENT_KEYS` is still a hand-kept copy.** §211's rule over tool descriptions reads it, and this
+- ~~**`AGENT_KEYS` is still a hand-kept copy.** §211's rule over tool descriptions reads it, and this
   one does not; the two now answer the same question from different sources, which is a
   disagreement waiting to happen and is left as one because the honest fix is for the MCP rule to
-  read `roleMatrix.ts` too, across a package boundary that currently has no test dependency.
+  read `roleMatrix.ts` too, across a package boundary that currently has no test dependency.~~ →
+  **DONE 2026-08-15, [§213](213-the-copy-the-spec-could-have-answered.md), and the stated reason for
+  leaving it was false**: `harness.ts` has imported across that boundary since §203, twelve lines
+  above the constant. The two rules read one source now. Population zero — the hand-kept 32 keys and
+  §A3's Test Engineer column agreed exactly.

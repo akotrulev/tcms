@@ -141,12 +141,14 @@ passes on the three sentences that are still true (`suite:approve`, `plan:approv
 `tcms_review_verdict`'s *"approval is a separate permission this credential does not hold"*, which
 names no key at all) and reddens on exactly the two that are not.
 
-**Know what it is measured against.** `AGENT_KEYS` is this package's *copy* of what `Agent` is
+**Know what it is measured against.** ~~`AGENT_KEYS` is this package's *copy* of what `Agent` is
 seeded with — a test constant, only as current as the last slice that moved a grant remembered to
-update it. `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse` pins the real thing against the
-real seed; this pins the prose against the copy. Two hops, and it is the best available from a stack
-that cannot read the migration. Saying so is the point: a check whose reference could drift is worth
-having and is not worth trusting further than its reference.
+update it.~~ → **superseded 2026-08-15 (§213): it is a parse of the roles spec's §A3**, so the
+reference is the document that decides the catalogue rather than a third copy of it.
+`SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse` pins the real thing against the
+real seed; this pins the prose against ~~the copy~~ the spec. Two hops either way, and it is the
+best available from a stack that cannot read the migration. Saying so is the point: a check whose
+reference could drift is worth having and is not worth trusting further than its reference.
 
 ## `tcms_record_result` amends now, and its declaration cannot say so
 

@@ -83,8 +83,12 @@ surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the fl
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `8d47a0f` (§212 phase 2; §212's docs commit lands immediately after this
-line. Suite on `shanks` still **1349 across 100** — §212 added no frontend test and changed no
+**Baseline commit:** `0e774e4` (§213 phase 1; §213's docs commit lands immediately after this line.
+**§213 touched no `frontend/` byte at all** — four test-lane files in `packages/`, so this suite was
+not run and is still **1349 across 100**. Note that the two `packages/` rules which *scan* this tree
+— `citedFiles` and `tierClaims` — ran green, so a stale citation or tier claim here would still have
+reddened, in the packages job. Before it ~~`8d47a0f`, §212 phase 2~~, where the suite was also
+**1349 across 100** — §212 added no frontend test and changed no
 frontend behaviour, only comments and `schema.d.ts` prose. Before it ~~`5198d1f`, §211 phase 3~~,
 also 1349. Before it ~~`be0ac69`, §209 phase 2~~, where the suite
 went to 1349 (+8: five in `ArtifactDialogs.test.tsx`, three in `ArtifactTable.test.tsx`). Before it: ~~`9de1eac`, §207's docs commit, with §208 at 1341~~ —

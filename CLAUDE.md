@@ -161,6 +161,19 @@ npm run test:run --workspaces     # ~~211~~ ~~241~~ ~~260~~ ~~269~~ ~~302~~ ~~31
                                   # nothing checks it — and two descriptions were false in the
                                   # direction that matters most: a model reads them BEFORE deciding
                                   # whether to try, so the failure has no error and no symptom.
+                                  # **Since §213 `AGENT_KEYS` IS NOT A LIST** — it is `agentKeys()`,
+                                  # a parse of the roles spec's §A3 (Test Engineer's column entire;
+                                  # §A6a's `company:read` is COMPANY scope and not in that parse, so
+                                  # a `company:read` appearing there THROWS). Do not re-hand-key it.
+                                  # The chain is `migration → SeedDataTest → spec → both packages
+                                  # rules`, and the only link that sees `V52`'s rows is
+                                  # `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse` — a spec
+                                  # that drifts from the seed reddens the BACKEND suite, which
+                                  # `ci.yml` does not run. §213 also made `server.test.ts`'s
+                                  # `serves the whole surface` compare against the WHOLE registry:
+                                  # `toContain` one name plus a `tcms_` prefix passes on any subset,
+                                  # and `tools/list` is permission-filtered, so a narrowed grant
+                                  # hid tools and read green.
                                   # **Since §205 `writeConformance.test.ts` exists in cli/ and mcp/**
                                   # — eight comments had cited it (and a `conformance.test.ts`) since
                                   # §139/§140 and neither file was real; the MCP's registry check
