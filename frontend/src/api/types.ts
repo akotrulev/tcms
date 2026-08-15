@@ -337,6 +337,41 @@ export type ArtifactInput = S['ArtifactInput'];
  */
 export type ArtifactFileInput = S['ArtifactFileInput'];
 
+// integration (§218) — where a project sends its notices, and what came back
+/**
+ * A channel, **without its credential and with no property that could carry one**.
+ *
+ * `secretHint` is the masked tail of a live webhook URL — enough to recognise which room is
+ * configured, far short of enough to post to it — and it is null for a kind that has no credential
+ * of its own. Nothing in this SPA ever holds a plaintext webhook: it travels one way, on
+ * {@link NotificationChannelInput}.
+ */
+export type NotificationChannel = S['NotificationChannel'];
+/**
+ * The write shape — a full replacement, with **one field that does not obey that**.
+ *
+ * `secret` absent on the `PUT` means *unchanged*, which inverts this API's usual convention. The
+ * screen never shows a secret, so an edit form has nothing to send back, and a `''` or a `null`
+ * there would blank the credential of every channel anybody renamed — a failure with no error,
+ * arriving hours later as notifications that stopped.
+ */
+export type NotificationChannelInput = S['NotificationChannelInput'];
+export type NotificationChannelKind = S['NotificationChannelKind'];
+export type NotificationSubscription = S['NotificationSubscription'];
+export type NotificationSubscriptionInput = S['NotificationSubscriptionInput'];
+export type NotificationDelivery = S['NotificationDelivery'];
+export type NotificationDeliveryStatus = S['NotificationDeliveryStatus'];
+/**
+ * What a channel may subscribe to — the live vocabulary, and deliberately **not** the type of
+ * `NotificationDelivery.eventType`.
+ *
+ * A delivery row is historical: it may name an event this instance recorded once and no longer
+ * sends, so the contract types that one as a bare string. Rendering a delivery through a map keyed
+ * on this union is therefore a lookup that may miss, which is why `labels.ts` gives that column a
+ * fallback and the subscription controls do not need one.
+ */
+export type NotificationEventType = S['NotificationEventType'];
+
 // work
 export type WorkItem = S['WorkItem'];
 export type WorkItemStatus = S['WorkItemStatus'];

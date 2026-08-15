@@ -31,6 +31,9 @@ import type {
   CurrentUser,
   DocPageSummary,
   ExternalLink,
+  NotificationChannel,
+  NotificationDelivery,
+  NotificationSubscription,
   PlanStatistics,
   Project,
   ProjectSettings,
@@ -295,6 +298,75 @@ export function anArtifact(overrides: Partial<Artifact> = {}): Artifact {
 
 export function anExternalLink(overrides: Partial<ExternalLink> = {}): ExternalLink {
   return { id: 'el1', targetKind: 'EXTERNAL_URL', relationship: 'VERIFIES', ...overrides }
+}
+
+/**
+ * One notification channel (§218).
+ *
+ * `secretHint: null` and `subscriptions: []` are the inert defaults this file's header calls for,
+ * and the first of them is more than scenery: null is what the contract says for a kind with no
+ * credential of its own, so a webhook fixture that wants a hint must say so. **There is no `secret`
+ * property to override** — `NotificationChannel` has none, deliberately, and a fixture that grew one
+ * would be a build error here rather than a credential in a response body.
+ */
+export function aNotificationChannel(
+  overrides: Partial<NotificationChannel> = {},
+): NotificationChannel {
+  return {
+    id: 'nc1',
+    projectId: 'p1',
+    kind: 'SLACK',
+    name: 'A channel',
+    enabled: true,
+    recipients: [],
+    secretHint: null,
+    subscriptions: [],
+    createdAt: AT,
+    updatedAt: AT,
+    lockVersion: 0,
+    ...overrides,
+  }
+}
+
+/**
+ * One event a channel wants.
+ *
+ * `minFailures: 0` is the contract's own default and means *every occurrence*, which is the least
+ * interesting body the schema admits — a test that cares about the threshold says so.
+ */
+export function aNotificationSubscription(
+  overrides: Partial<NotificationSubscription> = {},
+): NotificationSubscription {
+  return {
+    id: 'ns1',
+    eventType: 'execution.run_completed',
+    minFailures: 0,
+    ...overrides,
+  }
+}
+
+/**
+ * One delivery attempt.
+ *
+ * `eventType` is a bare **string** here because the contract types it as one — a historical row may
+ * name an event this instance no longer sends. Serving a live enum member where the contract says
+ * string is fine and is what this default does; the reverse is what would fail.
+ */
+export function aNotificationDelivery(
+  overrides: Partial<NotificationDelivery> = {},
+): NotificationDelivery {
+  return {
+    id: 'nd1',
+    channelId: 'nc1',
+    eventId: '11111111-1111-4111-8111-111111111111',
+    eventType: 'execution.run_completed',
+    status: 'SENT',
+    attempt: 1,
+    error: null,
+    createdAt: AT,
+    updatedAt: AT,
+    ...overrides,
+  }
 }
 
 export function aCurrentUser(overrides: Partial<CurrentUser> = {}): CurrentUser {

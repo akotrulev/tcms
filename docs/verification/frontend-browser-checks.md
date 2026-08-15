@@ -2457,3 +2457,39 @@ links will do) plus one plan-scope artifact on the lane's plan. `AR-1` creates t
 | `§209 AR-6` | **L2**, as a **Test Engineer** registering at **PLAN** scope while the register is filtered to the project: open **Replaces** | The project's documents must **not** be listed. This is the escalation the same-scope rule exists to stop — a plan-scope note retiring the project's test strategy — and the server refuses it with `errors.supersedes` regardless, so a row appearing here is an affordance for a 400 rather than a hole. |
 | `§210 AR-7` | **L4**, as a **Test Engineer**, on a **project-scope** artifact: open the ⋯ menu | **Enabled now** — the mirror of `§209 AR-3`, which expected it disabled. `V52` de-qualified `artifact:edit`, so `canOnScope` answers yes at both scopes. **This row exists because `AR-3` is the one queued check §210 inverts**: running the queue without it would drive an expectation the product no longer has. | ⬜ NOT RUN |
 | `§210 AR-8` | **L4**, as a **Test Engineer**: delete a suite, close a run, amend a recorded result, and publish a doc page | All four **succeed**. Five controls that were disabled-with-a-reason for this role until `V52`. Drives the whole tier change through the UI in one pass, and the failure it looks for is a control still disabled because a *frontend* gate hard-codes a role assumption the key no longer carries. | ⬜ NOT RUN |
+
+## §218 — the notification channels, and the credential that must survive a rename
+
+**Seven rows, none run** (§65). Ids are `§218 NT-*`; `NT` is unused elsewhere in this file — grep
+before minting a prefix (`§154`'s banner).
+
+Lane: **A0** for `NT-1`…`NT-4` (the screen needs a project and a **Test Lead**, and nothing else —
+`NT-1` wants a project nobody has configured, so drive it before `NT-2` writes the first channel);
+**L1** for `NT-5`, which needs a signed-in **Test Engineer**; **A3** for `NT-6` and `NT-7`, because a
+delivery row exists only once a run has actually completed.
+
+**Two things this pass has to supply that no earlier lane creates**, and neither is a fixture the
+charter can author on its own:
+
+- **`TCMS_INTEGRATION_SECRET_KEY` must be set on the deployment under test.** It is a required Spring
+  property with **no default** (`${VAR}`, no colon — §108's lesson taken literally), so an instance
+  without it does not start at all. If the stack refuses to boot on this pass, that is this and the
+  fix is `openssl rand -base64 32`, not a rollback. `.env.example` carries a dev value.
+- **A webhook URL the pass may point at.** `NT-6` deliberately uses an **unreachable** one
+  (`https://hooks.slack.test/services/DEAD`) rather than a real Slack workspace: a delivery row is
+  written as soon as an attempt is *made*, including a first attempt that failed, so a dead endpoint
+  produces exactly the row this lane needs to read and needs no third-party account. Reading a
+  **successful** delivery end to end is the one thing here that would need a real workspace, and the
+  options are (a) a live Slack incoming webhook created for the pass, (b) a local HTTP sink pointed
+  at by the URL, or (c) leave it undriven and rely on the backend's own delivery tests. **(b) is the
+  recommendation** — it is the only one of the three that also proves the *body* the adapter posts.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§218 NT-1` | **A0**, as a **Test Lead**, on a project nobody has configured: open **Notifications** in the rail | The rail entry is there, the page renders, and the panel shows the *no-records* empty state — **"No channels yet"**, not a failed region and not a spinner. `[]` is a valid 200 and is the state of most projects; a screen that read it as a fault would fail on every project until somebody configured one. |
+| `§218 NT-2` | Same screen: press **Add a channel**, choose **Slack**, name it `#qa-alerts`, paste a webhook URL, tick **Run completed**, save | **201 and the row appears.** Read the **Where it goes** cell: it must show `…` plus the **last four characters** of the URL and nothing else. If the whole URL is rendered, `secretHint` is not what the server sent or the cell is rendering the wrong field — either way a live credential is on screen and in the browser cache, which is the leak §218 §4 exists to prevent. |
+| `§218 NT-3` | Press **Edit** on that row, change the name to `#release-alerts`, **leave the webhook field empty**, save. Then reopen the editor | **200, the name changed, and the tail in the hint is the SAME four characters.** ⚠️ **The row that matters, and the one whose failure is invisible.** Absent means *unchanged*; a form that sent `secret: ''` would save successfully, the row would still read as configured, and delivery would stop hours later at a time unconnected to this edit. If the tail changes or the hint reads "No webhook set", the client sent the field. Confirm from the other end too — devtools, the `PUT` payload, no `secret` key at all. |
+| `§218 NT-4` | In the same editor, open the **Transport** select; then untick **Run completed** and save | The select is **disabled**, with a helper naming delete-and-create as the way to move a transport — the `PUT` ignores `kind` and the input schema requires it, so the value must still be in the payload. After the save the row's **Told about** cell reads *"Nothing — this channel never fires"*: `subscriptions` is the complete set, and unticking is the only way to unsubscribe. |
+| `§218 NT-5` | **L1**, as a **Test Engineer**: find **Notifications** in the rail and open it | The entry is **present** and the page shows a sentence naming who can configure channels — **not** an empty table, **not** a 403 toast, **not** a missing rail item. Then check the network tab: **no request to `/notification-channels` was made at all.** This is the whole read-gate decision; a fetch fired here would 403 and raise a global "Something didn't load" over a screen working exactly as designed. |
+| `§218 NT-6` | **A3**, as a **Test Lead**: add a second Slack channel pointed at `https://hooks.slack.test/services/DEAD`, subscribe it to **Run completed**, then complete a run. Wait for the outbox to drain, press **History** on that row | A delivery row with **Failed**, a **Tries** count that climbs across the backoff ladder, and an error in **What came back**. ⚠️ **Read that error character by character**: it must contain **no** `hooks.slack.test` path — `SecretRedaction` strips it on the way in, and this is the leak that is invisible in a green run, sitting in a table an operator browses and a backup copies. A URL here is a finding, not a cosmetic one. |
+| `§218 NT-7` | On the channel from `NT-2`, which has never had an event fire: press **History** | The *no-records* empty state reading **"Nothing sent yet"** — and the body must distinguish it from a channel that does not work, because a row appears as soon as an attempt is *made*. Paired with `NT-6` deliberately: the same panel has to say two different things, and a single "no data" message for both is how a working channel and a dead one become indistinguishable. |
