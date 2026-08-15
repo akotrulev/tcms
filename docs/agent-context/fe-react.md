@@ -83,7 +83,7 @@ surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the fl
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `3e5545a` (§218 phase 2) + the §218 phase-3 commit, which lands immediately after this line is written — so the header is one behind by construction, as it has been since §207. `npm run build`, `npm run lint` (0 warnings) and `npm run test:run` (**1373 across 101**) were all run on macOS for that commit. Before it ~~`e83644e` (§216 phase 1; §216's docs commit lands immediately after this line. **§216 touched no `frontend/` byte** — one backend validation method, one test class and two operator documents — so this suite was not run and is still **1349 across 100**. Before it ~~`f3c35b2` (§215 phase 1; §215's docs commit lands immediately after this line. **§215 touched no `frontend/` byte at all** — one new `packages/` test, one refactor, and two markdown documents — so this suite was not run and is still **1349 across 100**. What concerns this stack: `README.md`'s copy of the permission matrix is now compared to roles spec §A3, every cell, both ways, all three scopes; the copy an SPA reader consults can no longer drift from the catalogue `lib/permissions.ts` mirrors.~~ Before it ~~`a44fc41` (§214 phase 1; §214's docs commit lands immediately after this line. **§214 touched no `frontend/` byte at all** — one backend test and one `packages/` comment, so this suite was not run and is still **1349 across 100**. What concerns this stack indirectly: the roles spec's §A3 tables are now compared to the seeded rows cell by cell, which is the document `lib/permissions.ts`'s catalogue and every `useCan` claim ultimately rests on.~~ Before it ~~`0e774e4` (§213 phase 1; §213's docs commit lands immediately after this line.
+**Baseline commit:** `c9cadb6` — the merge that landed §218 phase 3 on `master` — + the §218 phase-4 docs commit, which lands immediately after this line is written, so the header is one behind by construction, as it has been since §207. **Phase 4 changes no `frontend/` byte** (a handoff, an index row, both caches and the two verification queues), so this suite was not re-run and stands at **1373 across 101**. Before it ~~`3e5545a` (§218 phase 2) + the §218 phase-3 commit … `npm run build`, `npm run lint` (0 warnings) and `npm run test:run` (**1373 across 101**) were all run on macOS for that commit.~~ Before it ~~`e83644e` (§216 phase 1; §216's docs commit lands immediately after this line. **§216 touched no `frontend/` byte** — one backend validation method, one test class and two operator documents — so this suite was not run and is still **1349 across 100**. Before it ~~`f3c35b2` (§215 phase 1; §215's docs commit lands immediately after this line. **§215 touched no `frontend/` byte at all** — one new `packages/` test, one refactor, and two markdown documents — so this suite was not run and is still **1349 across 100**. What concerns this stack: `README.md`'s copy of the permission matrix is now compared to roles spec §A3, every cell, both ways, all three scopes; the copy an SPA reader consults can no longer drift from the catalogue `lib/permissions.ts` mirrors.~~ Before it ~~`a44fc41` (§214 phase 1; §214's docs commit lands immediately after this line. **§214 touched no `frontend/` byte at all** — one backend test and one `packages/` comment, so this suite was not run and is still **1349 across 100**. What concerns this stack indirectly: the roles spec's §A3 tables are now compared to the seeded rows cell by cell, which is the document `lib/permissions.ts`'s catalogue and every `useCan` claim ultimately rests on.~~ Before it ~~`0e774e4` (§213 phase 1; §213's docs commit lands immediately after this line.
 **§213 touched no `frontend/` byte at all** — four test-lane files in `packages/`, so this suite was
 not run and is still **1349 across 100**. Note that the two `packages/` rules which *scan* this tree
 — `citedFiles` and `tierClaims` — ran green, so a stale citation or tier claim here would still have
@@ -183,7 +183,29 @@ is a lost update and **`describeError` owns the sentence** — do not compose on
 `…/{id}/deliveries`, so a `startsWith` arm answers the delivery log with the channel list and the
 contract comparison then reports it against the wrong schema.
 
-**No `packages/` surface.** Neither the CLI nor the MCP server offers notification channels.
+**No `packages/` surface.** Neither the CLI nor the MCP server offers notification channels, and
+that is a decision rather than an omission: an agent that could create a channel could point one at a
+URL it chose.
+
+### What is queued and unrun (§65) — eight rows, and one of them is the second event type
+
+`§218 NT-1`…`NT-8` in `docs/verification/frontend-browser-checks.md`. Three are worth knowing about
+before touching this screen, because each is the *only* observer of a decision above:
+
+- **`NT-3`** is the `secret`-absent-means-unchanged round trip, read from both ends — the hint's tail
+  unchanged *and* the `PUT` payload with no `secret` key. Nothing else in either stack watches the
+  live behaviour of that spread.
+- **`NT-5`** is the read gate: the rail item present, the sentence rendered, and **no request fired**.
+  Check the network tab, not just the copy — a fetch here 403s and raises a global "Something didn't
+  load" over a screen working exactly as designed.
+- **`NT-8`** was added by phase 4 and drives **`work.item_assigned`**, which until then nothing in
+  either queue touched: the backend's end-to-end test drives `run_completed` only, so the second
+  event type had a producer pin, a consumer pin, and nothing that crossed between them. It also
+  proves the failure threshold is **inert** for an event with no counts — the claim
+  `notificationEventTypeHelp` makes in the dialog.
+
+`NT-6`/`NT-8` need a webhook endpoint the pass supplies; the block recommends a local HTTP sink, and
+the charter now says so where a reader preparing the stack will meet it.
 
 ---
 

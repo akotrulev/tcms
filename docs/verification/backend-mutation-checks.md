@@ -2563,13 +2563,17 @@ in the migration is currently observed by nothing at all.
 
 ## §218 phase 2 — the notification-channel REST surface, and the gate on its reads
 
-**Six rows, none run** (§65). Ids are `§218 NC-*`; `NC` is unused elsewhere in this file — grep
-before minting a prefix (`§154`'s banner).
+**~~Six rows~~ ten rows, none run** (§65). Ids are `§218 NC-*`; `NC` is unused elsewhere in this file
+— grep before minting a prefix (`§154`'s banner).
 
-**§218 phase 1 added no rows to this file, and that is a gap this block does not close.** The spine
+~~**§218 phase 1 added no rows to this file, and that is a gap this block does not close.** The spine
 — `V54`, the cipher, the redaction, the three adapters, the two producers and the payload pins — is
 phase 4's to record, and inventing rows for code this phase did not write would be worse than
-leaving the omission visible.
+leaving the omission visible.~~ → **closed by phase 4: `NC-7`…`NC-10` below are the spine's.** That
+paragraph was right to leave the omission visible and right about who owed it; what it did not say is
+how lopsided the block was — **every one of `NC-1`…`NC-6` is about the REST edge**, and the four
+things in this slice whose failure is silent (a duplicate message, a silenced channel, a reopened run
+announced as finished, a disabled channel that still posts) all live behind it.
 
 What this phase's rows are about is one decision and one omission: **the reads cost
 `integration:manage`**, which phase 1's service javadoc said the opposite of; and **there is no
@@ -2584,6 +2588,10 @@ in the other direction.
 | `§218 NC-4` | In `NotificationChannelService.update`, change `if (input.secret() != null && !input.secret().isBlank())` to an unconditional `channel.replaceSecret(…)` | `NotificationChannelTest.anAbsentSecretMeansUnchanged` | The null-means-unchanged inversion, which is the single most consequential line in the class. A green build would mean a rename blanks the credential — a row that still reads as configured, delivering nothing, failing hours later at a time unconnected to the edit that caused it. |
 | `§218 NC-5` | Add a `secret` property to the `NotificationChannel` schema in `openapi.yaml` and a matching `secret` component to `NotificationChannelView` | `ContractConventionTest.pairedSchemasAndRecordsNameTheSameMembers` **is NOT the observer** — nothing reddens | ⚠️ **Expected GREEN, and it is the most uncomfortable row here.** The pairing rule compares the two sides to *each other*, so adding the member to both satisfies it. Nothing in this repository asserts that a credential is absent from the wire; what stands in its place is `NotificationChannelView`'s header, `NotificationChannel`'s schema description, and the fact that the entity has no plaintext accessor at all — three prose statements and one type-level obstacle. A rule that read the *response schemas* for a credential-shaped property is the check this slice did not write. |
 | `§218 NC-6` | Add `parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]` to `createNotificationChannel` | **Expected GREEN.** | ⚠️ **The §205 shape, recorded as a gap.** That slice found `tcms_report.generate` sending an `Idempotency-Key` to the one create of eleven that takes none, and the check it built — `writeConformance.test.ts` — reads the **packages** write registry, which has no notification-channel arm. So a header declared here and honoured by nothing would be observed by no gate in either stack. It is a 202-shaped defect: a client that trusted the header replays a timed-out create and gets a second channel that delivers every notice twice. |
+| `§218 NC-7` | In `NotificationLedger.beginAttempt`, change the `existing.isPresent()` arm to `return true` — keeping the row, dropping only the `getStatus() != SENT` refusal | `NotificationDeliveryTest.theDeliveryIsKeyedOnTheOccurrence` | **The idempotency gate, and it is what makes at-least-once delivery legal here.** An outbox row whose handler succeeded and then lost the settle is re-delivered on the next tick; a green build would mean that is a second message in somebody's release channel, and the retry ladder makes it up to **eight**. The unique index on `(company_id, channel_id, event_id)` is not the observer — it stops a second *row*, not a second POST, and the POST is the part a person sees. |
+| `§218 NC-8` | In `NotificationSubscription.wants`, change `failures == null \|\| failures >= minFailures` to `failures != null && failures >= minFailures` | `NotificationRenderingTest.anEventWithoutCountsIsNotSilenced`. `NotificationDeliveryTest.theThresholdFilters` **must stay green** — it is the mirror that proves the predicate still discriminates rather than matching everything | ⚠️ **Read the direction before running it.** The mutation does not open a channel, it **silences** one: every event type with no notion of failures — today `work.item_assigned`, tomorrow anything added — matches nothing, forever, on a subscription somebody ticked. A green build would mean a channel configured through the screen, showing as subscribed, that never once fires. The observer is a **unit** assertion on `wants(null)`, not a fan-out: `work.item_assigned` reaches no end-to-end test in this suite (see `§218 NT-8`), so the pair above is the whole of what watches this line. |
+| `§218 NC-9` | In `RunStatusService.move`, delete the `if (target == RunStatus.COMPLETED)` guard around `announce(projectId, view)`, so every status move records the occurrence | `NotificationDeliveryTest.onlyCompletionIsAnOccurrence` | Aborting is not completing and a reopen is not an ending. A green build would mean *"TR-14 finished"* posted to a release channel when somebody reopened it to fix a result — an announcement that is not merely noise but **false**, and one no recipient can distinguish from the real thing. The one-event-per-status-move design pushes that discrimination onto every subscriber and one of them gets it wrong. |
+| `§218 NC-10` | In `NotificationChannelRepository.findSubscribed`, delete the `AND c.enabled = TRUE` line from the `@Query` | `NotificationDeliveryTest.aDisabledChannelIsSilent` | The off switch. `enabled` is the only control an administrator has that is **not** a delete — it is what you reach for when a webhook is misbehaving at 2am and you want the history kept. A green build would mean the switch renders, saves, reads back as off, and changes nothing at all. |
 
 ## §217 phases 3–6 — the federation flow, and the four things a green suite is not watching
 

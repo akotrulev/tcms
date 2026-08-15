@@ -189,6 +189,17 @@ deterministic**. Anything a row names by key is created here.
 | Teams | **Platform** (created first and alone, for `L4-1`), then **Payments Squad** (`lead`, `engineer`) and **Checkout Squad** (`viewer`, `newbie`) |
 | Doc pages, OLB | **`DOC-1` "Payments"**, authored in `/docs` before `M3-16` needs a page to link. §115 needs it to have a **specific shape**, so build it deliberately: one paragraph of intro, a **heading "Refunds"**, then **four list bullets** under it, then a **heading "Disputes"** with nothing under it. Link cases to the bullets from the documentation editor (`M3-19`'s affordance): bullet 1 → a case that **passed**, bullet 2 → **two** cases, one that passed and one that **failed**, bullet 3 → a case **never executed**, bullet 4 → **nothing at all**. Then link a case to the intro **paragraph**. Also author **`DOC-2` "Charter"** as prose alone — one paragraph, no bullets, no links. |
 
+**Two things §218 needs are NOT fixtures and are not authored here — read `§218`'s own block before
+the stack is built.** `TCMS_INTEGRATION_SECRET_KEY` is a required Spring property with no default, so
+an instance without it does not start at all; `.env.lane-b.example` carries a dev value, which is the
+file this pass copies, so the ordinary path is already covered and the note is a **diagnostic** — a
+scratch stack that refuses to boot with a `secret-key is required` message is this and the fix is
+`openssl rand -base64 32`, not a rollback. And `§218 NT-6`/`NT-8` need a **webhook endpoint**: they
+deliberately use an unreachable one, because a delivery row is written as soon as an attempt is
+*made*. Reading a **successful** delivery is the one thing here that needs more, and the
+recommendation is a **local HTTP sink** rather than a real Slack workspace — it is the only option
+that also proves the *body* the adapter posts. Stand it up before stage 5, not at stage 13.
+
 **If a fixture cannot be authored through the product, that is a finding and not a setup problem.**
 The old pass could paper over a missing control with a fixture; this one cannot, and the two places
 SQL is still required — `TC-3`'s null author and `L3-3`'s retired-after-assignment value — are
@@ -2460,13 +2471,20 @@ links will do) plus one plan-scope artifact on the lane's plan. `AR-1` creates t
 
 ## §218 — the notification channels, and the credential that must survive a rename
 
-**Seven rows, none run** (§65). Ids are `§218 NT-*`; `NT` is unused elsewhere in this file — grep
-before minting a prefix (`§154`'s banner).
+**~~Seven rows~~ eight rows, none run** (§65). Ids are `§218 NT-*`; `NT` is unused elsewhere in this
+file — grep before minting a prefix (`§154`'s banner).
 
 Lane: **A0** for `NT-1`…`NT-4` (the screen needs a project and a **Test Lead**, and nothing else —
 `NT-1` wants a project nobody has configured, so drive it before `NT-2` writes the first channel);
 **L1** for `NT-5`, which needs a signed-in **Test Engineer**; **A3** for `NT-6` and `NT-7`, because a
-delivery row exists only once a run has actually completed.
+delivery row exists only once a run has actually completed; **A5** for `NT-8`, which needs a board
+card created with an assignee.
+
+**`NT-8` was added by phase 4, reading the two queues as a set.** This slice ships **two** event
+types and, until it, everything in either queue drove exactly one of them: `run_completed` has an
+end-to-end backend test *and* `NT-6`, and `work.item_assigned` had a producer pin and a consumer pin
+and nothing that crossed between them. That is the one shape the whole slice's three-test argument
+says a pair of pins cannot catch.
 
 **Two things this pass has to supply that no earlier lane creates**, and neither is a fixture the
 charter can author on its own:
@@ -2474,7 +2492,10 @@ charter can author on its own:
 - **`TCMS_INTEGRATION_SECRET_KEY` must be set on the deployment under test.** It is a required Spring
   property with **no default** (`${VAR}`, no colon — §108's lesson taken literally), so an instance
   without it does not start at all. If the stack refuses to boot on this pass, that is this and the
-  fix is `openssl rand -base64 32`, not a rollback. `.env.example` carries a dev value.
+  fix is `openssl rand -base64 32`, not a rollback. **`.env.lane-b.example` carries a dev value and
+  that is the file this pass copies**, so the ordinary path is covered and this note is a diagnostic
+  rather than a step. `.env.example` carries one too. The charter section repeats it, because a
+  reader preparing the stack meets the charter two thousand lines before this block.
 - **A webhook URL the pass may point at.** `NT-6` deliberately uses an **unreachable** one
   (`https://hooks.slack.test/services/DEAD`) rather than a real Slack workspace: a delivery row is
   written as soon as an attempt is *made*, including a first attempt that failed, so a dead endpoint
@@ -2493,6 +2514,7 @@ charter can author on its own:
 | `§218 NT-5` | **L1**, as a **Test Engineer**: find **Notifications** in the rail and open it | The entry is **present** and the page shows a sentence naming who can configure channels — **not** an empty table, **not** a 403 toast, **not** a missing rail item. Then check the network tab: **no request to `/notification-channels` was made at all.** This is the whole read-gate decision; a fetch fired here would 403 and raise a global "Something didn't load" over a screen working exactly as designed. |
 | `§218 NT-6` | **A3**, as a **Test Lead**: add a second Slack channel pointed at `https://hooks.slack.test/services/DEAD`, subscribe it to **Run completed**, then complete a run. Wait for the outbox to drain, press **History** on that row | A delivery row with **Failed**, a **Tries** count that climbs across the backoff ladder, and an error in **What came back**. ⚠️ **Read that error character by character**: it must contain **no** `hooks.slack.test` path — `SecretRedaction` strips it on the way in, and this is the leak that is invisible in a green run, sitting in a table an operator browses and a backup copies. A URL here is a finding, not a cosmetic one. |
 | `§218 NT-7` | On the channel from `NT-2`, which has never had an event fire: press **History** | The *no-records* empty state reading **"Nothing sent yet"** — and the body must distinguish it from a channel that does not work, because a row appears as soon as an attempt is *made*. Paired with `NT-6` deliberately: the same panel has to say two different things, and a single "no data" message for both is how a working channel and a dead one become indistinguishable. |
+| `§218 NT-8` | **A5**, as a **Test Lead**: edit `NT-6`'s dead-endpoint channel and tick **Work assigned to somebody** as well, **and set its failure threshold to 3**. Then open the board and create a task with `engineer` on it. Wait for the outbox to drain, press **History** | A **second** delivery row, `eventType` **Work assigned to somebody**, alongside the `NT-6` run row. ⚠️ **The whole point is the threshold.** `work.item_assigned` carries no failure counts, so a threshold of 3 must be **inert** here — the row appears anyway. If it does not, the predicate is silencing an event that has no notion of the thing it filters on, which is the one failure mode with nothing to see: a channel that shows as subscribed, saves cleanly, and never fires. Read the dialog's help text for the event while you are there — it makes exactly this claim. **This is also the only place either queue drives the second event type at all**: `work.item_assigned` has a producer pin and a consumer pin and no test that crosses between them, which is the gap the slice's own three-test argument predicts. Create a **second** task with **nobody** on it and confirm **no third row appears** — an unassigned task is not an assignment. |
 
 ## §217 — signing in through somebody else's issuer, with no screen to do it on
 

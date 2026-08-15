@@ -1,8 +1,10 @@
 # Notifications — M4's first integration, and the outbox's first payload
 
-**Date:** 2026-08-15 · **Status:** in progress · **Branch:** `worktree-notifications` (a concurrency
-worktree — other lanes are live in the primary checkout) · **Milestone:** M4, plan §5 *Integration
-architecture notes* and Phase 2 line 159
+**Date:** 2026-08-15 · **Status:** ~~in progress~~ **all four phases shipped** — see
+`docs/handoff/218-the-arm-with-no-caller.md` · **Branch:** ~~`worktree-notifications` (a concurrency
+worktree — other lanes are live in the primary checkout)~~ **merged to `master` at `c9cadb6`; the
+worktree has served its purpose and must not be committed into again** · **Milestone:** M4, plan §5
+*Integration architecture notes* and Phase 2 line 159
 
 ---
 
@@ -192,6 +194,13 @@ Each phase commits after its own gate. Staging is `git add <paths>` only.
 4. **Docs** — `docs/handoff/NN-*.md` + one index row, both orientation caches, and the rows this
    slice owes to `docs/verification/frontend-browser-checks.md` and
    `docs/verification/backend-mutation-checks.md`. Per §65 those rows are **written and not run**.
+   → **Shipped as `docs/handoff/218-the-arm-with-no-caller.md`.** Reading the two queues *as a set*
+   is what this phase found worth doing: phases 2 and 3 had written `NC-1`…`NC-6` and `NT-1`…`NT-7`,
+   and every backend row was about the REST edge while the four failures with no symptom — a
+   duplicate message, a silenced channel, a reopened run announced as finished, a disabled channel
+   that still posts — all sit behind it. `NC-7`…`NC-10` and `NT-8` close that; `NT-8` is also the
+   only place either queue drives `work.item_assigned`. Gate re-run on the merged tree:
+   `./gradlew build` **BUILD SUCCESSFUL, 2791 / 0 / 0**.
 
 ## 8. What this slice does not do
 
