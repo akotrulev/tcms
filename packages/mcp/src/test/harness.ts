@@ -12,6 +12,7 @@
 */
 import { checkExchange } from '../../../client/src/test/contractExchange.js';
 import { currentUser, permissions, project } from '../../../client/src/test/fixtures.js';
+import { agentKeys } from '../../../client/src/test/roleMatrix.js';
 import { openSession, type Reach, type Session } from '../session.js';
 
 export interface SentRequest {
@@ -138,22 +139,19 @@ export const PROJECT = project();
  * `library:manage` that used to be missing here are held now; what replaced the catalogue ceiling
  * is the consent prompt on delete arms in `server.ts`.
  *
- * A fixture, so it can disagree with the seed silently — the assertion that cannot is
- * `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse`, which derives the delta from the live
- * catalogue. Keep this list in step with it; a stale copy here widens or narrows `tools/list` in
- * every test at once.
+ * ~~A fixture, so it can disagree with the seed silently … Keep this list in step with it; a stale
+ * copy here widens or narrows `tools/list` in every test at once.~~ → **superseded 2026-08-15
+ * (§213): it is not a list any more.** It is read out of §A3, by the parse §212 built for the
+ * tier-claim rule, so the way it went stale is gone rather than warned about — and §212's stated
+ * reason for leaving it hand-kept (*"a package boundary that currently has no test dependency"*)
+ * was false when it was written: this file has imported across that boundary since §203, twelve
+ * lines up.
+ *
+ * The chain is unchanged and this is still its last link: `migration → SeedDataTest → spec → here`.
+ * `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse` derives the delta from the live catalogue
+ * and is the only thing that can catch a spec which drifts from `V52`.
  */
-export const AGENT_KEYS = [
-  'project:read', 'case:read', 'case:create', 'case:edit', 'case:delete', 'case:comment',
-  'case:review', 'suite:manage', 'suite:delete', 'suite:review', 'library:manage',
-  'doc:read', 'doc:edit', 'doc:publish',
-  'plan:create', 'plan:edit', 'plan:delete', 'plan:review',
-  'run:create', 'run:execute', 'run:close',
-  'result:submit', 'result:amend', 'evidence:attach', 'evidence:delete',
-  'report:view', 'report:export',
-  'artifact:read', 'artifact:edit', 'artifact:delete',
-  'defect:create', 'workitem:manage',
-] as const;
+export const AGENT_KEYS = agentKeys();
 
 /** Re-exported so the test files that build one keep importing it from here. */
 export { permissions };

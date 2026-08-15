@@ -17,6 +17,7 @@ import { TcmsApiError, TcmsTimeoutError } from '@tcms/client';
 import { caseDetail, casePage, caseSummary, docPage, docPageSummary } from '../../client/src/test/fixtures.js';
 import { failed } from './result.js';
 import { buildServer } from './server.js';
+import { TOOLS } from './tools.js';
 import { AGENT_KEYS, agentRoutes, api, permissions, sessionWith, withApi, type Api } from './test/harness.js';
 
 async function connect(stub: Api): Promise<Client> {
@@ -72,11 +73,18 @@ describe('tools/list', () => {
     const client = await connect(api(agentRoutes()));
     const { tools } = await client.listTools();
 
-    expect(tools.map((tool) => tool.name)).toContain('tcms_write_case');
     // ~~Not everything: the Agent grant holds no `run:close`.~~ → §210: it does. The grant is Test
     // Engineer entire now, so every tool on this surface is listed for it and the interesting
     // filtering case is the reduced credential in the next test.
-    expect(tools.every((tool) => tool.name.startsWith('tcms_'))).toBe(true);
+    /*
+      Asserted as the whole registry since §213, which is what this test's name has claimed since
+      §140 and what its body did not check: `toContain` one name plus a prefix test passes on any
+      subset, so a grant that quietly narrowed would hide tools here and read as green. That stopped
+      being hypothetical when `AGENT_KEYS` became a parse of the roles spec rather than a literal —
+      the failure moved from "somebody forgot to update the copy" to "the tables changed shape", and
+      only an exact comparison can see either.
+    */
+    expect(tools.map((tool) => tool.name).sort()).toEqual(TOOLS.map((tool) => tool.name).sort());
   });
 
   it('hides what this credential cannot use, and says nothing about why', async () => {

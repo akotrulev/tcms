@@ -7,11 +7,12 @@
  * copy of the matrix.
  *
  * That is the whole argument for parsing a markdown table, and it is worth being explicit about
- * what the alternative would have been. §211's rule compares tool descriptions against
+ * what the alternative would have been. ~~§211's rule compares tool descriptions against
  * `AGENT_KEYS`, a hand-kept constant in `packages/mcp/src/test/harness.ts` that is *"only as
  * current as the last slice that moved a grant remembered to update it"* — the honest caveat in its
  * own comment. A second such constant, in a second package, for a rule that sweeps four corpora, is
- * a third place for the catalogue to be wrong. The spec is the place it cannot be.
+ * a third place for the catalogue to be wrong.~~ → **superseded 2026-08-15 (§213): that constant is
+ * {@link agentKeys} now**, so there is no second place. The spec is the place it cannot be.
  *
  * **What this does not read is the seeded data.** `V3` and `V52` are the rows Postgres actually
  * holds, and only `SeedDataTest` can compare the two — it derives Test Lead minus Test Engineer
@@ -110,4 +111,32 @@ export function roleMatrix(): Record<Role, Set<string>> {
   }
 
   return held;
+}
+
+/**
+ * What a `tcms_` bearer can reach, derived from the same tables.
+ *
+ * Roles spec §A6a: the `Agent` role is **Test Engineer entire, minus `company:read`** (`V52`, §210),
+ * and `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse` derives that delta from the live
+ * catalogue rather than restating it. So the `PROJECT`-scope answer is Test Engineer's row exactly —
+ * `company:read` is a `COMPANY`-scope key and {@link roleMatrix} parses `PROJECT` scope alone.
+ *
+ * The subtraction is therefore invisible here, which is precisely the way this could go wrong
+ * later: if §A3's `COMPANY` table ever grew the six `PROJECT` columns, its rows would parse into
+ * `TE` and the Agent would silently widen by a key no token can answer for — a credential with no
+ * membership row has no `V15` baseline, and `evaluateCompanyWide` reads the SYSTEM and COMPANY terms
+ * only. The guard below is that case, stated rather than trusted.
+ */
+export function agentKeys(): readonly string[] {
+  const engineer = roleMatrix().TE;
+  if (engineer.has('company:read')) {
+    throw new Error(
+      `${ROLES_SPEC} §A3's PROJECT matrix parsed with 'company:read' in the Test Engineer column, `
+        + 'and that key is COMPANY scope. Either a COMPANY-scope table grew the six PROJECT '
+        + 'columns and is now being read as one, or the grant genuinely moved — in which case §A6a '
+        + "and `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse` move first, because a token "
+        + 'holding it still cannot answer for it.',
+    );
+  }
+  return [...engineer];
 }

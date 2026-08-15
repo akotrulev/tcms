@@ -674,10 +674,12 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
       statement of what it may attempt, so a false one does not mislead a maintainer later, it
       stops the agent trying something it is allowed to do, now, every session.
 
-      The instrument is AGENT_KEYS, which is this package's copy of what the `Agent` role is
-      seeded with — a test constant and not the seed, so it is only as current as the last slice
-      that moved a grant remembered to update it. `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse`
-      is what pins the real thing; this pins the copy against the prose.
+      The instrument is AGENT_KEYS. ~~This package's copy of what the `Agent` role is seeded with —
+      a test constant and not the seed, so it is only as current as the last slice that moved a
+      grant remembered to update it.~~ → **§213: it is read out of the roles spec's §A3**, by the
+      same parse `tierClaims.test.ts` uses, so this rule and that one now answer from one source
+      instead of two. `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse` is still what pins
+      the real thing; this pins the prose against the spec.
     */
     const held = new Set<string>(AGENT_KEYS);
     for (const candidate of TOOLS) {
