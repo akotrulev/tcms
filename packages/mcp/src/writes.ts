@@ -49,6 +49,25 @@
  * Both are consequences of decisions taken elsewhere and are listed as **Buildable** in the
  * surface spec's §3 table. They are recorded in §140's section file rather than quietly dropped.
  *
+ * ## The two delete keys this surface still cannot reach — §211
+ *
+ * `V52` gave the credential five (§210), and three of them are arms here: `case:delete`,
+ * `suite:delete`, `plan:delete`. The other two are absent by decision.
+ *
+ * **`artifact:delete`** has no tool because *artifacts* have none — no read, no write, nothing.
+ * Adding a delete alone would be a tool whose id can only come from somewhere else, which is the
+ * reviewer-assignment shape above. It waits for a slice that gives the register a surface.
+ *
+ * **`evidence:delete`** is reachable — `tcms_open_run` serves an execution's `evidence[].id`, so
+ * unlike a `userId` the argument exists — and is excluded anyway. Two facts decide it together.
+ * The delete is **hard**: the bytes leave the disk, which the contract argues for deliberately
+ * (a screenshot removed for privacy reasons must actually go). And this surface **cannot attach
+ * evidence at all** — `POST …/evidence` is `multipart/form-data` and a tool call carries no bytes.
+ * So the only evidence an agent could remove is a person's, through the one irreversible delete on
+ * the surface, offered to the one actor that can never create the thing. The consent prompt does
+ * not change that arithmetic; it asks a person to approve a loss nothing can undo. If it is ever
+ * wanted, it wants the upload arm first.
+ *
  * ## The replay these tools do not report, and why the CLI does
  *
  * §204 gave `createIntent` a reader for the 200-instead-of-201 that says an `Idempotency-Key` had
@@ -176,24 +195,34 @@ const writeCase: ToolDefinition = {
     + 'a test case, and nothing on this surface can: a credential cannot accept its own proposal. '
     + '`edit` changes an existing case directly. `submit` puts one into review. Use `edit` when '
     + 'you are correcting a case that exists and `propose` when you are adding coverage; the line '
-    + 'is whether a display key would have to be allocated.',
-  // Two keys merged, and §134 is what makes it safe: `case:create` without `case:edit` exists in
-  // exactly one role, `Automation Service`, which is non-assignable since V41 and never carries
-  // this surface. Had the two token roles been collapsed, this merge would list a create-only
-  // caller a tool whose edit arm 403s.
-  gate: { mode: 'all', permissions: ['case:create', 'case:edit'] },
+    + 'is whether a display key would have to be allocated. `delete` removes one: it is SOFT, so '
+    + 'past runs keep resolving what they covered and the key stays reserved for ever, and the '
+    + 'host will ask a person before it happens.',
+  // Three keys merged, and §134 is what makes the first two safe: `case:create` without
+  // `case:edit` exists in exactly one role, `Automation Service`, which is non-assignable since
+  // V41 and never carries this surface. Had the two token roles been collapsed, this merge would
+  // list a create-only caller a tool whose edit arm 403s.
+  //
+  // `case:delete` joins them on the same test and it is `V52` that passes it (§210, §211): the
+  // key was Test Engineer's already but `OWN`-qualified until `V51`, and no seeded role now holds
+  // `case:edit` without it. Before `V52` this merge would have been wrong for a different key —
+  // `suite:delete` was Lead-only while `suite:manage` was a contributor's, so folding the two
+  // would have hidden `tcms_write_suite` from every Test Engineer. Widening the tier is what made
+  // the deletes mergeable at all, rather than three tools nobody but a lead would ever see.
+  gate: { mode: 'all', permissions: ['case:create', 'case:edit', 'case:delete'] },
   arms: [
     { action: 'propose', kind: 'create', permission: 'case:create' },
     { action: 'edit', kind: 'edit', permission: 'case:edit' },
     { action: 'submit', kind: 'state', permission: 'case:edit' },
+    { action: 'delete', kind: 'delete', permission: 'case:delete', targets: ['case'] },
   ],
   inputSchema: {
     type: 'object',
     additionalProperties: false,
     required: ['action'],
     properties: {
-      action: ACTION(['propose', 'edit', 'submit'], 'What to do.'),
-      case: idProperty('case to edit or submit — required for those, refused for propose', 'TC-42'),
+      action: ACTION(['propose', 'edit', 'submit', 'delete'], 'What to do.'),
+      case: idProperty('case to edit, submit or delete — required for those, refused for propose', 'TC-42'),
       testCase: {
         type: 'object',
         description:
@@ -326,6 +355,26 @@ const writeCase: ToolDefinition = {
       return result;
     }
 
+    if (action === 'delete') {
+      /*
+        No `If-Match`, which the contract states on the operation and is worth reading before
+        somebody "fixes" it: there is no lost-delete for a precondition to prevent, and a stale
+        version would refuse the delete over an edit the caller does not care about.
+
+        The consent prompt has already run by the time this is reached — `server.ts` gates on the
+        arm's `kind`, before `run` — so a client that cannot be asked never gets here.
+      */
+      await session.client.DELETE('/projects/{projectId}/cases/{caseId}', {
+        params: { path }, tcms: session.request,
+      });
+      return {
+        deleted: caseId,
+        note: 'Soft-deleted. No read returns it, past runs still resolve the version they '
+          + 'executed, and the display and automation keys stay reserved. Nothing cascaded: its '
+          + 'steps, conditions, tags and attachments are still on the row.',
+      };
+    }
+
     if (action !== 'edit') throw new InputError(`Unknown action '${action}'.`);
 
     const suite = nullableStr(input, 'suite');
@@ -395,20 +444,23 @@ const writeSuite: ToolDefinition = {
     + 'imposes pre/postconditions on the cases filed in it. EVERY list here is a COMPLETE SET — '
     + 'sending `cases` replaces the membership rather than adding to it, and the same holds for '
     + '`tagRules`, `preconditions` and `postconditions`. `status` moves it to DRAFT or IN_REVIEW; '
-    + 'APPROVED and DEPRECATED need suite:approve, which this credential does not hold.',
-  gate: { mode: 'all', permissions: ['suite:manage'] },
+    + 'APPROVED and DEPRECATED need suite:approve, which this credential does not hold. `delete` '
+    + 'removes the collection and is refused while any case is FILED in it — the refusal names '
+    + 'how many. A person is asked first.',
+  gate: { mode: 'all', permissions: ['suite:manage', 'suite:delete'] },
   arms: [
     { action: 'create', kind: 'create', permission: 'suite:manage' },
     { action: 'edit', kind: 'edit', permission: 'suite:manage' },
     { action: 'status', kind: 'state', permission: 'suite:manage' },
+    { action: 'delete', kind: 'delete', permission: 'suite:delete', targets: ['suite'] },
   ],
   inputSchema: {
     type: 'object',
     additionalProperties: false,
     required: ['action'],
     properties: {
-      action: ACTION(['create', 'edit', 'status'], 'What to do.'),
-      suite: idProperty('suite — required for edit and status', 'TS-7'),
+      action: ACTION(['create', 'edit', 'status', 'delete'], 'What to do.'),
+      suite: idProperty('suite — required for edit, status and delete', 'TS-7'),
       name: { type: 'string' },
       description: { type: ['string', 'null'] },
       tagRules: { type: 'array', items: { type: 'string' }, description: 'COMPLETE set of tag rules.' },
@@ -455,6 +507,25 @@ const writeSuite: ToolDefinition = {
         // writes nothing. The contract says so on this endpoint.
         tcms: session.request,
       });
+    }
+
+    if (action === 'delete') {
+      await session.client.DELETE('/projects/{projectId}/suites/{suiteId}', {
+        params: { path }, tcms: session.request,
+      });
+      /*
+        The 409 is not handled here on purpose. `result.ts` renders a refusal from the server's
+        `Problem`, whose `detail` names the live filed-case count — which is the thing actually in
+        the way and the thing a model needs in order to compose the next call. Catching it to say
+        "the suite is not empty" would replace a number with a sentence.
+      */
+      return {
+        deleted: suiteId,
+        note: 'Soft-deleted. Nothing was filed in it — that is what the delete checks — and the '
+          + 'cases it merely ADDED or matched by a tag rule were never held here, so they are '
+          + 'unaffected. Soft rather than hard because past runs key their per-suite summaries on '
+          + 'this id.',
+      };
     }
 
     if (action !== 'edit') throw new InputError(`Unknown action '${action}'.`);
@@ -636,20 +707,23 @@ const writePlan: ToolDefinition = {
   description:
     'A plan is a named selection of suites and cases against a milestone. `suites` and `cases` '
     + 'are COMPLETE SETS. `status` moves it to DRAFT or IN_REVIEW; APPROVED needs plan:approve, '
-    + 'which this credential does not hold.',
-  gate: { mode: 'all', permissions: ['plan:create', 'plan:edit'] },
+    + 'which this credential does not hold. `delete` removes one and is refused while any live '
+    + 'run was created from it, naming how many — a plan a run names cannot be deleted and has no '
+    + 'terminal state either, so leave it. A person is asked first.',
+  gate: { mode: 'all', permissions: ['plan:create', 'plan:edit', 'plan:delete'] },
   arms: [
     { action: 'create', kind: 'create', permission: 'plan:create' },
     { action: 'edit', kind: 'edit', permission: 'plan:edit' },
     { action: 'status', kind: 'state', permission: 'plan:edit' },
+    { action: 'delete', kind: 'delete', permission: 'plan:delete', targets: ['plan'] },
   ],
   inputSchema: {
     type: 'object',
     additionalProperties: false,
     required: ['action'],
     properties: {
-      action: ACTION(['create', 'edit', 'status'], 'What to do.'),
-      plan: idProperty('plan — required for edit and status', 'TP-1'),
+      action: ACTION(['create', 'edit', 'status', 'delete'], 'What to do.'),
+      plan: idProperty('plan — required for edit, status and delete', 'TP-1'),
       name: { type: 'string' },
       description: { type: ['string', 'null'] },
       milestoneName: { type: ['string', 'null'] },
@@ -691,6 +765,15 @@ const writePlan: ToolDefinition = {
         body: { status: requireStr(input, 'status') as 'DRAFT' | 'IN_REVIEW' | 'APPROVED' },
         tcms,
       });
+    }
+
+    if (action === 'delete') {
+      await session.client.DELETE('/projects/{projectId}/plans/{planId}', { params: { path }, tcms });
+      return {
+        deleted: planId,
+        note: 'Soft-deleted. The suites and cases its scope named are untouched — a plan is a '
+          + 'selection, not a container. A second delete answers 404 rather than a second 204.',
+      };
     }
 
     if (action !== 'edit') throw new InputError(`Unknown action '${action}'.`);

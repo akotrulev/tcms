@@ -156,10 +156,12 @@ function describe(tool: ToolDefinition, session: Session): Tool {
  *     normal outcome of a well-behaved run — `isError` here would push the model to retry.
  *
  * The gate keys on {@link ToolArm.kind} rather than on a list of tool names, so a delete arm added
- * to any tool later is covered by construction. Today the surface has exactly one:
- * `tcms_write_doc_page`'s `unlink`. **That is not a measure of the change's blast radius** — the
- * five delete keys `V52` gave the credential have no MCP tools at all yet, so they are reachable
- * over REST and the CLI and not through here. Adding one is what puts it behind this prompt.
+ * to any tool later is covered by construction — which §211 then relied on: three arms arrived and
+ * not one line here changed. ~~Today the surface has exactly one: `tcms_write_doc_page`'s
+ * `unlink` … the five delete keys `V52` gave the credential have no MCP tools at all yet.~~ →
+ * **four arms now, over three of the five keys.** `evidence:delete` and `artifact:delete` are still
+ * unreachable from this surface and for stated reasons rather than by omission; see
+ * `writes.ts`'s module header.
  */
 async function withheldConsent(
   server: Server,

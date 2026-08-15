@@ -95,7 +95,7 @@ describe('write conformance — surface spec §8.3', () => {
   it('finds every arm of every write tool', () => {
     // A vacuity guard. A registry this could not see would make every assertion below pass by
     // having nothing to assert on, which reads identically to a green run.
-    expect(arms.length).toBeGreaterThanOrEqual(22);
+    expect(arms.length).toBeGreaterThanOrEqual(25);
     expect(WRITE_TOOLS.every((tool) => (tool.arms ?? []).length > 0)).toBe(true);
   });
 
@@ -280,6 +280,12 @@ const INVOCATIONS: Record<string, Invocation> = {
     path: '/suites/s-1/status',
     routes: { ...SUITES, 'PUT /suites/s-1/status': { status: 200, body: SUITE } },
   },
+  'tcms_write_case.delete': {
+    tool: 'tcms_write_case',
+    input: { action: 'delete', case: 'TC-42' },
+    path: '/cases/c-1',
+    routes: { ...CASES, 'DELETE /cases/c-1': { status: 204 } },
+  },
   'tcms_write_doc_page.create': {
     tool: 'tcms_write_doc_page',
     input: { action: 'create', title: 'Payments spec' },
@@ -305,6 +311,12 @@ const INVOCATIONS: Record<string, Invocation> = {
       ...CASES,
       'POST /blocks/b-1/links': { status: 201, body: BLOCK_LINK },
     },
+  },
+  'tcms_write_suite.delete': {
+    tool: 'tcms_write_suite',
+    input: { action: 'delete', suite: 'TS-1' },
+    path: '/suites/s-1',
+    routes: { ...SUITES, 'DELETE /suites/s-1': { status: 204 } },
   },
   'tcms_write_doc_page.unlink': {
     tool: 'tcms_write_doc_page',
@@ -333,6 +345,12 @@ const INVOCATIONS: Record<string, Invocation> = {
     input: { action: 'status', plan: 'TP-1', status: 'IN_REVIEW' },
     path: '/plans/tp-1/status',
     routes: { ...PLANS, 'PUT /plans/tp-1/status': { status: 200, body: PLAN } },
+  },
+  'tcms_write_plan.delete': {
+    tool: 'tcms_write_plan',
+    input: { action: 'delete', plan: 'TP-1' },
+    path: '/plans/tp-1',
+    routes: { ...PLANS, 'DELETE /plans/tp-1': { status: 204 } },
   },
   'tcms_write_run.create': {
     tool: 'tcms_write_run',

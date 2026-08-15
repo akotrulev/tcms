@@ -114,12 +114,14 @@ describe('tools/list', () => {
       arm added to some other tool and NOT annotated — which is invisible from the tool it was added
       to and shows up here as a name this list does not have.
 
-      One name today, and that is not a measure of the change: the five delete keys V52 gave the
-      credential have no MCP tools yet, so they are reachable over REST and the CLI and not through
-      this surface at all.
+      ~~One name today, and that is not a measure of the change: the five delete keys V52 gave the
+      credential have no MCP tools yet.~~ → **four names since §211**, over three of the five.
+      `evidence:delete` and `artifact:delete` are still absent by decision — `writes.ts`'s module
+      header carries both reasons — so this list is also where a slice that changes its mind about
+      either one shows up.
     */
-    expect(tools.filter((tool) => tool.annotations?.destructiveHint).map((tool) => tool.name))
-      .toEqual(['tcms_write_doc_page']);
+    expect(tools.filter((tool) => tool.annotations?.destructiveHint).map((tool) => tool.name).sort())
+      .toEqual(['tcms_write_case', 'tcms_write_doc_page', 'tcms_write_plan', 'tcms_write_suite']);
 
     const search = tools.find((tool) => tool.name === 'tcms_search_cases');
     expect(search?.annotations?.readOnlyHint).toBe(true);
@@ -240,6 +242,28 @@ describe('consent before a delete — §210', () => {
     expect(stub.sent.some((request) => request.method === 'DELETE')).toBe(false);
     expect(result.isError).toBe(true);
     expect((result.content as { text: string }[])[0]?.text).toContain('cannot ask for confirmation');
+  });
+
+  it('covers the arms §211 added without the gate having been touched', async () => {
+    /*
+      The point of keying on `ToolArm.kind` rather than on a list of tool names, driven rather than
+      argued: three delete arms arrived on three tools that were not destructive before, and not a
+      line of `withheldConsent` changed. Driven through `tcms_write_case` because it is the tool
+      whose other three arms are NOT gated — so a gate that had leaked up to the tool would refuse
+      an edit here, and one that had stayed on the doc-page tool would let this delete through.
+    */
+    const stub = api(agentRoutes({
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
+      'DELETE /cases/c-1': { status: 204 },
+    }));
+    const client = await connect(stub);
+
+    const result = await withApi(stub, () =>
+      client.callTool({ name: 'tcms_write_case', arguments: { action: 'delete', case: 'TC-42' } }));
+
+    expect(stub.sent.some((request) => request.method === 'DELETE')).toBe(false);
+    expect(result.isError).toBe(true);
+    expect((result.content as { text: string }[])[0]?.text).toContain('case: TC-42');
   });
 
   it('asks for nothing on a write that is not a delete', async () => {
