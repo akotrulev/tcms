@@ -33,15 +33,17 @@ import org.hibernate.annotations.Filter;
  *
  * <p>~~<strong>Four columns of {@code V1}'s table are deliberately unmapped:</strong>
  * {@code attachment_id}, {@code report_artifact_id} and the two halves of the tags/version story
- * plan §6n describes.~~ <strong>→ three, since §126 phase 3 gave {@link ArtifactKind#FILE} a
- * writer.</strong> The rule stands and the reason expired for one column: mapping a field
+ * plan §6n describes.~~ ~~<strong>→ three, since §126 phase 3 gave {@link ArtifactKind#FILE} a
+ * writer.</strong>~~ <strong>→ two, since §209 gave superseding one</strong> — the same expiry a
+ * third time, and by now the pattern rather than the coincidence. The rule stands and the reason
+ * expired for two columns: mapping a field
  * <em>this slice cannot set</em> would put an always-null accessor on the wire's other side and
  * invite a caller to believe it means something — the call {@code TestCaseDetailView} made for
  * {@code relatedDocuments} and §57 made for {@code coverage}: absent rather than zeroed. This slice
  * can set {@code attachment_id}, so the condition the exclusion was written under no longer holds.
  * That is the fifth time in this project a "blocked" note has outlived its blocker, and the note
  * itself is what made it cheap to notice. {@code ddl-auto: validate} checks that every mapped field
- * has a column and never the reverse, so the remaining three stay inert.
+ * has a column and never the reverse, so the remaining two stay inert.
  *
  * <h2>{@code attachment_id} and {@code attachment.owner_type = 'ARTIFACT'} are not rivals</h2>
  *
@@ -121,6 +123,23 @@ public class Artifact {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private ArtifactStatus status;
+
+    /**
+     * The newer artifact that replaced this one, and {@code null} until one does.
+     *
+     * <p>~~One of the three columns deliberately left unmapped~~ <strong>→ two, since §209 gave
+     * superseding its act.</strong> The exclusion's reason — a field this slice cannot set puts an
+     * always-null accessor on the wire and invites a caller to believe it means something — expired
+     * exactly the way {@link #attachmentId}'s did at §126 phase 3, and the header above already
+     * records that this is what happens to a "blocked" note.
+     *
+     * <p>Written only by {@link #supersededBy}, and never apart from {@link #status}: a row is
+     * {@link ArtifactStatus#SUPERSEDED} precisely when this names something. The two are one fact
+     * with two spellings, and {@code ArtifactRepository.isSupersedingSomething} reads it from the
+     * other end to keep the replacement from being deleted out from under it.
+     */
+    @Column(name = "superseded_by_id")
+    private UUID supersededById;
 
     /** Set for {@link ArtifactKind#DOC_PAGE_REF}. The page is in this same module and project. */
     @Column(name = "doc_page_id", updatable = false)
@@ -236,6 +255,47 @@ public class Artifact {
         return artifact;
     }
 
+    /**
+     * Records that {@code replacementId} has replaced this artifact.
+     *
+     * <p>Status and pointer move together and there is no way to move one without the other — a
+     * {@link ArtifactStatus#SUPERSEDED} row naming no replacement is a claim the register cannot
+     * back, and a replacement named by a row still reading {@link ArtifactStatus#ACTIVE} is the same
+     * disagreement the other way round.
+     *
+     * <p>Nothing is refused here. Whether this row is in a state that may be replaced is the
+     * caller's question, because the refusal has to name a request field in a 400 and an entity
+     * cannot produce one — {@code Artifact.register}'s header, one act over.
+     */
+    void supersededBy(UUID replacementId, UUID actorId, Instant now) {
+        this.status = ArtifactStatus.SUPERSEDED;
+        this.supersededById = replacementId;
+        touch(actorId, now);
+    }
+
+    /**
+     * Takes the artifact out of circulation, or puts it back.
+     *
+     * <p>{@link ArtifactStatus#SUPERSEDED} is not one of the two and the guard is a programming
+     * error rather than a refusal a caller can provoke: the endpoint parses the request into these
+     * two values, so reaching here with the third means a second parser was written somewhere. A
+     * narrower two-value enum would make it unrepresentable and is refused for
+     * {@code RowScopeGate}'s reason — a second type whose only job is to be converted into the first.
+     */
+    void circulate(ArtifactStatus target, UUID actorId, Instant now) {
+        if (target == ArtifactStatus.SUPERSEDED) {
+            throw new IllegalArgumentException(
+                    "SUPERSEDED is the outcome of registering a replacement, never a status to set.");
+        }
+        this.status = target;
+        touch(actorId, now);
+    }
+
+    private void touch(UUID actorId, Instant now) {
+        this.updatedBy = actorId;
+        this.updatedAt = now;
+    }
+
     public UUID getId() {
         return id;
     }
@@ -274,6 +334,11 @@ public class Artifact {
 
     public ArtifactStatus getStatus() {
         return status;
+    }
+
+    /** The newer artifact, when {@link #getStatus()} is {@link ArtifactStatus#SUPERSEDED}. */
+    public UUID getSupersededById() {
+        return supersededById;
     }
 
     public UUID getDocPageId() {

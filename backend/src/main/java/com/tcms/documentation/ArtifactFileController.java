@@ -112,12 +112,17 @@ public class ArtifactFileController {
                     .status(HttpStatus.FORBIDDEN)
                     .body(scopeProblem());
             case ArtifactWriteService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
-            // The delete's two outcomes, unreachable here. Written out rather than defaulted,
-            // because a sealed interface's whole value is that a sixth outcome fails to compile
-            // here instead of falling into an arm that renders it as something else.
+            // The delete's and the status endpoint's outcomes, unreachable here. Written out
+            // rather than defaulted, because a sealed interface's whole value is that a further
+            // outcome fails to compile here instead of falling into an arm that renders it as
+            // something else — which §209 collected on: adding two outcomes reddened this file.
             case ArtifactWriteService.Outcome.Deleted ignored ->
                     ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             case ArtifactWriteService.Outcome.Undeletable ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.Updated ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.Unchangeable ignored ->
                     ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         };
     }

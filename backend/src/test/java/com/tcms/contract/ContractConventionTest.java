@@ -384,6 +384,8 @@ class ContractConventionTest {
             Map.entry("Artifact", List.of(com.tcms.documentation.ArtifactView.class)),
             Map.entry("ArtifactFileInput", List.of(com.tcms.documentation.ArtifactFileInput.class)),
             Map.entry("ArtifactInput", List.of(com.tcms.documentation.ArtifactInput.class)),
+            Map.entry("ArtifactStatusInput",
+                    List.of(com.tcms.documentation.ArtifactStatusInput.class)),
             // THE TWO-OWNER CASE THE LIST VALUE WAS DESIGNED FOR, and it existed before the
             // comment above said nothing did. `repository` and `documentation` may not import each
             // other, so an attachment's wire shape is written twice; this entry is the only thing

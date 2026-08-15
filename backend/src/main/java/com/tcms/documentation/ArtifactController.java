@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -108,8 +109,58 @@ public class ArtifactController {
                     .status(HttpStatus.FORBIDDEN)
                     .body(scopeProblem());
             case ArtifactWriteService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
-            // The delete's two outcomes. Unreachable here, and written out rather than defaulted
-            // for the reason the delete's own switch gives.
+            // The other two writes' outcomes. Unreachable here, and written out rather than
+            // defaulted for the reason the delete's own switch gives.
+            case ArtifactWriteService.Outcome.Deleted ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.Undeletable ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.Updated ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.Unchangeable ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        };
+    }
+
+    /**
+     * Archives an artifact, or restores it — {@code PUT} because the payload is the state the caller
+     * wants rather than the move they want, so sending it twice lands in the same place.
+     *
+     * <p>The 403 here is the create's, unchanged: {@code artifact:edit}, scope-qualified, and read
+     * against the <strong>row's</strong> scope rather than the request's — a Test Engineer archives
+     * their cycle's documents and not the project's test strategy. It carries a body for the same
+     * reason the create's does: the caller holds the key, and what they cannot act on is this row's
+     * scope, which is a fact worth stating rather than a bare "forbidden".
+     *
+     * <p>The 409 is not about the caller at all. {@code SUPERSEDED} is a fact about another row (see
+     * {@code ArtifactStatus}), so it is neither an origin nor a destination here.
+     */
+    @PutMapping("/{artifactId}/status")
+    public ResponseEntity<Object> status(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID artifactId,
+            @RequestBody ArtifactStatusInput input) {
+
+        ArtifactWriteService.Outcome outcome =
+                writes.setStatus(UUID.fromString(jwt.getSubject()), projectId, artifactId, input);
+
+        return switch (outcome) {
+            case ArtifactWriteService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
+            case ArtifactWriteService.Outcome.Invalid invalid -> ResponseEntity.badRequest()
+                    .body(problem("The artifact's status could not be changed.", invalid.errors()));
+            case ArtifactWriteService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            case ArtifactWriteService.Outcome.ForbiddenAtScope ignored -> ResponseEntity
+                    .status(HttpStatus.FORBIDDEN)
+                    .body(statusScopeProblem());
+            case ArtifactWriteService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case ArtifactWriteService.Outcome.Unchangeable refused -> ResponseEntity
+                    .status(HttpStatus.CONFLICT)
+                    .body(conflict("This artifact's status cannot be changed", refused.message()));
+            // The create's and the delete's. Unreachable here — see the delete's switch.
+            case ArtifactWriteService.Outcome.Created ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             case ArtifactWriteService.Outcome.Deleted ignored ->
                     ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             case ArtifactWriteService.Outcome.Undeletable ignored ->
@@ -141,7 +192,7 @@ public class ArtifactController {
                     ResponseEntity.status(HttpStatus.FORBIDDEN).build();
             case ArtifactWriteService.Outcome.Undeletable refused -> ResponseEntity
                     .status(HttpStatus.CONFLICT)
-                    .body(conflict(refused.message()));
+                    .body(conflict("This artifact cannot be removed", refused.message()));
             // Unreachable on this path — the create's three outcomes. The arms stay written rather
             // than collapsed into a default, because a sealed interface's whole value is that
             // adding a fourth outcome fails to compile here instead of falling into one.
@@ -151,14 +202,24 @@ public class ArtifactController {
                     ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             case ArtifactWriteService.Outcome.ForbiddenAtScope ignored ->
                     ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.Updated ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.Unchangeable ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         };
     }
 
-    /** The register's own refusal, worded by the service — see {@code Outcome.Undeletable}. */
-    private static ProblemDetail conflict(String message) {
+    /**
+     * The register's own refusal, worded by the service — see {@code Outcome.Undeletable} and
+     * {@code Outcome.Unchangeable}.
+     *
+     * <p>The title is a parameter because the two 409s are about different acts: "cannot be removed"
+     * on a status conflict would tell the reader about an operation they did not attempt.
+     */
+    private static ProblemDetail conflict(String title, String message) {
         ProblemDetail detail =
                 ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, message);
-        detail.setTitle("This artifact cannot be removed");
+        detail.setTitle(title);
         return detail;
     }
 
@@ -168,8 +229,12 @@ public class ArtifactController {
      * {@code DocPageController}'s header for why a {@code shared} module is not introduced here.
      */
     private static ProblemDetail problem(Map<String, List<String>> errors) {
-        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
-                HttpStatus.BAD_REQUEST, "The artifact could not be registered.");
+        return problem("The artifact could not be registered.", errors);
+    }
+
+    private static ProblemDetail problem(String detailText, Map<String, List<String>> errors) {
+        ProblemDetail detail =
+                ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detailText);
         detail.setTitle("Invalid artifact");
         detail.setProperty("errors", errors);
         return detail;
@@ -189,6 +254,26 @@ public class ArtifactController {
                 "scope",
                 List.of("Your role can add artifacts to a plan, but not to the project as a whole. "
                         + "Project artifacts are inherited by every plan, so a Test Lead owns them.")));
+        return detail;
+    }
+
+    /**
+     * The same refusal about a row that already exists, which is a different sentence: the caller is
+     * not choosing a scope here, they are being told about the one this artifact already sits at.
+     *
+     * <p>Not folded into {@link #scopeProblem()} with the strings as parameters, and the reason is a
+     * check rather than taste — {@code ErrorBodyPolicyTest} reads the <em>construction site</em> and
+     * requires the value to be a literal sentence there, so a parameterized builder hands it a
+     * variable and the rule stops being able to see the words.
+     */
+    private static ProblemDetail statusScopeProblem() {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.FORBIDDEN, "Your role can change a plan's artifacts, but not the project's.");
+        detail.setTitle("Not allowed at this scope");
+        detail.setProperty("errors", Map.of(
+                "scope",
+                List.of("Your role can change a plan's artifacts, but not the project's. Project "
+                        + "artifacts are inherited by every plan, so a Test Lead owns them.")));
         return detail;
     }
 

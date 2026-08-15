@@ -108,6 +108,12 @@ class ArtifactEndpointTest extends IntegrationTestBase {
     private static final UUID BANKING_PLAN = UUID.fromString("af004000-0000-4000-8000-000000000001");
     /** A plan of ACME_LOCKED — same company, different project. The PlanFacts fixture. */
     private static final UUID FOREIGN_PLAN = UUID.fromString("af004000-0000-4000-8000-000000000002");
+    /**
+     * A second plan of ACME_BANKING — added by §209 for the half of the same-scope rule that
+     * {@link #BANKING_PLAN} alone cannot express: two rows may share a scope and still sit in
+     * different cycles, and one cycle's document does not replace another's.
+     */
+    private static final UUID SECOND_PLAN = UUID.fromString("af004000-0000-4000-8000-000000000003");
 
     @Autowired
     private MockMvc mvc;
@@ -222,6 +228,7 @@ class ArtifactEndpointTest extends IntegrationTestBase {
     private void seedPlans() throws SQLException {
         try (Connection connection = appConnection(ACME)) {
             insertPlan(connection, BANKING_PLAN, ACME_BANKING, "AFOLB-P1", 1, "Release 1");
+            insertPlan(connection, SECOND_PLAN, ACME_BANKING, "AFOLB-P2", 2, "Release 2");
             insertPlan(connection, FOREIGN_PLAN, ACME_LOCKED, "AFLCK-P1", 1, "Internal Release 1");
         }
     }
@@ -703,6 +710,293 @@ class ArtifactEndpointTest extends IntegrationTestBase {
      * {@code artifact:edit} compiles, passes review, and hands every Test Engineer the ability to
      * remove a lead's sign-off record.
      */
+    /**
+     * <strong>The act that writes {@code SUPERSEDED}</strong>, and the scope rule that is the whole
+     * of its authorization.
+     *
+     * <p>Superseding writes a <em>second</em> row — the one being replaced — which nothing gated.
+     * The rule that makes the create's own scope-qualified gate cover it is that the replacement
+     * must sit in the same place as the row it replaces. Delete that rule and
+     * {@link #theEngineerCannotRetireWhatTheyMayNotEdit} is the only assertion that goes red.
+     */
+    @Nested
+    @DisplayName("Superseding — one request, two rows, one gate")
+    class Supersession {
+
+        @Test
+        @DisplayName("the replacement flips the old row and names itself on it")
+        void theReplacementFlipsTheOldRow() throws Exception {
+            UUID replaced = createdId(create(LEAD, ACME_BANKING, urlBody("Sign-off v1")));
+
+            UUID replacement = createdId(create(
+                    LEAD, ACME_BANKING, replacing(urlBody("Sign-off v2"), replaced)));
+
+            JsonNode old = row(ACME_BANKING, replaced);
+            assertThat(old.get("status").asText()).isEqualTo("SUPERSEDED");
+            assertThat(old.get("supersededById").asText())
+                    .as("a status the reader cannot follow is a dead end — the pointer is what "
+                            + "turns \"superseded\" into \"superseded by that one\"")
+                    .isEqualTo(replacement.toString());
+            assertThat(row(ACME_BANKING, replacement).get("status").asText()).isEqualTo("ACTIVE");
+        }
+
+        @Test
+        @DisplayName("the replaced row stays in the register — that is the point of not deleting it")
+        void theOldRowStays() throws Exception {
+            UUID replaced = createdId(create(LEAD, ACME_BANKING, urlBody("Sign-off v1")));
+            create(LEAD, ACME_BANKING, replacing(urlBody("Sign-off v2"), replaced));
+
+            assertThat(titlesOf(list(LEAD, ACME_BANKING, null, null)))
+                    .as("plan §6n makes the audit trail the register's value; a supersession that "
+                            + "hid the old row would answer the audit question with a gap")
+                    .containsExactlyInAnyOrder("Sign-off v1", "Sign-off v2");
+        }
+
+        /**
+         * <strong>THE gate assertion of this class.</strong> The engineer may register at plan
+         * scope, so the create itself is allowed — and the row they name is the project's, which
+         * they hold read-only (plan §6n). Drop the same-scope rule and this 400 becomes a 201 that
+         * retires a document the caller may not edit, with a response that looks entirely correct.
+         */
+        @Test
+        @DisplayName("a Test Engineer cannot retire a PROJECT artifact by replacing it from a plan")
+        void theEngineerCannotRetireWhatTheyMayNotEdit() throws Exception {
+            UUID strategy = createdId(create(LEAD, ACME_BANKING, urlBody("Test strategy")));
+
+            MvcResult refused = create(
+                    ENGINEER, ACME_BANKING, replacing(planBody("Cycle note"), strategy));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorFields(refused)).contains("supersedes");
+            assertThat(row(ACME_BANKING, strategy).get("status").asText())
+                    .as("a refused registration must leave the other row alone")
+                    .isEqualTo("ACTIVE");
+        }
+
+        @Test
+        @DisplayName("a plan artifact cannot be replaced from another plan's register either")
+        void theScopeRuleIsAboutThePlanToo() throws Exception {
+            UUID first = createdId(create(LEAD, ACME_BANKING, planBody("Release 1 snapshot")));
+            String otherPlan = link("PLAN", SECOND_PLAN, "Cycle", "Release 2 snapshot",
+                    "https://docs.example.test/r2");
+
+            MvcResult refused = create(LEAD, ACME_BANKING, replacing(otherPlan, first));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorFields(refused)).contains("supersedes");
+        }
+
+        @Test
+        @DisplayName("an artifact already replaced is refused — the chain keeps its middle")
+        void aSecondReplacementIsRefused() throws Exception {
+            UUID first = createdId(create(LEAD, ACME_BANKING, urlBody("Sign-off v1")));
+            create(LEAD, ACME_BANKING, replacing(urlBody("Sign-off v2"), first));
+
+            MvcResult refused =
+                    create(LEAD, ACME_BANKING, replacing(urlBody("Sign-off v3"), first));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(refused).get("errors").get("supersedes").get(0).asText())
+                    .as("overwriting superseded_by_id would leave the register saying v3 replaced "
+                            + "v1 and that v2 replaced nothing")
+                    .contains("already been replaced");
+        }
+
+        @Test
+        @DisplayName("an archived artifact is refused, and told to be restored first")
+        void anArchivedArtifactIsRefused() throws Exception {
+            UUID retired = createdId(create(LEAD, ACME_BANKING, urlBody("Old guide")));
+            assertThat(setStatus(LEAD, ACME_BANKING, retired, "ARCHIVED")
+                    .getResponse().getStatus()).isEqualTo(200);
+
+            MvcResult refused =
+                    create(LEAD, ACME_BANKING, replacing(urlBody("New guide"), retired));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(refused).get("errors").get("supersedes").get(0).asText())
+                    .contains("Restore it");
+        }
+
+        @Test
+        @DisplayName("an artifact of another project is one message with an absent one")
+        void anotherProjectsArtifactIsRefused() throws Exception {
+            UUID elsewhere = UUID.fromString("af005000-0000-4000-8000-000000000009");
+            insertArtifact(elsewhere, ACME, ACME_LOCKED, "Locked project's strategy");
+
+            MvcResult refused =
+                    create(LEAD, ACME_BANKING, replacing(urlBody("Replacement"), elsewhere));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(refused).get("errors").get("supersedes").get(0).asText())
+                    .as("a distinct message would let a caller probe which artifact ids are real "
+                            + "in a project they cannot see (§6t)")
+                    .isEqualTo("That artifact is not in this project.");
+        }
+
+        @Test
+        @DisplayName("the kinds may differ — a stale link replaced by an authored page")
+        void kindsMayDiffer() throws Exception {
+            UUID link = createdId(create(LEAD, ACME_BANKING, urlBody("Strategy on Confluence")));
+            UUID page = createDocPage(LEAD, ACME_BANKING, "Test strategy");
+            String pageRef = "{\"scope\":\"PROJECT\",\"category\":\"Strategy\","
+                    + "\"kind\":\"DOC_PAGE_REF\",\"title\":\"Test strategy\","
+                    + "\"docPageId\":\"" + page + "\"}";
+
+            MvcResult replaced = create(LEAD, ACME_BANKING, replacing(pageRef, link));
+
+            assertThat(replaced.getResponse().getStatus())
+                    .as("what is recorded is that one document took over from another — plan §6n "
+                            + "steers people off stale copies and this is the move that does it")
+                    .isEqualTo(201);
+            assertThat(row(ACME_BANKING, link).get("status").asText()).isEqualTo("SUPERSEDED");
+        }
+
+        @Test
+        @DisplayName("the supersession is audited as the edge, naming both rows")
+        void theActIsAudited() throws Exception {
+            UUID replaced = createdId(create(LEAD, ACME_BANKING, urlBody("January sign-off")));
+            create(LEAD, ACME_BANKING, replacing(urlBody("January sign-off corrected"), replaced));
+
+            assertThat(auditChanges(ACME, "ARTIFACT_SUPERSEDED"))
+                    .as("\"what happened to the January sign-off\" is unanswerable from a row "
+                            + "that only says its status changed")
+                    .hasSize(1)
+                    .allSatisfy(changes -> assertThat(changes)
+                            .contains("January sign-off")
+                            .contains("January sign-off corrected"));
+        }
+    }
+
+    /**
+     * Archiving and restoring — {@code ARCHIVED}'s only writer, and the qualifier read against the
+     * <strong>row's</strong> scope rather than the request's.
+     */
+    @Nested
+    @DisplayName("Archiving — the contributor's key, read against the row")
+    class Circulation {
+
+        @Test
+        @DisplayName("a Test Lead archives an artifact and restores it")
+        void archivesAndRestores() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Old environment guide")));
+
+            MvcResult archived = setStatus(LEAD, ACME_BANKING, id, "ARCHIVED");
+            assertThat(archived.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(archived).get("status").asText()).isEqualTo("ARCHIVED");
+
+            assertThat(body(setStatus(LEAD, ACME_BANKING, id, "ACTIVE")).get("status").asText())
+                    .as("nothing outside the row asserts ARCHIVED, so restoring is the same act "
+                            + "back — unlike SUPERSEDED, which another row is holding")
+                    .isEqualTo("ACTIVE");
+        }
+
+        /**
+         * <strong>THE gate assertion of this class.</strong> One caller, one key, two rows — and
+         * the difference is the row's own scope. Gate this on the request instead of the row and
+         * the engineer archives the project's test strategy by not mentioning its scope.
+         */
+        @Test
+        @DisplayName("a Test Engineer archives a plan's artifact and NOT the project's")
+        void theQualifierIsReadAgainstTheRow() throws Exception {
+            UUID cycleDoc = createdId(create(ENGINEER, ACME_BANKING, planBody("Cycle snapshot")));
+            UUID strategy = createdId(create(LEAD, ACME_BANKING, urlBody("Test strategy")));
+
+            assertThat(setStatus(ENGINEER, ACME_BANKING, cycleDoc, "ARCHIVED")
+                    .getResponse().getStatus())
+                    .as("the roles spec's ✓ — a Test Engineer curates their own cycle")
+                    .isEqualTo(200);
+
+            MvcResult refused = setStatus(ENGINEER, ACME_BANKING, strategy, "ARCHIVED");
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            assertThat(errorFields(refused))
+                    .as("the 403 carries a body naming the field, like the create's, because the "
+                            + "caller holds the key and it is the row's scope they cannot act on")
+                    .contains("scope");
+            assertThat(row(ACME_BANKING, strategy).get("status").asText()).isEqualTo("ACTIVE");
+        }
+
+        @Test
+        @DisplayName("setting the status it already has is agreement, not a conflict")
+        void idempotent() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Guide")));
+            setStatus(LEAD, ACME_BANKING, id, "ARCHIVED");
+
+            assertThat(setStatus(LEAD, ACME_BANKING, id, "ARCHIVED").getResponse().getStatus())
+                    .isEqualTo(200);
+            assertThat(auditChanges(ACME, "ARTIFACT_STATUS_CHANGED"))
+                    .as("an audit row per repeated click buries the change that happened")
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("SUPERSEDED is not a value the endpoint takes")
+        void supersededCannotBeSent() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Guide")));
+
+            MvcResult refused = setStatus(LEAD, ACME_BANKING, id, "SUPERSEDED");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorFields(refused)).contains("status");
+            assertThat(row(ACME_BANKING, id).get("status").asText()).isEqualTo("ACTIVE");
+        }
+
+        @Test
+        @DisplayName("a superseded artifact cannot be archived — 409, and not about the caller")
+        void supersededCannotBeLeft() throws Exception {
+            UUID replaced = createdId(create(LEAD, ACME_BANKING, urlBody("Sign-off v1")));
+            create(LEAD, ACME_BANKING, replacing(urlBody("Sign-off v2"), replaced));
+
+            MvcResult refused = setStatus(LEAD, ACME_BANKING, replaced, "ARCHIVED");
+
+            assertThat(refused.getResponse().getStatus())
+                    .as("the caller holds the strongest key in the module; it is the state that "
+                            + "refuses, so an administrator cannot help and a 403 would lie")
+                    .isEqualTo(409);
+            assertThat(body(refused).get("detail").asText()).contains("replaced this one");
+        }
+
+        @Test
+        @DisplayName("a Viewer is refused with no body — they hold artifact:edit at no scope")
+        void theViewerIsRefused() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Guide")));
+
+            MvcResult refused = setStatus(VIEWER, ACME_BANKING, id, "ARCHIVED");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            assertThat(refused.getResponse().getContentAsString()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("another project's artifact is a 404 through a project the caller can write")
+        void anotherProjectsArtifactIsNotReachable() throws Exception {
+            UUID elsewhere = UUID.fromString("af005000-0000-4000-8000-00000000000a");
+            insertArtifact(elsewhere, ACME, ACME_LOCKED, "Locked project's guide");
+
+            assertThat(setStatus(LEAD, ACME_BANKING, elsewhere, "ARCHIVED")
+                    .getResponse().getStatus())
+                    .as("the path segment must select the row, not merely authorise the call")
+                    .isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("the move is audited with the state it left")
+        void theMoveIsAudited() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Guide")));
+
+            setStatus(LEAD, ACME_BANKING, id, "ARCHIVED");
+
+            List<String> recorded = auditChanges(ACME, "ARTIFACT_STATUS_CHANGED");
+            assertThat(recorded).hasSize(1);
+            // Read as JSON rather than as a substring: the column is jsonb, so Postgres hands the
+            // object back reformatted and a literal `"from":"ACTIVE"` never matches.
+            JsonNode changes = json.readTree(recorded.get(0));
+            assertThat(changes.get("from").asText())
+                    .as("a status event without the state it left says nothing")
+                    .isEqualTo("ACTIVE");
+            assertThat(changes.get("to").asText()).isEqualTo("ARCHIVED");
+        }
+    }
+
     @Nested
     @DisplayName("Deleting an artifact — the key that is not artifact:edit")
     class Deletion {
@@ -790,13 +1084,18 @@ class ArtifactEndpointTest extends IntegrationTestBase {
          * The inbound edge {@code Artifact}'s javadoc said did not exist — see
          * {@code ArtifactRepository.isSupersedingSomething}. Without the check this is a foreign-key
          * violation surfacing as a 500.
+         *
+         * <p>~~The state is produced by raw SQL, which is the only way to reach it.~~ <strong>→ by
+         * the register's own act since §209.</strong> The guard was written before its writer
+         * existed — the same call the write-once row makes — and this is the round where the
+         * fixture stops being a stand-in for a product that could not do it.
          */
         @Test
         @DisplayName("an artifact that superseded another is refused with 409, not a 500")
         void theReplacementCannotBeDeleted() throws Exception {
             UUID replaced = createdId(create(LEAD, ACME_BANKING, urlBody("Old sign-off")));
-            UUID replacement = createdId(create(LEAD, ACME_BANKING, urlBody("Corrected sign-off")));
-            setSupersededBy(replaced, replacement);
+            UUID replacement = createdId(create(
+                    LEAD, ACME_BANKING, replacing(urlBody("Corrected sign-off"), replaced)));
 
             MvcResult refused = delete(LEAD, ACME_BANKING, replacement);
 
@@ -990,6 +1289,31 @@ class ArtifactEndpointTest extends IntegrationTestBase {
         return link("PLAN", BANKING_PLAN, "Cycle", title, "https://docs.example.test/plan-doc");
     }
 
+    /** The same registration, replacing {@code supersedes}. Spliced in rather than re-spelled. */
+    private String replacing(String body, UUID supersedes) {
+        return body.substring(0, body.length() - 1) + ",\"supersedes\":\"" + supersedes + "\"}";
+    }
+
+    private MvcResult setStatus(UUID userId, UUID projectId, UUID artifactId, String status)
+            throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .put("/api/v1/projects/" + projectId + "/artifacts/" + artifactId
+                                + "/status")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(userId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":" + quote(status) + "}"))
+                .andReturn();
+    }
+
+    /** One row of the register, read back through the list the SPA reads. */
+    private JsonNode row(UUID projectId, UUID artifactId) throws Exception {
+        return list(LEAD, projectId, null, null).stream()
+                .filter(candidate -> candidate.get("id").asText().equals(artifactId.toString()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no such row in the register: " + artifactId));
+    }
+
     private UUID createdId(MvcResult result) throws Exception {
         assertThat(result.getResponse().getStatus())
                 .as("the fixture's own create must succeed, or the assertion under test is "
@@ -1066,17 +1390,6 @@ class ArtifactEndpointTest extends IntegrationTestBase {
              var statement = connection.prepareStatement(
                      "UPDATE artifact SET write_once = true WHERE id = ?")) {
             statement.setObject(1, artifactId);
-            statement.executeUpdate();
-        }
-    }
-
-    /** Points {@code replaced} at {@code replacement} — the self-FK nothing writes yet. */
-    private void setSupersededBy(UUID replaced, UUID replacement) throws SQLException {
-        try (Connection connection = appConnection(ACME);
-             var statement = connection.prepareStatement(
-                     "UPDATE artifact SET superseded_by_id = ? WHERE id = ?")) {
-            statement.setObject(1, replacement);
-            statement.setObject(2, replaced);
             statement.executeUpdate();
         }
     }

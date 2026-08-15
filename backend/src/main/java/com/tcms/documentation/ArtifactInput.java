@@ -19,6 +19,13 @@ import java.util.UUID;
  * @param planId    required when {@code scope} is {@link ArtifactScope#PLAN}, rejected otherwise
  * @param docPageId required when {@code kind} is {@link ArtifactKind#DOC_PAGE_REF}
  * @param url       required when {@code kind} is {@link ArtifactKind#EXTERNAL_URL}
+ * @param supersedes the artifact this one replaces, or {@code null} for an ordinary registration.
+ *                  <strong>The only writer of {@link ArtifactStatus#SUPERSEDED}</strong> (§209):
+ *                  the replacement and the replacement's effect on the old row are one request, so
+ *                  there is no window in which a newer document exists and the register still calls
+ *                  the old one current. It must sit at the same scope and — at {@link
+ *                  ArtifactScope#PLAN} — in the same plan, which is what makes the create's own
+ *                  qualifier gate sufficient for both rows
  */
 public record ArtifactInput(
         ArtifactScope scope,
@@ -28,5 +35,6 @@ public record ArtifactInput(
         String title,
         String description,
         UUID docPageId,
-        String url) {
+        String url,
+        UUID supersedes) {
 }

@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -72,6 +73,7 @@ public class ArtifactWriteService {
     private final DocPageRepository pages;
     private final PlanFacts plans;
     private final ArtifactPeople people;
+    private final ArtifactFiles files;
     private final AttachmentRepository attachments;
     private final AttachmentStore store;
     private final AuditEventRepository auditEvents;
@@ -83,6 +85,7 @@ public class ArtifactWriteService {
             DocPageRepository pages,
             PlanFacts plans,
             ArtifactPeople people,
+            ArtifactFiles files,
             AttachmentRepository attachments,
             AttachmentStore store,
             AuditEventRepository auditEvents,
@@ -93,6 +96,7 @@ public class ArtifactWriteService {
         this.pages = pages;
         this.plans = plans;
         this.people = people;
+        this.files = files;
         this.attachments = attachments;
         this.store = store;
         this.auditEvents = auditEvents;
@@ -133,6 +137,24 @@ public class ArtifactWriteService {
 
         /** A new artifact. 201. */
         record Created(ArtifactView view) implements Outcome {
+        }
+
+        /** The row after a status move. 200. */
+        record Updated(ArtifactView view) implements Outcome {
+        }
+
+        /**
+         * The register refuses to move the status — a <strong>409</strong>, like
+         * {@link Undeletable} and for the same reason: the caller's permissions are not the problem
+         * and an administrator cannot help.
+         *
+         * <p>One state reaches it. {@link ArtifactStatus#SUPERSEDED} is not a judgement about this
+         * row but a fact about another one, so it can be neither chosen nor left, and a caller who
+         * asks is told what the state means rather than being given a way out that does not exist.
+         *
+         * @param message written for the person looking at the register
+         */
+        record Unchangeable(String message) implements Outcome {
         }
 
         /**
@@ -194,6 +216,7 @@ public class ArtifactWriteService {
                             now));
 
                     audit(project.getId(), userId, artifact, now);
+                    applySupersession(project.getId(), userId, input, artifact, now);
 
                     Map<UUID, UserRef> authors =
                             people.resolve(CompanyContext.require(), List.of(userId));
@@ -303,6 +326,7 @@ public class ArtifactWriteService {
                 now));
 
         audit(project.getId(), userId, artifact, now);
+        applySupersession(project.getId(), userId, input, artifact, now);
 
         // LAST — the half that does not roll back goes after the half that does.
         store.put(key, upload.bytes());
@@ -310,6 +334,131 @@ public class ArtifactWriteService {
         Map<UUID, UserRef> authors = people.resolve(companyId, List.of(userId));
         return new Outcome.Created(
                 ArtifactView.of(project.getId(), artifact, file, false, authors));
+    }
+
+    /**
+     * Points the replaced artifact at its replacement — <strong>{@link ArtifactStatus#SUPERSEDED}'s
+     * only writer</strong>, and a no-op for an ordinary registration.
+     *
+     * <p>Runs after the new row is saved and flushes before touching the old one, because
+     * {@code artifact.superseded_by_id} is a foreign key and Postgres checks it at statement time.
+     * Hibernate does order inserts before updates within one flush; the explicit call is cheaper
+     * than depending on that, and it is the same reasoning {@link #writeFile} applies to the
+     * attachment.
+     *
+     * <p><strong>No permission is consulted here and that is the design, not an omission.</strong>
+     * {@link #validate} has already refused a replacement whose scope or plan differs from the row
+     * it replaces, so the create's own scope-qualified gate — which passed for the new row — passed
+     * for a row sitting in exactly the same place. Drop the same-scope rule and this becomes the
+     * escalation it exists to prevent: a Test Engineer registering a plan-scope artifact that
+     * retires the project's test strategy, which they may not touch.
+     *
+     * <p>{@code write_once} is deliberately <em>not</em> checked. Superseding is precisely what a
+     * sign-off record is for — the delete's own refusal says so and names it as the way forward.
+     */
+    private void applySupersession(
+            UUID projectId, UUID userId, ArtifactInput input, Artifact replacement, Instant now) {
+
+        if (input.supersedes() == null) {
+            return;
+        }
+        artifacts.flush();
+        artifacts.findInProject(projectId, input.supersedes()).ifPresent(replaced -> {
+            replaced.supersededBy(replacement.getId(), userId, now);
+            artifacts.save(replaced);
+            auditSupersession(projectId, userId, replaced, replacement, now);
+        });
+    }
+
+    /**
+     * Takes an artifact out of circulation, or puts it back —
+     * <strong>{@link ArtifactStatus#ARCHIVED}'s only writer</strong>.
+     *
+     * <h2>The gate is the create's key read against the ROW's scope</h2>
+     *
+     * <p>{@code artifact:edit}, scope-qualified, exactly as both creates are — and the one word that
+     * differs carries the whole rule. A create is gated on the scope in the <em>request</em>, because
+     * that is the scope the row will have; this is gated on the scope the row already
+     * <em>has</em>. Read the request instead and a Test Engineer archives the project's test
+     * strategy by not mentioning its scope, which is the inheritance rule (plan §6n) defeated by an
+     * omitted field.
+     *
+     * <p>Not {@code artifact:delete}. Archiving keeps the row, keeps it readable and can be undone;
+     * §208's suite argument one module over, and the same conclusion — removal is the Lead's key,
+     * taking something out of use is the contributor's.
+     *
+     * <p>Idempotent: setting the status a row already has answers 200 with the row and writes no
+     * audit event. {@code DocPageWriteService.setStatus}'s call — two people archiving the same
+     * artifact are agreeing, not conflicting, and an audit row per repeated click buries the change
+     * that happened.
+     */
+    @Transactional
+    public Outcome setStatus(
+            UUID userId, UUID projectId, UUID artifactId, ArtifactStatusInput input) {
+
+        return gated(projects.writeGrantedByRowScope(userId, projectId, PERMISSION,
+                (project, rowScope) -> {
+                    ArtifactStatus target = parseCirculation(input.status());
+                    if (target == null) {
+                        return new Outcome.Invalid(Map.of("status", List.of(
+                                "Choose a status: ACTIVE or ARCHIVED. An artifact becomes "
+                                        + "SUPERSEDED by having a replacement registered against "
+                                        + "it, so it cannot be set here.")));
+                    }
+                    Optional<Artifact> found = artifacts.findInProject(project.getId(), artifactId);
+                    if (found.isEmpty()) {
+                        return new Outcome.NotFound();
+                    }
+                    Artifact artifact = found.get();
+                    if (!rowScope.mayActOn(artifact.getScope() == ArtifactScope.PLAN)) {
+                        return new Outcome.ForbiddenAtScope();
+                    }
+                    if (artifact.getStatus() == ArtifactStatus.SUPERSEDED) {
+                        return new Outcome.Unchangeable(
+                                "A newer artifact has replaced this one, so the register keeps it "
+                                        + "as the record of what it replaced. Archive the "
+                                        + "replacement instead if the document is no longer "
+                                        + "relevant.");
+                    }
+
+                    Instant now = clock.instant();
+                    ArtifactStatus previous = artifact.getStatus();
+                    artifact.circulate(target, userId, now);
+                    artifacts.saveAndFlush(artifact);
+                    if (previous != target) {
+                        auditCirculation(project.getId(), userId, artifact, previous, now);
+                    }
+
+                    Map<UUID, UserRef> authors = people.resolve(
+                            CompanyContext.require(), List.of(artifact.getUpdatedBy()));
+                    return new Outcome.Updated(ArtifactView.of(
+                            project.getId(),
+                            artifact,
+                            files.forArtifact(artifact).orElse(null),
+                            false,
+                            authors));
+                }));
+    }
+
+    /**
+     * The two values the status endpoint takes, or {@code null} for anything else.
+     *
+     * <p>{@code SUPERSEDED} lands in the {@code null} arm along with a typo, deliberately: it is not
+     * a status a caller chooses, and the field message says which two are and why the third is not.
+     *
+     * <p>Package-private for its own test — §184's call. The rule is total over a string and needs
+     * no context, no container and no row, so proving it from the endpoint would cost a Spring boot
+     * per case and would still only reach the values somebody thought to send.
+     */
+    static ArtifactStatus parseCirculation(String candidate) {
+        if (candidate == null) {
+            return null;
+        }
+        String normalized = candidate.trim().toUpperCase(Locale.ROOT);
+        if (normalized.equals(ArtifactStatus.ACTIVE.name())) {
+            return ArtifactStatus.ACTIVE;
+        }
+        return normalized.equals(ArtifactStatus.ARCHIVED.name()) ? ArtifactStatus.ARCHIVED : null;
     }
 
     /**
@@ -453,7 +602,64 @@ public class ArtifactWriteService {
 
         validateScope(projectId, input, errors);
         validateKind(projectId, input, hasUpload, errors);
+        validateSupersedes(projectId, input, errors);
         return errors;
+    }
+
+    /**
+     * The artifact being replaced has to be one this registration is allowed to replace.
+     *
+     * <h2>Same scope, same plan — the rule the permission model rests on</h2>
+     *
+     * <p>This looks like tidiness and is the slice's one security-relevant check. The create's gate
+     * asks whether the caller may write at the scope in the <em>request</em>; superseding writes a
+     * second row nobody gated. Requiring the two to sit in the same place is what makes the one gate
+     * cover both — without it, a Test Engineer registers a plan-scope note that retires the
+     * project's test strategy, a document plan §6n gives them read-only.
+     *
+     * <p>It is also the honest domain rule independently of that: a cycle's sign-off does not
+     * replace the project's environment guide, and one plan's document does not replace another
+     * plan's. The kinds are free to differ — a Confluence link may be replaced by an upload, which
+     * is the register's stated way of steering people off stale copies.
+     *
+     * <h2>Only an ACTIVE artifact may be replaced</h2>
+     *
+     * <p>A second replacement would overwrite {@code superseded_by_id} and lose the middle of the
+     * chain, leaving the register asserting that the newest document replaced the oldest and that
+     * the one in between replaced nothing. An archived row is already out of use, so replacing it
+     * answers a question nobody asked; the message names the way back rather than refusing flatly.
+     */
+    private void validateSupersedes(
+            UUID projectId, ArtifactInput input, Map<String, List<String>> errors) {
+
+        if (input.supersedes() == null) {
+            return;
+        }
+        Optional<Artifact> found = artifacts.findInProject(projectId, input.supersedes());
+        if (found.isEmpty()) {
+            // Absent, another project's and another company's are one message, for validateScope's
+            // reason: a distinct one would let a caller probe which artifact ids are real.
+            errors.put("supersedes", List.of("That artifact is not in this project."));
+            return;
+        }
+        Artifact replaced = found.get();
+        UUID requestedPlan = input.scope() == ArtifactScope.PLAN ? input.planId() : null;
+        if (replaced.getScope() != input.scope()
+                || !Objects.equals(replaced.getPlanId(), requestedPlan)) {
+            errors.put("supersedes", List.of(
+                    "A replacement has to sit where the artifact it replaces sits — the same "
+                            + "scope, and the same plan."));
+            return;
+        }
+        if (replaced.getStatus() == ArtifactStatus.SUPERSEDED) {
+            errors.put("supersedes", List.of(
+                    "That artifact has already been replaced. Replace the artifact that replaced "
+                            + "it."));
+        } else if (replaced.getStatus() == ArtifactStatus.ARCHIVED) {
+            errors.put("supersedes", List.of(
+                    "That artifact is archived, so nothing is using it. Restore it first if it is "
+                            + "the one being replaced."));
+        }
     }
 
     /**
@@ -609,6 +815,46 @@ public class ArtifactWriteService {
                         + (artifact.getExternalUrl() == null ? ""
                                 : ",\"url\":" + AuditEvent.jsonString(artifact.getExternalUrl()))
                         + "}",
+                now));
+    }
+
+    /**
+     * The replacement, recorded from the replaced row's side.
+     *
+     * <p>Both ids are in the body because the event answers a question about a <em>pair</em>: "what
+     * happened to the January sign-off" is unanswerable from a row that only says its status
+     * changed. The registration of the replacement has its own {@code ARTIFACT_REGISTERED} event —
+     * this is the edge between them, which neither of the two rows' own events carries.
+     */
+    private void auditSupersession(
+            UUID projectId, UUID userId, Artifact replaced, Artifact replacement, Instant now) {
+
+        auditEvents.save(AuditEvent.record(
+                projectId,
+                userId,
+                "ARTIFACT_SUPERSEDED",
+                AUDIT_TARGET,
+                List.of(replaced.getId()),
+                "{\"title\":" + AuditEvent.jsonString(replaced.getTitle())
+                        + ",\"supersededBy\":\"" + replacement.getId() + "\""
+                        + ",\"supersededByTitle\":" + AuditEvent.jsonString(replacement.getTitle())
+                        + "}",
+                now));
+    }
+
+    /** Archiving and restoring, with the state left behind — a status event without it says nothing. */
+    private void auditCirculation(
+            UUID projectId, UUID userId, Artifact artifact, ArtifactStatus previous, Instant now) {
+
+        auditEvents.save(AuditEvent.record(
+                projectId,
+                userId,
+                "ARTIFACT_STATUS_CHANGED",
+                AUDIT_TARGET,
+                List.of(artifact.getId()),
+                "{\"title\":" + AuditEvent.jsonString(artifact.getTitle())
+                        + ",\"from\":\"" + previous + "\""
+                        + ",\"to\":\"" + artifact.getStatus() + "\"}",
                 now));
     }
 

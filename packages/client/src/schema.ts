@@ -5773,7 +5773,15 @@ export interface paths {
          *
          *     `status` is absent from the input on purpose (plan §6g): `SUPERSEDED` is the outcome of
          *     superseding something, and a create that could set it would be an author approving their
-         *     own record.
+         *     own record. **`supersedes` is how that outcome is produced** — see the field.
+         *
+         *     **Registering a replacement is one request, not two.** `supersedes` names the artifact this
+         *     one takes over from; the server flips that row to `SUPERSEDED` and sets its
+         *     `supersededById` in the same transaction, so there is no window in which the newer document
+         *     exists and the register still calls the older one current. A `PUT` on the old row would
+         *     have left that window open and would have needed its own permission check — where this
+         *     needs none beyond the create's, because the replacement must sit at the same scope and in
+         *     the same plan as the row it replaces.
          */
         post: {
             parameters: {
@@ -5839,6 +5847,11 @@ export interface paths {
          *     *superseding* it (plan §6n) — a second artifact naming the first — so the bytes are fixed
          *     at registration. An artifact that swapped its bytes would keep the author, the timestamp
          *     and the audit trail of the file it replaced.
+         *
+         *     That advice named an act the product could not perform for two milestones. `supersedes` on
+         *     `ArtifactFileInput` is it, and the replaced artifact does not have to be an upload: a
+         *     Confluence link superseded by a signed PDF is the register's own steering, one direction
+         *     at a time.
          *
          *     **Requires `artifact:edit`, scope-qualified exactly as the reference create is.** A Test
          *     Engineer may upload a cycle's sign-off and may not upload the project's test strategy, for
@@ -5953,7 +5966,14 @@ export interface paths {
          *       nothing.
          *     - **An artifact another one supersedes cannot be deleted.** `superseded_by_id` would be
          *       left dangling, and a correction pointing at a record that no longer exists is worse than
-         *       either row alone.
+         *       either row alone. Reachable by ordinary use since `supersedes` shipped; before that the
+         *       only way to produce the state was `psql`, and the guard was written anyway for the reason
+         *       the write-once one was.
+         *
+         *     **A `SUPERSEDED` artifact is still deletable, and that is a decision.** Being replaced is
+         *     not what makes a record permanent — `write_once` is, and it is the column whose stated
+         *     meaning is exactly that. Refusing both ends of the edge would make a *mis-registered* link
+         *     immortal the moment somebody corrected it, since the replacement cannot be deleted either.
          */
         delete: {
             parameters: {
@@ -5980,6 +6000,52 @@ export interface paths {
                 409: components["responses"]["Conflict"];
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/artifacts/{artifactId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                artifactId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Archive an artifact, or restore it
+         * @description Takes an artifact out of circulation, or puts it back. `ArtifactStatus.ARCHIVED` had no
+         *     writer from `V1` until this operation existed, which made "no longer relevant, kept for
+         *     the record" a state the schema described and the product could not reach.
+         *
+         *     **Requires `artifact:edit`, scope-qualified against the ROW's scope** — not the request's,
+         *     which is the one word that differs from the create and carries the whole rule. A Test
+         *     Engineer archives their cycle's documents and may not archive the project's test strategy,
+         *     a document plan §6n gives every plan read-only. Reading a scope out of the body instead
+         *     would let that restriction be defeated by an omitted field. The refusal is a `403` with
+         *     `errors.scope`, exactly as the create's is.
+         *
+         *     **Not `artifact:delete`.** Archiving keeps the row, keeps it readable and can be undone;
+         *     removal is the Lead's key and this is the contributor's. Same line §208 drew between
+         *     deprecating a suite and deleting one.
+         *
+         *     **`SUPERSEDED` is neither a value you may send nor a state you may leave**, and both halves
+         *     follow from what it means: it holds exactly when `supersededById` names a replacement, so
+         *     it is a fact about another row rather than a judgement about this one. Sending it is a
+         *     `400` naming the two values this takes; sending anything at all for a row that already has
+         *     it is a `409` — the caller's permissions are not the problem and an administrator cannot
+         *     help.
+         *
+         *     Idempotent: setting the status a row already has answers `200` with the row and writes no
+         *     audit event. Two people archiving the same artifact are agreeing, not conflicting.
+         */
+        put: operations["setArtifactStatus"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -10687,8 +10753,24 @@ export interface components {
             kind: "FILE" | "DOC_PAGE_REF" | "EXTERNAL_URL" | "GENERATED_REPORT";
             title: string;
             description?: string | null;
-            /** @enum {string} */
+            /**
+             * @description `ACTIVE` is where every registration starts. `ARCHIVED` is chosen, on
+             *     `PUT /projects/{projectId}/artifacts/{artifactId}/status`, and reversible. `SUPERSEDED`
+             *     is neither: it holds exactly when `supersededById` names a replacement, so it is
+             *     written only by registering one and is never left.
+             * @enum {string}
+             */
             status: "ACTIVE" | "SUPERSEDED" | "ARCHIVED";
+            /**
+             * Format: uuid
+             * @description The newer artifact that replaced this one, and `null` unless `status` is `SUPERSEDED`.
+             *
+             *     Here because a status the reader cannot follow is a dead end — "superseded" without
+             *     *by what* sends somebody scanning the register for a title they have to guess. The
+             *     replacement is in the same register and at the same scope by construction, so a client
+             *     resolves it from the rows it already holds rather than fetching it.
+             */
+            supersededById?: string | null;
             /** @description Project-scope artifact shown read-only inside a plan (plan §6n). */
             inherited: boolean;
             /**
@@ -10760,6 +10842,13 @@ export interface components {
             category: string;
             title: string;
             description?: string | null;
+            /**
+             * Format: uuid
+             * @description As `ArtifactInput.supersedes`. This is the field this endpoint's own description has
+             *     been pointing at since it shipped — "replacing the document is superseding it" — and
+             *     the replaced artifact need not itself be a `FILE`.
+             */
+            supersedes?: string | null;
         };
         /**
          * @description A registration. Which of `docPageId` / `url` is required is decided by `kind`, and which of
@@ -10812,6 +10901,41 @@ export interface components {
              *     the product's own markup around it.
              */
             url?: string | null;
+            /**
+             * Format: uuid
+             * @description The artifact this registration replaces, or omitted for an ordinary one. **The only
+             *     writer of `SUPERSEDED`** — that row is flipped and its `supersededById` set in the same
+             *     transaction, so a replacement and its effect are never two requests.
+             *
+             *     It must sit at the **same scope** and, at `PLAN` scope, in the **same plan**. That is
+             *     what makes the create's own scope-qualified gate cover both rows: the check that
+             *     passed for the new one passed for a row in exactly the same place. Without the rule, a
+             *     Test Engineer registers a plan-scope note that retires the project's test strategy —
+             *     a document they hold read-only.
+             *
+             *     Only an `ACTIVE` artifact may be replaced. A second replacement would overwrite
+             *     `supersededById` and lose the middle of the chain; an archived row is already out of
+             *     use, and the `400` says to restore it first.
+             *
+             *     The **kinds are free to differ**. What is being recorded is that one document took over
+             *     from another, and a stale uploaded copy replaced by an authored doc page is exactly the
+             *     move plan §6n steers people toward.
+             */
+            supersedes?: string | null;
+        };
+        /**
+         * @description The state the caller wants, for
+         *     `PUT /projects/{projectId}/artifacts/{artifactId}/status`.
+         */
+        ArtifactStatusInput: {
+            /**
+             * @description **A proper subset of `Artifact.status`.** `SUPERSEDED` is missing on purpose rather
+             *     than by omission: it is a fact about another row, so it is written by registering a
+             *     replacement and by nothing else. Declaring it here would offer a value the server
+             *     refuses — a contract disagreeing with itself about the same field.
+             * @enum {string}
+             */
+            status: "ACTIVE" | "ARCHIVED";
         };
         User: components["schemas"]["UserRef"] & {
             /** @enum {string} */
@@ -12414,6 +12538,38 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    setArtifactStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                artifactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtifactStatusInput"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Artifact"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listReportDefinitions: {

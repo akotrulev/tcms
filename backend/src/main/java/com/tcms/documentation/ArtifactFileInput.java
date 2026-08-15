@@ -26,13 +26,20 @@ import java.util.UUID;
  * @param scope  {@code PROJECT} or {@code PLAN}, gated exactly as the reference create is — a Test
  *               Engineer may upload a cycle's sign-off and not the project's test strategy
  * @param planId required when {@code scope} is {@link ArtifactScope#PLAN}, rejected otherwise
+ * @param supersedes as {@link ArtifactInput#supersedes()}, and the field this endpoint's own help
+ *               text has been promising since §126 phase 3: "the bytes are fixed at registration —
+ *               replacing the document means registering a new artifact that supersedes this one"
+ *               described an act nothing could perform until §209. A replaced upload does not have
+ *               to be replaced by another upload; kinds are free to differ, because what is being
+ *               recorded is that one document took over from another
  */
 public record ArtifactFileInput(
         ArtifactScope scope,
         UUID planId,
         String category,
         String title,
-        String description) {
+        String description,
+        UUID supersedes) {
 
     /**
      * The same registration, in the shape the shared validation and the entity factory already
@@ -44,6 +51,7 @@ public record ArtifactFileInput(
      */
     ArtifactInput asRegistration() {
         return new ArtifactInput(
-                scope, planId, category, ArtifactKind.FILE, title, description, null, null);
+                scope, planId, category, ArtifactKind.FILE, title, description, null, null,
+                supersedes);
     }
 }

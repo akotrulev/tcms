@@ -35,6 +35,12 @@ import java.util.UUID;
  *                   when the writer arrived. Still {@code null} for every non-{@code FILE} row,
  *                   where it means what it always meant
  * @param sizeBytes  likewise, and the column the register renders for uploads
+ * @param supersededById the artifact that replaced this one, and {@code null} for every row that is
+ *                   not {@link ArtifactStatus#SUPERSEDED}. On the wire since §209 because a status
+ *                   the reader cannot follow is a dead end: "superseded" without *by what* sends
+ *                   somebody scanning the register for a title they have to guess. The replacement
+ *                   is in the same register and at the same scope by construction, so the client
+ *                   resolves it from the rows it already holds rather than fetching
  */
 public record ArtifactView(
         UUID id,
@@ -44,6 +50,7 @@ public record ArtifactView(
         String title,
         String description,
         ArtifactStatus status,
+        UUID supersededById,
         boolean inherited,
         String url,
         UUID docPageId,
@@ -82,6 +89,7 @@ public record ArtifactView(
                 artifact.getTitle(),
                 artifact.getDescription(),
                 artifact.getStatus(),
+                artifact.getSupersededById(),
                 inherited,
                 file == null ? artifact.getExternalUrl() : contentPath(projectId, artifact.getId()),
                 artifact.getDocPageId(),
