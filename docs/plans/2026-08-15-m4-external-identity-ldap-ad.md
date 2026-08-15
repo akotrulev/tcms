@@ -22,7 +22,7 @@ code**: the module may not reach the network (§6r trap 5, ArchUnit), which is t
 **Tech Stack:** Java 21 · Spring Boot 3.5.6 · `spring-boot-starter-ldap` (Spring LDAP `LdapTemplate`
 over JNDI — new dependency, the first this M4 lane adds) · UnboundID `InMemoryDirectoryServer` for
 tests (ships with the starter, so it is a test-scope declaration and not a new artifact to source) ·
-Flyway `V56` · Testcontainers Postgres 17 · Vite 8 · React 19 · TypeScript strict · MUI v7 ·
+Flyway `V57` · Testcontainers Postgres 17 · Vite 8 · React 19 · TypeScript strict · MUI v7 ·
 TanStack Query · Vitest + RTL.
 
 ---
@@ -52,12 +52,13 @@ than dropped.
   `schema.d.ts` copies are regenerated in the same task and the same commit. `schemaFreshness.test.ts`
   and `contractPairing.test.ts` fail if they diverge. Say so before starting: no other lane may edit
   `openapi.yaml` while this one is in flight, and the output is never hand-merged.
-- **Flyway version `V56` is pre-assigned here.** The highest applied version on `master` is `V55`
-  (`V55__provider_discovery_for_domain.sql`). `out-of-order` is unset, so a `V56` landing after
-  somebody else's `V56`/`V57` is refused **on an already-migrated database and nowhere else** —
+- **Flyway version `V57` is pre-assigned here.** The highest applied version on `master` is `V56`
+  (`V56__role_scope_agrees_with_the_grant_shape.sql`, §225 — this plan was renumbered
+  from `V56` to `V57` at integration, 2026-08-15, per the landing-order rule). `out-of-order` is unset, so a `V57` landing after
+  somebody else's `V57`/`V58` is refused **on an already-migrated database and nowhere else** —
   Testcontainers migrates a fresh container every run and structurally cannot see it. There are three
   worktrees under `.claude/worktrees/`; check their `db/migration/` directories before writing the
-  file, and renumber at integration in landing order if one of them has taken 56.
+  file, and renumber at integration in landing order if one of them has taken 57.
 - **Fixture UUID prefix `f3`** (`f3000000-0000-0000-0000-0000000000NN`) for this plan's fixtures.
   Hand-managed with no check behind it; it has collided five times (§19 … §62). Plan 1 took `f2`.
   State the prefix in the fixture file's own header.
@@ -210,7 +211,7 @@ with the AD field swap (Task 6, `guidOf`). `entryUUID` arrives as a plain string
 
 `tcms_resolve_providers_for_domain` must start returning `kind`, and Postgres refuses to replace a
 function whose `RETURNS TABLE` shape changed (`42P13 — cannot change return type of existing
-function`). V56 must `DROP FUNCTION` first and then `CREATE`, and the **`REVOKE ALL … FROM PUBLIC`
+function`). V57 must `DROP FUNCTION` first and then `CREATE`, and the **`REVOKE ALL … FROM PUBLIC`
 and the `GRANT … TO tcms_app` must be repeated** — a dropped function takes its grants with it, and
 the failure mode of forgetting is a `permission denied for function` on the login screen of a
 migrated deployment while every fresh-container test stays green.
@@ -262,7 +263,7 @@ the result set size is not exactly 1, and the refusal is the ordinary one.
 
 | File | Responsibility |
 |---|---|
-| `backend/src/main/resources/db/migration/V56__ldap_identity_provider.sql` | The LDAP columns, the per-kind `CHECK`, and the discovery function regaining `kind` |
+| `backend/src/main/resources/db/migration/V57__ldap_identity_provider.sql` | The LDAP columns, the per-kind `CHECK`, and the discovery function regaining `kind` |
 | `backend/src/main/java/com/tcms/auth/LdapProperties.java` | Timeouts and the throttle's numbers |
 | `backend/src/main/java/com/tcms/auth/LdapDirectory.java` | The only class that talks LDAP: search, bind, attribute reading |
 | `backend/src/main/java/com/tcms/auth/LdapLoginService.java` | The flow — resolve, open context, search, bind, resolve identity, mint session |
@@ -543,10 +544,10 @@ git commit -m "§NNN phase 1 — the contract for a directory that is not an iss
 
 ---
 
-## Task 3: V56 — the columns, the per-kind shape check, and the function that must be dropped
+## Task 3: V57 — the columns, the per-kind shape check, and the function that must be dropped
 
 **Files:**
-- Create: `backend/src/main/resources/db/migration/V56__ldap_identity_provider.sql`
+- Create: `backend/src/main/resources/db/migration/V57__ldap_identity_provider.sql`
 - Create: `backend/src/test/java/com/tcms/schema/LdapSchemaTest.java`
 
 - [ ] **Step 1: Write the failing schema test**
@@ -564,7 +565,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * V56 relaxed a NOT NULL, and this is what replaced it.
+ * V57 relaxed a NOT NULL, and this is what replaced it.
  *
  * <p>{@code client_id} had to become nullable so an LDAP row could exist at all — and the moment it
  * did, every OIDC row lost the guarantee it shipped with. A provider with a null client id fails at
@@ -635,7 +636,7 @@ Expected: FAIL — the inserts succeed (no such constraint) and the function has
 
 ```sql
 -- =============================================================================
--- V56 — LDAP / Active Directory as a second kind of identity provider.
+-- V57 — LDAP / Active Directory as a second kind of identity provider.
 --
 -- Source: docs/plans/2026-08-15-m4-external-identity-ldap-ad.md. V53 shipped
 --         `kind IN ('OIDC','LDAP')` and an implementation of the first of them.
@@ -774,15 +775,15 @@ cd backend && ./gradlew test --tests 'com.tcms.schema.LdapSchemaTest' \
     --tests 'com.tcms.tenancy.SchemaConventionTest'
 ```
 
-Expected: PASS. `SchemaConventionTest` must stay green untouched — V56 adds no table, so neither the
+Expected: PASS. `SchemaConventionTest` must stay green untouched — V57 adds no table, so neither the
 `company_id` rule nor the RLS exception list changes.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/main/resources/db/migration/V56__ldap_identity_provider.sql \
+git add backend/src/main/resources/db/migration/V57__ldap_identity_provider.sql \
         backend/src/test/java/com/tcms/schema/LdapSchemaTest.java
-git commit -m "§NNN phase 2 — V56, and the NOT NULL that had to be replaced rather than dropped"
+git commit -m "§NNN phase 2 — V57, and the NOT NULL that had to be replaced rather than dropped"
 ```
 
 ---
@@ -812,7 +813,7 @@ Beside the existing fields:
     @Column(name = "user_search_base")
     private String userSearchBase;
 
-    /** Contains {@code {0}}; see the column comment in V56 and D8 in the plan. */
+    /** Contains {@code {0}}; see the column comment in V57 and D8 in the plan. */
     @Column(name = "user_search_filter")
     private String userSearchFilter;
 
@@ -2042,7 +2043,7 @@ as a constructor dependency, and change `authorize`'s first lines to
     }
 ```
 
-and in `providersFor`, the mapper reads the third column V56 added:
+and in `providersFor`, the mapper reads the third column V57 added:
 
 ```java
                 .map(row -> new ProviderChoice(
@@ -2427,7 +2428,7 @@ Re-read `be-java.md` first (another lane may have written it), then add to its s
   cannot do this — it counts API tokens only.
 - **`auth/ProviderResolution`** — V53's pre-authentication lookup, extracted from `SsoLoginService`
   because both sign-in flows ask it. Answers a company and `enabled`, never the configuration.
-- **`ck_identity_provider_shape` (V56)** — the conditional replacement for `client_id NOT NULL`,
+- **`ck_identity_provider_shape` (V57)** — the conditional replacement for `client_id NOT NULL`,
   which had to be dropped so an LDAP row could exist. Prevents: an OIDC provider with no client id,
   which fails at the token exchange days later rather than at the insert.
 ```
@@ -2896,7 +2897,7 @@ git push
 `allowInsecure`* → **D2 and Task 1**, decided the other way and written down as a reversal rather
 than a silent drop. *Key on `objectGUID`/`entryUUID`, never the DN* → D3, Task 6 (`subjectOf`,
 `guidOf`), asserted in `LdapDirectoryTest.aCorrectBindResolvesAnEntry` and in the endpoint test's
-`theSubjectIsTheKey`. *Slots into `user_identity` unchanged* → confirmed: V56 touches
+`theSubjectIsTheKey`. *Slots into `user_identity` unchanged* → confirmed: V57 touches
 `identity_provider` only. *Groups from a configurable search, nested groups bounded* → **deferred**,
 scope check, with the reason. *Referrals and paging* → D7 (referrals ignored) and Task 6
 (`countLimit(2)`, which is the paging question in the only form this plan's search can meet it).
@@ -2927,7 +2928,7 @@ takes eighteen parameters in Task 4 and is called with eighteen in Task 5, in th
 `BindThrottle`'s three methods are `mayBind` / `recordFailure` / `recordSuccess` in the test, the
 implementation and the caller.
 
-**One thing this plan cannot check for you.** `V56` is pre-assigned against `master` as of writing.
+**One thing this plan cannot check for you.** `V57` is pre-assigned against `master` as of writing.
 Three worktrees exist; `out-of-order` is unset, and Testcontainers structurally cannot see a
 collision. Check before writing the file.
 
