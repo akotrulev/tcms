@@ -2434,3 +2434,24 @@ status rather than on who authored it, so one contributor session can drive four
 | `§208 DP-3` | **L2**, as a **Test Engineer**, on an **APPROVED** suite: read both `Return to draft` and `Deprecate…` | **Both still disabled**, both naming `suite:approve`. The half §208 keeps, and the row that says the line moved exactly as far as intended. If `DP-1` passes and this one does too, the change is a gate placement rather than a widening. |
 | `§208 DP-4` | **L2**, as a **Test Engineer**, on the suite `DP-2` just retired: open the menu and press `Restore to draft` | **Enabled, and a 200 landing on `DRAFT`.** The one-way door this slice exists not to build: if `DP-2` passes and this fails, a contributor can retire a folder and cannot undo it, which is worse than the state before the slice. |
 | `§208 DP-5` | **L2**, as a **Test Engineer**: select two cases in the grid — one `DRAFT`, one `APPROVED` — open the bulk dialog, choose **Set status → Deprecated**, preview and commit | **200 with a split result**: the draft in `changed`, the approved one in `skipped` reading *"Only a test lead can change a case that is already approved."* Two things at once — that `DEPRECATED` is no longer gated for the whole selection, and that the per-row skip still names the state the row is **in** rather than the one it was asked to reach. Before §208 both rows were skipped and the sentence was *"Only a test lead can deprecate cases."* |
+
+## §209 — the two acts the register's own help text had been advising
+
+**Six rows, none run** (§65). Ids are `§209 AR-*`; `AR` is unused elsewhere in this file — grep
+before minting a prefix (`§154`'s banner).
+
+Lane: **L2** for the project-scope rows, **L4** for the plan-scope ones. `AR-3` and `AR-6` need a
+signed-in **Test Engineer**; the rest run as a Test Lead. **No second account is needed** — the gate
+turns on the *row's scope*, not on who authored it, so one session per role covers everything.
+
+The fixture is two project-scope artifacts registered by the lane's own charter (any two external
+links will do) plus one plan-scope artifact on the lane's plan. `AR-1` creates the third.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§209 AR-1` | **L2**, as a **Test Lead**: press Register, fill the form, and open the new **Replaces** select | The register's other **ACTIVE** rows, listed as `Category — Title`, plus `Nothing — this is a new artifact` first. Before §209 the field did not exist. The row that proves the picker is fed by a read at the *form's* scope: switch **Belongs to** to `One plan` and the list must change to that plan's own rows, not merely filter the ones already loaded. |
+| `§209 AR-2` | Same form: choose one of them and submit | **201, and the register shows both rows.** The replaced one carries a **Superseded** chip; hovering it names the artifact that replaced it *by title*. If the chip appears without a name, `supersededById` did not reach the wire or the replacement is not in the loaded rows — read which, because they are different defects. |
+| `§209 AR-3` | **L2**, as a **Test Engineer**, on the same register: open a **project-scope** row's ⋯ menu button | **Disabled**, with a tooltip naming the scope rather than the key. This is the qualifier read against the *row*; if it is enabled, the click will 403 and the SPA is guessing where the server is deciding. Read the tooltip, not the pixel — the button is also disabled while the permission query is in flight. |
+| `§209 AR-4` | **L4**, as a **Test Engineer**, on the plan's own artifact: open the ⋯ menu and press **Archive** | **200, and the row shows an Archived chip.** The mirror of `AR-3` and the row that says the line sits exactly where the roles spec puts it: a contributor curates their own cycle. `Restore` in the same menu must be greyed *before* the press and live after it. |
+| `§209 AR-5` | On the row `AR-2` marked Superseded: open its ⋯ menu button | **Disabled**, tooltip *"A newer artifact replaced this one…"*. Both acts refused, and refused with the same sentence the server's 409 gives. If the menu opens, press Archive: a 409 must land as a notification rather than silently doing nothing. |
+| `§209 AR-6` | **L2**, as a **Test Engineer** registering at **PLAN** scope while the register is filtered to the project: open **Replaces** | The project's documents must **not** be listed. This is the escalation the same-scope rule exists to stop — a plan-scope note retiring the project's test strategy — and the server refuses it with `errors.supersedes` regardless, so a row appearing here is an affordance for a 400 rather than a hole. |

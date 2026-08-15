@@ -2,7 +2,14 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-15 (**§208** — **the authoring ladder's gate moved and this tree holds a
+**Last verified:** 2026-08-15 (**§209** — **the artifact register gets both missing acts, and its own
+help text had been advising them for two milestones**: `ArtifactDialogs` gains an optional **Replaces**
+picker (which reads the register at the scope the FORM is on, not the page's, and offers only `ACTIVE`
+non-`inherited` rows) and `ArtifactTable` gains a row ⋯ menu with Archive and Restore, gated by
+`canOnScope('artifact:edit', row.scope === 'PLAN')` — the qualifier read against the ROW, which is what
+the server evaluates. `anArtifact` joins `src/test/fixtures.ts`. Two `ui-rules` deviations are recorded
+in the files: two menu items rather than one that flips, and **no confirm dialog** on Archive. See the
+§209 entry below; **§208** — **the authoring ladder's gate moved and this tree holds a
 COPY of it**: `SuiteList.tsx`'s `suiteMoves` table has three rows now reading `suite:manage` where
 they read `suite:approve` — deprecating an unapproved folder and restoring a deprecated one are
 contributor moves. The case side needed no change and that is the finding: `BulkActionDialog` gates
@@ -46,11 +53,55 @@ surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the fl
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `9de1eac` (§207's docs commit; §208's slice commit lands immediately after this
-line. Suite on `shanks` at **1341 across 100** (+2, both in `SuiteList.test.tsx`). Before it:
+**Baseline commit:** `be0ac69` (§209 phase 2; §209's docs commit lands immediately after this
+line. Suite on `shanks` at **1349 across 100** (+8: five in `ArtifactDialogs.test.tsx`, three in
+`ArtifactTable.test.tsx`). Before it: ~~`9de1eac`, §207's docs commit, with §208 at 1341~~ —
 ~~`507c80b`, §207~~ — no `frontend/` behaviour changed there, four prose sites and two test headers —
 and ~~`c6fbefd`, §206 phase 3~~, likewise `schema.d.ts` only.)
 (trust the body over the header and re-grep what a later commit could have moved).
+
+## §209 — THE ARTIFACT REGISTER'S TWO NEW ACTS, AND THE QUALIFIER READ AGAINST THE ROW
+
+**Read this before editing `features/artifacts/{ArtifactTable,ArtifactDialogs}.tsx`.**
+
+Both acts existed only as **advice** until §209 — the delete's 409 said *"Supersede it with a
+correction instead"* and this dialog's own upload helper text said *"replacing the document means
+registering a new artifact that supersedes this one"*. Neither named anything the product could do.
+
+**`ArtifactTable` now runs a query.** `ArtifactRowActions` calls `useCan(projectId)` and
+`useSetArtifactStatus`, so **every test that renders this table must mock `/me/permissions`** — the two
+pre-existing tests in `ArtifactTable.test.tsx` did not, and since §202 a failed read fails the test.
+
+**The gate is `canOnScope('artifact:edit', row.scope === 'PLAN')`, not `can('artifact:edit')`.** The
+register is the one table in the product holding rows at **two scopes side by side**, and the grant is
+qualified by exactly that: a Test Engineer's `artifact:edit` is `PLAN_SCOPE`, so the ⋯ button is
+disabled on a project-scope row and live on a plan-scope one. Asking the plain key enables it
+everywhere and turns each project-scope click into a 403 — §31's renders-then-rejects.
+
+**The Replaces picker issues its own `useArtifacts` read**, keyed on the scope and plan the **form** is
+on rather than the page's filter. The two differ the moment somebody viewing a plan registers at
+project scope. It filters to `status === 'ACTIVE' && !inherited`, which is the server's same-scope rule
+stated where it can be enforced: `inherited` rows inside a plan query are the *project's* documents, and
+a plan-scope artifact may not replace one. The selection is cleared when scope or plan changes.
+
+**Send `null`, never `''`.** `supersedes` is a nullable uuid; an empty string is a 400 about a field the
+user never touched.
+
+Two deliberate deviations from `ui-rules`, both argued in the files:
+
+- **Archive and Restore are two menu items**, always rendered, each enabled by the row's state — §4
+  refuses one control that swaps its own meaning. A `SUPERSEDED` row disables both with the server's
+  own 409 sentence.
+- **No confirmation dialog on Archive.** It destroys nothing, the row stays on screen with its new
+  status, and the way back is the item directly beneath. §7 refuses a blocking modal where the
+  interruption is not the value. **Removal is the destructive act — and `DELETE …/artifacts/{id}` still
+  has NO consumer in `src/`.** The ⋯ menu is now where that item belongs; §118's dialog is the pattern.
+
+`artifactStatusLabel` is in `lib/labels.ts` (`satisfies Record<ArtifactStatus, string>`); the chip's
+tooltip names the *replacement's title*, resolved from the rows already on screen — the same-scope rule
+is what guarantees it is among them.
+
+---
 
 ## §208 — `suiteMoves` IS A SECOND COPY OF THE SERVER'S GATE, AND IT MOVED
 

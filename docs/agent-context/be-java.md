@@ -2,7 +2,14 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-15 (**§208** — **the authoring ladder's gate is one sentence now**: the
+**Last verified:** 2026-08-15 (**§209** — **`ArtifactStatus`'s two writerless values have their acts**,
+and the model is that they are reached DIFFERENTLY: `ARCHIVED` is a judgement about the row, so it is
+chosen on `PUT …/artifacts/{id}/status` and reversible; `SUPERSEDED` is a fact about ANOTHER row — it
+holds exactly when `superseded_by_id` names a replacement — so it is written only by `supersedes` on
+either create and is neither settable nor leavable, which is why `ArtifactStatusInput`'s enum is a
+PROPER SUBSET of `Artifact.status`. **The same-scope rule is the whole of the authorization** and it
+reads as tidiness: read the §209 section before touching `validateSupersedes`. No migration, no grant
+moved; **§208** — **the authoring ladder's gate is one sentence now**: the
 approve key buys a sign-off and buys touching an artifact that has one, so deprecating *and reviving*
 an unapproved case or suite cost the EDIT key, `rank` is **deleted** (it ranked `DEPRECATED` above
 `APPROVED`, which is narrative order used as authority order), `LifecycleLadderTest` is the first
@@ -25,11 +32,71 @@ draft buffer; **§127 phase 1** — the table and image block payloads; **§126 
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `9de1eac` (§207's docs commit — §208's own slice commit lands immediately after
+**Baseline commit:** `be0ac69` (§209 phase 2 — §209's own docs commit lands immediately after this line is written, so the header is one behind by construction. Before it the header sat at ~~`9de1eac` (§207's docs commit — §208's own slice commit lands immediately after
 this line is written, so the header is one behind by construction. Before it the header sat at
 ~~`507c80b` (§207)~~, ~~`c6fbefd` (§206 phase 3)~~ and ~~`be8c1a6` (§199)~~, lagging the body by six
-sections — the normal state, and exactly why the rule below exists.)
+sections — the normal state, and exactly why the rule below exists.)~~
 Per `CLAUDE.md`, **trust the body over the header** and re-grep what a later commit could have moved.
+
+---
+
+## §209 — THE ARTIFACT REGISTER HAS THREE REACHABLE STATES, AND TWO WAYS IN
+
+**Read this before touching `ArtifactWriteService.validateSupersedes`, `setStatus`, or
+`Artifact.circulate` / `supersededBy`.**
+
+`ArtifactStatus` had **one writer** from `V1` until §209: `Artifact.register` writing `ACTIVE`. Both
+other values now have one, and they are not symmetrical.
+
+| | `ARCHIVED` | `SUPERSEDED` |
+|---|---|---|
+| Written by | `PUT /projects/{projectId}/artifacts/{artifactId}/status` | `ArtifactInput.supersedes` / `ArtifactFileInput.supersedes` on either create |
+| Chosen by a caller? | yes | **never** |
+| Reversible? | yes, same endpoint | **no** — a 409, and the way out is to archive the *replacement* |
+| In `ArtifactStatusInput`'s enum? | yes | **no**, deliberately |
+
+**`SUPERSEDED` is a fact about another row.** It holds exactly when `artifact.superseded_by_id` names
+a replacement, so `Artifact.supersededBy` writes the status and the pointer together and nothing else
+writes either. `Artifact.circulate` **throws** on `SUPERSEDED` and `ArtifactWriteService.parseCirculation`
+returns `null` for it — two refusals on purpose, so a second parser cannot let it through.
+`ArtifactCirculationTest` asserts the *correctly spelled* member is refused, which the obvious
+implementation (a lookup over `values()`) would not survive.
+
+### The same-scope rule is a gate, not tidiness
+
+`supersedes` writes a **second row** — the one being replaced — and nothing gates that row.
+`validateSupersedes` requires the replacement to sit at the **same scope** and, at `PLAN` scope, in
+the **same plan**, after which the create's own `writeGrantedByRowScope` check covers both. Delete
+the comparison and a Test Engineer (whose `artifact:edit` is `PLAN_SCOPE`) registers a plan-scope note
+that retires the project's test strategy, with a `201` that looks correct. `§209 AM-1` is the mutation
+row; `Supersession.theEngineerCannotRetireWhatTheyMayNotEdit` is the assertion.
+
+Two more rules in the same method, both `400` on `errors.supersedes`: only an `ACTIVE` artifact may be
+replaced (a second replacement overwrites the pointer and loses the middle of the chain; an archived
+one is already out of use). **Kinds are free to differ.** **`write_once` is NOT checked** — superseding
+is what a sign-off record is for, and the delete's own 409 says so.
+
+### `setStatus` reads the qualifier against the ROW's scope
+
+The one word that differs from the create, and it carries the rule: a create is gated on the scope in
+the *request* (the scope the row will have), this on the scope the row *already has*. Read the request
+instead and the restriction is defeated by an omitted field. Not `artifact:delete` — archiving keeps
+the row and can be undone, which is §208's suite argument one module over. Idempotent, and the audit
+row is written only when the status actually moved (`DocPageWriteService.setStatus`'s call).
+
+### What did NOT change, and was re-argued rather than inherited
+
+**A `SUPERSEDED` artifact stays deletable.** `theReplacementCannotBeDeleted` has asserted since §124
+that the other end of the edge is deletable, and that stands: being replaced is not what makes a
+record permanent — `write_once` is. Refusing both ends would make a *mis-registered* link immortal the
+moment somebody corrected it, since the replacement cannot be deleted either.
+
+`ArtifactEndpointTest.setSupersededBy` (raw SQL) is **deleted** — the state is reachable through the
+register's own act now. `aSignOffRecordCannotBeDeleted`'s `setWriteOnce` fixture stays, because that
+column still has no writer.
+
+`superseded_by_id` is **mapped**, so the entity's unmapped-column count is **two**. Third time inside
+this one entity that a "blocked" note has outlived its blocker.
 
 ---
 
