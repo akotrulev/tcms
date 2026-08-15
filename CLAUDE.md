@@ -109,9 +109,40 @@ npm run build                     # THE gate: tsc over source+tests, then emit. 
                                   # names the order client → cli → mcp; mcp is THIRD for the
                                   # same reason cli is second.
 npm run lint --workspaces         # oxlint, 0 warnings
-npm run test:run --workspaces     # ~~211~~ ~~241~~ ~~260~~ ~~269~~ ~~302~~ 314 tests (119 client /
-                                  # 78 cli / 117 mcp, measured on shanks 2026-08-15), ~1s — CI runs
+npm run test:run --workspaces     # ~~211~~ ~~241~~ ~~260~~ ~~269~~ ~~302~~ ~~314~~ 320 tests
+                                  # (123 client / 78 cli / 119 mcp, 2026-08-15), ~1s — CI runs
                                   # these, unlike the backend's.
+                                  # **Since §212 a sentence claiming somebody LACKS a permission is
+                                  # checked against the roles spec's §A3 tables** —
+                                  # `client/src/test/tierClaims.test.ts`, over the same four corpora
+                                  # as the cited-files rule, so a stale claim in `backend/` javadoc
+                                  # or a `frontend/` comment reddens the **packages** job. It is the
+                                  # third pass at one population: §210 swept two corpora by hand,
+                                  # §211 wrote an eight-line rule over a third, and this found
+                                  # thirteen more — every one of them a permission `V52` moved down
+                                  # a tier eight days earlier, including a TOOL DESCRIPTION, which a
+                                  # model reads before deciding whether to call. Two forms are
+                                  # matched: `Lead-only`/`Lead and up`, and `does not hold` /
+                                  # `not held by` / `withheld from`. **PAST TENSE IS NOT A CLAIM** —
+                                  # every migration header opens by saying what a key *was* — and
+                                  # `<del>…</del>` counts as strikethrough, because javadoc renders
+                                  # `~~` as literal tildes. It reads COMMENTS ONLY (`proseOf`): a
+                                  # whole-file scan reads an `assertThat` chain as a claim about the
+                                  # catalogue. Its reach is a claim that NAMES A KEY, not a claim
+                                  # about a tier — seven repairs in §212 were found by hand.
+                                  # The four roots and the walker now live in
+                                  # `client/src/test/corpus.ts`, shared with `citedFiles.test.ts`.
+                                  # **Since §212 the MCP surface can CLOSE A RUN and PUBLISH A
+                                  # PAGE** — `status` on `tcms_write_run` (`run:close`) and
+                                  # `publish` on `tcms_write_doc_page` (`doc:publish`), still 21
+                                  # tools. Both merges are legal only because of `V52`: before it
+                                  # `doc:publish` was Lead-only while `doc:edit` is every writer's,
+                                  # so the merge would have hidden the tool from every contributor.
+                                  # `run:close` clears §2 by a different route — `Automation
+                                  # Service` holds `run:create` WITHOUT it and is not a reachable
+                                  # intersection, because `V41` made it non-assignable. Of §211's
+                                  # four gaps, artifacts and `library:manage` remain, both by
+                                  # decision.
                                   # **Since §211 the MCP surface can DELETE** — `case:delete`,
                                   # `suite:delete` and `plan:delete` as `delete` arms on the three
                                   # write tools that own those resources, behind §210's consent

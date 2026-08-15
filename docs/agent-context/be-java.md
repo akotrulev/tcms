@@ -2,7 +2,27 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-15 (**§211** — **no Java changed and one thing here did**: two
+**Last verified:** 2026-08-15 (**§212** — **ten `backend/src` files changed and NOT ONE of them
+changed behaviour**: javadoc, plus two `@DisplayName`s describing a 403 that no longer happens.
+**§211 said the obvious next instrument was a Java-side rule over `openapi.yaml` and javadoc; it
+exists now and it is NOT in Java** — `packages/client/src/test/tierClaims.test.ts`, reading
+`backend/src` from the `packages` job for §206's measured reason: a `Test` task's declared inputs are
+its classpath, so a comment edit that shifts no line number leaves the class byte-identical and the
+suite `UP-TO-DATE`, and the usual cause of a stale claim is a change somewhere else entirely, which
+changes no backend input at all. **So a stale tier claim in javadoc reddens the `packages` job.** Its
+instrument is the roles spec's §A3 tables parsed, not a copy — `SeedDataTest` pins the seeded rows
+against the spec and this pins the prose against the spec. What it found in `backend/`:
+`ExecutionService` and `TestExecution` calling `result:amend` *"Lead-only"*, `PlanLifecycle` and
+`PlanDeleteService` saying `run:close`/`suite:delete`/`plan:delete` *"are all Lead-only"*,
+`SuiteWriteService` saying `suite:delete` is *"by leads only"*, `LifecycleLadder` resting on §A4
+principle 1 *"as `V51` rewrote it"* — **a principle `V52` deleted the next day** — and three test
+classes whose persona javadoc still described the pre-`V52` grant. **Two repairs were a
+`{@link Type#member}` naming a method §210 renamed** (`Qualifier#engineerCannotRegisterAtProjectScope`,
+`Gates#engineerCannotPublish`): javadoc's member form is a warning at most and this build does not
+run javadoc, so **nothing checks it** — §206's rule resolves `{@code SomethingTest}` against the
+filesystem and stops there. Also worth knowing: `<del>…</del>` is now recognised as strikethrough by
+both prose rules, because javadoc renders `~~` as literal tildes and four `backend/` corrections had
+been read as live claims; **§211** — **no Java changed and one thing there did**: two
 `openapi.yaml` operation/schema `description`s that `V52` made false — `DELETE …/suites/{id}` still
 said `suite:delete` was *"held by leads and above and **not** by Test Engineer"*, and
 `HeldPermission` still taught the qualifier through *"a Test Engineer holds `artifact:edit` at
@@ -54,7 +74,7 @@ draft buffer; **§127 phase 1** — the table and image block payloads; **§126 
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `5198d1f` (§211 phase 3 — no Java changed in §210's successor either, so the last commit to touch `backend/src` is still §210's. Before it ~~`be0ac69` (§209 phase 2)~~ — §209's own docs commit lands immediately after this line is written, so the header is one behind by construction. Before it the header sat at ~~`9de1eac` (§207's docs commit — §208's own slice commit lands immediately after
+**Baseline commit:** `8d47a0f` (§212 phase 2 — the ten `backend/src` files §212 touched are comments only, so the last commit to change Java BEHAVIOUR is still §210's. Before it ~~`5198d1f` (§211 phase 3 — no Java changed in §210's successor either)~~. Before it ~~`be0ac69` (§209 phase 2)~~ — §209's own docs commit lands immediately after this line is written, so the header is one behind by construction. Before it the header sat at ~~`9de1eac` (§207's docs commit — §208's own slice commit lands immediately after
 this line is written, so the header is one behind by construction. Before it the header sat at
 ~~`507c80b` (§207)~~, ~~`c6fbefd` (§206 phase 3)~~ and ~~`be8c1a6` (§199)~~, lagging the body by six
 sections — the normal state, and exactly why the rule below exists.)~~

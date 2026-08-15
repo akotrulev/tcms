@@ -2,8 +2,22 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-15 (**§211** — **`packages/` only, and the one thing that reaches this
-stack is `src/api/schema.d.ts`**: two `description` strings regenerated from `openapi.yaml` after
+**Last verified:** 2026-08-15 (**§212** — **six `frontend/src` files changed and NOT ONE of them
+changed behaviour**: four comments and `schema.d.ts`, all of them the same defect. `V52` (§210) moved
+seven permissions down a tier and the prose that argued for the old line did not move with them, so
+`api/queries/runs.ts` said *"`run:close`, which a Test Engineer does not hold"*,
+`api/queries/documentation.ts` and `features/docs/DocsPage.tsx` said the same of `doc:publish`, and
+`features/artifacts/ArtifactDialogs.tsx` + `features/plans/PlanStatisticsPage.tsx` both rested their
+gate arguments on `artifact:edit` being `PLAN_SCOPE`-qualified — **the key that was the only one in
+the catalogue ever to carry a qualifier, de-qualified by `V52`**. **THE RULE TO CARRY:
+`packages/client/src/test/tierClaims.test.ts` now sweeps `frontend/src` for exactly this and it
+reddens the `packages` job**, by the same deliberate blast-radius design as §206's cited-files rule.
+So a `PermissionGate` comment naming a role is now checked against the roles spec's §A3 tables, and
+a stale one fails a job in another stack. Nothing about `PermissionGate` itself changed and **no
+qualifier is carried by any seeded grant any more** — `useCan.canOnAuthored` and the `authorId` every
+delete site passes stay wired deliberately (§207), so a future qualified grant fails closed rather
+than open; **§211** — **`packages/` only, and the one thing that reached this
+stack was `src/api/schema.d.ts`**: two `description` strings regenerated from `openapi.yaml` after
 `V52` left them false — `DELETE …/suites/{id}` said `suite:delete` was *"held by leads and above and
 not by Test Engineer"*, and `HeldPermission` taught the qualifier through an `artifact:edit`
 `PLAN_SCOPE` example no grant carries. **No type changed, nothing on the wire moved, no component
@@ -69,9 +83,10 @@ surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the fl
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `5198d1f` (§211 phase 3; §211's docs commit lands immediately after this
-line. Suite on `shanks` still **1349 across 100** — §211 added no frontend test and changed no
-frontend source, only `schema.d.ts` prose. Before it ~~`be0ac69`, §209 phase 2~~, where the suite
+**Baseline commit:** `8d47a0f` (§212 phase 2; §212's docs commit lands immediately after this
+line. Suite on `shanks` still **1349 across 100** — §212 added no frontend test and changed no
+frontend behaviour, only comments and `schema.d.ts` prose. Before it ~~`5198d1f`, §211 phase 3~~,
+also 1349. Before it ~~`be0ac69`, §209 phase 2~~, where the suite
 went to 1349 (+8: five in `ArtifactDialogs.test.tsx`, three in `ArtifactTable.test.tsx`). Before it: ~~`9de1eac`, §207's docs commit, with §208 at 1341~~ —
 ~~`507c80b`, §207~~ — no `frontend/` behaviour changed there, four prose sites and two test headers —
 and ~~`c6fbefd`, §206 phase 3~~, likewise `schema.d.ts` only.)
