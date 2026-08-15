@@ -267,6 +267,66 @@ class ConfigConventionTest {
                 .isEmpty();
     }
 
+    /**
+     * Env-var-shaped so that {@code ${spring.datasource.url}} — a property reference, not an
+     * environment variable — is not read as something Compose owes the container.
+     */
+    private static final Pattern ENV_VAR_NAME = Pattern.compile("[A-Z][A-Z0-9_]*");
+
+    @Test
+    @DisplayName("every required placeholder is a variable compose.prod.yaml actually passes")
+    void everyRequiredPlaceholderIsSuppliedInProduction() {
+        String prod = codeOf(Path.of("../deploy/compose.prod.yaml"));
+        List<String> missing = new ArrayList<>();
+
+        for (Path file : configFiles()) {
+            Matcher m = PLACEHOLDER.matcher(codeOf(file));
+            while (m.find()) {
+                String name = m.group(1);
+                // group(2) is the `:default` tail. Present means the app has a fallback and
+                // production supplying nothing is a decision rather than an outage.
+                if (m.group(2) != null || !ENV_VAR_NAME.matcher(name).matches()) {
+                    continue;
+                }
+                if (!prod.contains(name)) {
+                    missing.add("%s (%s)".formatted(name, file.getFileName()));
+                }
+            }
+        }
+
+        assertThat(missing)
+                .describedAs(
+                        """
+                        deploy/compose.prod.yaml passes none of: %s.
+
+                        A `${VAR}` with NO COLON is the §108 shape and means the application has \
+                        no default and must not boot without a real value. That guarantee is only \
+                        half a guarantee: it binds the APP, and nothing binds the DEPLOYMENT. If \
+                        compose never mentions the variable, the container starts without it and \
+                        the instance is down — which is what happened on 2026-08-15, when \
+                        TCMS_IDENTITY_SECRET_KEY and TCMS_INTEGRATION_SECRET_KEY reached \
+                        application.yml and never reached compose.prod.yaml. Both boxes refused \
+                        to start, lab and production, on the same dispatch.
+
+                        THE DEPLOY'S OWN VALIDATION CANNOT SEE THIS. `docker compose config` \
+                        checks that the box's env file satisfies the variables COMPOSE NAMES; a \
+                        variable compose never names is not a gap it can have an opinion about. \
+                        That step is green in exactly this failure.
+
+                        AND THE APP'S OWN GUARANTEE IS WEAKER THAN ITS COMMENT CLAIMS. \
+                        application.yml says an unresolvable placeholder "throws at bind time". \
+                        True for @Value; FALSE for @ConfigurationProperties, whose Binder resolves \
+                        with ignoreUnresolvablePlaceholders and passes the literal text \
+                        `${TCMS_IDENTITY_SECRET_KEY}` through as the value. The 2026-08-15 boot \
+                        failed with `Illegal base64 character 24` — 0x24 is `$`, the first \
+                        character of the un-substituted placeholder — and it failed ONLY because \
+                        that record validates Base64. A plain String property with no validation \
+                        would have taken the literal placeholder as its value and started clean, \
+                        which is §108 happening a second time past §108's own fix.""",
+                        missing)
+                .isEmpty();
+    }
+
     @Test
     @DisplayName("every blob root is bind-mounted in production, at the path the app writes to")
     void everyStorageRootIsMountedInProduction() {
