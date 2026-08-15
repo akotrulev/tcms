@@ -6536,6 +6536,184 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/notification-channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Where this project sends its notices
+         * @description Needs `integration:manage` on this project — **the read is gated exactly like the
+         *     write, and that is a decision rather than a default.**
+         *
+         *     `getProjectSettings` one path family over does the opposite deliberately: it is
+         *     readable by anybody who can see the project, because §6g's "a project that never turns
+         *     review on should see no extra UI at all" is a decision every client makes on every
+         *     artifact screen for every reader, and none of those readers is an administrator.
+         *
+         *     Neither half of that argument transfers. **Nothing in this product branches on whether
+         *     a channel exists** — no screen renders differently, so there is no reader who needs the
+         *     answer and cannot have the key. And what a channel carries points the other way: a
+         *     `secretHint` is the tail of a live credential, and `recipients` are people's addresses.
+         *     A settings screen's own gate is therefore the right gate for reading it.
+         *
+         *     The refusal splits the way `readGranted` splits everywhere: a project the caller cannot
+         *     see is **404**, and a project they are looking at without the key is **403**. The
+         *     second conceals nothing they do not already know, and answering 404 there would tell an
+         *     administrator the project had no channels rather than that they may not look.
+         *
+         *     Ordered by name. `[]` is a valid 200 and is the state of every project nobody has
+         *     configured, which is most of them.
+         */
+        get: operations["listNotificationChannels"];
+        put?: never;
+        /**
+         * Add a notification channel
+         * @description Needs `integration:manage` on this project.
+         *
+         *     **`secret` is required here and is never returned by anything.** For `SLACK` and
+         *     `TEAMS` the incoming-webhook URL *is* the authentication for the room it posts to, so
+         *     it is encrypted at rest and the read model carries only `secretHint` — enough to
+         *     recognise which webhook is configured, and far short of enough to post to it. `EMAIL`
+         *     has no credential of its own: it authenticates as whatever the deployment's mail
+         *     relay does, which is not a company-owned value, so it takes `recipients` instead.
+         *
+         *     `subscriptions` is the complete set of event types this channel wants. An empty array
+         *     is a legal channel that will never fire, which is a state an administrator can
+         *     deliberately want while a webhook is being tested.
+         *
+         *     **No `Idempotency-Key`, on `POST /projects/{projectId}/conditions`' terms**: there is
+         *     no idempotency record behind this path, a duplicate channel is visible in the list
+         *     beside its twin the moment this returns, and deleting one costs the same permission
+         *     that made it. Declaring the header without honouring it would be worse than declaring
+         *     nothing — a client that trusted it would replay a timed-out create and get a second
+         *     channel that delivers every notice twice.
+         *
+         *     `Location` names the created channel's own path, which serves a `GET`.
+         */
+        post: operations["createNotificationChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/notification-channels/{channelId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                channelId: components["parameters"]["ChannelId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One notification channel
+         * @description Needs `integration:manage` — the list endpoint's gate, and its reasoning.
+         *
+         *     A channel belonging to a sibling project answers **404**, the same answer an
+         *     unreachable project gets (§6t): the refusal must not become an oracle for which
+         *     channel ids exist in a project the caller is not asking about.
+         */
+        get: operations["getNotificationChannel"];
+        /**
+         * Replace a notification channel
+         * @description Needs `integration:manage` on this project.
+         *
+         *     **A `PUT` rather than a `PATCH`, and the subscriptions travel in the body rather than
+         *     as a sub-resource.** `updateProjectSettings` makes the argument and it is the same one:
+         *     the form shows every control and submits every control. A channel's transports, its
+         *     recipients and the event types it wants are configured together on one screen and saved
+         *     with one button, so "leave this one alone" is not something a user of this screen can
+         *     mean — and `subscriptions` is therefore the complete set, reconciled against what is
+         *     stored. Removal is the ordinary case (a channel that stops wanting run completions has
+         *     to be able to say so) and an upsert-only sub-resource can add and change a subscription
+         *     without ever taking one away.
+         *
+         *     **`secret` is the one exception, and absent means unchanged.** Everywhere else in this
+         *     API an omitted field on a `PUT` is a clear. It cannot be here: the screen never shows a
+         *     secret, so an edit form has nothing to send back, and treating that emptiness as a clear
+         *     would blank the credential of every channel anybody renamed. The row would still read as
+         *     configured and delivery would start failing hours later, at a time unconnected to the
+         *     edit that caused it. Send a `secret` to rotate one; omit it to keep it.
+         *
+         *     **`kind` is ignored.** A channel's transport is not editable — turning a Slack channel
+         *     into an email one would keep the row's name and history while replacing everything they
+         *     were about, and the delivery log beneath it would describe a transport that no longer
+         *     exists. Delete and create says that, and costs one row nobody was reading.
+         *
+         *     `If-Match` carries the `lockVersion` the client read. A channel edit is a *field* edit —
+         *     a name and a recipient list typed over what somebody else read — so two administrators
+         *     editing one channel really do lose each other's words, which is the case that earns a
+         *     precondition. Omitting the header is the documented last-write-wins path.
+         */
+        put: operations["updateNotificationChannel"];
+        post?: never;
+        /**
+         * Remove a notification channel
+         * @description Needs `integration:manage` on this project.
+         *
+         *     **A hard delete, and the delivery history goes with it.** The alternative — keeping the
+         *     log of a channel that no longer exists — is a history nothing can be replayed into and a
+         *     row naming a credential nobody can rotate, which is a worse thing to keep than to lose.
+         *
+         *     **No `If-Match`.** A delete names an absolute destination: the row is gone whichever
+         *     version the caller last read, so a precondition here could only refuse somebody who
+         *     wanted exactly what happened.
+         */
+        delete: operations["deleteNotificationChannel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/notification-channels/{channelId}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                channelId: components["parameters"]["ChannelId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What this channel has been sent, and what came back
+         * @description Needs `integration:manage` — the same gate as the channel itself, and here the reason is
+         *     the plainest of the three: a failed attempt's `error` is whatever the remote endpoint
+         *     said, and that is not a sentence to serve to every reader of a project.
+         *
+         *     **It hangs off the channel, not off the project, and that is a decision.** A delivery is
+         *     only ever asked about as one — *is this webhook working* — so a project-level log would
+         *     be a list every reader has to filter before it answers anything. It is also the shape the
+         *     rows can actually keep: deleting a channel takes its history with it, so a project-level
+         *     log would outlive the channels it names and would have to answer for ids that no longer
+         *     resolve. A project-wide view of failures is a reporting question and would be a different
+         *     endpoint with a different argument.
+         *
+         *     Newest first, most recent 50. `[]` is a real answer and means nothing has been sent
+         *     through this channel yet — which is not the same as a channel that has never worked,
+         *     because **a row exists as soon as an attempt is made**, including a first attempt that
+         *     failed.
+         *
+         *     `error` is stored already redacted: a failed POST's message can quote the webhook URL,
+         *     and a column an operator browses and a backup copies is the wrong place to be relying on
+         *     a rendering step to keep a credential out.
+         */
+        get: operations["listNotificationDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users": {
         parameters: {
             query?: never;
@@ -11448,6 +11626,211 @@ export interface components {
         WorkItemStatusUpdate: {
             status: components["schemas"]["WorkItemStatus"];
         };
+        /**
+         * @description Where one project sends its notices — **without its credential, and there is deliberately
+         *     no property that could carry one.**
+         *
+         *     A Slack or Teams incoming-webhook URL *is* the authentication for the room it posts to, so
+         *     a read model carrying it would put a live secret into every response, log and browser
+         *     cache that ever rendered a settings screen. `secretHint` is what replaces it.
+         */
+        NotificationChannel: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            kind: components["schemas"]["NotificationChannelKind"];
+            /**
+             * @description The administrator's own label. Unique within the project, so two channels posting to
+             *     the same room are told apart by what somebody called them.
+             */
+            name: string;
+            /**
+             * @description A disabled channel is skipped when the event fires — applied in the query the
+             *     dispatcher runs rather than at a call site, so "switched off" cannot come to mean
+             *     "still delivered, just not shown".
+             */
+            enabled: boolean;
+            /**
+             * @description Email addresses, for `EMAIL` channels. Empty for the two webhook kinds, which post to
+             *     whatever room their URL names.
+             */
+            recipients: string[];
+            /**
+             * @description The masked credential — the only part of one that ever leaves the server. **End
+             *     anchored, four characters** (`…AbC1`): the tail of a webhook URL is its
+             *     per-integration part, so it discriminates, where the host and path prefixes are
+             *     identical across every webhook of a kind and would look informative while
+             *     discriminating nothing.
+             *
+             *     Showing nothing at all was rejected: it makes "is this the right webhook" unanswerable
+             *     and invites the fix that follows from that — an administrator replaces a working secret
+             *     to be sure, and every replacement is a chance to paste the wrong one.
+             *
+             *     **Null for a kind with no credential of its own**, which is how an `EMAIL` channel and
+             *     an unconfigured webhook are told apart on the screen.
+             */
+            secretHint?: string | null;
+            subscriptions: components["schemas"]["NotificationSubscription"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /**
+             * Format: int64
+             * @description Send it back as `If-Match` on the `PUT`.
+             */
+            lockVersion: number;
+        };
+        /** @description A full replacement, with **one field that does not obey that** — see `secret`. */
+        NotificationChannelInput: {
+            /**
+             * @description Required on both writers and **ignored on the `PUT`** — a channel's transport is not
+             *     editable. Required rather than optional there because a client sending the object it
+             *     read should not have to strip a field, and silently accepting a *different* value
+             *     would be a save that reports success and changes nothing.
+             */
+            kind: components["schemas"]["NotificationChannelKind"];
+            name: string;
+            /**
+             * @description Required, like `ProjectSettingsUpdate`'s switches and for the same reason: a dropped
+             *     boolean would default to `false`, and a save that silently disabled a channel is a
+             *     project that quietly stops being told anything.
+             */
+            enabled: boolean;
+            /**
+             * @description At least one for `EMAIL`, where an empty list is a 400 on this field rather than a
+             *     channel that delivers to nobody. Ignored for the webhook kinds; send `[]`.
+             */
+            recipients: string[];
+            /**
+             * @description The incoming-webhook URL, in plaintext, **on the way in only**. Encrypted at rest and
+             *     returned by nothing — `NotificationChannel` has no property that could carry it back.
+             *
+             *     **Required on the create for a webhook kind. Absent on the `PUT` means unchanged**,
+             *     which inverts this API's usual convention on purpose: the screen never shows a secret,
+             *     so an edit form has nothing to send back, and treating that emptiness as a clear would
+             *     blank the credential of every channel anybody renamed. Send it to rotate; omit it to
+             *     keep.
+             *
+             *     Ignored for `EMAIL`, which authenticates as the deployment's mail relay.
+             */
+            secret?: string;
+            /**
+             * @description The complete set this channel wants, reconciled against what is stored — so an event
+             *     type left out of the array is unsubscribed. `[]` is a legal channel that will never
+             *     fire.
+             */
+            subscriptions: components["schemas"]["NotificationSubscriptionInput"][];
+        };
+        /** @description One event type a channel wants, and the one filter this API ships. */
+        NotificationSubscription: {
+            /** Format: uuid */
+            id: string;
+            eventType: components["schemas"]["NotificationEventType"];
+            /**
+             * @description Deliver only when at least this many results failed. `0` — the default — is every
+             *     occurrence.
+             *
+             *     **Served for every event type, including those that carry no verdicts**, where it is
+             *     inert rather than a filter that never matches. Hiding it per type would put a rule
+             *     about which events carry counts into the client, where it would be a second copy of a
+             *     fact the server owns.
+             */
+            minFailures: number;
+        };
+        NotificationSubscriptionInput: {
+            eventType: components["schemas"]["NotificationEventType"];
+            /**
+             * @description Required, because `0` is a meaningful value — every occurrence — and a dropped field
+             *     asserting it silently is the same defect as a dropped boolean.
+             * @default 0
+             */
+            minFailures: number;
+        };
+        /**
+         * @description One attempt against one channel. The operator's log, and the server's own idempotency
+         *     record — outbox delivery is at-least-once, so without a durable record of what already
+         *     went out one crash between the POST and the settle is a duplicate message.
+         */
+        NotificationDelivery: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            channelId: string;
+            /**
+             * Format: uuid
+             * @description The **occurrence's** id, not the outbox row's. A handler is deliberately not told
+             *     which row it is being delivered from, so the occurrence identifies itself inside the
+             *     payload.
+             */
+            eventId: string;
+            /**
+             * @description Deliberately a bare string and **not `NotificationEventType`**, unlike the
+             *     subscription beside it. This is a historical row: it may name an event this instance
+             *     recorded once and no longer sends, and typing it as the live vocabulary would make an
+             *     honest log fail a client's own parse.
+             */
+            eventType: string;
+            status: components["schemas"]["NotificationDeliveryStatus"];
+            /**
+             * @description Attempts against **this channel** for this occurrence — not the outbox row's count,
+             *     which covers the whole event across every subscribed channel. A fan-out of three where
+             *     one webhook is dead makes the two numbers different, and this is the one an operator is
+             *     asking about.
+             */
+            attempt: number;
+            /**
+             * @description Why the attempt failed, **already redacted** — a failed POST's message can quote the
+             *     webhook URL, and it is stored redacted rather than masked on the way out, because a
+             *     column an operator browses and a backup copies is the wrong place to rely on a
+             *     rendering step. Null on a `SENT` row, including one that succeeded after failing:
+             *     the previous failure's text no longer describes it.
+             */
+            error?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description When the latest attempt ended. A retry updates the row rather than adding one.
+             */
+            updatedAt: string;
+        };
+        /**
+         * @description Which transport a channel is. Three from the start rather than one plus a promise: a port
+         *     with a single implementation always leaks that implementation's vocabulary, and Slack's
+         *     block kit and Teams' message card disagree enough to keep it honest — while SMTP disagrees
+         *     with both about whether a message even has a room to be posted into.
+         * @enum {string}
+         */
+        NotificationChannelKind: "SLACK" | "TEAMS" | "EMAIL";
+        /**
+         * @description How an attempt ended. Terminal either way — a retry updates the row rather than adding a
+         *     second one, so a channel's history is one line per occurrence and not one per try.
+         * @enum {string}
+         */
+        NotificationDeliveryStatus: "SENT" | "FAILED";
+        /**
+         * @description What a channel may subscribe to. Both are past-tense **occurrences carrying a payload**,
+         *     which is what makes them deliverable at all: a coalesced event stands for every change
+         *     since the last delivery, so a notification whose entire content is the payload cannot be
+         *     sent from one.
+         *
+         *     `execution.run_completed` carries the run, its final status and its pass/fail/blocked
+         *     counts — which is what `NotificationSubscription.minFailures` filters on.
+         *     `work.item_assigned` carries the item and both assignees, and has no counts, so a
+         *     threshold set against it is inert rather than silencing.
+         *
+         *     **A "run failed" event is deliberately absent**: it is not an event, it is a predicate on
+         *     `execution.run_completed`, and modelling it as one keeps the producing module from having
+         *     to know what any subscriber considers alarming.
+         *
+         *     **`defect created` is absent for a different reason** — it has no producer. Defect filing
+         *     is M4 scope behind an issue-tracker port and is unbuilt, and a name nothing records would
+         *     be a subscription somebody configured that can never fire.
+         * @enum {string}
+         */
+        NotificationEventType: "execution.run_completed" | "work.item_assigned";
     };
     responses: {
         /**
@@ -11649,6 +12032,7 @@ export interface components {
         JobId: string;
         ArtifactId: string;
         DefinitionId: string;
+        ChannelId: string;
         Page: number;
         Size: number;
         /**
@@ -13147,6 +13531,183 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listNotificationChannels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project's channels, never their credentials */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationChannel"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createNotificationChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationChannelInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description The new channel's path */
+                    Location: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationChannel"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getNotificationChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                channelId: components["parameters"]["ChannelId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel, without its credential */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationChannel"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateNotificationChannel: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description The `lockVersion` the client read, as a decimal string. Mismatch yields 409.
+                 *
+                 *     **The precondition travels in the header, never in the body.** A PATCH body states the
+                 *     desired state; the version the client happened to read is an assertion about the state it
+                 *     started from, and mixing the two means a field on the input schema that must never be
+                 *     persisted. Omitting the header skips the check — a last-write-wins save, which is correct
+                 *     for a caller that genuinely has no prior read (an importer) and wrong for an editor, so
+                 *     the SPA always sends it.
+                 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                channelId: components["parameters"]["ChannelId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationChannelInput"];
+            };
+        };
+        responses: {
+            /** @description The channel as it now stands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationChannel"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteNotificationChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                channelId: components["parameters"]["ChannelId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listNotificationDeliveries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                channelId: components["parameters"]["ChannelId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Delivery attempts, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationDelivery"][];
+                };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

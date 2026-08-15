@@ -489,7 +489,7 @@ public final class OpenApiContract {
      * and it is also what the generator emits as a named union, so it is the population a client
      * can be wrong about by name.
      */
-    Map<String, List<String>> enumSchemas() {
+    public Map<String, List<String>> enumSchemas() {
         Map<String, List<String>> enums = new LinkedHashMap<>();
         map(map(root, "components"), "schemas").forEach((name, schema) -> {
             if (asMap(schema).get("enum") instanceof List<?> members) {

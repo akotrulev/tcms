@@ -10,6 +10,7 @@ import com.tcms.identity.CompanyMembershipRepository;
 import com.tcms.identity.Role;
 import com.tcms.identity.RoleAssignment;
 import com.tcms.identity.RoleAssignmentRepository;
+import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectRepository;
 import com.tcms.tenancy.Company;
@@ -62,6 +63,7 @@ class NotificationChannelTest extends IntegrationTestBase {
     private static final UUID UMBRA = UUID.fromString("d5000000-0000-4000-8000-00000000000b");
 
     private static final UUID ACME_BANKING = UUID.fromString("d5001000-0000-4000-8000-000000000001");
+    private static final UUID ACME_PAYMENTS = UUID.fromString("d5001000-0000-4000-8000-000000000002");
     private static final UUID UMBRA_BANKING = UUID.fromString("d5002000-0000-4000-8000-000000000001");
 
     private static final UUID LEAD = UUID.fromString("d5003000-0000-4000-8000-000000000001");
@@ -106,9 +108,11 @@ class NotificationChannelTest extends IntegrationTestBase {
 
         inCompany(ACME, () -> tx.executeWithoutResult(status -> {
             seedProject(ACME_BANKING, ACME, "NCAOLB", "Online Banking", now);
+            seedProject(ACME_PAYMENTS, ACME, "NCAPAY", "Payments", now);
             member(ACME, LEAD, "L. Lead", now);
             member(ACME, ENGINEER, "E. Engineer", now);
             grant("lead", ACME, Role.TEST_LEAD_ID, LEAD, ACME_BANKING, now);
+            grant("leadpay", ACME, Role.TEST_LEAD_ID, LEAD, ACME_PAYMENTS, now);
             grant("eng", ACME, Role.TEST_ENGINEER_ID, ENGINEER, ACME_BANKING, now);
         }));
 
@@ -138,18 +142,78 @@ class NotificationChannelTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a Test Engineer reads the list and is refused the write")
+        @DisplayName("a Test Engineer is refused the read as well as the write")
         void anEngineerIsRefused() {
             inCompany(ACME, () -> {
-                create(LEAD, slack("Releases"));
+                UUID channelId = saved(create(LEAD, slack("Releases"))).id();
 
                 assertThat(service.list(ENGINEER, ACME_BANKING))
-                        .as("everyone who can see a project can already see whether its notices "
-                                + "go anywhere, by receiving one")
-                        .get().asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.LIST)
-                        .hasSize(1);
+                        .as("403, not 404 — the caller can see the project, so concealing the "
+                                + "feature would say the project had none rather than that they "
+                                + "may not look")
+                        .isInstanceOf(GateResult.Denied.class);
+                assertThat(service.find(ENGINEER, ACME_BANKING, channelId))
+                        .isInstanceOf(GateResult.Denied.class);
+                assertThat(service.history(ENGINEER, ACME_BANKING, channelId))
+                        .isInstanceOf(GateResult.Denied.class);
                 assertThat(create(ENGINEER, slack("Mine")))
                         .isInstanceOf(NotificationChannelService.Outcome.Forbidden.class);
+            });
+        }
+
+        @Test
+        @DisplayName("a Lead reads what a Test Engineer may not")
+        void aLeadReads() {
+            inCompany(ACME, () -> {
+                UUID channelId = saved(create(LEAD, slack("Releases"))).id();
+
+                assertThat(allowed(service.list(LEAD, ACME_BANKING))).hasSize(1);
+                assertThat(allowed(service.history(LEAD, ACME_BANKING, channelId)))
+                        .as("an empty history is a real answer — a channel nothing has been sent "
+                                + "through — and is not the null that means no such channel")
+                        .isEmpty();
+            });
+        }
+
+        @Test
+        @DisplayName("a channel in a sibling project is the same 404 an unreachable project is")
+        void aSiblingsChannelIsNotFound() {
+            inCompany(ACME, () -> {
+                UUID channelId = saved(create(LEAD, slack("Releases"))).id();
+
+                assertThat(allowed(service.find(LEAD, ACME_PAYMENTS, channelId)))
+                        .as("null, which the controller answers 404 — the refusal must not tell a "
+                                + "caller which channel ids exist in a project they are not asking "
+                                + "about")
+                        .isNull();
+            });
+        }
+
+        @Test
+        @DisplayName("an If-Match naming a version somebody else moved is a conflict, not a save")
+        void aStaleEditIsRefused() {
+            inCompany(ACME, () -> {
+                NotificationChannelView first = saved(create(LEAD, slack("Releases")));
+
+                service.update(LEAD, ACME_BANKING, first.id(), first.lockVersion(), rename("Once"));
+
+                assertThat(service.update(
+                        LEAD, ACME_BANKING, first.id(), first.lockVersion(), rename("Twice")))
+                        .as("the second edit read a version the first one has since moved past, "
+                                + "and a channel edit is a field edit — two administrators really "
+                                + "do lose each other's words")
+                        .isInstanceOf(NotificationChannelService.Outcome.Conflict.class);
+            });
+        }
+
+        @Test
+        @DisplayName("no If-Match is the documented last-write-wins path, not a refusal")
+        void anAbsentPreconditionSaves() {
+            inCompany(ACME, () -> {
+                UUID channelId = saved(create(LEAD, slack("Releases"))).id();
+
+                assertThat(service.update(LEAD, ACME_BANKING, channelId, null, rename("Renamed")))
+                        .isInstanceOf(NotificationChannelService.Outcome.Saved.class);
             });
         }
 
@@ -218,7 +282,7 @@ class NotificationChannelTest extends IntegrationTestBase {
                         List.of(new NotificationChannelInput.SubscriptionInput(
                                 OutboxEvents.RUN_COMPLETED, 0)));
                 NotificationChannelView view =
-                        saved(service.update(LEAD, ACME_BANKING, channelId, renamed));
+                        saved(service.update(LEAD, ACME_BANKING, channelId, null, renamed));
 
                 assertThat(view.name()).isEqualTo("Release channel");
                 assertThat(view.secretHint())
@@ -283,7 +347,7 @@ class NotificationChannelTest extends IntegrationTestBase {
                                         OutboxEvents.ITEM_ASSIGNED, 0))))).id();
 
                 NotificationChannelView narrowed = saved(service.update(
-                        LEAD, ACME_BANKING, channelId, new NotificationChannelInput(
+                        LEAD, ACME_BANKING, channelId, null, new NotificationChannelInput(
                                 NotificationChannelKind.SLACK, "Runs only", true, List.of(), null,
                                 List.of(new NotificationChannelInput.SubscriptionInput(
                                         OutboxEvents.RUN_COMPLETED, 3)))));
@@ -409,8 +473,22 @@ class NotificationChannelTest extends IntegrationTestBase {
                         OutboxEvents.RUN_COMPLETED, 0)));
     }
 
+    /** The same channel with a different name and no secret — an edit form's whole payload. */
+    private NotificationChannelInput rename(String name) {
+        return new NotificationChannelInput(
+                NotificationChannelKind.SLACK, name, true, List.of(), null,
+                List.of(new NotificationChannelInput.SubscriptionInput(
+                        OutboxEvents.RUN_COMPLETED, 0)));
+    }
+
     private NotificationChannelService.Outcome create(UUID userId, NotificationChannelInput input) {
         return service.create(userId, ACME_BANKING, input);
+    }
+
+    /** What a granted read produced, asserting the gate let it through on the way past. */
+    private static <T> T allowed(GateResult<T> gated) {
+        assertThat(gated).isInstanceOf(GateResult.Allowed.class);
+        return ((GateResult.Allowed<T>) gated).value();
     }
 
     private static NotificationChannelView saved(NotificationChannelService.Outcome outcome) {

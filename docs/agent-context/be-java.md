@@ -74,7 +74,7 @@ draft buffer; **§127 phase 1** — the table and image block payloads; **§126 
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `e83644e` + the §218 phase-1 commit, which lands immediately after this line is written — so the header is one behind by construction, as it has been since §207. §218 is the first change to add a MODULE since §125 and the first migration since `V52`; `./gradlew build` run locally on macOS, **2768 / 0 skipped / 0 failures**, +59 — the Linux lane has not seen it. Before it ~~`e83644e` (§216 phase 1 — **one `src/main` method and one new test class**; `./gradlew build` run on shanks, **2709 / 0 skipped / 0 failures**, +7. First `src/main` change since §210. Before it ~~`f3c35b2` (§215 phase 1 — **no `backend/` byte**, so the last commit to change Java at all is still §214's and `./gradlew build` was not run: it stands at **2702 / 0 skipped / 0 failures**. What §215 settles for this stack is a *placement* rule — §214's §A3 parser was the obvious tool for checking the two convenience copies of the matrix, and the check was written in `packages/` instead, because this suite is not run by `ci.yml` and two markdown files need no Testcontainers boot.~~ Before it ~~`a44fc41` (§214 phase 1 — **`backend/src/test` only**: one new test in `SeedDataTest` and its class header. No `src/main` byte, so no behaviour moved; `./gradlew build` was run and is **2702 / 0 skipped / 0 failures**, +1. What it settles: **`SeedDataTest` now COMPARES the roles spec's §A3 tables to the seeded rows, cell by cell, seven roles, both ways** (`theSeededMatrixIsTheSpecsMatrix`). Until §214 it asserted four PROPERTIES and three of them name the spec in their failure message without opening the file — so 385 cells were compared to nothing while `packages/` parsed that same document to police prose in four corpora and to derive the whole MCP surface. Population **three cells**, all one documented fact (`company:read` seeded per role; §A3's COMPANY table has only `Every member`, `V15`'s baseline), held in `MATRIX_DIVERGENCE_BY_DECISION` **both ways** per §162. A guard, not a repair. **The window is unchanged**: this comparison is in the suite `ci.yml` does not run.~~ Before it ~~`0e774e4` (§213 phase 1 — **no `backend/src` byte at all**, so the last commit to change Java BEHAVIOUR is still §210's and `./gradlew build` was not run. What §213 *does* concern this stack: `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse` is now the ONLY link that compares the seeded rows to the roles spec, because `packages/` derives the `Agent` grant from that spec rather than from a hand-kept copy — a spec edit that drifts from `V52` reddens here, in the suite `ci.yml` does not run — still true, and §214 widened what that link compares.~~ Before it ~~`8d47a0f` (§212 phase 2 — the ten `backend/src` files §212 touched are comments only)~~. Before it ~~`5198d1f` (§211 phase 3 — no Java changed in §210's successor either)~~. Before it ~~`be0ac69` (§209 phase 2)~~ — §209's own docs commit lands immediately after this line is written, so the header is one behind by construction. Before it the header sat at ~~`9de1eac` (§207's docs commit — §208's own slice commit lands immediately after
+**Baseline commit:** `94f1b09` + the §218 phase-2 commit, which lands immediately after this line is written — so the header is one behind by construction, as it has been since §207. **`./gradlew build` is RED on this branch and was red before phase 2 touched it: 2774 tests, 4 failures, all four in `ArchitectureRulesTest` and every one of them naming `IdentityProvider` or `UserIdentity` — §217 phase 2's federation entities, which arrived on this branch through the merge at `94f1b09` with no reader, no writer and three repository methods nothing calls.** Verified by stashing phase 2 entire and re-running that class: the same four, identically. Phase 2 itself is +6 tests (two in `NotificationEventTypeTest`, four in `NotificationChannelTest`) and reddens nothing; **the four are §217's to close and are named here rather than absorbed**, because a slice that reports its own gate as passing while the suite is red is how a red default branch stops being noticed. Before it ~~`e83644e` + the §218 phase-1 commit; §218 is the first change to add a MODULE since §125 and the first migration since `V52`; `./gradlew build` run locally on macOS, **2768 / 0 skipped / 0 failures**, +59 — the Linux lane has not seen it.~~ Before it ~~`e83644e` (§216 phase 1 — **one `src/main` method and one new test class**; `./gradlew build` run on shanks, **2709 / 0 skipped / 0 failures**, +7. First `src/main` change since §210. Before it ~~`f3c35b2` (§215 phase 1 — **no `backend/` byte**, so the last commit to change Java at all is still §214's and `./gradlew build` was not run: it stands at **2702 / 0 skipped / 0 failures**. What §215 settles for this stack is a *placement* rule — §214's §A3 parser was the obvious tool for checking the two convenience copies of the matrix, and the check was written in `packages/` instead, because this suite is not run by `ci.yml` and two markdown files need no Testcontainers boot.~~ Before it ~~`a44fc41` (§214 phase 1 — **`backend/src/test` only**: one new test in `SeedDataTest` and its class header. No `src/main` byte, so no behaviour moved; `./gradlew build` was run and is **2702 / 0 skipped / 0 failures**, +1. What it settles: **`SeedDataTest` now COMPARES the roles spec's §A3 tables to the seeded rows, cell by cell, seven roles, both ways** (`theSeededMatrixIsTheSpecsMatrix`). Until §214 it asserted four PROPERTIES and three of them name the spec in their failure message without opening the file — so 385 cells were compared to nothing while `packages/` parsed that same document to police prose in four corpora and to derive the whole MCP surface. Population **three cells**, all one documented fact (`company:read` seeded per role; §A3's COMPANY table has only `Every member`, `V15`'s baseline), held in `MATRIX_DIVERGENCE_BY_DECISION` **both ways** per §162. A guard, not a repair. **The window is unchanged**: this comparison is in the suite `ci.yml` does not run.~~ Before it ~~`0e774e4` (§213 phase 1 — **no `backend/src` byte at all**, so the last commit to change Java BEHAVIOUR is still §210's and `./gradlew build` was not run. What §213 *does* concern this stack: `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse` is now the ONLY link that compares the seeded rows to the roles spec, because `packages/` derives the `Agent` grant from that spec rather than from a hand-kept copy — a spec edit that drifts from `V52` reddens here, in the suite `ci.yml` does not run — still true, and §214 widened what that link compares.~~ Before it ~~`8d47a0f` (§212 phase 2 — the ten `backend/src` files §212 touched are comments only)~~. Before it ~~`5198d1f` (§211 phase 3 — no Java changed in §210's successor either)~~. Before it ~~`be0ac69` (§209 phase 2)~~ — §209's own docs commit lands immediately after this line is written, so the header is one behind by construction. Before it the header sat at ~~`9de1eac` (§207's docs commit — §208's own slice commit lands immediately after
 this line is written, so the header is one behind by construction. Before it the header sat at
 ~~`507c80b` (§207)~~, ~~`c6fbefd` (§206 phase 3)~~ and ~~`be8c1a6` (§199)~~, lagging the body by six
 sections — the normal state, and exactly why the rule below exists.)~~
@@ -224,7 +224,7 @@ safe to interpolate and the next component added would not be.
 
 `NotificationChannelService`'s methods are package-private because
 `everyPublicBeanMethodIsExercisedInProduction` refuses a public bean method whose only callers are
-tests, and the controller lands with the contract in phase 2 (same package).
+tests, and `NotificationChannelController` — the caller, landed in phase 2 — is in the same package.
 **`@Transactional` on a package-private method works here** — Spring Framework 6 detects it for
 class-based proxies, and `tenancy.OutboxLedger.claim` is the in-repo proof. Do not "fix" it by
 widening visibility.
@@ -246,13 +246,66 @@ displayed"; Teams requires `summary` and takes facts as objects; email has no ro
 recorded at both: a failed invitation must not undo a provisioning run, and a notification has no
 other route and sits on a row that will retry.
 
-### Left for phase 2 and 3
+### Phase 2 — the contract and the REST surface, and the read gate is the decision in it
 
-No `openapi.yaml` change, no controller, no frontend, no `packages/`. `NotificationChannelService`
-and its two view records exist and are driven only by tests; the controller is the caller they are
-shaped for. No message carries a **link** to the run — that needs a base URL this module does not
-have, and borrowing `tcms.invitation.base-url` would be `identity`'s property read from a module that
-may not see it.
+Six operations under `/projects/{projectId}/notification-channels`, all on
+`NotificationChannelController` in the same package as the service it drives. **Both halves cost
+`integration:manage`, reads included, and phase 1's javadoc said the opposite** — it is struck
+through in place rather than deleted, per the working agreement.
+
+**The argument, because it is the reusable half.** `getProjectSettings` is deliberately readable by
+anybody who can see the project, and the reason is that *every* client has a decision to make from
+it — whether to render a review panel — while none of those readers is an administrator. Neither
+half transfers here. Nothing in this product branches on whether a channel exists, so there is no
+reader who needs the answer and cannot have the key; and what the reads serve points the other way
+— `secretHint` is the tail of a live credential, `recipients` are people's addresses, and a
+delivery row's `error` is whatever a remote endpoint said. So the reads went to
+`ProjectService.readGranted`: **visibility still answers 404, the permission half answers 403**,
+which is `report:view`'s (§87) split and the reason that method exists. Generalised: *read the gate
+off what the response carries, not off the screen the endpoint belongs to.*
+
+- **The delivery log hangs off the CHANNEL** — `…/{channelId}/deliveries`, not a project-level list.
+  A delivery is only ever asked about as one (*is this webhook working*), and deleting a channel
+  takes its history with it, so a project-level log would outlive the channels it names.
+- **Subscriptions travel in the channel body, not as a sub-resource** — `updateProjectSettings`'
+  argument: the form shows every control and submits every control. The array is the **complete
+  set**, reconciled, because an upsert-only sub-resource can add and change a subscription and can
+  never take one away.
+- **`secret` is on the input schema and on NO response schema**, and `NotificationChannel` has no
+  property that could carry it back. Absent on the `PUT` means **unchanged** — the one field in this
+  API where an omission is not a clear, and the reason is that the screen has nothing to send back.
+- **NO `Idempotency-Key` on the create**, on `POST /projects/{projectId}/conditions`' terms: there is
+  no idempotency record behind the path, and §205's finding is what makes declaring one anyway the
+  expensive mistake — a client that trusted the header would replay a timed-out create and get a
+  second channel that delivers every notice twice.
+- **`If-Match` on the `PUT` and none on the `DELETE`.** `Long`-bound so a malformed header is a 400
+  from the binder rather than a skipped precondition. A delete names an absolute destination, so a
+  precondition there could only refuse somebody who wanted exactly what happened.
+
+**Five schemas and two enums had to be registered in the contract tests, and that is the tax on any
+new surface here.** `ContractConventionTest.PACKAGE_PRIVATE_OWNERS` grew from five entries to ten
+(the whole `integration` module is package-private by design, so it is `Map.ofEntries` now);
+`ContractEnumTest.OWNERS` gained `NotificationChannelKind` and `NotificationDeliveryStatus`.
+
+**`NotificationEventType` is the third named enum in this contract with NO server type**, joining
+`PermissionKey`: the outbox's names are `String` constants on `OutboxEvents`, in a foundation module
+that must not learn what a consumer does with them. What checks it instead is
+`com.tcms.integration.NotificationEventTypeTest` — the schema's members against
+`NotificationChannelService.DELIVERABLE_EVENTS` **both ways**, and each against the constants the
+producers record, because both sides could agree on a typo and the only symptom would be a channel
+that never fires. `OpenApiContract.enumSchemas()` was widened to public for it.
+
+**`NotificationDelivery.eventType` is a bare string and not that enum, on purpose**: it is a
+historical row and may name an event this instance no longer sends, so typing it as the live
+vocabulary would make an honest log fail a client's own parse.
+
+### Left for phase 3
+
+No frontend and no `packages/` surface — the SPA's settings screen (channel list, create/edit dialog
+with the write-only secret, delivery history) is phase 3, and neither the CLI nor the MCP server
+offers notification channels at all. No message carries a **link** to the run — that needs a base URL
+this module does not have, and borrowing `tcms.invitation.base-url` would be `identity`'s property
+read from a module that may not see it.
 
 
 ## §209 — THE ARTIFACT REGISTER HAS THREE REACHABLE STATES, AND TWO WAYS IN

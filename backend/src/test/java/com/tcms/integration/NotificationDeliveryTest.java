@@ -270,7 +270,7 @@ class NotificationDeliveryTest extends IntegrationTestBase {
     @DisplayName("a disabled channel is not attempted")
     void aDisabledChannelIsSilent() throws SQLException {
         UUID channelId = channel("Releases", 0);
-        inCompany(() -> channels.update(LEAD, BANKING, channelId, new NotificationChannelInput(
+        inCompany(() -> channels.update(LEAD, BANKING, channelId, null, new NotificationChannelInput(
                 NotificationChannelKind.SLACK, "Releases", false, List.of(), null,
                 List.of(new NotificationChannelInput.SubscriptionInput(
                         OutboxEvents.RUN_COMPLETED, 0)))));

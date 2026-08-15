@@ -122,7 +122,13 @@ class ContractEnumTest {
             Map.entry("IngestedOutcome", List.of("com.tcms.execution.IngestedOutcome")),
             Map.entry("IngestionStatus", List.of("com.tcms.execution.IngestionStatus")),
             Map.entry("PermissionQualifier", List.of("com.tcms.identity.PermissionQualifier")),
-            Map.entry("WorkItemStatus", List.of("com.tcms.work.WorkItemStatus")));
+            Map.entry("WorkItemStatus", List.of("com.tcms.work.WorkItemStatus")),
+            Map.entry("NotificationChannelKind",
+                    List.of("com.tcms.integration.NotificationChannelKind")),
+            // Nested in the entity that holds it, like ReviewVerdict above; the contract's name
+            // carries the owner because a bare `Status` schema would say nothing about whose.
+            Map.entry("NotificationDeliveryStatus",
+                    List.of("com.tcms.integration.NotificationDelivery$Status")));
 
     /**
      * The contract enums with no server type at all, and what checks each instead.
@@ -135,7 +141,15 @@ class ContractEnumTest {
             "the catalogue is DATA, not a type: V3 seeds 55 rows and the code checks permissions by "
                     + "string so that a role screen can render a key nobody compiled against. "
                     + "SeedDataTest.catalogueMatchesTheContract is this rule for it, "
-                    + "against the seed instead of against an enum, and it has run since M0");
+                    + "against the seed instead of against an enum, and it has run since M0",
+            "NotificationEventType",
+            "the outbox's names are String constants on OutboxEvents, in a foundation module that "
+                    + "must not learn what any consumer does with them — an enum there would be a "
+                    + "type every producer and consumer compiled against, which is the coupling "
+                    + "the outbox exists to avoid. What checks it instead is "
+                    + "com.tcms.integration.NotificationEventTypeTest, which compares this "
+                    + "schema's members to the set a channel may subscribe to in both directions, "
+                    + "and each of those to the constants the producers actually record");
 
     /**
      * Production enums whose simple name collides with a contract enum and which are not that

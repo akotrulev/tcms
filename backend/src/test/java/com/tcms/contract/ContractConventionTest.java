@@ -587,16 +587,33 @@ class ContractConventionTest {
      * <p>§170 added three, and the list growing from two to five is the reason to say what would
      * change the decision: at the point where the <em>majority</em> of a schema's owners are here,
      * the compile-time guarantee is the exception rather than the rule and the visibility question
-     * is worth reopening as its own slice. Five of 125 is not that point.
+     * is worth reopening as its own slice. ~~Five of 125 is not that point.~~ → <strong>ten of
+     * 130 after §218</strong>, and the five it added arrived differently from the first five: the
+     * whole {@code integration} module is package-private by design rather than incidentally, on
+     * {@code ArchitectureRulesTest.everyPublicBeanMethodIsExercisedInProduction}'s terms. That is
+     * an argument for the visibility, which none of the earlier five had — so the trigger above
+     * stands as written, and doubling the list has not moved it closer.
      */
-    private static final Map<String, List<String>> PACKAGE_PRIVATE_OWNERS = Map.of(
-            "BulkOperation", List.of("com.tcms.repository.BulkOperationRequest"),
-            "BulkPayload", List.of("com.tcms.repository.BulkPayloadInput"),
-            "BulkResult", List.of("com.tcms.repository.BulkResultView"),
-            "ReportDefinition", List.of("com.tcms.reporting.ReportDefinitionView"),
+    private static final Map<String, List<String>> PACKAGE_PRIVATE_OWNERS = Map.ofEntries(
+            Map.entry("BulkOperation", List.of("com.tcms.repository.BulkOperationRequest")),
+            Map.entry("BulkPayload", List.of("com.tcms.repository.BulkPayloadInput")),
+            Map.entry("BulkResult", List.of("com.tcms.repository.BulkResultView")),
+            Map.entry("NotificationChannel",
+                    List.of("com.tcms.integration.NotificationChannelView")),
+            Map.entry("NotificationChannelInput",
+                    List.of("com.tcms.integration.NotificationChannelInput")),
+            Map.entry("NotificationDelivery",
+                    List.of("com.tcms.integration.NotificationDeliveryView")),
+            Map.entry("NotificationSubscription",
+                    List.of("com.tcms.integration.NotificationSubscriptionView")),
+            // Nested in the input that carries it, so the name match cannot propose it — the
+            // schema is named for the wire and the record for the field it sits on.
+            Map.entry("NotificationSubscriptionInput",
+                    List.of("com.tcms.integration.NotificationChannelInput$SubscriptionInput")),
+            Map.entry("ReportDefinition", List.of("com.tcms.reporting.ReportDefinitionView")),
             // Package-private inside a package-private controller, so it is doubly unnameable.
-            "ReportDefinitionInput",
-            List.of("com.tcms.reporting.ReportDefinitionController$SaveRequest"));
+            Map.entry("ReportDefinitionInput",
+                    List.of("com.tcms.reporting.ReportDefinitionController$SaveRequest")));
 
     /**
      * Object schemas whose record pairing is asserted somewhere else, and where.
