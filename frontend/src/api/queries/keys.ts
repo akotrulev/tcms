@@ -142,6 +142,29 @@ export const keys = {
    */
   reportModel: (p: string, jobId: string) =>
     ['projects', p, 'reports', 'jobs', jobId, 'model'] as const,
+  /**
+   * The project's notification channels (§218), and one of them.
+   *
+   * Two keys rather than one with a `find` over the list, unlike most detail reads in this factory
+   * — and here the reason is not a difference of shape. `GET …/notification-channels/{id}` and the
+   * list serve the **same** schema, because this resource has no `*Summary`. What differs is
+   * reachability: the list is refused outright for a caller without `integration:manage`, so a
+   * detail read served out of a cache entry that never populated would be indistinguishable from a
+   * channel that does not exist.
+   */
+  notificationChannels: (p: string) => ['projects', p, 'notification-channels'] as const,
+  notificationChannel: (p: string, id: string) =>
+    ['projects', p, 'notification-channels', id] as const,
+  /**
+   * One channel's delivery attempts.
+   *
+   * Nested under the channel because the endpoint is — there is no project-level log, and the
+   * reason is the same one that makes this key correct: deleting a channel takes its history with
+   * it, so an entry keyed anywhere else would outlive the rows it names. The delete hook removes
+   * this entry rather than invalidating it, for exactly that.
+   */
+  notificationDeliveries: (p: string, id: string) =>
+    ['projects', p, 'notification-channels', id, 'deliveries'] as const,
   users: ['users'] as const,
   teams: ['teams'] as const,
   roles: ['roles'] as const,

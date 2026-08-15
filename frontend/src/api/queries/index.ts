@@ -154,6 +154,14 @@ export {
   useUpdateDocPage,
 } from './documentation';
 export {
+  useCreateNotificationChannel,
+  useDeleteNotificationChannel,
+  useNotificationChannel,
+  useNotificationChannels,
+  useNotificationDeliveries,
+  useUpdateNotificationChannel,
+} from './integration';
+export {
   useAutomationMappings,
   useConfirmAutomationMapping,
   useDeleteAutomationMapping,

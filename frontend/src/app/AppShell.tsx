@@ -26,6 +26,7 @@ import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
+import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
@@ -240,6 +241,23 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
           label: 'Review',
           to: `${p}/settings/review`,
           icon: <RateReviewOutlinedIcon fontSize="small" />,
+        },
+        /*
+          §218's channels. Ungated like every item in this rail — and here the argument the entry
+          above makes has to be made differently, because the page it leads to shows a contributor
+          nothing at all: the reads cost `integration:manage`, so there is no read-only view to fall
+          back on.
+
+          Hiding it is still wrong, and more clearly so. A rail with no Notifications entry tells a
+          test engineer that this instance cannot send notifications, which is a lie about the
+          product rather than about their access; the entry plus a sentence naming who can configure
+          it tells them the truth and what to ask for. That is §31's disable-don't-hide applied to
+          the one case where the *data* is what is withheld.
+        */
+        {
+          label: 'Notifications',
+          to: `${p}/settings/notifications`,
+          icon: <NotificationsNoneOutlinedIcon fontSize="small" />,
         },
       ],
     },

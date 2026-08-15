@@ -23,6 +23,9 @@ import type {
   IngestionStatus,
   LifecycleStatus,
   LinkRelationship,
+  NotificationChannelKind,
+  NotificationDeliveryStatus,
+  NotificationEventType,
   PlanStatus,
   Priority,
   ProposalStatus,
@@ -596,6 +599,109 @@ export const linkSourceTypeLabels = {
   TEST_CASE: 'Test case',
   SUITE: 'Suite',
 } as const satisfies Record<BlockLink['sourceType'], string>;
+
+// ------------------------------------------------- notifications (§218) ----
+
+/**
+ * Which transport a channel is.
+ *
+ * The product's word, not the vendor's enum: `TEAMS` is "Microsoft Teams" because that is what an
+ * administrator is looking for in a list beside Slack, and a bare "Teams" reads as a noun this
+ * product already uses for something else entirely (`company:teams`).
+ */
+export const notificationChannelKindLabels = {
+  SLACK: 'Slack',
+  TEAMS: 'Microsoft Teams',
+  EMAIL: 'Email',
+} as const satisfies Record<NotificationChannelKind, string>;
+
+/**
+ * The kinds, in display order — **derived from the labels rather than listed again.**
+ *
+ * `satisfies Record<NotificationChannelKind, string>` above is what makes this complete: a member
+ * added to the contract's enum is a compile error in the map, and this array inherits that. A
+ * second hand-written list is the drift `labels.ts` exists to prevent, one level up from a label.
+ */
+export const NOTIFICATION_CHANNEL_KINDS = Object.keys(
+  notificationChannelKindLabels,
+) as NotificationChannelKind[];
+
+/**
+ * What each transport authenticates with — the sentence the create form shows beside the secret.
+ *
+ * The distinction is load-bearing rather than decorative. A Slack or Teams incoming-webhook URL
+ * **is** the authentication for the room it posts to, which is why it is required, encrypted, and
+ * never returned. Email has no credential of its own: it authenticates as whatever the deployment's
+ * mail relay does, which is not a company-owned value, so that kind takes recipients instead and
+ * the field is not shown at all.
+ */
+export const notificationChannelCredentialHelp = {
+  SLACK:
+    'The incoming-webhook URL from your Slack app. It is the whole authentication for that channel, so it is stored encrypted and never shown again.',
+  TEAMS:
+    'The incoming-webhook URL from the Teams channel connector. It is the whole authentication for that channel, so it is stored encrypted and never shown again.',
+  EMAIL:
+    'No credential. Email is sent through this instance’s own mail relay, so this channel is addressed by its recipients instead.',
+} as const satisfies Record<NotificationChannelKind, string>;
+
+/** How one delivery attempt ended. Terminal either way — a retry updates the row. */
+export const notificationDeliveryStatusLabels = {
+  SENT: 'Sent',
+  FAILED: 'Failed',
+} as const satisfies Record<NotificationDeliveryStatus, string>;
+
+/**
+ * What a channel may subscribe to.
+ *
+ * Keyed on the wire name because that is what the contract's enum members are — dotted, module-
+ * qualified strings — and turning them into words is exactly the display decision this file owns.
+ *
+ * **This map is for a `NotificationSubscription`, never for a `NotificationDelivery`.** The
+ * delivery's `eventType` is a bare string on purpose: a historical row may name an event this
+ * instance no longer sends, so it renders through {@link notificationEventLabel}, which falls back
+ * rather than showing a blank cell for a name the vocabulary has dropped.
+ */
+export const notificationEventTypeLabels = {
+  'execution.run_completed': 'Run completed',
+  'work.item_assigned': 'Work assigned to somebody',
+} as const satisfies Record<NotificationEventType, string>;
+
+/** The live vocabulary, derived from the map — `NOTIFICATION_CHANNEL_KINDS`' reasoning. */
+export const NOTIFICATION_EVENT_TYPES = Object.keys(
+  notificationEventTypeLabels,
+) as NotificationEventType[];
+
+/**
+ * What each event carries, beside its checkbox — and in particular whether the failure threshold
+ * beside it does anything.
+ *
+ * The threshold is served for every event type, including the one that carries no verdicts, where
+ * it is inert rather than a filter that never matches. Hiding it per type would put a rule about
+ * which events carry counts into the client, where it would be a second copy of a fact the server
+ * owns; saying so is the honest alternative.
+ */
+export const notificationEventTypeHelp = {
+  'execution.run_completed':
+    'Sent when a run reaches Completed — not when one is aborted or reopened. Carries the run’s final status and its pass/fail/blocked counts, which is what the failure threshold reads.',
+  'work.item_assigned':
+    'Sent when a task is created with somebody on it. Carries no result counts, so a failure threshold set here is inert rather than silencing.',
+} as const satisfies Record<NotificationEventType, string>;
+
+/**
+ * One delivery row's event, in words — **with a fallback, unlike every other map in this file.**
+ *
+ * The delivery log is history and its `eventType` is typed as a bare string for that reason. An
+ * instance that recorded `work.defect_created` before that name existed, or one whose vocabulary
+ * later drops a name, must still render an honest log; `humanize` turns the wire name into
+ * something readable rather than leaving the cell empty, which would read as a row that was never
+ * about anything.
+ */
+export function notificationEventLabel(eventType: string): string {
+  return (
+    notificationEventTypeLabels[eventType as NotificationEventType] ??
+    humanize(eventType.replace(/^[a-z]+\./, ''))
+  );
+}
 
 /**
  * Fallback for values that arrive without a map — an unrecognized classification value,

@@ -113,6 +113,11 @@ const ReviewSettingsPage = lazy(() =>
     default: m.ReviewSettingsPage,
   })),
 );
+const NotificationSettingsPage = lazy(() =>
+  import('../features/settings/NotificationSettingsPage').then((m) => ({
+    default: m.NotificationSettingsPage,
+  })),
+);
 
 /** Route-level fallback, shaped like a page so the shell doesn't jump while a chunk loads. */
 function RouteFallback() {
@@ -391,6 +396,26 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ReviewSettingsPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            The third, and the one the `/settings/` shape was worth having for (§218). Where this
+            project sends word that a run finished or a task landed on somebody.
+
+            **Routed for everybody, unlike the data behind it.** Every operation under it costs
+            `integration:manage`, reads included, so a contributor reaching this URL gets the page
+            and a sentence saying who can configure it — not a redirect and not a 404. A route
+            guarded by a permission would be the client deciding an authorization question the
+            server is already answering, and it would make a pasted link behave differently for two
+            people with no explanation shown to either.
+          */}
+          <Route
+            path="/projects/:projectId/settings/notifications"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <NotificationSettingsPage />
               </Suspense>
             }
           />
