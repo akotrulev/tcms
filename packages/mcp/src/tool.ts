@@ -140,7 +140,7 @@ export function deletes(tool: ToolDefinition): boolean {
  *
  * Until `V52` (roles spec §A6a, handoff §210) an agent credential could not delete, because the
  * `Agent` role did not hold the keys. §210 made `Agent` equal to Test Engineer and moved the gate
- * here: `destructiveHint` is what makes a host prompt, and {@link consentedTo} in `server.ts` is
+ * here: `destructiveHint` is what makes a host prompt, and `withheldConsent` in `server.ts` is
  * what makes the prompt mandatory rather than advisory on clients that can be asked.
  *
  * **Know what an annotation is worth.** The spec's own words are that these are *hints*, and that

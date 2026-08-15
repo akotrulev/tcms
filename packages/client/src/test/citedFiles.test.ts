@@ -290,6 +290,12 @@ const CORPUS = CORPUS_ROOTS.map((entry) => ({
  * un-pruning `dist`, which would make the check's answer depend on whether anyone had run a build.
  */
 const CITED_BUT_ABSENT_BY_DECISION: Record<string, string> = {
+  'deploy/README.md':
+    'A planned deliverable, cited ahead of being written: `LdapDirectory.java` (§223 phase 4) '
+    + 'names it for the mounted-truststore note, and the LDAP plan '
+    + '(`docs/plans/2026-08-15-m4-external-identity-ldap-ad.md`, step 4) lists writing it as its '
+    + 'own unfinished step. Pinned both ways, so the moment that step lands this entry fails and '
+    + 'gets removed — which is the reminder working, not a defect.',
   'error.tsx':
     'A Next.js App Router file. `ErrorBoundaries.tsx` names it to say this is a Vite SPA and the '
     + 'framework tier does not exist here, so the boundaries are the whole of it.',

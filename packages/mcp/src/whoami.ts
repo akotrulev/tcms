@@ -25,7 +25,7 @@
  */
 import { describeReach } from '@tcms/client';
 
-import { isListed, type ToolDefinition } from './tool.js';
+import type { ToolDefinition } from './tool.js';
 
 export const whoami: ToolDefinition = {
   name: 'tcms_whoami',
@@ -63,14 +63,6 @@ export const whoami: ToolDefinition = {
     };
   },
 };
-
-/** Which tools this permission set lists — used by `server.ts` to decide whether to notify. */
-export function listedNames(
-  tools: readonly ToolDefinition[],
-  held: ReadonlySet<string>,
-): string[] {
-  return tools.filter((tool) => isListed(tool, held)).map((tool) => tool.name).sort();
-}
 
 function differs(before: ReadonlySet<string>, after: ReadonlySet<string>): boolean {
   if (before.size !== after.size) return true;

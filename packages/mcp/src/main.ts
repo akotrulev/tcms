@@ -85,6 +85,20 @@ export async function main(
       host.listen(port, parsed.values.host ?? BIND_DEFAULT, resolve);
     });
     log(`tcms-mcp listening on ${parsed.values.host ?? BIND_DEFAULT}:${port}${parsed.values.path ?? PATH_DEFAULT} → ${baseUrl}`);
+
+    /*
+      The deployment is a container, and a container stops with SIGTERM. Without this the signal
+      kills the process mid-request; with it the listener closes and in-flight requests finish.
+      Open SSE streams would hold `close` open indefinitely, so the unref'd timer puts a ceiling
+      on the wait without itself keeping the process alive.
+    */
+    const shutdown = (signal: string) => {
+      log(`tcms-mcp: ${signal}, closing`);
+      host.close(() => { process.exit(EXIT.ok); });
+      setTimeout(() => { process.exit(EXIT.ok); }, 5000).unref();
+    };
+    process.once('SIGTERM', () => { shutdown('SIGTERM'); });
+    process.once('SIGINT', () => { shutdown('SIGINT'); });
     return EXIT.ok;
   }
 

@@ -185,6 +185,43 @@ describe('the endpoint', () => {
     expect(response.status).toBe(400);
   });
 
+  it('answers an empty POST body with a 400 rather than hanging', async () => {
+    globalThis.fetch = tcmsByToken();
+    const url = await listen();
+
+    // An empty body used to fall through every branch without a response being written — the
+    // one request shape this endpoint simply never answered.
+    const response = await REAL_FETCH(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer token-ana' },
+      body: '',
+    });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('caps the body on an existing session too, and answers exactly once', async () => {
+    globalThis.fetch = tcmsByToken();
+    const url = await listen();
+
+    const opened = await initialize(url, 'token-ana');
+    const sessionId = opened.headers.get('mcp-session-id') ?? '';
+
+    // The oversized branch responds 413 inside the body read; the handler must then stop rather
+    // than hand the transport a consumed request on an ended response.
+    const response = await REAL_FETCH(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'mcp-session-id': sessionId,
+      },
+      body: JSON.stringify({ pad: 'x'.repeat(MAX_BODY_BYTES + 1) }),
+    });
+
+    expect(response.status).toBe(413);
+  });
+
   it('caps the body, because this endpoint is reachable before any credential is checked', async () => {
     globalThis.fetch = tcmsByToken();
     const url = await listen();

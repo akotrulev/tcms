@@ -34,7 +34,6 @@ import { failed, ok } from './result.js';
 import { MCP_VERSION, type Session } from './session.js';
 import { annotationsFor, describeFor, isListed, type ToolArm, type ToolDefinition } from './tool.js';
 import { TOOLS, findTool } from './tools.js';
-import { listedNames } from './whoami.js';
 
 export const SERVER_NAME = 'tcms';
 
@@ -52,11 +51,21 @@ export function buildServer(session: Session, tools: readonly ToolDefinition[] =
     },
   );
 
-  let listed = listedNames(tools, session.reach.permissions);
+  /*
+    The digest covers the per-session DESCRIPTIONS, not only the names. `describeFor` renders the
+    caller's qualifiers into the text, so a re-probe that keeps every key but narrows one (an
+    `ALL` becoming `OWN`) changes what a host should be showing while changing nothing about
+    which tools are listed — a names-only comparison stayed silent on exactly that.
+  */
+  const listingOf = () => tools
+    .filter((tool) => isListed(tool, session.reach.permissions))
+    .map((tool) => `${tool.name}\n${describeFor(tool, session.reach.permissions, session.reach.qualifiers)}`)
+    .join('\n\n');
+  let listing = listingOf();
   session.onListChanged = () => {
-    const now = listedNames(tools, session.reach.permissions);
-    if (now.join('\n') === listed.join('\n')) return;
-    listed = now;
+    const now = listingOf();
+    if (now === listing) return;
+    listing = now;
     void server.sendToolListChanged();
   };
 
@@ -84,19 +93,22 @@ export function buildServer(session: Session, tools: readonly ToolDefinition[] =
     const input = (request.params.arguments ?? {}) as Record<string, unknown>;
     const arm = armFor(tool, input);
 
-    if (arm?.kind === 'delete') {
-      const refusal = await withheldConsent(server, tool, arm, input);
-      if (refusal) return refusal;
-    }
-
     try {
+      // Inside the try so a host that cancels mid-prompt gets "Cancelled." as a result rather
+      // than a protocol error the model never reads.
+      if (arm?.kind === 'delete') {
+        const refusal = await withheldConsent(server, tool, arm, input, extra.signal);
+        if (refusal) return refusal;
+      }
+
       const value = await tool.run(
         {
           ...session,
           request: { ...session.request, signal: extra.signal },
-          // §4.2: the MCP adapter derives the idempotency key from the tool-call id. See
-          // `Session.callId` for exactly which retry that covers and which it does not.
-          callId: `mcp-${String(extra.requestId)}`,
+          // §4.2: the MCP adapter derives the idempotency key from the tool-call id, prefixed
+          // with the session's salt. See `Session.callId` for which retry the id covers, and
+          // `Session.idempotencyScope` for why the id alone was a cross-session collision.
+          callId: `mcp-${session.idempotencyScope}-${String(extra.requestId)}`,
         },
         input,
       );
@@ -168,6 +180,7 @@ async function withheldConsent(
   tool: ToolDefinition,
   arm: ToolArm,
   input: Record<string, unknown>,
+  signal: AbortSignal,
 ): Promise<CallToolResult | undefined> {
   const what = `${tool.title.charAt(0).toLowerCase()}${tool.title.slice(1)} (${arm.action})`;
   const target = identifying(arm, input);
@@ -186,20 +199,25 @@ async function withheldConsent(
     };
   }
 
-  const answer = await server.elicitInput({
-    message: `Confirm deletion — ${what}${target ? `\n\n${target}` : ''}`,
-    requestedSchema: {
-      type: 'object',
-      properties: {
-        confirm: {
-          type: 'boolean',
-          title: 'Delete this?',
-          description: 'This removes the item. It is a soft delete and is recorded in the audit trail.',
+  const answer = await server.elicitInput(
+    {
+      message: `Confirm deletion — ${what}${target ? `\n\n${target}` : ''}`,
+      requestedSchema: {
+        type: 'object',
+        properties: {
+          confirm: {
+            type: 'boolean',
+            title: 'Delete this?',
+            description: 'This removes the item. It is a soft delete and is recorded in the audit trail.',
+          },
         },
+        required: ['confirm'],
       },
-      required: ['confirm'],
     },
-  });
+    // The tool call's own cancellation, threaded through: without it a host that cancels the
+    // call leaves this prompt pending on the user's screen for an operation nobody is waiting on.
+    { signal },
+  );
 
   if (answer.action === 'accept' && answer.content?.['confirm'] === true) return undefined;
 

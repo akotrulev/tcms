@@ -9,7 +9,7 @@
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ElicitRequestSchema, ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import { describe, expect, it } from 'vitest';
 
 import { TcmsApiError, TcmsTimeoutError } from '@tcms/client';
@@ -356,6 +356,62 @@ describe('tools/call', () => {
     // wrong thing.
     expect(text).toContain('case:edit');
     expect(text).not.toContain('case:create');
+  });
+});
+
+describe('the idempotency scope', () => {
+  const CREATE = { name: 'tcms_write_doc_page', arguments: { action: 'create', title: 'New' } };
+  const ROUTES = agentRoutes({
+    'POST /doc-pages': { status: 201, body: docPage({ key: 'DOC-2', title: 'New' }) },
+  });
+
+  it('never hands two sessions the same key, even for the same request id', async () => {
+    const first = api(ROUTES);
+    const second = api(ROUTES);
+    const clientA = await connect(first);
+    const clientB = await connect(second);
+
+    await withApi(first, () => clientA.callTool(CREATE));
+    await withApi(second, () => clientB.callTool(CREATE));
+
+    const keyA = first.write('/doc-pages').headers.get('Idempotency-Key');
+    const keyB = second.write('/doc-pages').headers.get('Idempotency-Key');
+
+    /*
+      Same client implementation, same call sequence — both sessions arrive at this create with
+      the SAME JSON-RPC request id. That is the collision the session salt exists for: the server
+      dedupes creates on (company, project, key) with no caller in it, so a key derived from the
+      request id alone answers the second session's create with the FIRST session's row, silently
+      — another caller's document, presented as the result of this one's create. The same shape
+      repeats across stdio restarts, where every fresh session counts from 1.
+    */
+    expect(keyA).toMatch(/^mcp-/);
+    expect(keyB).toMatch(/^mcp-/);
+    expect(keyA).not.toBe(keyB);
+  });
+});
+
+describe('notifications/tools/list_changed', () => {
+  it('fires when a re-probe narrows a qualifier, not only when the listed set changes', async () => {
+    const stub = api(agentRoutes());
+    const client = await connect(stub);
+    const notified = new Promise<void>((resolve) => {
+      client.setNotificationHandler(ToolListChangedNotificationSchema, () => { resolve(); });
+    });
+
+    /*
+      Every key kept — the listed NAMES do not move — but `case:edit` narrows to OWN, which
+      changes the caveat sentence `describeFor` renders into the tool descriptions for this
+      session. A names-only comparison said nothing here, so a host kept showing descriptions
+      that no longer described the credential.
+    */
+    stub.set('/me/permissions', {
+      status: 200,
+      body: permissions([...AGENT_KEYS], { 'case:edit': 'OWN' }),
+    });
+    await withApi(stub, () => client.callTool({ name: 'tcms_whoami', arguments: {} }));
+
+    await notified;
   });
 });
 

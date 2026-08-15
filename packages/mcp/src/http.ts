@@ -79,7 +79,11 @@ export function createHost(options: HostOptions): HttpServer {
     const existing = sessionId ? sessions.get(sessionId) : undefined;
 
     if (existing) {
-      await existing.transport.handleRequest(req, res, await bodyOf(req, res));
+      const body = await bodyOf(req, res);
+      // `bodyOf` has already answered (413, 400) — handing the transport a consumed request on
+      // an ended response would only make it throw into the outer catch.
+      if (res.headersSent) return;
+      await existing.transport.handleRequest(req, res, body);
       return;
     }
 
@@ -157,8 +161,10 @@ export function createHost(options: HostOptions): HttpServer {
     }
 
     const text = Buffer.concat(chunks).toString('utf8');
-    if (text.length === 0) return undefined;
     try {
+      // An empty POST body takes this branch too. It used to `return undefined` bare, and the
+      // initialize path's `if (body === undefined) return` then ended the handler without ever
+      // answering — a request that simply hung.
       return JSON.parse(text);
     } catch {
       fail(res, 400, 'Body is not JSON');

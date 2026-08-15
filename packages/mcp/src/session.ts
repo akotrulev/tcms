@@ -35,6 +35,8 @@
  * unscoped `GET /me/permissions` answers SYSTEM and COMPANY terms only, so every project-scoped
  * tool falls out of `tools/list` on its own gate.
  */
+import { randomUUID } from 'node:crypto';
+
 import {
   createTcmsClient,
   resolveProject,
@@ -143,6 +145,20 @@ export interface Session {
    * response was lost, retried by the machinery rather than by the model.
    */
   callId?: string | undefined;
+  /**
+   * A random value minted at connect that {@link callId} is prefixed with, and it is what keeps
+   * two sessions out of each other's creates.
+   *
+   * The JSON-RPC request id alone is NOT a key: it is a per-session counter starting near 1, and
+   * the server's dedupe scope is `(company, project, key)` with no caller in it — `V11`'s index
+   * and its siblings. Bare `mcp-<requestId>` therefore collided in exactly the two ways that
+   * matter: two concurrent sessions in one project reach the same small integer and the second
+   * caller's create is answered with the FIRST caller's row as a "replay", and a fresh stdio
+   * session re-counts from 1 so today's create replays yesterday's. The salt makes the key unique
+   * per session while staying constant within one, which is precisely the retry the header exists
+   * to deduplicate.
+   */
+  idempotencyScope: string;
   /** Set by `server.ts`. Called when a refresh changed which tools are listed. */
   onListChanged?: (() => void) | undefined;
 }
@@ -172,6 +188,7 @@ export async function openSession(options: SessionOptions): Promise<Session> {
     client,
     reach: await probe(client, options.project),
     request: {},
+    idempotencyScope: randomUUID(),
     projectId: () => {
       if (!session.reach.project) {
         throw new TcmsClientError(
@@ -191,8 +208,9 @@ export async function openSession(options: SessionOptions): Promise<Session> {
 }
 
 async function probe(client: TcmsClient, requested: string | undefined): Promise<Reach> {
-  const me = await client.GET('/me');
-  const visible = await client.GET('/projects');
+  // Independent reads, and this runs on every HTTP initialize — serialising them was one
+  // round-trip of connect latency for nothing.
+  const [me, visible] = await Promise.all([client.GET('/me'), client.GET('/projects')]);
 
   const { project, unscoped } = await pickProject(client, visible, requested);
 
