@@ -2635,3 +2635,18 @@ it is absent there. It is the single most important row in the browser/Keycloak 
 |---|---|---|---|
 | `§224 SP-1` | In `OidcIdTokenVerifier`, change the cache key back to `expected.providerId()` | ✅ **RUN 2026-08-15 — RED by construction.** `OidcIdTokenVerifierTest.anEditedProviderIsNotServedItsOldChecks` (the mutation is exactly the state the test was written against) | Keyed by row id, the decoder built on a provider's first callback kept the old issuer, audience and `jwks_uri` until JVM restart — so the admin screen's whole reason to exist (editing `issuerUri`/`clientId`) silently did not take effect, and `OidcProperties.discoveryTtl`'s stated purpose (*"a rotated `jwks_uri` must eventually be picked up without a restart"*) was defeated one class downstream of where it is enforced. |
 | `§224 SP-2` | Delete the `@Scheduled` annotation from `SsoLoginAttemptPurge.purgeExpired` | **Predicted: zero reds — and that is the row.** `SsoLoginAttemptPurgeTest` calls the method directly, so the *wiring* is defended by review alone | Nothing else ever deletes an attempt row, and the writer is unauthenticated: every anonymous `GET …/authorize` that resolves an enabled provider inserts one. Un-wired, the table `V53` calls "empty in steady state" grows with crawler traffic until an operator notices the disk. The live observation is cheap: on a running stack, `SELECT count(*) FROM sso_login_attempt WHERE expires_at < now() - interval '2 hours'` must be **0** once the app has been up past the first hourly tick. |
+
+## §223 — the directory sign-in, driven against the compose stack it has never met
+
+**These four are live-stack drives, not suite mutations** — the suite already drives the encrypted
+path against an in-memory server (`LdapDirectoryTest`, `LdapLoginEndpointTest`), so what is unrun is
+the same flow against the compose stack and a real directory. The stack has no LDAP server today;
+the sibling browser queue's §223 rows carry the two options (an `osixia/openldap` service in
+`compose.yaml`, or the lab directory), and these rows need the same choice made first.
+
+| id | What to drive | Expected |
+|---|---|---|
+| `§223 LD-1` | Register an LDAP provider through `POST /identity-providers` against the compose stack, enable it, sign in with `POST /auth/ldap/{id}/login` | 200 with a session; `user_identity` gains one row whose `subject` is the directory's own identifier and not a DN |
+| `§223 LD-2` | Rename the person's `mail` in the directory and sign in again with the new address | 200, **the same** `user_identity` row, no second `app_user` |
+| `§223 LD-3` | Six wrong passwords in a row | The sixth is refused with no LDAP connection opened — check the directory's own log, not TCMS's |
+| `§223 LD-4` | Point a provider at `ldap://` without StartTLS through the API | 400 with an `issuerUri` field error, and no row written |

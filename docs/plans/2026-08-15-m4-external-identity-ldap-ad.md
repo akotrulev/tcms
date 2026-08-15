@@ -2412,7 +2412,7 @@ git commit -m "§NNN phase 6 — a directory can sign somebody in, and every way
 - Modify: `docs/agent-context/be-java.md`
 - Modify: `docs/verification/backend-mutation-checks.md`
 
-- [ ] **Step 1: Add the seams to the cache**
+- [x] **Step 1: Add the seams to the cache**
 
 Re-read `be-java.md` first (another lane may have written it), then add to its seam list:
 
@@ -2433,7 +2433,7 @@ Re-read `be-java.md` first (another lane may have written it), then add to its s
   which fails at the token exchange days later rather than at the insert.
 ```
 
-- [ ] **Step 2: Add the mutation rows**
+- [x] **Step 2: Add the mutation rows**
 
 Append to `docs/verification/backend-mutation-checks.md`, in the file's existing row format, ids
 continuing from the highest present:
@@ -2445,7 +2445,7 @@ continuing from the highest present:
 | Six wrong passwords in a row | The sixth is refused with no LDAP connection opened — check the directory's own log, not TCMS's |
 | Point a provider at `ldap://` without StartTLS through the API | 400 with a `issuerUri` field error, and no row written |
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/agent-context/be-java.md docs/verification/backend-mutation-checks.md
