@@ -6,14 +6,16 @@ import { RequireAuth } from '../auth/RequireAuth';
 import { SessionGate } from '../auth/SessionGate';
 import { AcceptInvitationPage } from '../features/auth/AcceptInvitationPage';
 import { LoginPage } from '../features/auth/LoginPage';
+import { SsoCallbackPage } from '../features/auth/SsoCallbackPage';
 import { NotFoundPage } from '../features/NotFoundPage';
 import { ProjectsPage } from '../features/projects/ProjectsPage';
 
 /**
  * Route topology.
  *
- * `/login` and `/accept-invitation` are the public routes — the second because someone holding
- * an invitation has no account to authenticate with. Everything else sits behind `<RequireAuth>` inside the
+ * `/login`, `/accept-invitation` and `/sso/callback` are the public routes — the second because
+ * someone holding an invitation has no account to authenticate with, the third because somebody
+ * arriving from their own issuer holds a token and nothing this app has yet confirmed. Everything else sits behind `<RequireAuth>` inside the
  * persistent `<AppShell>` — a layout, so the rail and its state survive navigation.
  *
  * Feature routes are **project-scoped** (`/projects/:projectId/…`) because a project is a real
@@ -100,6 +102,9 @@ const TeamsPage = lazy(() => import('../features/admin/TeamsPage').then((m) => (
 const ApiTokensPage = lazy(() =>
   import('../features/admin/ApiTokensPage').then((m) => ({ default: m.ApiTokensPage })),
 );
+const SsoProvidersPage = lazy(() =>
+  import('../features/admin/SsoProvidersPage').then((m) => ({ default: m.SsoProvidersPage })),
+);
 const ProjectAccessPage = lazy(() =>
   import('../features/admin/ProjectAccessPage').then((m) => ({ default: m.ProjectAccessPage })),
 );
@@ -152,6 +157,20 @@ function AppRoutes() {
         the query string exactly as `InvitationProperties` builds the emailed link.
       */}
       <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
+
+      {/*
+        Where an external sign-in lands (§6r, §222) — the third public route, and un-prefixed for
+        the reason `/login` is: the person arriving here holds a token in a fragment and no company,
+        so the segment M6d adds cannot be known until `/me` has answered.
+
+        The path is `tcms.oidc.spa-callback-path` on the server side and the two must agree. The
+        server builds the URL, so a rename here silently sends every federated sign-in to the
+        not-found page — which is exactly the state §217 shipped in.
+
+        Not lazy: it is sixty lines, and a code-split chunk between the issuer and the session is one
+        more thing that can fail while somebody is signing in.
+      */}
+      <Route path="/sso/callback" element={<SsoCallbackPage />} />
 
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
@@ -536,6 +555,20 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ApiTokensPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            Single sign-on (§222). Company-scoped like `/admin/teams` and `/admin/tokens`, and for
+            the same reason: a provider belongs to the company, so a project segment would make the
+            rail's switcher appear to change a list it cannot change.
+          */}
+          <Route
+            path="/admin/sso"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <SsoProvidersPage />
               </Suspense>
             }
           />
