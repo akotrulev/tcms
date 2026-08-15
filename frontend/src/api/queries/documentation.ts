@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tan
 import { ApiError, api, fetchArtifact, qs } from '../client';
 import type {
   Artifact,
+  ArtifactCirculation,
   ArtifactFileInput,
   ArtifactInput,
   Attachment,
@@ -291,6 +292,33 @@ export function useRegisterArtifactFile(projectId: string) {
       return api.upload<Artifact>(`${base(projectId)}/artifacts/files`, form);
     },
     meta: { handled: true },
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: ['projects', projectId, 'artifacts'] }),
+  });
+}
+
+/**
+ * Archives an artifact, or restores it — `ARCHIVED`'s only writer (§209).
+ *
+ * ## Not `handled`, unlike the two creates
+ *
+ * There is no form here and no field to land a message on: the control is a menu item in a table
+ * row, so a refusal has nowhere to render except the global notification. The two refusals it can
+ * produce are both worth reading — the scope-qualified 403 (this row belongs to the project and
+ * your grant does not) and the 409 (a newer artifact replaced this one) — and both are worded by
+ * the server for exactly this reader.
+ *
+ * ## Both scopes are invalidated
+ *
+ * `useCreateArtifact`'s rule and its reason: a project-scope artifact appears in every plan's
+ * register as an inherited row (plan §6n), so archiving one changes lists this mutation never
+ * named. The prefix is what refreshes the inherited copy.
+ */
+export function useSetArtifactStatus(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ artifactId, status }: { artifactId: string; status: ArtifactCirculation }) =>
+      api.put<Artifact>(`${base(projectId)}/artifacts/${artifactId}/status`, { status }),
     onSuccess: () =>
       client.invalidateQueries({ queryKey: ['projects', projectId, 'artifacts'] }),
   });

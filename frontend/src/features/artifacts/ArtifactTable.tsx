@@ -1,10 +1,14 @@
-import { Box, Chip, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import { Box, Chip, IconButton, Menu, MenuItem, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
+import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
+import { useSetArtifactStatus } from '../../api/queries';
 import type { Artifact } from '../../api/types';
+import { useCan } from '../../auth/useCan';
 import { FileDownloadLink } from '../../components/FileDownloadLink';
 import { Identifier } from '../../components/Identifier';
 import { formatAge, formatBytes, formatDateTime } from '../../lib/format';
-import { humanize } from '../../lib/labels';
+import { artifactStatusLabel, humanize } from '../../lib/labels';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -34,6 +38,8 @@ export function ArtifactTable({
       a.title.localeCompare(b.title),
   );
 
+  const replacements = new Map(rows.map((artifact) => [artifact.id, artifact.title]));
+
   return (
     <ScrollX>
       <Table size="small" data-testid="Artifacts.Grid">
@@ -46,6 +52,7 @@ export function ArtifactTable({
               Size
             </TableCell>
             <TableCell sx={{ color: 'text.secondary', width: 170 }}>Updated</TableCell>
+            <TableCell sx={{ width: 48 }} />
           </TableRow>
         </TableHead>
         <TableBody>
@@ -138,8 +145,22 @@ export function ArtifactTable({
                       />
                     </Tooltip>
                   )}
+                  {/*
+                    The status, and — for a superseded row — WHAT replaced it. A status the reader
+                    cannot follow is a dead end: "Superseded" alone sends somebody scanning the
+                    register for a title they have to guess. The replacement is at the same scope by
+                    construction, so it is in `rows` and no second request is needed; the fallback
+                    covers the one case it is not, a plan register showing an inherited row.
+                  */}
                   {artifact.status !== 'ACTIVE' && (
-                    <Chip size="small" variant="outlined" label={artifact.status.toLowerCase()} />
+                    <Tooltip title={statusReason(artifact, replacements)}>
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        label={artifactStatusLabel[artifact.status]}
+                        data-testid="Artifacts.Row.Status"
+                      />
+                    </Tooltip>
                   )}
                 </Stack>
   
@@ -168,10 +189,101 @@ export function ArtifactTable({
                 </Tooltip>
                 <Box>by {artifact.updatedBy.displayName}</Box>
               </TableCell>
+              <TableCell align="right">
+                <ArtifactRowActions artifact={artifact} projectId={projectId} />
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
     </ScrollX>
+  );
+}
+
+/** Why a row is not current, named rather than merely stated. */
+function statusReason(artifact: Artifact, titles: Map<string, string>): string {
+  if (artifact.status !== 'SUPERSEDED') {
+    return 'Taken out of circulation. It stays in the register for the record.';
+  }
+  const replacement = artifact.supersededById ? titles.get(artifact.supersededById) : undefined;
+  return replacement
+    ? `Replaced by “${replacement}”.`
+    : 'Replaced by a newer artifact in this project.';
+}
+
+/**
+ * Archive and Restore for one row.
+ *
+ * ## Both items are always rendered, and each is enabled by the row's own state
+ *
+ * §31's disable-don't-hide, and `ui-rules` §4's other half — one control whose label flips between
+ * Archive and Restore is the meaning-swapping toggle that rule names, so the two acts are two
+ * items and the state decides which is live. A superseded row disables both with the sentence the
+ * server's own 409 gives, because that state is a fact about another row and there is no way out
+ * of it from here.
+ *
+ * ## The permission is asked at the ROW's scope
+ *
+ * `canOnScope('artifact:edit', rowIsPlanScoped)` is exactly what the server evaluates, so the
+ * disable is the gate rather than a guess about it: a Test Engineer's grant is `PLAN_SCOPE`, and a
+ * project-scope artifact is inherited read-only by every plan (plan §6n). Asking the plain key
+ * instead would enable the control for every engineer on a row the server refuses — the
+ * renders-then-rejects shape.
+ *
+ * No confirmation dialog, and that is a deviation from `ui-rules` §4's "every destructive action
+ * confirms" taken deliberately: archiving destroys nothing, the row stays on screen with its new
+ * status, and the way back is the item directly beneath the one just pressed. §7 of the same skill
+ * refuses a blocking modal where the interruption is not the value. **Removal** — which is
+ * destructive, and still has no control anywhere in the SPA — is where that dialog belongs.
+ */
+function ArtifactRowActions({ artifact, projectId }: { artifact: Artifact; projectId: string }) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const gate = useCan(projectId);
+  const setStatus = useSetArtifactStatus(projectId);
+
+  const planScoped = artifact.scope === 'PLAN';
+  const allowed = gate.canOnScope('artifact:edit', planScoped);
+  const superseded = artifact.status === 'SUPERSEDED';
+  const reason = superseded
+    ? 'A newer artifact replaced this one, so the register keeps it as the record of what it replaced.'
+    : (gate.reasonOnScope('artifact:edit', planScoped) ?? undefined);
+
+  const move = (status: 'ACTIVE' | 'ARCHIVED') => {
+    setAnchor(null);
+    setStatus.mutate({ artifactId: artifact.id, status });
+  };
+
+  return (
+    <>
+      <Tooltip title={reason ?? 'Artifact actions'}>
+        <Box component="span">
+          <IconButton
+            size="small"
+            disabled={!allowed || superseded || setStatus.isPending}
+            onClick={(event) => setAnchor(event.currentTarget)}
+            data-testid="Artifacts.Row.Actions"
+            aria-label={`Actions for ${artifact.title}`}
+          >
+            <MoreVertIcon fontSize="small" />
+          </IconButton>
+        </Box>
+      </Tooltip>
+      <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
+        <MenuItem
+          disabled={artifact.status !== 'ACTIVE'}
+          onClick={() => move('ARCHIVED')}
+          data-testid="Artifacts.Row.Archive"
+        >
+          Archive
+        </MenuItem>
+        <MenuItem
+          disabled={artifact.status !== 'ARCHIVED'}
+          onClick={() => move('ACTIVE')}
+          data-testid="Artifacts.Row.Restore"
+        >
+          Restore
+        </MenuItem>
+      </Menu>
+    </>
   );
 }

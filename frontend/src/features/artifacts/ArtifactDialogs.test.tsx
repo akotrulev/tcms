@@ -65,9 +65,15 @@ const registered = {
 function mockPermissions(
   permissions: PermissionKey[],
   qualified: Record<string, 'OWN' | 'PLAN_SCOPE'> = {},
+  register: unknown[] = [],
 ) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions, qualified)
+    // The Replaces picker's own read (§209), at the scope the FORM is on rather than the one the
+    // register is filtered to. Answered even when the case under test has nothing to replace: a
+    // read this dialog always issues has to be mocked, or every test in the file fails on a
+    // failed fetch rather than on its own subject.
+    if (path.startsWith('/projects/p1/artifacts')) return register
     throw new Error(`unmocked read: ${path}`)
   }) as never)
 }
@@ -311,6 +317,9 @@ describe('RegisterArtifactDialog', () => {
         category: 'Strategy',
         title: 'Release sign-off',
         description: null,
+        // §209. `toEqual` rather than `toMatchObject` on purpose: the part is what the server
+        // binds, so a field appearing in it that nobody meant to send is the thing to catch.
+        supersedes: null,
       })
       expect((form.get('file') as File).name).toBe('sign-off.pdf')
     })
@@ -363,6 +372,66 @@ describe('RegisterArtifactDialog', () => {
       expect(screen.queryByTestId('Artifacts.Dialog.FileInput')).toBeNull()
       await choose('Artifacts.Dialog.Kind', /page in this project's documentation/i)
       expect(screen.queryByTestId('Artifacts.Dialog.FileInput')).toBeNull()
+    })
+  })
+
+  /*
+    §209 — the picker for the act three refusals had been advising.
+
+    Everything the field constrains is about ANOTHER row, so there is no Zod rule to assert: what
+    is asserted is that the control cannot OFFER a row the server would refuse, which is the same
+    rule stated where it can be enforced.
+  */
+  describe('Replaces', () => {
+    const candidates = [
+      { ...registered, id: 'active-1', title: 'Sign-off v1', status: 'ACTIVE', inherited: false },
+      { ...registered, id: 'retired', title: 'Old guide', status: 'ARCHIVED', inherited: false },
+      { ...registered, id: 'replaced', title: 'Sign-off v0', status: 'SUPERSEDED', inherited: false },
+      { ...registered, id: 'from-project', title: 'Test strategy', status: 'ACTIVE', inherited: true },
+    ]
+
+    it('offers only what the server would accept — ACTIVE, and not an inherited row', async () => {
+      mockPermissions(['artifact:edit'], {}, candidates)
+      renderDialog('plan-1')
+
+      const select = screen.getByTestId('Artifacts.Dialog.Supersedes').closest('.MuiInputBase-root')!
+      await userEvent.click(within(select as HTMLElement).getByRole('combobox'))
+
+      expect(await screen.findByRole('option', { name: /Sign-off v1/ })).toBeInTheDocument()
+      // The three the server refuses with `errors.supersedes`: already replaced, archived, and —
+      // the one that matters — a PROJECT-scope document a plan-scope registration may not retire.
+      expect(screen.queryByRole('option', { name: /Old guide/ })).toBeNull()
+      expect(screen.queryByRole('option', { name: /Sign-off v0/ })).toBeNull()
+      expect(screen.queryByRole('option', { name: /Test strategy/ })).toBeNull()
+    })
+
+    it('sends the chosen artifact as supersedes, and null when nothing is chosen', async () => {
+      mockPermissions(['artifact:edit'], {}, candidates)
+      const post = vi.spyOn(api, 'post').mockResolvedValue(registered as never)
+      renderDialog('plan-1')
+
+      await userEvent.type(screen.getByTestId('Artifacts.Dialog.TitleField'), 'Sign-off v2')
+      await userEvent.type(screen.getByTestId('Artifacts.Dialog.Url'), 'https://sign.example.test/r2')
+      await choose('Artifacts.Dialog.Supersedes', /Sign-off v1/)
+      await userEvent.click(screen.getByTestId('Artifacts.Dialog.Submit'))
+
+      await waitFor(() => expect(post).toHaveBeenCalled())
+      expect(post.mock.calls[0][1]).toMatchObject({ supersedes: 'active-1' })
+    })
+
+    it('sends null rather than an empty string for an ordinary registration', async () => {
+      mockPermissions(['artifact:edit'], {}, candidates)
+      const post = vi.spyOn(api, 'post').mockResolvedValue(registered as never)
+      renderDialog('plan-1')
+
+      await userEvent.type(screen.getByTestId('Artifacts.Dialog.TitleField'), 'Something new')
+      await userEvent.type(screen.getByTestId('Artifacts.Dialog.Url'), 'https://x.example.test/n')
+      await userEvent.click(screen.getByTestId('Artifacts.Dialog.Submit'))
+
+      await waitFor(() => expect(post).toHaveBeenCalled())
+      // `''` is not a uuid and not absent: the contract's field is nullable, and an empty string
+      // would be a 400 about a field the user never touched.
+      expect(post.mock.calls[0][1]).toMatchObject({ supersedes: null })
     })
   })
 

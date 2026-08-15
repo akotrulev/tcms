@@ -10,6 +10,7 @@
  */
 import type {
   AggregationPolicy,
+  ArtifactStatus,
   AutomationStatus,
   BlockLink,
   CriterionMetric,
@@ -90,6 +91,20 @@ export const docPageStatusLabel = {
   PUBLISHED: 'Published',
   ARCHIVED: 'Archived',
 } as const satisfies Record<DocPageStatus, string>;
+
+/**
+ * An artifact's place in the register (plan §6n).
+ *
+ * Worded as states rather than as the acts that produce them, because the chip sits beside a title
+ * and describes the row. The register's own vocabulary calls the second one "superseded" and not
+ * "replaced", which is the word the refusal sentences and the audit trail use — one verb per
+ * operation, `ui-rules` §6.
+ */
+export const artifactStatusLabel = {
+  ACTIVE: 'Active',
+  SUPERSEDED: 'Superseded',
+  ARCHIVED: 'Archived',
+} as const satisfies Record<ArtifactStatus, string>;
 
 export const automationLabels = {
   MANUAL: 'Manual',

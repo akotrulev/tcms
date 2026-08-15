@@ -147,6 +147,7 @@ export {
   useLinkPlanDocument,
   usePlanDocument,
   useRegisterArtifactFile,
+  useSetArtifactStatus,
   useSetDocPageStatus,
   useUnlinkBlock,
   useUnlinkPlanDocument,

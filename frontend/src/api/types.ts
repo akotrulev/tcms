@@ -315,6 +315,16 @@ export type ExternalLinkInput = S['ExternalLinkInput'];
 /** What that create answers with. NOT `DocLink`: the case end is served off the mirror. */
 export type ExternalLink = S['ExternalLink'];
 export type Artifact = S['Artifact'];
+/**
+ * Where an artifact sits in the register.
+ *
+ * Three states reached by two different acts, which is the part worth carrying into the client:
+ * `ARCHIVED` is chosen and reversible, `SUPERSEDED` holds exactly when `supersededById` names a
+ * replacement — so it is written by registering one and can be neither set nor left.
+ */
+export type ArtifactStatus = S['Artifact']['status'];
+/** The half of that a caller may ask for — `ArtifactStatusInput`, not `Artifact['status']`. */
+export type ArtifactCirculation = S['ArtifactStatusInput']['status'];
 export type ArtifactInput = S['ArtifactInput'];
 /**
  * The register fields that travel **beside an uploaded file** — the `artifact` part of

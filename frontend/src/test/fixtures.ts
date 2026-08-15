@@ -25,6 +25,7 @@
  * it, the dependency is invisible.
  */
 import type {
+  Artifact,
   AuthResult,
   Configuration,
   CurrentUser,
@@ -261,6 +262,35 @@ export function aTeam(overrides: Partial<Team> = {}): Team {
 
 export function aDocPageSummary(overrides: Partial<DocPageSummary> = {}): DocPageSummary {
   return { id: 'dp1', key: 'DOC-1', title: 'A page', slug: 'a-page', status: 'DRAFT', updatedAt: AT, ...overrides }
+}
+
+/**
+ * One row of the artifact register.
+ *
+ * Complete rather than minimal, like every factory here: the contract's `Artifact` has eight
+ * required properties, and a double serving a subset is a component one commit away from a
+ * TypeError (§195). `supersededById` is nullable and defaults to `null` — a value on an `ACTIVE`
+ * row is a state the server cannot produce.
+ */
+export function anArtifact(overrides: Partial<Artifact> = {}): Artifact {
+  return {
+    id: 'af1',
+    scope: 'PROJECT',
+    category: 'SignOff',
+    kind: 'EXTERNAL_URL',
+    title: 'An artifact',
+    description: null,
+    status: 'ACTIVE',
+    supersededById: null,
+    inherited: false,
+    url: 'https://docs.example.test/a',
+    docPageId: null,
+    filename: null,
+    sizeBytes: null,
+    updatedBy: { id: 'u1', displayName: 'L. Lead', email: 'l@x.test', avatarUrl: null },
+    updatedAt: AT,
+    ...overrides,
+  }
 }
 
 export function anExternalLink(overrides: Partial<ExternalLink> = {}): ExternalLink {

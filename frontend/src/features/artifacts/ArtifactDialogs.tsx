@@ -18,7 +18,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { Artifact, DocPageSummary, TestPlanSummary } from '../../api/types';
 import { ApiError } from '../../api/client';
-import { useCreateArtifact, useRegisterArtifactFile } from '../../api/queries';
+import { useArtifacts, useCreateArtifact, useRegisterArtifactFile } from '../../api/queries';
 import { useCan } from '../../auth/useCan';
 import { MAX_UPLOAD_BYTES, uploadRefusal } from '../../lib/attachments';
 import { describeError } from '../../lib/describeError';
@@ -100,6 +100,15 @@ const ArtifactSchema = z
     docPageId: z.string(),
     url: z.string(),
     /*
+      The artifact this one replaces, or '' for an ordinary registration.
+
+      No Zod rule of its own: every constraint on it is about ANOTHER row (its scope, its plan, its
+      status), and the picker only offers rows that satisfy all three. What cannot be offered
+      cannot be chosen, so a client-side refusal here would be a message for a state the control
+      does not produce — and the server refuses it regardless.
+    */
+    supersedes: z.string(),
+    /*
       The chosen file's NAME, not the file.
 
       A `File` is an opaque handle from a native input and is not form state a resolver can
@@ -152,7 +161,7 @@ const ArtifactSchema = z
 type ArtifactFormInput = z.infer<typeof ArtifactSchema>;
 
 type FieldName = 'scope' | 'planId' | 'category' | 'kind' | 'title' | 'description' | 'docPageId'
-  | 'url' | 'file' | 'root';
+  | 'url' | 'file' | 'supersedes' | 'root';
 
 /*
   `file` is on this list and NOT on the Zod schema, and both halves are deliberate.
@@ -166,6 +175,7 @@ type FieldName = 'scope' | 'planId' | 'category' | 'kind' | 'title' | 'descripti
 */
 const FIELDS: readonly FieldName[] = [
   'scope', 'planId', 'category', 'kind', 'title', 'description', 'docPageId', 'url', 'file',
+  'supersedes',
 ];
 
 const TestIdPrefix = 'Artifacts.Dialog';
@@ -274,12 +284,41 @@ export function RegisterArtifactDialog({
       docPageId: '',
       url: '',
       file: '',
+      supersedes: '',
     },
     mode: 'onBlur',
   });
 
   const scope = watch('scope');
   const kind = watch('kind');
+  const planId = watch('planId');
+
+  /*
+    The rows this registration could replace, read at the scope the FORM is on rather than the one
+    the register is filtered to — the two differ the moment somebody viewing a plan registers at
+    project scope.
+
+    `inherited` rows are excluded and that is the same-scope rule, not tidiness: inside a plan query
+    those are the project's documents, and a plan-scope artifact may not replace one. The server
+    refuses it with `errors.supersedes`; offering it here would be an affordance for a 400.
+  */
+  const candidates = useArtifacts(
+    projectId,
+    scope,
+    scope === 'PLAN' ? planId || undefined : undefined,
+  );
+  const replaceable = (candidates.data ?? []).filter(
+    (artifact) => artifact.status === 'ACTIVE' && !artifact.inherited,
+  );
+
+  /*
+    A selection made under one scope cannot survive a change of scope — it names a row that is now
+    in the wrong place, and the server would answer 400. Cleared rather than left for the submit to
+    discover.
+  */
+  useEffect(() => {
+    setValue('supersedes', '');
+  }, [scope, planId, setValue]);
 
   /*
     Focus only — no reset. `DocPageDialogs` and `SuiteDialogs` both record why: a `reset(defaults)`
@@ -325,6 +364,7 @@ export function RegisterArtifactDialog({
                 category: values.category,
                 title: values.title,
                 description: values.description.trim() || null,
+                supersedes: values.supersedes || null,
               },
               // Non-null by the schema's own rule: `kind === 'FILE'` with no `file` is a Zod issue
               // and `handleSubmit` never reaches here. The assertion is the narrowing Zod cannot
@@ -342,6 +382,7 @@ export function RegisterArtifactDialog({
               description: values.description.trim() || null,
               docPageId: values.kind === 'DOC_PAGE_REF' ? values.docPageId : null,
               url: values.kind === 'EXTERNAL_URL' ? values.url.trim() : null,
+              supersedes: values.supersedes || null,
             });
       onRegistered(artifact);
       onClose();
@@ -545,6 +586,39 @@ export function RegisterArtifactDialog({
               helperText={errors.description?.message ?? 'Optional.'}
               slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Description` } }}
             />
+
+            {/*
+              The affordance for the sentence three refusals already give.
+
+              The delete's 409 says "Supersede it with a correction instead", the upload helper
+              text says replacing a document means registering one that supersedes it, and until
+              §209 neither named anything the product could do — `ui-rules` §4's mandated-follow-up
+              rule, unmet in the one module where plan §6n makes the trail the point.
+
+              Titles, never ids: the value is a uuid and what the reader picks from is the name of
+              the document they are replacing.
+            */}
+            <TextField
+              select
+              label="Replaces"
+              {...register('supersedes')}
+              value={watch('supersedes')}
+              error={!!errors.supersedes}
+              helperText={
+                errors.supersedes?.message ??
+                (replaceable.length === 0
+                  ? 'Nothing here to replace yet. The old artifact stays in the register, marked superseded.'
+                  : 'Optional. The artifact you choose is kept and marked superseded, not deleted.')
+              }
+              slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Supersedes` } }}
+            >
+              <MenuItem value="">Nothing — this is a new artifact</MenuItem>
+              {replaceable.map((artifact) => (
+                <MenuItem key={artifact.id} value={artifact.id}>
+                  {artifact.category} — {artifact.title}
+                </MenuItem>
+              ))}
+            </TextField>
           </Stack>
         </DialogContent>
         <DialogActions>
