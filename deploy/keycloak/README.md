@@ -29,7 +29,8 @@ keys that decide who signs in. `§217 FD-14` is the mutation row that pins it.
 So this local issuer, which is plain HTTP, **cannot be registered by a Company Admin through
 `POST /identity-providers`.** §217 phase 6 shipped that gate and Task 8 of the plan asked for a
 plain-HTTP counterparty; neither is wrong on its own and the plan never noticed they collide.
-Until that is decided, insert the row directly. **As `postgres`, not as `tcms_owner`** — both
+~~Until that is decided, insert the row directly.~~ → **decided 2026-08-15: the gate stays and this
+recipe is permanent.** Insert the row directly. **As `postgres`, not as `tcms_owner`** — both
 tables carry `FORCE ROW LEVEL SECURITY`, which subjects the owner to its own policies, and an
 `INSERT` with no `WITH CHECK` clause is checked against the `USING` predicate, so an owner
 session with no `app.current_company` open is refused. The container's superuser is the one
@@ -56,6 +57,9 @@ INSERT INTO company_email_domain (id, company_id, domain)
 SELECT gen_random_uuid(), c.id, 'acme.test'
 FROM company c WHERE c.slug = 'acme';
 ```
+
+Why this is an `INSERT` rather than a form: the https gate is deliberate and stays — see
+`docs/plans/2026-08-15-m4-external-identity-oidc.md`, self-review.
 
 `auto_link_verified_email` is `TRUE` and `jit_provisioning` is `FALSE` above, which is the
 combination the queue rows assume: `kim@acme.test` links to an account that already exists,

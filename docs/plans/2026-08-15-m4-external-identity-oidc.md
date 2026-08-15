@@ -1071,6 +1071,16 @@ where clients expect their own entry point" but are additive over `POST /auth/pr
 needed to ship a working sign-in. The frontend login-screen work is a `fe-react` lane, not this
 one.
 
+**The plain-HTTP issuer decision, taken 2026-08-15 (§217 phase 7 raised it and deferred it).**
+`IdentityProviderService.validate` keeps refusing any `issuerUri` that is not `https://`, and the
+compose Keycloak keeps being registered by SQL. A development-only escape hatch was considered and
+rejected: the gate protects the URL the `jwks_uri` is read from, so an instance that can be talked
+into an http issuer is an instance where a machine on the path nominates the signing keys — and a
+property that is only safe when a profile is set is one restart away from being set in production.
+Plan 3's `allowInsecure` sketch is for an LDAP *bind*, which is a different exposure with a different
+blast radius, and it is not a precedent for this. The cost is one documented `INSERT` for the one
+issuer that is deliberately not production, and `deploy/keycloak/README.md` carries it.
+
 **Placeholder scan.** No TBD/TODO. Task 5 steps 5 and Task 7 step 2 describe implementations
 without full listings — they are the two mechanical, well-trodden pieces (an HTTP GET with a cache,
 and AES encryption behind an interface), and every rule that constrains them is stated. Every
