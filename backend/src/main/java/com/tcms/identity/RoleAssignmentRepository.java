@@ -129,6 +129,12 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
      * <p>The qualifier matters here specifically: a company-wide Test Engineer inherits
      * {@code artifact:edit} with its {@code PLAN_SCOPE} qualifier into every project, and a project
      * grant of Test Lead must <em>replace</em> that with {@code ALL} rather than merge to it.
+     *
+     * <p><strong>That example is historical since {@code V52} (§210)</strong>, which de-qualified
+     * the last grant — no row carries a qualifier now. The rule it illustrates is unchanged and is
+     * why the column is still selected here: replace-don't-union is a property of how scopes
+     * compose, not of any particular grant, and it must already be right on the day a qualified
+     * grant returns.
      */
     @Query(nativeQuery = true, value = """
             SELECT DISTINCT rp.permission_key AS permissionKey,

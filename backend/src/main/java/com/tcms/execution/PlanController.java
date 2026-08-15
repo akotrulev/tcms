@@ -406,10 +406,21 @@ public class PlanController {
         return problem;
     }
 
+    /**
+     * ~~"Deleting a test plan needs a test lead."~~ — <strong>wrong since {@code V51}</strong>, which
+     * granted {@code plan:delete} to Test Engineer, and corrected at §210 rather than at §207 where
+     * it should have been. The only caller who reaches this now is one who cannot write in the
+     * project at all, and sending them to ask for a lead's role names a tier that would not have
+     * been the answer.
+     *
+     * <p>§32's rule is unchanged and is why the replacement still names no key: a permission key is
+     * not actionable by someone who cannot grant it to themselves, and naming it publishes the
+     * catalogue to exactly the caller not entitled to it.
+     */
     private static ProblemDetail deleteForbiddenProblem() {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
         problem.setTitle("Not allowed");
-        problem.setDetail("Deleting a test plan needs a test lead.");
+        problem.setDetail("You do not have permission to delete test plans in this project.");
         return problem;
     }
 

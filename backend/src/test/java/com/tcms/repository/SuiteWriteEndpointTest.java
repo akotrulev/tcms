@@ -85,8 +85,11 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
     /** Test Lead. Holds {@code suite:manage} AND {@code suite:delete}. */
     private static final UUID LEAD = UUID.fromString("f1003000-0000-4000-8000-000000000001");
     /**
-     * Test Engineer. Holds {@code suite:manage} and <strong>not</strong> {@code suite:delete} — the
-     * one persona that separates the two permissions, and the reason this class has two writers.
+     * Test Engineer. ~~Holds {@code suite:manage} and <strong>not</strong> {@code suite:delete} —
+     * the one persona that separates the two permissions.~~ → <strong>{@code V52} (§210) granted it
+     * {@code suite:delete}</strong>, so this persona no longer separates them and <em>no seeded role
+     * does</em>. The keys remain two; nothing in this file can still prove the route asks the right
+     * one.
      */
     private static final UUID ENGINEER = UUID.fromString("f1003000-0000-4000-8000-000000000002");
     /** Viewer. Holds {@code project:read} and neither write permission. */
@@ -316,16 +319,38 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a Test Engineer may NOT delete — the two permissions are genuinely two")
-        void engineerCannotDelete() throws Exception {
-            // THE assertion of this class. suite:delete is leads-only because deleting a subtree is
-            // the most destructive repository action; suite:manage is everyone above Viewer because
-            // a contributor must be able to organise freely. Gate both on suite:manage and this is
-            // the only test in the suite that goes red.
-            assertThat(delete(ENGINEER, ACME, ACME_BANKING, SPARE).getResponse().getStatus())
-                    .isEqualTo(403);
+        @DisplayName("a Test Engineer DOES delete since V52 — the tier line moved, the keys did not")
+        void engineerCanDelete() throws Exception {
+            /*
+              ~~THE assertion of this class. suite:delete is leads-only because deleting a subtree is
+              the most destructive repository action.~~ → INVERTED by V52 (§210): a contributor
+              creates, edits and deletes, and the tier line is now approvals and project
+              configuration alone.
 
-            // And the folder is still there — a 403 that deleted anyway is worse than either.
+              READ THIS BEFORE TRUSTING THE GATE. `suite:manage` and `suite:delete` are still two
+              keys in the catalogue — but NO SEEDED ROLE NOW HOLDS ONE WITHOUT THE OTHER, so no
+              persona in this file can tell them apart, and this class has lost its discriminator.
+              Collapse the delete route onto `suite:manage` today and every test here still passes.
+
+              That is a real loss and it is recorded rather than papered over: the keys stay separate
+              because a company may want them separated and because removing a folder is a distinct
+              audit event, but the CHECK that the route asks the right one now lives only in
+              `SuiteWriteService`'s constant and in review. `§210 DQ-5` is the queue row.
+            */
+            assertThat(delete(ENGINEER, ACME, ACME_BANKING, SPARE).getResponse().getStatus())
+                    .isEqualTo(204);
+
+            assertThat(liveSuiteIds(ACME, ACME_BANKING)).doesNotContain(SPARE);
+        }
+
+        @Test
+        @DisplayName("a Viewer still may not delete — the gate is a gate, not a formality")
+        void viewerCannotDelete() throws Exception {
+            // What survives of the test above as a real discrimination. Viewer holds neither write
+            // key, so this proves the route is gated at all — which is the half `engineerCanDelete`
+            // can no longer prove now that the contributor holds both keys.
+            assertThat(delete(VIEWER, ACME, ACME_BANKING, SPARE).getResponse().getStatus())
+                    .isEqualTo(403);
             assertThat(liveSuiteIds(ACME, ACME_BANKING)).contains(SPARE);
         }
 

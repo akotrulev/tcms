@@ -9,6 +9,9 @@ import com.tcms.project.ProjectRepository;
 import com.tcms.tenancy.Company;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.CompanyRepository;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -302,7 +305,12 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
                     .isFalse();
             assertThat(globex.has("project:create")).isFalse();
             assertThat(globex.has("case:approve")).isFalse();
-            assertThat(globex.has("run:close")).isFalse();
+            // ~~run:close~~ — V52 (§210) gave it to Test Engineer, so it stopped being a capability
+            // that could only have arrived from Acme and the assertion stopped detecting a bleed.
+            // project:members is the replacement: Lead-and-up, so a contributor in Globex must not
+            // have it however they are administered elsewhere.
+            assertThat(globex.has("project:members")).isFalse();
+            assertThat(globex.has("project:settings")).isFalse();
         }
 
         @Test
@@ -475,27 +483,36 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
     // =========================================================================
 
     @Test
-    @DisplayName("the three lines separating Test Engineer from Test Lead hold")
+    @DisplayName("the two lines separating Test Engineer from Test Lead hold — through the evaluator")
     void testEngineerToTestLeadBoundary() {
         PermissionSet engineer = evaluateIn(ACME, TEAM_ENGINEER, ACME_PROJECT);
         PermissionSet lead = evaluateIn(ACME, LEAD, ACME_PROJECT);
 
-        // 1. content vs shared structure and judgement — V51 (§207) rewrote this line. A Test
-        //    Engineer has full CRUD over the repository's CONTENT, including content somebody else
-        //    authored; what stays Lead-only is shared structure (a suite is the grouping many
-        //    people file into) and judgements about the work (whether a cycle is finished, whether
-        //    a recorded outcome may be overwritten). plan:delete moved OUT of this line.
+        /*
+          ~~1. content vs shared structure and judgement — V51 (§207) rewrote this line.~~ → DELETED
+          by V52 (§210), which is the third statement of a line that has been rewritten twice: a
+          contributor creates, edits and deletes everything in the project.
+
+          This test is the EVALUATOR's view of what SeedDataTest.testEngineerToTestLeadBoundary
+          asserts against the catalogue, and the duplication is deliberate — that one reads
+          role_permission, this one reads what a caller resolves to after scopes, teams and
+          qualifiers have composed. A grant present in the seed and lost in the union fails only
+          here.
+        */
         assertThat(engineer.hasAll("case:create", "case:edit", "plan:create", "run:create")).isTrue();
         assertThat(engineer.hasAll("case:delete", "evidence:delete", "plan:delete")).isTrue();
-        assertThat(engineer.hasAny("suite:delete", "run:close", "result:amend")).isFalse();
+        assertThat(engineer.hasAll(
+                "suite:delete", "artifact:delete", "run:close", "result:amend", "doc:publish"))
+                .as("the five V52 moved down")
+                .isTrue();
         assertThat(lead.hasAll("suite:delete", "plan:delete", "run:close", "result:amend")).isTrue();
 
-        // 2. review vs approve — contributors review, only Lead+ signs off.
+        // 1. review vs approve — contributors review, only Lead+ signs off.
         assertThat(engineer.hasAll("case:review", "suite:review", "plan:review")).isTrue();
         assertThat(engineer.hasAny("case:approve", "suite:approve", "plan:approve")).isFalse();
         assertThat(lead.hasAll("case:approve", "suite:approve", "plan:approve")).isTrue();
 
-        // 3. content vs configuration.
+        // 2. content vs configuration.
         assertThat(engineer.hasAny(
                 "project:settings", "project:members", "project:audit", "integration:manage"))
                 .isFalse();
@@ -794,15 +811,48 @@ class PermissionEvaluatorTest extends IntegrationTestBase {
 
         @Test
         @DisplayName("the qualifier follows the same override, not the stronger of the two")
-        void theQualifierIsOverriddenToo() {
-            // The half that is easy to leave behind. QUALIFIED_INHERITOR is a company-wide Test
-            // Engineer — artifact:edit is PLAN_SCOPE for them (V19) — and a Test Lead on
-            // ACME_PROJECT, where it is ALL. Merging the terms would give ALL everywhere by
-            // strongest-wins; overriding gives ALL only where the project says so.
-            assertThat(qualifierIn(ACME, QUALIFIED_INHERITOR, ACME_PROJECT, "artifact:edit"))
-                    .isEqualTo(PermissionQualifier.ALL);
-            assertThat(qualifierIn(ACME, QUALIFIED_INHERITOR, ACME_SECOND_PROJECT, "artifact:edit"))
-                    .isEqualTo(PermissionQualifier.PLAN_SCOPE);
+        void theQualifierIsOverriddenToo() throws SQLException {
+            /*
+              The half that is easy to leave behind. QUALIFIED_INHERITOR is a company-wide Test
+              Engineer and a Test Lead on ACME_PROJECT. Merging the terms would give ALL everywhere
+              by strongest-wins; overriding gives ALL only where the project says so.
+
+              THE QUALIFIER IS SET BY THIS TEST, and that is new. It used to come from the seed —
+              artifact:edit was PLAN_SCOPE for Test Engineer (V19) — until V52 (§210) de-qualified
+              it, after which NO seeded grant carries a qualifier and this rule became undrivable
+              from personas. The alternative was to delete the test, and the rule it covers is one of
+              the two the whole scope model rests on (RoleAssignmentRepository's header states it),
+              so the fixture supplies what the catalogue no longer does.
+
+              Restored in a finally, because `role_permission` is instance-wide catalogue data with
+              no company_id: leaking PLAN_SCOPE out of this method would silently narrow a grant for
+              every test class that runs after it in the same container.
+            */
+            qualify("artifact:edit", "PLAN_SCOPE");
+            try {
+                assertThat(qualifierIn(ACME, QUALIFIED_INHERITOR, ACME_PROJECT, "artifact:edit"))
+                        .as("the project grant replaces the inherited one")
+                        .isEqualTo(PermissionQualifier.ALL);
+                assertThat(qualifierIn(ACME, QUALIFIED_INHERITOR, ACME_SECOND_PROJECT, "artifact:edit"))
+                        .as("and the inherited one still applies where the project said nothing")
+                        .isEqualTo(PermissionQualifier.PLAN_SCOPE);
+            } finally {
+                qualify("artifact:edit", "ALL");
+            }
+        }
+
+        /** Sets Test Engineer's qualifier for one key. See the caller for why this is necessary. */
+        private void qualify(String permissionKey, String qualifier) throws SQLException {
+            try (Connection connection = migrationOwnerConnection();
+                 PreparedStatement statement = connection.prepareStatement("""
+                         UPDATE role_permission SET qualifier = ?
+                          WHERE role_id = ? AND permission_key = ?
+                         """)) {
+                statement.setString(1, qualifier);
+                statement.setObject(2, Role.TEST_ENGINEER_ID);
+                statement.setString(3, permissionKey);
+                statement.executeUpdate();
+            }
         }
     }
 

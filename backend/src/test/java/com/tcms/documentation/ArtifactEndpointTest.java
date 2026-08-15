@@ -256,54 +256,73 @@ class ArtifactEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("the same Test Engineer is REFUSED a PROJECT-scope artifact")
-        void engineerCannotRegisterAtProjectScope() throws Exception {
-            // THE assertion of this class. Gate the create on artifact:edit alone — the obvious
-            // implementation, and what every other endpoint in the codebase does — and this is the
-            // only test in the suite that goes red.
+        @DisplayName("the same Test Engineer registers at PROJECT scope too since V52")
+        void engineerRegistersAtProjectScope() throws Exception {
+            /*
+              ~~THE assertion of this class. Gate the create on artifact:edit alone — the obvious
+              implementation, and what every other endpoint in the codebase does — and this is the
+              only test in the suite that goes red.~~
+
+              → INVERTED by V52 (§210), which de-qualified artifact:edit. A contributor edits,
+              unqualified, so the project-scope row every plan inherits read-only is theirs now.
+
+              AND THE WARNING THE OLD COMMENT CARRIES IS NOW LIVE. `writeGrantedByRowScope` still
+              runs on this path and simply always answers yes for this caller, so gating the create
+              on `artifact:edit` alone — the obvious implementation — leaves the whole suite green.
+              The scope seam is retained because it is driven by DATA: a migration that re-qualifies
+              the key gets the narrowing back, where a deleted gate would fail OPEN. Roles spec §A5,
+              and `SeedDataTest.artifactEditIsUnqualifiedEverywhere` is where the current answer is
+              pinned.
+            */
             MvcResult result = create(ENGINEER, ACME_BANKING,
                     link("PROJECT", null, "Strategy", "Test strategy",
                             "https://wiki.example.test/strategy"));
 
-            assertThat(result.getResponse().getStatus()).isEqualTo(403);
-            assertThat(countArtifacts(ACME)).isZero();
-
-            // The refusal names the field, unlike the bodiless 403 a Viewer gets, so the form can
-            // put the sentence on the scope selector rather than nowhere.
-            //
-            // This used to be the whole story, and the comment here said the SPA "structurally
-            // cannot honour §31's disable-don't-hide" because its permission model was keys-only
-            // while this caller DOES hold artifact:edit. §65 put the qualifier on the wire, so the
-            // control can now be disabled BEFORE the submit — see the sibling test below. The
-            // refusal stays regardless: the client is an affordance layer and this is the gate.
-            assertThat(errorFields(result)).containsExactly("scope");
+            assertThat(result.getResponse().getStatus()).isEqualTo(201);
+            assertThat(countArtifacts(ACME)).isEqualTo(1);
         }
 
         @Test
-        @DisplayName("/me/permissions tells the SPA the grant is PLAN_SCOPE, so it can disable "
-                + "the control instead of letting the submit fail")
+        @DisplayName("a Viewer is still refused, at either scope — the gate is a gate")
+        void viewerCannotRegisterAtAll() throws Exception {
+            // What is left of the discrimination above. Viewer holds no artifact:edit at all, so
+            // this proves the create is gated — the half engineerRegistersAtProjectScope can no
+            // longer prove now that the contributor's grant is unqualified.
+            assertThat(create(VIEWER, ACME_BANKING,
+                    link("PROJECT", null, "Strategy", "Test strategy",
+                            "https://wiki.example.test/strategy"))
+                    .getResponse().getStatus())
+                    .isEqualTo(403);
+            assertThat(countArtifacts(ACME)).isZero();
+        }
+
+        @Test
+        @DisplayName("/me/permissions still carries a qualifier per key — now ALL for everything held")
         void theQualifierIsOnTheWire() throws Exception {
-            // §65's reason for existing, asserted at the surface the SPA actually reads. The test
-            // above proves the server refuses; this proves the client could have KNOWN, which is
-            // the difference between a disabled radio button with a reason and a 403 after a
-            // filled-in form.
+            /*
+              §65's reason for existing, asserted at the surface the SPA actually reads.
+
+              ~~The test above proves the server refuses; this proves the client could have KNOWN.~~
+              → V52 (§210) de-qualified `artifact:edit`, so there is nothing left in the seeded
+              catalogue for the SPA to be warned about: every held key answers ALL.
+
+              THIS TEST IS KEPT AND IT IS NOW WEAK, WHICH IS THE POINT OF SAYING SO. The control
+              assertion it was built around — a second key with a DIFFERENT qualifier, the only thing
+              that tells "resolved" from "hard-coded" — CANNOT BE MADE from seeded data any more,
+              because no grant carries a qualifier. A server that stamped every entry with a constant
+              "ALL" would satisfy everything below. `§210 DQ-6` is the queue row; the honest fix is a
+              fixture that qualifies a grant directly rather than a persona that inherits one.
+            */
             Map<String, String> engineer = heldPermissions(ENGINEER, ACME_BANKING);
 
             assertThat(engineer.get("artifact:edit"))
-                    .as("the one grant the roles spec qualifies for this persona")
-                    .isEqualTo("PLAN_SCOPE");
-
-            // The control assertion, and the one that makes this test mean anything. A server that
-            // simply stamped every entry with the same value would satisfy the line above; only a
-            // second key with a DIFFERENT qualifier can tell "resolved" from "hard-coded".
-            assertThat(engineer.get("artifact:read"))
-                    .as("an unqualified grant of the same persona, on the same response")
+                    .as("unqualified since V52 — the grant the roles spec used to qualify here")
                     .isEqualTo("ALL");
-
-            // And the same key resolves differently for a caller whose grant is unqualified, which
-            // is what rules out a per-KEY constant as the implementation.
+            assertThat(engineer.get("artifact:read"))
+                    .as("and its unqualified neighbour, unchanged")
+                    .isEqualTo("ALL");
             assertThat(heldPermissions(LEAD, ACME_BANKING).get("artifact:edit"))
-                    .as("a Test Lead holds it outright — same key, same project, different answer")
+                    .as("a Test Lead held it outright before V52 and still does")
                     .isEqualTo("ALL");
 
             // NONE is never serialized: a permission nobody holds is an absent entry, not a
@@ -896,23 +915,25 @@ class ArtifactEndpointTest extends IntegrationTestBase {
          * the engineer archives the project's test strategy by not mentioning its scope.
          */
         @Test
-        @DisplayName("a Test Engineer archives a plan's artifact and NOT the project's")
+        @DisplayName("a Test Engineer archives at either scope since V52 — the qualifier is gone")
         void theQualifierIsReadAgainstTheRow() throws Exception {
+            // Inverted by V52 (§210). The name is kept because the MECHANISM is unchanged and is
+            // what the next reader needs: the qualifier is read against the ROW, not the request,
+            // so gating this on the request instead would still be the defect the day a migration
+            // re-qualifies artifact:edit. Today both calls are 200 and neither can prove that.
             UUID cycleDoc = createdId(create(ENGINEER, ACME_BANKING, planBody("Cycle snapshot")));
             UUID strategy = createdId(create(LEAD, ACME_BANKING, urlBody("Test strategy")));
 
             assertThat(setStatus(ENGINEER, ACME_BANKING, cycleDoc, "ARCHIVED")
                     .getResponse().getStatus())
-                    .as("the roles spec's ✓ — a Test Engineer curates their own cycle")
+                    .as("a Test Engineer curates their own cycle — unchanged")
                     .isEqualTo(200);
 
-            MvcResult refused = setStatus(ENGINEER, ACME_BANKING, strategy, "ARCHIVED");
-            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
-            assertThat(errorFields(refused))
-                    .as("the 403 carries a body naming the field, like the create's, because the "
-                            + "caller holds the key and it is the row's scope they cannot act on")
-                    .contains("scope");
-            assertThat(row(ACME_BANKING, strategy).get("status").asText()).isEqualTo("ACTIVE");
+            assertThat(setStatus(ENGINEER, ACME_BANKING, strategy, "ARCHIVED")
+                    .getResponse().getStatus())
+                    .as("and the project's shared document too, which is the V52 widening")
+                    .isEqualTo(200);
+            assertThat(row(ACME_BANKING, strategy).get("status").asText()).isEqualTo("ARCHIVED");
         }
 
         @Test
@@ -1026,17 +1047,17 @@ class ArtifactEndpointTest extends IntegrationTestBase {
          * it. Swapping the service's constant to {@code artifact:edit} turns this 403 into a 204.
          */
         @Test
-        @DisplayName("a Test Engineer may register a plan artifact and may NOT delete it")
-        void theEngineerCannotDeleteWhatTheyMayCreate() throws Exception {
+        @DisplayName("a Test Engineer deletes what they may create since V52")
+        void theEngineerDeletesWhatTheyMayCreate() throws Exception {
+            // ~~creative versus destructive, roles spec §A~~ → V52 (§210) granted artifact:delete to
+            // Test Engineer and DELETED that principle rather than narrowing it a third time. The
+            // key stays separate from artifact:edit (a company may separate them; removing a
+            // register entry is its own audit event) — but no seeded role now holds one without the
+            // other, so nothing here proves the route asks the right one. §210 DQ-5.
             UUID id = createdId(create(ENGINEER, ACME_BANKING, planBody("Engineer's own row")));
 
-            assertThat(delete(ENGINEER, ACME_BANKING, id).getResponse().getStatus())
-                    .as("creative versus destructive, roles spec §A — and the artefact being "
-                            + "destroyed here IS the audit trail")
-                    .isEqualTo(403);
-            assertThat(countArtifacts(ACME))
-                    .as("a 403 that deleted anyway is worse than either")
-                    .isEqualTo(1);
+            assertThat(delete(ENGINEER, ACME_BANKING, id).getResponse().getStatus()).isEqualTo(204);
+            assertThat(countArtifacts(ACME)).isZero();
         }
 
         @Test

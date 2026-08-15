@@ -239,7 +239,8 @@ public class PermissionEvaluator {
      * now decided <strong>once</strong>. The old duplicate had to stay in step with {@link #evaluate}
      * by hand — a company-wide Test Engineer inherits {@code artifact:edit} as {@code PLAN_SCOPE} and
      * a project grant of Test Lead must replace it with {@code ALL}, a rule that was written out
-     * twice — and nothing failed if one copy was edited.
+     * twice — and nothing failed if one copy was edited. (That grant was de-qualified by
+     * {@code V52}, §210, so the example no longer occurs; the rule it names is unchanged.)
      *
      * <p>The account gate, the company gate and the foreign-project check are all still applied,
      * because {@link #evaluate} applies them: a deactivated account or a project in another company

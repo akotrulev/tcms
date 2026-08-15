@@ -220,22 +220,41 @@ class ArtifactFileEndpointTest extends IntegrationTestBase {
     class Gates {
 
         @Test
-        @DisplayName("A TEST ENGINEER CANNOT UPLOAD AT PROJECT SCOPE — the qualifier reaches here too")
-        void anEngineerCannotUploadAtProjectScope() throws Exception {
-            // THE assertion of this phase. The file create is a SECOND call site of
-            // writeGrantedByRowScope, and a plain writeGranted here compiles, passes every other
-            // test in this class, and lets an engineer replace the project's test strategy — a
-            // document every plan inherits read-only (plan §6n).
-            MvcResult refused = upload(ENGINEER, ACME, ACME_BANKING,
+        @DisplayName("a Test Engineer uploads at PROJECT scope since V52 — the qualifier is gone")
+        void anEngineerUploadsAtProjectScope() throws Exception {
+            /*
+              ~~THE assertion of this phase.~~ → INVERTED by V52 (§210), which de-qualified
+              artifact:edit.
+
+              THE WARNING IT CARRIED IS NOW LIVE, AND IT NAMED ITSELF: "a plain writeGranted here
+              compiles, passes every other test in this class, and lets an engineer replace the
+              project's test strategy". That call is now 201 by grant, so this file no longer
+              distinguishes writeGrantedByRowScope from writeGranted at either call site. The seam
+              stays because it is data-driven — re-qualify the key and the narrowing returns — but
+              nothing here would catch its removal. §210 DQ-5.
+            */
+            MvcResult uploaded = upload(ENGINEER, ACME, ACME_BANKING,
                     """
                     {"scope":"PROJECT","category":"Strategy","title":"Test strategy"}""",
                     "strategy.pdf", "application/pdf", "PDF".getBytes(UTF_8));
 
-            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
-            // A body naming the field, not a bare 403: the caller is one radio button away from a
-            // 201 and the form can put the sentence on the scope selector.
-            assertThat(errorFields(refused)).containsExactly("scope");
+            assertThat(uploaded.getResponse().getStatus()).isEqualTo(201);
+            assertThat(artifactRows(ACME)).isEqualTo(1);
+            assertThat(attachmentRows(ACME)).isEqualTo(1);
+        }
 
+        @Test
+        @DisplayName("a Viewer cannot upload at either scope, and neither row is written")
+        void aViewerCannotUpload() throws Exception {
+            // What survives of the test above as a real discrimination: a caller holding no
+            // artifact:edit at all. It proves the route is gated, which is the half the contributor
+            // can no longer prove.
+            MvcResult refused = upload(VIEWER, ACME, ACME_BANKING,
+                    """
+                    {"scope":"PLAN","category":"Strategy","title":"Anything"}""",
+                    "notes.pdf", "application/pdf", "PDF".getBytes(UTF_8));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
             assertThat(artifactRows(ACME)).as("a 403 that wrote the row anyway").isZero();
             assertThat(attachmentRows(ACME))
                     .as("and the blob row is the half a permission check is least likely to reach")
@@ -444,14 +463,19 @@ class ArtifactFileEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("an engineer cannot unregister one, and the bytes survive the refusal")
-        void anEngineerCannotUnregister() throws Exception {
+        @DisplayName("a Viewer cannot unregister one, and the bytes survive the refusal")
+        void aViewerCannotUnregister() throws Exception {
             // artifact:delete, not artifact:edit — §124's key, and it now guards the last copy of a
             // file rather than a record of one.
+            //
+            // ~~an engineer cannot unregister one~~ → V52 (§210) granted artifact:delete to Test
+            // Engineer, so this is driven by a Viewer now. The property being protected is the same
+            // and is the one worth keeping: a refusal must not destroy the bytes on its way out,
+            // and the blob is the half a permission check is least likely to reach.
             UUID artifactId = registered(LEAD, ACME_BANKING, "PROJECT", null, "signoff.pdf");
             String key = storageKeyOf(ACME, attachmentIdOf(ACME, artifactId));
 
-            assertThat(remove(ENGINEER, ACME, ACME_BANKING, artifactId).getResponse().getStatus())
+            assertThat(remove(VIEWER, ACME, ACME_BANKING, artifactId).getResponse().getStatus())
                     .isEqualTo(403);
 
             assertThat(artifactRows(ACME)).isEqualTo(1);

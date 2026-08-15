@@ -218,11 +218,18 @@ public class RunController {
         };
     }
 
-    /** §32 again — worded for the act, naming no permission key. */
+    /**
+     * §32 again — worded for the act, naming no permission key.
+     *
+     * <p>~~"Ending or reopening a run needs a test lead."~~ — {@code V52} (§210) granted
+     * {@code run:close} to Test Engineer, so the sentence named a tier that no longer gates it. The
+     * caller who reaches this now holds no write access to the project's runs at all, and sending
+     * them after a lead's role would have them asking for the wrong thing.
+     */
     private static ProblemDetail closeForbiddenProblem() {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
         problem.setTitle("Not allowed");
-        problem.setDetail("Ending or reopening a run needs a test lead.");
+        problem.setDetail("You do not have permission to end or reopen runs in this project.");
         return problem;
     }
 
@@ -361,8 +368,14 @@ public class RunController {
     private static ProblemDetail forbiddenProblem(ExecutionService.Outcome.Forbidden forbidden) {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
         problem.setTitle("Not allowed");
+        // ~~"…changing one needs a test lead."~~ — V52 (§210) granted result:amend to Test Engineer,
+        // so the tier named here no longer gates it. The DISTINCTION the two sentences draw is the
+        // point and it survives untouched: a caller refused an amend has been refused a different
+        // act from one refused a first record, and telling them they cannot record results sends
+        // them after a permission they may already hold.
         problem.setDetail(forbidden.amending()
-                ? "A result has already been recorded here, and changing one needs a test lead."
+                ? "A result has already been recorded here, and you do not have permission to "
+                        + "change one."
                 : "You do not have permission to record results in this project.");
         return problem;
     }

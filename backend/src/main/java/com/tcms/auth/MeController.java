@@ -42,11 +42,17 @@ public class MeController {
      * One held permission and <strong>which rows it covers</strong>.
      *
      * <p>The qualifier is on the wire since §65 because without it this endpoint cannot express the
-     * answer the SPA needs. A Test Engineer holds {@code artifact:edit} at
-     * {@link PermissionQualifier#PLAN_SCOPE}: a keys-only response says "held", the project-scope
-     * control enables, and the server refuses the submit — so handoff §31's disable-don't-hide
+     * answer the SPA needs. A Test Engineer held {@code artifact:edit} at
+     * {@link PermissionQualifier#PLAN_SCOPE}: a keys-only response said "held", the project-scope
+     * control enabled, and the server refused the submit — so handoff §31's disable-don't-hide
      * became unfollowable on exactly the control where it mattered, and §61 shipped a refusal
      * message in the response body as the interim.
+     *
+     * <p><strong>{@code V52} (§210) de-qualified that grant and no grant carries a qualifier now</strong>,
+     * so this field currently answers {@code ALL} for every key held. It is not removed: the
+     * argument above is about what a keys-only response <em>cannot say</em>, which is a property of
+     * the shape rather than of any grant, and a client written against a keys-only answer would be
+     * wrong on the day a qualified grant returns. Roles spec §A5.
      *
      * <p>{@link PermissionQualifier#NONE} is never serialized: a permission the caller does not hold
      * is an <em>absent</em> entry, never a present one qualified to nothing.

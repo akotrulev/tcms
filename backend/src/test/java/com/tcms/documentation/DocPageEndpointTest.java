@@ -302,13 +302,32 @@ class DocPageEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a Test Engineer may NOT publish — the two permissions are genuinely two")
-        void engineerCannotPublish() throws Exception {
+        @DisplayName("a Test Engineer DOES publish since V52 — publishing is not an approval")
+        void engineerCanPublish() throws Exception {
             UUID id = idOf(create(ENGINEER, ACME_BANKING, page("Draft", null)));
 
-            // THE assertion of this nest. Gate publishing on doc:edit and this is the only test in
-            // the suite that goes red.
+            /*
+              ~~THE assertion of this nest. Gate publishing on doc:edit and this is the only test in
+              the suite that goes red.~~ → INVERTED by V52 (§210). `doc:publish` was Lead-only as the
+              human's readiness signal; the tier is approvals and project configuration now, and
+              publishing a page is neither.
+
+              And the sentence it used to prove is now unprovable here: `doc:edit` and `doc:publish`
+              are still two keys, but no seeded role holds one without the other, so gating the
+              publish on `doc:edit` would leave this whole file green. `§210 DQ-5` is the queue row
+              that names the class of check this cost us.
+            */
             assertThat(setStatus(ENGINEER, ACME_BANKING, id, "PUBLISHED").getResponse().getStatus())
+                    .isEqualTo(200);
+            assertThat(statusOf(ACME, id)).isEqualTo("PUBLISHED");
+        }
+
+        @Test
+        @DisplayName("a Viewer may not publish — what is left of the gate's proof")
+        void viewerCannotPublish() throws Exception {
+            UUID id = idOf(create(ENGINEER, ACME_BANKING, page("Draft", null)));
+
+            assertThat(setStatus(VIEWER, ACME_BANKING, id, "PUBLISHED").getResponse().getStatus())
                     .isEqualTo(403);
             assertThat(statusOf(ACME, id)).isEqualTo("DRAFT");
         }

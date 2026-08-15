@@ -39,11 +39,26 @@ import org.springframework.transaction.annotation.Transactional;
  * <h2>The gate is {@code artifact:edit}, and it is scope-qualified</h2>
  *
  * <p>Unlike the read — which uses the project gate because {@code artifact:read}'s distribution is
- * identical to {@code project:read}'s — this permission genuinely differs between roles, and differs
+ * identical to {@code project:read}'s — this permission genuinely differs between roles, and differed
  * <em>within</em> a role by the row's scope. The roles spec grants it outright to Instance Admin,
- * Company Admin and Test Lead, and <strong>plan-scope-only</strong> to a Test Engineer, because a
- * project-scope artifact is inherited read-only by every plan (plan §6n): editing one edits every
- * cycle at once, which is a Lead-level act, while curating your own cycle's sign-off is not.
+ * Company Admin and Test Lead, and granted it <strong>plan-scope-only</strong> to a Test Engineer,
+ * because a project-scope artifact is inherited read-only by every plan (plan §6n): editing one
+ * edits every cycle at once, which was a Lead-level act, while curating your own cycle's sign-off
+ * was not.
+ *
+ * <h3>{@code V52} (§210) de-qualified it, and the scope seam is retained anyway</h3>
+ *
+ * <p>The requirement is that a contributor creates, edits and deletes, unqualified, so a Test
+ * Engineer now holds this at {@code ALL} and may edit the project-scope row. <strong>This is a real
+ * widening and it is a silent one</strong> — {@link ProjectService#writeGrantedByRowScope} still
+ * runs, still compares, and now simply always says yes for that caller. Nothing 403s that used to,
+ * and no test of this gate goes red on its own.
+ *
+ * <p>The seam is <em>not</em> removed, for the reason the whole qualifier mechanism is kept: it is
+ * driven by <em>data</em>, so a future migration that qualifies this key again gets the narrowing
+ * back, whereas a gate deleted today would have to be rebuilt and would fail <strong>open</strong>
+ * until somebody noticed. Roles spec §A5 carries the argument and
+ * {@code SeedDataTest.artifactEditIsUnqualifiedEverywhere} is where the current answer is pinned.
  *
  * <p>V19 is what made that expressible — {@code role_permission.qualifier} accepted only
  * {@code ALL} and {@code OWN} before it — and {@link ProjectService#writeGrantedByRowScope} is how
@@ -471,12 +486,21 @@ public class ArtifactWriteService {
      *
      * <h2>The gate is {@code artifact:delete} and NOT {@code artifact:edit}</h2>
      *
-     * <p>This is the whole point of wiring it. A Test Engineer holds {@code artifact:edit} at plan
+     * <p>~~This is the whole point of wiring it. A Test Engineer holds {@code artifact:edit} at plan
      * scope, so they may register a cycle's documents; {@code V3} withholds {@code artifact:delete}
      * from them entirely. Reusing {@link #PERMISSION} here would have compiled, passed review, and
      * quietly given every engineer the ability to remove a lead's sign-off record from the
      * register — the roles spec's creative-versus-destructive line, in the one module where the
-     * artefact being destroyed <em>is</em> the audit trail.
+     * artefact being destroyed <em>is</em> the audit trail.~~
+     *
+     * <p><strong>{@code V52} (§210) granted {@code artifact:delete} to Test Engineer and deleted the
+     * creative-versus-destructive line outright</strong>, so the paragraph above no longer describes
+     * a difference between roles: every caller who may edit here may now also delete. <strong>The
+     * separate key is still correct and is not collapsed into {@link #PERMISSION}.</strong> Two
+     * reasons that never depended on the tier: a Viewer holds neither but a company may grant one
+     * without the other, and removing a register entry is a distinct, separately auditable act from
+     * amending one. What is gone is the <em>tier</em> argument, not the <em>key</em> argument — and
+     * the distinction between those two is exactly what §210 found had been restated twice.
      *
      * <p><strong>Unqualified, unlike the create.</strong> {@link ProjectService#writeGranted} rather
      * than {@code writeGrantedByRowScope}, because {@code V19}'s own comment says so: "artifact:read

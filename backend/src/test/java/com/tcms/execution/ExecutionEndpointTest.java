@@ -656,19 +656,46 @@ class ExecutionEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a Test Engineer may NOT amend an existing result — the two permissions are two")
-        void engineerCannotAmend() throws Exception {
-            // THE assertion of this class. EXEC_B already carries a verdict, so this is an amend.
-            // Gate both verbs on result:submit and this is the only test in the suite that goes red.
-            MvcResult refused =
+        @DisplayName("a Test Engineer DOES amend since V52 — amending is not an approval")
+        void engineerCanAmend() throws Exception {
+            /*
+              ~~THE assertion of this class. Gate both verbs on result:submit and this is the only
+              test in the suite that goes red.~~ → INVERTED by V52 (§210). `result:amend` was
+              Lead-only as a "judgement about the work"; the tier is approvals and project
+              configuration now.
+
+              EXEC_B already carries a verdict, so this is an amend. `result:submit` and
+              `result:amend` are still two keys — but no seeded role holds one without the other any
+              more, so the discrimination this class was built around cannot be made from a persona.
+              What still proves the two verbs are two is `theRefusalsCarryDifferentSentences` below,
+              which reads the refusal copy for a caller holding NEITHER.
+            */
+            MvcResult amended =
                     patch(ENGINEER, ACME, RUN, EXEC_B, resultPayload(failedStatus(), null), "0");
 
-            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
-            assertThat(body(refused).get("detail").asText())
-                    .as("and it must not be the record-results sentence — a Test Engineer holds "
-                            + "that permission and records results all day")
-                    .isEqualTo("A result has already been recorded here, and changing one needs a "
-                            + "test lead.");
+            assertThat(amended.getResponse().getStatus()).isEqualTo(200);
+            assertThat(statusKindOf(EXEC_B)).isEqualTo("FAILED");
+        }
+
+        @Test
+        @DisplayName("the amend refusal is still its own sentence — the acts are two, the tier is not")
+        void theRefusalsCarryDifferentSentences() throws Exception {
+            // What survives of engineerCannotAmend as a real discrimination, moved onto the Viewer.
+            // The DISTINCTION was always the valuable half: a caller refused an amend has been
+            // refused a different act from one refused a first record, and telling them they cannot
+            // record results sends them after a permission they may already hold. V52 changed who
+            // is refused, not that the two refusals say different things.
+            MvcResult amend =
+                    patch(VIEWER, ACME, RUN, EXEC_B, resultPayload(failedStatus(), null), "0");
+            MvcResult first =
+                    patch(VIEWER, ACME, RUN, EXEC_A, resultPayload(passedStatus(), null), "0");
+
+            assertThat(amend.getResponse().getStatus()).isEqualTo(403);
+            assertThat(body(amend).get("detail").asText())
+                    .isEqualTo("A result has already been recorded here, and you do not have "
+                            + "permission to change one.");
+            assertThat(body(first).get("detail").asText())
+                    .isEqualTo("You do not have permission to record results in this project.");
 
             assertThat(statusKindOf(EXEC_B))
                     .as("a 403 that wrote anyway is worse than either")
@@ -735,9 +762,12 @@ class ExecutionEndpointTest extends IntegrationTestBase {
         void theRefusalsNameNoKey() throws Exception {
             // A key is not actionable by someone who cannot grant it to themselves, and naming it
             // publishes the catalogue to exactly the caller not entitled to it.
+            // The middle call was ENGINEER amending EXEC_B until V52 (§210) granted result:amend to
+            // that role, at which point it stopped being a refusal at all and this loop was reading
+            // a 200's body. VIEWER on EXEC_B is the amend refusal now.
             for (MvcResult refused : List.of(
                     patch(VIEWER, ACME, RUN, EXEC_A, resultPayload(passedStatus(), null), "0"),
-                    patch(ENGINEER, ACME, RUN, EXEC_B, resultPayload(failedStatus(), null), "0"),
+                    patch(VIEWER, ACME, RUN, EXEC_B, resultPayload(failedStatus(), null), "0"),
                     patch(ROBOT, ACME, RUN, EXEC_A, resultPayload(passedStatus(), null), "0"))) {
                 assertThat(body(refused).get("detail").asText())
                         .doesNotContain("result:")
@@ -1269,19 +1299,36 @@ class ExecutionEndpointTest extends IntegrationTestBase {
         /**
          * THE gate assertion, and the reason this permission is worth more than §71's.
          *
-         * <p>{@code V3} grants {@code run:close} to Lead and up and withholds it from Test
+         * <p>~~{@code V3} grants {@code run:close} to Lead and up and withholds it from Test
          * Engineer, who holds {@code run:execute} and {@code result:submit} — so unlike
          * {@code company:teams}, this key can be told apart from its neighbours by a persona the
-         * suite can actually build, and swapping the gate's constant reddens this test.
+         * suite can actually build, and swapping the gate's constant reddens this test.~~
+         *
+         * <p><strong>{@code V52} (§210) granted {@code run:close} to Test Engineer, and that
+         * property is gone with it.</strong> {@code run:close} is now exactly like
+         * {@code company:teams}: no seeded role separates it from its neighbours, so swapping the
+         * gate's constant for {@code run:execute} leaves this file green. The key stays distinct in
+         * the catalogue and the discrimination is no longer testable from personas — {@code §210
+         * DQ-5} is the queue row for the class of check this cost.
          */
         @Test
-        @DisplayName("a Test Engineer may NOT end a run, and the run is untouched")
-        void engineerCannotClose() throws Exception {
-            MvcResult refused = putStatus(ENGINEER, ACME, RUN, "COMPLETED");
+        @DisplayName("a Test Engineer DOES end a run since V52 — closing a cycle you ran is not a tier act")
+        void engineerCanClose() throws Exception {
+            // Inverted by V52 (§210). run:close was Lead-only as a "judgement about the work"; the
+            // tier is approvals and project configuration now, and neither covers this.
+            assertThat(putStatus(ENGINEER, ACME, RUN, "COMPLETED").getResponse().getStatus())
+                    .isEqualTo(200);
+            assertThat(runRow(RUN).status()).isEqualTo("COMPLETED");
+        }
+
+        @Test
+        @DisplayName("a Viewer may not end a run, and the run is untouched")
+        void viewerCannotClose() throws Exception {
+            MvcResult refused = putStatus(VIEWER, ACME, RUN, "COMPLETED");
 
             assertThat(refused.getResponse().getStatus()).isEqualTo(403);
             assertThat(body(refused).get("detail").asText())
-                    .isEqualTo("Ending or reopening a run needs a test lead.");
+                    .isEqualTo("You do not have permission to end or reopen runs in this project.");
             assertThat(runRow(RUN).status())
                     .as("a 403 that wrote anyway is worse than either")
                     .isEqualTo("IN_PROGRESS");

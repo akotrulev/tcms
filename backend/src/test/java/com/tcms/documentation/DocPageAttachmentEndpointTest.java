@@ -298,14 +298,23 @@ class DocPageAttachmentEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("and that engineer genuinely cannot publish — the split is real, not assumed")
-        void theEngineerStillCannotPublish() throws Exception {
-            // Without this, the test above is consistent with a fixture that accidentally granted
-            // doc:publish, and the decision it claims to pin would be unpinned.
+        @DisplayName("that engineer publishes too since V52 — attaching is still doc:edit's own key")
+        void theEngineerAlsoPublishes() throws Exception {
+            /*
+              ~~Without this, the test above is consistent with a fixture that accidentally granted
+              doc:publish, and the decision it claims to pin would be unpinned.~~ → V52 (§210) DID
+              grant it, deliberately, so this can no longer be the control it was.
+
+              What the test above is really pinning is that the attachment routes ask `doc:edit` and
+              not `doc:publish`, and the persona can no longer distinguish those. It is kept
+              inverted rather than deleted because the direction still matters the other way: if
+              attaching had been gated on the WRONG key, this assertion tells the next reader that
+              both keys are held here and the neighbouring test proves nothing about which one.
+            */
             assertThat(setStatus(ENGINEER, ACME, ACME_BANKING, page, "PUBLISHED")
                     .getResponse().getStatus())
-                    .as("Test Engineer holds doc:edit and not doc:publish (roles spec §A2)")
-                    .isEqualTo(403);
+                    .as("Test Engineer holds doc:edit AND doc:publish since V52 (roles spec §A2)")
+                    .isEqualTo(200);
         }
 
         @Test

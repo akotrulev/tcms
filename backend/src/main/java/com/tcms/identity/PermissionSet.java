@@ -22,10 +22,16 @@ import java.util.Set;
  *
  * <p>That argument had one consumer it did not survive. {@code GET /me/permissions} answers the
  * SPA's disable-don't-hide gate, and a keys-only answer <strong>cannot express the verdict a
- * qualified grant produces</strong>: a Test Engineer holds {@code artifact:edit} at
- * {@link PermissionQualifier#PLAN_SCOPE}, so "held" enables a project-scope control the server then
- * refuses. Handoff §61 shipped that refusal with the sentence in the response body and recorded
+ * qualified grant produces</strong>: a Test Engineer held {@code artifact:edit} at
+ * {@link PermissionQualifier#PLAN_SCOPE}, so "held" enabled a project-scope control the server then
+ * refused. Handoff §61 shipped that refusal with the sentence in the response body and recorded
  * putting qualifiers on the wire as the real fix.
+ *
+ * <p><strong>Past tense since {@code V52} (§210)</strong>: that grant was de-qualified and no grant
+ * carries a qualifier now, so the wire currently answers {@code ALL} for everything held. The field
+ * stays because the argument for it was never about {@code artifact:edit} — a keys-only answer
+ * cannot express a qualified verdict, and removing the field would have to be undone by the
+ * migration that next needs one. Roles spec §A5.
  *
  * <p>So the two computations are now one. The gates' entry point is unchanged — they still ask
  * {@link PermissionEvaluator#qualifierOf} about one key — but it reads this map rather than

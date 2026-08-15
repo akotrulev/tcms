@@ -121,8 +121,11 @@ public class IdentityProjectAccess implements ProjectAccess {
             // meet: this method has no scope to compare, so neither answer would be about the
             // caller's actual grant. Refusing loudly rather than returning false — which reads as a
             // clean authorization denial and would be investigated against the grants, where
-            // nothing is wrong — for PermissionQualifier#ofStored's reason. Unreachable today:
-            // artifact:edit is the only PLAN_SCOPE grant and no caller asks it about an author.
+            // nothing is wrong — for PermissionQualifier#ofStored's reason. Unreachable today, and
+            // MORE unreachable than it was: artifact:edit was the only PLAN_SCOPE grant and V52
+            // (§210) de-qualified it, so NO grant carries any qualifier now. The arm stays for the
+            // reason the whole mechanism stays — deleting it is what makes a future qualified grant
+            // fail OPEN at whichever gate forgot it. Roles spec §A5.
             case PLAN_SCOPE -> throw new IllegalStateException(
                     "'" + permission + "' is PLAN_SCOPE-qualified for this caller, so authorship "
                             + "does not decide it. Use canDoOnScope — see the roles spec's "
