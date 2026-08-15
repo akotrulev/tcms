@@ -2,7 +2,17 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-15 (**§209** — **`ArtifactStatus`'s two writerless values have their acts**,
+**Last verified:** 2026-08-15 (**§210** — **the Test Engineer / Test Lead line is now a CLOSED SET of
+seven keys**: the three approvals and the four project-configuration keys, asserted exactly in both
+directions by `SeedDataTest.testEngineerToTestLeadBoundary`. `V52` gives Test Engineer `suite:delete`,
+`artifact:delete`, `run:close`, `result:amend`, `doc:publish` and de-qualifies its `artifact:edit`.
+**§A4's first line is DELETED, not narrowed** — it was stated three times in six weeks and broken by
+an ordinary workflow case each time. **`PLAN_SCOPE` joins `OWN` at zero rows**, which expires the only
+one of `V51`'s three retention reasons that claimed the mechanism was in use — read §A5 before
+proposing deletion. **`Agent` is Test Engineer entire, minus the unreachable `company:read`**, with
+deletes gated by a consent prompt in the MCP server that binds **that transport only**. Read the §210
+section below before any permission, seeding or delete-gate change; **§209** —
+**`ArtifactStatus`'s two writerless values have their acts**,
 and the model is that they are reached DIFFERENTLY: `ARCHIVED` is a judgement about the row, so it is
 chosen on `PUT …/artifacts/{id}/status` and reversible; `SUPERSEDED` is a fact about ANOTHER row — it
 holds exactly when `superseded_by_id` names a replacement — so it is written only by `supersedes` on
@@ -66,10 +76,19 @@ implementation (a lookup over `values()`) would not survive.
 
 `supersedes` writes a **second row** — the one being replaced — and nothing gates that row.
 `validateSupersedes` requires the replacement to sit at the **same scope** and, at `PLAN` scope, in
-the **same plan**, after which the create's own `writeGrantedByRowScope` check covers both. Delete
+the **same plan**, after which the create's own `writeGrantedByRowScope` check covers both. ~~Delete
 the comparison and a Test Engineer (whose `artifact:edit` is `PLAN_SCOPE`) registers a plan-scope note
-that retires the project's test strategy, with a `201` that looks correct. `§209 AM-1` is the mutation
-row; `Supersession.theEngineerCannotRetireWhatTheyMayNotEdit` is the assertion.
+that retires the project's test strategy, with a `201` that looks correct.~~ `§209 AM-1` is the
+mutation row; `Supersession.theEngineerCannotRetireWhatTheyMayNotEdit` is the assertion.
+
+> **§210 moved the premise of that argument and the rule survives it — read which half.** `V52`
+> de-qualified `artifact:edit`, so a Test Engineer holds it at `ALL` and `writeGrantedByRowScope` no
+> longer refuses them the project-scope row. The same-scope comparison is **not** thereby redundant:
+> it is a **400 validation** — a plan note is not a project document, whoever is asking — and the
+> named test still passes for that reason and not the permission one. What is gone is its second job
+> as an authorization backstop. **Same shape as §207's find**: an argument outliving its premise
+> while every test stayed green, which is why the reason is rewritten here rather than left to be
+> re-derived from a comment that now misleads.
 
 Two more rules in the same method, both `400` on `errors.supersedes`: only an `ACTIVE` artifact may be
 replaced (a second replacement overwrites the pointer and loses the middle of the chain; an archived
@@ -148,45 +167,91 @@ Found on the way and **not** taken: **`ArtifactStatus` has two unreachable value
 
 ---
 
-## §207 — `OWN` IS A LIVE MECHANISM WITH ZERO GRANTS, AND THREE MIGRATIONS LIE ABOUT IT
+## §207 + §210 — BOTH QUALIFIERS ARE LIVE MECHANISMS WITH ZERO GRANTS, AND FOUR MIGRATIONS LIE ABOUT IT
 
 **Read this before any change to permissions, role seeding, or a delete gate.**
 
-### The state, as of `V51`
+### The state, as of `V52` (§210) — supersedes the `V51` table below
+
+**The Test Engineer / Test Lead line is exactly seven keys**, and nothing else:
+
+| Test Lead only | |
+|---|---|
+| `case:approve` · `suite:approve` · `plan:approve` | giving approvals |
+| `project:members` · `project:settings` · `project:audit` · `integration:manage` | adding and managing permission on the project |
+
+**Everything else in the project is a contributor's** — created, edited and deleted, whoever authored
+it. `SeedDataTest.testEngineerToTestLeadBoundary` asserts that delta **exactly, in both directions**,
+so do not "add" to it with a `contains`.
+
+What `V52` moved: ~~`suite:delete` · `artifact:delete` (shared **structure**)~~,
+~~`run:close` · `result:amend` (judgements about the **work**)~~, ~~`doc:publish`~~ — all ✓ for Test
+Engineer now — and `artifact:edit` went `PLAN_SCOPE` → `ALL`, which was the **last** qualified grant
+in the catalogue.
+
+> **The lesson, and it is why the table above is a closed set rather than a principle.** §A4's first
+> line was stated three times in six weeks — *creative vs destructive* (`V3`/`V12`), *content vs
+> shared structure and judgement* (`V51`), then **deleted** (`V52`) — and each rewrite was broken by
+> an **ordinary** workflow case. When a tier line has to be re-stated every time it meets the
+> workflow, the line is not the principle; the tier is. Do not propose a fourth.
+
+<details><summary>The `V51` state, superseded by the above — kept because `V51`'s header argues it</summary>
 
 | Key | Test Engineer | Note |
 |---|---|---|
 | `case:delete` · `evidence:delete` | ✓ (was `OWN`) | qualifier removed |
 | `plan:delete` | ✓ (was **not held**) | a *tier* gate, not a qualifier |
-| `case:create` · `case:edit` · `plan:create` · `plan:edit` | ✓ | unchanged |
-| `suite:delete` · `artifact:delete` | — | shared **structure**, Lead-only, unchanged |
-| `run:close` · `result:amend` | — | judgements about the **work**, unchanged |
+| `suite:delete` · `artifact:delete` | — | shared **structure**, Lead-only |
+| `run:close` · `result:amend` | — | judgements about the **work** |
+
+</details>
 
 **Steps have no permission key** and never did — part of the case, written by `CaseUpdateService`,
 gated by `case:edit`. Do not go looking for `step:*`.
 
-The rule in one line: **CRUD on plans, cases and steps belongs to every non-Viewer contributor, no
-matter who created the row.** Author-cannot-approve-own-work is untouched — approving is not CRUD,
-and it is now the *only* place authorship decides anything.
+Author-cannot-approve-own-work is untouched — approving is not CRUD, and it is now the *only* place
+authorship decides anything.
+
+### `Agent` is Test Engineer, and the ceiling left the catalogue (§210)
+
+`Agent` (`V40`) was *"Test Engineer minus the things an API caller must not do"*. Since `V52` it is
+**Test Engineer entire, minus `company:read`**, derived from Test Engineer's rows *in the migration*
+so the two cannot drift.
+
+- **`company:read` is not a ceiling.** A PROJECT-scope grant of it is unanswerable by
+  `evaluateCompanyWide`, and a token has no membership row and so no `V15` baseline — the row would
+  be a company surface permanently false at the gate. `companyReadIsAlwaysExplicit` caught this on
+  `V52`'s first run: a §43 rule catching a §210 migration.
+- **What replaced the ceiling is a consent prompt in `packages/mcp/src/server.ts`** —
+  `destructiveHint` so a host prompts, plus an elicitation that **refuses when the client cannot be
+  asked**. It binds the **MCP transport only**; the same `tcms_` bearer deletes over `curl` with
+  nobody to ask. Roles spec §A6a carries that objection, raised before the change and struck through
+  as *superseded rather than wrong*. **Do not cite the Agent role as a delete boundary.**
 
 ### The mechanism is loaded and unused, deliberately — do not "clean it up"
 
 `OWN` is still a legal `CHECK` value, still a `PermissionQualifier` member, still resolved by
 `IdentityProjectAccess.canDoOnAuthored:111`, and `CaseDeleteService` still routes through
-`projects.writeGrantedByAuthorship`. The SPA still passes `authorId` at every delete site. All of it
-is unreachable from the shipped catalogue.
+`projects.writeGrantedByAuthorship`. The SPA still passes `authorId` at every delete site.
+**`PLAN_SCOPE` is in the same state since `V52`** — legal value, enum member, live resolution arm,
+zero grants. All of it is unreachable from the shipped catalogue: **every row of
+`role_permission.qualifier` is now `'ALL'`.**
 
-Three reasons it stays, in order of weight:
+~~Three~~ **Two** reasons it stays, and the count matters:
 
-1. **The qualifier is DATA.** Deleting the arm is what would make a future `OWN` grant fail **open**
-   at whichever gate forgot it.
-2. `PLAN_SCOPE` (`V19`) is the same mechanism and *is* populated (`artifact:edit`, Test Engineer and
-   Agent), so the column and seam earn their keep regardless.
+1. **The qualifier is DATA.** Deleting an arm is what would make a future qualified grant fail
+   **open** at whichever gate forgot it.
+2. ~~`PLAN_SCOPE` (`V19`) is the same mechanism and *is* populated (`artifact:edit`, Test Engineer and
+   Agent), so the column and seam earn their keep regardless.~~ → **EXPIRED at `V52`**, which
+   de-qualified both `artifact:edit` rows. This was the **only** reason that claimed the mechanism
+   was *in use*; the two that remain are arguments from future cost.
 3. Rebuilding it later costs a migration + gate + contract change; keeping it costs a comment.
 
-`SeedDataTest.ownIsCarriedByNoGrant` pins the empty population **in both directions** — no `OWN`
-grant, *and* `DISTINCT qualifier` is exactly `{ALL, PLAN_SCOPE}`. The second half exists because a
-typo in the column name would make the first half pass. #confirmed
+`SeedDataTest.everyQualifierIsAll` pins the whole column in both directions (no qualified grant,
+*and* a non-zero row count, because a misnamed table produces the same green);
+`ownIsCarriedByNoGrant` still pins the value specifically. **If you are here to propose deleting the
+mechanism, read roles spec §A5 first** — the argument for keeping it is already down to two reasons
+and neither is "it is in use". #confirmed
 
 ### `V12`, `V40` and `V3` still argue the pre-`V51` model and are NOT edited
 

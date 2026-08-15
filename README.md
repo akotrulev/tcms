@@ -67,19 +67,25 @@ Roles are ordered least-permissioned first. Rows are grouped by how widely a per
 | `defect:create` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `workitem:manage` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `doc:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `artifact:edit` | — | — | plan scope only | ✓ | ✓ | ✓ |
-| `suite:delete` | — | — | — | ✓ | ✓ | ✓ |
+| `artifact:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `suite:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `artifact:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `run:close` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `result:amend` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `doc:publish` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `case:approve` | — | — | — | ✓ | ✓ | ✓ |
 | `suite:approve` | — | — | — | ✓ | ✓ | ✓ |
 | `plan:approve` | — | — | — | ✓ | ✓ | ✓ |
-| `run:close` | — | — | — | ✓ | ✓ | ✓ |
-| `result:amend` | — | — | — | ✓ | ✓ | ✓ |
-| `doc:publish` | — | — | — | ✓ | ✓ | ✓ |
-| `artifact:delete` | — | — | — | ✓ | ✓ | ✓ |
 | `project:audit` | — | — | — | ✓ | ✓ | ✓ |
 | `project:settings` | — | — | — | ✓ | ✓ | ✓ |
 | `project:members` | — | — | — | ✓ | ✓ | ✓ |
 | `integration:manage` | — | — | — | ✓ | ✓ | ✓ |
+
+**The seven rows with a `—` under Test Engineer are the whole tier line since `V52` (2026-08-15):
+giving approvals, and adding and managing permission on the project.** A Test Engineer creates,
+edits and deletes everything else in the project, whoever authored it. `artifact:edit` was
+~~`plan scope only`~~ until the same migration, which left **no grant in the catalogue carrying any
+qualifier**.
 
 ### `COMPANY` scope
 
@@ -139,11 +145,13 @@ RLS would be permanently unreachable.
   `evaluate(ownerId, projectId) ∩ permissionsOf(token.roleId) ∩ [the token's project]` — intersection,
   never union, so a token can exceed neither its role nor its owner, and demoting a person shrinks
   every token they issued.
-- **`OWN` narrows through the intersection too** (`PermissionQualifier.narrowedBy`): a company-wide
-  `ALL` capped by a role's `OWN` is `OWN`. **No grant carries `OWN` since `V51` (2026-08-14)** —
-  CRUD on plans, cases and steps belongs to every non-Viewer contributor no matter who created the
-  row — so this describes a mechanism kept deliberately unpopulated, not a live narrowing. The
-  qualifier still in play is `PLAN_SCOPE`.
+- **A qualifier narrows through the intersection too** (`PermissionQualifier.narrowedBy`): a
+  company-wide `ALL` capped by a role's `OWN` is `OWN`. **No grant carries any qualifier** — `OWN`
+  emptied by `V51` (2026-08-14), because CRUD belongs to every non-Viewer contributor no matter who
+  created the row; ~~the qualifier still in play is `PLAN_SCOPE`~~ → **`PLAN_SCOPE` emptied by `V52`
+  (2026-08-15)**, when `artifact:edit` — the only key that ever carried it — was de-qualified. So
+  this describes a mechanism kept deliberately unpopulated, not a live narrowing, and every row of
+  `role_permission.qualifier` is now `'ALL'`.
 - **`case:comment` is one key covering cases, suites and plans.** `suite:comment` / `plan:comment`
   deliberately do not exist — they would be seeded to nobody, making a comment on a folder a 403 no
   administrator could grant their way out of. `evidence:read` was rejected for the same reason.

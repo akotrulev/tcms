@@ -2,7 +2,15 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-15 (**§209** — **the artifact register gets both missing acts, and its own
+**Last verified:** 2026-08-15 (**§210** — **a permission change with NO frontend behaviour change**,
+which is the thing to know before hunting for one: the SPA gates on **keys**, and §210 moved no key —
+it moved who holds them (`V52` gives Test Engineer `suite:delete`, `artifact:delete`, `run:close`,
+`result:amend`, `doc:publish`, and de-qualifies `artifact:edit`). So every `PermissionGate` and
+`useCan` call site is unchanged and correct. **Keep `canOnScope` and the `authorId` arguments**: both
+now answer trivially because no grant carries a qualifier, and collapsing either is a second
+implementation of the permission model that goes wrong the day one returns. Five prose sites were
+struck where they asserted a tier fact that is now false; **§209** — **the artifact register gets both
+missing acts, and its own
 help text had been advising them for two milestones**: `ArtifactDialogs` gains an optional **Replaces**
 picker (which reads the register at the scope the FORM is on, not the page's, and offers only `ACTIVE`
 non-`inherited` rows) and `ArtifactTable` gains a row ⋯ menu with Archive and Restore, gated by
@@ -73,10 +81,18 @@ registering a new artifact that supersedes this one"*. Neither named anything th
 pre-existing tests in `ArtifactTable.test.tsx` did not, and since §202 a failed read fails the test.
 
 **The gate is `canOnScope('artifact:edit', row.scope === 'PLAN')`, not `can('artifact:edit')`.** The
-register is the one table in the product holding rows at **two scopes side by side**, and the grant is
-qualified by exactly that: a Test Engineer's `artifact:edit` is `PLAN_SCOPE`, so the ⋯ button is
-disabled on a project-scope row and live on a plan-scope one. Asking the plain key enables it
-everywhere and turns each project-scope click into a 403 — §31's renders-then-rejects.
+register is the one table in the product holding rows at **two scopes side by side**, and the grant
+was qualified by exactly that: ~~a Test Engineer's `artifact:edit` is `PLAN_SCOPE`, so the ⋯ button is
+disabled on a project-scope row and live on a plan-scope one~~ → **`V52` (§210) de-qualified it**, so
+that caller now gets a live button on both, which is the intended widening and not a regression.
+
+**Keep `canOnScope` here.** It reads the qualifier the server sent, so it is correct for whatever the
+catalogue says on the day it runs — an unqualified grant makes it a no-op, and swapping it for the
+plain key would be a second implementation of the permission model that goes wrong the moment a
+qualified grant returns. Asking the plain key would have turned each project-scope click into a 403
+(§31's renders-then-rejects), and that is a live failure again the day the qualifier comes back.
+`schemaFreshness`-style safety does not apply here; nothing fails if this is collapsed, which is
+exactly why it is written down.
 
 **The Replaces picker issues its own `useArtifacts` read**, keyed on the scope and plan the **form** is
 on rather than the page's filter. The two differ the moment somebody viewing a plan registers at

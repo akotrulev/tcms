@@ -443,11 +443,16 @@ Roles are ordered least-permissioned first; rows run broadest-held to narrowest.
 | `plan:create` · `plan:edit` · `plan:delete` · `run:execute` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `defect:create` · `workitem:manage` · `doc:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `case:delete` · `evidence:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `artifact:edit` | — | — | plan scope only | ✓ | ✓ | ✓ |
+| `artifact:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `suite:delete` · `artifact:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `run:close` · `result:amend` · `doc:publish` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `case:approve` · `suite:approve` · `plan:approve` | — | — | — | ✓ | ✓ | ✓ |
-| `suite:delete` · `artifact:delete` | — | — | — | ✓ | ✓ | ✓ |
-| `run:close` · `result:amend` · `doc:publish` | — | — | — | ✓ | ✓ | ✓ |
 | `project:audit` · `project:settings` · `project:members` · `integration:manage` | — | — | — | ✓ | ✓ | ✓ |
+
+**The last two rows are the whole Test Engineer → Test Lead line since `V52` (§210)** — giving
+approvals, and adding and managing permission on the project. Seven keys, and
+`SeedDataTest.testEngineerToTestLeadBoundary` asserts that delta **exactly, in both directions**.
+`artifact:edit` was ~~`plan scope only`~~ for Test Engineer until the same migration.
 
 `COMPANY` scope — answered from the SYSTEM + COMPANY terms only, so a PROJECT-scope role contributes
 nothing here. `company:read` reaches every member through the non-assignable **Company Member**
@@ -471,16 +476,19 @@ Five things that change how the table reads:
 - **THREE seeded rows have `role.assignable = false` and only two of them are outside the six**
   (`V40`, `V41`).
   `Company Member` (`V15`) is the `company:read` baseline joining confers; **`Agent`** (`V40`) is
-  the token-only ceiling for agent access — **Test Engineer minus `library:manage`, `case:delete`,
-  `evidence:delete`, `plan:delete` and `company:read`** (~~four~~ **five since `V51`**), enumerated
-  once in the roles spec **§A6a** and derived from the catalogue by
-  `SeedDataTest.agentIsTestEngineerMinusFive`, not copied into a fourth table. `library:manage` is
-  dropped because §A3 gates it by an *impact modal* an API caller never sees; ~~the two deletes
-  because `OWN` follows `api_token.owner_id`, so an agent would delete what the human authored~~ →
-  **that premise died with `V51` — the three deletes are dropped because agent access creates, reads
-  and edits and does NOT delete.** `plan:delete` had to be *promoted* into that list the moment Test
-  Engineer gained it: it had been excluded only by inheritance, and the delta check is what caught
-  it — a subset check would have stayed green while the stated reason evaporated.
+  the role a token carries for agent access — ~~the token-only **ceiling**~~ ~~Test Engineer minus
+  `library:manage`, `case:delete`, `evidence:delete`, `plan:delete` and `company:read`~~ ~~(four)~~
+  ~~(five since `V51`)~~ → **`V52` (§210): it is Test Engineer ENTIRE, minus `company:read` alone**,
+  derived from Test Engineer's rows *in the migration* so the two cannot drift, and asserted by
+  `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse`. **That last key is not a ceiling** — it
+  is unreachable for a credential with no membership row (`evaluateCompanyWide` reads the SYSTEM and
+  COMPANY terms only, and a token has no `V15` baseline), which is the §A6 reachability rule pointing
+  the other way and which `companyReadIsAlwaysExplicit` caught on the migration's first run.
+  **What replaced the ceiling is a consent prompt on delete arms in `packages/mcp/src/server.ts`** —
+  `destructiveHint` so a host prompts, plus an elicitation that **refuses when the client cannot be
+  asked**. Know its reach before relying on it: it binds the MCP transport only, and the same `tcms_`
+  bearer deletes over `curl` with nobody to ask. Roles spec §A6a carries that objection, raised
+  before the change and struck through as *superseded rather than wrong*.
   **`Automation Service` is the third (`V41`) and behaves like `Agent`.**
   **Assignability, issuability, listedness and revocability are FOUR different questions** — the two
   ceilings are non-assignable but issuable **and listed**, so `GET /roles` must keep returning them,
@@ -493,18 +501,25 @@ Five things that change how the table reads:
   every token they issued. `OWN` narrows through it too (`PermissionQualifier.narrowedBy`): a
   company-wide `ALL` capped by a role's `OWN` is `OWN`. **Nothing carries `OWN` since `V51`** — see
   the bullet below.
-- **NO GRANT IS `OWN`-QUALIFIED (`V51`, §207).** CRUD on plans, cases and steps belongs to every
-  non-Viewer contributor **no matter who first created the row** — so `case:delete` and
-  `evidence:delete` lost the qualifier and Test Engineer gained `plan:delete`. The mechanism is kept
-  **deliberately unpopulated**: the qualifier is *data*, so deleting `PermissionQualifier.OWN` or
-  `IdentityProjectAccess.canDoOnAuthored` is what would make a future `OWN` grant fail **open**, and
-  `PLAN_SCOPE` keeps the same column and seam in use anyway. `SeedDataTest.ownIsCarriedByNoGrant`
-  pins the empty population in both directions so it reads as a decision, not a seeding bug. The
-  authorship *plumbing* on both sides stays wired for the same reason — `CaseDeleteService`'s gate,
-  its `NotTheAuthor` refusal, `useCan.canOnAuthored`, and the `authorId` every `PermissionGate`
-  delete site passes. **`suite:delete` / `artifact:delete` stay Lead-only (shared structure, not
-  authored content) and so do `run:close` / `result:amend` (judgements about the work), and
-  author-cannot-approve-own-work is untouched — approving is not CRUD.**
+- **NO GRANT CARRIES ANY QUALIFIER — the column is `'ALL'` on every row** (`OWN` emptied by `V51`
+  §207, `PLAN_SCOPE` by `V52` §210). CRUD on everything in the project belongs to every non-Viewer
+  contributor **no matter who first created the row or what kind of thing it is** — `case:delete`
+  and `evidence:delete` lost `OWN`, Test Engineer gained `plan:delete`, then `suite:delete`,
+  `artifact:delete`, `run:close`, `result:amend` and `doc:publish`, and `artifact:edit` lost
+  `PLAN_SCOPE`. The mechanism is kept **deliberately unpopulated**: the qualifier is *data*, so
+  deleting `PermissionQualifier.OWN`/`PLAN_SCOPE` or `IdentityProjectAccess.canDoOnAuthored` is what
+  would make a future qualified grant fail **open**. ~~`PLAN_SCOPE` keeps the same column and seam in
+  use anyway~~ → **that argument expired at `V52`, and it was the only one of `V51`'s three that
+  claimed the mechanism was in use**; the other two are arguments from future cost. Read roles spec
+  §A5 before proposing deletion. `SeedDataTest.everyQualifierIsAll` pins the column in both
+  directions, `ownIsCarriedByNoGrant` still pins the value, so the emptiness reads as a decision and
+  not a seeding bug. The authorship *plumbing* on both sides stays wired for the same reason —
+  `CaseDeleteService`'s gate, its `NotTheAuthor` refusal, `useCan.canOnAuthored`, and the `authorId`
+  every `PermissionGate` delete site passes. **What is left of the tier is approvals and project
+  configuration, seven keys** (§A4) — ~~`suite:delete` / `artifact:delete` stay Lead-only (shared
+  structure) and so do `run:close` / `result:amend` (judgements about the work)~~ → all four are a
+  contributor's since `V52`, and the "shared structure and judgement" principle is **deleted rather
+  than narrowed a third time**. Author-cannot-approve-own-work is untouched — approving is not CRUD.
 - **`case:comment` is one key covering cases, suites and plans.** `suite:comment` / `plan:comment`
   deliberately do not exist, and `evidence:read` was rejected on the same grounds: a key seeded to
   nobody is a 403 no administrator can grant their way out of. Resolving a thread is *not*
