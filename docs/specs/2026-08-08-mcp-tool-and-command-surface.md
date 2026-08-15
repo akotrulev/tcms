@@ -229,9 +229,73 @@ dump — instructions truncate at 2KB. The refusal-copy constraint in §4.5 gove
 ### 3.3 What is not a tool
 
 - **Nothing gated by a permission `Agent` does not hold.** No approve, no `run:close`, no
-  `result:amend`, no `doc:publish`, no delete of anything, no project configuration, no library
+  `result:amend`, no `doc:publish`, ~~no delete of anything~~, no project configuration, no library
   write. These are absent from the surface entirely rather than present-and-refused: a tool the role
   can never hold is a definition nobody's `tools/list` will ever include, so it would be dead schema.
+
+  **→ two of these are false as of 2026-08-15 and the bullet is kept because its ARGUMENT is still
+  the rule.** A tool the credential can never reach is dead schema; what changed is the reach, not
+  the reasoning. `V52` (§210) made `Agent` equal to Test Engineer minus `company:read`, so
+  `run:close`, `result:amend`, `doc:publish` and every delete key are now **held**. Approve, project
+  configuration and library write are unmoved and still correctly absent.
+
+  **"No delete of anything" — superseded, and shipped in two slices.** The planning note this
+  paragraph used to carry said *the ceiling has to move first, and moving it is not a one-line
+  change*; that was right and §210 did it — a migration after `V51`, roles spec §A6a and its
+  changelog row, and `SeedDataTest.agentIsTestEngineerMinusFive`, which was renamed to
+  `agentIsTestEngineerMinusNothingItCouldUse` because the delta it computes became one key. §211
+  then built the arms. **Three of the five delete keys are reachable**, as `delete` arms on the
+  tools that already own those resources — `case:delete` on `tcms_write_case`, `suite:delete` on
+  `tcms_write_suite`, `plan:delete` on `tcms_write_plan`.
+
+  **Folding a delete into an existing tool is only legal because of `V52`, and this is the part
+  worth carrying forward.** §2 merges arms only when every reachable intersection holds all of
+  them. Before `V52`, `suite:delete` was Lead-only while `suite:manage` was a contributor's, so the
+  fold would have hidden `tcms_write_suite` from every Test Engineer — the exact failure §2's rule
+  exists to prevent. Widening the tier is what made three deletes into three arms rather than three
+  tools nobody but a lead would ever be shown.
+
+  **The other two are excluded by decision, not by permission** (`packages/mcp/src/writes.ts`
+  module header):
+
+  | Key | Why not |
+  |---|---|
+  | `artifact:delete` | Artifacts have **no surface here at all** — no read, no write. A delete alone takes an id nothing on this transport can produce, which is the reviewer-assignment shape §140 recorded. It waits for a slice that gives the register a surface. |
+  | `evidence:delete` | Reachable — `tcms_open_run` serves an execution's `evidence[].id` — and refused anyway. It is the **one hard delete** on this surface (the bytes leave the disk, deliberately), and this transport **cannot attach evidence at all**: `POST …/evidence` is `multipart/form-data` and a tool call carries no bytes. So the only evidence an agent could remove is a person's, irreversibly, offered to the one actor that can never create the thing. The consent prompt does not change that arithmetic. It wants the upload arm first. |
+
+  Note the surface was **not** delete-free before any of this, which the struck sentence reads as
+  claiming: the `unlink` arm of `tcms_write_doc_page` has been `kind: 'delete'` since §140. It was
+  always permissible because detaching a `doc_link` costs `doc:edit`, not a delete permission — the
+  ceiling is a statement about *permissions*, not about verbs.
+
+  **The consent half is now server-side, and the client-side rule is a second layer rather than the
+  gate.** `.claude/settings.json` carries an `autoMode.hard_deny` rule forcing a permission prompt
+  for any `tcms_*` delete, matching on the `action` argument as well as the tool name since this
+  surface expresses verbs as arguments (§2) — but that is a rule in **Claude Code's** classifier and
+  no other client has one. What binds every MCP caller is in the server: `destructiveHint` on any
+  tool with a delete arm, plus an **elicitation** prompt that **refuses when the client declares no
+  elicitation capability**. That refusal is the decision to read before relaxing anything here — a
+  consent gate that degrades to "cannot ask, carry on" fails open on exactly the minimal client an
+  unattended agent is most likely to be. Both halves key on `ToolArm.kind`, so an arm added later is
+  covered without anybody remembering; §211 added three and changed no gate code.
+
+  **Neither reaches raw REST**, and §A6a records that objection as superseded rather than as wrong:
+  the same `tcms_` bearer deletes over `curl` with nobody to ask. What still bounds it is the token
+  intersection, soft delete, the audit trail, the required `expiresAt` and Revoke.
+
+  One observation, still an **open question**: a gate phrased around *deletes* does not cover this
+  surface's most destructive writes, which are tagged `edit`. Every COMPLETE-SET property discards
+  what the caller omits — `blocks` on `tcms_write_doc_page` ("a block you omit is deleted"),
+  `tagRules`/`cases`/`pre`/`postconditions` on `tcms_write_suite`, `suites`/`cases` on
+  `tcms_write_plan`, `tags` on `tcms_write_case`. A read-modify-write that drops a paragraph or
+  unfiles a case arrives through that shape and through no other. Whether those belong behind the
+  same prompt is unsettled. (Line numbers were cited here and are gone: they rotted within one
+  slice, and `citedFiles.test.ts` checks paths, not lines.)
+
+  **What is held and still has no tool**, recorded so the gap is a decision rather than an
+  oversight: `run:close`, `result:amend` as a distinct arm, `doc:publish`, and the whole
+  `artifact:*` family. `tcms_record_result` amends today by re-recording — the server decides which
+  key the call costs by whether a result exists — but nothing here closes a run or publishes a page.
 - **Nothing under `/users`, `/teams`, `/roles`, `/role-assignments`, `/api-tokens`.** All are
   `COMPANY`-scope, and `Agent` deliberately does not hold `company:read` (`V40` §6: *a token is not a
   member*).

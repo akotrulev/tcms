@@ -41,7 +41,7 @@ import { armFor } from './server.js';
 import { TOOLS } from './tools.js';
 import { WRITE_TOOLS } from './writes.js';
 import type { ToolDefinition } from './tool.js';
-import { agentRoutes, api, sessionWith, withApi, type Api } from './test/harness.js';
+import { AGENT_KEYS, agentRoutes, api, sessionWith, withApi, type Api } from './test/harness.js';
 
 function tool(name: string): ToolDefinition {
   const found = WRITE_TOOLS.find((candidate) => candidate.name === name);
@@ -659,6 +659,37 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
       // Truncation is silent and takes the last sentence, which is where the caveats are.
       expect(new TextEncoder().encode(candidate.description).length, candidate.name)
         .toBeLessThanOrEqual(2000);
+    }
+  });
+
+  it('never tells the model it lacks a key this credential holds — §211', () => {
+    /*
+      §210's own closing lesson, made mechanical: *"copy that names a role is a claim about the
+      catalogue, and nothing checks it."* It found three such sentences in `backend/` and
+      `frontend/` and swept neither `packages/`, where two were live — `tcms_write_run` saying
+      run:close was out of reach and `tcms_record_result` saying the same of result:amend, both
+      granted by `V52` in the very slice that wrote the lesson.
+
+      **This is worse than a stale comment.** A tool description is read by the model as the
+      statement of what it may attempt, so a false one does not mislead a maintainer later, it
+      stops the agent trying something it is allowed to do, now, every session.
+
+      The instrument is AGENT_KEYS, which is this package's copy of what the `Agent` role is
+      seeded with — a test constant and not the seed, so it is only as current as the last slice
+      that moved a grant remembered to update it. `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse`
+      is what pins the real thing; this pins the copy against the prose.
+    */
+    const held = new Set<string>(AGENT_KEYS);
+    for (const candidate of TOOLS) {
+      for (const sentence of candidate.description.split(/(?<=[.!])\s+/)) {
+        if (!sentence.includes('does not hold')) continue;
+        for (const key of sentence.match(/\b[a-z]+:[a-z]+\b/g) ?? []) {
+          expect(held.has(key), `${candidate.name} says the credential does not hold '${key}', `
+            + 'and it does. Say what is actually out of reach — a permission it lacks, or a tool '
+            + 'this surface has not built.')
+            .toBe(false);
+        }
+      }
     }
   });
 

@@ -111,7 +111,7 @@ administrator does deliberately; joining a company confers only the `Company Mem
 | Role | Scope | Built-in | Assignable | Listed by `GET /roles` | Carried by a token | Intent |
 |---|---|---|---|:--:|:--:|---|
 | **Company Member** | COMPANY | yes | **no** | no | no | Exactly `company:read`, granted automatically to every member on joining. Never offered, never revocable. Added 2026-08-01 by `V15` — the mechanism §A3's "`company:read` for every member" needed rather than a tier. |
-| **Agent** | PROJECT | yes | **no** | **yes** | **yes** | The ceiling for an AI agent acting on behalf of the person who issued the token — Test Engineer minus three, enumerated in **§A6a**. Added 2026-08-08 by `V40`. |
+| **Agent** | PROJECT | yes | **no** | **yes** | **yes** | ~~The ceiling for an AI agent~~ → **not a ceiling since `V52`** (§210): the role an AI agent carries when acting on behalf of the person who issued the token, and it is Test Engineer ~~minus three~~ **entire, minus `company:read` alone**, enumerated in **§A6a**. Added 2026-08-08 by `V40`. |
 
 **`Company Member` is not in the table above because nobody ever *chooses* it**: it is granted by the act of joining, it is filtered out of `GET /roles`, `POST /role-assignments` refuses it, and `GET /role-assignments` does not list its grants — so nothing renders a Revoke whose effect would be to take away a colleague's sight of the company with no repair short of the operator CLI.
 
@@ -400,6 +400,16 @@ evidence:attach   ✓                   artifact:edit     ✓  plan scope only
 defect:create     ✓                   project:read      ✓  visibility precondition (§A6)
 workitem:manage   ✓
 ```
+
+**What the consent prompt actually covers, measured rather than assumed — §211.** The paragraph
+above says the withheld acts are "gated by a user-consent prompt in the MCP tool definitions", and
+when it was written **no delete tool existed on that surface at all**, so the sentence described an
+intention. It now describes three arms — `case:delete`, `suite:delete`, `plan:delete`, each on the
+tool that already owns the resource, each raising an elicitation the server **refuses to skip** when
+the client cannot be asked. `artifact:delete` and `evidence:delete` are still unreachable there and
+for stated reasons (surface spec §3.3), and `library:manage` remains off the surface on the
+impact-modal argument, which `V52` did not touch. **None of this changes the objection above**: the
+prompt binds the MCP transport, the bearer does not.
 
 **The grant since `V52` is Test Engineer's, derived from it in the data** (`V52` statement 3 selects Agent's rows *from* Test Engineer's) so the two cannot drift. `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse` asserts the delta is exactly `company:read`, **in both directions** — the equality is the invariant, and a subset check would stay green while a future migration widened the contributor role and left the credential behind.
 

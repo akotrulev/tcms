@@ -981,8 +981,11 @@ const runStatus: Command = {
   summary: 'Complete, abort or reopen a run',
   usage: 'tcms run status TR-1 --status COMPLETED|ABORTED|IN_PROGRESS|NOT_STARTED',
   options: { status: { type: 'string' } },
-  // `run:close` is Lead and up and an Agent token does not hold it — the command exists because
-  // this CLI is a person's tool too. Same call as `suite status`, one noun over.
+  // ~~`run:close` is Lead and up and an Agent token does not hold it — the command exists because
+  // this CLI is a person's tool too.~~ → **false since `V52`** (§210): `run:close` is a
+  // contributor's and an `Agent` token holds it. The command needed no change, which is the point
+  // of gating on the server; what was wrong was the sentence. Same call as `suite status`, one
+  // noun over.
   write: { kind: 'state', permission: 'run:close' },
   run: async (context) => {
     const { client, out, json, request } = context;

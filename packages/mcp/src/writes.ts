@@ -819,7 +819,8 @@ const writeRun: ToolDefinition = {
     'A run is a fixed selection of cases to execute. `tags` on a run point the opposite way from a '
     + 'case filter: every live case carrying ANY of them, union not intersection. Cloning takes '
     + "the original's selection under a new name, which is how a re-test of the same scope is "
-    + 'made. Closing a run needs run:close, which this credential does not hold.',
+    + 'made. Closing or reopening a run is not on this surface yet — the credential holds '
+    + 'run:close, but no tool here calls it.',
   gate: { mode: 'all', permissions: ['run:create'] },
   arms: [
     { action: 'create', kind: 'create', permission: 'run:create' },
@@ -903,11 +904,19 @@ const recordResult: ToolDefinition = {
     'Name the run and the case — an execution has no display key and never will. The status is a '
     + "per-project name from tcms_orient's executionStatuses, not a UUID. **Attaching evidence is "
     + 'not available here**: evidence is a file upload and there is no way to send bytes through '
-    + 'a tool call. Amending a recorded result needs result:amend, which this credential does not '
-    + 'hold.',
+    + 'a tool call. Recording over a result that is already there is an AMEND and costs '
+    + 'result:amend, which this credential holds — the run must still be open either way.',
   // Two keys, not the three §3 lists — the `evidence:attach` arm cannot exist on this transport.
   // See the module header: declaring a permission the tool never exercises would hide it from a
   // caller who can record results and cannot attach evidence.
+  //
+  // **`result:amend` is deliberately not a third key here, and the arm still declares
+  // `result:submit`.** The server decides which of the two this call costs by whether a result is
+  // already recorded, and a `ToolArm` cannot say "one permission or the other depending on state".
+  // Declaring the stricter one would hide the tool from a caller who can record and not amend —
+  // the failure §2's rule exists to prevent — so the tool is listed on what a first record needs
+  // and an amend refusal is left to the server. The cost is that such a refusal names
+  // `result:submit`; the description above is what carries the true answer.
   gate: { mode: 'all', permissions: ['run:execute', 'result:submit'] },
   arms: [{ action: 'record', kind: 'edit', permission: 'result:submit' }],
   inputSchema: {

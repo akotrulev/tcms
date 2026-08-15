@@ -112,7 +112,8 @@ ceiling held in validation code has no such derivation available.
 **Kept** — everything §1 asks for: `case:read` · `case:create` · `case:edit` · `suite:manage` ·
 `doc:read` · `doc:edit` · `plan:create` · `plan:edit` · `run:create` · `run:execute` ·
 `result:submit` · `evidence:attach` · `case:comment` · `case:review` · `suite:review` ·
-`plan:review` · `report:view` · `report:export` · `artifact:read` · `artifact:edit` (plan scope) ·
+`plan:review` · `report:view` · `report:export` · `artifact:read` · `artifact:edit` ~~(plan
+scope)~~ — **unqualified since `V52`; nothing in the catalogue carries a qualifier now** —
 `defect:create` · `workitem:manage` · `project:read`.
 
 **Dropped from Test Engineer** — three, each for its own reason:
@@ -120,8 +121,8 @@ ceiling held in validation code has no such derivation available.
 | Dropped | Why |
 |---|---|
 | `library:manage` | §A3 gates it by an **impact modal, not by permission** — editing a shared condition or step propagates to every referencing case, and the control is *informed consent* via a confirmation listing them. **An API caller never sees that modal.** Removing the permission is the only fix that also holds for raw REST; rebuilding consent at the tool layer could not. |
-| `case:delete` | `OWN` for Test Engineer, and `OWN` follows `api_token.owner_id` — so an agent would delete cases **the human authored**, not only ones it created. Not needed for add/update. |
-| `evidence:delete` | Same `OWN` reasoning. |
+| `case:delete` | ~~`OWN` for Test Engineer, and `OWN` follows `api_token.owner_id` — so an agent would delete cases **the human authored**, not only ones it created.~~ → **premise deleted by `V51`; nothing carries `OWN` any more (§207).** The drop stands on the second clause alone: not needed for add/update. |
+| `evidence:delete` | ~~Same `OWN` reasoning.~~ → same reversal. |
 
 **Never held, inherited from Test Engineer's own boundary** — and each is something an agent should
 not do:
@@ -133,6 +134,29 @@ not do:
 | `doc:publish` | Publishing is the human's signal that a document is ready. |
 | `project:settings` · `project:members` · `integration:manage` | Configuration and access-granting — the boundary §1 draws. |
 | `suite:delete` · `plan:delete` · `artifact:delete` | Destructive, and not needed for add/update. |
+
+> **These tables are the original argument and no longer the grant — 2026-08-15, §210 and §211.**
+>
+> **The count went stale twice in a week.** §2.1 and this section say Test Engineer **minus three**;
+> `V51` made it minus five (`plan:delete` had to be promoted out of the "never held, inherited"
+> table the moment Test Engineer gained it, and `company:read` was never in either list here —
+> `V40` §6, *a token is not a member*). **`V52` then made it minus one:** `Agent` is Test Engineer
+> **entire, minus `company:read` alone**, derived from Test Engineer's own rows inside the migration
+> so the two cannot drift. Roles spec **§A6a** is authoritative and
+> `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse` is what enforces it.
+>
+> **Both delete rows above are reversed.** `case:delete` and `evidence:delete` are held, and so are
+> `suite:delete`, `plan:delete` and `artifact:delete` from the "never held" table. The ceiling is no
+> longer where the limit lives — a **consent prompt on the delete arms** is, and its reach is
+> honestly smaller: it binds the MCP transport and not the credential. §211 shipped three delete
+> arms (`case`, `suite`, `plan`) and left two out by decision. All of it is written once, in the
+> surface spec [`§3.3`](../specs/2026-08-08-mcp-tool-and-command-surface.md), rather than duplicated
+> here.
+>
+> **`library:manage` is the one row above that still stands**, and on its own reasoning: the control
+> is an impact modal, not a permission, and an API caller never sees a modal. `V52` grants the key
+> and the argument for keeping it off the *surface* is untouched — which is the distinction this
+> whole section lost track of, between what the credential holds and what the surface offers.
 
 ### 2.3 Why a role, and why it may be a seventh one
 

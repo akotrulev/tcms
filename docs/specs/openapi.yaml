@@ -1038,12 +1038,15 @@ paths:
       tags: [repository]
       summary: Delete an empty suite
       description: |
-        Soft-deletes a suite. Requires `suite:delete`, which is held by leads and above and **not**
-        by Test Engineer — ~~deleting is the one repository action a contributor is blocked from, so
-        they can organise the tree freely without being able to unmake someone else's work~~ →
-        since `V51` a contributor deletes cases freely, whoever authored them, so the line here is
-        no longer "deleting" but **shared structure**: a suite is the collection many people file
-        into, and removing it changes something other people's work hangs off (roles spec §A3.5).
+        Soft-deletes a suite. Requires `suite:delete`, which **every non-Viewer contributor holds
+        since `V52`** (roles spec §A4). Two superseded readings, kept because each was the stated
+        reason at the time: ~~deleting is the one repository action a contributor is blocked from,
+        so they can organise the tree freely without being able to unmake someone else's work~~ →
+        `V51` made a contributor delete cases freely, whoever authored them, after which the line
+        was said to be not "deleting" but ~~**shared structure**: a suite is the collection many
+        people file into, and removing it changes something other people's work hangs off~~ →
+        `V52` deleted that principle rather than narrowing it a third time (§210). The Test Lead
+        line is now approvals and project configuration, and nothing else.
 
         **The suite must be empty**: a suite holding live *filed* cases answers `409` naming how
         many. A cascade would soft-delete an unbounded set of *cases* through a collection action
@@ -10700,10 +10703,16 @@ components:
 
             Entries carry a `qualifier` as well as a key. Until §65 this was an array of bare
             keys, and the omission had a cost the SPA could not work around: a Test Engineer
-            holds `artifact:edit` at `PLAN_SCOPE`, so a keys-only answer says "held", the
-            project-scope control enables, and the server refuses the submit. Disable-don't-hide
+            held `artifact:edit` at `PLAN_SCOPE`, so a keys-only answer said "held", the
+            project-scope control enabled, and the server refused the submit. Disable-don't-hide
             (handoff §31) is not expressible against an answer that cannot say "held, but not
             here".
+
+            **That example is historical since `V52`** (§210): no grant in the shipped catalogue
+            carries any qualifier at all — every row is `ALL` — so this field answers `ALL` for
+            everything a caller holds today. It stays required, and the mechanism stays wired,
+            for the reason roles spec §A5 gives: the qualifier is *data*, so removing the field
+            is what would make a future qualified grant fail **open**.
           items: { $ref: '#/components/schemas/HeldPermission' }
 
     HeldPermission:
