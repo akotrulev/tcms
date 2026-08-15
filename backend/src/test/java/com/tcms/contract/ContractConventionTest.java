@@ -1142,6 +1142,8 @@ class ContractConventionTest {
                     List.of(com.tcms.auth.InvitationController.AcceptRequest.class)),
             Map.entry("POST /auth/providers (request)",
                     List.of(com.tcms.auth.SsoController.ProviderDiscoveryRequest.class)),
+            Map.entry("POST /auth/ldap/{providerId}/login (request)",
+                    List.of(com.tcms.auth.LdapController.DirectoryLoginRequest.class)),
             Map.entry("GET /projects/{projectId}/cases (200)",
                     List.of(com.tcms.repository.CasePageView.class)),
             Map.entry("GET /projects/{projectId}/ai-proposals (200)",

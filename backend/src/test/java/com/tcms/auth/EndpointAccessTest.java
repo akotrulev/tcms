@@ -60,7 +60,12 @@ class EndpointAccessTest extends IntegrationTestBase {
             // you cannot present a session in order to obtain one. Each answers 302 whatever
             // happens, and the failure landing is one opaque marker for every cause.
             "/api/v1/auth/sso/{providerId}/authorize",
-            "/api/v1/auth/sso/callback");
+            "/api/v1/auth/sso/callback",
+            // The credential flow's one leg. Open for the same reason login is — you cannot
+            // present a session in order to obtain one — and it answers login's own empty 401
+            // for every failure, throttled per (provider, identifier) before the directory is
+            // ever contacted.
+            "/api/v1/auth/ldap/{providerId}/login");
 
     @Autowired
     private MockMvc mvc;

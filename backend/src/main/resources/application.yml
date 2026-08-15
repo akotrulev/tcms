@@ -2,6 +2,17 @@ spring:
   application:
     name: tcms
 
+  autoconfigure:
+    # spring-ldap-core is on the classpath for LdapDirectory, which builds a context source PER
+    # PROVIDER ROW at sign-in time. Boot's LdapAutoConfiguration triggers on the class alone and
+    # wires ONE application-wide ContextSource from spring.ldap.* — defaulting to localhost:389 —
+    # plus an LdapTemplate bean, which the actuator's LDAP health indicator then pings. The result
+    # is a health probe that reports the whole instance DOWN because a server this product never
+    # talks to is not there. Excluding it removes the bean, and the health indicator's
+    # @ConditionalOnBean(LdapOperations) removes the probe with it.
+    exclude:
+      - org.springframework.boot.autoconfigure.ldap.LdapAutoConfiguration
+
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:tcms}
     username: ${DB_USER:tcms_app}
@@ -141,18 +152,6 @@ tcms:
     connect-timeout: PT5S
     read-timeout: PT10S
 
-  ldap:
-    # The same argument as oidc above, one protocol over: the directory host was chosen by a
-    # client's own administrator. A JNDI context with neither timeout set blocks for ever.
-    connect-timeout: PT3S
-    read-timeout: PT5S
-    # NOT a lockout on this product's own credential — local sign-in deliberately has none. Every
-    # failed bind increments the CUSTOMER'S directory counter, so an endpoint with no bound here is
-    # a way to lock a company's staff out of Active Directory from the internet, and the harm lands
-    # on a system this product does not own and cannot unlock.
-    max-bind-attempts: 5
-    bind-lockout: PT60S
-
     # How long a fetched openid-configuration is reused. Not zero, or every callback costs an extra
     # round trip to a third party; not indefinite, or a rotated jwks_uri needs a restart.
     discovery-ttl: PT15M
@@ -171,6 +170,18 @@ tcms:
 
     # Where the browser lands on the SPA afterwards, carrying the session in the URL FRAGMENT.
     spa-callback-path: /sso/callback
+
+  ldap:
+    # The same argument as oidc above, one protocol over: the directory host was chosen by a
+    # client's own administrator. A JNDI context with neither timeout set blocks for ever.
+    connect-timeout: PT3S
+    read-timeout: PT5S
+    # NOT a lockout on this product's own credential — local sign-in deliberately has none. Every
+    # failed bind increments the CUSTOMER'S directory counter, so an endpoint with no bound here is
+    # a way to lock a company's staff out of Active Directory from the internet, and the harm lands
+    # on a system this product does not own and cannot unlock.
+    max-bind-attempts: 5
+    bind-lockout: PT60S
 
   api-token:
     # How stale api_token.last_used_at may be before an authenticated request is worth an UPDATE.

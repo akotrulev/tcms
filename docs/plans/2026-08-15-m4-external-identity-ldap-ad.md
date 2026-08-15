@@ -300,7 +300,7 @@ the result set size is not exactly 1, and the refusal is the ordinary one.
 **Files:**
 - Modify: `docs/plans/2026-08-15-m4-external-identity-oidc.md` (the "Plan 3 (sketch)" section)
 
-- [ ] **Step 1: Replace the sketch's first bullet**
+- [x] **Step 1: Replace the sketch's first bullet**
 
 Find the bullet reading ``**`ldap://` is refused unless an explicit `allowInsecure` flag is set**``
 and replace that bullet with:
@@ -316,7 +316,7 @@ and replace that bullet with:
   production never takes.
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add docs/plans/2026-08-15-m4-external-identity-oidc.md
@@ -332,7 +332,7 @@ git commit -m "§NNN — the LDAP transport decision, taken before the code that
 - Modify: `frontend/src/api/schema.d.ts` (generated)
 - Modify: `packages/client/src/schema.ts` (generated)
 
-- [ ] **Step 1: `IdentityProviderKind`'s description stops saying LDAP is unimplemented**
+- [x] **Step 1: `IdentityProviderKind`'s description stops saying LDAP is unimplemented**
 
 Replace the `IdentityProviderKind` block's description with:
 
@@ -348,7 +348,7 @@ Replace the `IdentityProviderKind` block's description with:
         nothing can create is a state the code must branch on for no reason.
 ```
 
-- [ ] **Step 2: `IdentityProvider` gains the LDAP half**
+- [x] **Step 2: `IdentityProvider` gains the LDAP half**
 
 In `IdentityProvider`, change the `required` list and the `issuerUri`/`clientId` descriptions, and add
 seven properties:
@@ -421,7 +421,7 @@ seven properties:
           description: LDAP only. Which attribute carries the person's name, for the membership this creates.
 ```
 
-- [ ] **Step 3: `IdentityProviderInput` gains the same fields plus the write-only credential**
+- [x] **Step 3: `IdentityProviderInput` gains the same fields plus the write-only credential**
 
 ```yaml
     IdentityProviderInput:
@@ -452,7 +452,7 @@ with, added beside `clientSecret`:
         displayNameAttribute: { type: string, nullable: true, maxLength: 100 }
 ```
 
-- [ ] **Step 4: `SsoProviderChoice` gains `kind`**
+- [x] **Step 4: `SsoProviderChoice` gains `kind`**
 
 ```yaml
     SsoProviderChoice:
@@ -470,7 +470,7 @@ with, added beside `clientSecret`:
             companies claim the domain, so it is disclosed on the same terms as `displayName`.
 ```
 
-- [ ] **Step 5: The one new operation**
+- [x] **Step 5: The one new operation**
 
 Add after `/auth/sso/callback`:
 
@@ -524,7 +524,7 @@ Add after `/auth/sso/callback`:
         '401': { description: Refused. No body, and no cause — see the description. }
 ```
 
-- [ ] **Step 6: Regenerate both copies and run the packages gate**
+- [x] **Step 6: Regenerate both copies and run the packages gate**
 
 ```bash
 cd frontend && npm run gen:api
@@ -535,7 +535,7 @@ cd .. && npm run build && npm run test:run --workspaces
 Expected: green. If `responseCredentials.test.ts` fails, the failure is real — re-read D7: no
 `bindPassword` may appear on a **response** schema, only `bindPasswordSet`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add docs/specs/openapi.yaml frontend/src/api/schema.d.ts packages/client/src/schema.ts
@@ -550,7 +550,7 @@ git commit -m "§NNN phase 1 — the contract for a directory that is not an iss
 - Create: `backend/src/main/resources/db/migration/V57__ldap_identity_provider.sql`
 - Create: `backend/src/test/java/com/tcms/schema/LdapSchemaTest.java`
 
-- [ ] **Step 1: Write the failing schema test**
+- [x] **Step 1: Write the failing schema test**
 
 ```java
 package com.tcms.schema;
@@ -624,7 +624,7 @@ class LdapSchemaTest extends IntegrationTestBase {
 > ground truth for the two `INSERT`s and the application role for the function call, because the
 > grant is exactly what the third test is checking.
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 cd backend && ./gradlew test --tests 'com.tcms.schema.LdapSchemaTest'
@@ -632,7 +632,7 @@ cd backend && ./gradlew test --tests 'com.tcms.schema.LdapSchemaTest'
 
 Expected: FAIL — the inserts succeed (no such constraint) and the function has two columns.
 
-- [ ] **Step 3: Write the migration**
+- [x] **Step 3: Write the migration**
 
 ```sql
 -- =============================================================================
@@ -768,7 +768,7 @@ BEGIN
 END $$;
 ```
 
-- [ ] **Step 4: Run the schema tests plus the two schema-wide rules**
+- [x] **Step 4: Run the schema tests plus the two schema-wide rules**
 
 ```bash
 cd backend && ./gradlew test --tests 'com.tcms.schema.LdapSchemaTest' \
@@ -778,7 +778,7 @@ cd backend && ./gradlew test --tests 'com.tcms.schema.LdapSchemaTest' \
 Expected: PASS. `SchemaConventionTest` must stay green untouched — V57 adds no table, so neither the
 `company_id` rule nor the RLS exception list changes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/main/resources/db/migration/V57__ldap_identity_provider.sql \
@@ -795,7 +795,7 @@ git commit -m "§NNN phase 2 — V57, and the NOT NULL that had to be replaced r
 - Modify: `backend/src/main/java/com/tcms/identity/IdentityProviderInput.java`
 - Modify: `backend/src/main/java/com/tcms/identity/IdentityProviderView.java`
 
-- [ ] **Step 1: Add the eight columns to the entity**
+- [x] **Step 1: Add the eight columns to the entity**
 
 Beside the existing fields:
 
@@ -828,7 +828,7 @@ Beside the existing fields:
     private String displayNameAttribute;
 ```
 
-- [ ] **Step 2: A second factory rather than a twelve-argument one**
+- [x] **Step 2: A second factory rather than a twelve-argument one**
 
 `register` stays exactly as it is and keeps its name for OIDC. Add beside it:
 
@@ -886,7 +886,7 @@ Beside the existing fields:
     }
 ```
 
-- [ ] **Step 3: One mutator, widened — not a second one**
+- [x] **Step 3: One mutator, widened — not a second one**
 
 `applyEdit` keeps its single-mutator contract (the header already says why two would stamp
 `updatedAt` twice). Add the parameters, and give the bind password `clientSecret`'s null-keeps rule:
@@ -943,7 +943,7 @@ Add the eight getters in the file's existing style (`getBindDn`, `getBindPasswor
 `isStartTls`, `getUserSearchBase`, `getUserSearchFilter`, `getUserIdAttribute`, `getEmailAttribute`,
 `getDisplayNameAttribute`).
 
-- [ ] **Step 4: Input and view**
+- [x] **Step 4: Input and view**
 
 `IdentityProviderInput` gains, in contract order: `String bindDn`, `String bindPassword`,
 `Boolean startTls`, `String userSearchBase`, `String userSearchFilter`, `String userIdAttribute`,
@@ -968,7 +968,7 @@ style requires; `bindPassword`'s says *"null keeps the stored one, for `clientSe
 **There is no `bindPassword` on the view.** `responseCredentials.test.ts` will fail the build if one
 appears, which is §219's rule doing the job it was built for.
 
-- [ ] **Step 5: Compile**
+- [x] **Step 5: Compile**
 
 ```bash
 cd backend && ./gradlew build -x test
@@ -984,7 +984,7 @@ Expected: FAIL at `IdentityProviderService`, which still calls the old `applyEdi
 - Modify: `backend/src/main/java/com/tcms/identity/IdentityProviderService.java`
 - Modify: `backend/src/test/java/com/tcms/identity/IdentityProviderEndpointTest.java`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `IdentityProviderEndpointTest` (§220's file — read its existing helpers and reuse them; these
 four use whatever `postProvider`/`asCompanyAdmin` seam that file already has):
@@ -1028,7 +1028,7 @@ four use whatever `postProvider`/`asCompanyAdmin` seam that file already has):
     }
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 ```bash
 cd backend && ./gradlew test --tests 'com.tcms.identity.IdentityProviderEndpointTest'
@@ -1036,7 +1036,7 @@ cd backend && ./gradlew test --tests 'com.tcms.identity.IdentityProviderEndpoint
 
 Expected: FAIL — four tests, plus compilation errors from Task 4's widened `applyEdit`.
 
-- [ ] **Step 3: Split `validate` by kind**
+- [x] **Step 3: Split `validate` by kind**
 
 Replace `validate` and add the two arms plus the shared fields:
 
@@ -1127,7 +1127,7 @@ Replace `validate` and add the two arms plus the shared fields:
     }
 ```
 
-- [ ] **Step 4: Branch `register` on the kind**
+- [x] **Step 4: Branch `register` on the kind**
 
 ```java
         UUID companyId = CompanyContext.require();
@@ -1165,7 +1165,7 @@ Replace `validate` and add the two arms plus the shared fields:
                                 now));
 ```
 
-- [ ] **Step 5: Widen the `update` call and the audit document**
+- [x] **Step 5: Widen the `update` call and the audit document**
 
 ```java
         provider.applyEdit(
@@ -1208,7 +1208,7 @@ why, and the reason applies unchanged: the client's own administrators read that
 Update the class javadoc's "The client secret leaves by exactly one door" heading to say *"Two
 credentials leave by exactly one door"* and name `bindPassword` beside `clientSecret`.
 
-- [ ] **Step 6: Run the endpoint tests**
+- [x] **Step 6: Run the endpoint tests**
 
 ```bash
 cd backend && ./gradlew test --tests 'com.tcms.identity.IdentityProviderEndpointTest'
@@ -1216,7 +1216,7 @@ cd backend && ./gradlew test --tests 'com.tcms.identity.IdentityProviderEndpoint
 
 Expected: PASS, including everything §220 wrote.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/main/java/com/tcms/identity/ backend/src/test/java/com/tcms/identity/
@@ -1234,7 +1234,7 @@ git commit -m "§NNN phase 3 — a provider that is a directory, validated on it
 - Create: `backend/src/test/java/com/tcms/auth/LdapDirectoryTest.java`
 - Create: `backend/src/test/resources/ldap/f3-directory.ldif`
 
-- [ ] **Step 1: Add the dependency**
+- [x] **Step 1: Add the dependency**
 
 `libs.versions.toml`:
 
@@ -1253,7 +1253,7 @@ unboundid-ldapsdk = { module = "com.unboundid:unboundid-ldapsdk" }
 Both are version-managed by the Spring Boot BOM, so neither entry carries a `version.ref` — the same
 arrangement every other starter here uses.
 
-- [ ] **Step 2: The fixture directory**
+- [x] **Step 2: The fixture directory**
 
 `backend/src/test/resources/ldap/f3-directory.ldif` — **fixture UUID prefix `f3`, hand-managed, see
 this plan's lane-ownership section:**
@@ -1303,7 +1303,7 @@ mail: twin@acme.test
 userPassword: twin-password
 ```
 
-- [ ] **Step 3: Write the failing test**
+- [x] **Step 3: Write the failing test**
 
 ```java
 package com.tcms.auth;
@@ -1417,7 +1417,7 @@ class LdapDirectoryTest {
 }
 ```
 
-- [ ] **Step 4: Run it and watch it fail**
+- [x] **Step 4: Run it and watch it fail**
 
 ```bash
 cd backend && ./gradlew test --tests 'com.tcms.auth.LdapDirectoryTest'
@@ -1425,7 +1425,7 @@ cd backend && ./gradlew test --tests 'com.tcms.auth.LdapDirectoryTest'
 
 Expected: FAIL — `LdapDirectory` and `LdapProperties` do not exist.
 
-- [ ] **Step 5: Write `LdapProperties`**
+- [x] **Step 5: Write `LdapProperties`**
 
 ```java
 package com.tcms.auth;
@@ -1478,7 +1478,7 @@ colon**, per the working agreement; these four are literals, not environment rea
 and add `LdapProperties.class` to the `@EnableConfigurationProperties` list that already carries
 `OidcProperties.class` (in `OidcConfiguration`).
 
-- [ ] **Step 6: Write `LdapDirectory`**
+- [x] **Step 6: Write `LdapDirectory`**
 
 ```java
 package com.tcms.auth;
@@ -1723,7 +1723,7 @@ public class LdapDirectory {
 > `EqualsFilter` in the imports is unused once the filter is built from the administrator's string —
 > drop it; `-Werror` will not catch an unused import, but the review will.
 
-- [ ] **Step 7: Run the directory tests**
+- [x] **Step 7: Run the directory tests**
 
 ```bash
 cd backend && ./gradlew test --tests 'com.tcms.auth.LdapDirectoryTest'
@@ -1731,7 +1731,7 @@ cd backend && ./gradlew test --tests 'com.tcms.auth.LdapDirectoryTest'
 
 Expected: PASS, five tests.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/build.gradle.kts backend/gradle/libs.versions.toml \
@@ -1751,7 +1751,7 @@ git commit -m "§NNN phase 4 — the protocol, escaped, timed out, and refusing 
 - Create: `backend/src/main/java/com/tcms/auth/BindThrottle.java`
 - Create: `backend/src/test/java/com/tcms/auth/BindThrottleTest.java`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```java
 package com.tcms.auth;
@@ -1845,7 +1845,7 @@ class BindThrottleTest {
 }
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 cd backend && ./gradlew test --tests 'com.tcms.auth.BindThrottleTest'
@@ -1853,7 +1853,7 @@ cd backend && ./gradlew test --tests 'com.tcms.auth.BindThrottleTest'
 
 Expected: FAIL — no such class.
 
-- [ ] **Step 3: Implement it**
+- [x] **Step 3: Implement it**
 
 ```java
 package com.tcms.auth;
@@ -1945,7 +1945,7 @@ public class BindThrottle {
 }
 ```
 
-- [ ] **Step 4: Run it**
+- [x] **Step 4: Run it**
 
 ```bash
 cd backend && ./gradlew test --tests 'com.tcms.auth.BindThrottleTest'
@@ -1953,7 +1953,7 @@ cd backend && ./gradlew test --tests 'com.tcms.auth.BindThrottleTest'
 
 Expected: PASS, four tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/main/java/com/tcms/auth/BindThrottle.java \
@@ -1971,7 +1971,7 @@ git commit -m "§NNN phase 5 — the bound that protects the customer's director
 - Modify: `backend/src/main/java/com/tcms/auth/SsoLoginService.java`
 - Modify: `backend/src/test/java/com/tcms/api/EndpointAccessTest.java`
 
-- [ ] **Step 1: Extract provider resolution from `SsoLoginService`**
+- [x] **Step 1: Extract provider resolution from `SsoLoginService`**
 
 `SsoLoginService.resolve` and its `ResolvedProvider` record are private and both flows need them.
 Move them to a package-private component, unchanged in behaviour:
@@ -2035,7 +2035,7 @@ as a constructor dependency, and change `authorize`'s first lines to
 `Optional<ProviderResolution.Resolved> resolved = resolution.forProvider(providerId);`. Its
 `EntityManager` field goes if nothing else in the class uses it.
 
-- [ ] **Step 2: `ProviderChoice` carries the kind**
+- [x] **Step 2: `ProviderChoice` carries the kind**
 
 ```java
     /** One live sign-in route, as a button or as a password field — see {@code kind}. */
@@ -2050,7 +2050,7 @@ and in `providersFor`, the mapper reads the third column V57 added:
                         (UUID) row[0], (String) row[1], IdentityProviderKind.valueOf((String) row[2])))
 ```
 
-- [ ] **Step 3: Write the failing endpoint test**
+- [x] **Step 3: Write the failing endpoint test**
 
 `backend/src/test/java/com/tcms/auth/LdapLoginEndpointTest.java` — an `IntegrationTestBase`
 subclass that starts the same `InMemoryDirectoryServer` as `LdapDirectoryTest`, inserts an **enabled**
@@ -2127,7 +2127,7 @@ drives the endpoint:
 > unauthenticated calls; copy the shape from `IdentityProviderEndpointTest`, which was written in
 > §220 for the same reason. `renameInDirectory` is `server.modify(...)` on the in-memory server.
 
-- [ ] **Step 4: Run it and watch it fail**
+- [x] **Step 4: Run it and watch it fail**
 
 ```bash
 cd backend && ./gradlew test --tests 'com.tcms.auth.LdapLoginEndpointTest'
@@ -2135,7 +2135,7 @@ cd backend && ./gradlew test --tests 'com.tcms.auth.LdapLoginEndpointTest'
 
 Expected: FAIL — 404, because the endpoint does not exist yet.
 
-- [ ] **Step 5: Write `LdapLoginService`**
+- [x] **Step 5: Write `LdapLoginService`**
 
 ```java
 package com.tcms.auth;
@@ -2312,7 +2312,7 @@ public class LdapLoginService {
 }
 ```
 
-- [ ] **Step 6: Write `LdapController`**
+- [x] **Step 6: Write `LdapController`**
 
 ```java
 package com.tcms.auth;
@@ -2382,12 +2382,12 @@ public class LdapController {
 }
 ```
 
-- [ ] **Step 7: Add the route to the public set**
+- [x] **Step 7: Add the route to the public set**
 
 In `EndpointAccessTest`, beside the three §217 added, add
 `"POST /api/v1/auth/ldap/{providerId}/login"` in whatever form that file's public set takes.
 
-- [ ] **Step 8: Run the whole backend suite**
+- [x] **Step 8: Run the whole backend suite**
 
 ```bash
 cd backend && ./gradlew build
@@ -2396,7 +2396,7 @@ cd backend && ./gradlew build
 Expected: PASS. `ArchitectureRulesTest` is the one to watch — if it fails, something LDAP-shaped
 landed in `identity`, which trap 4 is about.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add backend/src/main/java/com/tcms/auth/ backend/src/test/java/com/tcms/auth/ \

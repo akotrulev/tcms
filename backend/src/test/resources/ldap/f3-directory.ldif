@@ -50,3 +50,16 @@ cn: Twin B
 sn: B
 mail: twin@acme.test
 userPassword: twin-password
+
+# A person the DIRECTORY knows and TCMS does not — the JIT-off refusal's subject: they prove who
+# they are to the directory and are still refused, with no account created.
+dn: uid=stranger,ou=people,dc=acme,dc=test
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: stranger
+cn: Sam Stranger
+sn: Stranger
+mail: stranger@acme.test
+userPassword: directory-password

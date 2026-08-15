@@ -4,6 +4,7 @@ import com.tcms.identity.AppUser;
 import com.tcms.identity.AppUserRepository;
 import com.tcms.identity.FederatedIdentityService;
 import com.tcms.identity.IdentityProvider;
+import com.tcms.identity.IdentityProviderKind;
 import com.tcms.identity.IdentityProviderRepository;
 import com.tcms.identity.InvitationProperties;
 import com.tcms.identity.ProviderSecrets;
@@ -66,8 +67,8 @@ public class SsoLoginService {
 
     private static final int STATE_BYTES = 32;
 
-    /** One live sign-in route, as a button. */
-    public record ProviderChoice(UUID id, String displayName) {
+    /** One live sign-in route, as a button or as a password field — see {@code kind}. */
+    public record ProviderChoice(UUID id, String displayName, IdentityProviderKind kind) {
     }
 
     /** A session, exactly as local sign-in produces one. */
@@ -75,6 +76,7 @@ public class SsoLoginService {
     }
 
     private final SsoLoginAttemptRepository attempts;
+    private final ProviderResolution resolution;
     private final IdentityProviderRepository providers;
     private final AppUserRepository users;
     private final FederatedIdentityService identities;
@@ -92,6 +94,7 @@ public class SsoLoginService {
 
     public SsoLoginService(
             SsoLoginAttemptRepository attempts,
+            ProviderResolution resolution,
             IdentityProviderRepository providers,
             AppUserRepository users,
             FederatedIdentityService identities,
@@ -107,6 +110,7 @@ public class SsoLoginService {
             Clock clock) {
 
         this.attempts = attempts;
+        this.resolution = resolution;
         this.providers = providers;
         this.users = users;
         this.identities = identities;
@@ -143,7 +147,8 @@ public class SsoLoginService {
 
         return rows == null ? List.of() : rows.stream()
                 .map(row -> (Object[]) row)
-                .map(row -> new ProviderChoice((UUID) row[0], (String) row[1]))
+                .map(row -> new ProviderChoice(
+                        (UUID) row[0], (String) row[1], IdentityProviderKind.valueOf((String) row[2])))
                 .toList();
     }
 
@@ -158,12 +163,12 @@ public class SsoLoginService {
      * @return the issuer's authorization URL, or empty for any reason it could not be built
      */
     public Optional<String> authorize(UUID providerId) {
-        Optional<ResolvedProvider> resolved = resolve(providerId);
+        Optional<ProviderResolution.Resolved> resolved = resolution.forProvider(providerId);
         if (resolved.isEmpty() || !resolved.get().enabled()) {
             log.info("SSO authorize refused for provider {}", providerId);
             return Optional.empty();
         }
-        ResolvedProvider provider = resolved.get();
+        ProviderResolution.Resolved provider = resolved.get();
 
         Optional<OidcDiscoveryDocument> document = discovery.forIssuer(provider.issuerUri());
         if (document.isEmpty()) {
@@ -316,25 +321,6 @@ public class SsoLoginService {
     private static boolean isTrue(Object claim) {
         return claim instanceof Boolean flag ? flag
                 : claim instanceof String text && "true".equalsIgnoreCase(text);
-    }
-
-    private Optional<ResolvedProvider> resolve(UUID providerId) {
-        List<?> rows = transactions.execute(status -> entityManager
-                .createNativeQuery(
-                        "SELECT * FROM tcms_resolve_identity_provider(CAST(:providerId AS uuid))")
-                .setParameter("providerId", providerId.toString())
-                .getResultList());
-        if (rows == null || rows.isEmpty()) {
-            return Optional.empty();
-        }
-        Object[] row = (Object[]) rows.getFirst();
-        return Optional.of(new ResolvedProvider(
-                (UUID) row[0], (String) row[1], (String) row[2], (Boolean) row[3]));
-    }
-
-    /** What {@code tcms_resolve_identity_provider} answers with, before any context is open. */
-    private record ResolvedProvider(UUID companyId, String issuerUri, String clientId,
-                                    boolean enabled) {
     }
 
     /**
