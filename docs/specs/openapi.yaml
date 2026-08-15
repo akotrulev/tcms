@@ -1107,8 +1107,10 @@ paths:
           approval by asking for `DRAFT`.
 
         Deprecating used to cost `suite:approve` from *every* state, on the argument that retiring is
-        the soft form of a delete and `suite:delete` is Lead-only. That argument does not survive
-        being stated precisely: `suite:delete` **removes** the folder, while deprecating keeps it,
+        the soft form of a delete and `suite:delete` was Lead-only. That argument does not survive
+        being stated precisely — and since `V52` (2026-08-15) it has no premise either, because
+        `suite:delete` is granted to Test Engineer: `suite:delete` **removes** the folder, while
+        deprecating keeps it,
         keeps its members, and can be undone — and it is the only way out of a folder that cannot be
         deleted while it holds cases. Retiring a draft folder is the same kind of act as renaming
         one, which is already `suite:manage`.
@@ -3194,9 +3196,13 @@ paths:
         **Three permissions, not one.** Every call here needs `run:execute` — *"execute test
         cases in a run"*, which V3 grants to Test Engineer and up and **withholds from Automation
         Service alone**. On top of that, recording a verdict where none was recorded needs
-        `result:submit`, and changing a verdict that is already there needs `result:amend`, which
-        is **Lead-only** (roles spec §A4 — `result:amend` is listed beside `suite:delete` as
-        destructive rather than creative).
+        `result:submit`, and changing a verdict that is already there needs `result:amend` — a
+        **separate key**, so overwriting a recorded outcome stays a distinct and separately
+        auditable act. ~~which is **Lead-only** (roles spec §A4 — `result:amend` is listed beside
+        `suite:delete` as destructive rather than creative)~~ → **superseded 2026-08-15 (`V52`):
+        Test Engineer holds it.** The tier line is approvals and project configuration, and
+        amending a result you recorded is neither. Who may amend changed; that it is its own key
+        did not.
 
         **What `run:execute` buys, since it looks redundant beside `result:submit`:** every other
         execution permission separates a lead from an engineer, and this one separates a *person*

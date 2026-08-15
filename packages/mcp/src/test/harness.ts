@@ -129,13 +129,30 @@ export const ME = currentUser();
 
 export const PROJECT = project();
 
-/** The `Agent` grant as §A6a enumerates it — Test Engineer minus four. */
+/**
+ * The `Agent` grant as roles spec §A6a states it.
+ *
+ * ~~Test Engineer minus four.~~ ~~minus five (`V51`).~~ → **`V52` (§210): Test Engineer entire,
+ * minus `company:read`** — which is withheld for reachability rather than as a ceiling (a token has
+ * no membership row, so a PROJECT-scope grant of it is unanswerable). The three deletes and
+ * `library:manage` that used to be missing here are held now; what replaced the catalogue ceiling
+ * is the consent prompt on delete arms in `server.ts`.
+ *
+ * A fixture, so it can disagree with the seed silently — the assertion that cannot is
+ * `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse`, which derives the delta from the live
+ * catalogue. Keep this list in step with it; a stale copy here widens or narrows `tools/list` in
+ * every test at once.
+ */
 export const AGENT_KEYS = [
-  'project:read', 'case:read', 'case:create', 'case:edit', 'case:comment',
-  'case:review', 'suite:manage', 'suite:review', 'doc:read', 'doc:edit',
-  'plan:create', 'plan:edit', 'plan:review', 'run:create', 'run:execute',
-  'result:submit', 'evidence:attach', 'report:view', 'report:export',
-  'artifact:read', 'artifact:edit', 'defect:create', 'workitem:manage',
+  'project:read', 'case:read', 'case:create', 'case:edit', 'case:delete', 'case:comment',
+  'case:review', 'suite:manage', 'suite:delete', 'suite:review', 'library:manage',
+  'doc:read', 'doc:edit', 'doc:publish',
+  'plan:create', 'plan:edit', 'plan:delete', 'plan:review',
+  'run:create', 'run:execute', 'run:close',
+  'result:submit', 'result:amend', 'evidence:attach', 'evidence:delete',
+  'report:view', 'report:export',
+  'artifact:read', 'artifact:edit', 'artifact:delete',
+  'defect:create', 'workitem:manage',
 ] as const;
 
 /** Re-exported so the test files that build one keep importing it from here. */

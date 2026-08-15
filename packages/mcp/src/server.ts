@@ -32,7 +32,7 @@ import {
 import { renderInstructions } from './instructions.js';
 import { failed, ok } from './result.js';
 import { MCP_VERSION, type Session } from './session.js';
-import { describeFor, isListed, type ToolArm, type ToolDefinition } from './tool.js';
+import { annotationsFor, describeFor, isListed, type ToolArm, type ToolDefinition } from './tool.js';
 import { TOOLS, findTool } from './tools.js';
 import { listedNames } from './whoami.js';
 
@@ -84,6 +84,11 @@ export function buildServer(session: Session, tools: readonly ToolDefinition[] =
     const input = (request.params.arguments ?? {}) as Record<string, unknown>;
     const arm = armFor(tool, input);
 
+    if (arm?.kind === 'delete') {
+      const refusal = await withheldConsent(server, tool, arm, input);
+      if (refusal) return refusal;
+    }
+
     try {
       const value = await tool.run(
         {
@@ -118,8 +123,105 @@ function describe(tool: ToolDefinition, session: Session): Tool {
     title: tool.title,
     description: describeFor(tool, session.reach.permissions, session.reach.qualifiers),
     inputSchema: tool.inputSchema as Tool['inputSchema'],
+    annotations: annotationsFor(tool) as Tool['annotations'],
     ...(tool.meta ? { _meta: tool.meta } : {}),
   };
+}
+
+/**
+ * Ask the user before removing something. Returns the refusal, or `undefined` to proceed.
+ *
+ * ## Why this exists, and what it is standing in for
+ *
+ * Until 2026-08-15 an agent credential could not delete at all: the `Agent` role withheld
+ * `case:delete`, `evidence:delete` and `plan:delete`, and the roles spec's argument for putting
+ * the ceiling in the *catalogue* was that a ceiling enforced at the tool layer controls what an
+ * agent reaches **for**, not what the credential can **do**. `V52` (§210) made `Agent` equal to
+ * Test Engineer and moved the gate here, over that objection — see roles spec §A6a, where it is
+ * struck through as superseded rather than as wrong.
+ *
+ * So this is the whole of the remaining gate, and it is honest about its reach:
+ *
+ *   - it binds the **MCP transport only**. The `tcms_` bearer authenticates against `/api/*`, so
+ *     the same credential driven by `curl`, the CLI, or any other MCP client deletes with nothing
+ *     to ask. What still bounds it is the token intersection — an agent never exceeds the person
+ *     who issued it — plus soft delete, the audit trail, the required `expiresAt` and Revoke.
+ *   - it **refuses rather than proceeds** when the client declares no `elicitation` capability.
+ *     That is the decision worth defending: a consent gate that silently degrades to "no prompt
+ *     available, carry on" is not a gate, and it would fail open on exactly the minimal client an
+ *     unattended agent is most likely to be. A host that wants agent deletes implements
+ *     elicitation, which is a one-time cost paid by the integrator rather than a risk carried by
+ *     the client's data.
+ *   - a decline is a **result, not an error**. The model asked, a person said no, and that is a
+ *     normal outcome of a well-behaved run — `isError` here would push the model to retry.
+ *
+ * The gate keys on {@link ToolArm.kind} rather than on a list of tool names, so a delete arm added
+ * to any tool later is covered by construction. Today the surface has exactly one:
+ * `tcms_write_doc_page`'s `unlink`. **That is not a measure of the change's blast radius** — the
+ * five delete keys `V52` gave the credential have no MCP tools at all yet, so they are reachable
+ * over REST and the CLI and not through here. Adding one is what puts it behind this prompt.
+ */
+async function withheldConsent(
+  server: Server,
+  tool: ToolDefinition,
+  arm: ToolArm,
+  input: Record<string, unknown>,
+): Promise<CallToolResult | undefined> {
+  const what = `${tool.title.charAt(0).toLowerCase()}${tool.title.slice(1)} (${arm.action})`;
+  const target = identifying(input);
+
+  if (!server.getClientCapabilities()?.elicitation) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Refused: this client cannot ask for confirmation, and deletions on this server `
+          + `require it. Nothing was ${arm.action === 'unlink' ? 'unlinked' : 'deleted'}.\n\n`
+          + `Asked for: ${what}${target ? ` — ${target}` : ''}.\n\n`
+          + `A host that supports MCP elicitation will prompt the user and proceed on approval. `
+          + `Everything else this credential can do is unaffected.`,
+      }],
+      isError: true,
+    };
+  }
+
+  const answer = await server.elicitInput({
+    message: `Confirm deletion — ${what}${target ? `\n\n${target}` : ''}`,
+    requestedSchema: {
+      type: 'object',
+      properties: {
+        confirm: {
+          type: 'boolean',
+          title: 'Delete this?',
+          description: 'This removes the item. It is a soft delete and is recorded in the audit trail.',
+        },
+      },
+      required: ['confirm'],
+    },
+  });
+
+  if (answer.action === 'accept' && answer.content?.['confirm'] === true) return undefined;
+
+  return {
+    content: [{
+      type: 'text',
+      text: `Not confirmed — nothing was ${arm.action === 'unlink' ? 'unlinked' : 'deleted'}. `
+        + `Do not retry this without being asked to.`,
+    }],
+  };
+}
+
+/**
+ * The fields that tell a person *which* row is about to go.
+ *
+ * A confirmation naming only the operation is one a user cannot answer, so the prompt echoes the
+ * identifying arguments back. Restricted to a known list rather than dumping the whole input:
+ * these are display keys and ids, and a delete arm's payload can otherwise carry prose.
+ */
+function identifying(input: Record<string, unknown>): string {
+  return ['projectKey', 'key', 'caseKey', 'planKey', 'suiteKey', 'runKey', 'slug', 'id', 'targetId']
+    .filter((field) => typeof input[field] === 'string' || typeof input[field] === 'number')
+    .map((field) => `${field}: ${String(input[field])}`)
+    .join(', ');
 }
 
 /**

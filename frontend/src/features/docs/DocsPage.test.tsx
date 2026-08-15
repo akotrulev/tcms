@@ -14,9 +14,11 @@ import { DocsPage } from './DocsPage'
  *
  * `AttachmentList.test.tsx` proves the panel gates on whatever key it is handed. This proves the
  * page hands it `doc:edit`, and the wrong answer is the plausible one: this screen already renders
- * a `doc:publish` gate three buttons away, and a Test Engineer holds the first and **not** the
- * second (`PageActions`' own header says so). A panel that copied the neighbouring gate would
- * compile, render, and refuse a diagram to exactly the role that writes the specification.
+ * a `doc:publish` gate three buttons away. ~~and a Test Engineer holds the first and **not** the
+ * second~~ → **`V52`: a Test Engineer holds both**, so the two keys no longer differ *by role* —
+ * but they are still separate keys, and this fixture holds one and not the other, which is what
+ * the assertion needs. A panel that copied the neighbouring gate would compile, render, and refuse
+ * a diagram to a caller who may write the specification.
  *
  * So the fixture is a caller with `doc:edit` and no `doc:publish`: Publish is disabled and Attach
  * is not, in one render. Only the right key produces both.

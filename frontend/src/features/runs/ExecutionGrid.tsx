@@ -29,10 +29,11 @@ import { orderedQueue } from './queueOrder';
  * is deliberate.
  *
  * **2. The row asks the permission its own state implies.** A first result needs `result:submit`;
- * changing one that is already recorded needs `result:amend`, which is lead-only. That differs
- * *per row* — half a run may be recorded and half not — so the gate is per row rather than around
- * the table. Gating the table on `result:submit` would give a Test Engineer a screen of enabled
- * buttons, of which every one over an already-recorded row 403s.
+ * changing one that is already recorded needs `result:amend` — a separate key (~~lead-only~~ → held
+ * by Test Engineer since `V52`, and still its own key, so a caller may hold one without the other).
+ * That differs *per row* — half a run may be recorded and half not — so the gate is per row rather
+ * than around the table. Gating the table on `result:submit` would give a caller holding only that
+ * key a screen of enabled buttons, of which every one over an already-recorded row 403s.
  *
  * The server also demands `run:execute` on this endpoint since 2026-08-07 (plan §8 #53), and this
  * gate deliberately **does not** ask for it. That is not an oversight and it is not §31's

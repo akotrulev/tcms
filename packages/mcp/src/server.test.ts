@@ -9,11 +9,12 @@
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { describe, expect, it } from 'vitest';
 
 import { TcmsApiError, TcmsTimeoutError } from '@tcms/client';
 
-import { caseDetail, casePage, caseSummary } from '../../client/src/test/fixtures.js';
+import { caseDetail, casePage, caseSummary, docPage, docPageSummary } from '../../client/src/test/fixtures.js';
 import { failed } from './result.js';
 import { buildServer } from './server.js';
 import { AGENT_KEYS, agentRoutes, api, permissions, sessionWith, withApi, type Api } from './test/harness.js';
@@ -72,7 +73,9 @@ describe('tools/list', () => {
     const { tools } = await client.listTools();
 
     expect(tools.map((tool) => tool.name)).toContain('tcms_write_case');
-    // Not everything: the Agent grant holds no `run:close`, so nothing gated on it exists at all.
+    // ~~Not everything: the Agent grant holds no `run:close`.~~ → §210: it does. The grant is Test
+    // Engineer entire now, so every tool on this surface is listed for it and the interesting
+    // filtering case is the reduced credential in the next test.
     expect(tools.every((tool) => tool.name.startsWith('tcms_'))).toBe(true);
   });
 
@@ -99,6 +102,129 @@ describe('tools/list', () => {
 
     const raised = tools.filter((tool) => tool._meta?.['anthropic/maxResultSizeChars']);
     expect(raised.map((tool) => tool.name).sort()).toEqual(['tcms_open_case', 'tcms_open_doc_page']);
+  });
+
+  it('marks the tools that remove something, because that is what makes a host prompt', async () => {
+    const client = await connect(api(agentRoutes()));
+    const { tools } = await client.listTools();
+
+    /*
+      The declaration half of the gate §210 moved here from the catalogue. Asserted as an exact set
+      rather than "the doc-page tool is destructive", because the failure that matters is a delete
+      arm added to some other tool and NOT annotated — which is invisible from the tool it was added
+      to and shows up here as a name this list does not have.
+
+      One name today, and that is not a measure of the change: the five delete keys V52 gave the
+      credential have no MCP tools yet, so they are reachable over REST and the CLI and not through
+      this surface at all.
+    */
+    expect(tools.filter((tool) => tool.annotations?.destructiveHint).map((tool) => tool.name))
+      .toEqual(['tcms_write_doc_page']);
+
+    const search = tools.find((tool) => tool.name === 'tcms_search_cases');
+    expect(search?.annotations?.readOnlyHint).toBe(true);
+    expect(search?.annotations?.destructiveHint).toBe(false);
+
+    // A create arm allocates, so re-sending is not a no-op — which is why those arms carry
+    // `Idempotency-Key`. The annotation must agree with the header the arm sends.
+    expect(tools.find((tool) => tool.name === 'tcms_write_case')?.annotations?.idempotentHint)
+      .toBe(false);
+  });
+});
+
+describe('consent before a delete — §210', () => {
+  /** A host that can be asked, answering however the test says. */
+  async function hostThatAnswers(stub: Api, answer: 'accept' | 'decline'): Promise<Client> {
+    const session = await sessionWith(stub);
+    const server = buildServer(session);
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+
+    const client = new Client(
+      { name: 'test-host', version: '0.0.0' },
+      { capabilities: { elicitation: {} } },
+    );
+    client.setRequestHandler(ElicitRequestSchema, () =>
+      answer === 'accept'
+        ? { action: 'accept' as const, content: { confirm: true } }
+        : { action: 'decline' as const });
+
+    await Promise.all([
+      server.connect(serverSide as Parameters<typeof server.connect>[0]),
+      client.connect(clientSide as Parameters<typeof client.connect>[0]),
+    ]);
+    return client;
+  }
+
+  const UNLINK = {
+    name: 'tcms_write_doc_page',
+    arguments: { action: 'unlink', page: 'DOC-1', link: 'l-1' },
+  };
+
+  const ROUTES = agentRoutes({
+    'GET /doc-pages': { status: 200, body: [docPageSummary({ key: 'DOC-1', title: 'Spec' })] },
+    'DELETE /links/l-1': { status: 204 },
+  });
+
+  it('deletes once a person has said yes', async () => {
+    const stub = api(ROUTES);
+    const client = await hostThatAnswers(stub, 'accept');
+
+    const result = await withApi(stub, () => client.callTool(UNLINK));
+
+    expect(result.isError).toBeFalsy();
+    expect(stub.sent.some((request) => request.method === 'DELETE')).toBe(true);
+  });
+
+  it('sends nothing when the person declines, and does not report it as an error', async () => {
+    const stub = api(ROUTES);
+    const client = await hostThatAnswers(stub, 'decline');
+
+    const result = await withApi(stub, () => client.callTool(UNLINK));
+
+    /*
+      Two assertions and the second is the one with teeth. A decline is a NORMAL outcome — the model
+      asked, a person said no — so flagging `isError` would read to the model as a fault to work
+      around, and the obvious way around a failed delete is to try it again.
+    */
+    expect(stub.sent.some((request) => request.method === 'DELETE')).toBe(false);
+    expect(result.isError).toBeFalsy();
+    expect((result.content as { text: string }[])[0]?.text).toContain('Not confirmed');
+  });
+
+  it('refuses outright when the client cannot ask — it does not fall through to the delete', async () => {
+    const stub = api(ROUTES);
+    // `connect` builds a client declaring no elicitation capability, which is the default.
+    const client = await connect(stub);
+
+    const result = await withApi(stub, () => client.callTool(UNLINK));
+
+    /*
+      THE decision in this gate, and the one to read before relaxing it. A consent gate that
+      degrades to "no prompt available, carry on" is not a gate — and it would fail open on exactly
+      the minimal client an unattended agent is most likely to be running. Refusing costs an
+      integrator one capability declaration; falling through costs the client their data.
+
+      This is also the honest limit of §210's design. The gate binds the MCP transport and nothing
+      else: the same `tcms_` bearer deletes over `curl` with nobody to ask. See roles spec §A6a,
+      where the objection is recorded as superseded rather than as wrong.
+    */
+    expect(stub.sent.some((request) => request.method === 'DELETE')).toBe(false);
+    expect(result.isError).toBe(true);
+    expect((result.content as { text: string }[])[0]?.text).toContain('cannot ask for confirmation');
+  });
+
+  it('asks for nothing on a write that is not a delete', async () => {
+    const stub = api(agentRoutes({
+      'POST /doc-pages': { status: 201, body: docPage({ key: 'DOC-2', title: 'New' }) },
+    }));
+    // No elicitation handler is installed, so a prompt raised here would fail the call rather than
+    // hang — which is the point: the gate must key on the ARM, not on the tool.
+    const client = await connect(stub);
+
+    const result = await withApi(stub, () =>
+      client.callTool({ name: 'tcms_write_doc_page', arguments: { action: 'create', title: 'New' } }));
+
+    expect(result.isError).toBeFalsy();
   });
 });
 

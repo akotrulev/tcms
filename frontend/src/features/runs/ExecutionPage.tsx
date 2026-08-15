@@ -687,11 +687,11 @@ function ExecutionForm({
                 return (
                   // All four verdicts ride ONE permission, but WHICH one depends on the row: a
                   // first result needs `result:submit`, and changing one that is already there
-                  // needs `result:amend`, which is lead-only (roles spec §A4 — amending is
-                  // unmaking somebody else's work). The server decides the same way, so the
-                  // disabled state and the refusal cannot disagree; gating both on
-                  // `result:submit` would show a Test Engineer four enabled buttons that every
-                  // one of them 403s.
+                  // needs `result:amend` — a separate key, held by Test Engineer since V52 and
+                  // still separately grantable. The server decides the same way, so the disabled
+                  // state and the refusal cannot disagree; gating both on `result:submit` would
+                  // show a caller holding only that key four enabled buttons, every one of which
+                  // 403s.
                   //
                   // Gated per button rather than around the group so each keeps its own
                   // `data-testid` and its own tooltip anchor.

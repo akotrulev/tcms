@@ -55,9 +55,11 @@ import { CreateSuiteDialog, DeleteSuiteDialog, RenameSuiteDialog } from './Suite
  * this list must not re-collapse. They used to render for everyone and be refused by the server,
  * because `CurrentUser` carries no permissions; `GET /me/permissions` answers that question and
  * `useCan` reads it. The menu items are gated individually rather than the kebab as a whole:
- * a Test Engineer holds `suite:manage` and not `suite:delete`, so the menu they get is live items
- * beside one greyed one — which is the truth, where a disabled kebab would claim they may not
- * touch suites at all.
+ * ~~a Test Engineer holds `suite:manage` and not `suite:delete`, so the menu they get is live items
+ * beside one greyed one~~ → **`V52`, 2026-08-15: a Test Engineer holds both.** The per-item gating
+ * stays, and the reason it stays is the general one rather than that example — a Viewer still sees
+ * live items beside greyed ones, and a disabled kebab would claim they may not touch suites at all.
+ * The keys remain split so a company that wants them separated has them.
  */
 
 /**

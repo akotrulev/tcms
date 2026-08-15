@@ -378,10 +378,12 @@ function PageView({
  * Edit, the publication transitions, and Delete.
  *
  * **Two permissions, so two gates with different sentences.** `doc:edit` opens the editor and the
- * delete; `doc:publish` moves the publication state, and Test Engineer holds the first and not the
- * second — so on one page a user can legitimately see Edit enabled beside Publish disabled. That
- * is the intended shape, and `PermissionGate` renders each with its own reason rather than one
- * blanket "you cannot do that".
+ * delete; `doc:publish` moves the publication state. ~~Test Engineer holds the first and not the
+ * second~~ → **`V52`, 2026-08-15: Test Engineer holds both.** The two gates stay, because the keys
+ * are still separate and any caller may hold one without the other — a Viewer holds neither, and a
+ * company that wants publishing separated from writing has the key to do it. So Edit enabled beside
+ * Publish disabled is still a shape this page must render, and `PermissionGate` gives each its own
+ * reason rather than one blanket "you cannot do that".
  *
  * **Transitions are labeled actions, not a status dropdown.** `ui-rules` is explicit that a
  * `<select>` bypasses the transition's side effects and its gate; here it would also let one

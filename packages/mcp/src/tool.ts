@@ -104,6 +104,50 @@ export interface ToolDefinition {
   run: (session: Session, input: Record<string, unknown>) => Promise<unknown>;
 }
 
+/**
+ * Whether any arm of this tool removes something.
+ *
+ * The single question the consent gate is keyed on, asked of the **declaration** rather than of a
+ * name or a list, so a delete arm added to any tool later is covered without anybody remembering.
+ * That is the whole reason `ToolArm.kind` was already there.
+ */
+export function deletes(tool: ToolDefinition): boolean {
+  return tool.arms?.some((arm) => arm.kind === 'delete') ?? false;
+}
+
+/**
+ * The MCP annotations a host reads to decide whether to ask the user first.
+ *
+ * ## This is the ceiling now, and it is a weaker instrument than the one it replaced
+ *
+ * Until `V52` (roles spec §A6a, handoff §210) an agent credential could not delete, because the
+ * `Agent` role did not hold the keys. §210 made `Agent` equal to Test Engineer and moved the gate
+ * here: `destructiveHint` is what makes a host prompt, and {@link consentedTo} in `server.ts` is
+ * what makes the prompt mandatory rather than advisory on clients that can be asked.
+ *
+ * **Know what an annotation is worth.** The spec's own words are that these are *hints*, and that
+ * a client must not treat them as trustworthy from an untrusted server — so a host is free to
+ * ignore `destructiveHint` entirely. That is the reason the runtime gate exists beside it and
+ * refuses when there is no channel to ask on. And neither reaches raw REST: the `tcms_` bearer
+ * authenticates against `/api/*` with `curl`, so nothing here is a boundary on the *credential*.
+ * See §A6a for the objection as it was recorded.
+ *
+ * `openWorldHint` is false throughout: every tool acts on one TCMS instance, which is a closed
+ * domain in the sense the field means.
+ */
+export function annotationsFor(tool: ToolDefinition): Record<string, boolean> {
+  const write = tool.arms !== undefined && tool.arms.length > 0;
+  return {
+    readOnlyHint: !write,
+    destructiveHint: deletes(tool),
+    // A create arm allocates, so re-sending is not a no-op — which is exactly why those arms carry
+    // `Idempotency-Key` (`WriteKind`). Everything else on this surface names an absolute target
+    // state or removes a row, both of which are already no-ops on repeat server-side.
+    idempotentHint: write && !tool.arms!.some((arm) => arm.kind === 'create'),
+    openWorldHint: false,
+  };
+}
+
 /** True when this session's permissions satisfy the tool's listing rule. */
 export function isListed(tool: ToolDefinition, held: ReadonlySet<string>): boolean {
   const { mode, permissions } = tool.gate;
