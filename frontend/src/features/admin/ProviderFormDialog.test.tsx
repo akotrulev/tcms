@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type { IdentityProvider } from '../../api/types'
-import { anIdentityProvider } from '../../test/fixtures'
+import { aDirectoryProvider, anIdentityProvider } from '../../test/fixtures'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TestProviders } from '../../test/TestProviders'
 import { ProviderFormDialog } from './ProviderFormDialog'
@@ -85,5 +85,98 @@ describe('ProviderFormDialog', () => {
 
     expect(screen.getByText(/signing keys/i)).toBeInTheDocument()
     expect(post).not.toHaveBeenCalled()
+  })
+
+  // ===================================================================
+  // The directory kind — §223. The Kind select stops being a one-option
+  // control, and everything below it follows the choice.
+  // ===================================================================
+
+  async function pickKind(user: ReturnType<typeof userEvent.setup>, name: RegExp) {
+    await user.click(screen.getByTestId('Admin.Sso.Kind'))
+    await user.click(await screen.findByRole('option', { name }))
+  }
+
+  async function fillDirectoryForm(
+    user: ReturnType<typeof userEvent.setup>,
+    { issuerUri, startTls }: { issuerUri: string; startTls: boolean },
+  ) {
+    await user.type(screen.getByTestId('Admin.Sso.Key'), 'acme-directory')
+    await user.type(screen.getByTestId('Admin.Sso.DisplayName'), 'Acme Directory')
+    await user.type(screen.getByTestId('Admin.Sso.IssuerUri'), issuerUri)
+    await user.type(screen.getByTestId('Admin.Sso.UserSearchBase'), 'ou=people,dc=acme,dc=test')
+    if (startTls) await user.click(screen.getByTestId('Admin.Sso.StartTls'))
+  }
+
+  it('offers both kinds when registering and neither when editing', async () => {
+    const user = userEvent.setup()
+    renderDialog(null)
+
+    expect(screen.getByTestId('Admin.Sso.Kind')).not.toHaveAttribute('aria-disabled', 'true')
+    await user.click(screen.getByTestId('Admin.Sso.Kind'))
+    expect(await screen.findByRole('option', { name: /directory/i })).toBeInTheDocument()
+  })
+
+  it('locks the kind on an edit, because the server ignores it there', () => {
+    renderDialog(anIdentityProvider())
+
+    expect(screen.getByTestId('Admin.Sso.Kind')).toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('asks for a search base and a filter once LDAP is chosen, and for no client id', async () => {
+    const user = userEvent.setup()
+    renderDialog(null)
+    await pickKind(user, /directory/i)
+
+    expect(screen.getByTestId('Admin.Sso.UserSearchBase')).toBeInTheDocument()
+    expect(screen.getByTestId('Admin.Sso.UserSearchFilter')).toBeInTheDocument()
+    expect(screen.queryByTestId('Admin.Sso.ClientId')).not.toBeInTheDocument()
+  })
+
+  it('refuses a plain ldap:// URL before it reaches the server', async () => {
+    const user = userEvent.setup()
+    const post = vi.spyOn(api, 'post').mockResolvedValue(aDirectoryProvider())
+
+    renderDialog(null)
+    await pickKind(user, /directory/i)
+    await fillDirectoryForm(user, { issuerUri: 'ldap://dc.acme.test:389', startTls: false })
+    await user.click(screen.getByTestId('Admin.Sso.Save'))
+
+    expect(screen.getByText(/directory passwords on the wire/i)).toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('accepts ldap:// once StartTLS is on', async () => {
+    const user = userEvent.setup()
+    const post = vi.spyOn(api, 'post').mockResolvedValue(aDirectoryProvider())
+
+    renderDialog(null)
+    await pickKind(user, /directory/i)
+    await fillDirectoryForm(user, { issuerUri: 'ldap://dc.acme.test:389', startTls: true })
+    await user.click(screen.getByTestId('Admin.Sso.Save'))
+
+    const body = post.mock.calls[0][1] as Record<string, unknown>
+    expect(body.kind).toBe('LDAP')
+    expect(body.startTls).toBe(true)
+    // ck_identity_provider_shape requires these null on a directory row.
+    expect(body.clientId).toBeNull()
+    expect(body.clientSecret).toBeNull()
+  })
+
+  it('sends a null bind password when the field is left blank on an edit, never an empty string', async () => {
+    const user = userEvent.setup()
+    const put = vi.spyOn(api, 'put').mockResolvedValue(aDirectoryProvider())
+
+    renderDialog(aDirectoryProvider({ bindPasswordSet: true }))
+    await user.click(screen.getByTestId('Admin.Sso.Save'))
+
+    const body = put.mock.calls[0][1] as Record<string, unknown>
+    expect(body.bindPassword).toBeNull()
+  })
+
+  it('says the bind password is kept rather than asking for it again', () => {
+    renderDialog(aDirectoryProvider({ bindPasswordSet: true }))
+
+    expect(screen.getByText(/leave blank to keep the stored password/i)).toBeInTheDocument()
   })
 })

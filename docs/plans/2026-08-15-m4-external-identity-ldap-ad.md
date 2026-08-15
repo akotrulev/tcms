@@ -2460,7 +2460,7 @@ git commit -m "§NNN phase 7 — the four seams and the four mutations nobody ha
 - Modify: `frontend/src/features/admin/ProviderFormDialog.tsx`
 - Modify: `frontend/src/features/admin/ProviderFormDialog.test.tsx`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```tsx
   it('offers both kinds when registering and neither when editing', async () => {
@@ -2510,7 +2510,7 @@ git commit -m "§NNN phase 7 — the four seams and the four mutations nobody ha
   });
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 ```bash
 cd frontend && npm run test:run -- ProviderFormDialog
@@ -2518,7 +2518,7 @@ cd frontend && npm run test:run -- ProviderFormDialog
 
 Expected: FAIL — the Kind select is disabled and there are no directory fields.
 
-- [ ] **Step 3: Make `kind` state, and switch the form on it**
+- [x] **Step 3: Make `kind` state, and switch the form on it**
 
 ```tsx
   const [kind, setKind] = useState<IdentityProviderKind>(provider?.kind ?? 'OIDC');
@@ -2546,7 +2546,7 @@ almost always has — and a form pre-filled with a working AD configuration is t
 an administrator who succeeds and one who reads a specification. They are editable, which is what
 makes OpenLDAP (`entryUUID`, `(mail={0})`) a two-field change rather than an unsupported case.
 
-- [ ] **Step 4: The kind-aware local refusal**
+- [x] **Step 4: The kind-aware local refusal**
 
 ```tsx
   const localRefusal = (): Partial<Record<FieldName, string>> => {
@@ -2586,7 +2586,7 @@ makes OpenLDAP (`entryUUID`, `(mail={0})`) a two-field change rather than an uns
   };
 ```
 
-- [ ] **Step 5: One payload, both kinds**
+- [x] **Step 5: One payload, both kinds**
 
 ```tsx
     const trimmedSecret = clientSecret.trim();
@@ -2620,7 +2620,7 @@ makes OpenLDAP (`entryUUID`, `(mail={0})`) a two-field change rather than an uns
     };
 ```
 
-- [ ] **Step 6: The controls**
+- [x] **Step 6: The controls**
 
 The `Kind` select becomes `disabled={editing}` — **not** unconditionally disabled — with the header
 comment updated to say that a kind is set once, which is why it is disabled on an edit and live on a
@@ -2641,7 +2641,7 @@ carries the same "leave blank to keep" sentence, keyed on `provider?.bindPasswor
 Add `FieldName` members and `isFieldName` arms for the six new server-keyed fields: `bindDn`,
 `bindPassword`, `userSearchBase`, `userSearchFilter`, `userIdAttribute`, `emailAttribute`.
 
-- [ ] **Step 7: Run the tests and the gates**
+- [x] **Step 7: Run the tests and the gates**
 
 ```bash
 cd frontend && npm run test:run -- ProviderFormDialog && npm run build && npm run lint
@@ -2649,7 +2649,7 @@ cd frontend && npm run test:run -- ProviderFormDialog && npm run build && npm ru
 
 Expected: PASS, 0 warnings.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add frontend/src/features/admin/
