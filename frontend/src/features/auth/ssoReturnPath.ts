@@ -34,8 +34,16 @@ export function consumeSsoReturnPath(): string {
   try {
     const stored = sessionStorage.getItem(KEY);
     sessionStorage.removeItem(KEY);
-    return stored != null && stored.startsWith('/') ? stored : '/';
+    return stored != null && isInternalPath(stored) ? stored : '/';
   } catch {
     return '/';
   }
+}
+
+/**
+ * One leading slash and only one: `//evil.test` is a protocol-relative URL, not a path, and
+ * browsers read `/\` the same way — either would turn the stash into an open redirect after all.
+ */
+function isInternalPath(value: string): boolean {
+  return value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\');
 }
