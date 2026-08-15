@@ -1036,8 +1036,14 @@ Gets its own file. The shape, so plan 1 does not accidentally block it:
 
 ## Plan 3 (sketch) — LDAP / Active Directory
 
-- **`ldap://` is refused unless an explicit `allowInsecure` flag is set** for lab use. A plain bind
-  puts the user's directory password on the wire and there is no third party absorbing the risk.
+- ~~**`ldap://` is refused unless an explicit `allowInsecure` flag is set** for lab use.~~ →
+  **superseded 2026-08-15 by `docs/plans/2026-08-15-m4-external-identity-ldap-ad.md` D2: there is no
+  such flag.** A URL must be `ldaps://`, or `ldap://` with StartTLS. The exposure a plain bind
+  creates is the *user's own directory password* — the credential to the customer's AD, and very
+  often to everything else they own — which is a strictly larger blast radius than §219's http issuer
+  question, where what was at risk was the signing-key URL. The lab needs no exception because
+  UnboundID's in-memory server serves LDAPS, so the tests drive the encrypted path rather than one
+  production never takes.
 - **Key on `objectGUID` (AD) / `entryUUID` (OpenLDAP), never the DN.** A DN encodes tree position,
   so moving someone between OUs orphans the account and its authorship. Store the DN as a mutable
   display/re-bind attribute.
@@ -1077,8 +1083,10 @@ compose Keycloak keeps being registered by SQL. A development-only escape hatch 
 rejected: the gate protects the URL the `jwks_uri` is read from, so an instance that can be talked
 into an http issuer is an instance where a machine on the path nominates the signing keys — and a
 property that is only safe when a profile is set is one restart away from being set in production.
-Plan 3's `allowInsecure` sketch is for an LDAP *bind*, which is a different exposure with a different
-blast radius, and it is not a precedent for this. The cost is one documented `INSERT` for the one
+~~Plan 3's `allowInsecure` sketch is for an LDAP *bind*, which is a different exposure with a different
+blast radius, and it is not a precedent for this.~~ → **the deferral closed 2026-08-15 the stricter
+way**: argued on its own ground, the bind exposure is *larger*, so plan 3 ships no such flag at all
+(D2). The reasoning above is unaffected — it was never resting on the sketch. The cost is one documented `INSERT` for the one
 issuer that is deliberately not production, and `deploy/keycloak/README.md` carries it.
 
 **Placeholder scan.** No TBD/TODO. Task 5 steps 5 and Task 7 step 2 describe implementations
