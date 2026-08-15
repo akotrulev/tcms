@@ -488,6 +488,13 @@ convenience copy, also in `README.md`. If they disagree the spec wins and the co
 55 permissions, all seeded by `V3__seed_permissions_and_roles.sql`; no migration has added one since —
 though `V51` **moved three grants between roles**, which is a different thing and the one this table
 gets wrong most easily.
+**Since §214 the spec's §A3 tables and the seeded rows are compared cell by cell, seven roles,
+both ways** — `SeedDataTest.theSeededMatrixIsTheSpecsMatrix`, with `MATRIX_DIVERGENCE_BY_DECISION`
+for the three that diverge on purpose (`company:read` seeded per role, where §A3's COMPANY table
+has only `Every member`). Before it that arrow was four *property* assertions and three of them
+named the spec in their failure message without opening it. **This copy and README's are still
+copies and nothing compares either** — the parser that would is in `SeedDataTest`, so it is
+cheap; it has not been done.
 
 Roles are ordered least-permissioned first; rows run broadest-held to narrowest. `✓` granted ·
 `—` not granted · anything else is a qualifier that narrows the grant.

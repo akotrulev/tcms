@@ -2,7 +2,7 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-15 (**§212** — **six `frontend/src` files changed and NOT ONE of them
+**Last verified:** 2026-08-15 (**§214** — **no `frontend/` byte; recorded because the document under this stack's permission copy moved.** `SeedDataTest` compares roles spec §A3 to the seeded rows now, every cell, both directions — until §214 it asserted properties and 385 cells were compared to nothing, while `lib/permissions.ts`, `useCan` and every `PermissionGate` rest on that catalogue. `permission.area` is still held to `lib/permissions.ts` by `areasMatchTheSpa`, unchanged; **§212** — **six `frontend/src` files changed and NOT ONE of them
 changed behaviour**: four comments and `schema.d.ts`, all of them the same defect. `V52` (§210) moved
 seven permissions down a tier and the prose that argued for the old line did not move with them, so
 `api/queries/runs.ts` said *"`run:close`, which a Test Engineer does not hold"*,
@@ -83,11 +83,11 @@ surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the fl
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `0e774e4` (§213 phase 1; §213's docs commit lands immediately after this line.
+**Baseline commit:** `a44fc41` (§214 phase 1; §214's docs commit lands immediately after this line. **§214 touched no `frontend/` byte at all** — one backend test and one `packages/` comment, so this suite was not run and is still **1349 across 100**. What concerns this stack indirectly: the roles spec's §A3 tables are now compared to the seeded rows cell by cell, which is the document `lib/permissions.ts`'s catalogue and every `useCan` claim ultimately rests on. Before it ~~`0e774e4` (§213 phase 1; §213's docs commit lands immediately after this line.
 **§213 touched no `frontend/` byte at all** — four test-lane files in `packages/`, so this suite was
 not run and is still **1349 across 100**. Note that the two `packages/` rules which *scan* this tree
 — `citedFiles` and `tierClaims` — ran green, so a stale citation or tier claim here would still have
-reddened, in the packages job. Before it ~~`8d47a0f`, §212 phase 2~~, where the suite was also
+reddened, in the packages job.~~ Before it ~~`8d47a0f`, §212 phase 2~~, where the suite was also
 **1349 across 100** — §212 added no frontend test and changed no
 frontend behaviour, only comments and `schema.d.ts` prose. Before it ~~`5198d1f`, §211 phase 3~~,
 also 1349. Before it ~~`be0ac69`, §209 phase 2~~, where the suite
