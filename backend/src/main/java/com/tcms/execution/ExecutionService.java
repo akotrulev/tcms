@@ -34,11 +34,15 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>On top of that: recording a verdict where none exists needs {@code result:submit}, which a Test
  * Engineer and even the Automation Service hold. Changing a verdict that is already there needs
- * {@code result:amend}, which is <strong>Lead-only</strong> — roles spec §A4 lists it beside
- * {@code suite:delete} under "creative vs destructive": a Test Engineer is never blocked from
- * producing, only from unmaking somebody else's work, and overwriting a recorded result is unmaking
- * it. Gate both on {@code result:submit} and a leaked CI token can rewrite a human's verdict, which
- * is precisely the smallest-role argument §A6 makes about that token.
+ * {@code result:amend}, a <strong>separate key</strong> — <del>which is Lead-only: roles spec §A4
+ * lists it beside {@code suite:delete} under "creative vs destructive", and a Test Engineer is never
+ * blocked from producing, only from unmaking somebody else's work</del> → <strong>superseded by
+ * {@code V52} (§210): a Test Engineer holds it.</strong> The creative-versus-destructive line is
+ * retired, not moved. What the split still buys is the whole reason this class reads the row before
+ * it knows its permission, and it is unchanged: {@code Automation Service} holds
+ * {@code result:submit} and not {@code result:amend}, so gating both on the first lets a leaked CI
+ * token rewrite a human's verdict — precisely the smallest-role argument §A6 makes about that
+ * token. The key that separated two roles now separates a person from a credential.
  *
  * <p><strong>The three 403s are worded differently</strong>, for §32's reason: telling a tester who
  * records results every day that they may not record results sends them to ask an administrator for

@@ -61,11 +61,13 @@ export function ArtifactsPage() {
             </Select>
             </Box>
             {/*
-              Disabled-with-a-reason rather than hidden (§31), and the gate is honest only about
+              Disabled-with-a-reason rather than hidden (§31). ~~The gate is honest only about
               the half it can see: `artifact:edit` is keys-only on the wire, so a Test Engineer —
               who holds it for plan scope alone — gets an ENABLED button here and a refusal on the
-              scope field if they choose the project. The dialog is written for that, and the
-              server answers that one 403 with a body so the message lands on the control.
+              scope field if they choose the project.~~ → **`V52` (§210) de-qualified the key**, so
+              the key IS the whole answer now and the button is honest on its own. The dialog still
+              renders the scope-shaped 403 — see its header for why a form that can no longer
+              produce a refusal must still handle one.
             */}
             <PermissionGate projectId={projectId} permission="artifact:edit">
               {({ allowed }) => (

@@ -52,10 +52,13 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li><strong>A removal that takes links with it.</strong> The 409 has to happen <em>before</em>
  *       anything is written, so the test asserts the refusal <em>and</em> that the other blocks were
  *       not rewritten.</li>
- *   <li><strong>The two permissions collapsed into one.</strong> {@code doc:edit} is held by Test
- *       Engineer and {@code doc:publish} is not. Gate publishing on {@code doc:edit} and only
- *       {@link Gates#engineerCannotPublish} goes red — every other assertion about publishing still
- *       passes, because a lead can still do it.</li>
+ *   <li><strong>The two permissions collapsed into one.</strong> <del>{@code doc:edit} is held by
+ *       Test Engineer and {@code doc:publish} is not, so gating publishing on {@code doc:edit}
+ *       reddens only {@code engineerCannotPublish}.</del> → <strong>{@code V52} (§210): a Test
+ *       Engineer holds both</strong>, and that assertion is now {@link Gates#engineerCanPublish},
+ *       which is the same row read the other way. No seeded role separates the two keys any more,
+ *       so what this class can still catch is the <em>refusal</em> — a caller holding neither must
+ *       be told which one it wanted.</li>
  *   <li><strong>A path or slug derived from the title.</strong> Both are set at creation from the
  *       key sequence and must survive a retitle; a title-derived path breaks subtree matching on the
  *       first rename, and does it quietly.</li>

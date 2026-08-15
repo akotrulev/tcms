@@ -408,9 +408,10 @@ function PageAttachments({ page, projectId }: { page: DocPage; projectId: string
   return (
     <AttachmentsPanel
       projectId={projectId}
-      // `doc:edit` — the key that already rewrites every block on this page. Not `doc:publish`,
-      // which Test Engineer does not hold: an image is part of what the page says, and publication
-      // is a separate act.
+      // `doc:edit` — the key that already rewrites every block on this page. Not `doc:publish`:
+      // an image is part of what the page says, and publication is a separate act. (~~which Test
+      // Engineer does not hold~~ → both are a contributor's since `V52`, so the choice is about
+      // which act this is, not about who may perform it — see the header above.)
       permission="doc:edit"
       attachments={page.attachments}
       onAttach={(file) => attach.mutate(file)}

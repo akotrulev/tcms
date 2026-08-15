@@ -528,10 +528,12 @@ function ArtefactsTab({ projectId, planId }: { projectId: string; planId: string
       dense
       actions={
         /*
-          Enabled on the key alone, which is honest here in a way it is not on the Artifacts page:
-          `artifact:edit` is qualified by scope, and this tab can only ever register at PLAN scope
-          — the one scope every holder of the key has. The dialog still renders the scope-qualified
-          403 if a grant is revoked between opening it and pressing Register.
+          Enabled on the key alone. ~~Which is honest here in a way it is not on the Artifacts
+          page: `artifact:edit` is qualified by scope, and this tab can only ever register at PLAN
+          scope — the one scope every holder of the key has.~~ → **`V52` (§210) de-qualified the
+          key**, so both pages are now honest for the same reason and this one is no longer the
+          special case. The dialog still renders a 403 if a grant is revoked between opening it and
+          pressing Register.
         */
         <PermissionGate projectId={projectId} permission="artifact:edit">
           {({ allowed }) => (

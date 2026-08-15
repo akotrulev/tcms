@@ -59,9 +59,13 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       {@code repository} renames one. So the cases here are authored through the <em>real</em>
  *       {@code POST /cases}, not by hand-written JSON — the two modules are checked against each
  *       other rather than against a fixture's idea of the format.</li>
- *   <li><strong>Recording and amending gated on one permission.</strong> {@code result:amend} is
- *       Lead-only (roles spec §A4). Collapse it into {@code result:submit} and a Test Engineer — or
- *       a leaked CI token — can overwrite somebody else's verdict. One test carries it.</li>
+ *   <li><strong>Recording and amending gated on one permission.</strong> <del>{@code result:amend}
+ *       is Lead-only (roles spec §A4), so collapsing it into {@code result:submit} lets a Test
+ *       Engineer overwrite somebody else's verdict.</del> → {@code V52} (§210) granted it to Test
+ *       Engineer, so the persona that used to carry this assertion no longer can — see
+ *       {@code engineerCanAmend}, which is the same test read the other way. What still separates
+ *       the two keys is the {@code Automation Service} token, which holds {@code result:submit}
+ *       alone: collapse them and a leaked CI credential rewrites a human's verdict.</li>
  *   <li><strong>{@code If-Match} ignored.</strong> A run is worked by several testers at once by
  *       design, so a lost update here is the ordinary failure rather than the exotic one.</li>
  *   <li><strong>A plan's case count taken from its scope items.</strong> A scope item naming a
@@ -90,8 +94,11 @@ class ExecutionEndpointTest extends IntegrationTestBase {
     /** Test Lead. Holds {@code result:submit} AND {@code result:amend}. */
     private static final UUID LEAD = UUID.fromString("e2003000-0000-4000-8000-000000000001");
     /**
-     * Test Engineer. Holds {@code result:submit} and <strong>not</strong> {@code result:amend} — the
-     * one persona that separates the two permissions, and the reason this class has two writers.
+     * Test Engineer. <del>Holds {@code result:submit} and not {@code result:amend} — the one persona
+     * that separates the two permissions, and the reason this class has two writers.</del> →
+     * {@code V52} (§210): holds both. No seeded <em>role</em> separates them any more; the
+     * {@code Automation Service} credential still does, and {@code theRefusalsCarryDifferentSentences}
+     * is what proves the two verbs are two.
      */
     private static final UUID ENGINEER = UUID.fromString("e2003000-0000-4000-8000-000000000002");
     /** Viewer. Reads everything here and writes nothing. */

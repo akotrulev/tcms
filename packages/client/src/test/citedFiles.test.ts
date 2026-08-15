@@ -24,6 +24,11 @@
  *
  * ## Four corpora, one place
  *
+ * **The roots and the walker moved to `corpus.ts` in §212**, when a second rule started reading the
+ * same four trees — see that file for the argument for each root and for why a rule about
+ * `frontend/`, `docs/specs` and `backend/` prose lives in `packages/`. What follows is this check's
+ * own half: which citation notation each corpus is read with.
+ *
  * `frontend/src` is scanned here rather than by a copy over there, and that is deliberate. The
  * walker in `contractBodies.ts` had to be copied and paired because a Vite `?raw` import and two npm
  * roots make an import impossible **in production code**; this is a test reading files off disk, the
@@ -107,7 +112,7 @@
  * ## Directories are the same claim, and the reach the rule does not have
  *
  * A cited path ending in `/` is checked the same way, which took a branch in {@link PATH} and a
- * trailing marker in {@link walk}. Its whole population is three entries, so as a *finder* it is a
+ * trailing marker in `corpus.ts`'s walk. Its whole population is three entries, so as a *finder* it is a
  * guard. What it is worth having for is the one it names: `src/mocks/`, the SPA's deleted mock
  * layer, cited by a backend test that is entirely right about it.
  *
@@ -150,18 +155,12 @@
  * silently, in the callout whose whole job is naming the worst. `StatusKind` has grown a member
  * before. The check exists as of §206, in the class the comment names.
  */
-import { readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
-
-/** Directories a scan must never descend into — build output, dependencies, VCS. */
-const PRUNED = new Set([
-  'node_modules', 'dist', 'build', '.git', '.gradle', '.idea', 'coverage', '.vite',
-]);
+import { CORPUS as CORPUS_ROOTS, REPO, filesOf, repoRelative, struckSpans, walk } from './corpus.js';
 
 /**
  * A path this repository could plausibly contain, by its extension.
@@ -252,45 +251,24 @@ const CITED_PATH = { find: BACKTICKED, suffix: '' };
 const CITED_PATH_IN_JAVADOC = { find: JAVADOC_CODE, suffix: '' };
 const CITED_TEST_CLASS = { find: JAVADOC_TEST_CLASS, suffix: '.java' };
 
-/** Where comments are read from. Generated files are not in it — see the header. */
-const CORPUS: { root: string; extensions: string[]; skip: string[]; patterns: Pattern[] }[] = [
-  {
-    root: 'packages',
-    extensions: ['.ts'],
-    skip: ['packages/client/src/schema.ts'],
-    patterns: [CITED_PATH],
-  },
-  {
-    root: 'frontend/src',
-    extensions: ['.ts', '.tsx'],
-    skip: ['frontend/src/api/schema.d.ts'],
-    patterns: [CITED_PATH],
-  },
-  /*
-    The directory rather than `openapi.yaml` alone, for `build.gradle.kts`'s reason one stack over: a
-    second contract artifact added here is one this check would want to see, and a hand-kept tally of
-    filenames is what §152–§156 replaced four times.
-  */
-  {
-    root: 'docs/specs',
-    extensions: ['.yaml', '.yml'],
-    skip: [],
-    patterns: [CITED_PATH],
-  },
-  /*
-    `backend/src`, both source sets: a test's javadoc argues from the same files a main one does, and
-    §205's own population was three-quarters test code.
-  */
-  {
-    root: 'backend/src',
-    extensions: ['.java'],
-    skip: [],
-    patterns: [CITED_PATH, CITED_PATH_IN_JAVADOC, CITED_TEST_CLASS],
-  },
-];
+/**
+ * Which patterns each root is read with. The roots themselves — and the argument for each — are
+ * `corpus.ts`'s, shared with `tierClaims.test.ts` since §212; what stays here is the half that is
+ * about *citations*, which is the per-language notation. `backend/src` needs three because javadoc
+ * writes `{@code}` where the other three write a backtick.
+ */
+const PATTERNS: Record<string, Pattern[]> = {
+  'packages': [CITED_PATH],
+  'frontend/src': [CITED_PATH],
+  'docs/specs': [CITED_PATH],
+  'backend/src': [CITED_PATH, CITED_PATH_IN_JAVADOC, CITED_TEST_CLASS],
+};
 
-/** A superseded claim, in this repo's notation. Non-greedy and multi-line — a span often is. */
-const STRUCK = /~~[\s\S]*?~~/g;
+const CORPUS = CORPUS_ROOTS.map((entry) => ({
+  ...entry,
+  patterns: PATTERNS[entry.root] ?? [CITED_PATH],
+}));
+
 
 /**
  * Citations that name no file in this repository on purpose, with the reason.
@@ -359,10 +337,7 @@ describe('a file a comment names', () => {
   const perCorpus = CORPUS.map((entry) => ({
     root: entry.root,
     patterns: entry.patterns,
-    files: walk(join(REPO, entry.root))
-      .map(repoRelative)
-      .filter((path) => entry.extensions.some((extension) => path.endsWith(extension)))
-      .filter((path) => !entry.skip.includes(path)),
+    files: filesOf(entry),
   }));
   const files = perCorpus.flatMap((entry) => entry.files);
 
@@ -370,10 +345,7 @@ describe('a file a comment names', () => {
 
   const cited = perCorpus.flatMap((corpus) => corpus.files.flatMap((path) => {
     const text = readFileSync(join(REPO, path), 'utf8');
-    const struck = [...text.matchAll(STRUCK)].map((match) => ({
-      from: match.index,
-      to: match.index + match[0].length,
-    }));
+    const struck = struckSpans(text);
 
     /*
       §156's defect, pre-empted — see the header. An unterminated marker excuses text nobody meant to
@@ -452,28 +424,3 @@ describe('a file a comment names', () => {
     }
   });
 });
-
-/**
- * Every path under `root`, directories included and marked with a trailing `/`.
- *
- * The marker is what lets one set answer both questions: a citation ends in `/` when it means a
- * directory, so `src/mocks/` is looked for among the entries that end in one and `labels.ts` among
- * the entries that do not. A directory recorded without it would let a file called `mocks` satisfy
- * a citation of the folder.
- */
-/** Repo-relative, keeping the trailing `/` that `path.relative` normalises away. */
-function repoRelative(absolute: string): string {
-  const path = relative(REPO, absolute);
-  return absolute.endsWith('/') ? `${path}/` : path;
-}
-
-function walk(root: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (PRUNED.has(entry.name)) continue;
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) found.push(`${path}/`, ...walk(path));
-    else if (entry.isFile()) found.push(path);
-  }
-  return found;
-}

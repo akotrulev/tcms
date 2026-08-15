@@ -122,7 +122,8 @@ export function useUpdateDocPage(projectId: string, pageId: string) {
  * Publishes, unpublishes or archives a page.
  *
  * A separate hook rather than a `status` field on the edit, because it is a separate permission
- * (`doc:publish`, which Test Engineer does not hold) — and `ui-rules` is explicit that a state
+ * (`doc:publish` — ~~which Test Engineer does not hold~~ → held by every contributor since `V52`,
+ * §210, and still its own key and its own audit row) — and `ui-rules` is explicit that a state
  * transition is an action, never an editable status control.
  */
 export function useSetDocPageStatus(projectId: string, pageId: string) {

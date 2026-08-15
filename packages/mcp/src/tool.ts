@@ -13,8 +13,11 @@
  * **It must never be read as "the caller may do this."** Two independent reasons, both live:
  *
  *   - `GET /me/permissions` answers the *keys* a caller holds, and §A3's qualifiers narrow
- *     several of them — `case:delete` is `OWN` for a Test Engineer. A tool listed on the key can
- *     still 403 on the row.
+ *     several of them — ~~`case:delete` is `OWN` for a Test Engineer~~ → **no seeded grant carries
+ *     a qualifier since `V52`** (§207 emptied `OWN`, §210 `PLAN_SCOPE`), so today every key on the
+ *     wire answers `ALL`. The reason survives the example: the qualifier is *data*, a future grant
+ *     may carry one, and a listing rule that assumed otherwise would fail **open**. A tool listed
+ *     on the key can still 403 on the row.
  *   - the permissions are resolved **once, at connect**. A grant revoked mid-session leaves a
  *     tool listed that the server will refuse, which is correct: the server refuses, not this
  *     list.

@@ -101,9 +101,12 @@ class ArtifactFileEndpointTest extends IntegrationTestBase {
     /** Test Lead — holds {@code artifact:edit} at both scopes and {@code artifact:delete}. */
     private static final UUID LEAD = UUID.fromString("4f003000-0000-4000-8000-000000000001");
     /**
-     * <strong>Test Engineer</strong> — the persona this class is really about. Holds
-     * {@code artifact:edit} <em>plan-scope-only</em> ({@code V19}'s qualifier) and holds
-     * {@code artifact:delete} at no scope at all.
+     * <strong>Test Engineer</strong> — <del>the persona this class is really about: holds
+     * {@code artifact:edit} plan-scope-only ({@code V19}'s qualifier) and holds
+     * {@code artifact:delete} at no scope at all.</del> → <strong>{@code V52} (§210): holds both,
+     * unqualified.</strong> Which is why the refusals below are driven by a {@code VIEWER} now —
+     * the one seeded role that still holds neither, and therefore the only one that can prove the
+     * gates are gates.
      */
     private static final UUID ENGINEER = UUID.fromString("4f003000-0000-4000-8000-000000000002");
     /** Viewer — reads the register, writes nothing, and may download. */

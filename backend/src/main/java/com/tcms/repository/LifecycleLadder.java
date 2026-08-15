@@ -218,13 +218,16 @@ final class LifecycleLadder {
      * dead end {@link #decide}'s {@code DEPRECATED}-from-anywhere rule already exists to avoid.
      * Retiring an artifact that <em>is</em> approved falls under rule 2 above and is unchanged.
      *
-     * <p>Roles spec §A4 principle 1, as {@code V51} rewrote it, is what makes this hold on both
-     * aggregates: a Test Engineer has full CRUD over <em>content</em>, and what stays Lead-only is
-     * shared structure and judgements. On a case the edit key is {@code case:edit} and the content
-     * argument is direct. On a suite the edit key is {@code suite:manage} — the key a contributor
-     * already uses to create, rename and file into folders — so retiring a draft folder is the
-     * structure work they hold, while <em>removing</em> it is still {@code suite:delete} and still
-     * Lead-only. Neither reading routes around anything.
+     * <p><del>Roles spec §A4 principle 1, as {@code V51} rewrote it, is what makes this hold on both
+     * aggregates: a Test Engineer has full CRUD over content, and what stays Lead-only is shared
+     * structure and judgements.</del> → <strong>{@code V52} (§210) deleted that principle a day
+     * after {@code V51} restated it</strong>, and the rule above does not need it. Retiring costs
+     * the edit key because retiring <em>is</em> an edit — on a case {@code case:edit}, on a suite
+     * {@code suite:manage}, the key a contributor already uses to create, rename and file into
+     * folders. Removing is still {@code suite:delete}, a separate key held by the same people, so
+     * the two acts stay separately auditable and neither reading routes around anything. The
+     * argument that had to go was the one about <em>who</em>; the argument about <em>what</em> is
+     * the one that was doing the work.
      *
      * <p><strong>Reviving is symmetric, and that is a decision rather than a fallout</strong>
      * (2026-08-15, at the user's direction). {@code DEPRECATED → DRAFT} costs the edit key too. The

@@ -47,15 +47,18 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <h2>The failures this class exists to catch</h2>
  *
  * <ol>
- *   <li><strong>The scope qualifier ignored.</strong> The one that matters, and the reason the slice
- *       touched the authorization core. Gate the create on {@code artifact:edit} alone and only
- *       {@link Qualifier#engineerCannotRegisterAtProjectScope} goes red — every other assertion
- *       passes, because a Test Engineer legitimately registers plan-scope artifacts and a Test Lead
- *       legitimately registers both. A Test Engineer who can rewrite the project's test strategy is
- *       editing a document every cycle inherits read-only (plan §6n), and nothing about the response
- *       would look wrong.</li>
- *   <li><strong>The qualifier over-applied.</strong> The mirror failure and the more likely one to
- *       ship, because it looks like caution: refuse a Test Engineer both scopes and the register is
+ *   <li><strong>The scope qualifier ignored.</strong> <del>The one that matters, and the reason the
+ *       slice touched the authorization core: gate the create on {@code artifact:edit} alone and
+ *       only {@code engineerCannotRegisterAtProjectScope} goes red, because a Test Engineer
+ *       legitimately registers plan-scope artifacts and a Test Lead legitimately registers
+ *       both.</del> → <strong>{@code V52} (§210) de-qualified {@code artifact:edit}, and that
+ *       assertion is now {@link Qualifier#engineerRegistersAtProjectScope} — the same call, the
+ *       opposite expectation.</strong> This class can no longer catch a qualifier ignored, because
+ *       no seeded grant carries one; what it catches instead is the widening being <em>undone</em>,
+ *       which would refuse a contributor the project document every cycle inherits (plan §6n) with
+ *       nothing about the response looking wrong.</li>
+ *   <li><strong>The gate over-applied.</strong> The mirror failure and the more likely one to
+ *       ship, because it looks like caution: refuse a Test Engineer and the register is
  *       Lead-only, which the roles spec's ✓ explicitly is not.
  *       {@link Qualifier#engineerCanRegisterAtPlanScope} is the guard.</li>
  *   <li><strong>Inheritance dropped, or applied to the wrong half.</strong> A plan register that
@@ -93,8 +96,11 @@ class ArtifactEndpointTest extends IntegrationTestBase {
     /** Test Lead. Holds {@code artifact:edit} unqualified — both scopes. */
     private static final UUID LEAD = UUID.fromString("af003000-0000-4000-8000-000000000001");
     /**
-     * Test Engineer. Holds {@code artifact:edit} <strong>PLAN_SCOPE</strong> — the one persona the
-     * whole slice turns on, and the reason V19 exists.
+     * Test Engineer. <del>Holds {@code artifact:edit} PLAN_SCOPE — the one persona the whole slice
+     * turns on, and the reason V19 exists.</del> → <strong>{@code V52} (§210): unqualified, both
+     * scopes.</strong> {@code artifact:edit} was the only key in the catalogue that ever carried
+     * {@code PLAN_SCOPE}, so this persona no longer separates the scopes from a Test Lead — and the
+     * qualifier {@code V19} added is now carried by no row at all (roles spec §A5).
      */
     private static final UUID ENGINEER = UUID.fromString("af003000-0000-4000-8000-000000000002");
     /** Viewer. Reads the register and holds no {@code artifact:edit} at all. */
@@ -348,7 +354,7 @@ class ArtifactEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a Test Lead registers at PROJECT scope — so the 403 above is the qualifier")
+        @DisplayName("a Test Lead registers at PROJECT scope too — the scope gates nobody now")
         void leadCanRegisterAtProjectScope() throws Exception {
             // Without this the test above passes just as well against a broken route, a missing
             // grant, or a create that refuses everybody. The same payload, a different caller.
@@ -361,7 +367,7 @@ class ArtifactEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("the refused Engineer still READS the project-scope artifact they cannot write")
+        @DisplayName("an Engineer READS the project-scope artifact — the read never carried a scope")
         void theRefusalIsAboutWritingAndNotAboutSeeing() throws Exception {
             create(LEAD, ACME_BANKING,
                     link("PROJECT", null, "Strategy", "Test strategy",

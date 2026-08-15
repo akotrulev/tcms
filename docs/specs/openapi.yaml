@@ -2730,8 +2730,11 @@ paths:
         Engineer** (roles spec §A4). ~~A Test Engineer holds `plan:create` and `plan:edit` and
         **not** this one: a contributor is never blocked from producing, only from unmaking.~~
         Reversed: a contributor who may author a plan and edit it may retire one, whoever wrote
-        it. The lead line now sits at shared *structure* (`suite:delete`, `artifact:delete`) and
-        at judgements about the work (`run:close`, `result:amend`), not at deletion as such.
+        it. ~~The lead line now sits at shared *structure* (`suite:delete`, `artifact:delete`) and
+        at judgements about the work (`run:close`, `result:amend`), not at deletion as such.~~ →
+        **that line lasted one day.** `V52` (2026-08-15, §210) granted all four to Test Engineer
+        and retired the principle rather than narrowing it a third time: the tier is approvals and
+        project configuration, and **no delete key is on it**.
 
         **Refused with `409` while any live run was created from the plan**, naming how many.
         `test_run.plan_id` references the plan and the run list keeps rendering its key, so
@@ -3120,14 +3123,21 @@ paths:
       operationId: setRunStatus
       summary: Complete, abort or reopen a run
       description: |
-        Requires `run:close`, which is **Lead and up** — a Test Engineer holds `run:execute` and
+        Requires `run:close`. ~~which is **Lead and up** — a Test Engineer holds `run:execute` and
         `result:submit` and does *not* hold this one (roles spec §A4: a contributor is never blocked
-        from producing, only from unmaking).
+        from producing, only from unmaking)~~ → **superseded 2026-08-15 (`V52`, §210): a Test
+        Engineer holds it.** Closing a cycle you ran is neither an approval nor project
+        configuration, which is the whole of the tier now. The key stays **separate** from
+        `run:execute`, so ending a run is still its own gate and its own audit row; what changed is
+        who may do it.
 
         **A run starts by itself and ends deliberately.** `NOT_STARTED → IN_PROGRESS` happens when
         the first result is recorded, with no permission of its own. A run never completes itself
-        when the last result lands, because "we are done" is a judgement — and auto-completion would
-        let a Test Engineer close a run by finishing it, which is the boundary this permission draws.
+        when the last result lands, because "we are done" is a judgement somebody makes — ~~and
+        auto-completion would let a Test Engineer close a run by finishing it, which is the boundary
+        this permission draws~~ → that boundary is gone and the behaviour is not. Auto-completion
+        would make the last person to record a result the person who ended the cycle, silently and
+        without deciding to, which is a reason of its own and the one that survives `V52`.
 
         **`COMPLETED` and `ABORTED` are both "closed".** There is no fifth status: `V1`'s
         *"immutable once the run closes"* names the act, and a run that has ended refuses further
@@ -3814,8 +3824,10 @@ paths:
       tags: [documentation]
       summary: Publish, unpublish or archive a page
       description: |
-        Requires `doc:publish`, which Test Engineer does **not** hold while `doc:edit` is held by
-        everyone who writes (roles spec §A2).
+        Requires `doc:publish`. ~~which Test Engineer does **not** hold while `doc:edit` is held by
+        everyone who writes (roles spec §A2)~~ → **superseded 2026-08-15 (`V52`, §210): a Test
+        Engineer holds both.** Publishing a page is not an approval, and the tier is approvals and
+        project configuration.
 
         **A separate endpoint rather than a `status` field on the `PATCH`, because it is a separate
         permission.** One endpoint whose gate depends on which fields the body happened to carry is
@@ -3858,11 +3870,13 @@ paths:
         paragraph and not the picture it was written about.
 
         **Requires `doc:edit`, not `doc:publish`.** This module's defining split is that
-        `doc:edit` writes content and `doc:publish` moves the publication state, with Test
-        Engineer holding the first and not the second (roles spec §A2). An attachment is
-        **content** — somebody who may rewrite every paragraph may attach the diagram those
-        paragraphs describe, and the other choice would leave a Test Engineer able to author a
-        specification they could not illustrate.
+        `doc:edit` writes content and `doc:publish` moves the publication state ~~, with Test
+        Engineer holding the first and not the second (roles spec §A2)~~ → **both are a
+        contributor's since `V52` (§210)**, so the split is no longer a tier and is still a split:
+        two keys, two audit rows, and a company that wants them held by different people has the
+        catalogue to do it. An attachment is **content** — somebody who may rewrite every paragraph
+        may attach the diagram those paragraphs describe — and it is the *content* key it costs,
+        which is now an argument about what the act is rather than about who may perform it.
 
         The delete below costs the same key with **no author arm**, which is the same call
         `case:edit` makes one module over and for the same reason: `doc:edit` already lets its
@@ -4219,10 +4233,14 @@ paths:
       tags: [artifacts]
       summary: Remove an artifact from the register
       description: |
-        Requires **`artifact:delete`** — Lead and up, and deliberately **not** held by a Test
+        Requires **`artifact:delete`**. ~~— Lead and up, and deliberately **not** held by a Test
         Engineer, who may register a plan-scope artifact (`artifact:edit`, plan-scope-qualified)
         and may not unregister one. That is the same creative-versus-destructive line the roles
-        spec draws for `result:submit` against `result:amend`. Wired 2026-08-07 (plan §8 #53); the
+        spec draws for `result:submit` against `result:amend`.~~ → **superseded 2026-08-15 (`V52`,
+        §210): a Test Engineer holds it, and holds `artifact:edit` unqualified.** The
+        creative-versus-destructive line is not narrowed here, it is **retired** — it was stated
+        twice in six weeks and both statements are gone, along with `PLAN_SCOPE`, which this key
+        was the only one in the catalogue ever to carry. Wired 2026-08-07 (plan §8 #53); the
         key had been in the catalogue since M0 with no consumer, so deletion did not exist at all.
 
         **This is for a mis-registration, not for an artifact that has served its purpose.** Plan
@@ -9701,8 +9719,10 @@ components:
 
                 Written and removed through the endpoints below, both costing **`doc:edit`** —
                 an attachment is *content*, so whoever may rewrite the paragraphs may attach
-                the diagram they describe. Not `doc:publish`, which would leave a Test
-                Engineer able to author a specification they could not illustrate.
+                the diagram they describe. Not `doc:publish` ~~, which would leave a Test
+                Engineer able to author a specification they could not illustrate~~ → both keys
+                are a contributor's since `V52` (§210), so the choice no longer excludes anybody;
+                it says which of the two acts this is, and attaching is writing.
             currentVersionNo: { type: integer }
             lockVersion: { type: integer }
 

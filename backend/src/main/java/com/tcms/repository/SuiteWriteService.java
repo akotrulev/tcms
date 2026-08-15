@@ -32,10 +32,16 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <h2>Two permissions, and collapsing them would erase a boundary the spec called out</h2>
  *
- * <p>{@code suite:manage} (create, rename) is held by Test Engineer and above; {@code suite:delete}
- * by leads only. The roles spec states the reason in one line: deleting is the most destructive
- * repository action, so it sits with leads while contributors keep organising freely. It also lists that split as a boundary that was <em>previously wrong</em> and got fixed —
- * so gating both on {@code suite:manage} would not be a simplification, it would be the reversion.
+ * <p><del>{@code suite:manage} (create, rename) is held by Test Engineer and above;
+ * {@code suite:delete} by leads only. The roles spec states the reason in one line: deleting is the
+ * most destructive repository action, so it sits with leads while contributors keep organising
+ * freely.</del> → <strong>{@code V52} (§210): both are held by Test Engineer and above.</strong>
+ * The tier line between them is gone; the <em>split</em> is not, and it is not the same claim. Two
+ * keys mean two audit rows and a company that wants renaming and removing held by different people
+ * has the catalogue to arrange it — which is exactly what the spec listed as a boundary that was
+ * <em>previously wrong</em> and got fixed. Gating both on {@code suite:manage} would still be that
+ * reversion, and it would now be an irreversible one: nothing else in the catalogue could express
+ * the difference.
  *
  * <h2>What this class refuses, and why refusing is the feature</h2>
  *

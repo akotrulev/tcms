@@ -157,7 +157,11 @@ public class TestExecution {
      * all null, which is what {@link #hasResult} reads and therefore what makes the first recording
      * a {@code result:submit} rather than a {@code result:amend}. Seeding a status — even an
      * "Untested" one from the project's vocabulary — would make every fresh execution look amended
-     * and hand {@code result:amend}'s Lead-only gate to the first person who opened the run.
+     * and charge {@code result:amend} for the first verdict anybody records. <del>Which is a
+     * Lead-only gate handed to the first person who opened the run.</del> → since {@code V52}
+     * (§210) a Test Engineer holds that key too, so what it costs is not a tier but the
+     * {@code Automation Service} token, which holds {@code result:submit} and never the other one:
+     * a seeded status would make every CI submission an amend and refuse it.
      *
      * <p>{@code assigneeId} may be null and that is the ordinary state: a run created without an
      * assignee is one the team picks up from, which is how most teams work. It is not a placeholder

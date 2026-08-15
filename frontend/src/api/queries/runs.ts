@@ -112,7 +112,8 @@ export function useCloneRun(projectId: string, runId: string) {
 }
 
 /**
- * Completes, aborts or reopens a run — `run:close`, which a Test Engineer does not hold.
+ * Completes, aborts or reopens a run — `run:close`, ~~which a Test Engineer does not hold~~ → held
+ * by every contributor since `V52` (§210), and still a key of its own.
  *
  * The run *list* is invalidated as well as the run itself, because the status is a column on it and
  * a "Still running" chip that survives the close is the same class of stale claim §42's live pass

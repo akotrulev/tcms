@@ -186,9 +186,11 @@ const TestIdPrefix = 'Artifacts.Dialog';
  * The server answers RFC-7807 with an `errors` map keyed by the input schema's field names, so
  * every message lands on the control it is about.
  *
- * **The 403 is the interesting one and it is deliberately treated like a 400.** A Test Engineer
+ * **The 403 is the interesting one and it is deliberately treated like a 400.** ~~A Test Engineer
  * holds `artifact:edit` — just not at project scope — so `PermissionGate` cannot disable the button
- * on the strength of the key alone. §61 shipped that as the *only* protection and recorded why:
+ * on the strength of the key alone.~~ → **`V52` (§210): the key is unqualified and nothing carries
+ * `PLAN_SCOPE` any more**, so the button *can* be decided from the key. §61 shipped the handler as
+ * the *only* protection and recorded why:
  * the permission model was keys-only, so §31's disable-don't-hide was structurally unavailable and
  * the server answered that one refusal with a *body* naming `scope`.
  *

@@ -76,8 +76,11 @@ export interface SessionOptions {
  *
  * `GET /me/permissions` has answered `{key, qualifier}` pairs since §65, and it was an array of
  * bare keys before that. The omission had a cost the SPA could not work around and the contract
- * still records it: a Test Engineer holds `artifact:edit` at `PLAN_SCOPE`, so a keys-only answer
- * says *held*, the project-scope control enables, and the server refuses the submit.
+ * still records it: a Test Engineer ~~holds~~ **held** `artifact:edit` at `PLAN_SCOPE`, so a
+ * keys-only answer said *held*, the project-scope control enabled, and the server refused the
+ * submit. That grant was de-qualified by `V52` (§210) and **no seeded row carries a qualifier now**
+ * — which changes the example and not the reasoning, because the qualifier is data and the next
+ * grant to need one must find this code already reading it.
  *
  * **`tools/list` is the same decision one client over.** §6w.3 filters the list so *"an agent
  * shown a tool it cannot use will call it, be refused, and retry"* — which is §31's

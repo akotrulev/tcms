@@ -61,9 +61,16 @@ import com.tcms.project.ReviewStanding;
  * silently rescind a lead's sign-off — the release-readiness signature §6g calls <em>"often the gate
  * that matters most"</em> — by pressing the button that returns it to draft. So {@code plan:approve}
  * is required to <em>grant</em> the sign-off and to <em>take it back</em>; {@code plan:edit} carries
- * a plan forward through the states nobody has signed off. This is roles spec §A4 principle 1
- * applied unchanged — a Test Engineer is never blocked from producing, only from unmaking — and it
- * is why {@code run:close}, {@code suite:delete} and {@code plan:delete} are all Lead-only.
+ * a plan forward through the states nobody has signed off.
+ *
+ * <p><del>This is roles spec §A4 principle 1 applied unchanged — a Test Engineer is never blocked
+ * from producing, only from unmaking — and it is why {@code run:close}, {@code suite:delete} and
+ * {@code plan:delete} are all Lead-only.</del> → <strong>{@code V52} (§210) granted all three to
+ * Test Engineer and deleted the principle they were named to illustrate.</strong> The gate above is
+ * untouched, and that is the point worth keeping: <em>approving is not CRUD</em>. Rescinding a
+ * sign-off is an approval act whoever performs it, so it costs {@code plan:approve} because of what
+ * it is — not because deleting things is a lead's job, which is no longer a claim this product
+ * makes.
  */
 final class PlanLifecycle {
 

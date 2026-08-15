@@ -127,7 +127,10 @@ administrator does deliberately; joining a company confers only the `Company Mem
 
 `✓` granted · `—` not granted · ~~`OWN` only for content the caller authored~~ → **no grant in the
 catalogue is `OWN`-qualified as of 2026-08-14 (`V51`, §207)**; the notation and the mechanism survive
-for a future key that needs it, and the qualifier still in play is `PLAN_SCOPE` (Artifacts, `V19`)
+for a future key that needs it ~~and the qualifier still in play is `PLAN_SCOPE` (Artifacts, `V19`)~~
+→ **`V52` (2026-08-15, §210) emptied that one too**, so **both** qualifiers are carried by zero rows
+and every cell below is `✓` or `—` — the one exception being Automation Service's `case:create`,
+which is narrowed by a *rule* and not by the qualifier column (§A5)
 
 **IA** Instance Admin · **CA** Company Admin · **TL** Test Lead · **TE** Test Engineer · **AS** Automation Service · **V** Viewer
 

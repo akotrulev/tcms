@@ -14,8 +14,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Removing a plan — <strong>{@code plan:delete}'s first consumer in Java</strong>, and the third
- * Lead-only destructive verb after {@code suite:delete} and {@code run:close}.
+ * Removing a plan — <strong>{@code plan:delete}'s first consumer in Java</strong>, and <del>the
+ * third Lead-only destructive verb after {@code suite:delete} and {@code run:close}</del> →
+ * <strong>none of the three is a tier any more</strong> ({@code V51}, then {@code V52} — §207 and
+ * §210). A contributor who may author a plan may retire one, whoever wrote it, and the refusal
+ * below is the only thing standing between them and the delete.
  *
  * <h2>The refusal is the feature</h2>
  *
