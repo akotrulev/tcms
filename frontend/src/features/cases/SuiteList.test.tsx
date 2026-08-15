@@ -211,6 +211,41 @@ describe('SuiteList — the status ladder', () => {
     expect(screen.queryByTestId('SuiteList.Menu.Move.IN_REVIEW')).not.toBeInTheDocument()
   })
 
+  /**
+   * §208 on the client, and the pair of it. Before §208 both of these items were dead in a
+   * contributor's hands: `Deprecate…` on a draft cost `suite:approve`, and so did the only way back
+   * from `DEPRECATED` — so a contributor could neither retire a folder nor undo a retirement.
+   *
+   * The barrier matters more than usual here. Every item is disabled while the permission answer is
+   * in flight, so an assertion that an item is *enabled* passes vacuously against a component that
+   * never resolves — hence the `waitFor`, which is the shape §201/§202 built for the fetch half.
+   */
+  it('lets an engineer deprecate a draft — retiring unsigned structure is suite:manage', async () => {
+    withPermissions(['case:read', 'suite:manage'])
+    renderList(at('DRAFT'))
+    await menuFor('Payments')
+
+    await waitFor(() =>
+      expect(screen.getByTestId('SuiteList.Menu.Move.DEPRECATED')).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    )
+  })
+
+  it('lets an engineer restore a deprecated suite — reviving unmakes nothing', async () => {
+    withPermissions(['case:read', 'suite:manage'])
+    renderList(at('DEPRECATED'))
+    await menuFor('Payments')
+
+    await waitFor(() =>
+      expect(screen.getByTestId('SuiteList.Menu.Move.DRAFT')).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    )
+  })
+
   it('lets an engineer submit a draft for review — that edge needs only suite:manage', async () => {
     withPermissions(['case:read', 'suite:manage'])
     renderList(at('DRAFT'))

@@ -244,15 +244,44 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
             assertThat(statusOf(approved())).isEqualTo("APPROVED");
         }
 
+        /**
+         * ~~An engineer cannot deprecate — retiring is the soft form of a delete.~~ →
+         * <strong>inverted in §208, and the assertion is the same row read the other way.</strong>
+         *
+         * <p>The premise died with {@code V51} (§207): {@code case:delete} is a plain grant every
+         * Test Engineer holds over every case, so "retiring routes around a Lead-only delete" was
+         * an argument about a delete that is not Lead-only, and it left the contributor able to
+         * destroy a colleague's case and unable to retire their own draft.
+         */
         @Test
-        @DisplayName("an engineer cannot deprecate — retiring is the soft form of a delete")
-        void engineerCannotDeprecate() throws Exception {
+        @DisplayName("an engineer deprecates a draft — retiring unsigned content is content work")
+        void engineerDeprecatesADraft() throws Exception {
             MvcResult result = commit(ENGINEER, setStatus("DEPRECATED", draft()));
 
-            assertThat(skippedKeys(result)).containsExactly("TC-1");
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(changed(result)).containsExactly("TC-1");
+            assertThat(skippedKeys(result)).isEmpty();
+            assertThat(statusOf(draft())).isEqualTo("DEPRECATED");
+        }
+
+        /**
+         * The half §208 keeps, and the one that makes the test above a moved line rather than a
+         * removed gate: retiring an artifact somebody signed off is still an approval act, because
+         * the sign-off ends either way and the target it names says nothing about that.
+         */
+        @Test
+        @DisplayName("an engineer cannot deprecate an APPROVED case — the row is skipped, not moved")
+        void engineerCannotDeprecateAnApprovedCase() throws Exception {
+            MvcResult result = commit(ENGINEER, setStatus("DEPRECATED", approved()));
+
+            assertThat(skippedKeys(result)).containsExactly("TC-3");
+            // The sentence names the state the row is IN, not the one it was asked to reach — the
+            // fact the caller cannot see from a selection of four hundred. Before §208 this arm
+            // answered "Only a test lead can deprecate cases", which was the one true thing it did
+            // not say once retiring a draft became ordinary.
             assertThat(skippedReasons(result).getFirst())
-                    .isEqualTo("Only a test lead can deprecate cases.");
-            assertThat(statusOf(draft())).isEqualTo("DRAFT");
+                    .isEqualTo("Only a test lead can change a case that is already approved.");
+            assertThat(statusOf(approved())).isEqualTo("APPROVED");
         }
 
         @Test

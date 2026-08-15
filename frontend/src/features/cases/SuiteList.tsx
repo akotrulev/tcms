@@ -81,10 +81,16 @@ function ordered(suites: Suite[]): Suite[] {
  * wrong here shows a control that 403s, which is §31's failure and not a security one; the server
  * decides, from a status only it holds.
  *
- * The three approve-keyed rows are the ones a target-decides reading gets wrong: returning an
- * approved folder to draft costs `suite:approve`, because leaving an approval is an approval act,
- * and deprecating costs it because retiring is the soft form of a delete that Test Engineer is
- * withheld from outright.
+ * **The rule in one sentence, since §208: `suite:approve` buys a sign-off, and it buys moving a
+ * folder that has one.** Every approve-keyed row below is therefore an `APPROVED` row or an
+ * `APPROVED` target — the reading a target-decides rule gets wrong is that leaving an approval is
+ * an approval act whatever the target is called.
+ *
+ * ~~Deprecating costs `suite:approve` from every state, because retiring is the soft form of a
+ * delete that Test Engineer is withheld from outright.~~ → **superseded in §208.** `suite:delete`
+ * *removes* the folder; deprecating keeps it, keeps its members and can be undone, and it is the
+ * only way out of a folder that cannot be deleted while it holds cases. Retiring a draft folder is
+ * the same kind of act as renaming one.
  *
  * `satisfies Record<LifecycleStatus, …>` so a fifth status is a compile error here rather than a
  * folder with no moves at all.
@@ -92,12 +98,12 @@ function ordered(suites: Suite[]): Suite[] {
 const suiteMoves = {
   DRAFT: [
     { target: 'IN_REVIEW', label: 'Submit for review', permission: 'suite:manage' },
-    { target: 'DEPRECATED', label: 'Deprecate…', permission: 'suite:approve' },
+    { target: 'DEPRECATED', label: 'Deprecate…', permission: 'suite:manage' },
   ],
   IN_REVIEW: [
     { target: 'APPROVED', label: 'Approve', permission: 'suite:approve' },
     { target: 'DRAFT', label: 'Return to draft', permission: 'suite:manage' },
-    { target: 'DEPRECATED', label: 'Deprecate…', permission: 'suite:approve' },
+    { target: 'DEPRECATED', label: 'Deprecate…', permission: 'suite:manage' },
   ],
   APPROVED: [
     { target: 'DRAFT', label: 'Return to draft', permission: 'suite:approve' },
@@ -105,7 +111,12 @@ const suiteMoves = {
   ],
   // Only one way back, and it lands on DRAFT: approval attaches to reviewed content by a named
   // person, so a retired folder returning straight to APPROVED would be a sign-off nobody gave.
-  DEPRECATED: [{ target: 'DRAFT', label: 'Restore to draft', permission: 'suite:approve' }],
+  //
+  // `suite:manage`, symmetric with the retire above it (§208): nothing is unmade coming back — the
+  // sign-off, if there was one, ended at the retirement and was ended by somebody holding
+  // `suite:approve`. Reviving at the approve key would make retiring a one-way door for exactly the
+  // caller who may now walk through it.
+  DEPRECATED: [{ target: 'DRAFT', label: 'Restore to draft', permission: 'suite:manage' }],
 } as const satisfies Record<
   LifecycleStatus,
   readonly { target: LifecycleStatus; label: string; permission: string }[]

@@ -62,10 +62,26 @@ import { formatCount } from '../../lib/format';
  * and the server had to answer with a field error.~~ → superseded in §65: qualifiers are on the
  * wire, so that gap is closed and `Gate.canOnScope` / `canOnAuthored` ask those questions directly.
  *
- * **No action offered here is qualified**, which is why this dialog reads none of them: there is no
- * bulk delete, and `case:delete` is the only `OWN`-qualified key in the catalogue. An action added
- * later that *is* qualified needs the row's author per selected case — which this dialog does not
- * hold, since it works from a list of ids — so it would be a design question, not a prop.
+ * **No action offered here is qualified**, which is why this dialog reads none of them. ~~There is
+ * no bulk delete, and `case:delete` is the only `OWN`-qualified key in the catalogue.~~ →
+ * **superseded by `V51` (§207): NO key in the catalogue carries `OWN` any more**, so the claim is
+ * true for a stronger reason than the one written here. The conditional below it stands unchanged
+ * and is the reason to keep the paragraph: an action added later that *is* qualified needs the
+ * row's author per selected case — which this dialog does not hold, since it works from a list of
+ * ids — so it would be a design question, not a prop.
+ *
+ * ## Which status options are gated, and which are not
+ *
+ * Only `APPROVED` is disabled here, and since §208 that is the whole of what this dialog can know:
+ * the other approve-keyed edge is *moving a case that is currently approved*, which depends on each
+ * selected row rather than on the form. Those rows come back in `skipped` with a reason, which is
+ * this dialog's standing shape for a partial failure.
+ *
+ * `DEPRECATED` is **not** gated, and it never was — which until §208 was a §31 gap in the direction
+ * that is hardest to notice: the server refused it for every contributor while this select offered
+ * it enabled, so a Test Engineer's Deprecate submitted and came back with every row skipped. §208
+ * closed it from the server's side rather than by disabling a second option, because the option was
+ * the half that was right: retiring a case nobody signed off costs `case:edit`.
  */
 
 /** The contract's `BulkOperation.action` values, in the order the picker offers them. */

@@ -1435,13 +1435,22 @@ export interface paths {
          *
          *     **Which permission a move needs is decided by the edge, not by the target:**
          *
-         *     - `suite:manage` (Test Engineer and up) carries a suite *forward* through the states nobody
-         *       has signed off — submitting a draft for review, and withdrawing that submission again.
-         *       §6g: submitting for review "needs only edit rights".
-         *     - `suite:approve` (Lead and up) is needed to **grant** the sign-off, to **deprecate** the
-         *       suite, and to **take either back**. Rescinding a lead's approval is an approval act, and a
-         *       target-only rule would let a Test Engineer do it by asking for `DRAFT`; deprecating is the
-         *       soft form of a delete, and `suite:delete` is withheld from Test Engineer outright.
+         *     - `suite:manage` (Test Engineer and up) moves a suite **nobody has signed off** — submitting
+         *       a draft for review, withdrawing that submission, deprecating a suite that was never
+         *       approved, and reviving a deprecated one back to `DRAFT`. §6g: submitting for review "needs
+         *       only edit rights".
+         *     - `suite:approve` (Lead and up) is needed to **grant** the sign-off and to move a suite that
+         *       **currently has one**, wherever it is going — back to `DRAFT`, back to `IN_REVIEW`, or out
+         *       to `DEPRECATED`. Every one of those ends a lead's approval, and the target it happens to
+         *       name says nothing about that: a target-only rule would let a Test Engineer rescind an
+         *       approval by asking for `DRAFT`.
+         *
+         *     Deprecating used to cost `suite:approve` from *every* state, on the argument that retiring is
+         *     the soft form of a delete and `suite:delete` is Lead-only. That argument does not survive
+         *     being stated precisely: `suite:delete` **removes** the folder, while deprecating keeps it,
+         *     keeps its members, and can be undone — and it is the only way out of a folder that cannot be
+         *     deleted while it holds cases. Retiring a draft folder is the same kind of act as renaming
+         *     one, which is already `suite:manage`.
          *
          *     Two moves are refused with `409` because the ladder does not have them: `IN_REVIEW` is
          *     reachable only from `DRAFT` (an approved suite that needs another look must lose its
@@ -8854,13 +8863,31 @@ export interface components {
         /**
          * @description One action, one argument, over a selection of cases.
          *
-         *     **The permission depends on the argument, not only on the action.** `SET_STATUS` targeting
-         *     `APPROVED` needs `case:approve` — Lead and up, and explicitly *not* Test Engineer (roles
+         *     **The permission depends on the argument, not only on the action** — and for `SET_STATUS`
+         *     it depends on the *row* as well, which is why a refused row is **skipped with a reason**
+         *     rather than failing the operation.
+         *
+         *     `SET_STATUS` needs `case:approve` — Lead and up, and explicitly *not* Test Engineer (roles
          *     spec, Review table; plan §6g: *"the state machine has exactly one gate, held by
-         *     `*:approve`"*). Every other action and every other target needs `case:edit`. A caller who
-         *     holds `case:edit` and not `case:approve` therefore gets a 403 on one value of one field and
-         *     a 200 on the rest, which is why the SPA gates the APPROVED option separately rather than
-         *     gating the dialog.
+         *     `*:approve`"*) — in exactly two situations:
+         *
+         *     - the target is `APPROVED`, or
+         *     - the case is **currently** `APPROVED`, whatever the target is. Moving it back to `DRAFT`
+         *       or `IN_REVIEW`, or out to `DEPRECATED`, all end a lead's sign-off; a rule reading the
+         *       target alone answers `case:edit` and lets a filtered selection of two hundred approved
+         *       cases be rescinded in one click.
+         *
+         *     Every other action and every other edge needs `case:edit`, **including deprecating a case
+         *     nobody signed off** — a Test Engineer has full CRUD over content since `V51`, so retiring a
+         *     colleague's draft cannot cost more than deleting it outright.
+         *
+         *     The two situations answer differently, and deliberately. Targeting `APPROVED` is knowable
+         *     before a single row is read, so a caller without `case:approve` gets a **403** on one value
+         *     of one field — which is why the SPA gates the APPROVED option separately rather than gating
+         *     the dialog. The other situation is a property of each row, so the operation answers **200**
+         *     and the approved rows come back in `skipped` with a reason naming the state they are in: a
+         *     selection is a filter's output and mixes statuses, and refusing all four hundred over two of
+         *     them is worse than the problem.
          */
         BulkOperation: {
             /**

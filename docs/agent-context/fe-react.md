@@ -2,8 +2,14 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-14 (**§207** — **the permission model changed and this tree's BEHAVIOUR
-did not**: no grant carries `OWN` any more, so `useCan.canOnAuthored` answers exactly what `can`
+**Last verified:** 2026-08-15 (**§208** — **the authoring ladder's gate moved and this tree holds a
+COPY of it**: `SuiteList.tsx`'s `suiteMoves` table has three rows now reading `suite:manage` where
+they read `suite:approve` — deprecating an unapproved folder and restoring a deprecated one are
+contributor moves. The case side needed no change and that is the finding: `BulkActionDialog` gates
+only the `APPROVED` option and **never gated `DEPRECATED`**, so until §208 a Test Engineer's Deprecate
+submitted, returned 200 and reported that nothing had happened — a §31 gap closed from the server's
+side. See the §208 entry below before editing either file; **§207** — **the permission model changed
+and this tree's BEHAVIOUR did not**: no grant carries `OWN` any more, so `useCan.canOnAuthored` answers exactly what `can`
 answers and every delete affordance simply enables for a non-Viewer — `plan:delete` reached Test
 Engineer and `PlanStatisticsPage`'s existing key gate lit up with no edit. **Do not delete the
 `authorId` plumbing**: the qualifier is server-side DATA, so a client that hard-coded "authorship
@@ -40,11 +46,44 @@ surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the fl
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `507c80b` (§207 — **no `frontend/` behaviour changed**: four prose sites, two
-test headers and a comments-only regeneration of `src/api/schema.d.ts`. Suite re-run on `shanks` at
-**1339 across 100** — unchanged, and see the §207 entry for why none of the gate tests moved. Before
-it: ~~`c6fbefd`, §206 phase 3~~, likewise `schema.d.ts` only.)
+**Baseline commit:** `9de1eac` (§207's docs commit; §208's slice commit lands immediately after this
+line. Suite on `shanks` at **1341 across 100** (+2, both in `SuiteList.test.tsx`). Before it:
+~~`507c80b`, §207~~ — no `frontend/` behaviour changed there, four prose sites and two test headers —
+and ~~`c6fbefd`, §206 phase 3~~, likewise `schema.d.ts` only.)
 (trust the body over the header and re-grep what a later commit could have moved).
+
+## §208 — `suiteMoves` IS A SECOND COPY OF THE SERVER'S GATE, AND IT MOVED
+
+**Read this before editing `SuiteList.tsx` or `BulkActionDialog.tsx`.**
+
+`SuiteList.tsx`'s `suiteMoves` mirrors `LifecycleLadder.permissionFor` per status, as a **disabling
+hint and never the gate**. The server's rule is now one sentence — *the approve key buys a sign-off,
+and it buys touching an artifact that has one* — so the table reads:
+
+| From | `suite:manage` | `suite:approve` |
+|---|---|---|
+| `DRAFT` | `IN_REVIEW`, **`DEPRECATED`** | — |
+| `IN_REVIEW` | `DRAFT`, **`DEPRECATED`** | `APPROVED` |
+| `APPROVED` | — | `DRAFT`, `DEPRECATED` |
+| `DEPRECATED` | **`DRAFT`** | — |
+
+The three bolded cells are §208's change. Everything under `APPROVED` is §75's finding and is
+**untouched** — if you are editing this table, that row is the one whose regression is silent.
+
+**`BulkActionDialog` gates `APPROVED` and nothing else, and that is correct rather than incomplete.**
+The other approve-keyed edge is *moving a case that is currently approved*, which depends on each
+selected row and not on the form — those rows come back in `skipped` with a reason, which is this
+dialog's standing shape for a partial failure. Do **not** add a `DEPRECATED` gate here; until §208
+the absence of one was a real §31 gap (the server refused what the select offered), and §208 closed it
+by making the server agree with the dialog.
+
+**Testing either:** every item in the suite menu is disabled while the permission query is in flight,
+so an assertion that an item is *enabled* passes vacuously against a component that never resolves.
+Use `waitFor`, as the two §208 tests do — this is the §201/§202 shape one control over.
+
+Struck in `BulkActionDialog`'s header, false since `V51`: *"`case:delete` is the only `OWN`-qualified
+key in the catalogue"*. **No** key carries `OWN`, so the paragraph's conclusion holds for a stronger
+reason.
 
 ## §207 — NO GRANT IS `OWN`-QUALIFIED, AND THE `authorId` PLUMBING STAYS ANYWAY
 

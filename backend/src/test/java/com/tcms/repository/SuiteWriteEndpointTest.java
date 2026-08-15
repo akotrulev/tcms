@@ -1440,24 +1440,50 @@ class SuiteWriteEndpointTest extends IntegrationTestBase {
                     .doesNotContainKey("suite.withdrawn");
         }
 
+        /**
+         * ~~An engineer cannot deprecate — retiring is the soft form of a delete, and
+         * {@code suite:delete} is withheld from Test Engineer outright, so leaving the retire at the
+         * edit key would route around it with a status change.~~ → <strong>inverted in §208.</strong>
+         *
+         * <p>The routing-around argument does not survive being stated precisely on a suite:
+         * {@code suite:delete} <em>removes</em> the folder, and retiring keeps it, keeps its members
+         * and can be undone. Retiring a draft folder is the same kind of act as renaming one, and
+         * {@code suite:manage} is the key a contributor already uses for that. What retiring routes
+         * around, if anything, is nothing — and it is the only way out of a folder that cannot be
+         * deleted while it holds cases.
+         */
         @Test
-        @DisplayName("an engineer cannot deprecate — retiring is the soft form of a delete")
-        void engineerCannotDeprecate() throws Exception {
-            // suite:delete is withheld from Test Engineer outright, so leaving the retire at the
-            // edit key would route around it with a status change.
+        @DisplayName("an engineer deprecates a draft suite — suite:manage is the structure key")
+        void engineerDeprecatesADraft() throws Exception {
             assertThat(putStatus(ENGINEER, ACME, ACME_BANKING, DRAFTED, "DEPRECATED")
-                    .getResponse().getStatus()).isEqualTo(403);
-            assertThat(storedStatus(ACME, DRAFTED)).isEqualTo("DRAFT");
-        }
-
-        @Test
-        @DisplayName("a lead deprecates a suite that was never approved — the alternative is a dead end")
-        void leadDeprecatesADraft() throws Exception {
-            // A folder holding cases cannot be deleted (the delete refuses a non-empty suite), so
-            // if retiring needed an approval first there would be no way out of it at all.
-            assertThat(putStatus(LEAD, ACME, ACME_BANKING, DRAFTED, "DEPRECATED")
                     .getResponse().getStatus()).isEqualTo(200);
             assertThat(storedStatus(ACME, DRAFTED)).isEqualTo("DEPRECATED");
+        }
+
+        /**
+         * The half §208 keeps. Retiring a folder somebody signed off ends that sign-off, so it costs
+         * what ending it costs, whatever the target is called.
+         */
+        @Test
+        @DisplayName("an engineer cannot deprecate an APPROVED suite")
+        void engineerCannotDeprecateAnApprovedSuite() throws Exception {
+            assertThat(putStatus(ENGINEER, ACME, ACME_BANKING, SIGNED_OFF, "DEPRECATED")
+                    .getResponse().getStatus()).isEqualTo(403);
+            assertThat(storedStatus(ACME, SIGNED_OFF)).isEqualTo("APPROVED");
+        }
+
+        /**
+         * §208's symmetry, and the reason retiring is not a one-way door for the contributor who may
+         * now walk through it. Nothing is unmade: {@code DEPRECATED} already stands
+         * {@code OUTSIDE_REVIEW}, so whatever sign-off existed ended at the retirement — performed
+         * by somebody who held {@code suite:approve} to do it — and what comes back is a draft.
+         */
+        @Test
+        @DisplayName("an engineer revives a retired suite, and it comes back as a DRAFT")
+        void engineerRevivesARetiredSuite() throws Exception {
+            assertThat(putStatus(ENGINEER, ACME, ACME_BANKING, RETIRED, "DRAFT")
+                    .getResponse().getStatus()).isEqualTo(200);
+            assertThat(storedStatus(ACME, RETIRED)).isEqualTo("DRAFT");
         }
 
         @Test

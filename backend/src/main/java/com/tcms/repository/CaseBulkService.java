@@ -546,13 +546,15 @@ public class CaseBulkService {
     private static String leadOnly(LifecycleStatus current, LifecycleStatus target) {
         return switch (target) {
             case APPROVED -> "Only a test lead can approve cases. Submit them for review instead.";
-            case DEPRECATED -> "Only a test lead can deprecate cases.";
-            // The unmaking arm. `current` is APPROVED or DEPRECATED here, or permissionFor would
-            // not have asked for the approve key — so the sentence names the state the row is in
-            // rather than the one it was asked to reach, which is the fact the caller cannot see
-            // from a selection of four hundred.
-            case DRAFT, IN_REVIEW -> "Only a test lead can change a case that is already "
-                    + current.label().toLowerCase(Locale.ROOT) + ".";
+            // Everything else. `current` is APPROVED here — since §208 that is the ONLY other way
+            // permissionFor asks for the approve key — so the sentence names the state the row is
+            // in rather than the one it was asked to reach, which is the fact the caller cannot
+            // see from a selection of four hundred. DEPRECATED joined this arm in §208: retiring a
+            // case nobody signed off costs case:edit now, so the standalone "only a test lead can
+            // deprecate cases" was left describing a refusal that only happens to an approved row,
+            // where it would have been the one true thing it did not say.
+            case DRAFT, IN_REVIEW, DEPRECATED -> "Only a test lead can change a case that is "
+                    + "already " + current.label().toLowerCase(Locale.ROOT) + ".";
         };
     }
 

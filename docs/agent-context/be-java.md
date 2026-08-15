@@ -2,14 +2,21 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-14 (**§207** — **the permission model changed and almost no code did**:
+**Last verified:** 2026-08-15 (**§208** — **the authoring ladder's gate is one sentence now**: the
+approve key buys a sign-off and buys touching an artifact that has one, so deprecating *and reviving*
+an unapproved case or suite cost the EDIT key, `rank` is **deleted** (it ranked `DEPRECATED` above
+`APPROVED`, which is narrative order used as authority order), `LifecycleLadderTest` is the first
+total observer the gate has ever had, and §207's recorded incoherence is closed — **no permission
+moved and no migration was written**; see the §208 section below before touching
+`LifecycleLadder`; **§207** — **the permission model changed and almost no code did**:
 `V51` moves three grants, after which **NO grant carries `OWN`** and the whole authorship-qualifier
 mechanism is live-but-unpopulated on purpose — `PermissionQualifier.OWN`,
 `IdentityProjectAccess.canDoOnAuthored`'s `OWN` arm, `CaseDeleteService`'s authorship gate and its
 `NotTheAuthor` outcome are all retained and unreachable from seeded data, because the qualifier is
 DATA and deleting the arm is what makes a future `OWN` grant fail OPEN; a Test Engineer now deletes
-any case, any evidence and any plan; `LifecycleLadder` carries a RECORDED, UNFIXED incoherence
-(deprecating still costs the approve key while deleting no longer does); and `V12`/`V40`/`V3` still
+any case, any evidence and any plan; ~~`LifecycleLadder` carries a RECORDED, UNFIXED incoherence
+(deprecating still costs the approve key while deleting no longer does)~~ → **closed by §208, read
+that section instead**; and `V12`/`V40`/`V3` still
 argue the old model and must NOT be edited — Flyway checksums an applied migration. See the §207
 section below before touching anything permission-shaped; **§206** — **no Java behaviour moved**, twenty javadocs did and one field became package-private for a check that had never existed, and a new rule in `packages/` now reads every `.java` file: a path a comment names must exist, `{@code}` included and `{@link}` excluded — see the §206 section immediately below, which is the one thing to read before writing a comment; the nine repairs are sentences that justified server behaviour by the SPA's mock, deleted 2026-08-06; **§200** — `CaseEdit.validate` takes a `ProcedureRule`: steps-for-STRUCTURED and scenario-for-GHERKIN are ONE rule with two spellings, `REQUIRED` on `PATCH`, `DEFERRED` on `POST` **and inside `CaseEdit.of`** — the third arm is not a second decision and is the half that would have shipped broken, because `of` re-validates a stored row and a stub would have been skipped by every authored bulk action under a message the update path refuses; `case_health.incomplete`'s two unreachable terms get a producer with the predicate unchanged, and the `APPROVED` gate is what makes the deferral cheap; **§194** — `frontend/` only, **no Java, no contract, no migration**: the case editor greys the decline switch while a move is pending, because `CaseEdit.normalizeDeclines` bounds the submitted set by the *destination* folder and a flat suite shares no attachment — so the server was already discarding what that control accepted; **§193** — the bulk result names the cases a move takes a decline from, the read must happen before the mutation because §192's write-back answers the question itself, and one projection serves both the write and the report; **§192** — a decline lives exactly as long as its folder imposes the rule, `reconcileOptouts` carries two bounds whose order is the rule, `declinableAttachmentIds` is now `reachingAt` returning both sets, and `V50` sweeps what the writers cannot reach; **§190** — a table comment is checked against the catalog, `V49` restated two of them, and a full stop is not a qualifier; **§188** — both column rules' corpora are `src/main`, `@Version` is skipped by the writer rule, a test that SELECTs a column is no longer that column's reader, and an explicit `= null` is a writer to a bytecode rule; **§187** — `case_condition_optout` has a writer at last, the declined rows are served on two lists of their own because `preconditions` is what a run pins, the hash must be what the case declines *after* the save, and a table whose only writer is a fixture reads as written to the column rule; **§186** — `suite_condition` has a writer at last, a suite serves two condition lists instead of one, and its reconcile must rewrite in place because `case_condition_optout` points at the rows; **§185** — the blob roots are provisioned by the image and pinned by a rule, a bind mount and a named volume behave oppositely, the store refuses to start on an unusable root, and a text rule reading a file outside `src/` is green by cache unless `build.gradle.kts` declares it; **§184** — `DashboardService.health` is the only ordering of health tiles, it is package-private for its own test, and its second comparator key had never been observed; **§182** — `case_health` has no open work left: every column is derived, `HealthSignal` has an eleventh member, and the boundary test stopped needing a witness; **§181** — every health signal has a writer, `ORPHANED` means the owner is no longer in the company's directory, and `incomplete` changed which by-decision map it is in; **§180** — the dashboard sends no display text and no colours, `HealthSignal.label` is deleted and `LifecycleStatus.label()` survives on one refusal sentence; **§179** — a raised signal carries its severity, `signals()` is sorted worst first, and the SPA's copy of the severity table is gone; **§178** — `case_health` has nine written signals and one left; the
 last two came off `case_doc_link`, the statement's *order* inside the recompute is load-bearing, and
@@ -18,11 +25,59 @@ draft buffer; **§127 phase 1** — the table and image block payloads; **§126 
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `507c80b` (§207, the slice commit; the docs commit that carries this very line
-lands immediately after it, so the header is one behind by construction. Before it the header sat at
-~~`c6fbefd` (§206 phase 3)~~ and before that ~~`be8c1a6` (§199)~~, lagging the body by six sections —
-the normal state, and exactly why the rule below exists.)
+**Baseline commit:** `9de1eac` (§207's docs commit — §208's own slice commit lands immediately after
+this line is written, so the header is one behind by construction. Before it the header sat at
+~~`507c80b` (§207)~~, ~~`c6fbefd` (§206 phase 3)~~ and ~~`be8c1a6` (§199)~~, lagging the body by six
+sections — the normal state, and exactly why the rule below exists.)
 Per `CLAUDE.md`, **trust the body over the header** and re-grep what a later commit could have moved.
+
+---
+
+## §208 — ONE SENTENCE DECIDES THE AUTHORING LADDER'S GATE, AND `rank` IS GONE
+
+**Read this before touching `LifecycleLadder`, `CaseBulkService`'s status arm, or `SuiteStatusService`.**
+
+`LifecycleLadder.permissionFor` is now four lines and the rule is one sentence:
+
+> **The approve key buys a sign-off, and it buys touching an artifact that has one.**
+
+```java
+if (requested == APPROVED) return keys.approve();
+return current == APPROVED ? keys.approve() : keys.edit();
+```
+
+Consequences you will otherwise re-derive:
+
+- **Deprecating an unapproved case or suite costs the EDIT key** (`case:edit` / `suite:manage`), and
+  so does **reviving** a deprecated one. This reverses §75's `DEPRECATED` arm. §207's recorded
+  incoherence — a contributor could delete a colleague's case and not retire it — is closed.
+- **`rank` is DELETED and must not come back.** It put `DEPRECATED` at 3, *above* `APPROVED`, which
+  is what made retiring reachable only from the ladder's top and reviving read as an unmaking.
+  Narrative order (drafted → reviewed → approved → retired) was being used as authority order. If you
+  find yourself wanting an ordinal here, that is the mistake. **`PlanLifecycle#rank` is a different
+  ladder and stays** — `PlanStatus` has no `DEPRECATED`.
+- **`APPROVED → anything` still costs approve.** §75's finding is untouched, and it is the half a
+  refactor breaks silently: `LifecycleLadderTest.Approve.leavingAnApproval` is its independent
+  observer, and `§208 DM-2` in the mutation queue exists because the fail-closed instinct on *revive*
+  frees `APPROVED → DRAFT` as a side effect.
+- **`LifecycleLadderTest` exists now and is total over the sixteen pairs**, with no Spring context.
+  Before §208 the gate's whole coverage was five assertions across two endpoint tests. Add a rule
+  here and the table is where it gets pinned; the endpoint tests assert the *wiring* (each caller's
+  own `Keys` plus the row's stored status), not the rule.
+- **`CaseBulkService.leadOnly` no longer has a `DEPRECATED` arm.** Everything that is not
+  `target == APPROVED` names the state the row is **in**, because since §208 `current == APPROVED` is
+  the only other way the approve key is asked for.
+- **`BulkOperations.permission` is unchanged and still correct** — it is the request-level *floor*
+  (approve iff the target is `APPROVED`), and the per-row half has always been `evaluateStatus`.
+
+**No permission moved and no migration was written.** This is a gate placement, so `V3`/`V51`,
+`Permission`'s enum and `lib/permissions.ts` are all untouched. Roles spec **§A4 principle 2** carries
+the rule; handoff [§208](../handoff/208-the-retire-that-cost-more-than-the-delete.md) carries the
+argument.
+
+Found on the way and **not** taken: **`ArtifactStatus` has two unreachable values.**
+`Artifact.java:230` is the only writer of `artifact.status` and it writes `ACTIVE`; `SUPERSEDED` and
+`ARCHIVED` have no endpoint, and `artifact.superseded_by_id` exists with nothing able to set it.
 
 ---
 
@@ -90,14 +145,18 @@ check, and its own 2026-08-08 comment predicted this exact scenario. **Generalis
 reads "X minus the things that…", assert the delta, never the subset** — a subset check cannot
 distinguish "still correct" from "correct for a reason that no longer exists". #confirmed
 
-### A recorded, unfixed incoherence in `LifecycleLadder`
+### ~~A recorded, unfixed incoherence in `LifecycleLadder`~~ → **CLOSED BY §208**
 
-`permissionFor` charges the **approve** key for the move to `DEPRECATED`, on the argument that
+~~`permissionFor` charges the **approve** key for the move to `DEPRECATED`, on the argument that
 retiring is the soft form of a Lead-only delete. Half that premise is gone: **a Test Engineer may
 now delete a colleague's case and may not deprecate it** — the stronger act is cheaper than the
 weaker one. Still coherent for a *suite* (`suite:delete` unchanged). Left standing because moving it
-is a change to the **approval ladder**, out of §207's scope; the javadoc says so at the site so the
-surviving prose is not read as a live argument. #confirmed
+is a change to the **approval ladder**, out of §207's scope.~~
+
+**Fixed 2026-08-15 — see the §208 section at the top of this file.** Kept struck rather than deleted
+because the "still coherent for a suite" clause is the half §208 had to re-argue rather than inherit:
+`suite:delete` *removes* the folder while deprecating keeps it, keeps its members and can be undone,
+so they were never two strengths of one act. #confirmed
 
 ### Where the prose was re-based (all comment-only)
 

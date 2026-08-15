@@ -2416,3 +2416,21 @@ tooltip and not only the `disabled` attribute.
 | `§207 AQ-2` | **L2**, same caller, press it and confirm the dialog | **204, the case leaves the list**, and the dialog reports no error. The `CaseDeleteDialog` refusal path still exists for a revoked grant, so a 403 here would render *in the dialog* rather than as a toast — read the dialog, not the corner. |
 | `§207 AQ-3` | **L4**, signed in as a **Test Engineer**, on a **plan** authored by a different account: open the plan and look at Delete | **Enabled.** This is the row with no server-side precedent — Test Engineer never held `plan:delete` at all, so the button has never once been live for this role and nothing in the SPA changed to make it so. It works only if the grant landed; a disabled button here means `V51`'s `INSERT` did not run on this database. |
 | `§207 AQ-4` | **L2**, signed in as a **Viewer**, on any case: look at Delete | **Disabled**, with a tooltip that does **not** name `case:delete`. The boundary §207 leaves in place, and the only refusal this endpoint can still produce. If AQ-1 passes and this one does too, the line moved exactly as far as intended and no further. |
+
+## §208 — the Deprecate a contributor could not press, and the way back from it
+
+**Five rows, none run** (§65). Ids are `§208 DP-*`; `DP` is unused elsewhere in this file — grep
+before minting a prefix (`§154`'s banner).
+
+Lane: **L2** for the case rows, **L1/L2** for the suite rows. `DP-1`, `DP-2` and `DP-5` need a
+signed-in **Test Engineer**; `DP-3` needs a suite an account holding `suite:approve` has already
+approved. Nothing here needs two accounts — unlike `§207 AQ-*`, the gate turns on the artifact's
+status rather than on who authored it, so one contributor session can drive four of the five.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§208 DP-1` | **L2**, as a **Test Engineer**, on a **DRAFT** suite: open the folder's ⋯ menu and read `Deprecate…` | **Enabled.** Before §208 it was greyed with a `suite:approve` reason. Read the tooltip, not the pixel: every item in this menu is disabled while the permission query is in flight, which for a moment looks identical — the frontend test for this row uses `waitFor` for exactly that reason. |
+| `§208 DP-2` | **L2**, same caller, press it and confirm | **200 and the folder shows as Deprecated.** The row that proves the *server* moved and not only the menu — the item enabling is a client-side table, so a 403 here means `LifecycleLadder` did not ship. |
+| `§208 DP-3` | **L2**, as a **Test Engineer**, on an **APPROVED** suite: read both `Return to draft` and `Deprecate…` | **Both still disabled**, both naming `suite:approve`. The half §208 keeps, and the row that says the line moved exactly as far as intended. If `DP-1` passes and this one does too, the change is a gate placement rather than a widening. |
+| `§208 DP-4` | **L2**, as a **Test Engineer**, on the suite `DP-2` just retired: open the menu and press `Restore to draft` | **Enabled, and a 200 landing on `DRAFT`.** The one-way door this slice exists not to build: if `DP-2` passes and this fails, a contributor can retire a folder and cannot undo it, which is worse than the state before the slice. |
+| `§208 DP-5` | **L2**, as a **Test Engineer**: select two cases in the grid — one `DRAFT`, one `APPROVED` — open the bulk dialog, choose **Set status → Deprecated**, preview and commit | **200 with a split result**: the draft in `changed`, the approved one in `skipped` reading *"Only a test lead can change a case that is already approved."* Two things at once — that `DEPRECATED` is no longer gated for the whole selection, and that the per-row skip still names the state the row is **in** rather than the one it was asked to reach. Before §208 both rows were skipped and the sentence was *"Only a test lead can deprecate cases."* |

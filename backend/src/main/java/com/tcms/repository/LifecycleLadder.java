@@ -41,8 +41,12 @@ import com.tcms.project.ReviewStanding;
  * cases and move them to {@code DRAFT}, <strong>rescinding a lead's sign-off with the permission
  * they use every day</strong>. Leaving an approval is an approval act too.
  *
- * <p>Hence {@link #permissionFor} takes both ends. Roles spec §A4 principle 1, unchanged: a Test
- * Engineer is never blocked from producing, only from unmaking.
+ * <p>Hence {@link #permissionFor} takes both ends. <del>Roles spec §A4 principle 1, unchanged: a
+ * Test Engineer is never blocked from producing, only from unmaking.</del> → <strong>§A4 principle 1
+ * was rewritten by {@code V51} (§207) and this class follows it in §208</strong>: a Test Engineer has
+ * full CRUD over <em>content</em>, and what stays Lead-only is shared structure and judgements about
+ * the work. "Unmaking" collapsed two different things, and the {@code DEPRECATED} gate was where the
+ * collapse showed — see {@link #permissionFor}.
  */
 final class LifecycleLadder {
 
@@ -57,9 +61,12 @@ final class LifecycleLadder {
      * swapped version gates approval on the edit key, which is the defect this class exists to
      * close, silently reintroduced.
      *
-     * @param edit    what carrying the artifact forward costs — §6g: submitting for review
-     *                <em>"needs only edit rights"</em>
-     * @param approve what granting the sign-off, retiring the artifact, or taking either back costs
+     * @param edit    what carrying the artifact <em>through the states nobody has signed off</em>
+     *                costs — submitting a draft for review (§6g: <em>"needs only edit rights"</em>),
+     *                withdrawing that submission, retiring an unapproved artifact, and reviving a
+     *                retired one
+     * @param approve what granting the sign-off costs, and what touching an artifact that already
+     *                has one costs — <em>whatever</em> the move's target happens to be
      */
     record Keys(String edit, String approve) {
     }
@@ -116,7 +123,10 @@ final class LifecycleLadder {
      *   <li><strong>{@code DEPRECATED} from anywhere.</strong> Retiring is always available,
      *       including to a draft nobody ever reviewed — the alternative is a folder full of cases
      *       that can neither be deleted (the delete refuses a non-empty suite) nor retired, which
-     *       is a dead end reachable by ordinary use.</li>
+     *       is a dead end reachable by ordinary use. §208 is that argument carried into
+     *       {@link #permissionFor}: the move being <em>legal</em> from a draft while costing a key
+     *       no contributor holds left the same dead end one layer up, reachable by the same
+     *       ordinary use.</li>
      * </ul>
      *
      * <p><strong>A retired artifact returns as a DRAFT, never straight to review or approval.</strong>
@@ -177,48 +187,69 @@ final class LifecycleLadder {
      * may not climb. A pair that is both illegal and approval-shaped therefore answers the approve
      * key here and is refused afterwards — in that order.
      *
-     * <p>Three acts cost the approve key, and the third is the one a target-decides rule misses:
+     * <p><strong>The whole rule is one sentence: the approve key buys a sign-off, and it buys
+     * touching an artifact that has one.</strong> Two acts, and the second is the one a
+     * target-decides rule misses:
      *
      * <ol>
-     *   <li><strong>Granting the sign-off</strong> — {@code APPROVED}. §6g: only Admin and Test Lead
-     *       may perform the final transition.</li>
-     *   <li><strong>Retiring the artifact</strong> — {@code DEPRECATED}. The soft form of a delete,
-     *       and <del>the delete is Lead-only ({@code suite:delete} outright, {@code case:delete}
-     *       {@code OWN}-qualified), so leaving the retire at the edit key would route around
-     *       both</del>.
-     *
-     *       <p><strong>KNOWN INCOHERENCE SINCE {@code V51} (§207), LEFT STANDING DELIBERATELY AND
-     *       NOT ENDORSED.</strong> Half that premise is gone: {@code case:delete} is now a plain
-     *       grant every Test Engineer holds over every case. So a contributor may <em>delete</em> a
-     *       colleague's case outright and may <em>not</em> deprecate it — the stronger act is
-     *       cheaper than the weaker one, and the "routes around the delete" argument now runs
-     *       backwards on a case. It still holds for a suite, where {@code suite:delete} is Lead-only
-     *       and unchanged.
-     *
-     *       <p>Not repaired here because §207's requirement is about CRUD, and moving this gate is a
-     *       change to the <em>approval ladder</em> — the key it costs is {@code case:approve}, by
-     *       §72's placement decision, and that ladder was explicitly out of scope. The repair, when
-     *       someone takes it, is to decide whether retiring is an edit or an approval on its own
-     *       terms rather than by reference to what a delete costs. Recorded so the next reader does
-     *       not take the surviving prose as a live argument. Handoff §207 carries it as a named
-     *       follow-up.
-     *
-     *       <p>The rest is unchanged: this tightens what a Test Engineer could do to a <em>draft</em>
-     *       case through the bulk endpoint, deliberately. <del>The {@code OWN}-qualified refinement —
-     *       an author may retire their own — is the natural next rung.</del> → no longer available as
-     *       a rung: no grant carries {@code OWN} after {@code V51}, so a refinement built on it would
-     *       be reintroducing authorship-scoped writes that §207 removed.</li>
-     *   <li><strong>Taking either back</strong> — any move down out of a state at or above
-     *       {@code APPROVED}. This is the arm that was missing on a case.</li>
+     *   <li><strong>Granting the sign-off</strong> — {@code requested == APPROVED}. §6g: only Admin
+     *       and Test Lead may perform the final transition.</li>
+     *   <li><strong>Moving an artifact that is currently {@code APPROVED}</strong>, wherever it is
+     *       going — back to {@code DRAFT}, back to {@code IN_REVIEW}, or out to {@code DEPRECATED}.
+     *       Every one of those ends a lead's sign-off, and the target it happens to name says
+     *       nothing about that. This is the arm that was missing on a case until §75.</li>
      * </ol>
+     *
+     * <h2>What {@code DEPRECATED} costs, decided on its own terms (§208)</h2>
+     *
+     * <p><del>Retiring is the soft form of a delete, and the delete is Lead-only
+     * ({@code suite:delete} outright, {@code case:delete} {@code OWN}-qualified), so leaving the
+     * retire at the edit key would route around both.</del> → <strong>superseded 2026-08-15.</strong>
+     * {@code V51} (§207) made {@code case:delete} a plain grant every Test Engineer holds over every
+     * case, which left the premise half gone and the conclusion inverted: a contributor could
+     * <em>delete</em> a colleague's case outright and could not <em>retire</em> it — the stronger act
+     * cheaper than the weaker one. §207 recorded that and did not repair it, on the grounds that the
+     * repair belongs to the approval ladder rather than to a CRUD requirement.
+     *
+     * <p><strong>Retiring is now decided by what it is, not by what a delete costs.</strong> Retiring
+     * an artifact <em>nobody has signed off</em> takes it out of use and changes no judgement anybody
+     * made — it is the same kind of act as withdrawing a submission, and it costs the edit key. It is
+     * also the only way out of a folder that cannot be deleted while it holds cases, which is the
+     * dead end {@link #decide}'s {@code DEPRECATED}-from-anywhere rule already exists to avoid.
+     * Retiring an artifact that <em>is</em> approved falls under rule 2 above and is unchanged.
+     *
+     * <p>Roles spec §A4 principle 1, as {@code V51} rewrote it, is what makes this hold on both
+     * aggregates: a Test Engineer has full CRUD over <em>content</em>, and what stays Lead-only is
+     * shared structure and judgements. On a case the edit key is {@code case:edit} and the content
+     * argument is direct. On a suite the edit key is {@code suite:manage} — the key a contributor
+     * already uses to create, rename and file into folders — so retiring a draft folder is the
+     * structure work they hold, while <em>removing</em> it is still {@code suite:delete} and still
+     * Lead-only. Neither reading routes around anything.
+     *
+     * <p><strong>Reviving is symmetric, and that is a decision rather than a fallout</strong>
+     * (2026-08-15, at the user's direction). {@code DEPRECATED → DRAFT} costs the edit key too. The
+     * ladder cannot see whether the artifact was approved <em>before</em> it was retired — the pair
+     * is the whole of its input — so the question is which way to resolve the ambiguity, and the
+     * answer is that there is nothing left to unmake: {@link #standingOf} maps {@code DEPRECATED} to
+     * {@link ReviewStanding#OUTSIDE_REVIEW}, so the sign-off ended at the retirement, performed by
+     * somebody who held the approve key to do it. What comes back is a {@code DRAFT} that must pass
+     * review again. The alternative — revival at the approve key — makes retiring a one-way door for
+     * the contributor who may now walk through it, which is §68's and §69's bound and the argument
+     * {@link #decide} already makes for {@code DRAFT}-from-anywhere.
+     *
+     * <p><strong>{@code rank} went with the old rule and its absence is part of the decision.</strong>
+     * The private ordinal existed for this method alone and put {@code DEPRECATED} at 3 — <em>above</em>
+     * approval — which is precisely what made retiring reachable only from the ladder's top and
+     * reviving read as an unmaking. With the gate turning on one status rather than on an order
+     * between two there is nothing left to compare, and a private method with no caller is §152's
+     * shape. {@code PlanLifecycle#rank} is not the same copy and stays: {@code PlanStatus} has no
+     * {@code DEPRECATED}, so its three values really are a line.
      */
     static String permissionFor(LifecycleStatus current, LifecycleStatus requested, Keys keys) {
-        if (requested == LifecycleStatus.APPROVED || requested == LifecycleStatus.DEPRECATED) {
+        if (requested == LifecycleStatus.APPROVED) {
             return keys.approve();
         }
-        boolean unmaking =
-                rank(requested) < rank(current) && rank(current) >= rank(LifecycleStatus.APPROVED);
-        return unmaking ? keys.approve() : keys.edit();
+        return current == LifecycleStatus.APPROVED ? keys.approve() : keys.edit();
     }
 
     /**
@@ -243,22 +274,4 @@ final class LifecycleLadder {
         };
     }
 
-    /**
-     * How far along the ladder a status sits — used only by {@link #permissionFor}, and deliberately
-     * <em>not</em> by {@link #decide}, which spells its table out.
-     *
-     * <p>{@code PlanLifecycle#rank}'s reasoning, unchanged: an ordinal comparison decides an
-     * authorization question here, which is what {@code PermissionQualifier.strongest} was rewritten
-     * in §61 to stop doing. The difference is that this order is <em>the domain's own</em> — drafted
-     * before reviewed before approved before retired — and it is written out rather than read off
-     * {@code Enum#compareTo}, so re-ordering the enum's declaration cannot silently move a gate.
-     */
-    private static int rank(LifecycleStatus status) {
-        return switch (status) {
-            case DRAFT -> 0;
-            case IN_REVIEW -> 1;
-            case APPROVED -> 2;
-            case DEPRECATED -> 3;
-        };
-    }
 }
