@@ -133,6 +133,7 @@ public class AdminDirectoryService {
         // and is asked as its own key rather than folded into companyWide. See AdminReach.
         boolean manageTeams = companyTerm.has(TeamWriteService.MANAGE_TEAMS);
         boolean issueTokens = companyTerm.has(ApiTokenService.ISSUE_TOKENS);
+        boolean manageIdentityProviders = companyTerm.has(IdentityProviderService.MANAGE_IDP);
         boolean readsCompany = companyTerm.has(READ_COMPANY);
 
         Set<UUID> visible = new LinkedHashSet<>();
@@ -148,7 +149,7 @@ public class AdminDirectoryService {
         }
         return new AdminReach(
                 Set.copyOf(visible), Set.copyOf(staffable),
-                companyWide, manageTeams, issueTokens, readsCompany);
+                companyWide, manageTeams, issueTokens, manageIdentityProviders, readsCompany);
     }
 
     /**

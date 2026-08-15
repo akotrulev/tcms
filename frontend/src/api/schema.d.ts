@@ -94,6 +94,185 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Which sign-in providers an email address reaches
+         * @description External sign-in is discovered by **email domain** (§6r). There is deliberately no
+         *     pre-authentication company picker: one would publish this instance's client roster to
+         *     anyone who loaded the login page (§6s).
+         *
+         *     **This operation answers `200` with a list in every case, and never anything else.**
+         *     The list is empty for a domain no company claims, for a domain whose providers are all
+         *     disabled, and for something that is not an address at all — and it is the union across
+         *     every company claiming the domain, carrying no company id and no company name. A `404`,
+         *     an error, or a different shape for any of those would turn this endpoint into an oracle
+         *     for which client organisations exist here, which is exactly what the shared refusal on
+         *     `POST /auth/login` exists to prevent.
+         *
+         *     A domain may legitimately be claimed by several companies, so a caller cannot read
+         *     "one provider" as "one company" either.
+         *
+         *     `POST` rather than `GET` although it reads nothing: an email address in a query string
+         *     lands in access logs, browser history and `Referer` headers, and this one is typed by
+         *     somebody who has not signed in and may never do so.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: email */
+                        email: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The providers to offer. Often empty; never an error. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SsoProviderDiscovery"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/sso/{providerId}/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Begin external sign-in
+         * @description Records an in-flight attempt and redirects the browser to the issuer's authorization
+         *     endpoint with `state`, `nonce` and an S256 `code_challenge`.
+         *
+         *     **`302` in every case, success and failure alike.** The caller is a browser mid-redirect
+         *     and has no client to read a status code, so an unknown provider, a disabled one and an
+         *     unreachable issuer all land on the SPA's callback route with one opaque marker. The
+         *     provider's `enabled` flag is *returned* by the pre-authentication lookup rather than
+         *     filtered on, precisely so that refusal happens on the same code path as every other.
+         *
+         *     The PKCE verifier is held **server-side** for the life of the attempt. The rejected
+         *     alternative was a signed cookie, which puts a confidential client's PKCE secret in the
+         *     browser and moves the replay check to where it is not a check.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /**
+                     * @description Opaque, and it leaks nothing: it is a UUID, and the lookup behind it reads a company
+                     *     and an issuer and nothing about any person.
+                     */
+                    providerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description To the issuer, or to the SPA's failure landing. */
+                302: {
+                    headers: {
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/sso/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Complete external sign-in
+         * @description Exchanges the authorization code, verifies the `id_token` (signature, `iss`, `aud`,
+         *     `nonce`, `exp`), resolves the assertion to an account, and redirects to the SPA with a
+         *     **TCMS session** — the same token `POST /auth/login` issues, from the same claim set.
+         *     **The issuer's own token never reaches the SPA** (§6r): the IdP proves who somebody is,
+         *     once, and never becomes a credential for this API.
+         *
+         *     The session travels in the URL **fragment**, not the query string. A fragment is never
+         *     sent to a server, so the token does not land in this instance's access log, the reverse
+         *     proxy's, or the `Referer` header of the first outbound link the SPA renders.
+         *
+         *     **The attempt is single-use and is claimed before the code is exchanged**, by a
+         *     conditional update — two callbacks carrying one `state` cannot both proceed.
+         *
+         *     **There is no `providerId` in this path**, unlike the authorize leg. The `state` already
+         *     fixes which attempt, and therefore which provider and which company, this callback
+         *     belongs to, and that binding is server-side. A second caller-supplied copy of the same
+         *     fact could only be ignored or trusted, and trusting it is how a callback gets pointed at
+         *     somebody else's provider.
+         *
+         *     `302` in every case, for the reason the authorize leg gives.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    code?: string;
+                    state?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description To the SPA, carrying the session in the fragment, or the failure marker. */
+                302: {
+                    headers: {
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/invitations/{token}": {
         parameters: {
             query?: never;
@@ -7087,6 +7266,259 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/identity-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * This company's external identity providers
+         * @description Gated on **`company:idp`** at COMPANY scope — Company Admin and Instance Admin only, per
+         *     roles spec §A3 ("Configure identity providers and claim-to-role mappings"). This is that
+         *     permission's first consumer: it has been seeded since `V3` with nothing ever asking it.
+         *
+         *     **Disabled providers are in the list.** A list that hid them could not be used to enable
+         *     one, and registration always produces a disabled provider.
+         *
+         *     The client secret is **not here and is on no read path at all**. `clientSecretSet` is the
+         *     boolean a form needs so it can say "leave blank to keep"; the value itself exists only in
+         *     the database and for the length of one token exchange.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The company's providers */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IdentityProvider"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        /**
+         * Register an identity provider
+         * @description Gated on **`company:idp`**.
+         *
+         *     **The provider is always created disabled**, whatever `enabled` says. Configuring an
+         *     issuer and turning it into a live sign-in route are two acts: an issuer URL typed wrong
+         *     is a route that refuses everybody, and the moment it goes live should be a decision
+         *     somebody made after checking.
+         *
+         *     `jitProvisioning` and `autoLinkVerifiedEmail` both default to **off**, and both defaults
+         *     are the safe direction. An IdP authoritative for one organisation is not authoritative
+         *     for who may enter a client's company; and with auto-linking on, the issuer's word about
+         *     an email address is enough to reach an existing account's authorship.
+         *
+         *     `issuerUri` must be **`https`**. Not a style rule: the discovery document, and therefore
+         *     the `jwks_uri` every signature is checked against, is fetched from it.
+         *
+         *     `key` is set once and is not read by `PUT` — it is what a client's own documentation and
+         *     bookmarks name.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["IdentityProviderInput"];
+                };
+            };
+            responses: {
+                /** @description Registered, disabled */
+                201: {
+                    headers: {
+                        /** @description The new provider's URL. */
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IdentityProvider"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/identity-providers/email-domains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The email domains this company claims
+         * @description Gated on **`company:idp`**. These are what `POST /auth/providers` resolves an address
+         *     against.
+         *
+         *     A claim, not proof of ownership — nothing here verifies that the client controls the
+         *     domain, and nothing needs to: the row only decides which buttons a login form renders,
+         *     and pressing one still ends at an issuer that has to authenticate the person.
+         *
+         *     **Not unique across the instance.** Several companies may claim one domain, which §6r
+         *     requires; a rejection on save would leak, by refusal, that somebody else already claimed
+         *     it.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The claimed domains, alphabetically */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EmailDomains"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        /**
+         * Replace the claimed email domains
+         * @description Gated on **`company:idp`**. Replaces the whole set — the unit an administrator thinks in,
+         *     and there is no lifecycle on a claim to preserve. Domains already claimed keep their
+         *     original `created_at` rather than being deleted and reinserted.
+         *
+         *     Values are lower-cased and must look like a domain (`acme.test`), not an address.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["EmailDomains"];
+                };
+            };
+            responses: {
+                /** @description The claimed domains, as stored */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EmailDomains"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/identity-providers/{providerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                providerId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Reconfigure an identity provider
+         * @description Gated on **`company:idp`**. Applies the whole edit in one write, so a request cannot
+         *     leave a half-applied configuration behind a `200` saying otherwise.
+         *
+         *     **`key` and `kind` are ignored** — both are set once at registration.
+         *
+         *     **Omitting `clientSecret` keeps the stored one** rather than clearing it. No read path can
+         *     echo the secret back, so a caller editing a display name has nothing to resend; sending an
+         *     empty string is likewise a keep, and a public client simply never had one.
+         *
+         *     This is where `enabled` is turned on.
+         *
+         *     **There is no delete.** `enabled: false` is the off switch: `user_identity` rows reference
+         *     a provider, so removing it would orphan or cascade away every federated account in the
+         *     company, and a company that turned SSO off for a week must get its people back with their
+         *     authorship intact.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    providerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["IdentityProviderInput"];
+                };
+            };
+            responses: {
+                /** @description Saved */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IdentityProvider"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                /** @description No such provider in this company */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/teams": {
         parameters: {
             query?: never;
@@ -11301,6 +11733,116 @@ export interface components {
              *     cannot be recovered, and nothing here can show it again.
              */
             secret: string;
+        };
+        /**
+         * @description What `POST /auth/providers` answers with. **Always present, often empty** — an empty list
+         *     is the answer for an unclaimed domain, a disabled provider and a malformed address alike,
+         *     because a login surface must not be an oracle for which companies exist (§6r).
+         */
+        SsoProviderDiscovery: {
+            providers: components["schemas"]["SsoProviderChoice"][];
+        };
+        /**
+         * @description One sign-in button. **No company id and no company name** — a domain may be claimed by
+         *     several companies, and naming them would publish the client roster this shape exists to
+         *     withhold.
+         */
+        SsoProviderChoice: {
+            /**
+             * Format: uuid
+             * @description What `GET /auth/sso/{providerId}/authorize` takes.
+             */
+            id: string;
+            /**
+             * @description The label, chosen by the client's own administrator — the only string this endpoint
+             *     puts in front of an anonymous caller, and theirs to disclose to somebody who has just
+             *     typed an address at their domain.
+             */
+            displayName: string;
+        };
+        /**
+         * @description `OIDC` is implemented; `LDAP` is the schema's other member and has no implementation yet.
+         *     **There is no SAML member** — resolved question #40 ruled it out of scope, and a value
+         *     nothing can create is a state the code must branch on for no reason.
+         * @enum {string}
+         */
+        IdentityProviderKind: "OIDC" | "LDAP";
+        /**
+         * @description One external issuer a company authenticates its own people against.
+         *
+         *     **There is no client-secret field here or on any other read path.** `clientSecretSet` is
+         *     what replaces it: a form needs to know whether one is stored so it can say "leave blank to
+         *     keep", and that is a boolean, not the value.
+         */
+        IdentityProvider: {
+            /** Format: uuid */
+            id: string;
+            /** @description Stable, unique within the company, set once at registration. */
+            key: string;
+            kind: components["schemas"]["IdentityProviderKind"];
+            displayName: string;
+            /** @description Always `https` — the signing keys every assertion is checked against come from it. */
+            issuerUri: string;
+            clientId: string;
+            /**
+             * @description Whether a secret is stored. `false` means a public client using PKCE alone, which is a
+             *     configuration rather than an omission.
+             */
+            clientSecretSet: boolean;
+            /**
+             * @description Whether a first-time signer with no invitation gets an account — with exactly what
+             *     accepting an invitation grants and nothing more (roles spec §A7).
+             */
+            jitProvisioning: boolean;
+            /**
+             * @description Whether a **verified** address may bind a new subject to an existing account. An
+             *     unverified one never links, whatever this says.
+             */
+            autoLinkVerifiedEmail: boolean;
+            /**
+             * @description Which claim carries group membership. **Stored and not yet consulted** — claim-to-role
+             *     mapping is its own slice, and the column exists so that slice needs no migration here.
+             */
+            groupClaim: string | null;
+            /** @description Whether this is a live sign-in route. Always `false` immediately after registration. */
+            enabled: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /**
+         * @description No `companyId` and no `id`: the company comes from the session's context and the id from
+         *     the path, because request input never selects the tenancy discriminator (ERD §0.1 point 2).
+         *
+         *     `key` and `kind` are **ignored on `PUT`** — both are set once.
+         */
+        IdentityProviderInput: {
+            /** @description Lowercase letters, digits and hyphens. */
+            key: string;
+            kind: components["schemas"]["IdentityProviderKind"];
+            displayName: string;
+            /** @description Must begin `https://`. */
+            issuerUri: string;
+            clientId: string;
+            /**
+             * @description The plaintext, sent when it is set or rotated. **Null or empty keeps the stored
+             *     secret** rather than clearing it — no read path can echo it back, so a caller has
+             *     nothing to resend. Encrypted at rest, never hashed: a token exchange needs it back.
+             */
+            clientSecret: string | null;
+            jitProvisioning: boolean | null;
+            autoLinkVerifiedEmail: boolean | null;
+            groupClaim: string | null;
+            /** @description Ignored on registration, which always produces a disabled provider. */
+            enabled: boolean | null;
+        };
+        /**
+         * @description The domains one company claims, as a whole set. Both the request and the response shape of
+         *     `PUT /identity-providers/email-domains`.
+         */
+        EmailDomains: {
+            domains: string[];
         };
         Team: {
             /** Format: uuid */

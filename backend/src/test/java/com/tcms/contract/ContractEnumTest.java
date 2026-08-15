@@ -122,6 +122,12 @@ class ContractEnumTest {
             Map.entry("IngestedOutcome", List.of("com.tcms.execution.IngestedOutcome")),
             Map.entry("IngestionStatus", List.of("com.tcms.execution.IngestionStatus")),
             Map.entry("PermissionQualifier", List.of("com.tcms.identity.PermissionQualifier")),
+            // One copy, and the reason there is only one is worth keeping: `auth` holds the OIDC
+            // protocol and `identity` holds the entity, but `auth` may see `identity`, so the
+            // protocol side reads this type rather than restating it. Both members are seeded in
+            // ck_identity_provider_kind and neither is SAML — #40 ruled that out, and a member
+            // nothing can create is a state the code must branch on for no reason.
+            Map.entry("IdentityProviderKind", List.of("com.tcms.identity.IdentityProviderKind")),
             Map.entry("WorkItemStatus", List.of("com.tcms.work.WorkItemStatus")),
             Map.entry("NotificationChannelKind",
                     List.of("com.tcms.integration.NotificationChannelKind")),

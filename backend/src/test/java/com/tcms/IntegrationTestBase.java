@@ -130,6 +130,13 @@ public abstract class IntegrationTestBase {
         registry.add("tcms.integration.secret-key",
                 () -> "dGVzdC1vbmx5LWludGVncmF0aW9uLWtleS0zMi1ieXQ=");
 
+        // The OIDC client-secret key, same shape and same reason one module over: `identity` may
+        // not depend on `integration`, so federation has its own key, its own placeholder with no
+        // colon, and therefore its own refusal to start without one — which every context in this
+        // suite needs, including the several hundred that have nothing to do with sign-in.
+        registry.add("tcms.identity.provider-secret-key",
+                () -> "dGVzdC1vbmx5LXByb3ZpZGVyLWtleS0zMi1ieXRlcyE=");
+
         // The case-health recompute is a WRITE on a timer, over every company in the
         // database. Left enabled it fires two minutes into a multi-minute suite run and
         // rewrites case_health for whichever fixtures have seeded by then — most visibly

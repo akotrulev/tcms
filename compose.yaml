@@ -91,6 +91,14 @@ services:
       # so a key committed to this repository is every client's release channel open to
       # anyone who can read it. Base64 of 32 bytes — openssl rand -base64 32.
       TCMS_INTEGRATION_SECRET_KEY: ${TCMS_INTEGRATION_SECRET_KEY:?set it in .env — copy .env.example}
+      # Encrypts every OIDC client secret in the instance. A SECOND key rather than the one
+      # above because `identity` may not depend on `integration` and so cannot reach it — and
+      # separate keys keep a rotation's blast radius to one subsystem. Base64 of 32 bytes.
+      TCMS_IDENTITY_SECRET_KEY: ${TCMS_IDENTITY_SECRET_KEY:?set it in .env — copy .env.example}
+      # This API's own public origin — what an OIDC redirect_uri is built from, and what a
+      # client's administrator registers with their issuer. The SPA's origin is TCMS_BASE_URL
+      # below and is a different host in development.
+      TCMS_API_BASE_URL: ${TCMS_API_BASE_URL:-http://localhost:8080}
       # Where an invitee's browser can reach the SPA. NOT derivable from the request:
       # behind a reverse proxy the container only ever sees its own address, and a link
       # built from that would send every invitee to localhost:8080.

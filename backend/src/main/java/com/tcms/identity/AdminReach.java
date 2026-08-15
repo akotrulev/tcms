@@ -46,6 +46,15 @@ import java.util.UUID;
  *                          because a token is the credential a CI job authenticates with and
  *                          folding it into {@link #companyWide} would silently hand token issuance
  *                          to any future role holding {@code company:members} alone.
+ * @param manageIdentityProviders the caller holds {@code company:idp}: they may configure this
+ *                          company's external issuers and the email domains that discover them.
+ *                          Company Admin and Instance Admin, per roles spec §A3. <strong>A separate
+ *                          term for the third time</strong>, and the argument {@link #manageTeams}
+ *                          and {@link #issueTokens} make is at its strongest here: a provider is the
+ *                          thing that decides <em>who is who</em>, so folding it into
+ *                          {@link #companyWide} would hand federation configuration to any future
+ *                          role holding {@code company:members} alone. {@code company:idp} was
+ *                          seeded by {@code V3} and had no consumer at all until §217
  * @param readsCompany      the caller holds {@code company:read} <strong>at company scope</strong>.
  *                          This read "or on any project they hold" until handoff §43, because five
  *                          of the six built-in roles carry {@code company:read} on a PROJECT-scope
@@ -61,6 +70,7 @@ public record AdminReach(
         boolean companyWide,
         boolean manageTeams,
         boolean issueTokens,
+        boolean manageIdentityProviders,
         boolean readsCompany) {
 
     /**

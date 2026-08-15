@@ -147,6 +147,22 @@ public class AppUser {
     }
 
     /**
+     * Creates an account that an external issuer has just authenticated — {@link UserStatus#ACTIVE}
+     * from the first moment, and with <strong>no password at all</strong>.
+     *
+     * <p>The two differences from {@link #invite} are the same fact stated twice. There is no
+     * invitation to accept because the IdP has already proved who this is, and there is no password
+     * because this account has no local credential to prove it with: {@code AuthenticationService}
+     * refuses a null hash, so the only way in stays the provider that created it. Reached only when
+     * {@link IdentityProvider#isJitProvisioning()} is on (#38).
+     */
+    public static AppUser federate(UUID id, String email, String canonicalName, Instant now) {
+        AppUser user = invite(id, email, canonicalName, now);
+        user.status = UserStatus.ACTIVE;
+        return user;
+    }
+
+    /**
      * Accepts an invitation: sets the first password and opens the account.
      *
      * <p>Bumps the revocation epoch, because {@code INVITED → ACTIVE} changes what this

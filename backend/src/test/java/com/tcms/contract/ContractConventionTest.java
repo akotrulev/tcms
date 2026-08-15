@@ -63,7 +63,15 @@ class ContractConventionTest {
             // Idempotent by design and deliberately answers 204 to an absent or already-expired
             // session: telling an unauthenticated caller that their logout "failed" is both
             // useless and a probe for whether a token was ever valid.
-            "POST /auth/logout");
+            "POST /auth/logout",
+            // The two external-sign-in legs, and they are the strongest members this set has had.
+            // A browser mid-redirect has no client to read a status code, so BOTH answer 302 in
+            // every case — an unknown provider, a disabled one, an unreachable issuer, a replayed
+            // `state`, a refused identity — landing on the SPA with one opaque marker. Declaring a
+            // 4xx here would be declaring a response the endpoint must never send: telling those
+            // causes apart is exactly the oracle §6r forbids on a pre-authentication surface.
+            "GET /auth/sso/{providerId}/authorize",
+            "GET /auth/sso/callback");
 
     @Test
     @DisplayName("every operation declares at least one 4xx response")
@@ -381,6 +389,16 @@ class ContractConventionTest {
                     List.of(com.tcms.repository.AiProposalSummaryView.class)),
             Map.entry("ApiToken", List.of(com.tcms.identity.ApiTokenView.class)),
             Map.entry("ApiTokenInput", List.of(com.tcms.identity.ApiTokenIssueRequest.class)),
+            Map.entry("EmailDomains",
+                    List.of(com.tcms.identity.IdentityProviderController.EmailDomainsRequest.class,
+                            com.tcms.identity.IdentityProviderController.EmailDomainsResponse.class)),
+            Map.entry("IdentityProvider", List.of(com.tcms.identity.IdentityProviderView.class)),
+            Map.entry("IdentityProviderInput",
+                    List.of(com.tcms.identity.IdentityProviderInput.class)),
+            Map.entry("SsoProviderChoice",
+                    List.of(com.tcms.auth.SsoLoginService.ProviderChoice.class)),
+            Map.entry("SsoProviderDiscovery",
+                    List.of(com.tcms.auth.SsoController.ProviderDiscoveryResponse.class)),
             Map.entry("Artifact", List.of(com.tcms.documentation.ArtifactView.class)),
             Map.entry("ArtifactFileInput", List.of(com.tcms.documentation.ArtifactFileInput.class)),
             Map.entry("ArtifactInput", List.of(com.tcms.documentation.ArtifactInput.class)),
@@ -1122,6 +1140,8 @@ class ContractConventionTest {
                     List.of(com.tcms.auth.AuthController.LoginRequest.class)),
             Map.entry("POST /auth/invitations/{token}/accept (request)",
                     List.of(com.tcms.auth.InvitationController.AcceptRequest.class)),
+            Map.entry("POST /auth/providers (request)",
+                    List.of(com.tcms.auth.SsoController.ProviderDiscoveryRequest.class)),
             Map.entry("GET /projects/{projectId}/cases (200)",
                     List.of(com.tcms.repository.CasePageView.class)),
             Map.entry("GET /projects/{projectId}/ai-proposals (200)",

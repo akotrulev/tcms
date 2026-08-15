@@ -50,7 +50,17 @@ class EndpointAccessTest extends IntegrationTestBase {
             // Someone accepting an invitation has no account yet — securing these would
             // deadlock the only way into a new instance.
             "/api/v1/auth/invitations/{token}",
-            "/api/v1/auth/invitations/{token}/accept");
+            "/api/v1/auth/invitations/{token}/accept",
+            // Which sign-in buttons an address reaches. Open because it is asked BY the login
+            // form, before anybody has anything to present — and it is safe to open only
+            // because it answers 200 with a list in every case, empty for an unclaimed domain,
+            // carrying no company id and no company name (§6r).
+            "/api/v1/auth/providers",
+            // The two legs of the external-sign-in redirect. Open for the same reason login is:
+            // you cannot present a session in order to obtain one. Each answers 302 whatever
+            // happens, and the failure landing is one opaque marker for every cause.
+            "/api/v1/auth/sso/{providerId}/authorize",
+            "/api/v1/auth/sso/callback");
 
     @Autowired
     private MockMvc mvc;

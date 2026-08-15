@@ -692,6 +692,18 @@ class ArchitectureRulesTest {
      * plainest argument there is for running the pair.
      */
     private static final Map<String, String> READERLESS_BY_DECISION = Map.ofEntries(
+            Map.entry("UserIdentity.emailAtLink",
+                    "what the IdP said about the address at link time, kept deliberately as a "
+                            + "RECORD and never read back — the entity's own header says so, and "
+                            + "reading it would be the defect: the identity key is (provider, "
+                            + "subject) precisely so that a corporate rename does not fork "
+                            + "somebody into a second account. A reader here is the thing §6r "
+                            + "exists to keep out"),
+            Map.entry("UserIdentity.linkedAt",
+                    "when the binding was made. Written on every link, and there is no screen in "
+                            + "the product that lists a person's external identities — the "
+                            + "federation surface built in §217 configures PROVIDERS, not the "
+                            + "identities under them. Exits when that screen exists"),
             Map.entry("AppUser.locale",
                     "V1 NOT NULL, set to the constant \"en\" by AppUser.invite and never read. A "
                             + "stored preference with no writer but the default and no reader at "

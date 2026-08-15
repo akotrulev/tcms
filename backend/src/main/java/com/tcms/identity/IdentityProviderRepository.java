@@ -25,13 +25,10 @@ public interface IdentityProviderRepository extends JpaRepository<IdentityProvid
      */
     Optional<IdentityProvider> findByIdAndEnabledTrue(UUID id);
 
-    /**
-     * The company's live sign-in routes — what provider discovery turns into buttons.
-     *
-     * <p>{@code companyId} is redundant against RLS and the Hibernate filter, and is bound anyway
-     * for {@code identity_provider_company_enabled_idx} and for the reason
-     * {@link RoleAssignmentRepository}'s header gives: the policy is the guarantee, the predicate
-     * is the intent, and the two agreeing is what makes a mismatch return nothing.
-     */
-    List<IdentityProvider> findByCompanyIdAndEnabledTrue(UUID companyId);
+    // There was a findByCompanyIdAndEnabledTrue here, written for provider discovery. It was
+    // deleted in §217 phase 4 rather than wired: discovery runs BEFORE any company context
+    // exists, so this repository would have answered it with zero rows, and
+    // tcms_resolve_providers_for_domain (V53) answers it instead. A query with no caller is an
+    // unverified claim about a read path that has never executed — §152's rule, and
+    // everyDeclaredRepositoryMethodHasACaller reported this one on its first run.
 }

@@ -118,6 +118,48 @@ tcms:
       ttl: PT8H
       remember-me-ttl: P30D
 
+  identity:
+    # The key every OIDC client secret is encrypted with. NO COLON, for §108's reason: `${VAR:?msg}`
+    # is shell and Compose syntax that Spring reads as a DEFAULT, and this repository has already
+    # shipped a production signing key that was the literal text of its own error message. An
+    # unresolvable placeholder throws at bind time and the context does not start.
+    #
+    # A SECOND key rather than tcms.integration.secret-key, and the reason is the module boundary:
+    # `identity` may not depend on `integration`, so it can reach neither that key nor the cipher
+    # that uses it. Separate keys are the better answer anyway — a rotation's blast radius is one
+    # subsystem, and losing the notification key is not also losing every company's sign-in config.
+    #
+    # Base64 of exactly 32 bytes: `openssl rand -base64 32`.
+    provider-secret-key: ${TCMS_IDENTITY_SECRET_KEY}
+
+  oidc:
+    # Both timeouts bound something an external issuer controls and this deployment does not: the
+    # URL a request thread blocks on was typed by a client's own administrator. The read timeout is
+    # the one that matters — an issuer that accepts the connection and never answers holds a request
+    # thread until the container's own limit, which is a denial of service against the whole
+    # instance rather than one failed sign-in.
+    connect-timeout: PT5S
+    read-timeout: PT10S
+
+    # How long a fetched openid-configuration is reused. Not zero, or every callback costs an extra
+    # round trip to a third party; not indefinite, or a rotated jwks_uri needs a restart.
+    discovery-ttl: PT15M
+
+    # How long an in-flight authorization request stays resolvable. Short: the row exists only for
+    # the seconds between the redirect and the callback, and a long window is a long window in which
+    # a leaked `state` is still worth replaying.
+    attempt-validity: PT10M
+
+    # THIS API's public origin, which the redirect_uri is built from — deliberately NOT
+    # tcms.invitation.base-url, which is the SPA's and is a different host in development. Not
+    # derived from the request either: `Host` is caller-supplied, and behind Caddy the container
+    # only ever sees localhost:8080, so a request-derived value would either send people nowhere or
+    # let a forged header nominate where an authorization code is delivered.
+    api-base-url: ${TCMS_API_BASE_URL:http://localhost:8080}
+
+    # Where the browser lands on the SPA afterwards, carrying the session in the URL FRAGMENT.
+    spa-callback-path: /sso/callback
+
   api-token:
     # How stale api_token.last_used_at may be before an authenticated request is worth an UPDATE.
     # Coarse on purpose: the naive writer is one row update per request on the hot path, all
