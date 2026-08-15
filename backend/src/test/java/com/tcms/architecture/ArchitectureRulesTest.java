@@ -500,16 +500,21 @@ class ArchitectureRulesTest {
      * new entry, or the disappearance of one of these, fails the build: the first says a seam has
      * been built and left unexercised without anybody deciding to, the second says an argument
      * somebody wrote is now describing code that is gone.
+     *
+     * <p><strong>EMPTY, and it emptied by the exit the rule describes rather than by deletion.</strong>
+     * Its one member was {@code Outbox.record} — the outbox's occurrence arm, built in §131 and
+     * called by nothing but {@code OutboxDispatchTest} for eighty-odd sections, because every event
+     * type the product had was coalesced and consumed by an argument-less recompute. The entry's
+     * own text said the trade was "one recorded defect shape for the other".
+     *
+     * <p>The notifications slice is the caller. A message whose entire content is the payload
+     * cannot be sent from an event that has none, so {@code execution.RunStatusService} and
+     * {@code work.BoardService} both record through it — and the exemption therefore expired and is
+     * removed rather than being left as an argument about code that is now exercised, which is what
+     * {@code everyExemptionStillExemptsSomething} exists to prevent one file over. The map stays
+     * because the next unexercised seam should still cost a sentence somebody has to defend.
      */
-    private static final Map<String, String> UNEXERCISED_BY_DECISION = Map.of(
-            "Outbox.record",
-            "the outbox's OCCURRENCE arm — see Outbox#record. §131 built both arms and the product "
-                    + "has only ever used the coalesced one, because both handlers of the only "
-                    + "event type are whole-company recomputes that take no arguments by design. "
-                    + "Kept rather than deleted (2026-08-09) because deleting it makes "
-                    + "outbox.aggregate_type, aggregate_id and payload write-constant, which is the "
-                    + "writerless-column shape §116/§117/§132/§151 each found — the trade is one "
-                    + "recorded defect shape for the other, and the columns are V1's");
+    private static final Map<String, String> UNEXERCISED_BY_DECISION = Map.of();
 
     @Test
     @DisplayName("every public bean method is exercised by the product, not only by a test")
@@ -1668,6 +1673,39 @@ class ArchitectureRulesTest {
                         module reaching in is reaching for the caller's session, and a service that \
                         can see the session is one that will eventually decide authorization itself \
                         rather than asking PermissionEvaluator""");
+
+        rule.check(PRODUCTION);
+    }
+
+    @Test
+    @DisplayName("integration is a leaf — a notification channel is nobody else's business")
+    void nothingDependsOnIntegration() {
+        // The claim in integration/package-info.java, made mechanical — the same shape as the two
+        // rules above and for a third reason.
+        //
+        // Modulith already forbids the edge implicitly: `integration` is not on
+        // ArchitectureRules.FOUNDATION_MODULES, so declarationsNameOnlyTheFoundationModules would
+        // catch a module DECLARING it. What that rule cannot catch is the composition root, or a
+        // module quietly widening its own declaration in the same commit as the import — and the
+        // temptation is specific and plausible: `execution` wants to tell a channel that a run
+        // finished, and calling NotificationDispatchService directly is one line shorter than
+        // recording an outbox event.
+        //
+        // It is also the line that would undo the feature's one durability property. A direct call
+        // puts a POST to somebody else's server inside the transaction that closed the run, which
+        // is the failure V1's comment on the outbox table names in so many words: "a failing Slack
+        // webhook must never roll back a test result".
+        ArchRule rule = noClasses()
+                .that().resideInAPackage(ROOT_PACKAGE + "..")
+                .and().resideOutsideOfPackage("com.tcms.integration..")
+                .and().resideOutsideOfPackage(ROOT_PACKAGE)
+                .should().dependOnClassesThat().resideInAPackage("com.tcms.integration..")
+                .because("""
+                        integration is a leaf: it holds a domain concept with a lifecycle, an owner \
+                        and a permission, so it is not a foundation module and nothing may depend \
+                        on it. A module that wants a notification records an outbox event — which \
+                        is also what keeps a third party's webhook out of the transaction that did \
+                        the work""");
 
         rule.check(PRODUCTION);
     }

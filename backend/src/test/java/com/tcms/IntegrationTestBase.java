@@ -116,6 +116,20 @@ public abstract class IntegrationTestBase {
         registry.add("tcms.auth.jwt.secret",
                 () -> "test-only-signing-key-not-for-any-real-deployment");
 
+        // The integration credential key has no default either, and for a sharper version of the
+        // same reason: it decrypts every notification-channel webhook in every company, and a
+        // webhook URL IS the authentication for the room it posts to. So the placeholder in
+        // application.yml has no colon and the context refuses to start without it — which means
+        // EVERY test in this suite needs one, including the several hundred that have nothing to
+        // do with notifications.
+        //
+        // Base64 of exactly 32 bytes; IntegrationProperties refuses anything else. And the same
+        // warning the JWT override carries applies here: this replaces the shipped expression
+        // outright, so no test can observe a defect in its TEXT. ConfigConventionTest is what
+        // reads that.
+        registry.add("tcms.integration.secret-key",
+                () -> "dGVzdC1vbmx5LWludGVncmF0aW9uLWtleS0zMi1ieXQ=");
+
         // The case-health recompute is a WRITE on a timer, over every company in the
         // database. Left enabled it fires two minutes into a multi-minute suite run and
         // rewrites case_health for whichever fixtures have seeded by then — most visibly

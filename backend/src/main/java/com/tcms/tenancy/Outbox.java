@@ -53,29 +53,40 @@ public class Outbox {
     /**
      * Records one event in the active company, for delivery to whichever module handles its type.
      *
-     * <h2>NOTHING IN THE PRODUCT CALLS THIS, and that is a decision rather than an oversight</h2>
+     * <h2><del>NOTHING IN THE PRODUCT CALLS THIS, and that is a decision rather than an
+     * oversight</del> — TWO PRODUCERS SINCE THE NOTIFICATIONS SLICE</h2>
      *
-     * <p>§131 built both arms of the outbox and the product has only ever used
+     * <p><del>§131 built both arms of the outbox and the product has only ever used
      * {@link #recordCoalesced}. Every caller of this one is {@code OutboxDispatchTest}, which
      * {@code ArchitectureRulesTest.everyPublicBeanMethodIsExercisedInProduction} names explicitly
      * so that the fact cannot drift back into being an assumption. What that means concretely:
      * this method's serialization, its aggregate naming, and a handler receiving a non-empty
-     * payload have never once run outside a test. They are known to work; they are not known to be
-     * <em>right</em>, which is a different thing and is the state §152 named at the repository
-     * seam.
+     * payload have never once run outside a test.</del>
      *
-     * <p><strong>Why it is kept.</strong> Deleting it would make {@code outbox.aggregate_type},
-     * {@code aggregate_id} and {@code payload} write-constant — {@code "company"}, {@code NULL},
-     * {@code "{}"} — which is precisely the writerless-column shape §116, §117, §132 and §151 each
-     * found and each treated as a defect. The trade is one recorded defect shape for the other, and
-     * the columns are {@code V1}'s rather than this method's. The one candidate producer §131
-     * examined — the invitation email — it refused on grounds that do not expire: only a digest of
-     * the token is stored, so a payload carrying the accept URL would put a live credential at rest.
+     * <p>{@code execution.RunStatusService} records {@link OutboxEvents#RUN_COMPLETED} when a run
+     * closes and {@code work.BoardService} records {@link OutboxEvents#ITEM_ASSIGNED} when a task
+     * is created with somebody on it. The exemption in
+     * {@code ArchitectureRulesTest.UNEXERCISED_BY_DECISION} is therefore gone rather than reworded.
      *
-     * <p><strong>What the first real caller owes.</strong> Not just a handler: a consumer-side test
-     * pinning the payload shape, because {@link OutboxMessage#payload()} says the compiler cannot
-     * see across that boundary and a test on each side is what replaces it. Half of that pair does
-     * not exist yet.
+     * <p>The reason it took this long is worth keeping, because it says what kind of feature needs
+     * this arm: every event type before these was consumed by a <em>whole-company recompute</em>,
+     * which takes no arguments, so there was nothing truthful for a payload to carry. A
+     * notification is the opposite — the payload is the entire message, and a consumer in
+     * {@code integration} may not read {@code test_run} or {@code work_item} to find out anything
+     * the event did not say.
+     *
+     * <p><strong>What the first real caller owed, and paid.</strong> Not just a handler: a
+     * producer-side <em>and</em> a consumer-side test pinning the payload shape, because
+     * {@link OutboxMessage#payload()} says the compiler cannot see across that boundary and a test
+     * on each side is what replaces it. Both halves exist for both event types, plus an end-to-end
+     * test that drives a producer through the dispatcher into a handler — which is the one that
+     * still fails when somebody updates both pins in step.
+     *
+     * <p>The one candidate producer §131 examined and refused — the invitation email — stays
+     * refused on grounds that do not expire: only a digest of the token is stored, so a payload
+     * carrying the accept URL would put a live credential at rest. Both events below carry ids and
+     * counts and no credential, and {@code integration} keeps its webhook secrets out of the
+     * payload for exactly that reason.
      *
      * <p>No {@code @Transactional} of its own, deliberately: this method has no transaction to
      * manage, it <em>joins</em> the caller's — and an annotation here would let it start one when

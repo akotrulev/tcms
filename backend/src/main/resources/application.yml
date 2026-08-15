@@ -312,6 +312,38 @@ tcms:
     # a genuinely broken handler is not hammered for the six hours before somebody notices.
     backoff: PT1M,PT5M,PT15M,PT1H,PT6H
 
+  integration:
+    # The key every notification-channel credential in this instance is encrypted with (§6r).
+    #
+    # NO DEFAULT AND NO COLON, and both halves are the same lesson. A Slack or Teams incoming
+    # webhook URL *is* the authentication — anyone holding it can post into that room — and
+    # unlike an API token a digest is not available, because the value has to be RECOVERABLE to
+    # be used. So it is encrypted at rest, and this is the key.
+    #
+    # `${VAR:?message}` is shell and Compose syntax that SPRING DOES NOT IMPLEMENT: it splits on
+    # the first `:` and takes the rest as the default value. That is how the JWT signing key
+    # above came to be the literal text of its own error message, in production, for a year. A
+    # required Spring property is `${VAR}` with no colon — an unresolvable placeholder throws at
+    # bind time and the context does not start. ConfigConventionTest reads this text rather than
+    # the resolved value, because IntegrationTestBase supplies its own key and therefore cannot
+    # see a defect in the expression that ships.
+    #
+    # Base64 of exactly 32 bytes: `openssl rand -base64 32`. IntegrationProperties refuses
+    # anything else at startup rather than padding or hashing it, because a short passphrase
+    # makes a perfectly valid AES key and an unsafe one, and nothing the running product does
+    # would ever reveal that.
+    secret-key: ${TCMS_INTEGRATION_SECRET_KEY}
+
+    mail:
+      # Who a notification email comes from — deliberately not tcms.invitation.from-address.
+      # That one is what a stranger receives an account activation link from and a deployment
+      # usually wants a human to answer it; this is what a release channel receives fifty run
+      # notices from, which is the address an operator sends from a no-reply box and filters on.
+      #
+      # Defaulted, unlike the key above: a wrong from-address is a message that looks odd, and a
+      # missing one would be a startup failure on every install that sends no notifications.
+      from-address: ${TCMS_NOTIFICATION_MAIL_FROM:tcms@localhost}
+
   # spring.mail.host is deliberately NOT defaulted. Boot only auto-configures a
   # JavaMailSender when it is set, and MailConfiguration turns its absence into a loud
   # warning rather than a startup failure — an install with no relay still works, it just

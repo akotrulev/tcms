@@ -66,7 +66,7 @@ class ModuleStructureTest {
 
         assertThat(detected)
                 .as("""
-                        The eleven modules that exist today — `execution` joined them in backend M2 \
+                        The thirteen modules that exist today — `execution` joined them in backend M2 \
                         slice 1, `work` in §53, `documentation` in §57, `reporting` in §86 and \
                         `storage` in §125. \
                         Adding a module here is expected as the plan's remaining modules land \
@@ -120,10 +120,23 @@ class ModuleStructureTest {
                         six modules referred to it in prose, plus the same record written again in \
                         `auth` and a third time as a JSON string literal. The forcing function was \
                         a caller with no module at all — the container-error rendering, which runs \
-                        when no controller did.""")
+                        when no controller did. \
+                        The notifications slice adds `integration`, which plan §5 has named in the \
+                        module list since M0 (`Jira, notification channels, Git, outbound \
+                        webhooks`) — so this is a declared module arriving rather than one being \
+                        invented. It is NOT a foundation module and its package comment says so \
+                        against §125's three properties: a notification channel is a domain \
+                        concept with a lifecycle, an owner and a permission, which is exactly what \
+                        `ArchitectureRules.FOUNDATION_MODULES` says a feature module proposing \
+                        itself will not clear. What makes it interesting instead is the constraint \
+                        it works under: it may see NEITHER `execution` nor `work`, and every fact \
+                        it renders belongs to one of them — so the transactional outbox is not one \
+                        mechanism among several here, it is the only one, and this is the slice \
+                        that gave `Outbox.record` its first product caller since §131 built it.""")
                 .containsExactly(
-                        "api", "auth", "documentation", "execution", "identity", "project",
-                        "provisioning", "reporting", "repository", "storage", "tenancy", "work");
+                        "api", "auth", "documentation", "execution", "identity", "integration",
+                        "project", "provisioning", "reporting", "repository", "storage", "tenancy",
+                        "work");
     }
 
     @Test

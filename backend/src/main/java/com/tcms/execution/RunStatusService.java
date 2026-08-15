@@ -4,6 +4,8 @@ import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
+import com.tcms.tenancy.Outbox;
+import com.tcms.tenancy.OutboxEvents;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -53,6 +55,7 @@ public class RunStatusService {
     private final TestRunRepository runs;
     private final RunService views;
     private final AuditEventRepository auditEvents;
+    private final Outbox outbox;
     private final Clock clock;
 
     public RunStatusService(
@@ -60,12 +63,14 @@ public class RunStatusService {
             TestRunRepository runs,
             RunService views,
             AuditEventRepository auditEvents,
+            Outbox outbox,
             Clock clock) {
 
         this.projects = projects;
         this.runs = runs;
         this.views = views;
         this.auditEvents = auditEvents;
+        this.outbox = outbox;
         this.clock = clock;
     }
 
@@ -167,7 +172,42 @@ public class RunStatusService {
                         + "}",
                 now));
 
-        return new Outcome.Updated(views.viewOf(run));
+        TestRunView view = views.viewOf(run);
+        if (target == RunStatus.COMPLETED) {
+            announce(projectId, view);
+        }
+        return new Outcome.Updated(view);
+    }
+
+    /**
+     * Records that this run finished, for whoever is subscribed to hear about it.
+     *
+     * <p><strong>Inside this transaction, which is the entire pattern.</strong> The run's new
+     * status and the notice of it commit together or neither does — no window in which a run
+     * closed and its announcement was lost, none in which a channel was told about a close that
+     * rolled back. {@code Outbox#record} throws if it is called outside one rather than trusting
+     * this comment.
+     *
+     * <p><strong>{@code COMPLETED} only.</strong> Aborting is not completing, and a reopen is not
+     * an ending. A single "the status moved" event would push the question of which moves matter
+     * onto every subscriber, and the first one to get it wrong announces a reopened run as
+     * finished.
+     *
+     * <p>The payload is the message, not a pointer to this row: {@code integration} may not read
+     * {@code test_run} and never will be able to, so a consumer that had to look anything up could
+     * not exist. {@link RunCompletedEvent} is this module's declaration of that shape and its
+     * header says what keeps it honest against the consumer's.
+     *
+     * <p>Not coalesced. A coalesced event stands for every change since the last delivery, so its
+     * payload could name only one of them truthfully — and a notice whose whole content is the
+     * payload cannot be sent from an event that has none.
+     */
+    private void announce(UUID projectId, TestRunView view) {
+        outbox.record(
+                RunCompletedEvent.AGGREGATE,
+                view.id(),
+                OutboxEvents.RUN_COMPLETED,
+                RunCompletedEvent.of(UUID.randomUUID(), projectId, view));
     }
 
     /**

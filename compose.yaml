@@ -86,6 +86,11 @@ services:
       # read it, and it is the class of default that survives to production because
       # nothing ever fails because of it.
       TCMS_JWT_SECRET: ${TCMS_JWT_SECRET:?set it in .env — copy .env.example}
+      # Encrypts every notification-channel credential in the instance. Required with no
+      # default for TCMS_JWT_SECRET's reason exactly: a webhook URL IS the authentication,
+      # so a key committed to this repository is every client's release channel open to
+      # anyone who can read it. Base64 of 32 bytes — openssl rand -base64 32.
+      TCMS_INTEGRATION_SECRET_KEY: ${TCMS_INTEGRATION_SECRET_KEY:?set it in .env — copy .env.example}
       # Where an invitee's browser can reach the SPA. NOT derivable from the request:
       # behind a reverse proxy the container only ever sees its own address, and a link
       # built from that would send every invitee to localhost:8080.

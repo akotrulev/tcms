@@ -2,7 +2,7 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-15 (**§216** — **the first `backend/src/main` change since §210, and it is one method.** `JwtProperties#isSecretUsable` refuses the §108 signing key at bind time, plus any key starting with `?` or `-` — the residue of a `${VAR:?…}` / `${VAR:-…}` Spring resolved into a literal. **The rule to carry is the gap it closed: `ConfigConventionTest` and every rule like it read the SOURCE TEXT, so they stop a defect being re-authored and say nothing about the value a host supplies.** The §108 string cleared `@NotBlank` and `@Size(min = 32)` at 59 characters and had been startable the whole time — a restored env-file backup, or an operator pasting the value out of the repo to clear a startup failure, both got there. **When you write a constraint, prove the CONSEQUENCE separately from the rule**: `ApplicationContextRunner` (first use in this suite, no container, milliseconds) binds the bad key and asserts the context fails FOR THAT REASON — the constraint name is one cause down, so `hasMessageContaining` on the top-level message is red. `.env.example`'s dev key is deliberately NOT refused; the argument is in the handoff and it is about three database passwords, not one signing key. `./gradlew build` **2709 / 0 / 0** (+7); **§215** — **no `backend/` byte at all; recorded because it decided where a rule about §A3 goes, and decided against this suite.** `CLAUDE.md`'s and `README.md`'s convenience copies of the permission matrix are now compared to the spec cell by cell, both ways, all three scopes, all 55 keys — and **not** by `SeedDataTest`, whose §214 parser would have made it cheap. The reason is the window §214 opened: a comparison of two markdown files needs no database, and this suite is the one `ci.yml` does not run. **Generalised, and it is the rule to carry when adding any check here: the cheap place is not automatically the right place — ask what observes it.** Population zero (a guard). The chain is unchanged, `migration → SeedDataTest → spec → the packages rules`, and `SeedDataTest` is still the only link that sees the seeded rows; **§214** — **`backend/src/test` only, one test added.** The rule to carry: *a test that names a document in its failure message has not necessarily read it.* Three assertions in `SeedDataTest` cited roles spec §A3/§A6 and compared against hand-written lists, and two documents described a chain — `migration → SeedDataTest → spec → the packages rules` — whose middle arrow was those properties rather than a comparison of the tables. §A3 is 385 cells; one of them was pinned. `theSeededMatrixIsTheSpecsMatrix` compares them all, both ways, with `MATRIX_DIVERGENCE_BY_DECISION` for the three that diverge on purpose. **`../docs/specs` was already a declared `Test` input (§185) as a DIRECTORY, which is the only reason this rule is not green by cache on every spec edit** — check that before adding any rule that reads a file outside `backend/`; **§212** — **ten `backend/src` files changed and NOT ONE of them
+**Last verified:** 2026-08-15 (**§218 phase 1** — **the outbox's payload arm has product callers at last, and there is a THIRTEENTH module.** `integration` (plan §5's declared module) arrives with `V54`'s three tables, a port with three adapters, AES-GCM at rest and two occurrence events. **The rule to carry: `Outbox.record` had no product caller from §131 to here, and its javadoc named the debt the first one owed — a producer-side AND a consumer-side test pinning the payload, because the two modules may not share a class. Both exist for both events, and so does a THIRD test, because two pins updated together redden neither.** `integration` may see neither `execution` nor `work`, which is why the outbox is the only mechanism available rather than one of several — `nothingDependsOnIntegration` pins the leaf claim from the other side. `UNEXERCISED_BY_DECISION` is now EMPTY and stayed as a map. **A webhook URL is a credential that has to be RECOVERABLE, so it is encrypted rather than digested** — the key is `${TCMS_INTEGRATION_SECRET_KEY}`, no colon, and `IntegrationTestBase` supplies one for every context in the suite; **§216** — **the first `backend/src/main` change since §210, and it is one method.** `JwtProperties#isSecretUsable` refuses the §108 signing key at bind time, plus any key starting with `?` or `-` — the residue of a `${VAR:?…}` / `${VAR:-…}` Spring resolved into a literal. **The rule to carry is the gap it closed: `ConfigConventionTest` and every rule like it read the SOURCE TEXT, so they stop a defect being re-authored and say nothing about the value a host supplies.** The §108 string cleared `@NotBlank` and `@Size(min = 32)` at 59 characters and had been startable the whole time — a restored env-file backup, or an operator pasting the value out of the repo to clear a startup failure, both got there. **When you write a constraint, prove the CONSEQUENCE separately from the rule**: `ApplicationContextRunner` (first use in this suite, no container, milliseconds) binds the bad key and asserts the context fails FOR THAT REASON — the constraint name is one cause down, so `hasMessageContaining` on the top-level message is red. `.env.example`'s dev key is deliberately NOT refused; the argument is in the handoff and it is about three database passwords, not one signing key. `./gradlew build` **2709 / 0 / 0** (+7); **§215** — **no `backend/` byte at all; recorded because it decided where a rule about §A3 goes, and decided against this suite.** `CLAUDE.md`'s and `README.md`'s convenience copies of the permission matrix are now compared to the spec cell by cell, both ways, all three scopes, all 55 keys — and **not** by `SeedDataTest`, whose §214 parser would have made it cheap. The reason is the window §214 opened: a comparison of two markdown files needs no database, and this suite is the one `ci.yml` does not run. **Generalised, and it is the rule to carry when adding any check here: the cheap place is not automatically the right place — ask what observes it.** Population zero (a guard). The chain is unchanged, `migration → SeedDataTest → spec → the packages rules`, and `SeedDataTest` is still the only link that sees the seeded rows; **§214** — **`backend/src/test` only, one test added.** The rule to carry: *a test that names a document in its failure message has not necessarily read it.* Three assertions in `SeedDataTest` cited roles spec §A3/§A6 and compared against hand-written lists, and two documents described a chain — `migration → SeedDataTest → spec → the packages rules` — whose middle arrow was those properties rather than a comparison of the tables. §A3 is 385 cells; one of them was pinned. `theSeededMatrixIsTheSpecsMatrix` compares them all, both ways, with `MATRIX_DIVERGENCE_BY_DECISION` for the three that diverge on purpose. **`../docs/specs` was already a declared `Test` input (§185) as a DIRECTORY, which is the only reason this rule is not green by cache on every spec edit** — check that before adding any rule that reads a file outside `backend/`; **§212** — **ten `backend/src` files changed and NOT ONE of them
 changed behaviour**: javadoc, plus two `@DisplayName`s describing a 403 that no longer happens.
 **§211 said the obvious next instrument was a Java-side rule over `openapi.yaml` and javadoc; it
 exists now and it is NOT in Java** — `packages/client/src/test/tierClaims.test.ts`, reading
@@ -74,13 +74,186 @@ draft buffer; **§127 phase 1** — the table and image block payloads; **§126 
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `e83644e` (§216 phase 1 — **one `src/main` method and one new test class**; `./gradlew build` run on shanks, **2709 / 0 skipped / 0 failures**, +7. First `src/main` change since §210. Before it ~~`f3c35b2` (§215 phase 1 — **no `backend/` byte**, so the last commit to change Java at all is still §214's and `./gradlew build` was not run: it stands at **2702 / 0 skipped / 0 failures**. What §215 settles for this stack is a *placement* rule — §214's §A3 parser was the obvious tool for checking the two convenience copies of the matrix, and the check was written in `packages/` instead, because this suite is not run by `ci.yml` and two markdown files need no Testcontainers boot.~~ Before it ~~`a44fc41` (§214 phase 1 — **`backend/src/test` only**: one new test in `SeedDataTest` and its class header. No `src/main` byte, so no behaviour moved; `./gradlew build` was run and is **2702 / 0 skipped / 0 failures**, +1. What it settles: **`SeedDataTest` now COMPARES the roles spec's §A3 tables to the seeded rows, cell by cell, seven roles, both ways** (`theSeededMatrixIsTheSpecsMatrix`). Until §214 it asserted four PROPERTIES and three of them name the spec in their failure message without opening the file — so 385 cells were compared to nothing while `packages/` parsed that same document to police prose in four corpora and to derive the whole MCP surface. Population **three cells**, all one documented fact (`company:read` seeded per role; §A3's COMPANY table has only `Every member`, `V15`'s baseline), held in `MATRIX_DIVERGENCE_BY_DECISION` **both ways** per §162. A guard, not a repair. **The window is unchanged**: this comparison is in the suite `ci.yml` does not run.~~ Before it ~~`0e774e4` (§213 phase 1 — **no `backend/src` byte at all**, so the last commit to change Java BEHAVIOUR is still §210's and `./gradlew build` was not run. What §213 *does* concern this stack: `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse` is now the ONLY link that compares the seeded rows to the roles spec, because `packages/` derives the `Agent` grant from that spec rather than from a hand-kept copy — a spec edit that drifts from `V52` reddens here, in the suite `ci.yml` does not run — still true, and §214 widened what that link compares.~~ Before it ~~`8d47a0f` (§212 phase 2 — the ten `backend/src` files §212 touched are comments only)~~. Before it ~~`5198d1f` (§211 phase 3 — no Java changed in §210's successor either)~~. Before it ~~`be0ac69` (§209 phase 2)~~ — §209's own docs commit lands immediately after this line is written, so the header is one behind by construction. Before it the header sat at ~~`9de1eac` (§207's docs commit — §208's own slice commit lands immediately after
+**Baseline commit:** `e83644e` + the §218 phase-1 commit, which lands immediately after this line is written — so the header is one behind by construction, as it has been since §207. §218 is the first change to add a MODULE since §125 and the first migration since `V52`; `./gradlew build` run locally on macOS, **2768 / 0 skipped / 0 failures**, +59 — the Linux lane has not seen it. Before it ~~`e83644e` (§216 phase 1 — **one `src/main` method and one new test class**; `./gradlew build` run on shanks, **2709 / 0 skipped / 0 failures**, +7. First `src/main` change since §210. Before it ~~`f3c35b2` (§215 phase 1 — **no `backend/` byte**, so the last commit to change Java at all is still §214's and `./gradlew build` was not run: it stands at **2702 / 0 skipped / 0 failures**. What §215 settles for this stack is a *placement* rule — §214's §A3 parser was the obvious tool for checking the two convenience copies of the matrix, and the check was written in `packages/` instead, because this suite is not run by `ci.yml` and two markdown files need no Testcontainers boot.~~ Before it ~~`a44fc41` (§214 phase 1 — **`backend/src/test` only**: one new test in `SeedDataTest` and its class header. No `src/main` byte, so no behaviour moved; `./gradlew build` was run and is **2702 / 0 skipped / 0 failures**, +1. What it settles: **`SeedDataTest` now COMPARES the roles spec's §A3 tables to the seeded rows, cell by cell, seven roles, both ways** (`theSeededMatrixIsTheSpecsMatrix`). Until §214 it asserted four PROPERTIES and three of them name the spec in their failure message without opening the file — so 385 cells were compared to nothing while `packages/` parsed that same document to police prose in four corpora and to derive the whole MCP surface. Population **three cells**, all one documented fact (`company:read` seeded per role; §A3's COMPANY table has only `Every member`, `V15`'s baseline), held in `MATRIX_DIVERGENCE_BY_DECISION` **both ways** per §162. A guard, not a repair. **The window is unchanged**: this comparison is in the suite `ci.yml` does not run.~~ Before it ~~`0e774e4` (§213 phase 1 — **no `backend/src` byte at all**, so the last commit to change Java BEHAVIOUR is still §210's and `./gradlew build` was not run. What §213 *does* concern this stack: `SeedDataTest.agentIsTestEngineerMinusNothingItCouldUse` is now the ONLY link that compares the seeded rows to the roles spec, because `packages/` derives the `Agent` grant from that spec rather than from a hand-kept copy — a spec edit that drifts from `V52` reddens here, in the suite `ci.yml` does not run — still true, and §214 widened what that link compares.~~ Before it ~~`8d47a0f` (§212 phase 2 — the ten `backend/src` files §212 touched are comments only)~~. Before it ~~`5198d1f` (§211 phase 3 — no Java changed in §210's successor either)~~. Before it ~~`be0ac69` (§209 phase 2)~~ — §209's own docs commit lands immediately after this line is written, so the header is one behind by construction. Before it the header sat at ~~`9de1eac` (§207's docs commit — §208's own slice commit lands immediately after
 this line is written, so the header is one behind by construction. Before it the header sat at
 ~~`507c80b` (§207)~~, ~~`c6fbefd` (§206 phase 3)~~ and ~~`be8c1a6` (§199)~~, lagging the body by six
 sections — the normal state, and exactly why the rule below exists.)~~
 Per `CLAUDE.md`, **trust the body over the header** and re-grep what a later commit could have moved.
 
 ---
+
+## §218 — THE OUTBOX'S PAYLOAD ARM HAS PRODUCT CALLERS, AND THERE IS A THIRTEENTH MODULE
+
+**Read this before adding an outbox event, before touching `com.tcms.integration`, and before
+putting anything recoverable in a column.**
+
+### `Outbox.record` had no product caller for eighty sections, and the debt it named is now paid
+
+`Outbox#record` — the payload-carrying, past-tense arm — was built in §131 and called by nothing but
+`OutboxDispatchTest` until this slice. `ArchitectureRulesTest.UNEXERCISED_BY_DECISION` held it as its
+single entry; **that entry is gone and the map is now empty** (kept as a map, so the next unexercised
+seam still costs an argument somebody has to defend).
+
+Three files predicted this slice without naming it, and all three are now corrected rather than left
+standing: `Outbox#record`'s "what the first real caller owes", `OutboxMessage#payload`'s "stated in
+the conditional because no such pair exists (§153)", and `OutboxEvents`' "the first name whose
+handler wants to know *which* row moved".
+
+**Why it took this long, and it is the rule for deciding which arm a new event uses.** Every event
+type before these was consumed by a **whole-company recompute**, which takes no arguments — so there
+was nothing truthful for a payload to carry and `recordCoalesced` was right both times. A
+notification is the opposite: the payload **is** the message, because a consumer in `integration`
+may not read `test_run` or `work_item` to find out anything the event did not say. *"Something in
+this company finished"* is not a notification.
+
+### THE PIN IS THREE TESTS, NOT TWO, AND THE THIRD IS THE ONE THAT MATTERS
+
+Two records declare each payload, one per side, because plan §3 forbids the two modules from sharing
+a class and `ArchitectureRulesTest` reads every import.
+
+| Test | Fails when |
+|---|---|
+| `com.tcms.execution.RunCompletedPayloadTest` (+ `work.ItemAssignedPayloadTest`) | the producer's field names or values move |
+| `com.tcms.integration.RunCompletedPayloadTest` (+ `ItemAssignedPayloadTest`) | the consumer stops requiring a field, or starts requiring a new one |
+| `com.tcms.integration.NotificationDeliveryTest` | **the two no longer meet** |
+
+**Two pins updated in step redden neither**, which is exactly what renaming a field looks like. That
+is not a hole in the design; it is why the third test drives the real service, writes a real `outbox`
+row, runs the real dispatcher and asserts a delivery attempt. If you add a fourth event type, all
+three are the cost.
+
+The consumer pin asserts the record's **component list** as well as the parse, and the asymmetry is
+deliberate: an *unknown* field is tolerated (a producer may widen before every consumer wants it),
+an *absent* one is not, because it deserializes to null or zero in silence and a renderer then says
+"0 failures" about a run that failed.
+
+### Two new event names, both occurrences, and one the plan asked for that has no producer
+
+- **`execution.run_completed`** — `RunStatusService.move`, inside the closing transaction,
+  **`COMPLETED` only**. Aborting is not completing and reopening is not an ending; one "the status
+  moved" name would push the question onto every subscriber and one of them would announce a
+  reopened run as finished. `onlyCompletionIsAnOccurrence` pins it.
+- **`work.item_assigned`** — `BoardService.create`, and **nothing at all for an unassigned task**.
+- **`work.defect_created` IS NOT BUILT AND MUST NOT BE.** `defect:create` is seeded and there is no
+  defect entity, table or filing path anywhere in `backend/src`. A constant in a foundation module
+  with nothing recording it is the writerless shape one level up from the column `V54` drops.
+
+**The payload carries no display name and no previous assignee, and both absences are decisions.**
+A name is a display decision plan §6u makes per company membership, and a name frozen into a payload
+is the one they had when the row was written — so the handler resolves it through
+`project.PeopleDirectory`. A previous assignee does not exist: `work.WorkItem` has exactly one
+mutator and it moves a card between columns, and its own header records that editing an assignee
+"has no affordance anywhere in the SPA". **Creation is the only assignment this product can
+perform**, so that is the only producer.
+
+### `integration` is the thirteenth module and it is NOT a foundation module
+
+Declares `{"api", "tenancy", "project"}`. The plan also named `identity` and it is **left off**: a
+person's display name arrives through `project.PeopleDirectory`, which is that module's port
+precisely so a module which may not import `identity` can still ask *who is this*. A declaration is
+a fact about code that exists, never a forecast.
+
+It fails §125's second property for a foundation module outright — a notification channel is a
+domain concept with a lifecycle, an owner and a permission — so **nothing may depend on it**, and
+`ArchitectureRulesTest.nothingDependsOnIntegration` pins that from the other side, alongside the
+`provisioning` and `auth` leaf rules. Modulith would only catch a module *declaring* the edge; that
+rule also catches the composition root and a module widening its own declaration in the same commit.
+
+**The constraint is the design.** `integration` may see neither `execution` nor `work`, and every
+fact it renders belongs to one of them — so the outbox is not one mechanism among several here, it
+is the only one. The temptation the leaf rule exists for is specific: calling
+`NotificationDispatchService` from `RunStatusService` is one line shorter than recording an event,
+and it puts a POST to a third party inside the transaction that closed the run, which is precisely
+what `V1`'s comment on `outbox` forbids.
+
+### `V54`, three tables, and a `V1` column with no writer since M0
+
+Policy count **64 → 67**; `SchemaConventionTest` pins it. `team.notification_channel JSONB` is
+**dropped** — no writer, no reader, no mapping, and leaving it beside a real `notification_channel`
+table would be two spellings of one concept with the dead one first in `V1`.
+
+- **`notification_channel`** — unique `(company_id, project_id, name)`. `kind` is `updatable = false`:
+  changing a Slack channel into an email one keeps the name and history while replacing everything
+  they were about. `lock_version` **is** a real `@Version` here, unlike `work_item`'s — a channel
+  edit is a field edit typed over what somebody read, which is `ApiToken`'s rubric answering the
+  other way.
+- **`notification_subscription`** — `min_failures` is **a predicate on the event, not an event**.
+  A `RUN_FAILED` event would have `execution` record a distinct name against a threshold configured
+  in `integration`, which the module layout forbids and which breaks anyway the moment two
+  subscribers disagree about what a bad run is. `0` is every run; **null failures matches every
+  threshold**, because a filter that silently silenced a channel is indistinguishable from one that
+  never fires.
+- **`notification_delivery`** — the operator's log **and** the idempotency record. Unique
+  `(company_id, channel_id, event_id)`, and `NotificationLedger.beginAttempt` refuses a second
+  attempt against a row already `SENT`. Without it one crash between the POST and the settle is a
+  duplicate message, and the outbox's ladder makes it up to eight.
+  **`event_id` is minted by the PRODUCER and carried in the payload**, not the outbox row's id —
+  `OutboxMessage` deliberately hands a handler no row identity.
+
+### The credential is the first recoverable secret in this codebase
+
+A webhook URL **is** the authentication for the room it posts to, and unlike an API token a digest is
+unavailable because the value has to be *used*. So: AES-GCM, nonce prepended to the ciphertext, key
+from `${TCMS_INTEGRATION_SECRET_KEY}` — **no colon**, §108's lesson taken literally — and
+`IntegrationProperties` refuses anything that is not Base64 of exactly 32 bytes rather than hashing a
+passphrase, because a short key makes a perfectly valid AES key and nothing the running product does
+would reveal it.
+
+**This is a required property with no default, so EVERY context in the suite needs one.**
+`IntegrationTestBase` supplies it beside the JWT secret, with the same warning attached: that
+override replaces the shipped expression outright, so no test can see a defect in its *text* —
+`ConfigConventionTest` is what reads that.
+
+Four rules, each with a test:
+
+1. **Never returned.** `NotificationChannelView` has no `secret` component and must never get one;
+   `secretHint` (the last four characters, masked) is all that leaves the module.
+2. **Never in an outbox payload.** Asserted in the producer pin, not only asserted in prose.
+3. **Never in a delivery error.** `SecretRedaction` runs two passes — the exact secret, then any
+   `http(s)://` loses its path — before anything durable sees the text. **This is the leak that is
+   invisible in a green run**: an HTTP client's message quotes the URL it posted to, nothing fails,
+   and a live credential sits in a table an operator browses and a backup copies.
+4. **Never in `outbox.last_error` either.** `NotificationDeliveryFailure` names channels and carries
+   no cause, because that exception is what `OutboxDispatcher` writes into the row.
+
+**`ChannelConfig` is the only place a plaintext URL exists**, it is built immediately before one
+delivery, and it has no `toString` override *on purpose* — a redacting one would make the type look
+safe to interpolate and the next component added would not be.
+
+### The write path is package-private, and that is a rule rather than a style
+
+`NotificationChannelService`'s methods are package-private because
+`everyPublicBeanMethodIsExercisedInProduction` refuses a public bean method whose only callers are
+tests, and the controller lands with the contract in phase 2 (same package).
+**`@Transactional` on a package-private method works here** — Spring Framework 6 detects it for
+class-based proxies, and `tenancy.OutboxLedger.claim` is the in-repo proof. Do not "fix" it by
+widening visibility.
+
+`NotificationLedger` is split out of `NotificationDispatchService` for `OutboxLedger`'s exact reason:
+a `@Transactional` method called from another method of the same bean does not go through the proxy,
+so the annotation does nothing — no `app.current_company`, and RLS answers zero rows. It is also
+what keeps a connection from being held open across a POST.
+
+### One model, three renderers
+
+`RenderedNotification` is the model; the three adapters are the renderers. `SlackWebhookAdapter.body`
+and `TeamsWebhookAdapter.body` are **statics separate from the POST**, so a document can be asserted
+without an HTTP server. What the three disagree about is the argument for the port existing: Slack's
+header block refuses markdown and needs `text` beside `blocks` or it pushes as "This content can't be
+displayed"; Teams requires `summary` and takes facts as objects; email has no room at all.
+
+**The email adapter throws where `identity.SmtpInvitationMailer` swallows**, and the difference is
+recorded at both: a failed invitation must not undo a provisioning run, and a notification has no
+other route and sits on a row that will retry.
+
+### Left for phase 2 and 3
+
+No `openapi.yaml` change, no controller, no frontend, no `packages/`. `NotificationChannelService`
+and its two view records exist and are driven only by tests; the controller is the caller they are
+shaped for. No message carries a **link** to the run — that needs a base URL this module does not
+have, and borrowing `tcms.invitation.base-url` would be `identity`'s property read from a module that
+may not see it.
+
 
 ## §209 — THE ARTIFACT REGISTER HAS THREE REACHABLE STATES, AND TWO WAYS IN
 
@@ -2975,16 +3148,24 @@ membership seams and a 35-file test-fixture sweep.
 
 ## Layout
 
-Spring Modulith **monolith**; modules are *packages* under `com.tcms`, not Gradle subprojects. **Ten
-exist since §86**: `auth · documentation · execution · identity · project · provisioning · reporting ·
-repository · tenancy · work`. **`shared` is the only one on plan §3's list that still does not
-exist**, and the slice plan's decision E declines to create it for two storage ports and an enum.
-`ModuleStructureTest` hard-codes the ten, so an eleventh is a deliberate edit. `#confirmed`
+Spring Modulith **monolith**; modules are *packages* under `com.tcms`, not Gradle subprojects.
+~~**Ten exist since §86**~~ → **THIRTEEN since §218**: `api · auth · documentation · execution ·
+identity · integration · project · provisioning · reporting · repository · storage · tenancy · work`.
+~~**`shared` is the only one on plan §3's list that still does not exist**, and the slice plan's
+decision E declines to create it for two storage ports and an enum.~~ → **`shared` never arrived
+under that name: §146 built `api` instead**, on §125's grounds that a module every other module may
+depend on must not be a grab bag. `ModuleStructureTest` hard-codes the list, so a fourteenth is a
+deliberate edit. `#confirmed`
 
-- Cross-module FKs allowed **only** toward `tenancy` / `identity` / `project`; everything else
+- Cross-module FKs allowed **only** toward `tenancy` / `identity` / `project` — plus `storage`
+  (§125) and `api` (§146), which are `ArchitectureRules.FOUNDATION_MODULES`' fourth and fifth and
+  each carry a paragraph arguing the three properties they had to clear. Everything else
   crosses via domain events. **Enforced by ArchUnit** (`src/test/java/com/tcms/architecture/`), so
   the boundary is machine-checked. `#confirmed`
 - `tenancy` is depended on by everything and depends on nothing.
+- **Three modules are leaves and have a rule each saying so**: `provisioning`, `auth` and, since
+  §218, `integration`. Modulith only catches a module *declaring* the edge; the rules also catch the
+  composition root and a module widening its own declaration in the same commit as the import.
 - No Domain/Application/Infrastructure layering — vertical slices per module, with
   `<X>Controller` / `<X>Service` / `<X>Repository` inside each.
 
@@ -4473,6 +4654,25 @@ exist**, and the slice plan's decision E declines to create it for two storage p
 
 ## Session log
 
+- 2026-08-15 · EXTEND · **notifications, phase 1 — the backend spine** (§218 phase 1;
+  `backend/` only: `V54`, a new `integration` module, two producers in `execution` and
+  `work`, three architecture-rule edits, and `IntegrationTestBase`. No contract, no
+  frontend, no `packages/`). **The outbox's payload arm gets its first product callers
+  since §131 built it**, and the debt three files had named — a producer-side and a
+  consumer-side test pinning the payload — is paid twice over, plus a third end-to-end
+  test because two pins updated in step redden neither.
+  `ArchitectureRulesTest.UNEXERCISED_BY_DECISION` empties. `integration` is the thirteenth
+  module, declares `{api, tenancy, project}` (NOT `identity` — `PeopleDirectory` is
+  `project`'s port), is a leaf with its own rule, and may see neither `execution` nor
+  `work`, which is what makes the outbox the only mechanism rather than one of several.
+  `V54` drops `team.notification_channel`, a `V1` column writerless since M0; policies
+  64 → 67. The first recoverable secret in the codebase: AES-GCM, key required with no
+  default and **no colon**, never returned, never in a payload, never in either error
+  column. `work.defect_created` deliberately NOT minted — no defect entity exists, and a
+  writerless name in a foundation module is the shape this migration's own drop removes.
+  Gates **2768 / 0 skipped / 0 failures** (+59, run locally on macOS — the Linux lane
+  has not seen it yet). Phase 2 is the contract and the
+  controller; the write service and its views are driven only by tests until then.
 - 2026-08-12 · CHECK · **the query parameter nobody declared** (§176, one phase, `backend/` test code
   only; no migration, no contract change, nothing in `src/main`). §171's recorded gap, closed with one
   test method: `noHandlerBindsAnUndeclaredQueryParameter`. §171's stated reason for deferring was true

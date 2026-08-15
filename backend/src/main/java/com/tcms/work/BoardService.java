@@ -6,6 +6,8 @@ import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
 import com.tcms.project.TeamDirectory;
 import com.tcms.tenancy.CompanyContext;
+import com.tcms.tenancy.Outbox;
+import com.tcms.tenancy.OutboxEvents;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -90,6 +92,7 @@ public class BoardService {
     private final BoardFacts facts;
     private final BoardPeople people;
     private final TeamDirectory teams;
+    private final Outbox outbox;
     private final Clock clock;
 
     BoardService(
@@ -98,6 +101,7 @@ public class BoardService {
             BoardFacts facts,
             BoardPeople people,
             TeamDirectory teams,
+            Outbox outbox,
             Clock clock) {
 
         this.projects = projects;
@@ -105,6 +109,7 @@ public class BoardService {
         this.facts = facts;
         this.people = people;
         this.teams = teams;
+        this.outbox = outbox;
         this.clock = clock;
     }
 
@@ -329,10 +334,42 @@ public class BoardService {
                 case WorkItemEdit.Outcome.Valid valid -> {
                     WorkItem created = tasks.save(WorkItem.create(
                             project.getId(), valid.edit(), userId, idempotencyKey, clock.instant()));
+                    announceAssignment(created);
                     yield new CreateOutcome.Created(viewOf(created, project));
                 }
             };
         });
+    }
+
+    /**
+     * Records that this task went to somebody, for whoever is subscribed to hear about it.
+     *
+     * <p><strong>Inside the create transaction, which is the whole pattern.</strong> The task and
+     * the notice of it commit together or neither does; {@code Outbox#record} throws when it is
+     * called outside one rather than trusting this comment.
+     *
+     * <p><strong>Nothing at all for an unassigned task</strong>, which is most of them. The event
+     * is "assigned to somebody" and not "a task was created", so a card that goes onto the board
+     * for whoever picks it up records no occurrence — an event whose payload named no assignee
+     * would be one every consumer had to filter, and one of them would forget.
+     *
+     * <p>Not coalesced. Fifty tasks assigned in a planning session are fifty notices, because each
+     * names a different person and a coalesced event could name only one of them truthfully.
+     */
+    private void announceAssignment(WorkItem created) {
+        if (created.getAssigneeId() == null) {
+            return;
+        }
+        outbox.record(
+                ItemAssignedEvent.AGGREGATE,
+                created.getId(),
+                OutboxEvents.ITEM_ASSIGNED,
+                new ItemAssignedEvent(
+                        UUID.randomUUID(),
+                        created.getId(),
+                        created.getTitle(),
+                        created.getProjectId(),
+                        created.getAssigneeId()));
     }
 
     /**
