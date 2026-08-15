@@ -18,7 +18,7 @@ public interface CompanyEmailDomainRepository extends JpaRepository<CompanyEmail
      *
      * <p>There is deliberately no {@code findByDomain} here. That is the pre-authentication
      * question, it is asked with no context open, and under RLS this repository would answer it
-     * with zero rows — {@code tcms_resolve_providers_for_domain} (V53) answers it instead.
+     * with zero rows — {@code tcms_resolve_providers_for_domain} (V55) answers it instead.
      */
     List<CompanyEmailDomain> findByCompanyIdOrderByDomainAsc(UUID companyId);
 }

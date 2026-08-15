@@ -5,9 +5,13 @@ execution order and the prompt to paste for each step.
 
 **How to use this.** One task per session. Copy the prompt verbatim, paste it as your first message.
 Every prompt is self-contained: it names the branch, the plan section the agent must read, the files
-it may touch, the gate it must pass, and when to commit. **Run them in order** — the `Deps` column is
-real, and CLAUDE.md's "work is sequential" rule means no two of these run at once (T2 and T3 in
-particular share `backend/build/` and one Gradle daemon).
+it may touch, the gate it must pass, and when to commit. **Run them in the status board's `Run`
+order** — the `Deps` column is real, and CLAUDE.md's "work is sequential" rule means no two of these
+run at once (T2 and T3 in particular share `backend/build/` and one Gradle daemon).
+
+**The prompt sections below are in id order, not run order.** The board is the schedule; this half of
+the file is the reference. Ids never renumber, because §11's verification rows and the plan's §10
+quote them.
 
 **Preamble — prepend to every prompt below.** It is written once here rather than repeated eleven
 times; paste it above whichever task prompt you are running.
@@ -39,37 +43,56 @@ Rules for this session:
 
 ## Status board
 
-| # | Task | Agent | Deps | State |
-|---|---|---|---|---|
-| **T0** | Decision gate — answer Q1–Q3 | *(you)* | — | ☐ |
-| **T1** | Contract + both `schema.d.ts` | `be-java` | T0 | ☐ |
-| **T2** | Repository generalisation + §A1.1 helper | `be-java` | T1 | ☐ |
-| **T3** | `OrgChartService` + controller | `be-java` | T2 | ☐ |
-| **T4** | Backend tests | `qa-api-java` | T3 | ☐ |
-| **T5** | Query-plan review | `data-architect` | T2 | ☐ |
-| **T6** | Extract `teamTree.ts` | `fe-react` | — | ☐ |
-| **T7** | `useOrgChart` + invalidations | `fe-react` | T1, T6 | ☐ |
-| **T8** | The screen | `fe-react` | T7 | ☐ |
-| **T9** | Disclosure-boundary security pass | `qa-security` | T4 | ☐ |
-| **T10** | Manual test-case suite | `qa-test-case-designer` | T4, T8 | ☐ |
-| **T11** | The record — handoff, caches, queues | *(last lane)* | T8 | ☐ |
+**Rows are in RUN ORDER; the ids are the plan's and never renumber.** A prompt below says "Task T6",
+the plan's §10 says T6, and the verification rows quote ids the same way — so the board sorts, it
+does not renumber. Read the `Run` column top to bottom.
 
-**T6 can go first.** It is independent of T0–T5 and is the only task that touches a shipped screen,
-so landing it alone means a regression there cannot be confused with the new feature's fault.
+| Run | # | Task | Agent | Deps | State |
+|:--:|---|---|---|---|---|
+| 1 | **T6** | Extract `teamTree.ts` | `fe-react` | — | ☐ |
+| 2 | **T0** | Decision gate — answer Q1–Q3 **and Q5** | *(you)* | — | ☐ |
+| 3 | **T1** | Contract + both generated schema copies | `be-java` | T0 | ☐ |
+| 4 | **T2** | Repository generalisation + §A1.1 helper | `be-java` | T1 | ☐ |
+| 5 | **T3** | `OrgChartService` + controller | `be-java` | T2 | ☐ |
+| 6 | **T4** | Backend tests | `qa-api-java` | T3 | ☐ |
+| 7 | **T7** | `useOrgChart` + invalidations | `fe-react` | T1, T6 | ☐ |
+| 8 | **T8** | The screen | `fe-react` | T7 | ☐ |
+| — | **T5** | Query-plan review | `data-architect` | T2 | ☐ |
+| — | **T9** | Disclosure-boundary security pass | `qa-security` | T4 | ☐ |
+| — | **T10** | Manual test-case suite | `qa-test-case-designer` | T4, T8 | ☐ |
+| last | **T11** | The record — handoff, caches, queues | *(last lane)* | T8 | ☐ |
+
+**T6 runs first, ahead of even the decision gate.** It is independent of T0–T5, it is the only task
+that touches a shipped screen, and landing it alone means a regression in `/admin/teams` cannot be
+confused with the new feature's fault. It also unblocks nothing else, so running it while Q1–Q3 are
+still open costs nothing.
+
+**The three dashed rows are off the critical path** and produce reports, not code — `T5` needs only
+T2, `T9` needs only T4, `T10` needs T4 and T8. Slot each one in as soon as its deps land, or batch
+all three before T11. **T11 is genuinely last**: if T9 or T10 has been run, its findings belong in
+the handoff section T11 writes, so do not run T11 while either is outstanding.
+
+**Nothing here runs concurrently** (CLAUDE.md, "work is sequential"). T2/T3/T4 in particular share
+one `backend/build/` and one Gradle daemon, and T6/T7/T8 share `frontend/`.
 
 ---
 
 ## T0 — Decision gate *(you, not an agent)*
 
-Answer §14's Q1, Q2 and Q3. Nothing below starts until they are answered or explicitly deferred with
-an owner. Write the answers into §14 as a decision, dated, so the next reader sees a decision rather
-than an open question.
+Answer §14's Q1, Q2, Q3 **and Q5**. Nothing below starts — except T6, which is independent — until
+they are answered or explicitly deferred with an owner. Write the answers into §14 as a decision,
+dated, so the next reader sees a decision rather than an open question.
 
 - **Q1** — role *names* on a visible project: every reader of that project, or only `project:members`
   holders? *(plan recommends: every reader)*
 - **Q2** — is `companyRoles` ("this person is a Company Admin") visible to every member?
   *(recommends: yes)*
 - **Q3** — does SYSTEM scope / Instance Admin appear at all? *(recommends: no)*
+- **Q5** — does the new path get an `operationId`? *(recommends: no, matching the identity family —
+  none of its paths has one.)* §14 lists this as blocking T1 and the first version of this file
+  omitted it; it is low-stakes and engineering's call if you would rather not decide it.
+
+**Q4 is a defer-with-owners and blocks nothing** — it needs no answer before T1.
 
 **Every prompt below assumes the recommended answers.** If you decide otherwise, say so in the
 prompt — each one has a line for it.
@@ -91,17 +114,22 @@ User.teams stays string[] — widening a shipped shape for a screen that can hav
 the breaking change §5.2 refuses.
 
 Then regenerate BOTH copies of the generated types:
-  cd frontend && npm run gen:api
-  cd packages/client && npm run gen:api
-They are byte-identical and schemaFreshness.test.ts compares them.
+  cd frontend && npm run gen:api       # -> frontend/src/api/schema.d.ts
+  cd packages/client && npm run gen:api  # -> packages/client/src/schema.ts
+NOTE THE SECOND FILENAME: the packages copy is `src/schema.ts`, NOT `schema.d.ts` — the
+first version of this file named a path that does not exist. Their contents are compared by
+schemaFreshness.test.ts; run the generators rather than hand-copying either.
 
-Also fix the false prose at openapi.yaml:6679-6681 (plan §13 F1): it claims GET /teams is
-gated on company:teams "so the org chart is not readable to the person in it". It is gated
-on company:read (AdminDirectoryService.java:249). Verify that in the source before you
-rewrite the sentence. Do NOT extend tierClaims.test.ts to catch this phrasing — the plan
-flags that as its own slice.
+Also fix the false prose in openapi.yaml (plan §13 F1). It is in `CurrentUser.teams` and
+reads "GET /teams is gated on company:teams, so the org chart is not readable to the person
+in it" — found at :7182 on master at 2026-08-15, but LINE NUMBERS DRIFT, so grep for
+"gated on `company:teams`" rather than trusting either number. It is gated on company:read
+(AdminDirectoryService.java:249 via readsCompany(), TeamController.java:61-64). Verify that
+in the source before you rewrite the sentence. Do NOT extend tierClaims.test.ts to catch this
+phrasing — the plan flags that as its own slice. Do NOT delete the field: plan §13 F2 records
+why it survives the repair.
 
-Q1-Q3 answered as: RECOMMENDED (Q1 every reader / Q2 yes / Q3 no).
+Q1-Q3 and Q5 answered as: RECOMMENDED (Q1 every reader / Q2 yes / Q3 no / Q5 no operationId).
   ^ change this line if you decided otherwise.
 
 Every new schema needs its `required` array, INCLUDING on inline nested objects — `required`
@@ -110,7 +138,7 @@ use it (CLAUDE.md working agreement).
 
 Gate: `npm run build` in frontend/ AND `npm run build` in packages/ (the ordered script, not
 --workspaces), plus schemaFreshness.test.ts green.
-Files: docs/specs/openapi.yaml, frontend/src/api/schema.d.ts, packages/client/src/schema.d.ts
+Files: docs/specs/openapi.yaml, frontend/src/api/schema.d.ts, packages/client/src/schema.ts
 Commit when the gate passes.
 ```
 
@@ -237,13 +265,16 @@ Files: docs/plans/2026-08-15-org-chart.md (§6 only)
 
 ---
 
-## T6 — Extract `teamTree.ts` *(run this FIRST; it is independent)*
+## T6 — Extract `teamTree.ts` *(RUN ORDER 1 — first of everything, including T0)*
 
 ```
 Task T6 from docs/plans/2026-08-15-org-chart.md §9.3.
 
-Extract the tree flattening at frontend/src/features/admin/TeamsPage.tsx:353-408 into
-frontend/src/features/admin/teamTree.ts, and have TeamsPage call it.
+Extract the tree flattening from frontend/src/features/admin/TeamsPage.tsx into
+frontend/src/features/admin/teamTree.ts, and have TeamsPage call it. It is the `useMemo`
+inside the `TeamTree` component — :378-408 on master at 2026-08-15, under the block comment
+at :365-377 — but LINE NUMBERS DRIFT, so find it by the `reachesARoot` helper rather than by
+number.
 
 BEHAVIOUR-PRESERVING, its own commit, nothing else in this session.
 
@@ -393,8 +424,14 @@ Close the slice out per CLAUDE.md:
 
 THE ROW IDS IN §11 ARE PROVISIONAL. Ids in those files are quoted from handoff sections and
 are NEVER renumbered, so take the real ids from the current high-water mark at append time.
-The highest L1 row seen when the plan was written was L1-22; the A0 lane's highest was never
-confirmed. Verify both before appending. Persona rows go in the L1 permission lane.
+Measured on master at 2026-08-15: L1 tops out at L1-22, A0 at A0-16 — so §11's rows would be
+L1-23..L1-26 and A0-17/A0-18 if nothing else lands first. RE-MEASURE ANYWAY: two other
+worktrees (worktree-notifications, worktree-m6-multi-company) are live and either may append
+to these lanes before this slice merges. Persona rows go in the L1 permission lane; the
+"does it render at all" rows go in A0.
+
+Also run T9 and T10 BEFORE this task if they are going to be run at all — this section is
+where their findings are recorded, and a handoff written ahead of them cannot mention them.
 
 Record the rows; RUN NOTHING (§65 — deferred and batched, and "deferred means ALL of them").
 A slice in an unrun queue is BUILT AND UNVERIFIED and must be described that way, not as done.
@@ -413,3 +450,14 @@ A slice in an unrun queue is BUILT AND UNVERIFIED and must be described that way
 - **Pushing this branch gates nothing.** `ci.yml` triggers on push to `master` and on PRs targeting
   it; `tests.yml` is nightly on the default branch. A pushed worktree branch is *backed up*, not
   *observed*.
+- **Three worktrees are live** (verified 2026-08-15): `org-chart-plan` (this one, at `5149e58` — the
+  two plan commits and nothing executed yet), plus `notifications` and `m6-multi-company`. That is
+  why every prompt says `git add <paths>` and never `git add -A`, and why T11 re-measures the
+  verification lanes rather than trusting the numbers written here.
+- **Flyway head is `V52`** and this slice adds no migration (plan §6). If T5 recommends an index, its
+  version is reserved at integration in landing order — `out-of-order` is unset, and Testcontainers
+  cannot see the failure because it migrates a fresh container every time.
+- **Citations in these prompts carry line numbers that drift.** Four had already moved between the
+  plan being written and this pass (the `openapi.yaml` prose, the `TeamsPage` block, and the
+  `packages/client` schema filename, which was wrong rather than stale). Grep for the named symbol;
+  treat a number as a hint.

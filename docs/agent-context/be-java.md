@@ -121,7 +121,13 @@ does not fork somebody into a second account.
 RLS-protected. Under RLS that read returns zero rows for an anonymous caller, so SSO would have been
 **undiscoverable, permanently, presenting as an empty button list rather than an error**.
 
-`tcms_resolve_providers_for_domain` is the answer and it is `V8`'s shape, not `V7`'s: **`SECURITY
+`tcms_resolve_providers_for_domain` is the answer. It lives in **`V55`, not `V53`** — §217 phase 4
+appended it to `V53`, which the lab had already applied, and the next deploy failed to boot on a
+Flyway checksum mismatch; `V53` is now back to its applied bytes. **An applied migration is
+immutable and no local gate can tell you it has been applied** — every backend test migrates a fresh
+container, where the edited file and the original are equally valid.
+
+It is `V8`'s shape, not `V7`'s: **`SECURITY
 INVOKER`, walking the ACTIVE companies with `set_config` and asking the ordinary fully-policed
 question in each.** `SECURITY DEFINER` does not work on these tables and the reason is the one this
 repository has paid for once — `FORCE ROW LEVEL SECURITY` subjects the table's owner to its own

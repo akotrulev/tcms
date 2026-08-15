@@ -28,7 +28,7 @@ public interface IdentityProviderRepository extends JpaRepository<IdentityProvid
     // There was a findByCompanyIdAndEnabledTrue here, written for provider discovery. It was
     // deleted in §217 phase 4 rather than wired: discovery runs BEFORE any company context
     // exists, so this repository would have answered it with zero rows, and
-    // tcms_resolve_providers_for_domain (V53) answers it instead. A query with no caller is an
+    // tcms_resolve_providers_for_domain (V55) answers it instead. A query with no caller is an
     // unverified claim about a read path that has never executed — §152's rule, and
     // everyDeclaredRepositoryMethodHasACaller reported this one on its first run.
 }

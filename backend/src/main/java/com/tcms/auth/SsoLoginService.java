@@ -125,7 +125,7 @@ public class SsoLoginService {
     /**
      * Which sign-in buttons to offer somebody who typed {@code email}.
      *
-     * <p>Answered by {@code tcms_resolve_providers_for_domain} (V53) rather than by a repository,
+     * <p>Answered by {@code tcms_resolve_providers_for_domain} (V55) rather than by a repository,
      * because it is asked with no session and therefore no company context: under RLS,
      * {@code company_email_domain} and {@code identity_provider} both return zero rows here. The
      * function returns the union across every company claiming the domain, carrying no company id

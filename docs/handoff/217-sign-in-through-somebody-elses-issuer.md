@@ -27,8 +27,16 @@ by building rather than by reading:
    through `company_email_domain`, which is company-owned and FORCE RLS'd. Under RLS that read
    returns zero rows for an anonymous caller, so SSO would have been **undiscoverable, permanently,
    presenting as an empty button list rather than as an error.** The answer is
-   `tcms_resolve_providers_for_domain`, appended to `V53` — **which amends an already-pushed
-   migration**, acceptable only because nothing but Testcontainers had migrated it. It is `V8`'s
+   `tcms_resolve_providers_for_domain`, ~~appended to `V53` — **which amends an already-pushed
+   migration**, acceptable only because nothing but Testcontainers had migrated it~~ →
+   **superseded: the lab had migrated it, and the deploy of `87a2614` failed on
+   `Migration checksum mismatch for migration version 53` (Actions run 31897579899).** The premise
+   was wrong, not the reasoning about the premise: `ci.yml` deploys `master` to the lab on every
+   push, so §217 phase 1's `V53` was applied to a live database hours before phase 4 edited it. The
+   function now ships as **`V55__provider_discovery_for_domain.sql`** and `V53` is back to the bytes
+   the lab applied. *Generalised: "nothing has migrated it" is a claim about a running database, and
+   the only local observer is a fresh container that cannot disagree — check the deploy history, not
+   the test suite.* It is `V8`'s
    shape and not `V7`'s: **`SECURITY INVOKER`**, walking the ACTIVE companies with `set_config` and
    asking the ordinary fully-policed question in each. `SECURITY DEFINER` does not work on these
    tables, and the reason is one this repository has already paid for — `FORCE ROW LEVEL SECURITY`
