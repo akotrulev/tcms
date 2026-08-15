@@ -345,6 +345,96 @@ class IdentityProviderEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // Directories
+    // =====================================================================
+
+    /**
+     * The LDAP arm of validation, whose two security-relevant refusals have no escape hatch.
+     *
+     * <p>An unencrypted bind puts the person's <em>own</em> directory password on the wire — the
+     * credential to the customer's AD, and very often to everything else they own — and a filter
+     * without the placeholder is an injection point on a surface an anonymous caller reaches. Both
+     * are refusals rather than warnings, and there is no property, profile or column that turns
+     * either off.
+     */
+    @Nested
+    @DisplayName("A directory provider is validated on its own terms")
+    class Directories {
+
+        @Test
+        @DisplayName("a directory provider is refused unless its URL is encrypted")
+        void aPlainLdapUrlIsRefused() throws Exception {
+            MvcResult result = register(ADMIN, directoryBody("ldap://dc.acme.test:389", false));
+
+            assertThat(statusOf(result))
+                    .describedAs("a plain bind sends the person's own directory password in the "
+                            + "clear; D2 of the LDAP plan, and deliberately not overridable")
+                    .isEqualTo(400);
+            assertThat(errorsOf(result).has("issuerUri")).isTrue();
+        }
+
+        @Test
+        @DisplayName("ldap:// with StartTLS is accepted")
+        void startTlsMakesAPlainUrlAcceptable() throws Exception {
+            MvcResult result = register(ADMIN, directoryBody("ldap://dc.acme.test:389", true));
+
+            assertThat(statusOf(result))
+                    .as("registration failed: %s", result.getResponse().getContentAsString())
+                    .isEqualTo(201);
+        }
+
+        @Test
+        @DisplayName("a search filter without {0} is refused")
+        void aFilterMustCarryThePlaceholder() throws Exception {
+            MvcResult result = register(ADMIN, directoryBodyWith("\"userSearchFilter\":\"(mail=*)\""));
+
+            assertThat(statusOf(result)).isEqualTo(400);
+            assertThat(errorsOf(result).has("userSearchFilter")).isTrue();
+        }
+
+        @Test
+        @DisplayName("a directory with no search base or id attribute is refused")
+        void theSearchMustBeConstructible() throws Exception {
+            MvcResult result = register(ADMIN, directoryBodyWith(
+                    "\"userSearchBase\":\"\",\"userIdAttribute\":\"\""));
+
+            assertThat(statusOf(result)).isEqualTo(400);
+            assertThat(errorsOf(result).has("userSearchBase")).isTrue();
+            assertThat(errorsOf(result).has("userIdAttribute")).isTrue();
+        }
+
+        @Test
+        @DisplayName("the bind password is stored, and no read path can see it")
+        void theBindPasswordLeavesByOneDoor() throws Exception {
+            JsonNode view = registered(ADMIN, directoryBody());
+
+            assertThat(view.get("bindPasswordSet").asBoolean())
+                    .describedAs("clientSecretSet's counterpart, and a boolean for its reason")
+                    .isTrue();
+            assertThat(view.toString())
+                    .describedAs("§219's rule, one credential over: the value is in no response")
+                    .doesNotContain(BIND_PASSWORD);
+        }
+
+        @Test
+        @DisplayName("no client id is stored on a directory, and the audit trail omits the password")
+        void aDirectoryHasNoRelyingPartyIdentity() throws Exception {
+            JsonNode view = registered(ADMIN, directoryBody());
+
+            assertThat(view.get("clientId").isNull())
+                    .describedAs("ck_identity_provider_shape requires it null on an LDAP row")
+                    .isTrue();
+
+            String audit = auditChanges(NORTH, "identity_provider.registered");
+
+            assertThat(audit)
+                    .describedAs("the client's own administrators read this table")
+                    .doesNotContain(BIND_PASSWORD);
+            assertThat(audit).contains("userSearchBase");
+        }
+    }
+
+    // =====================================================================
     // Tenancy
     // =====================================================================
 
@@ -512,6 +602,44 @@ class IdentityProviderEndpointTest extends IntegrationTestBase {
     private static String bodyWith(String extra) {
         String base = body();
         return base.substring(0, base.length() - 1) + "," + extra + "}";
+    }
+
+    private static final String DIRECTORY_URL = "ldaps://dc.acme.test:636";
+
+    private static final String BIND_PASSWORD = "s3rvice-nothing-may-echo";
+
+    private static String directoryBody() {
+        return directoryBody(DIRECTORY_URL, false);
+    }
+
+    /**
+     * A complete, valid directory registration. The three attribute names are Active Directory's,
+     * because AD is what a company registering a directory almost always has.
+     */
+    private static String directoryBody(String url, boolean startTls) {
+        return "{"
+                + "\"key\":\"acme-directory\""
+                + ",\"kind\":\"LDAP\""
+                + ",\"displayName\":\"Acme Directory\""
+                + ",\"issuerUri\":" + quoted(url)
+                + ",\"bindDn\":\"cn=service,dc=acme,dc=test\""
+                + ",\"bindPassword\":" + quoted(BIND_PASSWORD)
+                + ",\"startTls\":" + startTls
+                + ",\"userSearchBase\":\"ou=people,dc=acme,dc=test\""
+                + ",\"userSearchFilter\":\"(|(userPrincipalName={0})(mail={0}))\""
+                + ",\"userIdAttribute\":\"objectGUID\""
+                + ",\"emailAttribute\":\"mail\""
+                + ",\"displayNameAttribute\":\"displayName\""
+                + "}";
+    }
+
+    /**
+     * The default directory body with members overridden — a later duplicate key wins in JSON, so
+     * this appends rather than substitutes and the test reads as "this body, but with X".
+     */
+    private static String directoryBodyWith(String overrides) {
+        String base = directoryBody();
+        return base.substring(0, base.length() - 1) + "," + overrides + "}";
     }
 
     private static String quoted(String value) {

@@ -27,13 +27,18 @@ import org.springframework.transaction.annotation.Transactional;
  * (§64), {@code company:vocabulary} (§69) and {@code token:issue} (§128). The gate is the
  * permission and never a role name, per §6b, and there is no wildcard.
  *
- * <h2>The client secret leaves by exactly one door</h2>
+ * <h2>Two credentials leave by exactly one door</h2>
  *
- * <p>It arrives on {@link IdentityProviderInput#clientSecret}, is encrypted by
- * {@link ProviderSecrets} before anything else touches it, and is decrypted only by the token
- * exchange. It is in no view, no audit document, no log line and no error message (§6r) — and
- * {@link IdentityProviderView} carries {@code clientSecretSet} instead, so a form can still say
- * "leave blank to keep" without the value existing outside the database.
+ * <p>{@link IdentityProviderInput#clientSecret} and {@link IdentityProviderInput#bindPassword} are
+ * encrypted by {@link ProviderSecrets} before anything else touches them, and are decrypted only by
+ * the token exchange and the directory bind respectively. Neither is in a view, an audit document, a
+ * log line or an error message (§6r) — {@link IdentityProviderView} carries
+ * {@code clientSecretSet} and {@code bindPasswordSet} instead, so a form can still say "leave blank
+ * to keep" without either value existing outside the database.
+ *
+ * <p>The bind password is the one this instance did not choose and cannot rotate: it is a service
+ * account in the <em>customer's</em> directory, which is why it gets the stricter of the two
+ * treatments wherever they could differ.
  *
  * <h2>Registering and enabling are two acts</h2>
  *
@@ -67,6 +72,11 @@ public class IdentityProviderService {
 
     /** Lowercase, digits, hyphens — what a URL-safe stable identifier is everywhere else here. */
     private static final Pattern KEY = Pattern.compile("^[a-z0-9][a-z0-9-]{0,58}[a-z0-9]$");
+
+    /** Already encrypted, so StartTLS is neither needed nor used. */
+    private static final Pattern LDAPS_URL = Pattern.compile("^ldaps://.+");
+
+    private static final Pattern LDAP_URL = Pattern.compile("^ldaps?://.+");
 
     /**
      * Deliberately permissive, like {@code MembershipInviteService.EMAIL} one label over: at least
@@ -163,17 +173,35 @@ public class IdentityProviderService {
         Instant now = clock.instant();
         UUID id = UUID.randomUUID();
 
-        IdentityProvider provider = providers.saveAndFlush(IdentityProvider.register(
-                id,
-                companyId,
-                input.key().trim(),
-                input.kind(),
-                input.displayName().trim(),
-                input.issuerUri().trim(),
-                input.clientId().trim(),
-                secrets.encrypt(input.clientSecret()),
-                callerId,
-                now));
+        IdentityProvider provider = providers.saveAndFlush(
+                input.kind() == IdentityProviderKind.LDAP
+                        ? IdentityProvider.registerDirectory(
+                                id,
+                                companyId,
+                                input.key().trim(),
+                                input.displayName().trim(),
+                                input.issuerUri().trim(),
+                                blankToNull(input.bindDn()),
+                                secrets.encrypt(input.bindPassword()),
+                                Boolean.TRUE.equals(input.startTls()),
+                                input.userSearchBase().trim(),
+                                input.userSearchFilter().trim(),
+                                input.userIdAttribute().trim(),
+                                blankToNull(input.emailAttribute()),
+                                blankToNull(input.displayNameAttribute()),
+                                callerId,
+                                now)
+                        : IdentityProvider.register(
+                                id,
+                                companyId,
+                                input.key().trim(),
+                                input.kind(),
+                                input.displayName().trim(),
+                                input.issuerUri().trim(),
+                                input.clientId().trim(),
+                                secrets.encrypt(input.clientSecret()),
+                                callerId,
+                                now));
 
         auditEvents.save(AuditEvent.record(
                 null, callerId, AUDIT_REGISTERED, AUDIT_TARGET, List.of(id), changes(provider), now));
@@ -202,11 +230,23 @@ public class IdentityProviderService {
 
         IdentityProvider provider = found.get();
         Instant now = clock.instant();
+        boolean directory = provider.getKind() == IdentityProviderKind.LDAP;
         provider.applyEdit(
                 input.displayName().trim(),
                 input.issuerUri().trim(),
-                input.clientId().trim(),
+                // ck_identity_provider_shape requires it null on a directory and present on an
+                // issuer, so the kind of the STORED row decides — `kind` is set once and an edit
+                // neither requires nor reads what the caller sent.
+                directory ? null : trimmed(input.clientId()),
                 secrets.encrypt(input.clientSecret()),
+                blankToNull(input.bindDn()),
+                secrets.encrypt(input.bindPassword()),
+                Boolean.TRUE.equals(input.startTls()),
+                directory ? blankToNull(input.userSearchBase()) : null,
+                directory ? blankToNull(input.userSearchFilter()) : null,
+                directory ? blankToNull(input.userIdAttribute()) : null,
+                blankToNull(input.emailAttribute()),
+                blankToNull(input.displayNameAttribute()),
                 Boolean.TRUE.equals(input.jitProvisioning()),
                 Boolean.TRUE.equals(input.autoLinkVerifiedEmail()),
                 blankToNull(input.groupClaim()),
@@ -317,20 +357,66 @@ public class IdentityProviderService {
                     "A display name is required, up to " + MAX_DISPLAY_NAME + " characters."));
         }
 
-        String issuerUri = input.issuerUri() == null ? "" : input.issuerUri().trim();
+        if (input.kind() == IdentityProviderKind.LDAP) {
+            validateDirectory(input, errors);
+        } else {
+            validateIssuer(input, errors);
+        }
+
+        return errors;
+    }
+
+    private static void validateIssuer(IdentityProviderInput input,
+                                       Map<String, List<String>> errors) {
+        String issuerUri = trimmed(input.issuerUri());
         if (!issuerUri.startsWith("https://") || issuerUri.length() > MAX_URI) {
-            // Not a style rule. The discovery document, and therefore the jwks_uri every signature
+            // Not a style rule. The discovery document, and therefore every signing key a signature
             // is verified against, is fetched from this URL — over http, anyone on the path
             // nominates the keys that decide who signs in.
             errors.put("issuerUri", List.of("The issuer must be an https:// URL."));
         }
-
-        String clientId = input.clientId() == null ? "" : input.clientId().trim();
+        String clientId = trimmed(input.clientId());
         if (clientId.isEmpty() || clientId.length() > MAX_URI) {
             errors.put("clientId", List.of("A client id is required."));
         }
+    }
 
-        return errors;
+    /**
+     * The directory arm. <strong>Two of these are the security-relevant ones</strong> and both are
+     * refusals with no escape hatch: an unencrypted bind puts the person's own directory password on
+     * the wire, and a filter without the placeholder is an injection point on a surface an anonymous
+     * caller reaches.
+     */
+    private static void validateDirectory(IdentityProviderInput input,
+                                          Map<String, List<String>> errors) {
+        String url = trimmed(input.issuerUri());
+        boolean startTls = Boolean.TRUE.equals(input.startTls());
+        if (!LDAP_URL.matcher(url).matches() || url.length() > MAX_URI
+                || (!LDAPS_URL.matcher(url).matches() && !startTls)) {
+            errors.put("issuerUri", List.of(
+                    "A directory URL must be ldaps://, or ldap:// with StartTLS — a plain bind puts "
+                            + "your people's directory passwords on the wire."));
+        }
+        if (trimmed(input.userSearchBase()).isEmpty()) {
+            errors.put("userSearchBase", List.of(
+                    "A search base is required — 'ou=people,dc=acme,dc=test'."));
+        }
+        String filter = trimmed(input.userSearchFilter());
+        if (filter.isEmpty() || !filter.contains("{0}")) {
+            errors.put("userSearchFilter", List.of(
+                    "A search filter is required and must contain {0}, where the address is "
+                            + "substituted — '(|(userPrincipalName={0})(mail={0}))'."));
+        }
+        if (trimmed(input.userIdAttribute()).isEmpty()) {
+            errors.put("userIdAttribute", List.of(
+                    "Name the attribute holding the directory's own identifier — 'objectGUID' on "
+                            + "Active Directory, 'entryUUID' on OpenLDAP. Not a DN: a DN changes "
+                            + "when somebody moves between OUs."));
+        }
+    }
+
+    private static String trimmed(String value) {
+        return value == null ? "" : value.trim();
     }
 
     /**
@@ -343,12 +429,30 @@ public class IdentityProviderService {
                 .append("\"key\":").append(AuditEvent.jsonString(provider.getKey()))
                 .append(",\"displayName\":").append(AuditEvent.jsonString(provider.getDisplayName()))
                 .append(",\"issuerUri\":").append(AuditEvent.jsonString(provider.getIssuerUri()))
-                .append(",\"clientId\":").append(AuditEvent.jsonString(provider.getClientId()))
+                .append(",\"clientId\":").append(orNull(provider.getClientId()))
+                .append(",\"bindDn\":").append(orNull(provider.getBindDn()))
+                .append(",\"startTls\":").append(provider.isStartTls())
+                .append(",\"userSearchBase\":").append(orNull(provider.getUserSearchBase()))
+                .append(",\"userSearchFilter\":").append(orNull(provider.getUserSearchFilter()))
+                .append(",\"userIdAttribute\":").append(orNull(provider.getUserIdAttribute()))
                 .append(",\"jitProvisioning\":").append(provider.isJitProvisioning())
                 .append(",\"autoLinkVerifiedEmail\":").append(provider.isAutoLinkVerifiedEmail())
                 .append(",\"enabled\":").append(provider.isEnabled())
                 .append("}")
                 .toString();
+    }
+
+    /**
+     * The JSON {@code null} literal for an absent value, rather than the quoted string
+     * {@link AuditEvent#jsonString} would build.
+     *
+     * <p>Needed since V57 and not before: every field this document carried used to be
+     * {@code NOT NULL}, and half of them are now null by design — {@code clientId} on a directory,
+     * the five directory fields on an issuer. {@code jsonString} dereferences its argument, so
+     * handing it one of those is an NPE inside a 201, which is what this exists to stop.
+     */
+    private static String orNull(String value) {
+        return value == null ? "null" : AuditEvent.jsonString(value);
     }
 
     private static String jsonArray(Set<String> values) {

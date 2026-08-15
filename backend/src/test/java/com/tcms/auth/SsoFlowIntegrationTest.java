@@ -328,6 +328,8 @@ class SsoFlowIntegrationTest extends IntegrationTestBase {
                     issuerUri,
                     CLIENT_ID,
                     provider.getClientSecretEncrypted(),
+                    // The directory half, unpopulated on an issuer (V57).
+                    null, null, false, null, null, null, null, null,
                     false,
                     false,
                     null,
@@ -354,6 +356,8 @@ class SsoFlowIntegrationTest extends IntegrationTestBase {
                     provider.getIssuerUri(),
                     provider.getClientId(),
                     provider.getClientSecretEncrypted(),
+                    // The directory half, unpopulated on an issuer (V57).
+                    null, null, false, null, null, null, null, null,
                     false,
                     false,
                     null,

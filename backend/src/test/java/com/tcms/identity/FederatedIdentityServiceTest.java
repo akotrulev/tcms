@@ -220,9 +220,12 @@ class FederatedIdentityServiceTest {
         IdentityProvider provider = IdentityProvider.register(
                 PROVIDER, COMPANY, "corporate", IdentityProviderKind.OIDC, "Corporate",
                 "https://idp.acme.test", "tcms", null, null, NOW);
+        // The eight nulls and the false are the directory half, which an OIDC provider does not
+        // populate — V57 added them and this call site is only here to flip the two flags.
         provider.applyEdit(
-                "Corporate", "https://idp.acme.test", "tcms", null, jit, autoLink, null, true,
-                null, NOW);
+                "Corporate", "https://idp.acme.test", "tcms", null,
+                null, null, false, null, null, null, null, null,
+                jit, autoLink, null, true, null, NOW);
         return provider;
     }
 
