@@ -109,9 +109,27 @@ npm run build                     # THE gate: tsc over source+tests, then emit. 
                                   # names the order client → cli → mcp; mcp is THIRD for the
                                   # same reason cli is second.
 npm run lint --workspaces         # oxlint, 0 warnings
-npm run test:run --workspaces     # ~~211~~ ~~241~~ ~~260~~ ~~269~~ 302 tests (119 client / 78 cli /
-                                  # 105 mcp, measured on shanks 2026-08-14), ~1s — CI runs these,
-                                  # unlike the backend's.
+npm run test:run --workspaces     # ~~211~~ ~~241~~ ~~260~~ ~~269~~ ~~302~~ 314 tests (119 client /
+                                  # 78 cli / 117 mcp, measured on shanks 2026-08-15), ~1s — CI runs
+                                  # these, unlike the backend's.
+                                  # **Since §211 the MCP surface can DELETE** — `case:delete`,
+                                  # `suite:delete` and `plan:delete` as `delete` arms on the three
+                                  # write tools that own those resources, behind §210's consent
+                                  # prompt. Two of `V52`'s five delete keys are still off the
+                                  # surface BY DECISION and the reasons are in `writes.ts`'s module
+                                  # header: artifacts have no tools at all, and `evidence:delete` is
+                                  # the one HARD delete on a transport that cannot attach evidence.
+                                  # A `delete` arm MUST declare `ToolArm.targets` — the input fields
+                                  # that name the row — or `writes.test.ts` fails it. The consent
+                                  # prompt is composed from them, and it named nothing at all until
+                                  # §211 because the old list matched field names this surface has
+                                  # never used.
+                                  # **Also since §211: a tool description may not claim the
+                                  # credential lacks a key `AGENT_KEYS` holds.** §210's lesson —
+                                  # copy that names a role is a claim about the catalogue and
+                                  # nothing checks it — and two descriptions were false in the
+                                  # direction that matters most: a model reads them BEFORE deciding
+                                  # whether to try, so the failure has no error and no symptom.
                                   # **Since §205 `writeConformance.test.ts` exists in cli/ and mcp/**
                                   # — eight comments had cited it (and a `conformance.test.ts`) since
                                   # §139/§140 and neither file was real; the MCP's registry check

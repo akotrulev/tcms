@@ -8,5 +8,11 @@
     "qa-java@skills-library": true,
     "security-guidance@claude-plugins-official": true,
     "context7@claude-plugins-official": true
+  },
+  "autoMode": {
+    "hard_deny": [
+      "$defaults",
+      "Any call to a TCMS MCP tool that deletes, removes, unlinks or detaches a record or a relationship. The tools are named tcms_* and reach the model MCP-prefixed (mcp__<server>__tcms_*); match on the tcms_ part, not the prefix. This surface expresses most writes as an `action` argument on a shared tool rather than as a separate tool per verb, so the delete may be in the ARGUMENTS and not in the tool name at all -- action: \"unlink\" / \"delete\" / \"remove\" / \"detach\" / \"archive\" counts, and so does a tcms_delete_* tool if one exists. Every such call requires explicit per-call user approval. Prior user intent does NOT clear it: approve nothing here on the strength of the user having asked for the deletion earlier in the conversation."
+    ]
   }
 }

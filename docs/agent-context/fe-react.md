@@ -2,7 +2,15 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-15 (**§210** — **a permission change with NO frontend behaviour change**,
+**Last verified:** 2026-08-15 (**§211** — **`packages/` only, and the one thing that reaches this
+stack is `src/api/schema.d.ts`**: two `description` strings regenerated from `openapi.yaml` after
+`V52` left them false — `DELETE …/suites/{id}` said `suite:delete` was *"held by leads and above and
+not by Test Engineer"*, and `HeldPermission` taught the qualifier through an `artifact:edit`
+`PLAN_SCOPE` example no grant carries. **No type changed, nothing on the wire moved, no component
+and no test.** Regenerate BOTH copies if you touch the contract — `schemaFreshness.test.ts` and the
+byte-identical pairing check both fail otherwise. The transferable finding is §210's lesson taken one
+corpus further: prose that names a role is a claim about the catalogue and nothing checks it, and it
+was wrong in four more places, including two the model reads; **§210** — **a permission change with NO frontend behaviour change**,
 which is the thing to know before hunting for one: the SPA gates on **keys**, and §210 moved no key —
 it moved who holds them (`V52` gives Test Engineer `suite:delete`, `artifact:delete`, `run:close`,
 `result:amend`, `doc:publish`, and de-qualifies `artifact:edit`). So every `PermissionGate` and
@@ -61,9 +69,10 @@ surfaces; §124 — the `BEST` removal's frontend half; §121 phase 4 — the fl
 quarantine action; §121 phase 3 — the board's quarantine card; §120 — automation drift; §119 — the
 ingestion history and the binder; §118 — the token screen; §115 — the coverage matrix's frontend
 arm; §107 — the mock layer is deleted — before them)
-**Baseline commit:** `be0ac69` (§209 phase 2; §209's docs commit lands immediately after this
-line. Suite on `shanks` at **1349 across 100** (+8: five in `ArtifactDialogs.test.tsx`, three in
-`ArtifactTable.test.tsx`). Before it: ~~`9de1eac`, §207's docs commit, with §208 at 1341~~ —
+**Baseline commit:** `5198d1f` (§211 phase 3; §211's docs commit lands immediately after this
+line. Suite on `shanks` still **1349 across 100** — §211 added no frontend test and changed no
+frontend source, only `schema.d.ts` prose. Before it ~~`be0ac69`, §209 phase 2~~, where the suite
+went to 1349 (+8: five in `ArtifactDialogs.test.tsx`, three in `ArtifactTable.test.tsx`). Before it: ~~`9de1eac`, §207's docs commit, with §208 at 1341~~ —
 ~~`507c80b`, §207~~ — no `frontend/` behaviour changed there, four prose sites and two test headers —
 and ~~`c6fbefd`, §206 phase 3~~, likewise `schema.d.ts` only.)
 (trust the body over the header and re-grep what a later commit could have moved).

@@ -2,7 +2,19 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-15 (**§210** — **the Test Engineer / Test Lead line is now a CLOSED SET of
+**Last verified:** 2026-08-15 (**§211** — **no Java changed and one thing here did**: two
+`openapi.yaml` operation/schema `description`s that `V52` made false — `DELETE …/suites/{id}` still
+said `suite:delete` was *"held by leads and above and **not** by Test Engineer"*, and
+`HeldPermission` still taught the qualifier through *"a Test Engineer holds `artifact:edit` at
+`PLAN_SCOPE`"*. §210 fixed two contract descriptions and missed these. **The rule to carry, and it is
+§210's own closing lesson taken one corpus further: prose that names a ROLE is a claim about the
+seeded catalogue, and nothing in this repo checks it** — not `SchemaConventionTest`, not
+`SeedDataTest`, not the cited-files rule (which checks *paths*, not claims). `packages/` now has an
+eight-line version over MCP tool descriptions only, measured against a test constant rather than the
+seed. A Java-side equivalent over `openapi.yaml` and javadoc does not exist and is the obvious next
+instrument. Also: three MCP `delete` arms shipped (`case:delete`, `suite:delete`, `plan:delete`),
+which changes no server behaviour but means those endpoints now have an *agent* caller for the first
+time; **§210** — **the Test Engineer / Test Lead line is now a CLOSED SET of
 seven keys**: the three approvals and the four project-configuration keys, asserted exactly in both
 directions by `SeedDataTest.testEngineerToTestLeadBoundary`. `V52` gives Test Engineer `suite:delete`,
 `artifact:delete`, `run:close`, `result:amend`, `doc:publish` and de-qualifies its `artifact:edit`.
@@ -42,7 +54,7 @@ draft buffer; **§127 phase 1** — the table and image block payloads; **§126 
 attachment owners; **§125** — the `storage` module extraction; **§124** — the `BEST` removal and the
 two unwired permission keys; §122's grant-instance-admin, §121's four phases, §120's automation
 drift, §119's ingestion history, §117's CI ingestion, §116's API tokens before it)
-**Baseline commit:** `be0ac69` (§209 phase 2 — §209's own docs commit lands immediately after this line is written, so the header is one behind by construction. Before it the header sat at ~~`9de1eac` (§207's docs commit — §208's own slice commit lands immediately after
+**Baseline commit:** `5198d1f` (§211 phase 3 — no Java changed in §210's successor either, so the last commit to touch `backend/src` is still §210's. Before it ~~`be0ac69` (§209 phase 2)~~ — §209's own docs commit lands immediately after this line is written, so the header is one behind by construction. Before it the header sat at ~~`9de1eac` (§207's docs commit — §208's own slice commit lands immediately after
 this line is written, so the header is one behind by construction. Before it the header sat at
 ~~`507c80b` (§207)~~, ~~`c6fbefd` (§206 phase 3)~~ and ~~`be8c1a6` (§199)~~, lagging the body by six
 sections — the normal state, and exactly why the rule below exists.)~~
