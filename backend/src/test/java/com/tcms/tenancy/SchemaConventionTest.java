@@ -72,6 +72,12 @@ class SchemaConventionTest extends IntegrationTestBase {
             // against, and the row holds nothing identifying: no email, no subject, no
             // user id, because at insert time none of them are known. Recorded in ERD §0.1.
             "sso_login_attempt",
+            // V58: a person's social identity (GitHub/GitLab/Google) spans their companies —
+            // and the login path reads it before any company context can exist. Its attempt
+            // row is pre-session by construction, exactly like sso_login_attempt above.
+            // Decided in the 2026-08-16 social-login plan; recorded in ERD §0.1.
+            "user_social_identity",
+            "social_login_attempt",
             "instance_setting",           // infrastructure
             "instance_audit_event",       // operator actions across companies
             "flyway_schema_history");     // infrastructure
