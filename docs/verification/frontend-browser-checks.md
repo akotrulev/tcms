@@ -2760,3 +2760,28 @@ an open review, and two accounts, which is `§207 AQ-*`'s two-author requirement
 change. The menu deliberately does not predict it (a third implementation of `ReviewService.refuses`
 would be wrong exactly where it mattered), so the refusal arrives as a notification. If the pass has
 two accounts available, driving it is worth one row.
+
+## §230 — the trip from a case to the requirement it claims (A8)
+
+**Six rows, none run** (§65). Ids are `§230 LK-*`; `LK` is unused elsewhere in this file — grepped
+before minting (`§154`'s banner).
+
+Lane: **A1 — the repository**, after `DOC-1`'s own links are authored (the fixture note at the top
+of this file builds that page). Every row needs a signed-in **Test Engineer**, who holds `case:edit`
+and `doc:edit` both; `LK-5` needs a **Viewer** instead, and is the only row that needs a second
+account.
+
+**Nothing about this slice changed the server.** No endpoint, no payload, no permission — the whole
+of A8 is a URL carrying a case id between two screens that already existed, which is why there are
+no matching rows in `backend-mutation-checks.md`. What can go wrong is therefore entirely
+navigational, and that is what these rows drive: the intent surviving a redirect, a tree click and
+a reload.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§230 LK-1` | **A1**, open any case → the **Traceability** panel | **Two** link buttons: *Link a specification* and *Link code or a URL*. Before this slice the panel named a target kind (a documentation block) that it offered no way to produce, including in its own empty state. |
+| `§230 LK-2` | Press **Link a specification** | The documentation space, with `?linkCase=<the case id>` in the address bar **and a page selected** — the space redirects to its first page when none is named, and a redirect that rebuilt only the path would drop the intent before anything could read it. A banner names the case (key **and** title) and offers *Stop linking*; the case's key in it is a link back. |
+| `§230 LK-3` | Click through to **another page** in the tree, then **reload** the browser | The banner is still there, still naming the same case, on both. The intent is in the URL for exactly this reason — the page somebody lands on is rarely the page their case verifies. |
+| `§230 LK-4` | On a paragraph of that page, press the block's **Link `TC-…`** button | The dialog opens with the **case already chosen** — its key and title in the picker, Test case selected, Verifies as the relationship — and **Link is enabled without touching anything**. Press it: the block's chips gain the case and its coverage margin recounts. Then open that case: the link is on its Traceability panel (allow the mirror a moment — `§167 DL-1`'s timing arm). |
+| `§230 LK-5` | As a **Viewer**, open a case → Traceability | *Link a specification* is **disabled**, not hidden (§31), and so is *Link code or a URL*. The two ask different keys — `doc:edit` and `case:edit` — and a Viewer holds neither, so this row proves only that it is gated. **The pair that proves it is gated on the right one is `DocLinksPanel.test.tsx`'s**, which needs a caller with `case:edit` and no `doc:edit`; no seeded role is that, so it is not driveable here. Named rather than skipped. |
+| `§230 LK-6` | Back on the documentation space carrying a case, press **Stop linking** | The banner goes, the address bar loses `linkCase`, and each block's button returns to *Link* / *Link a case*. Open one: the picker is **empty** and Link is disabled. The intent has to leave the dialog too, not just the banner that announced it. |

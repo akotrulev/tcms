@@ -7,7 +7,7 @@ import type { BlockLink, DocPage, DocPageSummary, PermissionKey } from '../../ap
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
-import { aCaseSummary, aProject, aSuite } from '../../test/fixtures'
+import { aCase, aCaseSummary, aProject, aSuite } from '../../test/fixtures'
 import { DocsPage } from './DocsPage'
 
 /**
@@ -309,5 +309,134 @@ describe('a block carries the links that claim to verify it', () => {
     expect(del).not.toHaveBeenCalled()
     // The chip survives — a cancelled confirmation must not have removed the row optimistically.
     expect(screen.getByTestId('Docs.Block.Links.Item')).toHaveTextContent('TC-42')
+  })
+})
+
+/**
+ * A8 (§230) — a case carried here from its own screen.
+ *
+ * `doc_link`'s block arm is writable from this side alone, so the trip is the product's only path
+ * from "this case verifies a requirement" to a recorded link. What matters is that the case
+ * **survives the journey**: the reader arrives on a page they did not choose, walks the tree to the
+ * one they want, and presses Link on a paragraph — three navigations after the intent was formed.
+ *
+ * The `linkCase` id is read once by the page and drilled down, which is also why the picker has to
+ * accept a value the case *search* did not return: the query is the case's own label and the server
+ * answers whatever it answers.
+ */
+describe('a case carried in from its own screen is already chosen', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function mockIntentReads(keys: PermissionKey[]) {
+    served = []
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path.startsWith('/me/permissions')) return heldPermissions(keys)
+      if (path.includes('/doc-pages/')) return page(served)
+      if (path.endsWith('/doc-pages')) return [summary]
+      // The detail read, before the list arm below it — `/cases/case-9` matches both.
+      if (/\/cases\/[^/]+$/.test(path)) {
+        return aCase({ id: 'case-9', key: 'TC-42', title: 'Refund is refused after 30 days' })
+      }
+      // Deliberately empty: the carried case is not in the search answer, which is the ordinary
+      // case once the query is its own label. A picker that trusted the served options alone would
+      // hold a value matching nothing.
+      if (path.includes('/cases')) return { items: [], facets: [], page: 0, size: 20, total: 1 }
+      if (path.endsWith('/suites')) return [aSuite({ id: 'suite-3', key: 'TS-3', name: 'Refunds' })]
+      if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
+      return []
+    }) as never)
+  }
+
+  function renderCarrying(query: string) {
+    return render(
+      <TestProviders
+        client={createTestQueryClient()}
+        route={`/projects/${PROJECT}/docs/page-1${query}`}
+      >
+        <Routes>
+          <Route path="/projects/:projectId/docs/:pageId" element={<DocsPage />} />
+        </Routes>
+      </TestProviders>,
+    )
+  }
+
+  it('says whose coverage is being claimed, and names the case on every Link', async () => {
+    mockIntentReads(['project:read', 'doc:edit'])
+    renderCarrying('?linkCase=case-9')
+
+    // The banner renders on the id alone — it is the first thing on screen and the case read is
+    // still in flight — so what is awaited here is the *name*, not the element.
+    await waitFor(() =>
+      expect(screen.getByTestId('Docs.LinkIntent')).toHaveTextContent('TC-42'),
+    )
+    const banner = screen.getByTestId('Docs.LinkIntent')
+    expect(banner).toHaveTextContent('Refund is refused after 30 days')
+    // The way back to the case, so a dismissible banner is not the only exit.
+    expect(within(banner).getByTestId('Docs.LinkIntent.Case')).toHaveAttribute(
+      'href',
+      `/projects/${PROJECT}/cases/case-9`,
+    )
+    await waitFor(() =>
+      expect(screen.getByTestId('Docs.Block.Links.AddButton')).toHaveTextContent('Link TC-42'),
+    )
+  })
+
+  it('posts the carried case without it being picked again', async () => {
+    const user = userEvent.setup()
+    mockIntentReads(['project:read', 'doc:edit'])
+    const post = vi.spyOn(api, 'post').mockImplementation((async () => {
+      served = [link]
+      return link
+    }) as never)
+    renderCarrying('?linkCase=case-9')
+
+    await waitFor(() => expect(screen.getByTestId('Docs.Block.Links.AddButton')).toBeEnabled())
+    await user.click(screen.getByTestId('Docs.Block.Links.AddButton'))
+    // Straight to Confirm: nothing is typed and no option is opened, which is the point of the
+    // whole feature — and a Confirm still disabled here would mean the seed reached the input and
+    // not the value.
+    await user.click(await screen.findByTestId('Docs.Block.LinkDialog.Confirm'))
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        `/projects/${PROJECT}/doc-pages/page-1/blocks/block-1/links`,
+        { sourceType: 'TEST_CASE', sourceId: 'case-9', relationship: 'VERIFIES' },
+      ),
+    )
+  })
+
+  it('stops carrying it when asked, and the dialog goes back to empty', async () => {
+    const user = userEvent.setup()
+    mockIntentReads(['project:read', 'doc:edit'])
+    renderCarrying('?linkCase=case-9')
+
+    await screen.findByTestId('Docs.LinkIntent')
+    await user.click(screen.getByTestId('Docs.LinkIntent.Stop'))
+
+    await waitFor(() => expect(screen.queryByTestId('Docs.LinkIntent')).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByTestId('Docs.Block.Links.AddButton')).toHaveTextContent('Link a case'),
+    )
+    await user.click(screen.getByTestId('Docs.Block.Links.AddButton'))
+    // Nothing chosen, so nothing to send: the intent is gone from the dialog too, not just from
+    // the banner that announced it.
+    expect(await screen.findByTestId('Docs.Block.LinkDialog.Confirm')).toBeDisabled()
+  })
+
+  it('keeps the case while the reader walks the tree to another page', async () => {
+    const user = userEvent.setup()
+    mockIntentReads(['project:read', 'doc:edit'])
+    renderCarrying('?linkCase=case-9')
+
+    await waitFor(() =>
+      expect(screen.getByTestId('Docs.LinkIntent')).toHaveTextContent('TC-42'),
+    )
+    // The first click of the journey: the page somebody lands on is rarely the page their case
+    // verifies, so a tree link that rebuilt only the path would end the intent immediately.
+    await user.click(await screen.findByTestId('Docs.Tree.Item'))
+
+    expect(await screen.findByTestId('Docs.LinkIntent')).toHaveTextContent('TC-42')
   })
 })

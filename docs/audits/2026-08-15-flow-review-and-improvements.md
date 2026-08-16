@@ -13,9 +13,13 @@ the handoff sections. Observations verified against source; each improvement nam
 **Scope authorised 2026-08-16: A1–A8 (every P1).** B, C, D and E are **not** in that scope and are
 untouched unless a row below says otherwise. Gates run on `shanks` per `CLAUDE.md`.
 
-**Seven of the eight are done. `A8` is the remainder**, and it is the whole of what is left in the
+~~**Seven of the eight are done. `A8` is the remainder**, and it is the whole of what is left in the
 authorised scope — see `docs/handoff/229-the-assignee-and-the-correction.md` for what §229 shipped
-and for the one gate it could not re-run.
+and for the one gate it could not re-run.~~ → **all eight are done as of §230**
+(`docs/handoff/230-the-requirement-a-case-could-not-reach.md`), which also completed §229 phase 2's
+outstanding backend and `packages` gates. **The authorised scope is closed.** Everything still open
+below is B, C, D or E, none of it started; `E2` and `C10` are the cheapest next steps and both name
+work in this run as their prerequisite.
 
 Status marks used in the tables: **✅ DONE** · **🔨 IN PROGRESS** · **⬜ NOT STARTED** ·
 **⛔ OUT OF SCOPE** (this session).
@@ -29,7 +33,7 @@ Status marks used in the tables: **✅ DONE** · **🔨 IN PROGRESS** · **⬜ N
 | A4 | ✅ DONE | §229 phase 1 | `PUT …/executions/{executionId}/assignee` (`ExecutionAssignmentService`, gated on **`run:execute`** — the one key `Automation Service` does not hold, so a CI credential cannot reorganise a team's workload) + an **Assignment** panel on `ExecutionPage`. **`GET /projects/{projectId}/configurations` came with it and was not in the audit's text**: the environment list lived only on `TestPlanDetail`, so a run scoped by suites or tags (§99) had nowhere to read it from — which is the whole of `RunCloneDialog`'s recorded *"there is no configuration picker anywhere in this SPA"*. Both dialogs now carry **Configuration** and **Assign to**; the clone's two recorded absences are struck through in place rather than deleted, because one of them named the slice that closed it. |
 | A6 | ✅ DONE | §229 phase 2 | `PATCH /projects/{projectId}/artifacts/{artifactId}` (`ArtifactWriteService.edit`, `artifact:edit` scope-qualified against the **row's** scope, `write_once` refused with 409) + **Correct…** and **Remove…** on the register's row menu, the second behind a confirmation that names what a `FILE`'s removal costs. Three editable fields — scope, kind and every payload column are `updatable = false`, so *"this points at the wrong thing"* stays **supersede**. **A `SUPERSEDED` row is editable and the status endpoint still refuses it**: a status is a fact about another row and a title is not. The kebab no longer shuts on a superseded row, which is what put the new edit path within reach of every row anybody had ever replaced. `DELETE` shipped in §126 with both its 409 guards and had **no caller at all** until now. |
 | A7 | ✅ DONE | §227 phase 2 | `SuitePanel` — above the case grid whenever a suite is selected — carrying the suite's key, name, lifecycle chip, membership count, an execution-history link, and **`ReviewPanel` for `SUITE`**, which had never been mounted anywhere. **A rail-side panel rather than a suite detail page**, of the audit's two options: a suite is flat since §98 and every write it has hangs off the rail, so a page of its own would be a header plus this panel reached by navigating away from the list you pick the suite in. Not *in* the rail either — 260px renders assignees, verdicts and a comment thread as a stack of ellipses. |
-| A8 | ⬜ NOT STARTED | — | Cross-navigation between the two link-creation surfaces. **The one item of the authorised A1–A8 scope still open.** Nothing about it was started in §229; the audit's own row below is unchanged and remains the specification. |
+| A8 | ✅ DONE | §230 | `?linkCase=<caseId>` carried from the case's Traceability panel into the documentation space, where a banner names it and every block's dialog opens with it **already chosen**. **`frontend/` alone — no endpoint, no payload, no permission, `openapi.yaml` untouched**, which is the finding: every piece of the journey existed and nothing joined them. The new button asks **`doc:edit`** (the destination's key, not the panel's own `case:edit` one line away), and the three navigations on the destination screen that dropped the query string — the no-page-id redirect, the page tree, the page-missing redirect — all carry it now. The first of those killed the intent *on arrival*, in the one route the feature is entered by. |
 | E2 | ⛔ OUT OF SCOPE | — | `Idempotency-Key` on `POST /reports/generate`. Pairs naturally with A3 and was deliberately **not** taken: it is a P2, the authorised scope is A1–A8, and it is a contract change to a write. Cheapest remaining reports work; do it next if the reports area is revisited. |
 
 **Also changed in phase 2:** `CaseBulkEndpointTest` is renamed in spirit rather than on disk — its
@@ -100,7 +104,9 @@ Doc pages: block-structured editor, `LTREE` hierarchy, `DRAFT → PUBLISHED → 
 `doc:publish`; versions hash-gated but **write-only** (no versions endpoint). Links: `VERIFIES` is
 the coverage claim; created from the doc side (`doc:edit`) or the case side
 (`case:edit`, external targets only), mirrored via `case_doc_link` on an event. Coverage matrix
-walks a page's headings with `LATEST` fixed. Artifacts: four-kind register (`FILE`, `DOC_PAGE_REF`,
+walks a page's headings with `LATEST` fixed. ~~A user on a case has no path to the block-link
+surface.~~ → **§230: the case's panel carries the case into `/docs?linkCase=…`, where every block's
+dialog opens with it chosen** (A8); the permission asymmetry itself is unchanged and still argued. Artifacts: four-kind register (`FILE`, `DOC_PAGE_REF`,
 `EXTERNAL_URL`, `GENERATED_REPORT`), PROJECT/PLAN scope, ACTIVE/ARCHIVED/SUPERSEDED — ~~but **no
 `PATCH` endpoint** despite `artifact:edit`, no UI delete control~~ → **both closed 2026-08-16 (A6,
 §229 phase 2)**: `PATCH …/artifacts/{artifactId}` over title/category/description, and Correct… /
@@ -139,7 +145,7 @@ move together.
 | A5 | ✅ | **Wire saved report definitions in the SPA.** `POST/DELETE /reports/{definitionId}` are implemented and the panel renders — with no Save button and always `[]`. One hook + one button turns an inert backend feature on. | No `useCreateReportDefinition` in `api/queries/` |
 | A6 | ✅ | **Give artifacts an edit path and a delete control.** There is no `PATCH /artifacts/{id}` despite `artifact:edit` (a typo can only be fixed by supersede-or-recreate), and `DELETE` — with both 409 guards — has no UI caller. `ArtifactTable.tsx:236` says so itself. | openapi.yaml artifact paths; `ArtifactTable.tsx:236` |
 | A7 | ✅ | **Give suites a home.** `suite:review`/`suite:approve`/`reviewEnabledSuite` all exist, yet a suite's review record has no visible surface — `ReviewPanel` mounts on cases and plans only, and all suite writes live in the case-list rail. Either a suite detail page or a rail-side panel that shows lifecycle + review standing. | `SuiteList.tsx`; only suite route is `/suites/:id/history` |
-| A8 | ⬜ | **Cross-navigate the two link-creation surfaces.** A `DOC_BLOCK` link is only creatable from the doc page; the case's Traceability panel writes external targets only. The permission asymmetry is argued and fine — but a user on a case who wants to claim a requirement paragraph gets no path there. Minimum: a "link from documentation" jump that lands on the page with the case pre-selected in `LinkBlockDialog`. | `DocLinksPanel` vs `LinkBlockDialog`; openapi.yaml:2101 rationale |
+| A8 | ✅ | **Cross-navigate the two link-creation surfaces.** A `DOC_BLOCK` link is only creatable from the doc page; the case's Traceability panel writes external targets only. The permission asymmetry is argued and fine — but a user on a case who wants to claim a requirement paragraph gets no path there. Minimum: a "link from documentation" jump that lands on the page with the case pre-selected in `LinkBlockDialog`. | `DocLinksPanel` vs `LinkBlockDialog`; openapi.yaml:2101 rationale |
 
 ### B. Heal the asymmetries (P2)
 

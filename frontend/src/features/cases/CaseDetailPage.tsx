@@ -930,6 +930,17 @@ function StructuredSteps({ steps }: { steps: TestStep[] }) {
  * from the case end — offering a control here that would fail is worse than not offering it. The
  * asymmetry is the permission split §169 argues at the service: a link to a paragraph belongs to
  * the documentation, a link to a file belongs to the case.
+ *
+ * ## Two link buttons, because there are two acts (A8, §230)
+ *
+ * The same split leaves this panel able to *write* only the external half, so a reader who wants to
+ * claim a requirement paragraph has to go to the documentation space — and until §230 nothing here
+ * said so, which made the panel's own empty state ("Nothing traces this case back to a requirement")
+ * a dead end for the one target kind it names. The second button is a **jump**, not a second
+ * writer: it carries the case in the URL and the block link is still created over there, under
+ * `doc:edit`, which is why that is the key this control asks for rather than this panel's own
+ * `case:edit`. Asking the wrong one would send a Test Engineer's Viewer colleague to a page whose
+ * every Link button is disabled.
  */
 function DocLinksPanel({
   links,
@@ -947,6 +958,7 @@ function DocLinksPanel({
   const [withdrawing, setWithdrawing] = useState<DocLink | null>(null);
   const remove = useUnlinkCaseExternal(projectId, caseId);
   const relabel = useRelabelCaseExternalLink(projectId, caseId);
+  const navigate = useNavigate();
 
   return (
     <Panel
@@ -971,6 +983,21 @@ function DocLinksPanel({
             do this. `case:edit` and not `doc:edit` — the endpoint's gate, because this link renders
             here and on no documentation page.
           */}
+          <PermissionGate projectId={projectId} permission="doc:edit">
+            {({ allowed }) => (
+              <Button
+                size="small"
+                startIcon={<AddLinkIcon />}
+                disabled={!allowed}
+                onClick={() =>
+                  navigate(`/projects/${projectId}/docs?linkCase=${encodeURIComponent(caseId)}`)
+                }
+                data-testid="CaseDetail.DocLinks.LinkSpecButton"
+              >
+                Link a specification
+              </Button>
+            )}
+          </PermissionGate>
           <PermissionGate projectId={projectId} permission="case:edit">
             {({ allowed }) => (
               <Button

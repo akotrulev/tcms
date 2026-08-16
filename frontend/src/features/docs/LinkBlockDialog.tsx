@@ -61,6 +61,19 @@ const TestIdPrefix = 'Docs.Block.LinkDialog';
  * block again — re-asserting a recorded fact is not a conflict, and a duplicate row would double
  * every count drawn off `doc_link`. So there is nothing to warn about and nothing to disable: the
  * dialog closes and the block shows the one link it has either way.
+ *
+ * ## `intendedCase` — arriving here from a case (A8)
+ *
+ * A block link is creatable **only** from this side, so somebody reading a case who wants to claim
+ * a requirement paragraph has to come here, and until §230 they arrived with nothing carried over:
+ * the case they were reading had to be found again in a type-ahead over thousands. The prop is the
+ * case `DocsPage` read out of the `linkCase` search param — pre-selected, and pre-typed into the
+ * search box, because the input is controlled and a `value` with an empty `inputValue` renders as a
+ * selection nobody can see.
+ *
+ * It is **merged into the options** when the server's answer for that query does not contain it.
+ * Without that the picker holds a value matching no option, which MUI renders and warns about, and
+ * which a `filterOptions` that trusts the server cannot repair.
  */
 export function LinkBlockDialog({
   open,
@@ -68,22 +81,29 @@ export function LinkBlockDialog({
   projectId,
   pageId,
   block,
+  intendedCase = null,
 }: {
   open: boolean;
   onClose: () => void;
   projectId: string;
   pageId: string;
   block: DocBlock;
+  /** The case this reader came from, or null when they came from the page itself. */
+  intendedCase?: TestCaseSummary | null;
 }) {
   const write = useLinkBlock(projectId, pageId);
   const [sourceType, setSourceType] = useState<SourceType>('TEST_CASE');
   const [relationship, setRelationship] = useState<LinkRelationship>('VERIFIES');
-  const [query, setQuery] = useState('');
-  const [pickedCase, setPickedCase] = useState<TestCaseSummary | null>(null);
+  const [query, setQuery] = useState(intendedCase ? caseLabel(intendedCase) : '');
+  const [pickedCase, setPickedCase] = useState<TestCaseSummary | null>(intendedCase);
   const [pickedSuite, setPickedSuite] = useState<string>('');
 
   const cases = useCases(projectId, { q: query.trim() || undefined, size: 20 }, 'key,asc');
   const suites = useSuites(projectId);
+
+  const served = cases.data?.items ?? [];
+  const options =
+    pickedCase && !served.some((row) => row.id === pickedCase.id) ? [pickedCase, ...served] : served;
 
   // Reopening after a refusal must not show the previous one — `QuarantineDialog`'s rule, and
   // `ExternalLinkDialog` two features over makes the same call.
@@ -92,13 +112,15 @@ export function LinkBlockDialog({
       write.reset();
       setSourceType('TEST_CASE');
       setRelationship('VERIFIES');
-      setQuery('');
-      setPickedCase(null);
+      // Back to the *intent*, not to empty: reopening on another block while a case is being
+      // carried across the page must still be carrying it.
+      setQuery(intendedCase ? caseLabel(intendedCase) : '');
+      setPickedCase(intendedCase);
       setPickedSuite('');
     }
     // `write` is a stable mutation object; depending on it would reset on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, block.id]);
+  }, [open, block.id, intendedCase?.id]);
 
   const fieldError = (field: string) =>
     write.error instanceof ApiError ? write.error.fieldErrors?.[field]?.join(' ') : undefined;
@@ -144,11 +166,14 @@ export function LinkBlockDialog({
           {sourceType === 'TEST_CASE' ? (
             <Autocomplete
               size="small"
-              options={cases.data?.items ?? []}
+              options={options}
               // The server has already filtered. Filtering again client-side would hide rows that
               // matched on a field the option label does not show — `BindTestDialog`'s note.
               filterOptions={(all) => all}
-              getOptionLabel={(option) => `${option.key} — ${option.title}`}
+              getOptionLabel={caseLabel}
+              // By id, because the carried case and the served row are two objects: the default
+              // identity comparison would call a pre-selected case "not one of the options".
+              isOptionEqualToValue={(option, value) => option.id === value.id}
               inputValue={query}
               onInputChange={(_event, next) => setQuery(next)}
               value={pickedCase}
@@ -238,6 +263,11 @@ export function LinkBlockDialog({
       </DialogActions>
     </Dialog>
   );
+}
+
+/** One spelling of a case in this picker — the option label, the input text, and the seed. */
+function caseLabel(row: TestCaseSummary): string {
+  return `${row.key} — ${row.title}`;
 }
 
 /**

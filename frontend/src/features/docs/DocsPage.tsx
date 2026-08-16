@@ -1,12 +1,20 @@
-import { Box, Button, Chip, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import AddLinkIcon from '@mui/icons-material/AddLinkOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { useEffect, useMemo, useState } from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
-import type { BlockLink, DocPage, DocBlock, DocPageStatus, DocPageSummary } from '../../api/types';
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import type {
+  BlockLink,
+  DocPage,
+  DocBlock,
+  DocPageStatus,
+  DocPageSummary,
+  TestCaseSummary,
+} from '../../api/types';
 import {
   useAttachDocPageFile,
+  useCase,
   useDeleteDocPageFile,
   useDocPage,
   useDocPages,
@@ -66,14 +74,38 @@ export function DocsPage() {
   const pages = useDocPages(projectId);
   const page = useDocPage(projectId, pageId);
 
+  /*
+    A8 — the case somebody arrived here to claim coverage for.
+
+    In the URL rather than in a store, which is this SPA's rule for anything that narrows what a
+    screen is doing: the reader browses the tree, deep-links a colleague at a paragraph, or reloads,
+    and the intent survives all three. It is also the only place it *can* live — the jump comes from
+    another route entirely, and a block link is creatable from this side alone (openapi.yaml's
+    rationale at the case end), so the trip is the product's one path from a case to a requirement.
+  */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const intendedCaseId = searchParams.get('linkCase') ?? undefined;
+  const intended = useCase(projectId, intendedCaseId);
+  const stopLinking = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('linkCase');
+    setSearchParams(next, { replace: true });
+  };
+
   // With no page selected, land on the first published one rather than showing an empty
   // pane next to a populated tree.
   const firstPageId = pages.data?.[0]?.id;
+  // Both redirects below carry the query string with them. They are the *first* thing that happens
+  // to a reader arriving from a case — `/docs?linkCase=…` has no page id — so a redirect that
+  // rebuilt only the path would drop the intent before anything could read it, which is a whole
+  // feature failing in the one route it was built for.
+  const query = searchParams.toString();
+  const suffix = query ? `?${query}` : '';
   useEffect(() => {
     if (!pageId && firstPageId) {
-      navigate(`/projects/${projectId}/docs/${firstPageId}`, { replace: true });
+      navigate(`/projects/${projectId}/docs/${firstPageId}${suffix}`, { replace: true });
     }
-  }, [pageId, firstPageId, projectId, navigate]);
+  }, [pageId, firstPageId, projectId, suffix, navigate]);
 
   /*
     A page id that is no longer in the space sends the reader back to it.
@@ -89,9 +121,9 @@ export function DocsPage() {
     !!pageId && pages.data !== undefined && !pages.data.some((row) => row.id === pageId);
   useEffect(() => {
     if (pageMissing) {
-      navigate(`/projects/${projectId}/docs`, { replace: true });
+      navigate(`/projects/${projectId}/docs${suffix}`, { replace: true });
     }
-  }, [pageMissing, projectId, navigate]);
+  }, [pageMissing, projectId, suffix, navigate]);
 
   return (
     <Box>
@@ -120,6 +152,43 @@ export function DocsPage() {
           </PermissionGate>
         }
       />
+
+      {/*
+        The carried case, named. It is a banner rather than a highlighted control somewhere in the
+        page because the reader has to *navigate* — pick a page from the tree, scroll to the
+        paragraph — before the thing they came to do is in reach, and an intent that is only visible
+        on the screen it started on is an intent that has already been forgotten by the time it
+        matters. It says how to finish and how to stop, which are the only two ways out.
+      */}
+      {intendedCaseId && (
+        <Alert
+          severity="info"
+          data-testid="Docs.LinkIntent"
+          sx={{ mb: 2 }}
+          action={
+            <Button color="inherit" size="small" onClick={stopLinking} data-testid="Docs.LinkIntent.Stop">
+              Stop linking
+            </Button>
+          }
+        >
+          {intended.data ? (
+            <>
+              Linking{' '}
+              {/* The way back, on the name itself: the reader came from this case and will want to
+                  return to it, and a banner that can only be dismissed strands them here. */}
+              <RouterLink
+                to={`/projects/${projectId}/cases/${intended.data.id}`}
+                data-testid="Docs.LinkIntent.Case"
+              >
+                {intended.data.key}
+              </RouterLink>{' '}
+              — {intended.data.title}. Open the page it verifies and press Link on that block.
+            </>
+          ) : (
+            'Linking a case. Open the page it verifies and press Link on that block.'
+          )}
+        </Alert>
+      )}
 
       {creating && (
         <CreateDocPageDialog
@@ -152,7 +221,9 @@ export function DocsPage() {
                 isEmpty={(rows) => rows.length === 0}
                 empty={{ kind: 'no-records', title: 'No pages', body: 'Write the first specification page.' }}
               >
-                {(rows) => <PageTree pages={rows} projectId={projectId} activeId={pageId} />}
+                {(rows) => (
+                  <PageTree pages={rows} projectId={projectId} activeId={pageId} suffix={suffix} />
+                )}
               </DataRegion>
             </Box>
           </Panel>
@@ -173,7 +244,12 @@ export function DocsPage() {
             <DataRegion testId="Docs.Page" state={{ ...page, refetch: () => void page.refetch() }}>
               {(data) => (
                 <Stack sx={{ gap: 2 }}>
-                  <PageView page={data} projectId={projectId} onDelete={setDeleting} />
+                  <PageView
+                    page={data}
+                    projectId={projectId}
+                    onDelete={setDeleting}
+                    intendedCase={intended.data ?? null}
+                  />
                   <PageAttachments page={data} projectId={projectId} />
                 </Stack>
               )}
@@ -197,10 +273,17 @@ function PageTree({
   pages,
   projectId,
   activeId,
+  suffix,
 }: {
   pages: DocPageSummary[];
   projectId: string;
   activeId: string | undefined;
+  /**
+   * The query string, carried onto every page link. This tree is how a reader gets from the page
+   * they landed on to the one their case actually verifies, so a link that dropped it would end the
+   * intent on the first click of the journey it exists for.
+   */
+  suffix: string;
 }) {
   const tree = useMemo(() => {
     const byParent = new Map<string | null, DocPageSummary[]>();
@@ -224,7 +307,7 @@ function PageTree({
         return (
           <Box component="li" key={page.id}>
             <RouterLink
-              to={`/projects/${projectId}/docs/${page.id}`}
+              to={`/projects/${projectId}/docs/${page.id}${suffix}`}
               data-testid="Docs.Tree.Item"
               style={{ textDecoration: 'none' }}
             >
@@ -275,10 +358,16 @@ function PageView({
   page,
   projectId,
   onDelete,
+  intendedCase,
 }: {
   page: DocPage;
   projectId: string;
   onDelete: (page: DocPageSummary) => void;
+  /**
+   * Drilled from the page rather than read per block: it is one case for the whole screen, and a
+   * block reading the search param for itself would issue one case request per paragraph.
+   */
+  intendedCase: TestCaseSummary | null;
 }) {
   const blocks = [...(page.blocks ?? [])].sort((a, b) => a.position - b.position);
 
@@ -362,6 +451,7 @@ function PageView({
                 projectId={projectId}
                 pageId={page.id}
                 attachments={page.attachments}
+                intendedCase={intendedCase}
               />
             ))}
           </Box>
@@ -508,11 +598,13 @@ function BlockView({
   projectId,
   pageId,
   attachments,
+  intendedCase,
 }: {
   block: DocBlock;
   projectId: string;
   pageId: string;
   attachments: DocPage['attachments'];
+  intendedCase: TestCaseSummary | null;
 }) {
   const isHeading = block.blockType === 'heading';
 
@@ -547,7 +639,12 @@ function BlockView({
           <CoverageMarker coverage={block.coverage} projectId={projectId} />
         </Stack>
       )}
-      <BlockLinks block={block} projectId={projectId} pageId={pageId} />
+      <BlockLinks
+        block={block}
+        projectId={projectId}
+        pageId={pageId}
+        intendedCase={intendedCase}
+      />
     </Box>
   );
 }
@@ -584,10 +681,12 @@ function BlockLinks({
   block,
   projectId,
   pageId,
+  intendedCase,
 }: {
   block: DocBlock;
   projectId: string;
   pageId: string;
+  intendedCase: TestCaseSummary | null;
 }) {
   const [linking, setLinking] = useState(false);
   // The link being withdrawn, not a boolean: the dialog names it, and the list mounts one control
@@ -681,7 +780,14 @@ function BlockLinks({
             sx={{ color: 'text.secondary' }}
             data-testid="Docs.Block.Links.AddButton"
           >
-            {block.links.length === 0 ? 'Link a case' : 'Link'}
+            {/* Named while a case is being carried: the reader is scanning a page of paragraphs
+                for the one their case verifies, and every Link on it does something different
+                from what it did before they arrived. */}
+            {intendedCase
+              ? `Link ${intendedCase.key}`
+              : block.links.length === 0
+                ? 'Link a case'
+                : 'Link'}
           </Button>
         )}
       </PermissionGate>
@@ -695,6 +801,7 @@ function BlockLinks({
           projectId={projectId}
           pageId={pageId}
           block={block}
+          intendedCase={intendedCase}
         />
       )}
 

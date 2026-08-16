@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type { DocLink, PermissionKey, TestCase } from '../../api/types'
@@ -427,3 +427,68 @@ describe('The Traceability panel renders all three target kinds', () => {
     )
   })
 })
+
+/**
+ * A8 (§230) — the trip from a case to the requirement it claims to verify.
+ *
+ * A `DOC_BLOCK` link is creatable from the documentation side alone, which is argued and correct
+ * and left this panel naming a target kind it could not produce. What is tested here is the two
+ * halves of the jump that make it usable rather than merely present: the **key it asks for** is the
+ * destination's (`doc:edit`), not this panel's own, and the **case travels in the URL**.
+ */
+describe('the Traceability panel opens the documentation side of a link', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function renderWithDocs() {
+    return render(
+      <TestProviders
+        client={createTestQueryClient()}
+        route={`/projects/${PROJECT}/cases/c1`}
+        userId={CALLER}
+      >
+        <Routes>
+          <Route path="/projects/:projectId/cases/:caseId" element={<CaseDetailPage />} />
+          <Route path="/projects/:projectId/docs" element={<Landing />} />
+        </Routes>
+      </TestProviders>,
+    )
+  }
+
+  it('carries the case into the documentation space', async () => {
+    mockReads([], ['case:read', 'doc:edit'])
+    renderWithDocs()
+
+    const user = userEvent.setup()
+    // Re-queried inside the waitFor: the gate renders disabled while the permission answer is
+    // pending and React replaces the node when it lands, so a captured reference stays detached.
+    await waitFor(() =>
+      expect(screen.getByTestId('CaseDetail.DocLinks.LinkSpecButton')).toBeEnabled(),
+    )
+    await user.click(screen.getByTestId('CaseDetail.DocLinks.LinkSpecButton'))
+
+    // The whole of the hand-off: without the id the reader lands on a documentation space that
+    // knows nothing about why they came, which is the state this closes.
+    expect(await screen.findByTestId('landing')).toHaveTextContent('?linkCase=c1')
+  })
+
+  it('asks for doc:edit, which is the key the block link actually costs', async () => {
+    // A case editor with no documentation rights: this panel's own control is enabled in the same
+    // render, so a jump gated on `case:edit` by copying its neighbour would pass every other test
+    // in this file and send the reader to a page whose every Link button is disabled.
+    mockReads([], ['case:read', 'case:edit'])
+    renderWithDocs()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('CaseDetail.DocLinks.AddButton')).toBeEnabled(),
+    )
+    expect(screen.getByTestId('CaseDetail.DocLinks.LinkSpecButton')).toBeDisabled()
+  })
+})
+
+/** Stands in for the documentation space, and reports the URL it was reached by. */
+function Landing() {
+  const location = useLocation()
+  return <div data-testid="landing">{`${location.pathname}${location.search}`}</div>
+}
