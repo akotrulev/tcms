@@ -256,8 +256,13 @@ eleven.** Each remaining decision (C1, C2, C4) becomes a slice.
       `EXTERNAL` provider, delete on `defect:create`) and the runner's step-evidence affordance.
       C9 needed no contract change — `StepResult.evidence` was already served — and C5's four
       unstated decisions are in the ledger row above.
-   5. ⬜ **C2** — quarantine consumers (denominator exclusion is a semantics change to reports;
-      keep it its own slice).
+   5. 🔨 **C2** — quarantine consumers (denominator exclusion is a semantics change to reports;
+      keep it its own slice). **§237 phase 1 landed the report half**: `case_flake` gets its first
+      reader downstream of the screen that writes it, live rather than snapshotted, and as a
+      **second** pass rate printed beside the first rather than as a replacement for it — the
+      headline is what `AggregateExecutionCrossCheckTest` pins against `PlanStatisticsService`,
+      which may not read `case_flake` at all. Widened to `RunSummaryReport` as well as
+      `aggregate_execution`. Phase 2 is the runner badge.
    6. ⬜ **C1** — suite version advancement (touches the review-pinning seam; last because it is
       the one most likely to grow).
    7. ⬜ **C4** — retire the shared-step library (migration + UI removal; independent, can land
