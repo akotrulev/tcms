@@ -2981,3 +2981,34 @@ tests mock the endpoint. **A finding here is expected rather than surprising.**
 | `§238 SV-3` | Read each mark's author and timestamp | Each names the person who made the composition change and when. **No mark carries a change comment**, and the rail must render that absence cleanly rather than as an empty quote or the word `null` — a composition version has no author's note by decision, so this is the normal state and not an edge case. |
 | `§238 SV-4` | Open the history of a suite created **before** this slice, or one nothing has changed | **One mark, or none, and no notice** — and the page reads as "nothing changed here", never as an error or a gap. Suites predating the writer carry no marks at all and none was invented for them; the screen cannot tell that apart from a stable folder and must not pretend to. |
 | `§238 SV-5` | Compare the pass rates either side of the mark, on a suite that **gained** cases | The suite's rate moves and the screen does **not** invite the comparison across the boundary. §6p calls this the most dangerous screen in the product for exactly this reason, and the mark exists so a reader refuses the comparison rather than making it silently. |
+
+## §239 — the library that is gone, and the cases that referenced it (C4)
+
+**Six rows, none run** (§65). Ids are `§239 RT-*`; `RT` was grepped against this file and the
+mutation queue before minting, as were `SS` (taken by §222) and `RL`/`XL` (both in use).
+
+**This is a RETIREMENT, so what these rows check is an absence and a non-event.** There is no new
+affordance to drive. The question every row asks is the one a deletion cannot answer from a green
+suite: *does a case that used the thing still work now that the thing is gone?*
+
+**Lane.** All six are lane `A1` — authoring — because the screens are the case editor and case
+detail, which that lane already visits.
+
+**⚠️ The fixture problem, stated rather than hidden.** Five of these six rows want **a case whose
+steps carry a `shared_step_id`**, and **no lane creates one, and none can any more**: the picker is
+deleted, the endpoint is gone, and the field left `TestStepInput`, so there is no longer any path
+through the product that writes such a row. The only way to author the state is a **direct
+`INSERT`/`UPDATE` against `test_step.shared_step_id`** on a provisioned company, naming a live
+`shared_step` row (the table is still there and still populated — that is `V63`'s whole point). The
+lane's charter must say so, and the row that sets it up is `RT-0` below. If that setup is not done,
+`RT-2`…`RT-5` are **not driven, and the reason is that the state can no longer be reached from the
+UI** — which is a legitimate outcome and must be recorded as one rather than skipped silently.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§239 RT-0` | **Setup, not an assertion.** Against a provisioned company, `UPDATE test_step SET shared_step_id = (SELECT id FROM shared_step WHERE project_id = … LIMIT 1) WHERE id = …` for two steps of one case. If `shared_step` is empty, insert an entry first | A case now in the pre-§239 state. Everything below depends on it. Note in the charter that this is the **only** way to produce it. |
+| `§239 RT-1` | Open the case **editor** on any case, and read the panel under the step list | **No "Insert shared step" button and no picker.** The panel ends at the step rows. `CaseEditor.Steps.InsertSharedButton` is gone as a locator too, so anything else driving this screen must have stopped looking for it. |
+| `§239 RT-2` | Open **case detail** on the `RT-0` case | The two steps render their `action` text **exactly as before**, with **no "Shared" chip** and no tooltip. This is the row that proves the retirement cost no content: the text was always in `test_step.action`, and the chip is the only thing that leaves. |
+| `§239 RT-3` | Open the **editor** on the `RT-0` case, change nothing, press **Save** | **200, and the case is unchanged on screen.** ⚠️ Then read the row: `test_step.shared_step_id` for those two steps is now **NULL**, because the field left the payload and a save rewrites the step list. This is the column draining on its own, and it is the intended behaviour rather than data loss — the reference pointed at nothing. Worth watching the response body for a `sharedStepId` key, which must be **absent**, not null. |
+| `§239 RT-4` | On the `RT-0` case (before running `RT-3`), open the **version history** panel and read the newest entry | The stored snapshot still renders, and still carries the step text. Old snapshots keep a `sharedStepId` property the shape no longer declares; nothing reads a snapshot today, so what this row really checks is that the **history panel itself** is undisturbed. |
+| `§239 RT-5` | **Clone** the `RT-0` case | 201, and the clone's steps carry the same `action` text and **no** reference. `CaseCloneService` stopped copying the field; the clone is the first row written entirely without it. |

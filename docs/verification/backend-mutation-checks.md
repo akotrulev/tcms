@@ -2816,3 +2816,21 @@ on is not actually observing it.
 | `§238 SV-8` | In `Suite.applyStatus`, add a `currentVersionNo++` | **`approvingDoesNotMintItsOwnVersion` red**, and `thePinMoves` red too. This is C1's literal wording implemented, and the row exists so the divergence is a measured refusal rather than a paragraph. |
 | `§238 SV-9` | In `CaseBulkService`, move the `suitesBefore` read below the mutation loop | **`Bulk.oneVersionPerSuite` red** on the `from` suite. `SV-1` at the other call site, and worth its own row because the bulk path is the one where the read is textually far from the write. |
 | `§238 SV-10` | In `CaseBulkService`, drop the `dryRun` guard on `suitesBefore` and on the reconcile | **`Bulk.aPreviewIsNotAWrite` red.** A preview endpoint that writes is the one failure this operation's whole contract is about. |
+
+## §239 — retiring the shared-step library (C4)
+
+**Four rows, none run** (§65). Ids are `§239 RT-*`, shared with the browser queue's block of the
+same name.
+
+**A retirement has little to mutate, and saying so is more useful than padding the list.** This
+slice adds no new branch — it deletes a validator, a mapping, two endpoints and a picker. Three of
+the four rows below therefore mutate *the deletion itself*, asking whether anything would notice the
+feature coming back. **`RT-M2` is the one that matters**, and it is expected **green**, which is the
+finding.
+
+| # | Mutate | Expect |
+|---|---|---|
+| `§239 RT-M1` | In `IdempotencyKeyCapTest`, set `EXPECTED_DECLARATIONS` back to `10` | **Red** — `theCountIsPinned`. Cheap, and it confirms the count is measured over `src/main` rather than asserted from the javadoc beside it. The number went **down** for the first time in this slice, so the direction is worth exercising once. |
+| `§239 RT-M2` | Re-add `sharedStepId` to `CaseUpdateRequest.StepInput` and to `TestStep`'s mapping, and have `CaseUpdateService` persist whatever arrives — i.e. resurrect the field with **no validation at all**, as it was between M1 and §64 | Expected **GREEN**, and that is the point of the row. The contract no longer declares the property, so nothing in the backend suite sends it and nothing would catch a server that quietly started storing it again. Recorded as a **known gap**: `ContractConventionTest` checks that a declared schema has a Java shape, not that a Java shape declares no undeclared field. The nearest real observer is `packages`' `contractExchange`, which reads request payloads — but only for payloads the packages surface sends. **The cheapest row to close, and it wants an assertion that an undeclared property on `TestStepInput` is refused or ignored, not persisted.** |
+| `§239 RT-M3` | In `V63`, replace the two `COMMENT ON` statements with `ALTER TABLE test_step DROP COLUMN shared_step_id;` | Expected **green** — nothing maps the column, so `validate` is satisfied and every test passes. That is exactly why the drop is owed to a later slice as a **decision** rather than left to whoever next tidies the migration: no gate distinguishes the safe migration from the destructive one. Confirm `SearchVectorTest` — it still asserts `shared_step`'s trigger and index, so a `DROP TABLE` (unlike a `DROP COLUMN`) **would** redden something, which is worth knowing before the contract slice is written. |
+| `§239 RT-M4` | In `CaseEdit.normalizeSteps`, drop the `existingStepIds` membership check | **Red** — the step-identity tests. Not about this slice, but the check now sits alone where it used to sit beside the shared-step one, and this row confirms the survivor was not removed with its neighbour. |

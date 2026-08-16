@@ -41,9 +41,11 @@ advancement), **C4** (retire the shared-step library). None is started.~~ ~~→ 
 C5 + C9 landed as §236.** What remains, in order: **C2** (quarantine consumers), **C1** (suite
 version advancement), **C4** (retire the shared-step library). None is started.~~ ~~→ **nine of
 eleven, C2 landed as §237.** What remains, in order: **C1** (suite version advancement), **C4**
-(retire the shared-step library). Neither is started.~~ → **ten of eleven, C1 landed as §238.**
+(retire the shared-step library). Neither is started.~~ ~~→ **ten of eleven, C1 landed as §238.**
 What remains: **C4** (retire the shared-step library), which is not started and is independent of
-everything above it.
+everything above it.~~ → **ELEVEN OF ELEVEN. C4 landed as §239 and the C run is complete.** Ten of
+the eleven decisions were *finish*; C4 was the one *retire*, and the only slice in the run to
+remove a user-visible affordance.
 
 Status marks used in the tables: **✅ DONE** · **🔨 IN PROGRESS** · **⬜ NOT STARTED** ·
 **⛔ OUT OF SCOPE** (this session).
@@ -199,16 +201,18 @@ where the row's own proposal was not what was built — three of them were, and 
 ### C. Finish or retire the inert machinery (P3 — each is a decision, not a task)
 
 **All eleven decided 2026-08-16** (user, prompted per item). The **Decision** column is the outcome;
-~~nothing in this section is implemented yet~~ → **implementation runs in the §3.6 order. Done:
-C11 + C8 (§233), then C6 + C7 + C10 (§234), then C3 (§235), then C5 + C9 (§236) — eight of the
-eleven.** Each remaining decision (C1, C2, C4) becomes a slice.
+~~nothing in this section is implemented yet~~ → **implementation ran in the §3.6 order and is
+COMPLETE: C11 + C8 (§233), C6 + C7 + C10 (§234), C3 (§235), C5 + C9 (§236), C2 (§237), C1 (§238),
+C4 (§239) — eleven of eleven, seven slices.** Three of them landed partly against their own wording
+(C2's denominator, C1's status half, C4's backfill), each because the code said something the row
+had assumed.
 
 | # | Decision (2026-08-16) | Decision to make | Evidence |
 |---|---|---|---|
 | C1 | ✅ §238 — **Fixed the sharp edge, and refused half the wording.** `suite_version` advances on any act that changes the RESOLVED membership (all three arms), never on a status change: an approval that minted a version would pin a number the transition created, when the pin has to name the composition that WAS approved. The other three resources' versioning is untouched, as decided. Two findings this row did not contain: **v1 was a false statement for every suite created with members** (`writeInitial` hard-coded an empty composition, unnoticed since §98 let a create carry `caseIds`), and `SuiteHistoryEndpointTest`'s synthetic v2 — 20 tests — collided with the real writer. **No backfill**, of either. | **Versioning story.** Four resources, four behaviours: cases (full table + panel, no restore/diff), suites (~~v1 then never~~ → live), plans (scope-only, no endpoint), doc pages (hash-gated, write-only, `pinned`/`change_comment` never set). Either ship one read+diff(+restore) surface across them, or trim the write paths that nothing reads. ~~The review apparatus pinning `Suite.currentVersionNo` to a number that never moves is the sharpest edge.~~ → closed. | `SuiteVersions`, `PageVersions` headers |
 | C2 | **Finish it — reports + runner badge**: exclude quarantined cases from `aggregate_execution` / pass-rate denominators AND badge them in the runner. | **Quarantine.** The flag is recorded (`PUT /cases/{id}/quarantine`, reason required) and nothing downstream reads it — runs, reports, pass rates and flake all include quarantined cases. Decide the consumer (exclude from `aggregate_execution` denominators? badge in the runner?) or it is a note field with ceremony. | Authoring trace friction 16 |
 | C3 | ✅ §235 — **Ship docs search**: a search endpoint over the existing tsvector + a search box in the documentation space. Wider (cases/plans) search is not part of this decision. | **Search.** `doc_page.search_vector` (and `V2`'s triggers) are maintained, GIN-indexed, and no endpoint queries them — while `PlanDocumentPanel` justifies its design on pages being "found by everybody who searches documentation". A docs search endpoint is the cheapest visible win from machinery already paid for. | Doc trace friction 8 |
-| C4 | **Retire it**: migrate `sharedStepId` refs to copied text, remove the picker and library UI; the suggestion corpus stays as the authoring aid. | **Shared-step library.** §94 declared it vestigial next to the suggestion corpus, and the picker's insert writes the entry's *title* as the action while the body lives elsewhere. Either retire it (migrate `sharedStepId` refs to copied text) or make it real (picker inserts the body; suggestions offer "promote to library"). Half-alive is the one wrong state. | §94; `SharedStepPicker.tsx` |
+| C4 | ✅ §239 — **Retired, and the backfill this row asked for turned out to be a no-op that both plausible spellings would have made harmful.** The premise both this row and `SharedStepPicker.tsx`'s own header state — that the body "lives in the library and is resolved when the case is read" — **is false and always was**: `SharedStep.getBody()` had exactly one reader in the whole backend, the library's own list endpoint. So the reference resolved to nothing on every read path, and the step's visible text is `test_step.action`, which the picker filled with the entry's TITLE at insert time. Copying the title again would overwrite hand-edited actions; copying the body would insert never-rendered text into live cases. `V63` is therefore **comments only** — table and column kept, populated, unreachable, DROP owed to a later slice. Two tooltips promising that editing an entry "changes every case using it" were false from the day they shipped, with no symptom. `/conditions` is now the product's only shared authoring object and the contract says so. | **Shared-step library.** §94 declared it vestigial next to the suggestion corpus, and the picker's insert writes the entry's *title* as the action while the body lives elsewhere. Either retire it (migrate `sharedStepId` refs to copied text) or make it real (picker inserts the body; suggestions offer "promote to library"). Half-alive is the one wrong state. ~~Half-alive~~ → it was **not** half-alive: the reference half did nothing at all. | §94; `SharedStepPicker.tsx` |
 | C5 | ✅ §236 — **Ship the minimal external-link write** (same shape as case external links); M4's tracker integration stays future. | **Defects pre-M4.** `DefectLink` renders on run detail, `defect:create` is seeded, `defect_link` is in the ERD — and no endpoint writes one. Either hide the read-only column until M4 or ship the minimal external-link write (the key and table already exist; it is the same shape as case external links). | Execution trace friction 7 |
 | C6 | ✅ §234 — **Ship it, and fix the stale prose with it**: "Save to register" on `ReportViewPage` creating a `GENERATED_REPORT` artifact, plus correcting `ArtifactKind.java`'s claim that the reporting module does not exist (overlaps C11). | **`GENERATED_REPORT` artifacts.** The reporting module now exists and `artifact.report_artifact_id` is waiting — "save this report to the register" from `ReportViewPage` would close the loop between two shipped features (and give reports a durable home, reinforcing A3). | `ArtifactKind.java` prose is stale on this |
 | C7 | ✅ §234 — **Expose it on registration**: a write-once (sign-off) toggle on artifact registration, one field through contract, form and service. | **`write_once` has no writer.** The delete guard honours it; nothing sets it. Expose it on sign-off-kind registrations or drop the column. | Doc trace friction 16 |
@@ -274,5 +278,9 @@ eleven.** Each remaining decision (C1, C2, C4) becomes a slice.
       reading would have made `suite_version` a second implementation of "in this suite" — and the
       slice found two things this ledger did not list: an empty v1 that has been a false statement
       since §98, and 20 tests hand-inserting a version the product now writes.
-   7. ⬜ **C4** — retire the shared-step library (migration + UI removal; independent, can land
-      anywhere after 1).
+   7. ✅ **C4** (§239) — retire the shared-step library. **The migration this row anticipated does
+      not exist**, and finding out why was the slice: nothing in the product ever resolved a shared
+      step's body, so the reference migrated to nothing and the copied text was already in
+      `test_step.action`. `V63` is comments only. The table and the column are kept, populated and
+      unreachable; the DROP is owed to a later slice as its own decision, because that is the
+      statement that destroys authored content.

@@ -251,8 +251,12 @@ npm run dev          # http://localhost:5173 — proxies /api to localhost:8080
                      # sign in by redeeming the /accept-invitation link provision-company prints
 npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
-npm run test:run     # Vitest + RTL, ~~1203~~ ~~1251~~ ~~1276~~ ~~1285~~ ~~1314~~ ~~1320~~ ~~1330~~ ~~1335~~ ~~1339~~ ~~1341~~ ~~1349~~ ~~1434~~ ~~1478~~ ~~1529~~ ~~1547~~ 1552 tests
-                     # (measured on shanks 2026-08-16) — also a gate. Since §197 the harness compares
+npm run test:run     # Vitest + RTL, ~~1203~~ ~~1251~~ ~~1276~~ ~~1285~~ ~~1314~~ ~~1320~~ ~~1330~~ ~~1335~~ ~~1339~~ ~~1341~~ ~~1349~~ ~~1434~~ ~~1478~~ ~~1529~~ ~~1547~~ ~~1552 — NEVER MEASURED, see below~~ 1540 tests
+                     # (measured on shanks 2026-08-16). **1552 was quoted here by §238 from this
+                     # very line and never run** — §238 was backend-only. The real §238 state is
+                     # 1547/116, and §239 deleted `SharedStepPicker.test.tsx` (7 tests, 1 file) to
+                     # reach 1540/115. A test count copied from a document is not a measurement;
+                     # this file is where such a copy comes from, so re-measure before quoting it. — also a gate. Since §197 the harness compares
                      # every body a mocked `api.*` call serves against openapi.yaml and fails the test
                      # that served a body the server could not send; since §198 it compares the VALUES
                      # too — enum members, types, nulls in non-nullable fields, `date-time` strings,
