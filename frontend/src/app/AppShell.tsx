@@ -33,6 +33,7 @@ import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import InventoryOutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined';
 import LoginOutlinedIcon from '@mui/icons-material/LoginOutlined';
+import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -839,6 +840,18 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
           </Typography>
         </Box>
         <Divider />
+        {/* The account's own sign-in identities (V58) — self-service, so no gate. */}
+        <MenuItem
+          component={RouterLink}
+          to="/account/security"
+          onClick={() => setAnchor(null)}
+          data-testid="TopBar.SecurityLink"
+        >
+          <ListItemIcon>
+            <ShieldOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText slotProps={{ primary: { variant: 'body2' } }}>Security</ListItemText>
+        </MenuItem>
         <MenuItem onClick={logout} data-testid="TopBar.SignOutButton">
           <ListItemIcon>
             <LogoutIcon fontSize="small" />
