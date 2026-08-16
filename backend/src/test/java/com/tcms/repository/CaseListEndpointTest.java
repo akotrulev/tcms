@@ -347,6 +347,76 @@ class CaseListEndpointTest extends IntegrationTestBase {
     // Ordering and paging
     // =====================================================================
 
+    /**
+     * B8 — resolving a set of cases somebody already holds the ids of.
+     *
+     * <h2>Why this had no operation at all until now</h2>
+     *
+     * <p>Every read here answers "which cases match a description". A plan's Test cases tab has the
+     * opposite question — it holds ids and needs their keys and titles — and the SPA answered it by
+     * fetching the first 200 cases of the project and joining client-side, so a plan naming a case
+     * outside that window rendered a chip with no name on it. The fix is a filter rather than a
+     * second endpoint, which is what keeps the answer in this operation's shape, order and paging.
+     */
+    @Nested
+    @DisplayName("The by-ids filter (B8)")
+    class ByIds {
+
+        @Test
+        @DisplayName("names cases directly, in this endpoint's own order and not the caller's")
+        void resolvesTheNamedCases() throws Exception {
+            String query = "&id=" + caseId("tc10") + "&id=" + caseId("tc2");
+
+            assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, query)))
+                    // TC-2 first: the ids arrived the other way round, and the order of this list
+                    // is the endpoint's (key_seq) — a client that wanted its own order has it in
+                    // the ids it sent.
+                    .containsExactly("TC-2", "TC-10");
+        }
+
+        @Test
+        @DisplayName("intersects with the other filters — it narrows, it does not replace")
+        void itIsAFilterAndNotAMode() throws Exception {
+            // The assertion that separates a filter from a mode: naming three ids and a suite must
+            // answer the ones in that suite, not all three and not the suite's whole membership.
+            String query = "&id=" + caseId("tc1") + "&id=" + caseId("tc5")
+                    + "&suiteId=" + CHECKOUT;
+
+            assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, query)))
+                    .containsExactly("TC-5");
+        }
+
+        @Test
+        @DisplayName("an id from another project matches nothing, and does not leak that it exists")
+        void aForeignIdMatchesNothing() throws Exception {
+            String query = "&id=" + caseId("umb1");
+
+            assertThat(itemsAs(LEAD, ACME, ACME_BANKING, query)).isEmpty();
+            // 200 with an empty page, never a 404 or a 400: the caller asked which of these are
+            // here, and "none of them" is the answer rather than an error about an id they may
+            // legitimately be holding from elsewhere.
+            assertThat(statusOf(LEAD, ACME, ACME_BANKING, query)).isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("a repeated id is one condition, not two")
+        void duplicatesCollapse() throws Exception {
+            String query = "&id=" + caseId("tc1") + "&id=" + caseId("tc1");
+
+            assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, query))).containsExactly("TC-1");
+        }
+
+        @Test
+        @DisplayName("no id parameter at all is no filter — the guard on an empty IN")
+        void absentMeansUnfiltered() throws Exception {
+            // The defect this guards: an implementation that built `id IN ()` for the absent case
+            // would answer nothing to every request in the product, and an implementation that
+            // treated empty as "match all" is what the code does — so the assertion is that the
+            // ordinary list still has its rows.
+            assertThat(keysOf(itemsAs(LEAD, ACME, ACME_BANKING, ""))).isNotEmpty();
+        }
+    }
+
     @Nested
     @DisplayName("Ordering — by meaning, and stable enough to page over")
     class Ordering {

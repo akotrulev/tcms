@@ -42,12 +42,23 @@ import java.util.regex.Pattern;
  * @param releaseVersion  cases executed in a release. <strong>Matches nothing today</strong> — see
  *                        {@link CaseSpecifications} for why that is the honest answer rather than
  *                        an ignored parameter
+ * @param ids             <strong>B8's by-ids read.</strong> Empty means no id filter. A non-empty
+ *                        list narrows to exactly those cases — de-duplicated, capped at
+ *                        {@link #MAX_SIZE}, and <em>intersected</em> with the other filters, so
+ *                        {@code ?id=…&lifecycleStatus=APPROVED} answers "which of these are
+ *                        approved" rather than replacing the filter. An id naming a case in
+ *                        another project simply matches nothing: the query is already bounded by
+ *                        the project, so a foreign id is a filter that selects no row rather than
+ *                        a leak or a 400
  * @param page            zero-based, clamped at 0
  * @param size            clamped to {@code 1..200}, the contract's maximum
  * @param sort            {@code field,dir} — resolved by {@link CaseSort}
  */
 public record CaseQuery(
         String q,
+        // B8 — the by-ids read. Empty means "no id filter"; a non-empty list narrows to exactly
+        // those cases and is intersected with every other filter rather than replacing them.
+        List<UUID> ids,
         UUID suiteId,
         UUID featureId,
         UUID testTypeId,
@@ -85,7 +96,7 @@ public record CaseQuery(
      */
     static CaseQuery unfiltered() {
         return new CaseQuery(
-                null, null, null, null, null, null,
+                null, List.of(), null, null, null, null, null,
                 List.of(), List.of(), List.of(), List.of(),
                 List.of(), false,
                 null, 0, DEFAULT_SIZE, null);
@@ -106,6 +117,16 @@ public record CaseQuery(
     /** Normalizes at construction, so nothing downstream re-decides what a blank string means. */
     public CaseQuery {
         q = blankToNull(q);
+        // De-duplicated for `tags`' reason — `?id=x&id=x` is one condition — and capped at the
+        // page maximum, which is not arbitrary: a caller naming more ids than a page can hold is
+        // asking for something this endpoint cannot answer in one response, and the honest failure
+        // is to serve the first MAX_SIZE rather than to build a 20 kB URL that a proxy truncates
+        // silently. The SPA pages its chips instead.
+        ids = ids == null ? List.of() : ids.stream()
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .limit(MAX_SIZE)
+                .toList();
         releaseVersion = blankToNull(releaseVersion);
         lifecycleStatus = List.copyOf(lifecycleStatus == null ? List.of() : lifecycleStatus);
         automationStatus = List.copyOf(automationStatus == null ? List.of() : automationStatus);

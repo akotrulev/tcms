@@ -26,6 +26,7 @@ public record TestRunDetailView(
         Instant startedAt,
         Instant completedAt,
         ResultCountsView counts,
+        RunScopeRequestView scopeRequest,
         List<TestExecutionSummaryView> executions) {
 
     static TestRunDetailView of(TestRunView run, List<TestExecutionSummaryView> executions) {
@@ -45,6 +46,7 @@ public record TestRunDetailView(
                 run.startedAt(),
                 run.completedAt(),
                 run.counts(),
+                run.scopeRequest(),
                 executions);
     }
 }

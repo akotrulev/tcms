@@ -131,6 +131,7 @@ public class CaseController {
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID projectId,
             @RequestParam(required = false) String q,
+            @RequestParam(name = "id", required = false) List<UUID> ids,
             @RequestParam(required = false) UUID suiteId,
             @RequestParam(required = false) UUID featureId,
             @RequestParam(required = false) UUID testTypeId,
@@ -148,7 +149,12 @@ public class CaseController {
             @RequestParam(defaultValue = CaseSort.DEFAULT) String sort) {
 
         CaseQuery request = new CaseQuery(
-                q, suiteId, featureId, testTypeId, testLevelId, ownerId,
+                q,
+                // `id` on the wire and `ids` here, `tag`'s spelling and its reason: the parameter
+                // is repeated per value (`?id=…&id=…`), which reads as one id per occurrence at
+                // the call site and as a list at this one.
+                ids,
+                suiteId, featureId, testTypeId, testLevelId, ownerId,
                 lifecycleStatus, automationStatus, priority, healthSignal,
                 // `tag` on the wire, `tags` here: the parameter is repeated per value
                 // (`?tag=smoke&tag=slow`), which reads as one tag per occurrence at the call site

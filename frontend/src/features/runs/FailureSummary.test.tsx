@@ -83,6 +83,8 @@ function run(executions: TestExecutionSummary[], notRun = 0): TestRunDetail {
       skipped: 0,
       notRun,
     },
+    // No request recorded — B7's ordinary state for a fixture built by hand.
+    scopeRequest: null,
     executions,
   }
 }

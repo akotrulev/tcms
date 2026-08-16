@@ -477,14 +477,40 @@ class IngestionEndpointTest extends IntegrationTestBase {
     class Refusals {
 
         @Test
-        @DisplayName("a malformed report is a field error on `report`, and writes no job row")
-        void aMalformedReportWritesNothing() throws Exception {
+        @DisplayName("a malformed report is a field error on `report`, and RECORDS a FAILED job")
+        void aMalformedReportIsRecorded() throws Exception {
             MvcResult refused = ingest(ROBOT, "not xml at all <<<", "ik-13");
 
             assertThat(refused.getResponse().getStatus()).isEqualTo(400);
             assertThat(body(refused).get("errors").has("report")).isTrue();
-            // No FAILED row: it would consume the idempotency key, so the CORRECTED retry under
-            // the key CI generated once would replay the failure for ever.
+            /*
+              ~~No FAILED row: it would consume the idempotency key, so the CORRECTED retry under
+              the key CI generated once would replay the failure for ever.~~ → B6, and the old
+              sentence was right about the constraint and wrong about which rows it was for.
+
+              What the absence cost is what this row buys: the 400 body was the ENTIRE record of a
+              rejected report, and it goes to a CI job's stdout. `GET …/ingestions` showed the
+              successes and was silent about every rejection, so a pipeline posting malformed XML
+              for a week looked exactly like one nobody had wired up.
+            */
+            assertThat(jobCount()).isOne();
+            assertThat(statusOfOnlyJob()).isEqualTo("FAILED");
+            // The parser's sentence, on the row as well as in the 400 — the person who reads the
+            // history is not the person who read the response.
+            assertThat(errorOfOnlyJob()).isNotBlank();
+            // Nothing else happened: no run, no results. The parse failed before a test name
+            // existed, which is why matched/unmatched are zero rather than merely unpopulated.
+            assertThat(runCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("a report nobody may submit writes nothing at all — the row is gated too")
+        void aRefusedCallerRecordsNothing() throws Exception {
+            // The row is written under `result:submit`, so posting rubbish is not a way to write
+            // into a project's history — or to find out that the project exists.
+            assertThat(ingest(VIEWER, "not xml at all <<<", "ik-13b")
+                    .getResponse().getStatus()).isEqualTo(400);
+
             assertThat(jobCount()).isZero();
         }
 
@@ -497,8 +523,26 @@ class IngestionEndpointTest extends IntegrationTestBase {
             assertThat(ingest(ROBOT,
                     junit(testCase("com.acme.RefundTest", "refundsInFull", null)), "ik-14")
                     .getResponse().getStatus())
-                    .as("A FAILED job row would have burned this key — decision F.")
+                    .as("the FAILED row carries this key and must not consume it — V60 narrowed "
+                            + "the uniqueness to COMPLETED rows for exactly this request")
                     .isEqualTo(201);
+
+            // Both rows, and this is the assertion that separates B6's arrangement from the old
+            // one: the failure is still there to be read after the retry succeeded.
+            assertThat(jobCount()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("two failures under one key are two rows — a build that failed twice failed twice")
+        void repeatedFailuresAreRepeatedRows() throws Exception {
+            assertThat(ingest(ROBOT, "not xml <<<", "ik-14b").getResponse().getStatus())
+                    .isEqualTo(400);
+            assertThat(ingest(ROBOT, "still not xml <<<", "ik-14b").getResponse().getStatus())
+                    .isEqualTo(400);
+
+            // Collapsing these would hide the repetition, which is the useful part: the partial
+            // unique index is on COMPLETED rows and says nothing about FAILED ones.
+            assertThat(jobCount()).isEqualTo(2);
         }
 
         @Test
@@ -1351,6 +1395,15 @@ class IngestionEndpointTest extends IntegrationTestBase {
 
     private long runCount() throws SQLException {
         return count("SELECT COUNT(*) FROM test_run");
+    }
+
+
+    private String statusOfOnlyJob() throws SQLException {
+        return string("SELECT status FROM ingestion_job");
+    }
+
+    private String errorOfOnlyJob() throws SQLException {
+        return string("SELECT error FROM ingestion_job");
     }
 
     private long jobCount() throws SQLException {

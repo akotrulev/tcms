@@ -237,10 +237,12 @@ export const ingestedOutcomeLabels = {
 /**
  * A posted report's four states.
  *
- * **Only `COMPLETED` is reachable today** — the synchronous lane writes nothing else, and a report
- * that cannot be parsed leaves no row at all. The other three are labeled rather than omitted
- * because the enum is the contract's, an asynchronous lane is a named next step, and a screen that
- * rendered a raw `PROCESSING` the day it arrives is the drift this file exists to prevent.
+ * ~~**Only `COMPLETED` is reachable today**~~ → **`COMPLETED` and `FAILED` since B6**: a report that
+ * cannot be parsed leaves a `FAILED` row now, which is what makes a rejected report visible in this
+ * history at all. `PENDING` and `PROCESSING` are still unreachable, and are labeled rather than
+ * omitted because the enum is the contract's, an asynchronous lane is a named next step, and a
+ * screen that rendered a raw `PROCESSING` the day it arrives is the drift this file exists to
+ * prevent.
  */
 export const ingestionStatusLabels = {
   PENDING: 'Queued',
@@ -485,6 +487,34 @@ export const criterionMetricLabels = {
   cases_approved: 'Cases approved (%)',
   build_available: 'Build available',
 } as const satisfies Record<CriterionMetric, string>;
+
+/**
+ * Which of those the product can actually decide today (B11).
+ *
+ * The paragraph above always said two of the five evaluate, and the picker did not: all five were
+ * offered identically, so a plan could be gated on "open critical defects" and read `not evaluated`
+ * for ever with nothing at selection time to say it would. The audit's own words — *a user can
+ * build an exit gate that will read `null` forever*.
+ *
+ * **Marked rather than hidden**, which is the choice the paragraph above already argued for and
+ * `ui-rules`' disable-don't-hide one screen over: a gate somebody has agreed to is worth recording
+ * before the product can check it, and removing the option would make the plan document lie by
+ * omission. What was missing was the label, not the restraint.
+ *
+ * **This is a copy, and the original is `PlanStatisticsService.actuals`** — the map of metric to
+ * number that endpoint can fill. Nothing compares the two: the evaluated set is not on the wire,
+ * and putting it there is a contract change for a boolean per metric. So the failure mode is
+ * stated instead: teach the server a third metric and this file says "not evaluated" about
+ * something that now is, until somebody edits it. `satisfies` at least forces a NEW metric to be
+ * classified here rather than silently defaulting either way.
+ */
+export const criterionMetricEvaluated = {
+  pass_rate: true,
+  coverage: true,
+  open_critical: false,
+  cases_approved: false,
+  build_available: false,
+} as const satisfies Record<CriterionMetric, boolean>;
 
 /**
  * The comparisons a criterion may make, in the contract's order.

@@ -2,6 +2,8 @@ package com.tcms.execution;
 
 import com.tcms.tenancy.CompanyFilter;
 import jakarta.persistence.Column;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -174,6 +176,22 @@ public class TestRun {
     @Column(name = "release_sort_key", updatable = false)
     private String releaseSortKey;
 
+    /**
+     * What this run was <strong>asked</strong> for, as JSON — B7, {@code V61}.
+     *
+     * <p>Provenance and nothing else. The run's contents are its {@code test_execution} rows,
+     * materialised once and pinned to a case version; this column records the request that
+     * produced them so a reader can answer "why is this case here" and so a clone can be offered
+     * the same terms rather than only the same case list.
+     *
+     * <p>{@code updatable = false} because a request is a thing that happened. Null for every run
+     * created before {@code V61} and for every run opened by ingestion — there was no request —
+     * and a reader must show that as <em>not recorded</em> rather than as an empty scope.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "scope_request", updatable = false)
+    private String scopeRequest;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -226,6 +244,7 @@ public class TestRun {
             RunSource source,
             UUID creatorId,
             String idempotencyKey,
+            String scopeRequest,
             Instant now) {
 
         TestRun created = new TestRun();
@@ -245,6 +264,7 @@ public class TestRun {
         created.commitSha = edit.commitSha();
         created.branch = edit.branch();
         created.source = source;
+        created.scopeRequest = scopeRequest;
         created.startedAt = null;
         created.completedAt = null;
         created.createdAt = now;
@@ -346,6 +366,11 @@ public class TestRun {
 
     RunSource getSource() {
         return source;
+    }
+
+    /** The request that made this run, as JSON, or null when none was recorded — B7. */
+    String getScopeRequest() {
+        return scopeRequest;
     }
 
     Instant getStartedAt() {

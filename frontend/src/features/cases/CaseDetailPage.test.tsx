@@ -286,6 +286,7 @@ describe('CaseDetailPage — a rule this case turned off', () => {
       inline: false,
       inherited: true,
       inheritedFrom: 'Payments',
+      declineCount: 0,
     },
   ]
 

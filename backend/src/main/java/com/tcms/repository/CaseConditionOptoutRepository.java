@@ -45,4 +45,25 @@ public interface CaseConditionOptoutRepository
              ORDER BY o.caseId, o.suiteConditionId
             """)
     List<CaseConditionOptout> findForCases(@Param("caseIds") List<UUID> caseIds);
+
+    /**
+     * How many cases decline each of a suite's attachments (B10).
+     *
+     * <p>For the <strong>warning before a detach</strong>, and it is the number nothing could
+     * answer: {@code case_condition_optout} is {@code ON DELETE CASCADE} on
+     * {@code suite_condition}, so removing an attachment silently deletes every case's decision to
+     * opt out of it — and re-attaching does not bring them back, because the new row is a new id.
+     * The register of that cost was a comment in the ERD and a count nobody could see.
+     *
+     * <p>Grouped rather than a per-attachment count, for the reason every list read here is
+     * batched: a suite with eight conditions is one query, not eight.
+     */
+    @Query("""
+            SELECT o.suiteConditionId, COUNT(o)
+              FROM CaseConditionOptout o
+             WHERE o.suiteConditionId IN :suiteConditionIds
+             GROUP BY o.suiteConditionId
+            """)
+    List<Object[]> countDeclinesBy(
+            @Param("suiteConditionIds") List<UUID> suiteConditionIds);
 }

@@ -152,6 +152,8 @@ describe('RunDetailPage — the same pair, from the other grid', () => {
       startedAt: '2026-08-06T09:00:00Z',
       completedAt: null,
       counts: { total: 1, passed: 0, failed: 0, blocked: 0, skipped: 0, notRun: 1 },
+      // No request recorded — B7's ordinary state for a fixture built by hand.
+      scopeRequest: null,
       executions: [summary()],
     }
   }

@@ -483,6 +483,20 @@ export interface Paged<T> {
 /** Case list filter state. Mirrored into the URL so views are shareable (plan §6o/§6q). */
 export interface CaseFilters {
   q?: string;
+  /**
+   * Cases named directly, by id — the by-ids read (B8). The parameter repeats (`?id=…&id=…`) and
+   * `qs` spells that for free.
+   *
+   * **A filter like every other one here**, intersected with the rest rather than replacing them,
+   * which is what makes it usable to answer "which of these are approved". Capped server-side at
+   * 200 — the page maximum, since more ids than a page can hold cannot be answered in one
+   * response — and an id from another project matches nothing rather than failing.
+   *
+   * It exists because the plan's Test cases tab holds ids and needs their keys: before it, that
+   * screen fetched the first 200 cases of the project and joined client-side, so a plan naming a
+   * case outside that window drew a chip with no name on it.
+   */
+  id?: string[];
   suiteId?: string;
   featureId?: string;
   testTypeId?: string;

@@ -167,6 +167,9 @@ export function condition(overrides: Partial<Schemas['CaseConditionRef']> = {}):
     inline: true,
     inherited: false,
     inheritedFrom: null,
+    // B10 — how many cases decline this attachment. Zero is a case's own condition and an
+    // inherited row; the number that matters before a detach is on the SUITE's copy.
+    declineCount: 0,
     ...overrides,
   };
 }
@@ -214,6 +217,8 @@ export function run(overrides: Partial<Schemas['TestRun']> = {}): Schemas['TestR
     startedAt: null,
     completedAt: null,
     counts: counts(),
+    // B7 — no request recorded, which is what a run created before `V61` carries.
+    scopeRequest: null,
     ...overrides,
   };
 }

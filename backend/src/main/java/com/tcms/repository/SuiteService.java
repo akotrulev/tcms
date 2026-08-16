@@ -54,6 +54,8 @@ public class SuiteService {
     private final SuiteMembership membership;
     private final SuiteTagRuleRepository tagRules;
     private final SuiteCaseRepository addedCases;
+    /** Read only to COUNT declines per attachment (B10) — this class writes none of them. */
+    private final CaseConditionOptoutRepository optouts;
 
     public SuiteService(
             ProjectService projects,
@@ -62,7 +64,8 @@ public class SuiteService {
             ConditionRepository conditions,
             SuiteMembership membership,
             SuiteTagRuleRepository tagRules,
-            SuiteCaseRepository addedCases) {
+            SuiteCaseRepository addedCases,
+            CaseConditionOptoutRepository optouts) {
 
         this.projects = projects;
         this.suites = suites;
@@ -71,6 +74,7 @@ public class SuiteService {
         this.membership = membership;
         this.tagRules = tagRules;
         this.addedCases = addedCases;
+        this.optouts = optouts;
     }
 
     /**
@@ -261,6 +265,13 @@ public class SuiteService {
         conditions.findLiveByIds(referenced).forEach(condition ->
                 library.put(condition.getId(), condition));
 
+        // B10 — how many cases decline each attachment, in one grouped query for the whole list.
+        // It is what the detach warning needs and what nothing could previously say: the opt-outs
+        // cascade with the attachment, and re-attaching does not bring them back.
+        Map<UUID, Long> declines = new HashMap<>();
+        optouts.countDeclinesBy(live.stream().map(SuiteCondition::getId).toList())
+                .forEach(row -> declines.put((UUID) row[0], (Long) row[1]));
+
         for (SuiteCondition attachment : live) {
             Condition condition = library.get(attachment.getConditionId());
             if (condition == null) {
@@ -271,7 +282,8 @@ public class SuiteService {
             }
             byKind.get(attachment.getKind())
                     .computeIfAbsent(attachment.getSuiteId(), key -> new ArrayList<>())
-                    .add(SuiteConditionView.of(attachment, condition));
+                    .add(SuiteConditionView.of(
+                            attachment, condition, declines.getOrDefault(attachment.getId(), 0L)));
         }
         return byKind;
     }

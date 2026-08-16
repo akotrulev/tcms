@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tcms.project.CaseStatusView;
 import com.tcms.project.ProjectService;
 import com.tcms.tenancy.CompanyContext;
@@ -41,6 +42,8 @@ public class RunService {
     private final ResultStatuses statuses;
     private final ExecutionViews views;
     private final PlanCriteria criteria;
+    /** Reads `scope_request` back (B7). The module's own mapper, never a second one. */
+    private final ObjectMapper json;
 
     public RunService(
             ProjectService projects,
@@ -49,7 +52,8 @@ public class RunService {
             ConfigurationRepository configurations,
             ResultStatuses statuses,
             ExecutionViews views,
-            PlanCriteria criteria) {
+            PlanCriteria criteria,
+            ObjectMapper json) {
 
         this.projects = projects;
         this.runs = runs;
@@ -58,6 +62,7 @@ public class RunService {
         this.statuses = statuses;
         this.views = views;
         this.criteria = criteria;
+        this.json = json;
     }
 
     /** A project's runs, newest first, or empty when the caller may not see the project. */
@@ -193,7 +198,11 @@ public class RunService {
                 run.getStartedAt(),
                 run.getCompletedAt(),
                 context.counts().getOrDefault(
-                        run.getId(), new ResultCountsView(0, 0, 0, 0, 0, 0)));
+                        run.getId(), new ResultCountsView(0, 0, 0, 0, 0, 0)),
+                // B7 — what was asked for, parsed from the stored document. Null for a run created
+                // before `V61` and for one opened by ingestion, and a client must render that as
+                // "not recorded" rather than as an empty scope.
+                RunScopeRequestView.parse(json, run.getScopeRequest()));
     }
 
     /**

@@ -244,6 +244,56 @@ function RunActions({ projectId, run }: { projectId: string; run: TestRunDetail 
 
 type Filter = 'ALL' | 'TODO' | 'FAILED';
 
+/**
+ * What this run was **asked** for (B7).
+ *
+ * ## The question it answers, which nothing could
+ *
+ * A run's checklist is a list of executions. Whether TC-41 is on it because somebody named that
+ * case, because it was filed in a suite that was named, or because it carried `smoke` on the day
+ * the run was made was unrecoverable — `test_run` kept the plan id and nothing else. `V61` records
+ * the request, and this is where a reader meets it.
+ *
+ * ## Absent means NOT RECORDED, and says so
+ *
+ * Null is every run created before `V61` and every run opened by an ingested report, where there
+ * was no request at all. Rendering that as "no scope" would state that a run covering two hundred
+ * cases was asked for nothing, so the line is omitted instead: an absent sentence is the honest
+ * spelling of an absent fact, and the checklist below is still the answer to what the run holds.
+ *
+ * ## It is not the checklist and does not pretend to be
+ *
+ * The counts are of what was *asked for* — two suites, one tag — never of what they resolved to.
+ * A suite named here may since have been deleted. That divergence is the point of recording the
+ * request, so the copy stays in the past tense and the numbers stay arm counts.
+ */
+function ScopeProvenance({ scopeRequest }: { scopeRequest: TestRunDetail['scopeRequest'] }) {
+  if (!scopeRequest) return null;
+
+  const arms: string[] = [];
+  if (scopeRequest.suiteIds.length > 0) {
+    arms.push(
+      `${formatCount(scopeRequest.suiteIds.length)} ${scopeRequest.suiteIds.length === 1 ? 'suite' : 'suites'}`,
+    );
+  }
+  if (scopeRequest.tags.length > 0) arms.push(`tagged ${scopeRequest.tags.join(', ')}`);
+  if (scopeRequest.caseIds.length > 0) {
+    arms.push(
+      `${formatCount(scopeRequest.caseIds.length)} ${scopeRequest.caseIds.length === 1 ? 'case' : 'cases'} named directly`,
+    );
+  }
+  // A plan-scoped run's arms are empty and the plan is the whole request, which the header already
+  // renders as a link — so there is nothing to add and the line stays off rather than saying
+  // "asked for: nothing".
+  if (arms.length === 0) return null;
+
+  return (
+    <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid="RunDetail.Scope">
+      Created from {arms.join(', ')} — as they resolved at the time.
+    </Typography>
+  );
+}
+
 function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: string; runId: string }) {
   const [filter, setFilter] = useState<Filter>('ALL');
   const executions = data.executions ?? [];
@@ -310,6 +360,7 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
               )
             )}
           </Stack>
+          <ScopeProvenance scopeRequest={data.scopeRequest} />
         </Stack>
       </Panel>
 

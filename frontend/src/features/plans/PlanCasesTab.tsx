@@ -103,13 +103,31 @@ export function PlanCasesTab({
   /*
     A lookup for the case ids the plan already names, so a chip can say `TC-41` rather than a UUID.
 
-    **A client-side join over the case list's first page, and its limit is stated rather than
-    hidden**: there is no by-ids read on the contract, so an id outside this page renders as an
-    unresolved chip that can still be removed — removal needs the id and nothing else. A plan naming
-    more than 200 individual cases is one the model steers away from anyway (that is what suites and
-    tags are for), and the fix if it bites is a server-side read, not a bigger page.
+    ~~A client-side join over the case list's first page, and its limit is stated rather than
+    hidden: there is no by-ids read on the contract, so an id outside this page renders as an
+    unresolved chip.~~ → **B8 built that read.** This asks for exactly the ids the plan names —
+    the unsectioned arm plus every section's — so a chip is resolved because it was asked about,
+    not because it happened to be in the project's first 200 cases by key.
+
+    The ids come from the DRAFT rather than from the plan, so a case added in this session gets its
+    name as soon as the answer lands, and the query key changes with them (`keys.cases` includes
+    the filters), which is what makes that refetch happen at all.
+
+    Still bounded, and the bound is the server's: 200 ids per request, dropped rather than refused.
+    A plan naming more than 200 individual cases is one the model steers away from — that is what
+    suites and tags are for — and the chip for a dropped id still removes, which needs the id and
+    nothing else.
   */
-  const catalogue = useCases(projectId, { size: 200 }, 'key,asc');
+  const referencedCaseIds = useMemo(() => {
+    const ids = new Set<string>(draft.caseIds);
+    for (const section of draft.sections) for (const id of section.caseIds) ids.add(id);
+    return [...ids];
+  }, [draft]);
+  const catalogue = useCases(
+    projectId,
+    { id: referencedCaseIds, size: 200 },
+    'key,asc',
+  );
   const casesById = useMemo(() => {
     const index = new Map<string, TestCaseSummary>();
     for (const row of catalogue.data?.items ?? []) index.set(row.id, row);
@@ -420,9 +438,10 @@ function GroupCard({
                       <span>{known.title}</span>
                     </Stack>
                   ) : (
-                    // Resolvable only from the loaded page; it can still be removed, which is what
-                    // the chip is for. Named honestly rather than shown as a UUID.
-                    'A case outside the loaded list'
+                    // Since B8 this is a case the by-ids read did not answer for: deleted since
+                    // the plan named it, or past the 200-id cap. It can still be removed, which
+                    // is what the chip is for. Named honestly rather than shown as a UUID.
+                    'A case this project no longer lists'
                   )
                 }
                 onDelete={() => remove({ kind: 'case', id })}

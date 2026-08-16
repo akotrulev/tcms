@@ -3,10 +3,11 @@ package com.tcms.execution;
 /**
  * Where a posted report got to — the {@code CHECK} on {@code ingestion_job.status} in {@code V1}.
  *
- * <p><strong>The synchronous lane writes only {@link #COMPLETED}, and {@link IngestionJob}'s header
- * says why the other three are not an omission.</strong> Briefly: the idempotency key is consumed by
- * whichever attempt writes a row, so a {@code FAILED} row would make the corrected retry — under the
- * key the CI job generated once — replay the failure. A report that cannot be parsed leaves no row.
+ * <p><strong>The synchronous lane writes {@link #COMPLETED} and — since B6 — {@link #FAILED}</strong>,
+ * and {@link IngestionJob}'s header says why the other two are not an omission. Briefly: the
+ * idempotency key used to be consumed by whichever attempt wrote a row, so a {@code FAILED} row
+ * would have made the corrected retry replay the failure; {@code V60} narrowed that uniqueness to
+ * {@code COMPLETED} rows, so a rejected report is recorded and consumes nothing.
  *
  * <p>The enum is kept whole rather than narrowed to the one reachable value, and that is the
  * opposite call to {@code LinkSourceType} (§93), which is deliberately narrower than its column.

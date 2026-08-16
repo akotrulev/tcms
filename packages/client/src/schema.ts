@@ -1943,6 +1943,26 @@ export interface paths {
                      */
                     q?: string;
                     /**
+                     * @description **The by-ids read (B8).** Repeat the parameter to name several
+                     *     (`?id=…&id=…`); the answer is those cases, as ordinary summaries, in this endpoint's
+                     *     ordinary order and paging.
+                     *
+                     *     It exists because resolving a *known set* of cases had no operation at all. A plan's
+                     *     Test cases tab holds ids and had to join them client-side against the first 200 cases
+                     *     of the project — so a plan naming a case outside that window rendered an unresolved
+                     *     chip, and the only way to widen it was to fetch more of a list nobody wanted.
+                     *
+                     *     **A filter, not a mode.** It is intersected with everything else on this operation, so
+                     *     `?id=…&lifecycleStatus=APPROVED` answers *which of these are approved*. An id from
+                     *     another project matches nothing rather than 400ing or leaking: the query is bounded by
+                     *     the project either way.
+                     *
+                     *     **At most 200 ids** — the page maximum, since more than a page of ids cannot be
+                     *     answered in one response anyway. Excess ids are dropped rather than refused, exactly as
+                     *     `size` is clamped rather than rejected; a client with more than 200 pages its chips.
+                     */
+                    id?: string[];
+                    /**
                      * @description Narrows to the suite's **resolved membership** — filed here, added here individually,
                      *     or carrying one of its `tagRules`. The same union `Suite.caseCount` counts, so the
                      *     number in the rail and the length of this list are two readings of one query.
@@ -7267,6 +7287,16 @@ export interface paths {
          *     duplicate of a case that already exists. The names come back in `unmatched` with the
          *     exact `normalizedName` that `POST /automation-mappings` takes, which is the supported way
          *     to bind them.
+         *
+         *     **A report this server cannot parse is a 400 *and* a `FAILED` job (B6).** The refusal is
+         *     unchanged — a field error on `report`, carrying the parser's own sentence — and it now
+         *     leaves a row, so `GET …/ingestions` shows the rejection instead of showing nothing. That
+         *     row **consumes no key**: the corrected retry under the key CI generated once still ingests,
+         *     because `V60` narrowed the uniqueness to `COMPLETED` rows. See `IngestionStatus`.
+         *
+         *     The row is written only for a caller who holds `result:submit`; anybody else gets the same
+         *     400 and writes nothing, which keeps this endpoint from telling a stranger which projects
+         *     exist.
          */
         post: operations["ingestResults"];
         delete?: never;
@@ -10216,6 +10246,21 @@ export interface components {
             inherited: boolean;
             /** @example Billing */
             inheritedFrom?: string | null;
+            /**
+             * Format: int64
+             * @description **How many cases have declined this attachment (B10)** — the cost of detaching it, and
+             *     a number nothing on the wire could state before.
+             *
+             *     `case_condition_optout` is `ON DELETE CASCADE` on `suite_condition`, so removing a
+             *     suite's condition deletes every case's decision to opt out of it — and re-attaching the
+             *     same library entry does **not** bring them back, because the new row has a new id and
+             *     the opt-outs were keyed on the old one. A form that removes one without saying so
+             *     destroys a set of decisions nobody can see being destroyed.
+             *
+             *     Zero is the ordinary answer, and it is what a case's OWN condition and an inherited
+             *     row both carry: only a suite's attachment can be declined.
+             */
+            declineCount: number;
         };
         /**
          * @description One condition attached to a case. **Only the reference form is accepted** as of §95:
@@ -10875,10 +10920,24 @@ export interface components {
          */
         IngestedOutcome: "PASSED" | "FAILED" | "ERRORED" | "SKIPPED";
         /**
-         * @description Where the job got to. **The synchronous lane writes only `COMPLETED`.** A report that
+         * @description Where the job got to. ~~**The synchronous lane writes only `COMPLETED`.** A report that
          *     cannot be parsed leaves no row at all — a `FAILED` row would consume the idempotency key,
-         *     so the *corrected* retry under the key CI generated once would replay the failure. The
-         *     other three belong to an asynchronous lane that does not exist yet.
+         *     so the *corrected* retry under the key CI generated once would replay the failure.~~ →
+         *     **superseded by B6: it writes `COMPLETED` and `FAILED`.**
+         *
+         *     The old reasoning was right about the constraint and wrong about which rows it was for.
+         *     `V60` narrowed the uniqueness to `COMPLETED` rows, so a rejected report is recorded, carries
+         *     its key, and consumes nothing — the corrected retry under the same key still ingests. What
+         *     that buys is the thing the absence cost: `GET …/ingestions` showed every success and was
+         *     silent about every rejection, so a pipeline posting malformed XML for a week was
+         *     indistinguishable from a pipeline nobody had wired up, and the 400 body was the entire
+         *     record of the refusal.
+         *
+         *     Two `FAILED` rows may share a key, deliberately: a build that posted rubbish three times
+         *     failed three times, and collapsing them would hide the repetition that is the useful part.
+         *
+         *     `PENDING` and `PROCESSING` belong to an asynchronous lane that does not exist yet, and are
+         *     the two values nothing can produce.
          * @enum {string}
          */
         IngestionStatus: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
@@ -11070,6 +11129,30 @@ export interface components {
             /** Format: date-time */
             confirmedAt: string;
         };
+        /**
+         * @description **What a run was asked for**, beside what it materialised (B7, `V61`).
+         *
+         *     A run's contents are its executions — materialised once, pinned to a case version, never
+         *     re-resolved. That law is unchanged, and what it left unanswerable is *why* a case is on the
+         *     checklist: named directly, filed in a suite that was named, or carrying a tag that was.
+         *     `test_run` kept the plan id and nothing else.
+         *
+         *     **The whole object is `null` when nothing was recorded** — every run created before `V61`,
+         *     and every run opened by ingestion, which materialises from a report rather than from a
+         *     request. Render that as *not recorded*, never as "no scope": a run covering two hundred
+         *     cases was not asked for nothing.
+         *
+         *     It is the request and not the result. A suite named here may since have been deleted and a
+         *     tag may now match nothing; nothing repairs it, because the value of the record is that it
+         *     says what was asked on the day it was asked.
+         */
+        RunScopeRequest: {
+            /** Format: uuid */
+            planId: string | null;
+            caseIds: string[];
+            suiteIds: string[];
+            tags: string[];
+        };
         TestRun: {
             /** Format: uuid */
             id: string;
@@ -11108,6 +11191,12 @@ export interface components {
             /** Format: date-time */
             completedAt: string | null;
             counts: components["schemas"]["ResultCounts"];
+            /**
+             * @description What this run was asked for — see `RunScopeRequest`. **Null means not
+             *     recorded**, which is every run created before `V61` and every run opened by an
+             *     ingested report.
+             */
+            scopeRequest: components["schemas"]["RunScopeRequest"] | null;
         };
         TestPlanCloneInput: {
             /**
@@ -11144,6 +11233,26 @@ export interface components {
              *     would turn a documented one-off into a permanent exemption.
              */
             overrideApprovalGate?: boolean | null;
+            /**
+             * @description **Re-run what the source was asked for, rather than what it materialised** (B7).
+             *     Omitted or `false` is the ordinary clone and stays the default.
+             *
+             *     A clone normally re-runs the source's exact case list, which is right: a re-run of *the
+             *     regression pass we did on Friday* is that pass again, and a set that quietly grew would
+             *     make two runs with one name cover different work. What that cannot express is the other
+             *     intention — *run the smoke suite again* — where a case filed into the suite since Friday
+             *     is exactly what should be included. Before this flag the only way to get it was to
+             *     create a new run by hand, losing the link to the source.
+             *
+             *     **Refused with a field error when the source has no recorded request** (`scopeRequest`
+             *     is null: a run created before `V61`, or one opened by an ingested report). The two
+             *     clones produce different case sets and look identical afterwards, so falling back
+             *     silently would answer a question nobody asked.
+             *
+             *     A source whose scope was a bare list of case ids re-resolves to that same list, so the
+             *     flag is accepted there and changes nothing.
+             */
+            rescope?: boolean | null;
         };
         TestRunInput: {
             name: string;

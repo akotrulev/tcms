@@ -1,5 +1,8 @@
 package com.tcms.execution;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
@@ -127,6 +130,8 @@ public class RunCreateService {
     private final ExecutionPeople people;
     private final DisplayKeys displayKeys;
     private final AuditEventRepository auditEvents;
+    /** Writes `scope_request` (B7) and nothing else — the module's own mapper, never a new one. */
+    private final ObjectMapper json;
     private final Clock clock;
 
     @SuppressWarnings("checkstyle:ParameterNumber")
@@ -142,6 +147,7 @@ public class RunCreateService {
             ExecutionPeople people,
             DisplayKeys displayKeys,
             AuditEventRepository auditEvents,
+            ObjectMapper json,
             Clock clock) {
 
         this.projects = projects;
@@ -155,6 +161,7 @@ public class RunCreateService {
         this.people = people;
         this.displayKeys = displayKeys;
         this.auditEvents = auditEvents;
+        this.json = json;
         this.clock = clock;
     }
 
@@ -241,6 +248,39 @@ public class RunCreateService {
             case GateResult.Denied<Outcome> ignored -> new Outcome.Forbidden();
             case GateResult.Allowed<Outcome> allowed -> allowed.value();
         };
+    }
+
+
+    /**
+     * The run's request, as the JSON {@code test_run.scope_request} holds (B7).
+     *
+     * <p>Normalised the way the resolution normalised it — de-duplicated ids, trimmed tags — so
+     * what is recorded is what the server acted on rather than the bytes that arrived. A caller
+     * that named the same suite twice asked for one suite.
+     *
+     * <p><strong>Null for an INGESTED run</strong>, which had no request: a report arrived and the
+     * run was opened to hold its results. Recording {@code {}} there would say "asked for nothing",
+     * which is a different and false statement — the column's own comment makes the absence mean
+     * <em>not recorded</em>, and this is the path that produces it.
+     */
+    private String scopeRequestOf(RunWriteRequest request, RunSource source) {
+        if (source == RunSource.INGESTED) {
+            return null;
+        }
+        ObjectNode node = json.createObjectNode();
+        if (request.planId() != null) {
+            node.put("planId", request.planId().toString());
+        }
+        putIds(node, "caseIds", PlanEdit.distinct(request.caseIds()));
+        putIds(node, "suiteIds", PlanEdit.distinct(request.suiteIds()));
+        ArrayNode tags = node.putArray("tags");
+        RunEdit.tagsOf(request).forEach(tags::add);
+        return node.toString();
+    }
+
+    private static void putIds(ObjectNode node, String field, List<UUID> ids) {
+        ArrayNode array = node.putArray(field);
+        ids.forEach(id -> array.add(id.toString()));
     }
 
     private Outcome apply(
@@ -350,6 +390,10 @@ public class RunCreateService {
                 source,
                 userId,
                 idempotencyKey,
+                // B7 — what was ASKED for, beside what it materialised. Written from the REQUEST
+                // and not from `edit.caseIds()`: the resolved list is the checklist, and the whole
+                // value of this column is being able to see the difference between the two.
+                scopeRequestOf(request, source),
                 now);
 
         // Flushed before the executions so test_execution.run_id has a row to reference, and so

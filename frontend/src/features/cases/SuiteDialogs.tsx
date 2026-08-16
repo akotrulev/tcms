@@ -17,6 +17,7 @@ import { z } from 'zod';
 import type { CaseConditionRef, Condition, Suite } from '../../api/types';
 import { ApiError } from '../../api/client';
 import { Identifier } from '../../components/Identifier';
+import { formatCount } from '../../lib/format';
 import { useCreateSuite, useDeleteSuite, useProjectTags, useRenameSuite } from '../../api/queries';
 import { describeError } from '../../lib/describeError';
 import { ConditionEditDialog } from './ConditionEditDialog';
@@ -145,6 +146,7 @@ function SuiteFormDialog({
   onSubmit,
   isPending,
   testId,
+  attached,
 }: {
   open: boolean;
   onClose: () => void;
@@ -153,6 +155,14 @@ function SuiteFormDialog({
   title: string;
   submitLabel: string;
   defaults: SuiteFormInput;
+  /**
+   * The suite's conditions **as stored**, for B10's detach warning. Absent on a create, where
+   * nothing is attached yet and nothing can have been declined.
+   *
+   * The stored rows rather than the form's ids, because the number the warning needs —
+   * `declineCount` — is a property of the *attachment* and the form holds library ids.
+   */
+  attached?: readonly CaseConditionRef[];
   onSubmit: (values: SuiteFormInput, setError: Parameters<typeof applyServerError>[1]) => Promise<void>;
   isPending: boolean;
   testId: string;
@@ -183,6 +193,7 @@ function SuiteFormDialog({
     setFocus,
     setValue,
     getValues,
+    watch,
     formState: { errors },
   } = useForm<SuiteFormInput>({
     resolver: zodResolver(SuiteSchema),
@@ -210,6 +221,22 @@ function SuiteFormDialog({
   const submit = handleSubmit(async (values) => {
     await onSubmit(values, (field, message) => setError(field, { type: 'server', message }));
   });
+
+  /*
+    How many opt-outs this save would destroy (B10).
+
+    Read off the form as it stands — `watch`, not `getValues` — because the warning has to appear
+    the moment a chip is removed, which is the only moment it can still be acted on.
+  */
+  const keptConditionIds = new Set<string>([
+    ...watch('preconditionIds'),
+    ...watch('postconditionIds'),
+  ]);
+  const abandonedDeclines = (attached ?? [])
+    // `conditionId` is nullable on the wire (an inline attachment, which nothing can create), so
+    // a row without one is not a row the form could be keeping or dropping.
+    .filter((row) => !!row.conditionId && !keptConditionIds.has(row.conditionId))
+    .reduce((total, row) => total + row.declineCount, 0);
 
   return (
     // `md`, not `sm`: the two condition panels each carry a list, a picker and a create button,
@@ -356,6 +383,25 @@ function SuiteFormDialog({
                 />
               </Stack>
             </Stack>
+            {/*
+              B10 — what detaching a condition costs, said before Save rather than discovered after.
+
+              `case_condition_optout` cascades on `suite_condition`, so removing a condition here
+              deletes every case's decision to opt out of it — and re-attaching the same library
+              entry does NOT restore them, because the new attachment has a new id. Nothing said
+              so, and nothing could: `declineCount` reached the wire with this slice.
+
+              A warning and never a block: detaching is legitimate and only the author can weigh
+              what it costs. The same shape as the case editor's move warning (§192) — measured
+              from the stored rows rather than predicted from a rule.
+            */}
+            {abandonedDeclines > 0 && (
+              <Alert severity="warning" data-testid={`${TestIdPrefix}.DeclineWarning`}>
+                {abandonedDeclines === 1
+                  ? 'One case has opted out of a condition you are removing. That opt-out is deleted with it, and re-attaching the condition does not bring it back.'
+                  : `${abandonedDeclines} cases have opted out of conditions you are removing. Those opt-outs are deleted with them, and re-attaching the conditions does not bring them back.`}
+              </Alert>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -554,8 +600,37 @@ export function DeleteSuiteDialog({
       <DialogContent>
         <Stack spacing={2}>
           <DialogContentText>
-            <Identifier>{suite.key}</Identifier> {suite.name} will be removed from the tree.
+            {/* ~~"removed from the tree"~~ — there has been no tree since §98, and a suite is a
+                named collection resolved from three arms. */}
+            <Identifier>{suite.key}</Identifier> {suite.name} will be removed from this project.
           </DialogContentText>
+          {/*
+            B10 — what this costs, before it is pressed rather than after.
+
+            The delete refuses while cases are FILED here (the server's 409, rendered below), and
+            says nothing at all about the other two arms: a case ADDED individually or claimed by a
+            tag rule is dropped from the collection without a word. The cases themselves survive —
+            deleting a suite deletes no case — and the membership does not, which is the sentence
+            somebody about to lose a hand-assembled selection of forty cases needs.
+
+            Counted from what the read already serves: `caseCount` is the union of the three arms
+            and `caseIds` is the added one. The FILED count is deliberately not inferred by
+            subtraction — the arms overlap (a case can be filed here AND tagged in), so
+            `caseCount - caseIds.length` is not the filed count and a number that is wrong in a
+            confirmation is worse than a number that is absent.
+          */}
+          {suite.caseCount > 0 && (
+            <Alert severity="warning" data-testid={`${TestIdPrefix}.Delete.Membership`}>
+              This suite currently resolves to {formatCount(suite.caseCount)}{' '}
+              {suite.caseCount === 1 ? 'case' : 'cases'}
+              {suite.caseIds.length > 0 &&
+                `, ${formatCount(suite.caseIds.length)} of them added individually`}
+              {suite.tagRules.length > 0 &&
+                `, and it claims everything tagged ${suite.tagRules.join(', ')}`}
+              . The cases are not deleted — they stop belonging to this collection. A case{' '}
+              <strong>filed</strong> here blocks the delete instead.
+            </Alert>
+          )}
           {remove.isError && (
             <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.Delete.Error`}>
               {describeError(remove.error).body}

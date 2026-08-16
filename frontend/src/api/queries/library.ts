@@ -10,7 +10,8 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import { TIMEOUTS, api, qs } from '../client';
+import { useRef } from 'react';
+import { TIMEOUTS, api, newIntentKey, qs } from '../client';
 import type {
   Condition,
   ConditionInput,
@@ -111,9 +112,22 @@ export function useStepSuggestions(projectId: string, q: string): UseQueryResult
  */
 export function useCreateSharedStep(projectId: string) {
   const client = useQueryClient();
+  /*
+    One key per mounted dialog (B4, `V59`) — `useCreateCase`'s rule and its reason: it survives
+    re-renders and failed attempts, so pressing Save again after a timeout sends the SAME key and
+    the server answers with the entry the first attempt created.
+
+    The endpoint refused this header until B4, on the grounds that a duplicate is visible in the
+    picker next to its twin. That argument was about a person looking at a picker; the SPA is that
+    person, and it is still worth sending — a timeout is exactly the moment the twin is created and
+    the reader is looking at a spinner.
+  */
+  const intentKey = useRef(newIntentKey());
   return useMutation({
     mutationFn: (input: SharedStepInput) =>
-      api.post<SharedStep>(`${base(projectId)}/shared-steps`, input),
+      api.post<SharedStep>(`${base(projectId)}/shared-steps`, input, {
+        idempotencyKey: intentKey.current,
+      }),
     meta: { handled: true },
     onSuccess: () =>
       client.invalidateQueries({ queryKey: ['projects', projectId, 'shared-steps'] }),

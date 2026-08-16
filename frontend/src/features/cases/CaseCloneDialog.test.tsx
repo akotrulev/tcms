@@ -56,6 +56,7 @@ function declined(over: Partial<CaseConditionRef> = {}): CaseConditionRef {
     inline: false,
     inherited: true,
     inheritedFrom: 'Payments',
+    declineCount: 0,
     ...over,
   }
 }

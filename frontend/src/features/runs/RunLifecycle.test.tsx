@@ -54,6 +54,8 @@ function runBody(
     startedAt,
     completedAt: status === 'COMPLETED' || status === 'ABORTED' ? '2026-08-02T10:00:00Z' : null,
     counts: { total: 1, passed: 0, failed: 0, blocked: 0, skipped: 0, notRun: 1 },
+    // No request recorded — B7's ordinary state for a fixture built by hand.
+    scopeRequest: null,
     executions: [],
   }
 }

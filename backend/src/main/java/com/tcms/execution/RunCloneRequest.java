@@ -42,5 +42,25 @@ public record RunCloneRequest(
         String releaseVersion,
         String buildNumber,
         UUID assigneeId,
-        Boolean overrideApprovalGate) {
+        Boolean overrideApprovalGate,
+
+        /**
+         * Re-run what the source was <strong>asked</strong> for, rather than what it materialised
+         * (B7). Absent or false is the old behaviour and stays the default.
+         *
+         * <p>A clone normally re-runs the source's exact case list, which is right: a re-run of
+         * "the regression pass we did on Friday" is that pass again, and a set that quietly grew
+         * would make two runs with one name cover different work. What that cannot express is the
+         * other intention — <em>run the smoke suite again</em> — where a case added to the suite
+         * since Friday is precisely what should be included, and until this flag the only way to
+         * get it was to create a new run by hand and lose the link to the source.
+         *
+         * <p>Requires the source to have a recorded request ({@code V61}), and requires it to have
+         * <em>arms</em>: a run whose scope was a bare list of case ids re-resolves to the same list,
+         * so asking for it is accepted and changes nothing. A run created before {@code V61}, or by
+         * ingestion, has no request at all and the clone is refused with a field error rather than
+         * silently falling back — falling back would answer a different question from the one asked
+         * and look identical afterwards.
+         */
+        Boolean rescope) {
 }

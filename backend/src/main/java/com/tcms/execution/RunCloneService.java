@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tcms.project.ProjectService;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
@@ -70,6 +71,8 @@ public class RunCloneService {
     private final TestRunRepository runs;
     private final TestExecutionRepository executions;
     private final AuditEventRepository auditEvents;
+    /** Reads the source's recorded request back (B7). The module's own mapper. */
+    private final ObjectMapper json;
     private final Clock clock;
 
     RunCloneService(
@@ -78,6 +81,7 @@ public class RunCloneService {
             TestRunRepository runs,
             TestExecutionRepository executions,
             AuditEventRepository auditEvents,
+            ObjectMapper json,
             Clock clock) {
 
         this.projects = projects;
@@ -85,6 +89,7 @@ public class RunCloneService {
         this.runs = runs;
         this.executions = executions;
         this.auditEvents = auditEvents;
+        this.json = json;
         this.clock = clock;
     }
 
@@ -140,8 +145,25 @@ public class RunCloneService {
         }
         TestRun source = found.get();
 
+        // B7 — re-run what the source was ASKED for, when the caller asks for that and the source
+        // has a request to re-run. Refused rather than quietly downgraded to the ordinary clone:
+        // the two produce different case sets and look identical afterwards, so a silent fallback
+        // would answer a question nobody asked.
+        RunScopeRequestView recorded =
+                RunScopeRequestView.parse(json, source.getScopeRequest());
+        if (Boolean.TRUE.equals(request.rescope()) && recorded == null) {
+            return new Outcome.Invalid(Map.of("rescope", List.of(
+                    "This run has no recorded scope to re-resolve — it was created before the "
+                            + "request was stored, or by an ingested report. Clone it as it is, or "
+                            + "create a new run from the suites and tags you want.")));
+        }
+
+        RunWriteRequest derived = Boolean.TRUE.equals(request.rescope())
+                ? rescoped(source, request, recorded)
+                : derive(source, request);
+
         RunCreateService.Outcome created =
-                creation.create(userId, projectId, derive(source, request), idempotencyKey);
+                creation.create(userId, projectId, derived, idempotencyKey);
 
         return switch (created) {
             case RunCreateService.Outcome.NotFound ignored -> new Outcome.NotFound();
@@ -157,6 +179,39 @@ public class RunCloneService {
                 yield new Outcome.Created(fresh.view());
             }
         };
+    }
+
+
+    /**
+     * The source's own request, re-asked (B7).
+     *
+     * <p>The arms rather than the case list, which is the whole difference: the create resolves
+     * them again, so a case filed into one of those suites since the source ran is on this
+     * checklist and a case deleted since is not. That is the intention "run the smoke suite again"
+     * has and the ordinary clone cannot express.
+     *
+     * <p>Everything that is not scope is {@link #derive}'s — the same fallbacks, the same two
+     * fields that deliberately do not inherit. Only the four scope arguments differ, and they are
+     * taken whole from the record rather than merged with anything: a re-ask is the same request,
+     * not the same request plus what it happened to materialise.
+     */
+    private RunWriteRequest rescoped(
+            TestRun source, RunCloneRequest request, RunScopeRequestView recorded) {
+
+        RunWriteRequest asIs = derive(source, request);
+        return new RunWriteRequest(
+                asIs.name(),
+                recorded.planId(),
+                asIs.configurationId(),
+                asIs.releaseVersion(),
+                asIs.buildNumber(),
+                asIs.commitSha(),
+                asIs.branch(),
+                recorded.caseIds(),
+                recorded.suiteIds(),
+                recorded.tags(),
+                asIs.assigneeId(),
+                asIs.overrideApprovalGate());
     }
 
     /**

@@ -1,6 +1,10 @@
 import { Alert, Box, Button, IconButton, MenuItem, Select, Stack, TextField, Typography } from '@mui/material';
 import { Panel } from '../../components/PageHeader';
-import { criterionMetricLabels, criterionOperators } from '../../lib/labels';
+import {
+  criterionMetricEvaluated,
+  criterionMetricLabels,
+  criterionOperators,
+} from '../../lib/labels';
 import type { CriterionRow, PlanDraft } from './planDraft';
 
 /**
@@ -124,7 +128,7 @@ export function PlanFieldsTab({
       <CriteriaEditor
         testId={`${TestId}.Exit`}
         title="Exit criteria"
-        hint="What must be true before the release is signed off. The Progress tab evaluates these against the run results."
+        hint="What must be true before the release is signed off. The Progress tab evaluates pass rate and coverage against the run results; the other metrics are recorded and shown as unevaluated."
         rows={draft.exitCriteria}
         error={errorOf('exitCriteria')}
         onChange={(exitCriteria) => onChange({ exitCriteria })}
@@ -192,7 +196,23 @@ function CriteriaEditor({
             >
               {Object.entries(criterionMetricLabels).map(([value, label]) => (
                 <MenuItem key={value} value={value}>
+                  {/*
+                    B11 — the three metrics this product cannot decide yet say so HERE, where the
+                    choice is made. All five stay on offer: a gate somebody has agreed to is worth
+                    recording before it can be checked automatically (`criterionMetricEvaluated`
+                    carries that argument), and the plan page shows such a criterion as unevaluated
+                    rather than as passing. What was missing was any way to know that in advance.
+                  */}
                   {label}
+                  {!criterionMetricEvaluated[value as keyof typeof criterionMetricEvaluated] && (
+                    <Typography
+                      component="span"
+                      variant="caption"
+                      sx={{ color: 'text.secondary', ml: 1 }}
+                    >
+                      — not evaluated yet
+                    </Typography>
+                  )}
                 </MenuItem>
               ))}
             </Select>

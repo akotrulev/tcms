@@ -33,5 +33,6 @@ public record TestRunView(
         RunSource source,
         Instant startedAt,
         Instant completedAt,
-        ResultCountsView counts) {
+        ResultCountsView counts,
+        RunScopeRequestView scopeRequest) {
 }

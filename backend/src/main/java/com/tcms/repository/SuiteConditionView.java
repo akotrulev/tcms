@@ -72,9 +72,18 @@ public record SuiteConditionView(
         List<String> body,
         boolean inline,
         boolean inherited,
-        String inheritedFrom) {
+        String inheritedFrom,
+        long declineCount) {
 
-    static SuiteConditionView of(SuiteCondition attachment, Condition condition) {
+    /**
+     * @param declines how many cases have declined THIS attachment (B10) — the cost of detaching
+     *     it, which nothing on the wire could state. {@code case_condition_optout} cascades on
+     *     {@code suite_condition}, so a detach deletes every one of those decisions and
+     *     re-attaching does not restore them: the new row has a new id, and the opt-outs were keyed
+     *     on the old one. Zero is the ordinary answer and is what an inherited or freshly attached
+     *     condition carries.
+     */
+    static SuiteConditionView of(SuiteCondition attachment, Condition condition, long declines) {
         return new SuiteConditionView(
                 attachment.getId(),
                 attachment.getPosition(),
@@ -83,6 +92,7 @@ public record SuiteConditionView(
                 condition.getBody(),
                 false,
                 false,
-                null);
+                null,
+                declines);
     }
 }

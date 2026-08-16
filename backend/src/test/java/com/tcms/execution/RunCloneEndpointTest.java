@@ -262,6 +262,35 @@ class RunCloneEndpointTest extends IntegrationTestBase {
         return ids;
     }
 
+
+    /** How many executions a run holds — the checklist's length (B7). */
+    private long executionCountOf(UUID runId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+                var statement = connection.prepareStatement(
+                        "SELECT COUNT(*) FROM test_execution WHERE run_id = CAST(? AS uuid)")) {
+            statement.setString(1, runId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next() ? rows.getLong(1) : -1;
+            }
+        }
+    }
+
+    /**
+     * Erases the recorded request, which is what a run created before {@code V61} carries.
+     *
+     * <p>Written in SQL because no endpoint can produce that state any more: the column is
+     * {@code updatable = false} and every create fills it. {@code Company.suspend()}'s shape — a
+     * rule enforced for rows the product can no longer author.
+     */
+    private void clearRecordedScope(UUID runId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+                var statement = connection.prepareStatement(
+                        "UPDATE test_run SET scope_request = NULL WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, runId.toString());
+            statement.executeUpdate();
+        }
+    }
+
     private long recordedExecutions(UUID runId) throws SQLException {
         try (Connection connection = appConnection(ACME);
                 var statement = connection.prepareStatement(
@@ -283,6 +312,106 @@ class RunCloneEndpointTest extends IntegrationTestBase {
             try (ResultSet rows = statement.executeQuery()) {
                 return rows.next() ? rows.getLong(1) : -1;
             }
+        }
+    }
+
+    /**
+     * B7 — what the run was asked for, and re-asking it.
+     *
+     * <h2>The two questions a run could not answer</h2>
+     *
+     * <p>{@code test_run} kept {@code plan_id} and nothing else about the request, so "why is this
+     * case in this run" had no answer at all — named directly, filed in a suite that was named, or
+     * carrying a tag that was, are indistinguishable once the executions exist. And a clone could
+     * only re-run the materialised list, so <em>run the smoke suite again</em> silently omitted
+     * every case filed into that suite since.
+     *
+     * <p>Materialisation-once is untouched: a run's contents are still its executions, pinned, and
+     * nothing re-resolves them. What {@code rescope} does is ask for a NEW run on the same terms.
+     */
+    @Nested
+    @DisplayName("The recorded scope, and cloning by it (B7)")
+    class RecordedScope {
+
+        @Test
+        @DisplayName("the run records the arms it was asked for, not the cases they resolved to")
+        void theRequestIsRecorded() throws Exception {
+            UUID source = sourceRun(LEAD, onScope("Smoke", List.of(), List.of(PAYMENTS),
+                    List.of("refunds")));
+
+            JsonNode scope = body(runDetail(source)).get("scopeRequest");
+
+            assertThat(scope.isNull()).isFalse();
+            assertThat(scope.get("suiteIds")).hasSize(1);
+            assertThat(scope.get("tags")).hasSize(1);
+            // The whole distinction: the checklist has cases, and the request named none. A
+            // recording taken from `edit.caseIds()` would put the resolved set here and answer the
+            // question with the same list it was asked about.
+            assertThat(scope.get("caseIds")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a plan-scoped run records the plan, and an ad-hoc one records null for it")
+        void thePlanIsPartOfTheRequest() throws Exception {
+            UUID fromPlan = sourceRun(LEAD, fromPlan("From the plan"));
+            UUID adHoc = sourceRun(LEAD, onCases("Ad hoc", List.of(caseA)));
+
+            assertThat(body(runDetail(fromPlan)).get("scopeRequest").get("planId").asText())
+                    .isEqualTo(plan.toString());
+            assertThat(body(runDetail(adHoc)).get("scopeRequest").get("planId").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("rescope re-resolves the arms, so a case added since is on the new checklist")
+        void rescopeReResolves() throws Exception {
+            // A run over everything tagged `refunds` — caseA today.
+            UUID source = sourceRun(LEAD, onScope("Smoke", List.of(), List.of(), List.of("refunds")));
+            assertThat(executionCountOf(source)).isOne();
+
+            // Somebody tags a second case afterwards. The ORDINARY clone must not pick it up (the
+            // source's checklist is what a re-run of that pass means) and the rescoped one must.
+            tagCase(caseB, "refunds");
+
+            Map<String, Object> asIs = named("As it was");
+            UUID plain = UUID.fromString(body(cloneRun(
+                    LEAD, ACME, ACME_BANKING, source, asIs, null)).get("id").asText());
+            assertThat(executionCountOf(plain)).isOne();
+
+            Map<String, Object> again = named("The suite again");
+            again.put("rescope", true);
+            UUID rescoped = UUID.fromString(body(cloneRun(
+                    LEAD, ACME, ACME_BANKING, source, again, null)).get("id").asText());
+
+            assertThat(executionCountOf(rescoped)).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("rescope on a run with no recorded request is refused, never downgraded")
+        void rescopeNeedsARequest() throws Exception {
+            UUID source = sourceRun(LEAD, onCases("Regression", List.of(caseA)));
+            // What a run created before V61 looks like: the column is null.
+            clearRecordedScope(source);
+
+            Map<String, Object> again = named("Again");
+            again.put("rescope", true);
+            MvcResult refused = cloneRun(LEAD, ACME, ACME_BANKING, source, again, null);
+
+            // A silent fallback to the ordinary clone would answer a different question and look
+            // identical afterwards, which is the one outcome worth refusing over.
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(refused).get("errors").has("rescope")).isTrue();
+        }
+
+        @Test
+        @DisplayName("a clone that does not ask for it still re-runs the materialised list")
+        void theDefaultIsUnchanged() throws Exception {
+            UUID source = sourceRun(LEAD, onScope("Smoke", List.of(), List.of(), List.of("refunds")));
+            tagCase(caseB, "refunds");
+
+            UUID clone = UUID.fromString(body(cloneRun(
+                    LEAD, ACME, ACME_BANKING, source, named("Copy"), null)).get("id").asText());
+
+            assertThat(executionCountOf(clone)).isOne();
         }
     }
 
@@ -601,6 +730,11 @@ class RunCloneEndpointTest extends IntegrationTestBase {
             request = request.header("Idempotency-Key", idempotencyKey);
         }
         return mvc.perform(request).andReturn();
+    }
+
+    /** The run's own detail, as the SPA reads it. */
+    private MvcResult runDetail(UUID runId) throws Exception {
+        return get(LEAD, ACME, "/projects/" + ACME_BANKING + "/runs/" + runId);
     }
 
     private MvcResult get(UUID userId, UUID companyId, String path) throws Exception {

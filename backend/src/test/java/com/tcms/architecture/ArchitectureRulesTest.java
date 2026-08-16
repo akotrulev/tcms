@@ -1076,12 +1076,12 @@ class ArchitectureRulesTest {
                     "V1's column for a picture nothing uploads. Already stated on the contract "
                             + "side — api.UserRef's javadoc calls it \"null for everyone today\" — "
                             + "and now stated at the column that would hold it"),
-            Map.entry("IngestionJob.error",
-                    "the detail of a FAILED job, and this lane never writes FAILED — argued at "
-                            + "IngestionJob's header since §117: the idempotency key is consumed "
-                            + "by whichever attempt writes a row, so a failed row would make the "
-                            + "corrected retry replay the failure. A report that cannot be parsed "
-                            + "leaves no row at all"),
+            // ~~IngestionJob.error — the detail of a FAILED job, and this lane never writes
+            // FAILED.~~ → B6 gave it a writer (`IngestionJob.failed`), so the entry is GONE rather
+            // than struck through: this map is pinned both ways, and an entry naming a column that
+            // now has a writer fails as loudly as a writerless column that has no entry. What made
+            // it possible is `V60`, which narrowed the idempotency uniqueness to COMPLETED rows —
+            // the argument this entry recorded was about the constraint, and the constraint moved.
             Map.entry("DocPageVersion.changeComment",
                     "V1 gives all four version tables a change_comment and only test_case_version "
                             + "has an endpoint that takes one. The exit is a contract field on the "

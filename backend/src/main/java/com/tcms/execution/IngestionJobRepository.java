@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 public interface IngestionJobRepository extends JpaRepository<IngestionJob, UUID> {
 
     /**
-     * The replay lookup.
+     * The replay lookup — <strong>completed jobs only, since B6</strong>.
      *
      * <p><strong>Keyed on the idempotency key alone, not on the key and the project.</strong>
      * {@code uq_ingestion_idempotency} is {@code (company_id, idempotency_key)} — company-scoped —
@@ -29,8 +29,25 @@ public interface IngestionJobRepository extends JpaRepository<IngestionJob, UUID
      * read back exactly. Adding {@code projectId} would make the query narrower than the index that
      * refuses the insert: the same key posted to a second project would find nothing here, be
      * treated as new, and then fail on the constraint as a 500 in the middle of a CI build.
+     *
+     * <p><strong>And on the status, which is the half B6 added.</strong> {@code V60} narrowed the
+     * uniqueness to {@code COMPLETED} rows so a REJECTED report can be recorded without consuming
+     * the key CI generated once for that build — and this method is that index read back. Without
+     * the status here, the corrected retry would find the failure and replay it: the caller would
+     * be handed the refusal again, for a payload they had already fixed, with nothing to do about
+     * it but invent a new key.
+     *
+     * <p>An explicit {@code @Query} where the old signature needed none: {@code findCompletedBy…}
+     * is not a property expression Spring Data can derive, and spelling the predicate out is also
+     * how the status constant stays visible beside the key it qualifies.
      */
-    Optional<IngestionJob> findByIdempotencyKey(String idempotencyKey);
+    @Query("""
+            SELECT j FROM IngestionJob j
+             WHERE j.idempotencyKey = :idempotencyKey
+               AND j.status = com.tcms.execution.IngestionStatus.COMPLETED
+            """)
+    Optional<IngestionJob> findCompletedByIdempotencyKey(
+            @Param("idempotencyKey") String idempotencyKey);
 
     /**
      * One project's jobs, newest first — the history.

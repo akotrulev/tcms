@@ -654,6 +654,8 @@ class ContractConventionTest {
             // Package-private, like every view in `reporting` — named as a string for that reason
             // and not because the pairing is in doubt.
             Map.entry("ReportCapabilities", List.of("com.tcms.reporting.ReportCapabilitiesView")),
+            // B7's provenance record — package-private in `execution`, like every view there.
+            Map.entry("RunScopeRequest", List.of("com.tcms.execution.RunScopeRequestView")),
             Map.entry("ReportDefinition", List.of("com.tcms.reporting.ReportDefinitionView")),
             // Package-private inside a package-private controller, so it is doubly unnameable.
             Map.entry("ReportDefinitionInput",

@@ -950,6 +950,7 @@ describe('CaseEditorPage — declining an inherited condition (§187)', () => {
         inline: false,
         inherited: true,
         inheritedFrom: 'Payments',
+        declineCount: 0,
       },
     ],
     lockVersion: 3,
@@ -1146,6 +1147,7 @@ describe('CaseEditorPage — moving a case out of the folder it declines (§194)
     inline: false,
     inherited: true,
     inheritedFrom: 'Refunds',
+    declineCount: 0,
   }
 
   /** Filed in Refunds, declining the one rule Refunds imposes. */

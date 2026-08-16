@@ -2802,3 +2802,35 @@ fallback are the exceptions.
 | `§231 GH-3` | **L2**, same stack: link a second provider from `/account/security`; then unlink it | The second row round-trips and flips to Unlink (dated, with the provenance email); unlinking confirms first, then flips back to Link. |
 | `§231 GH-4` | **L2**: a passwordless (company-IdP JIT) account with exactly one linked identity presses Unlink and confirms | Refused — the 409's explanatory message ("only way to sign in… set a password or link another provider first") stays **on the dialog**, not a corner toast. |
 | `§231 GH-5` | **L1**: paste `/api/v1/auth/social/callback?state=garbage&code=x` into the address bar | Lands on the sign-in page with the single SSO failure sentence — the same one a company-SSO failure renders, no cause named. |
+
+## §232 — the asymmetries (audit section B)
+
+**Ten rows, none run** (§65). Ids are `§232 SC-*`; `SC` is unused elsewhere in this file — grepped
+before minting (`§154`'s banner).
+
+Lanes: **A1** for the case and suite rows, **A2** for the plan ones, **A3** for the run rows,
+**A5** for the artifact upload, **A6** for the report format. `SC-1`…`SC-4` need a signed-in
+**Test Engineer**; the rest need a **Test Lead**.
+
+**What is hardest to drive here is B1, and it is worth reading before starting.** Its whole subject
+is a field the client *does not send*, and the SPA sends everything — so no click in this product
+exercises the change. `SC-1` therefore drives the API directly (curl or the CLI), and it is the one
+row in this file that does. Driving it through the editor proves nothing either way.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§232 SC-1` | **A1**, with a token: `GET` a case, then `PATCH` it with `{"title":"…","stepFormat":"STRUCTURED","priority":"HIGH","automationStatus":"MANUAL"}` and nothing else | **200**, and re-reading the case shows its objective, description, expected outcome, estimate and **steps unchanged**. Before B1 that body emptied four columns and deleted every step, answering 200 either way — which is why this row is an API drive and not a click. Then send `"objective": null` in the same shape: the objective clears and the description does not. |
+| `§232 SC-2` | **A1**, `PATCH` a case created from a title alone (a stub: no steps) with its own body, unchanged | **200.** Before B2 this was a 400 about steps nobody had written. Then send `"steps": []` to a case that *has* steps: still **400** on `steps` — the only body that was ever really a mistake. |
+| `§232 SC-3` | **A1**, `PATCH` a case echoing the `ownerId` the `GET` served | **200.** Then send a *different* `ownerId`: **400** naming the field. Both fields behave this way (`automationTags` too, in any order) — echoing what was read is not a write, and changing it is still refused because no path writes those columns. |
+| `§232 SC-4` | **A1**, the case grid: type a tag into **Tag**, press Enter, add a second | The helper text under the field reads **"All of these — a case must carry every one."** and the list gets shorter, not longer. Compare with the suite's Tag rules and the run's Tags, which say "any" and mean it — the three surfaces now state their own semantics. |
+| `§232 SC-5` | **A1**, select a suite whose conditions some case has declined, open **Rename/edit**, remove a condition chip | A **warning above Save** naming how many cases lose an opt-out, before the save. Cancel and nothing happens. The number comes from `declineCount`, which reached the wire with this slice — if it reads 0 where you know a case has declined, the count is being read from the wrong attachment id. |
+| `§232 SC-6` | **A1**, delete a suite that has added and tag-claimed members but nothing filed in it | The confirmation names what the suite resolves to and says the cases are not deleted, then the delete succeeds. Then try one with a **filed** case: refused, with the server's own sentence in place. The dialog deliberately does not print a "filed" count — the arms overlap, so it cannot be computed from what the read serves. |
+| `§232 SC-7` | **A2**, open a plan whose Test cases tab names an individual case, with more than 200 cases in the project | Every case chip shows its key and title, including one whose key sorts past the first 200. Before B8 that chip read "A case outside the loaded list". A chip that now reads "A case this project no longer lists" means the case was deleted, which is a different and true statement. |
+| `§232 SC-8` | **A2**, plan → Fields tab → **Exit criteria** → open the metric picker | Five metrics, three of them marked **"— not evaluated yet"**. All five stay selectable: a gate somebody has agreed to is worth recording. Save one of the marked ones and read the Progress tab: it shows as unevaluated rather than as passing. |
+| `§232 SC-9` | **A3**, open a run created from a suite or a tag | Under the pass-rate summary, a line naming **what it was created from** — arm counts, not case counts. A run created before this slice, or by an ingested report, shows **no such line at all** (not "no scope"). Then open **Clone**: a checkbox offering to *re-resolve the original scope*, unchecked. |
+| `§232 SC-10` | **A3**, tag one more case into that run's scope, then clone it twice — once plain, once with the checkbox | The plain copy has the **same** number of cases as the source; the re-scoped one has one more. Clone a run with no recorded scope with the checkbox forced (API): **400** on `rescope`, never a silent fall back to the ordinary clone. |
+
+**Not driveable from a browser and named so it is not read as an omission:** B4's whole subject.
+An `Idempotency-Key` replay needs the same key sent twice, which the SPA does by holding one key per
+mounted dialog — so reproducing it means killing the response mid-flight, not clicking twice. The
+backend queue's `§232 PB-*` rows are where that lives.

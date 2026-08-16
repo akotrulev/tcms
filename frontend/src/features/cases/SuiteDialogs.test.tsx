@@ -72,6 +72,7 @@ function attached(condition: Condition, id: string): CaseConditionRef {
     inline: false,
     inherited: false,
     inheritedFrom: null,
+    declineCount: 0,
   }
 }
 

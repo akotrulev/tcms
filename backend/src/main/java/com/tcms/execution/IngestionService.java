@@ -249,6 +249,13 @@ public class IngestionService {
         } catch (ReportXml.MalformedReportException malformed) {
             // A field error on `report`, not a 500 and not a 415: the caller sent a file this
             // server could not read, which is a payload they can fix.
+            //
+            // B6 — and it is RECORDED now, in its own transaction, before that answer is given.
+            // The 400 body used to be the entire record of a rejected report: it goes to a CI
+            // job's stdout, which rotates, and `GET …/ingestions` showed the successes and was
+            // silent about every rejection — so a pipeline posting malformed XML for a week looked
+            // exactly like a pipeline nobody had wired up.
+            recordFailure(userId, projectId, request, idempotencyKey, malformed.getMessage());
             return new Outcome.Invalid(Map.of("report", List.of(malformed.getMessage())));
         }
 
@@ -265,6 +272,69 @@ public class IngestionService {
         });
     }
 
+
+    /**
+     * Writes the FAILED row for a report this server could not read (B6).
+     *
+     * <h2>Its own transaction, after the parse and before the answer</h2>
+     *
+     * <p>The parse happens outside any transaction — see {@link #transactions} for why that is not
+     * negotiable — so the failure has nowhere to be written except a transaction of its own. That
+     * is also the correct shape rather than a concession: the row is not part of an ingestion, it
+     * is the record that one was refused, and it must survive whatever the caller does next.
+     *
+     * <h2>Gated, and silent when the gate refuses</h2>
+     *
+     * <p>Through {@code writeGranted} like the ingestion itself, so a caller who may not submit
+     * results cannot write rows into a project's history by posting rubbish at it. When the gate
+     * refuses, nothing is written and nothing is said <em>here</em> — the caller still receives the
+     * parse's 400, which is the answer they were always given for an unreadable payload and is one
+     * step earlier than the permission they lack. Reversing that order would make this endpoint
+     * disclose which projects exist to anyone who can post a malformed file.
+     *
+     * <h2>It consumes no key</h2>
+     *
+     * <p>{@code V60} narrowed the uniqueness to {@code COMPLETED} rows and
+     * {@link IngestionJobRepository#findCompletedByIdempotencyKey} is the replay lookup read back,
+     * so the corrected retry under the key CI generated once still ingests. Two failures under one
+     * key are two rows, deliberately: a build that posted rubbish three times failed three times.
+     */
+    private void recordFailure(
+            UUID userId,
+            UUID projectId,
+            IngestionRequest request,
+            String idempotencyKey,
+            String error) {
+
+        transactions.execute(status -> projects.writeGranted(userId, projectId, SUBMIT_RESULT,
+                project -> {
+                    UUID jobId = UUID.randomUUID();
+                    String rawStorageKey = BlobUpload.key(CompanyContext.require(), jobId);
+
+                    jobs.saveAndFlush(IngestionJob.failed(
+                            jobId,
+                            CompanyContext.require(),
+                            project.getId(),
+                            request.format(),
+                            idempotencyKey,
+                            rawStorageKey,
+                            error,
+                            clock.instant()));
+
+                    // The verbatim upload, kept for the reason a completed job keeps it and one
+                    // more: this is the file nobody could read, so it is the only thing that lets
+                    // whoever configured the pipeline see what their tool actually emitted — and
+                    // the CI log carrying the 400 will have rotated by the time they look.
+                    //
+                    // Row first, bytes second, as everywhere else in this module: a row whose blob
+                    // is missing downloads as a 404 and is findable; a blob no row names is
+                    // unreachable and uncollectable.
+                    rawReports.put(
+                            rawStorageKey, request.report().getBytes(StandardCharsets.UTF_8));
+                    return null;
+                }));
+    }
+
     private Outcome apply(
             UUID userId,
             UUID projectId,
@@ -278,7 +348,7 @@ public class IngestionService {
         // FIRST, and before anything is written — RunCreateService's rule, and the stakes are the
         // same one level up: a replay that fell through would post a second reading of one build
         // over a run's verdicts.
-        Optional<IngestionJob> already = jobs.findByIdempotencyKey(idempotencyKey);
+        Optional<IngestionJob> already = jobs.findCompletedByIdempotencyKey(idempotencyKey);
         if (already.isPresent()) {
             // The names are read back OUT of the stored payload rather than served as an empty
             // array. Until UnmatchedTests existed this answered `unmatchedCount: 12` beside

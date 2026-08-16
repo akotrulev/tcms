@@ -22,16 +22,23 @@ import org.hibernate.type.SqlTypes;
  *
  * <h2>The row is written ONCE, at the end, and is never updated</h2>
  *
- * <p>{@code status} has four values and this lane writes exactly one of them: {@code COMPLETED}.
- * That is a decision rather than an omission (slice plan decision F) and it follows from the
- * idempotency key. {@code uq_ingestion_idempotency} means the key is consumed by whichever attempt
- * writes a row — so a {@code FAILED} row for a malformed report would make the <em>corrected</em>
- * retry, under the same key the CI job generated once, replay the failure instead of ingesting.
- * A report that cannot be parsed therefore leaves no row at all, and the caller gets a field error.
+ * <p>{@code status} has four values and this lane writes ~~exactly one of them: {@code COMPLETED}~~
+ * → <strong>two of them since B6: {@code COMPLETED} and {@code FAILED}</strong>.
+ *
+ * <p>The old decision (slice plan decision F) followed from the idempotency key:
+ * {@code uq_ingestion_idempotency} meant the key was consumed by whichever attempt wrote a row, so
+ * a {@code FAILED} row for a malformed report would make the <em>corrected</em> retry — under the
+ * same key the CI job generated once — replay the failure instead of ingesting. It was right about
+ * the constraint and it cost the visibility: the 400 body was the entire record of a rejected
+ * report, and {@code GET …/ingestions} showed every success and no rejection at all.
+ *
+ * <p>{@code V60} narrowed the uniqueness to {@code COMPLETED} rows, which is what the constraint was
+ * always about, and both halves became available at once. A rejected report is recorded, carries its
+ * key, and consumes nothing. Two failures under one key are two rows deliberately: a build that
+ * posted rubbish three times failed three times.
  *
  * <p>{@code PENDING} and {@code PROCESSING} belong to an asynchronous lane that does not exist:
- * there, a row is written before the work and moved afterwards, and {@code FAILED} becomes reachable
- * because the key has already been consumed by the accepted request. The {@code CHECK} is left wide
+ * there, a row is written before the work and moved afterwards. The {@code CHECK} is left wide
  * for {@code LinkSourceType}'s reason (§93) — a constraint tightened and loosened again is one
  * nobody trusts.
  *
@@ -121,14 +128,22 @@ public class IngestionJob {
     private int unmatchedCount;
 
     /**
-     * Why a {@code FAILED} job failed — and <strong>nothing writes it</strong> (§156,
-     * {@code ArchitectureRulesTest.WRITERLESS_BY_DECISION}), because nothing writes {@code FAILED}.
+     * Why a {@code FAILED} job failed.
      *
-     * <p>That is the class header's decision rather than a gap, and it is the one member of this
-     * rule's population whose argument predates the rule by forty slices: a parse failure leaves no
-     * row at all, so there is no row for this column to explain. It becomes reachable with the
-     * asynchronous lane the header describes, at the same moment {@code PENDING} and
-     * {@code PROCESSING} do — which is why it is mapped now rather than added then.
+     * <p>~~<strong>Nothing writes it</strong> (§156, {@code WRITERLESS_BY_DECISION}), because
+     * nothing writes {@code FAILED}: a parse failure leaves no row at all, so there is no row for
+     * this column to explain.~~ → <strong>B6 writes both.</strong> The argument that entry recorded
+     * was about the <em>constraint</em> — a failed row would consume the idempotency key CI
+     * generated once, so the corrected retry would replay the failure — and {@code V60} moved the
+     * constraint: uniqueness is now on {@code COMPLETED} rows, so a failure is recorded and
+     * consumes nothing.
+     *
+     * <p>What it holds is the parser's own sentence, which is the same one the 400 carries. Written
+     * to be read by whoever configured the pipeline, in the history, long after the CI log that
+     * carried the response has rotated.
+     *
+     * <p>{@code PENDING} and {@code PROCESSING} are still unreachable and still belong to the
+     * asynchronous lane the header describes.
      */
     @Column(name = "error")
     private String error;
@@ -178,6 +193,52 @@ public class IngestionJob {
         job.status = IngestionStatus.COMPLETED;
         job.matchedCount = matchedCount;
         job.unmatchedCount = unmatchedCount;
+        job.createdAt = now;
+        return job;
+    }
+
+    /**
+     * A report this server could not read — B6, and the row that used to not exist.
+     *
+     * <p>It carries the key and consumes nothing: {@code V60} narrowed the uniqueness to
+     * {@code COMPLETED} rows, so the corrected retry under the key CI generated once still
+     * ingests. That trade — no row at all, so the retry stays usable — was the old behaviour's
+     * whole reason, and it is available without the cost as soon as the constraint is about the
+     * rows it is actually about.
+     *
+     * <p>{@code runId} is null and {@code matchedCount}/{@code unmatchedCount} are zero because
+     * <strong>nothing was matched</strong>: the parse failed before any test name existed, so
+     * there is no parsed payload either. The verbatim upload is still stored, for the reason a
+     * completed job stores it and one more — this is the file nobody could read, and the CI log
+     * carrying the 400 will have rotated by the time anybody looks.
+     *
+     * @param error the parser's sentence, which is the same one the 400 carries. Written to be read
+     *     by whoever configured the pipeline rather than by whoever wrote the parser.
+     */
+    static IngestionJob failed(
+            UUID id,
+            UUID companyId,
+            UUID projectId,
+            ReportFormat format,
+            String idempotencyKey,
+            String rawStorageKey,
+            String error,
+            Instant now) {
+
+        IngestionJob job = new IngestionJob();
+        job.id = id;
+        job.companyId = companyId;
+        job.projectId = projectId;
+        job.format = format;
+        job.idempotencyKey = idempotencyKey;
+        // `raw_payload` is the PARSED shape and there is none: the parse is what failed. The
+        // verbatim upload goes to the blob store under `rawStorageKey`, exactly as a completed
+        // job's does, which is where somebody debugging the pipeline has to look anyway.
+        job.rawStorageKey = rawStorageKey;
+        job.status = IngestionStatus.FAILED;
+        job.matchedCount = 0;
+        job.unmatchedCount = 0;
+        job.error = error;
         job.createdAt = now;
         return job;
     }

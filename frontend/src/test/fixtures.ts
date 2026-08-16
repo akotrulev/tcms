@@ -226,6 +226,9 @@ export function aRun(overrides: Partial<TestRun> = {}): TestRun {
     startedAt: null,
     completedAt: null,
     counts: noCounts(),
+    // B7 — null is "no request recorded", which is what a run created before `V61` or by an
+    // ingested report carries. A test about the provenance line passes its own.
+    scopeRequest: null,
     ...overrides,
   }
 }

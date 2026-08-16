@@ -2,18 +2,21 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
+  FormControlLabel,
   MenuItem,
   Stack,
   TextField,
+  Typography,
 } from '@mui/material';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
 import { useCloneRun, useConfigurations, useProjectMembers } from '../../api/queries';
@@ -80,6 +83,8 @@ const CloneSchema = z.object({
   // had controls — the source's configuration, and nobody assigned.
   configurationId: z.string(),
   assigneeId: z.string(),
+  /** B7 — re-resolve the source's arms rather than re-run its case list. Off by default. */
+  rescope: z.boolean(),
 });
 
 type CloneFormInput = z.infer<typeof CloneSchema>;
@@ -128,6 +133,24 @@ function applyServerError(
   setError('root', describeError(error).body);
 }
 
+/**
+ * The source's recorded request, in words (B7).
+ *
+ * Arm counts and never a case count: the request named suites and tags, and how many cases those
+ * resolve to today is precisely what the re-ask is for. A plan-scoped run says so by name, because
+ * "the plan" is what its author asked for.
+ */
+function describeScopeRequest(scope: TestRun['scopeRequest']): string {
+  if (!scope) return 'the original scope';
+  const arms: string[] = [];
+  if (scope.planId) arms.push("the plan's scope");
+  if (scope.suiteIds.length > 0) {
+    arms.push(`${scope.suiteIds.length} ${scope.suiteIds.length === 1 ? 'suite' : 'suites'}`);
+  }
+  if (scope.tags.length > 0) arms.push(`tags ${scope.tags.join(', ')}`);
+  return arms.length > 0 ? arms.join(' and ') : 'the original scope';
+}
+
 export function RunCloneDialog({
   projectId,
   run,
@@ -145,11 +168,27 @@ export function RunCloneDialog({
   onCloned: (created: TestRun) => void;
 }) {
   const clone = useCloneRun(projectId, run.id);
+
+  /*
+    Whether the source has a request to re-ask (B7). A run created before `V61` or opened by an
+    ingested report has none — the server refuses the flag by name there, and a control whose only
+    outcome is a field error is worse than no control.
+
+    A recorded request whose only arm is a bare case list re-resolves to that same list, so the
+    checkbox is withheld there too: it would be an option that changes nothing, which is the other
+    way to teach somebody to distrust a form.
+  */
+  const rescopable =
+    !!run.scopeRequest
+    && (run.scopeRequest.suiteIds.length > 0
+      || run.scopeRequest.tags.length > 0
+      || run.scopeRequest.planId !== null);
   const configurations = useConfigurations(projectId, open);
   const members = useProjectMembers(projectId, open);
 
   const {
     register,
+    control,
     handleSubmit,
     setError,
     setFocus,
@@ -162,6 +201,7 @@ export function RunCloneDialog({
       buildNumber: '',
       configurationId: '',
       assigneeId: '',
+      rescope: false,
     },
     mode: 'onBlur',
   });
@@ -196,6 +236,9 @@ export function RunCloneDialog({
         // Absent unless the override was taken, or every cloned run in the product claims an
         // override nobody made.
         ...(overrideApprovalGate ? { overrideApprovalGate: true } : {}),
+        // Absent unless asked for, like every other override here: `false` on the wire would be a
+        // client stating a default it does not own.
+        ...(values.rescope ? { rescope: true } : {}),
       });
       onCloned(created);
       onClose();
@@ -359,11 +402,12 @@ export function RunCloneDialog({
 
             {/*
               The frozen-scope sentence. A reader expects "the same suites" and gets "the same
-              cases": a run stores no scope — §99's arms are resolved once, at creation, into
-              executions — so a clone carries the case set as it was resolved then, and cases added
-              to those suites since are NOT picked up. That is the clone-versus-template
-              distinction, decided here by the schema rather than by the design, and it is the one
-              thing on this screen somebody will otherwise learn from a short checklist.
+              cases": ~~a run stores no scope~~ → since B7 it stores the REQUEST, and the
+              executions are still the checklist — §99's arms are resolved once, at creation, and
+              nothing re-resolves them. So the default clone carries the case set as it was
+              resolved then, and cases added to those suites since are not picked up. That is the
+              clone-versus-template distinction, and it is the one thing on this screen somebody
+              would otherwise learn from a short checklist.
             */}
             <DialogContentText variant="caption">
               The copy covers the same {formatCount(caseCount)} cases as this run, every one
@@ -371,6 +415,49 @@ export function RunCloneDialog({
               <Identifier variant="muted">{run.key}</Identifier>. Cases added to those folders since
               this run started are not picked up — a run records the checklist it was given.
             </DialogContentText>
+
+            {/*
+              B7 — the other intention, offered where the sentence above states its absence.
+
+              "Run the smoke suite again" and "re-run Friday's pass" are different requests, and
+              until the arms were recorded only the second was expressible: the first meant leaving
+              this dialog and building a run by hand, losing the link to the source. The checkbox is
+              off by default because the default is the one that cannot surprise anybody — a set
+              that quietly grew would make two runs with one name cover different work.
+
+              Rendered only when the source HAS a recorded request. A run created before `V61`, or
+              by an ingested report, has none and the server refuses the flag by name; offering a
+              control whose only outcome is a field error is worse than not offering it.
+            */}
+            {rescopable && (
+              <Controller
+                control={control}
+                name="rescope"
+                render={({ field }) => (
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={field.value}
+                        onChange={(event) => field.onChange(event.target.checked)}
+                        data-testid={`${TestId}.Rescope`}
+                      />
+                    }
+                    label={
+                      <Stack sx={{ gap: 0.25 }}>
+                        <Typography variant="body2">
+                          Re-resolve the original scope instead
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                          Runs {describeScopeRequest(run.scopeRequest)} again as they stand now, so
+                          cases added since are included. The copy may be longer or shorter than
+                          this run.
+                        </Typography>
+                      </Stack>
+                    }
+                  />
+                )}
+              />
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>

@@ -47,7 +47,22 @@ public record CaseConditionRefView(
         List<String> body,
         boolean inline,
         boolean inherited,
-        String inheritedFrom) {
+        String inheritedFrom,
+        /**
+         * Always <strong>zero</strong> here, and the field exists because the contract's
+         * {@code CaseConditionRef} carries it (B10).
+         *
+         * <p>It is a property of a SUITE's attachment — how many cases have declined it — and this
+         * record serves a case's view, where the question does not arise: a case's own condition
+         * cannot be declined (it would be removed instead), and an inherited row rendered here is
+         * one this case has or has not declined, which the panel already shows as a switch. The
+         * count that matters before a detach is on the suite's copy, which
+         * {@code SuiteConditionView} serves.
+         *
+         * <p>Zero rather than absent because the schema declares the property required, and a
+         * client should not have to tell "this server did not send it" from "nobody declines it".
+         */
+        long declineCount) {
 
     /** An entry the case itself attached. */
     static CaseConditionRefView own(CaseCondition attachment, Condition condition) {
@@ -59,7 +74,8 @@ public record CaseConditionRefView(
                 condition.getBody(),
                 false,
                 false,
-                null);
+                null,
+                0L);
     }
 
     /** An entry inherited from {@code suiteName}, at or above the case's own folder. */
@@ -74,6 +90,7 @@ public record CaseConditionRefView(
                 condition.getBody(),
                 false,
                 true,
-                suiteName);
+                suiteName,
+                0L);
     }
 }

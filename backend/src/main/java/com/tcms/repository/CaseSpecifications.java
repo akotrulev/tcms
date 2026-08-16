@@ -79,6 +79,12 @@ final class CaseSpecifications {
 
         all.add(suiteScope(scope, root, cb));
 
+        // B8 — the by-ids read, and it is a FILTER like any other rather than a mode. Placed
+        // after the two bounds above and before everything else so the reading is unambiguous:
+        // naming ids narrows what the other filters then narrow again, and an id from another
+        // project is excluded by the project bound rather than by anything here.
+        ids(request, root).ifPresent(all::add);
+
         tags(request, root, query, cb).ifPresent(all::add);
 
         keyOrText(request, root, cb).ifPresent(all::add);
@@ -97,6 +103,21 @@ final class CaseSpecifications {
         release(request, cb).ifPresent(all::add);
 
         return cb.and(all.toArray(Predicate[]::new));
+    }
+
+
+    /**
+     * {@code id IN (…)} when the caller named any (B8).
+     *
+     * <p>Empty is <strong>no predicate</strong> and never {@code IN ()} — which is a syntax error
+     * in SQL and, worse, would be an empty-set filter if it were expressible: every request without
+     * the parameter would answer nothing. {@link CaseQuery} has already de-duplicated and capped
+     * the list, so this only has to decide between a predicate and none.
+     */
+    private static Optional<Predicate> ids(CaseQuery request, Root<TestCase> root) {
+        return request.ids().isEmpty()
+                ? Optional.empty()
+                : Optional.of(root.get("id").in(request.ids()));
     }
 
     /**
