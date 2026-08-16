@@ -152,6 +152,10 @@ class ArtifactCirculationTest {
                     null,
                     "https://docs.example.test/strategy",
                     null,
+                    null,
+                    // Not a sign-off: this file drives circulation, and a write-once row would
+                    // refuse the acts it is here to observe.
+                    false,
                     ACTOR,
                     // No key: this fixture is a row, not a request. `V59`'s column is null for
                     // every artifact registered by a caller that sent no header, which is what a

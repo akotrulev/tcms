@@ -52,6 +52,7 @@ const registered = {
   docPageId: null,
   filename: null,
   sizeBytes: null,
+  writeOnce: false,
   updatedBy: { id: 'u1', displayName: 'L. Lead', email: 'l@x.test', avatarUrl: null },
   updatedAt: '2026-08-02T00:00:00Z',
 }
@@ -251,6 +252,108 @@ describe('RegisterArtifactDialog', () => {
     expect(post).not.toHaveBeenCalled()
   })
 
+  /*
+    C7 — the sign-off toggle, `artifact.write_once`'s first writer.
+
+    The column has been enforced by the delete since §126 and by the edit since §229 against a
+    value only psql could produce. What is asserted here is the half that is invisible to the
+    build: the checkbox reaches the payload as a boolean, and its absence is `false` rather than
+    `undefined` — the server reads an absent scalar as a clear (§68), so an undefined here would be
+    the same request and a client that later learned to send `null` would not be.
+  */
+  describe('the sign-off toggle', () => {
+    it('sends writeOnce when it is ticked', async () => {
+      const post = vi.spyOn(api, 'post').mockResolvedValue(registered as never)
+      renderDialog()
+
+      await userEvent.type(screen.getByTestId('Artifacts.Dialog.TitleField'), 'March sign-off')
+      await userEvent.type(screen.getByTestId('Artifacts.Dialog.Url'), 'https://sign.example.test/m')
+      await userEvent.click(screen.getByTestId('Artifacts.Dialog.WriteOnce'))
+      await userEvent.click(screen.getByTestId('Artifacts.Dialog.Submit'))
+
+      await waitFor(() => expect(post).toHaveBeenCalled())
+      expect(post.mock.calls[0][1]).toMatchObject({ writeOnce: true })
+    })
+
+    it('sends false when it is not, and says what the choice costs before it is made', async () => {
+      const post = vi.spyOn(api, 'post').mockResolvedValue(registered as never)
+      renderDialog()
+
+      // The flag cannot be set later and cannot be taken back, so a control that explained itself
+      // afterwards would be explaining an act nobody can undo.
+      expect(screen.getByText(/cannot be changed later/i)).toBeInTheDocument()
+
+      await userEvent.type(screen.getByTestId('Artifacts.Dialog.TitleField'), 'Environment guide')
+      await userEvent.type(screen.getByTestId('Artifacts.Dialog.Url'), 'https://env.example.test/g')
+      await userEvent.click(screen.getByTestId('Artifacts.Dialog.Submit'))
+
+      await waitFor(() => expect(post).toHaveBeenCalled())
+      expect(post.mock.calls[0][1]).toMatchObject({ writeOnce: false })
+    })
+  })
+
+  /*
+    C6 — the same dialog, pinning a report.
+
+    Reuse rather than a second form is `ArtifactDialogs`' own rule (its header refuses a separate
+    Upload dialog for the list of concerns both would share). What these lock is the part reuse can
+    get wrong: the kind must be fixed rather than merely defaulted, and the job id must reach the
+    payload from the PROP — a form field would be one more thing that can be edited into
+    disagreeing with the report the user pressed Save on.
+  */
+  describe('pinning a report', () => {
+    function renderPinning() {
+      return render(
+        <TestProviders client={createTestQueryClient()}>
+          <RegisterArtifactDialog
+            open
+            onClose={onClose}
+            projectId="p1"
+            plans={plans}
+            pages={pages}
+            pinnedReport={{ jobId: 'job-9', defaultTitle: 'Release 1 — run summary' }}
+            onRegistered={onRegistered}
+          />
+        </TestProviders>,
+      )
+    }
+
+    it('sends GENERATED_REPORT and the job, with no payload of any other kind', async () => {
+      const post = vi.spyOn(api, 'post').mockResolvedValue(registered as never)
+      renderPinning()
+
+      await userEvent.click(screen.getByTestId('Artifacts.Dialog.Submit'))
+
+      await waitFor(() => expect(post).toHaveBeenCalled())
+      expect(post.mock.calls[0][1]).toMatchObject({
+        kind: 'GENERATED_REPORT',
+        reportJobId: 'job-9',
+        // The server refuses these on this kind rather than ignoring them, so sending a leftover
+        // is a 400 about a control the user never saw.
+        docPageId: null,
+        url: null,
+      })
+    })
+
+    it('opens with the report’s own title, so nobody retypes what is on the screen behind it', async () => {
+      renderPinning()
+
+      expect(screen.getByTestId('Artifacts.Dialog.TitleField')).toHaveValue(
+        'Release 1 — run summary',
+      )
+    })
+
+    it('offers no kind picker — pressing Save on a report is the choice', async () => {
+      renderPinning()
+
+      // Every other option would invalidate the payload, so a picker here could only be used
+      // wrongly. Queried by testid deliberately: the assertion is that the control is absent, not
+      // that it is disabled, and §62's option-vs-testid caveat is about the opposite case.
+      expect(screen.queryByTestId('Artifacts.Dialog.Kind')).not.toBeInTheDocument()
+      expect(screen.getByTestId('Artifacts.Dialog.PinnedReport')).toBeInTheDocument()
+    })
+  })
+
   it('sends a docPageId and no url when the artifact is a documentation reference', async () => {
     const post = vi.spyOn(api, 'post').mockResolvedValue(registered as never)
     renderDialog()
@@ -314,6 +417,9 @@ describe('RegisterArtifactDialog', () => {
       expect(JSON.parse(await artifact.text())).toEqual({
         scope: 'PLAN',
         planId: 'plan-1',
+        // C7: the upload path takes the sign-off flag too — a countersigned PDF is bytes, not a
+        // link, so this is the create it most often arrives on.
+        writeOnce: false,
         category: 'Strategy',
         title: 'Release sign-off',
         description: null,

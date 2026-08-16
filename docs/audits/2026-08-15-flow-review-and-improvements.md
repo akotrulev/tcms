@@ -25,11 +25,17 @@ below is B, C, D or E, none of it started; `E2` and `C10` are the cheapest next 
 work in this run as their prerequisite. → **2026-08-16, later the same day: all eleven C decisions
 are made** (recorded in the C table's new Decision column) — every one is *finish*, none is *retire*
 except C4, and none is deferred. ~~Implementation of C has not started; the sequencing is §3.6.~~ →
-**C implementation started 2026-08-16, in the §3.6 order. Slice 1 (C11 + C8, with C6's
-`ArtifactKind.java` prose rider) is done — §233.** The extended rule found nine stale qualifier
+**C implementation started 2026-08-16, in the §3.6 order. Two of the seven slices are done:
+slice 1 (C11 + C8, with C6's `ArtifactKind.java` prose rider) as §233, and slice 2
+(C6 + C7 + C10, the artifact slice) as §234.** Slice 1's extended rule found nine stale qualifier
 claims (the audit's four minus the two A6 had already fixed, plus seven it never listed), and C8's
 annotation records the half the service headers denied: since `V16` Automation Service holds
-`project:read`, so its `—` cells for the two read keys are unenforced.
+`project:read`, so its `—` cells for the two read keys are unenforced. Slice 2 closed the last two
+writerless columns on `artifact` and gave the register an MCP surface.
+
+**Five of the eleven C items are done. What remains, in order: C3 (docs search), C5 + C9 (the
+run-detail pair), C2 (quarantine consumers), C1 (suite version advancement), C4 (retire the
+shared-step library).** None is started.
 
 Status marks used in the tables: **✅ DONE** · **🔨 IN PROGRESS** · **⬜ NOT STARTED** ·
 **⛔ OUT OF SCOPE** (this session).
@@ -44,6 +50,7 @@ Status marks used in the tables: **✅ DONE** · **🔨 IN PROGRESS** · **⬜ N
 | A6 | ✅ DONE | §229 phase 2 | `PATCH /projects/{projectId}/artifacts/{artifactId}` (`ArtifactWriteService.edit`, `artifact:edit` scope-qualified against the **row's** scope, `write_once` refused with 409) + **Correct…** and **Remove…** on the register's row menu, the second behind a confirmation that names what a `FILE`'s removal costs. Three editable fields — scope, kind and every payload column are `updatable = false`, so *"this points at the wrong thing"* stays **supersede**. **A `SUPERSEDED` row is editable and the status endpoint still refuses it**: a status is a fact about another row and a title is not. The kebab no longer shuts on a superseded row, which is what put the new edit path within reach of every row anybody had ever replaced. `DELETE` shipped in §126 with both its 409 guards and had **no caller at all** until now. |
 | A7 | ✅ DONE | §227 phase 2 | `SuitePanel` — above the case grid whenever a suite is selected — carrying the suite's key, name, lifecycle chip, membership count, an execution-history link, and **`ReviewPanel` for `SUITE`**, which had never been mounted anywhere. **A rail-side panel rather than a suite detail page**, of the audit's two options: a suite is flat since §98 and every write it has hangs off the rail, so a page of its own would be a header plus this panel reached by navigating away from the list you pick the suite in. Not *in* the rail either — 260px renders assignees, verdicts and a comment thread as a stack of ellipses. |
 | A8 | ✅ DONE | §230 | `?linkCase=<caseId>` carried from the case's Traceability panel into the documentation space, where a banner names it and every block's dialog opens with it **already chosen**. **`frontend/` alone — no endpoint, no payload, no permission, `openapi.yaml` untouched**, which is the finding: every piece of the journey existed and nothing joined them. The new button asks **`doc:edit`** (the destination's key, not the panel's own `case:edit` one line away), and the three navigations on the destination screen that dropped the query string — the no-page-id redirect, the page tree, the page-missing redirect — all carry it now. The first of those killed the intent *on arrival*, in the one route the feature is entered by. |
+| C6 + C7 + C10 | ✅ DONE | §234 | The artifact slice, in the §3.6 order. **C7** gave `artifact.write_once` its first writer — a sign-off toggle on both creates, `updatable = false` so it is decided at registration and never after, and **on the wire**, so the register greys Correct… and Remove… instead of answering a `409` the client could not predict. Both pre-existing write-once tests dropped their SQL fixtures. **C6** made `GENERATED_REPORT` registrable: the request names the **job** and the row stores the **artifact**, because `report_artifact` has no `project_id` and only the job can be proved to belong to the path's project (`ReportFacts`, the `PlanFacts` pattern). "Save to register" on `ReportViewPage` reuses the register's own dialog rather than carrying a second form. **C10** put the register on the MCP surface — `tcms_list_artifacts` + `tcms_write_artifact` (register/edit/status/delete, the delete behind §210's consent prompt), 21 tools → 23. Two findings the plan did not contain: `PATCH …/artifacts/{artifactId}` **declares no `If-Match`** and cannot simply gain one (`Artifact` carries no `lockVersion` on the wire), recorded as a decision with its cost; and the two new tools pushed the MCP capability summary past the host's 2KB ceiling, **silently dropping the section that tells a user which permission to ask for** — it degrades to the keys alone now, with a test. |
 | C11 + C8 | ✅ DONE | §233 | C11: the tier-claims rule extended to qualifier claims, checked against the spec's matrix cells; ran red on **nine** live sites (this audit listed four, two already fixed by A6, seven unlisted) — all corrected, `schema` copies regenerated for the one that was a contract description. C8: both keys annotated *checked-by-project-read* in the roles spec, **including the `V16` divergence** (AS holds `project:read`, so its `—` for `doc:read`/`artifact:read` is unenforced); both service headers corrected. C6's `ArtifactKind.java` stale-prose fix rode along; C6 itself (save-to-register) is still open. |
 | B1–B11 | ✅ DONE | §232 phases 1–4 | Every asymmetry. Four phases: **p1** the case `PATCH` (partial at last), the round trip, the tag-semantics label and the report-format capability read; **p2** the idempotency gaps and the plan create; **p3** the by-ids case read, the destructive-suite preview and the criterion-metric marking; **p4** ingestion failures and the run's recorded scope. Three migrations — `V59` (artifact + shared-step keys), `V60` (ingestion uniqueness narrowed to `COMPLETED`), `V61` (`test_run.scope_request`). See `docs/handoff/232-*.md` for what each row's proposal became, and why three of them were built differently from the way the row worded them. |
 | E2 | ⛔ OUT OF SCOPE | — | `Idempotency-Key` on `POST /reports/generate`. Pairs naturally with A3 and was deliberately **not** taken: it is a P2, the authorised scope was A1–A8 and then B, and it is a contract change to a write. **B4 touched the same family and left this one alone on purpose**: a duplicated report is two files, where a duplicated register row is a document nobody can tell from a deliberate second one and a duplicated upload is a second copy of the bytes. Cheapest remaining reports work. |
@@ -181,8 +188,9 @@ where the row's own proposal was not what was built — three of them were, and 
 ### C. Finish or retire the inert machinery (P3 — each is a decision, not a task)
 
 **All eleven decided 2026-08-16** (user, prompted per item). The **Decision** column is the outcome;
-~~nothing in this section is implemented yet~~ → **implementation runs in the §3.6 order; C11 and
-C8 are done (§233), with C6's stale-prose half** — each remaining decision becomes a slice.
+~~nothing in this section is implemented yet~~ → **implementation runs in the §3.6 order. Done:
+C11 + C8 (§233), then C6 + C7 + C10 (§234) — five of the eleven.** Each remaining decision (C1,
+C2, C3, C4, C5, C9) becomes a slice.
 
 | # | Decision (2026-08-16) | Decision to make | Evidence |
 |---|---|---|---|
@@ -191,12 +199,12 @@ C8 are done (§233), with C6's stale-prose half** — each remaining decision be
 | C3 | **Ship docs search**: a search endpoint over the existing tsvector + a search box in the documentation space. Wider (cases/plans) search is not part of this decision. | **Search.** `doc_page.search_vector` (and `V2`'s triggers) are maintained, GIN-indexed, and no endpoint queries them — while `PlanDocumentPanel` justifies its design on pages being "found by everybody who searches documentation". A docs search endpoint is the cheapest visible win from machinery already paid for. | Doc trace friction 8 |
 | C4 | **Retire it**: migrate `sharedStepId` refs to copied text, remove the picker and library UI; the suggestion corpus stays as the authoring aid. | **Shared-step library.** §94 declared it vestigial next to the suggestion corpus, and the picker's insert writes the entry's *title* as the action while the body lives elsewhere. Either retire it (migrate `sharedStepId` refs to copied text) or make it real (picker inserts the body; suggestions offer "promote to library"). Half-alive is the one wrong state. | §94; `SharedStepPicker.tsx` |
 | C5 | **Ship the minimal external-link write** (same shape as case external links); M4's tracker integration stays future. | **Defects pre-M4.** `DefectLink` renders on run detail, `defect:create` is seeded, `defect_link` is in the ERD — and no endpoint writes one. Either hide the read-only column until M4 or ship the minimal external-link write (the key and table already exist; it is the same shape as case external links). | Execution trace friction 7 |
-| C6 | **Ship it, and fix the stale prose with it**: "Save to register" on `ReportViewPage` creating a `GENERATED_REPORT` artifact, plus correcting `ArtifactKind.java`'s claim that the reporting module does not exist (overlaps C11). | **`GENERATED_REPORT` artifacts.** The reporting module now exists and `artifact.report_artifact_id` is waiting — "save this report to the register" from `ReportViewPage` would close the loop between two shipped features (and give reports a durable home, reinforcing A3). | `ArtifactKind.java` prose is stale on this |
-| C7 | **Expose it on registration**: a write-once (sign-off) toggle on artifact registration, one field through contract, form and service. | **`write_once` has no writer.** The delete guard honours it; nothing sets it. Expose it on sign-off-kind registrations or drop the column. | Doc trace friction 16 |
-| C8 | **Annotate in the roles spec**: an explicit "checked-by-project-read" annotation on both keys; docs-only, no behaviour change. | **Dead permission keys.** `doc:read` and `artifact:read` have no evaluation site (both services gate on project read, with recorded rationale). Fine — but they sit in the catalogue, the matrix, and every copy-checking test as keys that can never 403. Worth an explicit "checked-by-project-read" annotation in the roles spec so the next matrix sweep doesn't re-litigate them. | `DocPageService.java:19`, `ArtifactService.java:29` |
+| C6 | ✅ §234 — **Ship it, and fix the stale prose with it**: "Save to register" on `ReportViewPage` creating a `GENERATED_REPORT` artifact, plus correcting `ArtifactKind.java`'s claim that the reporting module does not exist (overlaps C11). | **`GENERATED_REPORT` artifacts.** The reporting module now exists and `artifact.report_artifact_id` is waiting — "save this report to the register" from `ReportViewPage` would close the loop between two shipped features (and give reports a durable home, reinforcing A3). | `ArtifactKind.java` prose is stale on this |
+| C7 | ✅ §234 — **Expose it on registration**: a write-once (sign-off) toggle on artifact registration, one field through contract, form and service. | **`write_once` has no writer.** The delete guard honours it; nothing sets it. Expose it on sign-off-kind registrations or drop the column. | Doc trace friction 16 |
+| C8 | ✅ §233 — **Annotate in the roles spec**: an explicit "checked-by-project-read" annotation on both keys; docs-only, no behaviour change. | **Dead permission keys.** `doc:read` and `artifact:read` have no evaluation site (both services gate on project read, with recorded rationale). Fine — but they sit in the catalogue, the matrix, and every copy-checking test as keys that can never 403. Worth an explicit "checked-by-project-read" annotation in the roles spec so the next matrix sweep doesn't re-litigate them. | `DocPageService.java:19`, `ArtifactService.java:29` |
 | C9 | **Wire the runner**: each step row gets an attach-evidence affordance that passes `stepId`; frontend-only. | **Step-level evidence.** The API takes `stepId`, the hook forwards it, `EvidencePanel` never passes one. Either wire the runner's step rows to it or note it as UI-deferred in the verification queue. | Execution trace friction 8 |
-| C10 | **Full MCP surface, delete included**: read plus register/edit arms, and delete behind the §210 consent prompt like the other three delete arms. Supersedes `writes.ts`'s "no artifact tools by decision" — strike it through there, don't delete it. | **MCP artifact tools.** The register has no MCP surface at all (self-documented in `writes.ts` §211 as waiting for the register to get a surface). A6 (edit+delete UI) is the prerequisite; after it, a read tool at minimum makes the register visible to the agent lane. | `packages/mcp/src/writes.ts` header |
-| C11 | **Hand-fix AND extend the rule**: fix the four sites, and extend the §212 tier-claims test to qualifier claims (`PLAN_SCOPE`/`OWN`/plan-scope-only wording) so the next V52-style migration cannot leave the same trail. | **Stale prose sweep.** `useCan.ts:47`, `ArtifactDialogs.tsx:190,262`, `ArtifactTable.tsx:227` still assert the pre-`V52` `PLAN_SCOPE` grant as current; `ArtifactKind.java` says the reporting module "does not exist". The tier-claims rule (§212) catches key-naming claims — these escape it because they name a *qualifier*, not a tier. Hand-fix, or extend the rule to qualifier claims. | Doc trace frictions 6, 13 |
+| C10 | ✅ §234 — **Full MCP surface, delete included**: read plus register/edit arms, and delete behind the §210 consent prompt like the other three delete arms. Supersedes `writes.ts`'s "no artifact tools by decision" — strike it through there, don't delete it. | **MCP artifact tools.** The register has no MCP surface at all (self-documented in `writes.ts` §211 as waiting for the register to get a surface). A6 (edit+delete UI) is the prerequisite; after it, a read tool at minimum makes the register visible to the agent lane. | `packages/mcp/src/writes.ts` header |
+| C11 | ✅ §233 — **Hand-fix AND extend the rule**: fix the four sites, and extend the §212 tier-claims test to qualifier claims (`PLAN_SCOPE`/`OWN`/plan-scope-only wording) so the next V52-style migration cannot leave the same trail. | **Stale prose sweep.** `useCan.ts:47`, `ArtifactDialogs.tsx:190,262`, `ArtifactTable.tsx:227` still assert the pre-`V52` `PLAN_SCOPE` grant as current; `ArtifactKind.java` says the reporting module "does not exist". The tier-claims rule (§212) catches key-naming claims — these escape it because they name a *qualifier*, not a tier. Hand-fix, or extend the rule to qualifier claims. | Doc trace frictions 6, 13 |
 
 ### D. Data-loss guards (P2, small)
 
@@ -227,19 +235,20 @@ C8 are done (§233), with C6's stale-prose half** — each remaining decision be
    regenerations and the §197/§203 harnesses will police it.
 5. **C-items** — one decision session over the finish-or-retire list; several (C3, C6, C9) are
    small once decided. → **done 2026-08-16; see the Decision column.**
-6. **C implementation order (proposed 2026-08-16, decisions in hand):**
-   1. **C11 + C8** — the prose/spec hygiene pair: hand-fix the four stale sites, extend the
+6. **C implementation order (proposed 2026-08-16, decisions in hand). Slices 1 and 2 are done;
+   the numbering is the running order and is not renumbered as slices land:**
+   1. ✅ **C11 + C8** (§233) — the prose/spec hygiene pair: hand-fix the four stale sites, extend the
       tier-claims rule to qualifier claims, annotate the two dead keys. No behaviour change,
       and C6's `ArtifactKind.java` fix rides with it.
-   2. **C6 + C7 + C10** — one artifact slice: save-report-to-register, the write-once toggle,
+   2. ✅ **C6 + C7 + C10** (§234) — one artifact slice: save-report-to-register, the write-once toggle,
       then the full MCP artifact surface (which wants both shipped first so the tools cover the
       whole register).
-   3. **C3** — docs search (endpoint + search box), self-contained.
-   4. **C5 + C9** — the run-detail pair: minimal defect-link write, step-level evidence in the
+   3. ⬜ **C3** — docs search (endpoint + search box), self-contained. **Next.**
+   4. ⬜ **C5 + C9** — the run-detail pair: minimal defect-link write, step-level evidence in the
       runner.
-   5. **C2** — quarantine consumers (denominator exclusion is a semantics change to reports;
+   5. ⬜ **C2** — quarantine consumers (denominator exclusion is a semantics change to reports;
       keep it its own slice).
-   6. **C1** — suite version advancement (touches the review-pinning seam; last because it is
+   6. ⬜ **C1** — suite version advancement (touches the review-pinning seam; last because it is
       the one most likely to grow).
-   7. **C4** — retire the shared-step library (migration + UI removal; independent, can land
+   7. ⬜ **C4** — retire the shared-step library (migration + UI removal; independent, can land
       anywhere after 1).

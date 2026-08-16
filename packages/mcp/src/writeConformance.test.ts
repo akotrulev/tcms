@@ -39,6 +39,7 @@ import { describe, expect, it } from 'vitest';
 
 import { contractPathOfRequest, declaredHeadersOf } from '../../client/src/test/contractBodies.js';
 import {
+  artifact,
   bulkResult,
   caseDetail,
   casePage,
@@ -74,13 +75,24 @@ const IMPLIED: Record<string, readonly string[]> = {
 const WATCHED = ['idempotency-key', 'if-match'] as const;
 
 /**
- * Create arms whose endpoint offers no `Idempotency-Key`, with what that costs.
+ * Arms whose endpoint does not offer the header their kind implies, with what that costs.
  *
- * Empty is the target and one member is the measurement. Of the eleven operations in the contract
- * that declare the parameter, seven are reached from this registry; the eighth create arm reaches one
- * that does not, and until §205 it sent the header anyway under a comment claiming the protection.
+ * ~~Create arms whose endpoint offers no `Idempotency-Key`~~ — the map was named for its only
+ * member and audit C10 gave it a second of a different shape, so the name is now narrower than
+ * the population. Left as it is rather than renamed: it is quoted by name in the failure message
+ * above and in `writes.ts`, and a rename is a diff across three files that says nothing new.
+ *
+ * Empty is the target and two members are the measurement.
  */
 const CREATE_WITHOUT_A_KEY: Record<string, string> = {
+  'tcms_write_artifact.edit':
+    'PATCH …/artifacts/{artifactId} declares no If-Match, so two callers correcting one register '
+    + 'row race and the later write wins silently. It cannot simply be added: the endpoint would '
+    + 'need a version to compare, and `Artifact` does not carry `lockVersion` on the wire at all — '
+    + 'the column exists and is deliberately unserved (§229). So closing this is a contract change '
+    + 'on both the response and the request, not a header here. What it costs is bounded by what '
+    + 'the edit can reach: three metadata fields, no payload and no scope, on a row whose real '
+    + 'corrections go through supersede.',
   'tcms_report.generate':
     'POST …/reports/generate declares no Idempotency-Key and ReportController takes no such header, '
     + 'so a retried 202 queues a second job. The arm sends none rather than one that does nothing; '
@@ -194,6 +206,11 @@ const PLANS = { 'GET /plans': { status: 200, body: [PLAN] } } as const;
 
 const RUN = runFixture({ key: 'TR-1' });
 const RUNS = { 'GET /runs': { status: 200, body: [RUN] } } as const;
+
+const ARTIFACT = artifact();
+// The edit arm reads the register to compose the whole-set body — `ArtifactEditInput` requires
+// title and category, so an edit naming only one of them would clear the other.
+const ARTIFACTS = { 'GET /artifacts': { status: 200, body: [ARTIFACT] } } as const;
 
 const REVIEW = review({ id: 'rv-1', state: 'IN_REVIEW' });
 const REVIEWS = { 'GET /reviews': { status: 200, body: [REVIEW] } } as const;
@@ -427,5 +444,32 @@ const INVOCATIONS: Record<string, Invocation> = {
     input: { action: 'generate', type: 'run_summary', format: 'HTML' },
     path: '/reports/generate',
     routes: { 'POST /reports/generate': { status: 202, body: REPORT_JOB } },
+  },
+  'tcms_write_artifact.register': {
+    tool: 'tcms_write_artifact',
+    input: { action: 'register', title: 'Test strategy', category: 'Strategy', url: 'https://x.test/s' },
+    path: '/artifacts',
+    routes: { 'POST /artifacts': { status: 201, body: ARTIFACT } },
+  },
+  'tcms_write_artifact.edit': {
+    tool: 'tcms_write_artifact',
+    input: { action: 'edit', artifact: ARTIFACT.id, title: 'Test strategy v2' },
+    path: `/artifacts/${ARTIFACT.id}`,
+    routes: {
+      ...ARTIFACTS,
+      [`PATCH /artifacts/${ARTIFACT.id}`]: { status: 200, body: ARTIFACT },
+    },
+  },
+  'tcms_write_artifact.status': {
+    tool: 'tcms_write_artifact',
+    input: { action: 'status', artifact: ARTIFACT.id, status: 'ARCHIVED' },
+    path: `/artifacts/${ARTIFACT.id}/status`,
+    routes: { [`PUT /artifacts/${ARTIFACT.id}/status`]: { status: 200, body: ARTIFACT } },
+  },
+  'tcms_write_artifact.delete': {
+    tool: 'tcms_write_artifact',
+    input: { action: 'delete', artifact: ARTIFACT.id },
+    path: `/artifacts/${ARTIFACT.id}`,
+    routes: { [`DELETE /artifacts/${ARTIFACT.id}`]: { status: 204 } },
   },
 };

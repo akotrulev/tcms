@@ -36,6 +36,25 @@ import org.springframework.transaction.annotation.Transactional;
  * alone, and §55 named the sharper version of it: the only way to get a row in was an operator with
  * a psql prompt.
  *
+ * <h2>Every column of {@code artifact} that this product decides now has a writer here</h2>
+ *
+ * <p>Recorded because the last two arrived together and for one reason (audit C6 and C7). Both had
+ * been enforced or rendered for slices against a value nothing could produce:
+ *
+ * <ul>
+ *   <li>{@code report_artifact_id} — {@link ArtifactKind#GENERATED_REPORT} was declared by {@code V1}
+ *       and refused by this service with "not available yet" while {@code reporting} generated
+ *       reports from §87 onward. The pin takes a <em>job</em> id and stores the artifact's, through
+ *       {@link ReportFacts}; what it buys is that the register's entry answers the same bytes for
+ *       ever, because a {@code report_artifact} is immutable.
+ *   <li>{@code write_once} — honoured by {@link #delete} since §126 and by {@link #edit} since §229,
+ *       and settable by nobody. A guarantee that is believed and never exercised is one nothing
+ *       proves; both refusals had test coverage only because the tests set the column in SQL.
+ * </ul>
+ *
+ * <p>{@code FILE} remains the one kind {@link #create} refuses, and that refusal is about the
+ * <em>endpoint</em> rather than the kind — see {@link #createFile}.
+ *
  * <h2>The gate is {@code artifact:edit}, and it is scope-qualified</h2>
  *
  * <p>Unlike the read — which uses the project gate because {@code artifact:read}'s distribution is
@@ -87,6 +106,7 @@ public class ArtifactWriteService {
     private final ArtifactRepository artifacts;
     private final DocPageRepository pages;
     private final PlanFacts plans;
+    private final ReportFacts reports;
     private final ArtifactPeople people;
     /**
      * The longest {@code Idempotency-Key} this service will look at — {@code SuiteWriteService}'s
@@ -106,6 +126,7 @@ public class ArtifactWriteService {
             ArtifactRepository artifacts,
             DocPageRepository pages,
             PlanFacts plans,
+            ReportFacts reports,
             ArtifactPeople people,
             ArtifactFiles files,
             AttachmentRepository attachments,
@@ -117,6 +138,7 @@ public class ArtifactWriteService {
         this.artifacts = artifacts;
         this.pages = pages;
         this.plans = plans;
+        this.reports = reports;
         this.people = people;
         this.files = files;
         this.attachments = attachments;
@@ -256,6 +278,14 @@ public class ArtifactWriteService {
                             input.kind() == ArtifactKind.DOC_PAGE_REF ? input.docPageId() : null,
                             input.kind() == ArtifactKind.EXTERNAL_URL ? input.url().trim() : null,
                             null,
+                            // Validation proved the job and gave back its artifact; re-reading it
+                            // here keeps the id the row stores and the id the refusal checked the
+                            // same one, rather than two lookups that could answer differently.
+                            input.kind() == ArtifactKind.GENERATED_REPORT
+                                    ? reports.findRenderedArtifactInProject(
+                                            project.getId(), input.reportJobId()).orElseThrow()
+                                    : null,
+                            input.writeOnce(),
                             userId,
                             idempotencyKey,
                             now));
@@ -383,6 +413,8 @@ public class ArtifactWriteService {
                 null,
                 null,
                 file.getId(),
+                null,
+                input.writeOnce(),
                 userId,
                 idempotencyKey,
                 now));
@@ -878,10 +910,19 @@ public class ArtifactWriteService {
         }
     }
 
-    /** Each reference kind needs its own target, and neither may carry the other's. */
+    /** Each kind needs its own target, and none may carry another's. */
     private void validateKind(
             UUID projectId, ArtifactInput input, boolean hasUpload,
             Map<String, List<String>> errors) {
+
+        if (input.reportJobId() != null && input.kind() != ArtifactKind.GENERATED_REPORT) {
+            // Refused rather than ignored, for validateScope's reason and once for the three arms
+            // that share it: a client sending a job id believes the register entry points at that
+            // report, and storing a row that does not is the silent disagreement §50 built two
+            // checks to catch.
+            errors.put("reportJobId",
+                    List.of("Only a pinned report names a report job."));
+        }
 
         switch (input.kind()) {
             case DOC_PAGE_REF -> {
@@ -930,8 +971,31 @@ public class ArtifactWriteService {
                     errors.put("url", List.of("An uploaded file points at its own bytes."));
                 }
             }
-            case GENERATED_REPORT -> errors.put("kind", List.of(
-                    "Pinning a generated report is not available yet."));
+            // Registrable since audit C6. The other three payload arms name a thing that exists
+            // independently of this product; this one names something it made itself, and the
+            // check is therefore about provenance rather than about format.
+            case GENERATED_REPORT -> {
+                if (input.reportJobId() == null) {
+                    errors.put("reportJobId", List.of("Choose the report this artifact pins."));
+                } else if (reports
+                        .findRenderedArtifactInProject(projectId, input.reportJobId())
+                        .isEmpty()) {
+                    // One message for "no such job", "another project's" and "it produced
+                    // nothing", for validateScope's reason — and the third is the one a real
+                    // caller meets: a report that failed, or is still running, has no bytes to
+                    // pin, and a register entry promising a document it cannot produce is plan
+                    // §6n's own failure mode.
+                    errors.put("reportJobId", List.of(
+                            "That report is not one this project has finished generating."));
+                }
+                if (input.docPageId() != null) {
+                    errors.put("docPageId", List.of("A pinned report is not a page reference."));
+                }
+                if (input.url() != null) {
+                    // Not ignored, for validateScope's reason.
+                    errors.put("url", List.of("A pinned report points at its own rendered bytes."));
+                }
+            }
             case null -> {
                 // Already reported by validate(); nothing to add, and switching on null would throw.
             }

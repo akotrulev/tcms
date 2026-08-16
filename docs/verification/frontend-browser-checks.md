@@ -2834,3 +2834,20 @@ row in this file that does. Driving it through the editor proves nothing either 
 An `Idempotency-Key` replay needs the same key sent twice, which the SPA does by holding one key per
 mounted dialog — so reproducing it means killing the response mid-flight, not clicking twice. The
 backend queue's `§232 PB-*` rows are where that lives.
+
+## §234 — the artifact register: pinned reports and sign-off records (C6 + C7)
+
+Lane **A5** (the register's own lane, where the upload rows already live) for `AR-2`…`AR-4`;
+**A6** (the reports lane) for `AR-1`, which starts on a generated report. All four need a
+**Test Lead** — `artifact:edit` at PROJECT scope plus `report:view`.
+
+**The fixture `AR-1` needs is one this queue's charter does not author: a COMPLETED report job.**
+The A6 lane generates one already, so the row is written to start from that lane's own output
+rather than asking for new seed data — run it in the same pass, not before.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§234 AR-1` | **A6**: on a finished report, press **Save to register**, keep the offered title, choose a category, Register | The dialog opens titled *"Save this report to the register"*, offers **no** kind picker, and starts with the report's own title. After Register: a confirmation naming the title with a link to the register, and the row is there with kind `GENERATED_REPORT`. Following its link downloads the same bytes the report's own Download gives. |
+| `§234 AR-2` | **A5**: register an external link with **This is a sign-off record** ticked, then open its row menu | Correct… and Remove… are **greyed**; Archive is **not**; a line in the menu says it is a sign-off record and to register a replacement. This is the §31 half of C7 — before it both were enabled and answered 409 after the correction was typed. |
+| `§234 AR-3` | **A5**: on that sign-off row, register a replacement naming it under **Replaces** | Two rows: the original `SUPERSEDED` and pointing at the replacement, the new one `ACTIVE`. **A write-once row can still be superseded** — that is the correction path the flag forces people onto, and refusing it would make the record uncorrectable. |
+| `§234 AR-4` | **A5**: pin a report at **PLAN** scope, then open a *different* plan's register | The pinned row appears in its own plan's register and **not** in the other plan's, and is absent from the project register. Plan-scope artifacts are not inherited sideways or upward. |

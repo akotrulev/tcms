@@ -3,10 +3,12 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   FormHelperText,
   MenuItem,
   Stack,
@@ -97,7 +99,13 @@ const ArtifactSchema = z
       that routes to a different endpoint, never a value sent to the JSON create (which answers a
       `kind: FILE` with a 400 naming the upload path).
     */
-    kind: z.enum(['DOC_PAGE_REF', 'EXTERNAL_URL', 'FILE']),
+    kind: z.enum(['DOC_PAGE_REF', 'EXTERNAL_URL', 'FILE', 'GENERATED_REPORT']),
+    /*
+      A sign-off record (C7). No Zod rule: every value is legal, and what it costs is stated in the
+      control's own helper text rather than refused here — the whole of its behaviour lives on the
+      server, where the row is frozen against a later edit or delete.
+    */
+    writeOnce: z.boolean(),
     title: z
       .string()
       .min(1, 'Give the artifact a title.')
@@ -167,7 +175,7 @@ const ArtifactSchema = z
 type ArtifactFormInput = z.infer<typeof ArtifactSchema>;
 
 type FieldName = 'scope' | 'planId' | 'category' | 'kind' | 'title' | 'description' | 'docPageId'
-  | 'url' | 'file' | 'supersedes' | 'root';
+  | 'url' | 'file' | 'supersedes' | 'writeOnce' | 'root';
 
 /*
   `file` is on this list and NOT on the Zod schema, and both halves are deliberate.
@@ -181,8 +189,20 @@ type FieldName = 'scope' | 'planId' | 'category' | 'kind' | 'title' | 'descripti
 */
 const FIELDS: readonly FieldName[] = [
   'scope', 'planId', 'category', 'kind', 'title', 'description', 'docPageId', 'url', 'file',
-  'supersedes',
+  'supersedes', 'writeOnce',
 ];
+
+/*
+  `reportJobId` is deliberately NOT on that list, and it is the mirror of `file`'s reason rather
+  than an omission of the same kind.
+
+  The server can answer `errors.reportJobId` — a job that rendered nothing, or one from another
+  project — but this form has no control for it: the job is fixed by the button that opened the
+  dialog (see `pinnedReport`). So the refusal falls through to the form-level banner, which is
+  where a message about something the user cannot change here belongs. Listing the key would land
+  it on a field that is not on screen, which is the register's own "rejected save showing nothing
+  at all" failure with an extra step.
+*/
 
 const TestIdPrefix = 'Artifacts.Dialog';
 
@@ -232,6 +252,7 @@ export function RegisterArtifactDialog({
   plans,
   pages,
   defaultPlanId,
+  pinnedReport,
   onRegistered,
 }: {
   open: boolean;
@@ -249,6 +270,20 @@ export function RegisterArtifactDialog({
    * Release 1's register and pressing Register means Release 1.
    */
   defaultPlanId?: string;
+  /**
+   * A finished report to pin, when this dialog is opened from the report itself (C6).
+   *
+   * **Reuse rather than a second dialog, which is this file's own rule stated one feature over.**
+   * The header above refuses a separate Upload dialog because scope, the plan requirement, the
+   * category list, both length limits and the `403`-as-a-field-error mapping are shared, and a
+   * second form would be a second implementation of every one of them. Pinning a report shares
+   * exactly the same set — it differs only in *what the payload is*, which is the one thing the
+   * caller already knows and the user therefore never chooses.
+   *
+   * When it is set the kind is fixed, the kind picker and the three payload controls are not
+   * rendered, and the title starts as the report's own.
+   */
+  pinnedReport?: { jobId: string; defaultTitle: string };
   onRegistered: (artifact: Artifact) => void;
 }) {
   const create = useCreateArtifact(projectId);
@@ -288,13 +323,17 @@ export function RegisterArtifactDialog({
       scope: defaultPlanId ? 'PLAN' : 'PROJECT',
       planId: defaultPlanId ?? '',
       category: 'Strategy',
-      kind: 'EXTERNAL_URL',
-      title: '',
+      kind: pinnedReport ? 'GENERATED_REPORT' : 'EXTERNAL_URL',
+      // The report's own title, which is the one the exported document carries and the one the
+      // reader was just looking at — an empty field here would make somebody re-type what is on
+      // the screen behind the dialog.
+      title: pinnedReport?.defaultTitle ?? '',
       description: '',
       docPageId: '',
       url: '',
       file: '',
       supersedes: '',
+      writeOnce: false,
     },
     mode: 'onBlur',
   });
@@ -374,6 +413,7 @@ export function RegisterArtifactDialog({
                 category: values.category,
                 title: values.title,
                 description: values.description.trim() || null,
+                writeOnce: values.writeOnce,
                 supersedes: values.supersedes || null,
               },
               // Non-null by the schema's own rule: `kind === 'FILE'` with no `file` is a Zod issue
@@ -392,6 +432,11 @@ export function RegisterArtifactDialog({
               description: values.description.trim() || null,
               docPageId: values.kind === 'DOC_PAGE_REF' ? values.docPageId : null,
               url: values.kind === 'EXTERNAL_URL' ? values.url.trim() : null,
+              // The server refuses a job id on any other kind rather than ignoring it — the same
+              // agreement `planId` above is half of, over a fourth field.
+              reportJobId:
+                values.kind === 'GENERATED_REPORT' ? (pinnedReport?.jobId ?? null) : null,
+              writeOnce: values.writeOnce,
               supersedes: values.supersedes || null,
             });
       onRegistered(artifact);
@@ -404,7 +449,9 @@ export function RegisterArtifactDialog({
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <form onSubmit={submit} noValidate>
-        <DialogTitle data-testid={`${TestIdPrefix}.Title`}>Register an artifact</DialogTitle>
+        <DialogTitle data-testid={`${TestIdPrefix}.Title`}>
+          {pinnedReport ? 'Save this report to the register' : 'Register an artifact'}
+        </DialogTitle>
         <DialogContent>
           <Stack sx={{ gap: 2, pt: 1 }}>
             {errors.root && (
@@ -481,6 +528,14 @@ export function RegisterArtifactDialog({
               slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.TitleField` } }}
             />
 
+            {/*
+              Not rendered when a report is being pinned: the kind is the one thing the caller
+              already decided by pressing Save on a report, and a picker whose other options would
+              all invalidate the payload is a control that can only be used wrongly (`ui-rules`
+              §4). The fixed value still travels — it is the form's `kind`, not a literal at the
+              submit — so there is one place the payload is decided either way.
+            */}
+            {!pinnedReport && (
             <TextField
               select
               label="What is it?"
@@ -505,6 +560,14 @@ export function RegisterArtifactDialog({
               */}
               <MenuItem value="FILE">A file to upload and keep here</MenuItem>
             </TextField>
+            )}
+
+            {pinnedReport && (
+              <Alert severity="info" data-testid={`${TestIdPrefix}.PinnedReport`}>
+                The register keeps the report exactly as it was generated. Regenerating it later
+                makes a new report and leaves this entry untouched.
+              </Alert>
+            )}
 
             {kind === 'DOC_PAGE_REF' && (
               <TextField
@@ -596,6 +659,32 @@ export function RegisterArtifactDialog({
               helperText={errors.description?.message ?? 'Optional.'}
               slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Description` } }}
             />
+
+            {/*
+              The sign-off toggle (C7) — `artifact.write_once`'s first writer.
+
+              A checkbox rather than a category, and the two are genuinely different things: the
+              `SignOff` category says what the document is ABOUT and groups the register by it,
+              while this decides whether the entry can ever be changed. Coupling them would freeze
+              every row somebody filed under SignOff, including the draft they are still writing.
+
+              **The helper text states the cost before the choice, because there is no way back.**
+              The flag is decided at registration and the column is not updatable, so a control
+              that explained itself only afterwards would be explaining an act nobody can undo.
+            */}
+            <FormControlLabel
+              control={
+                <Checkbox
+                  {...register('writeOnce')}
+                  data-testid={`${TestIdPrefix}.WriteOnce`}
+                />
+              }
+              label="This is a sign-off record"
+            />
+            <FormHelperText sx={{ mt: -1.5 }}>
+              Sign-off records are kept as they were signed: they cannot be edited or removed, and
+              a correction is registered as a replacement. This cannot be changed later.
+            </FormHelperText>
 
             {/*
               The affordance for the sentence three refusals already give.

@@ -317,6 +317,50 @@ const listLibrary: ToolDefinition = {
   },
 };
 
+const listArtifacts: ToolDefinition = {
+  name: 'tcms_list_artifacts',
+  title: 'Read the project artifact register',
+  description:
+    'The register of documents a project keeps: test strategies, environment guides, sign-off '
+    + 'records, pinned reports. A row is one of four kinds — a documentation page reference, an '
+    + 'external link, an uploaded file, or a generated report frozen as it was produced. Rows sit '
+    + 'at PROJECT scope (every plan inherits them, marked `inherited`) or at one plan. `url` is '
+    + 'where the document is, and what it means depends on `kind`: an external site, a download, '
+    + 'or nothing at all for a page reference, which is reached by `docPageId`. `writeOnce` marks '
+    + 'a sign-off record, which cannot be corrected or removed — it is superseded instead. The '
+    + 'ids here are what tcms_write_artifact takes.',
+  gate: { mode: 'all', permissions: ['artifact:read'] },
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      scope: { type: 'string', description: 'PROJECT or PLAN. Omit for the project register.' },
+      plan: idProperty('plan whose register to read — implies scope PLAN', 'OLB-P1'),
+      ...PAGING_PROPERTIES,
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const plan = str(input, 'plan');
+    // The plan is resolved by key like everywhere else on this surface, and naming one is taken
+    // to mean its register — asking a caller to send `scope: 'PLAN'` beside a plan they already
+    // named is a second way to say one thing, and the two can disagree.
+    const planId = plan
+      ? await resolveId({ client: session.client, projectId, value: plan, entity: 'PLAN' })
+      : undefined;
+    const scope = planId ? 'PLAN' : str(input, 'scope');
+
+    const artifacts = await session.client.GET('/projects/{projectId}/artifacts', {
+      params: {
+        path: { projectId },
+        query: { ...optional('scope', scope), ...optional('planId', planId) },
+      },
+      tcms: session.request,
+    });
+    return window(artifacts, input);
+  },
+};
+
 /* --------------------------------------------------------------------- docs ---- */
 
 const docTree: ToolDefinition = {
@@ -553,6 +597,7 @@ export const READ_TOOLS: readonly ToolDefinition[] = [
   openCase,
   listSuites,
   listLibrary,
+  listArtifacts,
   docTree,
   openDocPage,
   listPlans,

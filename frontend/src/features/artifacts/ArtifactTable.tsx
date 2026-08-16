@@ -263,6 +263,24 @@ function ArtifactRowActions({ artifact, projectId }: { artifact: Artifact; proje
   const mayRemove = gate.can('artifact:delete');
   const reason = gate.reasonOnScope('artifact:edit', planScoped) ?? undefined;
 
+  /*
+    A sign-off record refuses both content acts, and since C7 the client can say so BEFORE the
+    press.
+
+    This is not a permission and must not be mixed into one: the caller holds the key and would
+    hold it for any other row. What refuses them is the row's own promise, so it disables the two
+    acts and leaves Archive and Restore alone — circulation is not content, and a signed record
+    that is out of use is exactly what ARCHIVED says.
+
+    Until `writeOnce` reached the wire (C7) both refusals were `409`s nothing could predict, so the
+    register enabled Correct… on a frozen row and answered after the correction had been written —
+    §31's disable-don't-hide, unfollowable for want of one boolean.
+  */
+  const frozen = artifact.writeOnce;
+  const frozenReason = frozen
+    ? 'This is a sign-off record, so the register keeps it as it was signed. Register a replacement to correct it.'
+    : undefined;
+
   const move = (status: 'ACTIVE' | 'ARCHIVED') => {
     setAnchor(null);
     setStatus.mutate({ artifactId: artifact.id, status });
@@ -292,7 +310,7 @@ function ArtifactRowActions({ artifact, projectId }: { artifact: Artifact; proje
       </Tooltip>
       <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
         <MenuItem
-          disabled={!allowed}
+          disabled={!allowed || frozen}
           onClick={() => open(setEditing)}
           data-testid="Artifacts.Row.Edit"
         >
@@ -313,12 +331,27 @@ function ArtifactRowActions({ artifact, projectId }: { artifact: Artifact; proje
           Restore
         </MenuItem>
         <MenuItem
-          disabled={!mayRemove}
+          disabled={!mayRemove || frozen}
           onClick={() => open(setRemoving)}
           data-testid="Artifacts.Row.Delete"
         >
           Remove…
         </MenuItem>
+        {/*
+          Why the row's promise is stated here and not as a tooltip on the two disabled items: MUI
+          raises no hover events on a disabled `MenuItem`, so a tooltip there is a reason nobody
+          can read — the finding this file already records for the superseded case. A line inside
+          the menu is read by the person who just found both acts greyed.
+        */}
+        {frozen && (
+          <Typography
+            variant="caption"
+            sx={{ display: 'block', px: 2, py: 1, maxWidth: 280, color: 'text.secondary' }}
+            data-testid="Artifacts.Row.WriteOnce"
+          >
+            {frozenReason}
+          </Typography>
+        )}
       </Menu>
       <EditArtifactDialog
         open={editing}

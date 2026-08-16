@@ -111,6 +111,37 @@ describe('the capability summary', () => {
     }
   });
 
+  /*
+    The section shortens rather than disappearing — audit C10, and it is a repair rather than a
+    new rule.
+
+    `fit` drops whole sections from the end, so the "and here is what would let me" list was
+    always going to be sacrificed as the registry grew — and the credential it is sacrificed for
+    is the one holding almost nothing, which is precisely the reader it exists for. Two new tools
+    took the detailed form to 1848 bytes and the whole section vanished, silently: a dropped
+    section is indistinguishable from a credential with nothing hidden.
+
+    The permission keys are the half that survives, because they are what a user takes to an
+    administrator (`instructions.ts`' header makes that argument about naming the permission
+    rather than the role, and it holds a second time here).
+  */
+  it('keeps the permissions when the titles will not fit, rather than losing the section', async () => {
+    const stub = api(agentRoutes({
+      // The minimum this surface can hold: every tool but `tcms_orient` is hidden, which is the
+      // longest this list ever gets and therefore the case that overflows first.
+      '/me/permissions': { status: 200, body: permissions(['project:read']) },
+    }));
+    const session = await sessionWith(stub);
+    const text = renderInstructions(session.reach, TOOLS);
+
+    expect(bytes(text)).toBeLessThanOrEqual(INSTRUCTIONS_BUDGET);
+    // The keys are still there, and a permission this credential DOES hold is not listed as
+    // missing — which is what proves the compact form is derived from the same set.
+    expect(text).toContain('case:read');
+    expect(text).toContain('artifact:edit');
+    expect(text).not.toMatch(/project:read[,.]/);
+  });
+
   it('says nothing about a project when the permission answer is empty', async () => {
     const stub = api({
       '/me': { status: 200, body: ME },

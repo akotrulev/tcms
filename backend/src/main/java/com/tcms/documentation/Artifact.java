@@ -34,16 +34,17 @@ import org.hibernate.annotations.Filter;
  * <p>~~<strong>Four columns of {@code V1}'s table are deliberately unmapped:</strong>
  * {@code attachment_id}, {@code report_artifact_id} and the two halves of the tags/version story
  * plan §6n describes.~~ ~~<strong>→ three, since §126 phase 3 gave {@link ArtifactKind#FILE} a
- * writer.</strong>~~ <strong>→ two, since §209 gave superseding one</strong> — the same expiry a
- * third time, and by now the pattern rather than the coincidence. The rule stands and the reason
- * expired for two columns: mapping a field
+ * writer.</strong>~~ ~~<strong>→ two, since §209 gave superseding one</strong>~~
+ * <strong>→ one, since audit C6 gave {@link ArtifactKind#GENERATED_REPORT} one</strong> — the same
+ * expiry a fourth time, and by now the pattern rather than the coincidence. The rule stands and the
+ * reason expired for three columns: mapping a field
  * <em>this slice cannot set</em> would put an always-null accessor on the wire's other side and
  * invite a caller to believe it means something — the call {@code TestCaseDetailView} made for
  * {@code relatedDocuments} and §57 made for {@code coverage}: absent rather than zeroed. This slice
  * can set {@code attachment_id}, so the condition the exclusion was written under no longer holds.
  * That is the fifth time in this project a "blocked" note has outlived its blocker, and the note
  * itself is what made it cheap to notice. {@code ddl-auto: validate} checks that every mapped field
- * has a column and never the reverse, so the remaining two stay inert.
+ * has a column and never the reverse, so what is left — the tags/version story — stays inert.
  *
  * <h2>{@code attachment_id} and {@code attachment.owner_type = 'ARTIFACT'} are not rivals</h2>
  *
@@ -169,11 +170,44 @@ public class Artifact {
 
     /**
      * Sign-off records: a correction supersedes, never edits (plan §6n, and {@code V1}'s own column
-     * comment). Nothing sets it true yet — no act in this slice creates a sign-off — but the reads
-     * and the future edit path both have to honour it, so it is mapped rather than ignored.
+     * comment). ~~Nothing sets it true yet — no act in this slice creates a sign-off — but the reads
+     * and the future edit path both have to honour it, so it is mapped rather than ignored.~~
+     * <strong>→ registration sets it, since audit C7</strong>, which closes the last of this
+     * entity's writerless columns; the delete has honoured it since §126 and the edit since §229,
+     * so the guarantee was enforced for three slices against a value only {@code psql} could
+     * produce.
+     *
+     * <p><strong>{@code updatable = false}, and that is the flag's whole meaning rather than
+     * caution.</strong> A promise that can be made later can be made about somebody else's row, to
+     * freeze a document they are still correcting; and one that can be taken back is not a promise.
+     * Deciding it at registration is also what lets the refusals stay simple — no act has to ask
+     * whether the flag was true when the edit began.
      */
-    @Column(name = "write_once", nullable = false)
+    @Column(name = "write_once", nullable = false, updatable = false)
     private boolean writeOnce;
+
+    /**
+     * Set for {@link ArtifactKind#GENERATED_REPORT} — the {@code report_artifact} row whose bytes
+     * this register entry pins (audit C6).
+     *
+     * <p>The last of the columns the header calls deliberately unmapped, and it expired the same
+     * way the other three did: the exclusion's reason is that a field <em>this slice cannot
+     * set</em> puts an always-null accessor on the wire, and {@code reporting} has produced
+     * artifacts since §87.
+     *
+     * <p>A raw {@code UUID} and no association, for {@link #planId}'s reason: {@code report_artifact}
+     * belongs to {@code reporting}, which this module may not depend on (plan §3 allows
+     * {@code tenancy}, {@code identity}, {@code project} and {@code storage} alone). The one fact
+     * needed about the other side is read through {@link ReportFacts}, this module's second
+     * instance of that pattern.
+     *
+     * <p>{@code updatable = false} like the three sibling payload columns — a pinned report that
+     * could be repointed is a register entry whose {@code created_at} and audit trail describe a
+     * different report from the one it now serves. Regenerating produces a new artifact, and
+     * recording that is a new registration.
+     */
+    @Column(name = "report_artifact_id", updatable = false)
+    private UUID reportArtifactId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -239,6 +273,8 @@ public class Artifact {
             UUID docPageId,
             String externalUrl,
             UUID attachmentId,
+            UUID reportArtifactId,
+            boolean writeOnce,
             UUID authorId,
             String idempotencyKey,
             Instant now) {
@@ -256,11 +292,15 @@ public class Artifact {
         artifact.docPageId = docPageId;
         artifact.externalUrl = externalUrl;
         artifact.attachmentId = attachmentId;
+        artifact.reportArtifactId = reportArtifactId;
         artifact.createdIdempotencyKey = idempotencyKey;
         // Never from the input — plan §6g. A create that could choose its own status is an author
         // approving their own sign-off, which is the one thing the register exists to make auditable.
         artifact.status = ArtifactStatus.ACTIVE;
-        artifact.writeOnce = false;
+        // `writeOnce` IS from the input, and the two are not in tension: status is a claim about
+        // where the document stands, which an author must not grant themselves, while this is a
+        // restriction the author accepts on their own entry. Nobody approves anything by choosing it.
+        artifact.writeOnce = writeOnce;
         artifact.createdAt = now;
         artifact.createdBy = authorId;
         artifact.updatedAt = now;
@@ -388,6 +428,11 @@ public class Artifact {
 
     public boolean isWriteOnce() {
         return writeOnce;
+    }
+
+    /** The report row behind a {@link ArtifactKind#GENERATED_REPORT}, {@code null} otherwise. */
+    public UUID getReportArtifactId() {
+        return reportArtifactId;
     }
 
     public Instant getUpdatedAt() {

@@ -317,6 +317,9 @@ export function aDocPageSummary(overrides: Partial<DocPageSummary> = {}): DocPag
  * required properties, and a double serving a subset is a component one commit away from a
  * TypeError (§195). `supersededById` is nullable and defaults to `null` — a value on an `ACTIVE`
  * row is a state the server cannot produce.
+ *
+ * `writeOnce` is `false` here and required on the wire (C7): a row that cannot be corrected is the
+ * exception, and a factory defaulting to it would make every register test drive a frozen row.
  */
 export function anArtifact(overrides: Partial<Artifact> = {}): Artifact {
   return {
@@ -327,6 +330,7 @@ export function anArtifact(overrides: Partial<Artifact> = {}): Artifact {
     title: 'An artifact',
     description: null,
     status: 'ACTIVE',
+    writeOnce: false,
     supersededById: null,
     inherited: false,
     url: 'https://docs.example.test/a',

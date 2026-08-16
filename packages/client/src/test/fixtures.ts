@@ -48,6 +48,7 @@ export const IDS = {
   run: 'r-1',
   plan: 'tp-1',
   page: 'dp-1',
+  artifact: 'af-1',
 } as const;
 
 /** A fixed instant, so nothing here depends on when the suite runs. */
@@ -327,6 +328,36 @@ export function docPage(overrides: Partial<Schemas['DocPage']> = {}): Schemas['D
     attachments: [],
     currentVersionNo: 1,
     lockVersion: 1,
+    ...overrides,
+  };
+}
+
+/**
+ * One row of the artifact register.
+ *
+ * `EXTERNAL_URL` because it is the kind whose payload is a plain string — the two id-bearing
+ * kinds would make every default reference another fixture's row, and a `FILE`'s `filename` and
+ * `sizeBytes` are only non-null on that one kind. `writeOnce` is `false`: a frozen row refuses
+ * both content acts, so defaulting to it would make every register double drive the exception.
+ */
+export function artifact(overrides: Partial<Schemas['Artifact']> = {}): Schemas['Artifact'] {
+  return {
+    id: IDS.artifact,
+    scope: 'PROJECT',
+    category: 'Strategy',
+    kind: 'EXTERNAL_URL',
+    title: 'Test strategy',
+    description: null,
+    status: 'ACTIVE',
+    supersededById: null,
+    inherited: false,
+    url: 'https://docs.example.test/strategy',
+    docPageId: null,
+    filename: null,
+    sizeBytes: null,
+    writeOnce: false,
+    updatedBy: userRef(),
+    updatedAt: NOW,
     ...overrides,
   };
 }

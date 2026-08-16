@@ -52,14 +52,26 @@
  * Both are consequences of decisions taken elsewhere and are listed as **Buildable** in the
  * surface spec's §3 table. They are recorded in §140's section file rather than quietly dropped.
  *
- * ## The two delete keys this surface still cannot reach — §211
+ * ## ~~The two delete keys this surface still cannot reach~~ → one, since C10 — §211
  *
- * `V52` gave the credential five (§210), and three of them are arms here: `case:delete`,
- * `suite:delete`, `plan:delete`. The other two are absent by decision.
+ * `V52` gave the credential five (§210), and ~~three~~ **four** of them are arms here:
+ * `case:delete`, `suite:delete`, `plan:delete` and now `artifact:delete`. ~~The other two are~~
+ * The other one is absent by decision.
  *
- * **`artifact:delete`** has no tool because *artifacts* have none — no read, no write, nothing.
+ * ~~**`artifact:delete`** has no tool because *artifacts* have none — no read, no write, nothing.
  * Adding a delete alone would be a tool whose id can only come from somewhere else, which is the
- * reviewer-assignment shape above. It waits for a slice that gives the register a surface.
+ * reviewer-assignment shape above. It waits for a slice that gives the register a surface.~~
+ * → **that slice is audit C10**, and the condition it named is what it satisfied rather than
+ * waived: `tcms_list_artifacts` serves the ids, so the delete's argument exists on this surface
+ * the way an execution's `evidence[].id` does and a `userId` does not. The register's whole
+ * surface arrived together — read, register, edit, status, delete — for exactly that reason.
+ *
+ * Two shortfalls came with it and both are the multipart one again, not new decisions.
+ * **`FILE` cannot be registered here** — the bytes travel with the registration and a tool call
+ * carries none, the same wall `tcms_record_result` meets at evidence — so `register` derives its
+ * kind from the three payloads it *can* name. And the **delete is hard for a `FILE`**: the bytes
+ * go with the row. That is not the evidence argument repeated, because here the surface can also
+ * *create* the row it removes, and archiving is offered beside it as the reversible act.
  *
  * **`evidence:delete`** is reachable — `tcms_open_run` serves an execution's `evidence[].id`, so
  * unlike a `userId` the argument exists — and is excluded anyway. Two facts decide it together.
@@ -1293,6 +1305,196 @@ const writeWorkItem: ToolDefinition = {
 
 /* ------------------------------------------------------------------ reports ---- */
 
+/* ----------------------------------------------------------------- artifacts ---- */
+
+const writeArtifact: ToolDefinition = {
+  name: 'tcms_write_artifact',
+  title: 'Register a document in the project register, correct one, or retire one',
+  description:
+    'The register records the documents a project stands behind. `register` adds a reference: a '
+    + 'documentation page (`docPage`), an external link (`url`), or a report you generated '
+    + '(`reportJob` — poll it to COMPLETED first, and what is kept is the rendered output, frozen). '
+    + 'Uploading a FILE is not possible here; a tool call carries no bytes. `edit` corrects the '
+    + 'title, category and description and NOTHING else — a row that points at the wrong thing is '
+    + 'replaced, not repointed, by registering a new one with `supersedes`. `status` archives or '
+    + 'restores. `delete` removes the row and its file; a person is asked first. A row with '
+    + '`writeOnce` refuses edit and delete: correct it by superseding it.',
+  gate: { mode: 'all', permissions: ['artifact:edit', 'artifact:delete'] },
+  arms: [
+    { action: 'register', kind: 'create', permission: 'artifact:edit' },
+    { action: 'edit', kind: 'edit', permission: 'artifact:edit' },
+    { action: 'status', kind: 'state', permission: 'artifact:edit' },
+    { action: 'delete', kind: 'delete', permission: 'artifact:delete', targets: ['artifact'] },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(['register', 'edit', 'status', 'delete'], 'What to do.'),
+      artifact: {
+        type: 'string',
+        description:
+          'The artifact id, for edit, status and delete. Artifacts carry no display key — take '
+          + 'the id from tcms_list_artifacts.',
+      },
+      title: { type: 'string' },
+      category: {
+        type: 'string',
+        description:
+          'Strategy · TestData · Environment · SignOff · Compliance · Tooling · Template · Other. '
+          + 'Free text — the register groups by it, so match what the project already uses.',
+      },
+      description: { type: ['string', 'null'] },
+      scope: { type: 'string', description: 'For `register`: PROJECT (default) or PLAN.' },
+      plan: idProperty('plan — required when scope is PLAN', 'OLB-P1'),
+      docPage: idProperty('documentation page to point at', 'DOC-4'),
+      url: { type: 'string', description: 'For `register`: an http(s) link to point at.' },
+      reportJob: {
+        type: 'string',
+        description:
+          'For `register`: the id of a COMPLETED report job (tcms_report). What is registered is '
+          + 'the rendered output as it stands; regenerating later makes a new report and leaves '
+          + 'this entry alone.',
+      },
+      supersedes: {
+        type: 'string',
+        description:
+          'The artifact this one replaces. It is kept and marked SUPERSEDED — this is how a '
+          + 'sign-off record or a wrongly-pointed row is corrected. Must sit at the same scope, '
+          + 'and in the same plan, as the row it replaces.',
+      },
+      writeOnce: {
+        type: 'boolean',
+        description:
+          'For `register`: a sign-off record. It can never be edited or removed afterwards, by '
+          + 'anyone, and this cannot be undone. Do not set it unless the caller asked for a '
+          + 'sign-off record.',
+      },
+      status: { type: 'string', description: 'For `status`: ACTIVE or ARCHIVED.' },
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const action = requireStr(input, 'action');
+
+    if (action === 'register') {
+      const scope = str(input, 'scope') ?? 'PROJECT';
+      const docPage = str(input, 'docPage');
+      const reportJob = str(input, 'reportJob');
+      const url = str(input, 'url');
+
+      /*
+        The kind is DERIVED from which payload was named rather than taken as a field.
+
+        The server refuses a payload belonging to another kind rather than ignoring it, so a
+        `kind` argument would be a second statement of something the arguments already say — and
+        the disagreement between the two is a 400 about a field the model did set correctly. One
+        payload, one kind; naming none, or more than one, is refused here with a sentence rather
+        than by the server with a field error about `kind`.
+      */
+      const named = [docPage, url, reportJob].filter(Boolean);
+      if (named.length !== 1) {
+        throw new InputError(
+          'Name exactly one of `docPage`, `url` or `reportJob` — that is what decides the kind. '
+          + 'Uploading a file is not possible on this surface.',
+        );
+      }
+
+      return session.client.POST('/projects/{projectId}/artifacts', {
+        params: { path: { projectId } },
+        body: present({
+          scope,
+          planId: scope === 'PLAN'
+            ? await resolveId({
+              client: session.client, projectId, value: requireStr(input, 'plan'), entity: 'PLAN',
+            })
+            : undefined,
+          category: requireStr(input, 'category'),
+          kind: docPage ? 'DOC_PAGE_REF' : reportJob ? 'GENERATED_REPORT' : 'EXTERNAL_URL',
+          title: requireStr(input, 'title'),
+          description: nullableStr(input, 'description'),
+          docPageId: docPage
+            ? await resolveId({
+              client: session.client, projectId, value: docPage, entity: 'DOC_PAGE',
+            })
+            : undefined,
+          url,
+          reportJobId: reportJob,
+          // Absent is false server-side, and it is sent explicitly so the request states the
+          // choice: this flag cannot be added later or taken back, so a caller reading the
+          // payload back should see that it was decided.
+          writeOnce: bool(input, 'writeOnce') ?? false,
+          supersedes: str(input, 'supersedes'),
+        }) as components['schemas']['ArtifactInput'],
+        tcms: { ...session.request, ...createIntent({ key: session.callId }) },
+      });
+    }
+
+    const artifactId = requireStr(input, 'artifact');
+    const path = { projectId, artifactId };
+
+    if (action === 'status') {
+      return session.client.PUT('/projects/{projectId}/artifacts/{artifactId}/status', {
+        params: { path },
+        body: { status: requireStr(input, 'status') as 'ACTIVE' | 'ARCHIVED' },
+        // The suite's rule: an absolute target state, not a delta against something read.
+        tcms: session.request,
+      });
+    }
+
+    if (action === 'delete') {
+      await session.client.DELETE('/projects/{projectId}/artifacts/{artifactId}', {
+        params: { path }, tcms: session.request,
+      });
+      /*
+        Both 409s are left to `result.ts` for `writeSuite`'s reason — the server's `detail` names
+        which of the two applies (a sign-off record, or a row something else supersedes) and what
+        to do instead, which is more than a sentence composed here could say.
+      */
+      return {
+        deleted: artifactId,
+        note: 'Removed from the register. A FILE artifact\'s bytes go with it — this is the one '
+          + 'delete on this surface that is not soft. Archiving instead keeps the row and takes '
+          + 'it out of circulation.',
+      };
+    }
+
+    if (action !== 'edit') throw new InputError(`Unknown action '${action}'.`);
+
+    /*
+      `ArtifactEditInput` requires `title` and `category`, so this is the whole-set shape the
+      module header describes and not a delta — the same reason the suite and plan arms read
+      first. `core/rewrite.ts` is not used because the register has no `*InputFrom` projection:
+      three fields, read from the row the register serves.
+
+      No `If-Match`: the endpoint declares none. The row's own `lockVersion` is on the wire and
+      the server does not read it here, so sending one would be a header nothing checks —
+      `writeConformance.test.ts` asserts exactly that agreement.
+    */
+    const current = await session.client.GET('/projects/{projectId}/artifacts', {
+      params: { path: { projectId } }, tcms: session.request,
+    }) as components['schemas']['Artifact'][];
+    const row = current.find((artifact) => artifact.id === artifactId);
+    if (!row) {
+      throw new InputError(
+        `No artifact ${artifactId} in this project's register. Ids come from tcms_list_artifacts, `
+        + 'and a plan-scope row is only in that plan\'s register.',
+      );
+    }
+
+    return session.client.PATCH('/projects/{projectId}/artifacts/{artifactId}', {
+      params: { path },
+      body: present({
+        title: str(input, 'title') ?? row.title,
+        category: str(input, 'category') ?? row.category,
+        description: 'description' in input ? nullableStr(input, 'description') : row.description,
+      }) as components['schemas']['ArtifactEditInput'],
+      tcms: session.request,
+    });
+  },
+};
+
 const report: ToolDefinition = {
   name: 'tcms_report',
   title: 'Generate a report, and poll it',
@@ -1385,5 +1587,6 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   reviewComment,
   reviewVerdict,
   writeWorkItem,
+  writeArtifact,
   report,
 ];

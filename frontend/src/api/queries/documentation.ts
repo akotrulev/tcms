@@ -227,10 +227,13 @@ export function useArtifacts(
 /**
  * Registers a reference in the artifact register.
  *
- * Only the two **reference** kinds are accepted — `FILE` needs the storage port that open question
- * #28 resolved and nobody built, `GENERATED_REPORT` needs the `reporting` module. The contract's
+ * ~~Only the two **reference** kinds are accepted — `FILE` needs the storage port that open question
+ * #28 resolved and nobody built, `GENERATED_REPORT` needs the `reporting` module.~~ → **three of the
+ * four are, since audit C6 gave `GENERATED_REPORT` a writer**; `FILE` is the one this operation
+ * refuses, and it goes to `useRegisterArtifactFile` because the bytes travel with the registration.
+ * The contract's
  * `ArtifactInput.kind` is a narrower enum than `Artifact.kind` for exactly this reason, so the
- * unregistrable kinds are a compile error here rather than a 400 at runtime.
+ * unregistrable kind is a compile error here rather than a 400 at runtime.
  *
  * **Both scopes are invalidated, not just the one written.** A project-scope artifact appears in
  * every plan's register as an inherited row (plan §6n), so writing one changes lists this mutation

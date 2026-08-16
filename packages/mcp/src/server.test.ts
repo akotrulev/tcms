@@ -123,13 +123,21 @@ describe('tools/list', () => {
       to and shows up here as a name this list does not have.
 
       ~~One name today, and that is not a measure of the change: the five delete keys V52 gave the
-      credential have no MCP tools yet.~~ → **four names since §211**, over three of the five.
-      `evidence:delete` and `artifact:delete` are still absent by decision — `writes.ts`'s module
-      header carries both reasons — so this list is also where a slice that changes its mind about
-      either one shows up.
+      credential have no MCP tools yet.~~ ~~→ **four names since §211**, over three of the five.~~
+      → **five since audit C10**, over four of the five. `evidence:delete` is the one still absent
+      by decision — `writes.ts`'s module header carries the reason, and it is the sharpest of them:
+      that delete is HARD and this surface cannot attach evidence at all, so the only evidence an
+      agent could remove is a person's. This list is where a slice that changes its mind shows up.
+
+      Note what the artifact tool being here does NOT mean. Its delete is hard for a `FILE` too,
+      and it is offered anyway — the difference is that this surface can also register the row it
+      removes, and archiving sits beside the delete as the reversible act.
     */
     expect(tools.filter((tool) => tool.annotations?.destructiveHint).map((tool) => tool.name).sort())
-      .toEqual(['tcms_write_case', 'tcms_write_doc_page', 'tcms_write_plan', 'tcms_write_suite']);
+      .toEqual([
+        'tcms_write_artifact', 'tcms_write_case', 'tcms_write_doc_page', 'tcms_write_plan',
+        'tcms_write_suite',
+      ]);
 
     const search = tools.find((tool) => tool.name === 'tcms_search_cases');
     expect(search?.annotations?.readOnlyHint).toBe(true);

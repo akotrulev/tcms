@@ -6462,14 +6462,25 @@ export interface paths {
          * @description Registers a **reference** — a documentation page or an external URL — at project or plan
          *     scope.
          *
-         *     `FILE` and `GENERATED_REPORT` are declared on `Artifact` because the register renders them,
-         *     and are deliberately **not** accepted here. ~~An upload needs the storage port (open
-         *     question #28…)~~ → **superseded: `FILE` is registrable since 2026-08-07, at
-         *     `POST /projects/{projectId}/artifacts/files`**, because the bytes have to travel with the
-         *     registration — a `FILE` row created here and filled in later is a register entry claiming a
-         *     document it cannot produce. Sending `kind: FILE` to *this* operation is a `400` naming that
-         *     endpoint, and the advice is safe to give because the caller holds the same permission for
-         *     it. A pinned report still needs a writer: nothing in `reporting` produces one.
+         *     ~~`FILE` and `GENERATED_REPORT` are declared on `Artifact` because the register renders
+         *     them, and are deliberately **not** accepted here.~~ → **`FILE` is registrable since
+         *     2026-08-07 and `GENERATED_REPORT` since 2026-08-16; the kinds this operation refuses are
+         *     down to one.**
+         *
+         *     `FILE` goes to `POST /projects/{projectId}/artifacts/files`, because the bytes have to
+         *     travel with the registration — a `FILE` row created here and filled in later is a register
+         *     entry claiming a document it cannot produce. Sending `kind: FILE` to *this* operation is a
+         *     `400` naming that endpoint, and the advice is safe to give because the caller holds the
+         *     same permission for it.
+         *
+         *     **`GENERATED_REPORT` is accepted here (audit C6), and it is the one kind whose payload
+         *     this product generated itself.** ~~A pinned report still needs a writer: nothing in
+         *     `reporting` produces one.~~ → the module has produced them since §87 and `V1`'s
+         *     `artifact.report_artifact_id` waited the whole time; `reportJobId` is what fills it. What
+         *     is pinned is the **rendered artifact**, which is immutable by `ReportArtifact`'s own rule,
+         *     so a register entry made today answers with the same bytes a year from now — which is the
+         *     entire reason a cycle's numbers are worth registering at all. Regenerating the report
+         *     produces a different artifact and does not touch this row.
          *
          *     Steering people toward references is the design, not a limitation of this slice — plan §6n
          *     calls the register's failure mode "a graveyard of outdated copies", and a strategy document
@@ -12297,16 +12308,24 @@ export interface components {
             inherited: boolean;
             /**
              * @description **Where this artifact points, whatever its kind.** The external link for
-             *     `EXTERNAL_URL`, and — since the `FILE` kind got a writer — the download path for
-             *     `FILE`. `null` for `DOC_PAGE_REF` (reached by `docPageId`) and `GENERATED_REPORT`.
+             *     `EXTERNAL_URL`, the download path for `FILE` (since that kind got a writer), and —
+             *     since audit C6 — the **report download** for `GENERATED_REPORT`,
+             *     `/projects/{projectId}/reports/artifacts/{artifactId}/content`. `null` only for
+             *     `DOC_PAGE_REF`, which is reached by `docPageId`.
              *
              *     The server builds it rather than the client composing
              *     `/projects/{projectId}/artifacts/{artifactId}/content`: a composed path is a second
              *     place the route is spelled, and a route change then breaks the download with a `404`
              *     that reads as a missing file.
              *
-             *     **Read `kind` before following it.** One of these two values leaves the product for
-             *     somebody else's site and the other does not, and nothing about the string says which.
+             *     **Read `kind` before following it.** These values do three different things — one
+             *     leaves the product for somebody else's site, one downloads the register's own bytes,
+             *     and one downloads a report — and nothing about the string says which.
+             *
+             *     **A `GENERATED_REPORT`'s link is gated as a report, not as an artifact**: that route
+             *     costs `report:export`, so a reader holding `artifact:read` and not that key sees the
+             *     entry, the title and the provenance and is refused the bytes. Pinning a report into
+             *     the register records *that it was produced*; it does not re-license carrying it off.
              */
             url?: string | null;
             /**
@@ -12330,6 +12349,18 @@ export interface components {
              * @description The stored size in bytes, for `FILE` and `null` otherwise.
              */
             sizeBytes?: number | null;
+            /**
+             * @description **A sign-off record — this row cannot be edited or removed** (`409` either way), and
+             *     correcting it means superseding it. Set at registration and never after; see
+             *     `ArtifactInput.writeOnce`.
+             *
+             *     On the wire since audit C7, and the reason is §31's disable-don't-hide: the column has
+             *     been enforced by two refusals the client had **no way to predict**, so Correct… and
+             *     Remove… enabled on every sign-off row and the register answered a `409` after the
+             *     user had written the correction. A client renders those controls disabled, with this
+             *     as the reason.
+             */
+            writeOnce: boolean;
             updatedBy: components["schemas"]["UserRef"];
             /** Format: date-time */
             updatedAt: string;
@@ -12371,6 +12402,13 @@ export interface components {
              *     the replaced artifact need not itself be a `FILE`.
              */
             supersedes?: string | null;
+            /**
+             * @description As `ArtifactInput.writeOnce`, and **this is the path a sign-off usually arrives by** —
+             *     a countersigned PDF is bytes, not a link. Both creates take the flag because the
+             *     register's promise is about the entry, not about where the document lives.
+             * @default false
+             */
+            writeOnce: boolean;
         };
         /**
          * @description A registration. Which of `docPageId` / `url` is required is decided by `kind`, and which of
@@ -12405,13 +12443,52 @@ export interface components {
              */
             category: string;
             /**
-             * @description The two **reference** kinds. Narrower than `Artifact.kind` on purpose — see the
-             *     operation description for why `FILE` and `GENERATED_REPORT` are not accepted here.
+             * @description The two **reference** kinds, and — since audit C6 — the **pinned report**. Still
+             *     narrower than `Artifact.kind`: `FILE` is refused here and the operation description
+             *     names the endpoint that takes it.
              * @enum {string}
              */
-            kind: "DOC_PAGE_REF" | "EXTERNAL_URL";
+            kind: "DOC_PAGE_REF" | "EXTERNAL_URL" | "GENERATED_REPORT";
             title: string;
             description?: string | null;
+            /**
+             * @description **A sign-off record: the register keeps it as it was signed.** `true` refuses every
+             *     later edit and every delete on this row with a `409` — corrections *supersede* instead
+             *     (plan §6n), which leaves both documents and the fact that one replaced the other.
+             *
+             *     Absent means `false`, and it is **decided here and never again**: there is no field for
+             *     it on `ArtifactEditInput`, and the column is not updatable. Marking an existing row is
+             *     deliberately impossible — a flag that can be set later can be set on somebody else's
+             *     row to freeze it, and the whole value of the promise is that it was made when the
+             *     document was registered.
+             *
+             *     `write_once` has been enforced by the delete since §126 and by the edit since §229,
+             *     against a column **nothing could set** (audit C7). Registration is that writer.
+             *
+             *     Archiving is still allowed: circulation is not content, and a signed record that is no
+             *     longer in use is exactly what `ARCHIVED` says. So is *being* superseded — that is the
+             *     correction path this flag exists to force people onto.
+             * @default false
+             */
+            writeOnce: boolean;
+            /**
+             * Format: uuid
+             * @description Required when `kind` is `GENERATED_REPORT`, rejected otherwise. The **job**, not the
+             *     artifact: the job is what carries `projectId`, so it is the only id that can prove the
+             *     report belongs to the project in the path (`report_artifact` has no `project_id` —
+             *     `ReportArtifact`'s header states that and the download route already routes through
+             *     the job for the same reason).
+             *
+             *     It must name a `COMPLETED` job of this project. A `PENDING`, `RUNNING` or `FAILED` one
+             *     is a `400`: there are no bytes to pin, and a register entry pointing at a report that
+             *     never rendered is the failure mode plan §6n calls the register's own — an entry that
+             *     claims a document and cannot produce it.
+             *
+             *     The row stores the **artifact** the job produced. Regenerating from the same saved
+             *     definition makes a new job and a new artifact and changes nothing here, which is the
+             *     point of pinning: `Artifact.url` on this row answers the same bytes for ever.
+             */
+            reportJobId?: string | null;
             /**
              * Format: uuid
              * @description Required when `kind` is `DOC_PAGE_REF`. Must name a live page **in this project** — a

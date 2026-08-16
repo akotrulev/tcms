@@ -702,6 +702,206 @@ class ArtifactEndpointTest extends IntegrationTestBase {
         }
     }
 
+    /**
+     * <strong>Pinning a generated report — audit C6, and the last of {@code artifact}'s payload
+     * columns to get a writer.</strong>
+     *
+     * <p>{@code V1} declared {@code report_artifact_id} and {@link ArtifactKind#GENERATED_REPORT}
+     * together, {@code reporting} has produced artifacts since §87, and the register went on
+     * answering "not available yet" for two milestones — the sixth time in this project a "blocked"
+     * note has outlived its blocker.
+     *
+     * <p><strong>The request names the JOB and the row stores the ARTIFACT</strong>, which is the
+     * one design point worth carrying out of this class. {@code report_artifact} has no
+     * {@code project_id} ({@code ReportArtifact}'s header says so, and the reporting module's own
+     * download route already routes through the job), so an artifact id alone cannot be proved to
+     * belong to the project in the path — while the job id can. What is stored is the artifact
+     * because that row is immutable, so the register's entry answers the same bytes for ever;
+     * regenerating produces a new job, a new artifact, and does not touch this row.
+     */
+    @Nested
+    @DisplayName("Pinned reports — the job proves the project, the artifact is what is kept")
+    class PinnedReports {
+
+        @Test
+        @DisplayName("a completed report is pinned, and the row points at the report's own route")
+        void aCompletedReportIsPinnable() throws Exception {
+            UUID job = completedReportJob(ACME, ACME_BANKING);
+
+            MvcResult result = create(LEAD, ACME_BANKING, pinnedReport("Release 1 numbers", job));
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(201);
+            JsonNode registered = body(result);
+            assertThat(registered.get("kind").asText()).isEqualTo("GENERATED_REPORT");
+            // The reports download, not the register's own /content — and the difference is a
+            // permission: that route costs report:export, so pinning a report records that it was
+            // produced without re-licensing carrying it off.
+            assertThat(registered.get("url").asText())
+                    .isEqualTo("/api/v1/projects/" + ACME_BANKING + "/reports/artifacts/"
+                            + reportArtifactOf(job) + "/content");
+        }
+
+        @Test
+        @DisplayName("a job that rendered nothing is refused — there are no bytes to pin")
+        void anUnfinishedReportIsRefused() throws Exception {
+            UUID job = pendingReportJob(ACME, ACME_BANKING);
+
+            MvcResult refused = create(LEAD, ACME_BANKING, pinnedReport("Too early", job));
+
+            // A register entry claiming a document it cannot produce is plan §6n's own failure
+            // mode, and this is the arm a real caller meets: a report that failed or is still
+            // running looks exactly like one that finished until you read `artifact_id`.
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorFields(refused)).containsExactly("reportJobId");
+            assertThat(countArtifacts(ACME)).isZero();
+        }
+
+        @Test
+        @DisplayName("another project's completed report is the SAME refusal, not a distinct one")
+        void aForeignProjectsReportIsRefused() throws Exception {
+            UUID job = completedReportJob(ACME, ACME_LOCKED);
+
+            MvcResult refused = create(LEAD, ACME_BANKING, pinnedReport("Somebody else's", job));
+
+            // §6t: a distinct message would let a caller probe which job ids are real in a project
+            // they cannot see. Asserted as the same field AND the same sentence as the arm above,
+            // because "same refusal" is the property and two messages would satisfy the field
+            // check alone.
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorFields(refused)).containsExactly("reportJobId");
+            assertThat(body(refused).get("errors").get("reportJobId").get(0).asText())
+                    .isEqualTo("That report is not one this project has finished generating.");
+        }
+
+        @Test
+        @DisplayName("GENERATED_REPORT with no job is a field error, not a row pointing nowhere")
+        void thePinNeedsAJob() throws Exception {
+            MvcResult refused = create(LEAD, ACME_BANKING, pinnedReport("Nothing in mind", null));
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorFields(refused)).containsExactly("reportJobId");
+        }
+
+        @Test
+        @DisplayName("a job id on a kind that is not a pin is refused, never quietly dropped")
+        void anotherKindMayNotCarryAJob() throws Exception {
+            UUID job = completedReportJob(ACME, ACME_BANKING);
+
+            MvcResult refused = create(LEAD, ACME_BANKING,
+                    replacingLast(urlBody("An ordinary link"), "\"reportJobId\":\"" + job + "\""));
+
+            // validateScope's rule, over a fourth field: a client sending a job id believes the
+            // entry points at that report, and storing a row that does not is the silent
+            // disagreement §50 built two checks to catch.
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorFields(refused)).containsExactly("reportJobId");
+        }
+
+        @Test
+        @DisplayName("a Viewer may not pin one — the gate is the register's, not the report's")
+        void theGateIsTheRegisters() throws Exception {
+            UUID job = completedReportJob(ACME, ACME_BANKING);
+
+            MvcResult refused = create(VIEWER, ACME_BANKING, pinnedReport("Numbers", job));
+
+            // A Viewer holds report:view and report:export and still writes nothing here. Pinning
+            // is a registration, so it costs artifact:edit — inventing a report-shaped key for it
+            // would be a rule the roles spec does not have.
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            assertThat(countArtifacts(ACME)).isZero();
+        }
+    }
+
+    /**
+     * <strong>Sign-off records — audit C7, the column {@code V1} declared and nothing could
+     * set.</strong>
+     *
+     * <p>{@code write_once} has been honoured by the delete since §126 and by the edit since §229,
+     * against a value only {@code psql} could produce; both of those tests used to flip it in SQL
+     * and now register one. What is new here is the flag's own behaviour: it is decided at
+     * registration, it cannot be added later or taken back, and the two acts it does <em>not</em>
+     * refuse are as deliberate as the two it does.
+     */
+    @Nested
+    @DisplayName("Sign-off records — decided at registration, and never after")
+    class SignOffRecords {
+
+        @Test
+        @DisplayName("a sign-off registration says so on the wire, so the client can grey both acts")
+        void theFlagIsServed() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, signOff("March sign-off")));
+
+            // §31's disable-don't-hide, and the reason this reaches the wire at all: the column has
+            // been enforced by two refusals a client could not predict, so Correct… and Remove…
+            // enabled on every sign-off row and the 409 arrived after the correction was written.
+            assertThat(row(ACME_BANKING, id).get("writeOnce").asBoolean()).isTrue();
+        }
+
+        @Test
+        @DisplayName("an ordinary registration is not one — absent means false, never null")
+        void absentMeansFalse() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Environment guide")));
+
+            JsonNode registered = row(ACME_BANKING, id);
+            assertThat(registered.get("writeOnce").isNull())
+                    .as("required-and-not-nullable: a client must not have to tell a missing "
+                            + "field from a false one before deciding whether to offer Correct…")
+                    .isFalse();
+            assertThat(registered.get("writeOnce").asBoolean()).isFalse();
+        }
+
+        @Test
+        @DisplayName("an edit cannot make one — the promise is made at registration or not at all")
+        void anEditCannotSetIt() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Environment guide")));
+
+            MvcResult corrected = mvc.perform(MockMvcRequestBuilders
+                            .patch("/api/v1/projects/" + ACME_BANKING + "/artifacts/" + id)
+                            .header(HttpHeaders.AUTHORIZATION, bearer(LEAD))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"title":"Environment guide","category":"Compliance",\
+                                    "description":null,"writeOnce":true}"""))
+                    .andReturn();
+
+            // Two layers say no and neither is a filter in the service: ArtifactEditInput has no
+            // such component, and the column is updatable = false. Asserted from outside because
+            // "the record has three components" is not visible to a reader of the endpoint — and a
+            // flag that can be set later can be set on somebody else's row to freeze it.
+            assertThat(corrected.getResponse().getStatus()).isEqualTo(200);
+            assertThat(row(ACME_BANKING, id).get("writeOnce").asBoolean()).isFalse();
+        }
+
+        @Test
+        @DisplayName("a sign-off is still archivable — circulation is not content")
+        void archivingIsStillAllowed() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, signOff("Retired sign-off")));
+
+            assertThat(setStatus(LEAD, ACME_BANKING, id, "ARCHIVED").getResponse().getStatus())
+                    .as("a signed record that is no longer in use is exactly what ARCHIVED says, "
+                            + "and refusing it would leave the register no way to retire one")
+                    .isEqualTo(200);
+            assertThat(row(ACME_BANKING, id).get("status").asText()).isEqualTo("ARCHIVED");
+        }
+
+        @Test
+        @DisplayName("a sign-off is still supersedable — that is the correction path it forces")
+        void supersedingIsStillAllowed() throws Exception {
+            UUID signed = createdId(create(LEAD, ACME_BANKING, signOff("April sign-off")));
+
+            UUID replacement = createdId(create(LEAD, ACME_BANKING,
+                    replacing(signOff("April sign-off (corrected)"), signed)));
+
+            // The whole point of the flag rather than an accident of where the guard sits: edits
+            // and deletes are refused precisely so a correction leaves BOTH documents and the fact
+            // that one replaced the other. A write-once row that could not be superseded would be
+            // a record nobody could ever correct.
+            assertThat(row(ACME_BANKING, signed).get("status").asText()).isEqualTo("SUPERSEDED");
+            assertThat(row(ACME_BANKING, signed).get("supersededById").asText())
+                    .isEqualTo(replacement.toString());
+        }
+    }
+
     // =====================================================================
     // Reachability and isolation
     // =====================================================================
@@ -1195,21 +1395,24 @@ class ArtifactEndpointTest extends IntegrationTestBase {
          * <strong>The write-once guard, made reachable by the fixture.</strong>
          *
          * <p>{@code artifact.write_once} has had a comment since {@code V1} — "sign-off records:
-         * corrections supersede, never edit" — and no enforcement anywhere, and nothing in the
+         * corrections supersede, never edit" — and <del>no enforcement anywhere, and nothing in the
          * product sets it {@code true} yet. So this test flips the column directly, which is the
-         * only way the guard can be observed today.
+         * only way the guard can be observed today.</del> → <strong>registration sets it since
+         * audit C7</strong>, so the row here is made the way a lead makes one and the SQL fixture
+         * is gone.
          *
          * <p>Writing the check before its writer is deliberate and it is the opposite call from
          * §121 phase 3's deleted seam. A seam guesses at a consumer that may not want it; a
          * <em>refusal</em> guesses at nothing — it is the column's documented meaning, enforced. The
          * alternative is the {@code Company.suspend()} shape the plan recorded two days ago: a
-         * guarantee written in a comment, believed by everyone, and doing nothing.
+         * guarantee written in a comment, believed by everyone, and doing nothing. Three slices
+         * later the writer arrived and the refusal did not have to move, which is the argument
+         * paying out rather than merely being made.
          */
         @Test
         @DisplayName("a write-once sign-off record is refused with 409, and survives")
         void aSignOffRecordCannotBeDeleted() throws Exception {
-            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Release 1 sign-off")));
-            setWriteOnce(id);
+            UUID id = createdId(create(LEAD, ACME_BANKING, signOff("Release 1 sign-off")));
 
             MvcResult refused = delete(LEAD, ACME_BANKING, id);
 
@@ -1450,11 +1653,12 @@ class ArtifactEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("a write-once artifact is refused with 409 and told to supersede instead")
         void aWriteOnceRowIsRefused() throws Exception {
-            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("January sign-off")));
-            // Nothing in the product sets this column, which is exactly why the guard needs a
-            // fixture: enforcement that arrives after the writer is a guarantee that is believed
-            // and does nothing (the delete's own argument).
-            markWriteOnce(id);
+            // ~~Nothing in the product sets this column, which is exactly why the guard needs a
+            // fixture~~ → audit C7 gave it one, so the row is registered as a sign-off through the
+            // endpoint a caller uses. The guard is unchanged; what changed is that the state it
+            // refuses is now one the product can reach, which is what turns an enforced comment
+            // into an enforced behaviour.
+            UUID id = createdId(create(LEAD, ACME_BANKING, signOff("January sign-off")));
 
             MvcResult refused = edit(LEAD, ACME_BANKING, id, "January sign-off v2", "SignOff", null);
 
@@ -1565,14 +1769,6 @@ class ArtifactEndpointTest extends IntegrationTestBase {
                                 + ",\"description\":"
                                 + (description == null ? "null" : quote(description)) + "}"))
                 .andReturn();
-    }
-
-    /** The column {@code V1} declared and no product path writes — see the write-once test. */
-    private void markWriteOnce(UUID artifactId) throws SQLException {
-        try (Connection connection = appConnection(ACME)) {
-            execute(connection,
-                    "UPDATE artifact SET write_once = true WHERE id = '" + artifactId + "'");
-        }
     }
 
     /**
@@ -1734,6 +1930,29 @@ class ArtifactEndpointTest extends IntegrationTestBase {
         return body.substring(0, body.length() - 1) + ",\"supersedes\":\"" + supersedes + "\"}";
     }
 
+    /**
+     * A sign-off record — the ordinary registration plus {@code writeOnce} (audit C7).
+     *
+     * <p>Spliced the way {@link #replacing} splices, and for its reason: what these tests are about
+     * is one flag's effect on acts the register already had, so re-spelling the payload would put a
+     * second definition of "an ordinary registration" beside the first.
+     */
+    private String signOff(String title) {
+        return urlBody(title).substring(0, urlBody(title).length() - 1) + ",\"writeOnce\":true}";
+    }
+
+    /** The same body with one more property spliced in before the closing brace. */
+    private String replacingLast(String body, String property) {
+        return body.substring(0, body.length() - 1) + "," + property + "}";
+    }
+
+    /** A pinned report, which names a job rather than carrying a payload of its own (audit C6). */
+    private String pinnedReport(String title, UUID jobId) {
+        return "{\"scope\":\"PROJECT\",\"category\":\"Compliance\",\"kind\":\"GENERATED_REPORT\""
+                + ",\"title\":" + quote(title)
+                + ",\"reportJobId\":" + (jobId == null ? "null" : "\"" + jobId + "\"") + "}";
+    }
+
     private MvcResult setStatus(UUID userId, UUID projectId, UUID artifactId, String status)
             throws Exception {
 
@@ -1818,19 +2037,74 @@ class ArtifactEndpointTest extends IntegrationTestBase {
     }
 
     /**
-     * Flips {@code write_once}, which nothing in the product can set.
+     * A finished report of {@code projectId} — a {@code report_artifact} and the
+     * {@code report_job} that produced it, as {@code ReportJobRunner.complete} leaves them.
      *
-     * <p>Raw SQL is the only way to reach it and that is the point of the test it serves: the
-     * column has carried its meaning in a {@code V1} comment since M0, and the guard that honours
-     * it is unreachable until something writes it. A fixture is what makes an early guard
-     * assertable instead of aspirational.
+     * <p>Written in SQL rather than by running the pipeline, and the reason is the module boundary
+     * this fixture exists to test across: {@code documentation} may not depend on
+     * {@code reporting}, so a test of the register that booted the report runner would be asserting
+     * the register's rule through the very coupling {@link ReportFacts} exists to avoid. What the
+     * register needs from the other side is two columns, and this writes exactly those.
+     *
+     * @return the job id, which is what a caller pins by — see {@link PinnedReports}
      */
-    private void setWriteOnce(UUID artifactId) throws SQLException {
+    private UUID completedReportJob(UUID companyId, UUID projectId) throws SQLException {
+        UUID artifactId = UUID.randomUUID();
+        UUID jobId = UUID.randomUUID();
+        try (Connection connection = appConnection(companyId)) {
+            try (var statement = connection.prepareStatement("""
+                    INSERT INTO report_artifact
+                        (id, company_id, format, storage_key, filter_snapshot, generated_at)
+                    VALUES (CAST(? AS uuid), CAST(? AS uuid), 'MD', ?, '{}'::jsonb, now())
+                    """)) {
+                statement.setObject(1, artifactId);
+                statement.setObject(2, companyId);
+                statement.setString(3, "reports/" + artifactId + ".md");
+                statement.executeUpdate();
+            }
+            insertReportJob(connection, jobId, companyId, projectId, "COMPLETED", artifactId);
+        }
+        return jobId;
+    }
+
+    /** A claimed job with no bytes yet — the state the pin must refuse. */
+    private UUID pendingReportJob(UUID companyId, UUID projectId) throws SQLException {
+        UUID jobId = UUID.randomUUID();
+        try (Connection connection = appConnection(companyId)) {
+            insertReportJob(connection, jobId, companyId, projectId, "RUNNING", null);
+        }
+        return jobId;
+    }
+
+    private void insertReportJob(
+            Connection connection, UUID jobId, UUID companyId, UUID projectId, String status,
+            UUID artifactId) throws SQLException {
+
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO report_job
+                    (id, company_id, project_id, type, format, status, artifact_id, requested_at)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), 'run_summary', 'MD',
+                        ?, CAST(? AS uuid), now())
+                """)) {
+            statement.setObject(1, jobId);
+            statement.setObject(2, companyId);
+            statement.setObject(3, projectId);
+            statement.setString(4, status);
+            statement.setObject(5, artifactId);
+            statement.executeUpdate();
+        }
+    }
+
+    /** The artifact the job produced — what the register stores, read back for the URL assertion. */
+    private UUID reportArtifactOf(UUID jobId) throws SQLException {
         try (Connection connection = appConnection(ACME);
              var statement = connection.prepareStatement(
-                     "UPDATE artifact SET write_once = true WHERE id = ?")) {
-            statement.setObject(1, artifactId);
-            statement.executeUpdate();
+                     "SELECT artifact_id FROM report_job WHERE id = ?")) {
+            statement.setObject(1, jobId);
+            try (ResultSet rows = statement.executeQuery()) {
+                rows.next();
+                return rows.getObject(1, UUID.class);
+            }
         }
     }
 

@@ -7,6 +7,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { humanize, reportJobStatusLabels } from '../../lib/labels';
 import { DownloadReportButton } from './DownloadReportButton';
+import { PinReportButton } from './PinReportButton';
 import { ReportView } from './ReportView';
 
 /**
@@ -31,6 +32,13 @@ import { ReportView } from './ReportView';
  * query rule): while the job is running the page shows the job running rather than a skeleton for a
  * fetch that has not been made, and when the poll lands COMPLETED the model request fires by
  * itself. FAILED renders the worker's sentence and stops — the poll stops with it.
+ *
+ * ## Two things can be done with a finished report, and until C6 only one of them existed
+ *
+ * `DownloadReportButton` takes it away; `PinReportButton` keeps it. The second closes the loop
+ * between two features that had shipped separately — `reporting` has produced artifacts since §87
+ * and `V1` declared `artifact.report_artifact_id` in M0 — so "these were the numbers we signed the
+ * cycle off on" was a claim the product could generate and could register and could not do both.
  *
  * ## The 403 is worded here rather than left generic, and what it means changed in §227
  *
@@ -70,7 +78,25 @@ export function ReportViewPage() {
           { label: title },
         ]}
         subtitle="What you see here is the model the exported file was rendered from — the same numbers, the same header."
-        actions={job.data ? <DownloadReportButton job={job.data} testId={`${TestId}.Download`} /> : null}
+        actions={
+          job.data ? (
+            <Stack direction="row" sx={{ gap: 1, alignItems: 'flex-start' }}>
+              <DownloadReportButton job={job.data} testId={`${TestId}.Download`} />
+              {/*
+                Beside the download, because the two are the same question asked over different
+                time horizons: one takes the report away now, the other keeps it where the project
+                will still find it. The title is the model's once it is readable — the same words
+                the exported document carries — so the register's entry and the file agree.
+              */}
+              <PinReportButton
+                job={job.data}
+                projectId={projectId}
+                reportTitle={title}
+                testId={`${TestId}.Pin`}
+              />
+            </Stack>
+          ) : null
+        }
       />
 
       <DataRegion

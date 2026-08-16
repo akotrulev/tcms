@@ -46,6 +46,9 @@ import { isListed, type ToolDefinition } from './tool.js';
  */
 export const INSTRUCTIONS_BUDGET = 2000;
 
+/** What {@link fit} joins sections with, named so the size arithmetic and the join agree. */
+const SEPARATOR = '\n\n';
+
 /**
  * Renders the summary for one session.
  *
@@ -66,7 +69,29 @@ export function renderInstructions(reach: Reach, tools: readonly ToolDefinition[
   sections.push(identity(reach));
 
   const hidden = tools.filter((tool) => !isListed(tool, held));
-  if (hidden.length > 0) sections.push(unavailable(hidden));
+  if (hidden.length > 0) {
+    /*
+      Sized against what the two sections above leave, and shortened rather than dropped.
+
+      `fit` drops whole sections from the end, which is right for the closing advice — every write
+      tool's own description repeats it — and wrong for this one: a credential holding almost
+      nothing is exactly the caller who needs to be told what to ask for, and it is also the
+      caller for whom this list is longest. So the section that matters most to the reader was the
+      one guaranteed to be sacrificed as the registry grew.
+
+      That is not hypothetical. Audit C10 added two tools and pushed the detailed form to 1848
+      bytes, over budget with the header, and the whole section disappeared — silently, because a
+      dropped section reads exactly like a credential with nothing hidden.
+
+      The fallback keeps the half the module header argues is the actionable one: the permission
+      key is what a user takes to an administrator, the tool titles are context. Bounded by
+      construction — 55 keys is the whole catalogue — so this cannot overflow again as tools are
+      added, only as permissions are, and there have been none since `V3`.
+    */
+    const spare = INSTRUCTIONS_BUDGET - bytes(sections.join(SEPARATOR)) - SEPARATOR.length;
+    const detailed = unavailable(hidden);
+    sections.push(bytes(detailed) <= spare ? detailed : unavailableKeysOnly(hidden));
+  }
 
   sections.push(
     'Ground yourself before you write: call tcms_orient once, then read the cases or the '
@@ -114,6 +139,20 @@ function unavailable(hidden: readonly ToolDefinition[]): string {
 }
 
 /**
+ * The same answer with the titles taken out — what is rendered when the detailed form will not
+ * fit. See the call site for why the choice is made there and not here.
+ *
+ * The keys are still sorted and still deduplicated, so this is the detailed form's own left
+ * column: a reader who has both in front of them at different times sees the same set.
+ */
+function unavailableKeysOnly(hidden: readonly ToolDefinition[]): string {
+  const keys = [...new Set(hidden.flatMap((tool) => tool.gate.permissions))].sort();
+
+  return 'Not available to this credential — ask an administrator for a role holding one of '
+    + `these permissions: ${keys.join(', ')}.`;
+}
+
+/**
  * Joins the sections and drops whole ones from the end until the result fits.
  *
  * From the end, because the order above is the order of decreasing consequence: who you are
@@ -125,7 +164,7 @@ function unavailable(hidden: readonly ToolDefinition[]): string {
 function fit(sections: readonly string[]): string {
   const kept = [...sections];
   for (;;) {
-    const text = kept.join('\n\n');
+    const text = kept.join(SEPARATOR);
     if (bytes(text) <= INSTRUCTIONS_BUDGET || kept.length <= 1) return text;
     kept.pop();
   }

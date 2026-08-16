@@ -257,6 +257,50 @@ describe('ArtifactTable', () => {
       expect(screen.getByTestId('Artifacts.Row.Edit')).not.toHaveAttribute('aria-disabled', 'true')
     })
 
+    /*
+      C7 — the row's own promise, which is not a permission and must not be mixed into one.
+
+      Until `writeOnce` reached the wire both refusals were `409`s the client could not predict, so
+      Correct… enabled on a frozen row and the register answered after the correction had been
+      typed — §31's disable-don't-hide, unfollowable for want of one boolean. What the pair below
+      pins is that the same caller, with the same keys, gets opposite verdicts on two rows: only a
+      property of the ROW can produce that.
+    */
+    it('greys Correct… and Remove… on a sign-off record, and says why inside the menu', async () => {
+      mockPermissions(['artifact:edit', 'artifact:delete'])
+      renderTable([anArtifact({ id: 'a-signed', title: 'Signed off', writeOnce: true })])
+
+      await waitFor(() => expect(screen.getByTestId('Artifacts.Row.Actions')).toBeEnabled())
+      await userEvent.click(screen.getByTestId('Artifacts.Row.Actions'))
+
+      expect(await screen.findByTestId('Artifacts.Row.Edit'))
+        .toHaveAttribute('aria-disabled', 'true')
+      expect(screen.getByTestId('Artifacts.Row.Delete')).toHaveAttribute('aria-disabled', 'true')
+      // Archive is untouched: circulation is not content, and a signed record out of use is
+      // exactly what ARCHIVED says. Without this the test would pass against a menu that shut
+      // itself entirely, which is the §229 mistake one status over.
+      expect(screen.getByTestId('Artifacts.Row.Archive')).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      )
+      // MUI raises no hover events on a disabled MenuItem, so the reason is a line in the menu
+      // rather than a tooltip nobody can read.
+      expect(screen.getByTestId('Artifacts.Row.WriteOnce')).toHaveTextContent(/sign-off record/i)
+    })
+
+    it('leaves both live on an ordinary row, so the test above is about writeOnce', async () => {
+      mockPermissions(['artifact:edit', 'artifact:delete'])
+      renderTable([replacement])
+
+      await waitFor(() => expect(screen.getByTestId('Artifacts.Row.Actions')).toBeEnabled())
+      await userEvent.click(screen.getByTestId('Artifacts.Row.Actions'))
+
+      expect(await screen.findByTestId('Artifacts.Row.Edit'))
+        .not.toHaveAttribute('aria-disabled', 'true')
+      expect(screen.getByTestId('Artifacts.Row.Delete')).not.toHaveAttribute('aria-disabled', 'true')
+      expect(screen.queryByTestId('Artifacts.Row.WriteOnce')).not.toBeInTheDocument()
+    })
+
     it('disables the actions for a PROJECT row when the grant is PLAN_SCOPE, and not for a plan row', async () => {
       mockPermissions(['artifact:edit'], { 'artifact:edit': 'PLAN_SCOPE' })
       renderTable([replacement, planRow])

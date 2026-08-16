@@ -32,6 +32,10 @@ import java.util.UUID;
  *               described an act nothing could perform until §209. A replaced upload does not have
  *               to be replaced by another upload; kinds are free to differ, because what is being
  *               recorded is that one document took over from another
+ * @param writeOnce as {@link ArtifactInput#writeOnce()} — and <strong>this is the path a sign-off
+ *               usually arrives by</strong>, a countersigned PDF being bytes rather than a link.
+ *               Both creates take it because the promise is about the register's entry, not about
+ *               where the document is kept
  */
 public record ArtifactFileInput(
         ArtifactScope scope,
@@ -39,6 +43,7 @@ public record ArtifactFileInput(
         String category,
         String title,
         String description,
+        boolean writeOnce,
         UUID supersedes) {
 
     /**
@@ -51,7 +56,7 @@ public record ArtifactFileInput(
      */
     ArtifactInput asRegistration() {
         return new ArtifactInput(
-                scope, planId, category, ArtifactKind.FILE, title, description, null, null,
-                supersedes);
+                scope, planId, category, ArtifactKind.FILE, title, description, null, null, null,
+                writeOnce, supersedes);
     }
 }

@@ -636,10 +636,12 @@ describe('registry declarations', () => {
 });
 
 describe('the surface as a whole — surface spec §2 and §4.1', () => {
-  it('is 21 tools', () => {
+  it('is 23 tools', () => {
     // The count is an OUTCOME of "a tool never spans two permissions on its write path", not a
     // target. It is asserted so that a merge or a split has to be a decision somebody records.
-    expect(TOOLS).toHaveLength(21);
+    // ~~21~~ → 23 with audit C10: `tcms_list_artifacts` and `tcms_write_artifact`, which arrived
+    // together because a delete arm needs a read that serves the ids it takes (`writes.ts`).
+    expect(TOOLS).toHaveLength(23);
   });
 
   it('names every tool in the tcms_ namespace', () => {
