@@ -2822,14 +2822,14 @@ git commit -m "§NNN phase 9 — one screen, two ways in, and the same sentence 
 - Modify: `docs/HANDOFF.md` (one index row)
 - Create/modify: `deploy/README.md` — the truststore note
 
-- [ ] **Step 1: The ERD**
+- [x] **Step 1: The ERD**
 
 In the `identity_provider` entry, record that the row now serves two kinds, that `client_id` is
 conditional on `kind` behind `ck_identity_provider_shape`, and that `user_identity` is **unchanged** —
 `(provider, subject)` already carries a directory identifier as well as it carries an OIDC `sub`,
 which is what made the identity half of this free.
 
-- [ ] **Step 2: §6r**
+- [x] **Step 2: §6r**
 
 Add under the identity-provider section:
 
@@ -2844,13 +2844,13 @@ resolution and the deprovisioning poll are deferred with reasons in
 `docs/plans/2026-08-15-m4-external-identity-ldap-ad.md`.
 ```
 
-- [ ] **Step 3: The sketch becomes a pointer**
+- [x] **Step 3: The sketch becomes a pointer**
 
 Replace the body of "Plan 3 (sketch) — LDAP / Active Directory" with a line pointing at this plan,
 keeping the two deferred bullets (group search and the deprovisioning poll) struck through as
 *deferred rather than dropped*, each with the reason from this plan's scope check.
 
-- [ ] **Step 4: The truststore note**
+- [x] **Step 4: The truststore note**
 
 In `deploy/README.md`, under the identity-provider configuration:
 
@@ -2862,7 +2862,7 @@ would be a second trust store, editable through a web form, for a host the same 
 only user is the case where trusting the CA once is the correct fix.
 ```
 
-- [ ] **Step 5: The handoff section and the index row**
+- [x] **Step 5: The handoff section and the index row**
 
 `docs/handoff/NNN-<slug>.md`, in the house format: what landed per phase, the measured test counts
 before and after on the Linux lane, and **the things worth carrying** — the empty-password bind, the
@@ -2870,7 +2870,7 @@ little-endian `objectGUID`, `DROP FUNCTION` before `CREATE`, and the `NOT NULL` 
 replaced rather than dropped. Then one row in `docs/HANDOFF.md`'s index table. **Never append to
 `HANDOFF.md` itself.**
 
-- [ ] **Step 6: The full gates, on the Linux observer**
+- [x] **Step 6: The full gates, on the Linux observer**
 
 ```bash
 ~/bin/tcms-remote backend ./gradlew build
@@ -2881,7 +2881,7 @@ replaced rather than dropped. Then one row in `docs/HANDOFF.md`'s index table. *
 Expected: all three green. Run the backend one locally too — `ci.yml` is `-x test`, so nothing
 downstream runs a backend test until 01:17 UTC.
 
-- [ ] **Step 7: Commit and push**
+- [x] **Step 7: Commit and push**
 
 ```bash
 git add docs/

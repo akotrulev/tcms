@@ -109,8 +109,8 @@ npm run build                     # THE gate: tsc over source+tests, then emit. 
                                   # names the order client → cli → mcp; mcp is THIRD for the
                                   # same reason cli is second.
 npm run lint --workspaces         # oxlint, 0 warnings
-npm run test:run --workspaces     # ~~211~~ ~~241~~ ~~260~~ ~~269~~ ~~302~~ ~~314~~ 320 tests
-                                  # (123 client / 78 cli / 119 mcp, 2026-08-15), ~1s — CI runs
+npm run test:run --workspaces     # ~~211~~ ~~241~~ ~~260~~ ~~269~~ ~~302~~ ~~314~~ ~~320~~ 329 tests
+                                  # (128 client / 78 cli / 123 mcp, 2026-08-16), ~1s — CI runs
                                   # these, unlike the backend's.
                                   # **Since §212 a sentence claiming somebody LACKS a permission is
                                   # checked against the roles spec's §A3 tables** —
@@ -251,8 +251,8 @@ npm run dev          # http://localhost:5173 — proxies /api to localhost:8080
                      # sign in by redeeming the /accept-invitation link provision-company prints
 npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
-npm run test:run     # Vitest + RTL, ~~1203~~ ~~1251~~ ~~1276~~ ~~1285~~ ~~1314~~ ~~1320~~ ~~1330~~ ~~1335~~ ~~1339~~ ~~1341~~ 1349 tests
-                     # (measured on shanks 2026-08-15) — also a gate. Since §197 the harness compares
+npm run test:run     # Vitest + RTL, ~~1203~~ ~~1251~~ ~~1276~~ ~~1285~~ ~~1314~~ ~~1320~~ ~~1330~~ ~~1335~~ ~~1339~~ ~~1341~~ ~~1349~~ 1434 tests
+                     # (measured on shanks 2026-08-16) — also a gate. Since §197 the harness compares
                      # every body a mocked `api.*` call serves against openapi.yaml and fails the test
                      # that served a body the server could not send; since §198 it compares the VALUES
                      # too — enum members, types, nulls in non-nullable fields, `date-time` strings,

@@ -1701,7 +1701,7 @@ Included deliberately, because the OIDC list above assumes an issuer that many o
 
 It is **not** an OIDC provider with different settings — it is a directory you bind against, and the differences that matter are these:
 
-- **Authentication is a bind, not a redirect.** The user's credentials arrive at TCMS (over the local login form) and TCMS binds to the directory as that user. There is no browser redirect, no authorization code, no PKCE. Consequence: **LDAPS or StartTLS is mandatory, not recommended** — a plain-LDAP bind puts the user's directory password on the wire, and unlike OIDC there is no third party absorbing that risk. Refuse to save a provider config with an `ldap://` URL unless an explicit `allowInsecure` flag is set for lab use.
+- **Authentication is a bind, not a redirect.** The user's credentials arrive at TCMS (over the local login form) and TCMS binds to the directory as that user. There is no browser redirect, no authorization code, no PKCE. Consequence: **LDAPS or StartTLS is mandatory, not recommended** — a plain-LDAP bind puts the user's directory password on the wire, and unlike OIDC there is no third party absorbing that risk. ~~Refuse to save a provider config with an `ldap://` URL unless an explicit `allowInsecure` flag is set for lab use.~~ → **superseded 2026-08-15 (§223 D2): there is no such flag** — the lab needs no exception because UnboundID's in-memory server serves LDAPS, so even the tests drive the encrypted path.
 - **The stable identity key is `objectGUID` (AD) or `entryUUID` (OpenLDAP) — never the DN.** A DN encodes the user's position in the tree, so moving someone between OUs changes it, and keying `user_identity` on the DN silently orphans the account and its authorship. This is the LDAP equivalent of §6r's "never key on email" rule, and it is the single most common way LDAP integrations break. Store the DN as a mutable attribute for display and re-bind, not as the key.
 - **`user_identity` still applies unchanged.** An LDAP identity is `(company_id, issuer = provider id, subject = objectGUID)`. It slots into the existing table with no schema change, which is what makes adding it cheap.
 - **Groups come from a search, not a claim.** Either read `memberOf` on the user entry or search groups for `member=<dn>`, configurable — directories differ, and `memberOf` is not always populated. **Nested groups need an explicit recursive resolution** (or AD's `LDAP_MATCHING_RULE_IN_CHAIN`), bounded by a depth limit; unbounded recursion on a large directory is a real outage.
@@ -1711,6 +1711,15 @@ It is **not** an OIDC provider with different settings — it is a directory you
 - **Referrals and paging** — AD returns referrals and caps result sizes; unhandled, group resolution silently truncates for exactly the largest groups. Same failure shape as the Entra overage claim below, and worth handling at the same time.
 
 Spring Security has first-class LDAP support, so the work is configuration, group resolution and the identity-key discipline above — not a protocol implementation.
+
+**LDAP / Active Directory, shipped §223.** The second kind, and it is a *credential* flow: there is
+no third party to redirect to, so TCMS collects the directory password and binds with it. Three
+things follow that are not true of the OIDC lane — the transport must be encrypted with no escape
+hatch (`ldaps://`, or `ldap://` with StartTLS), failed attempts are throttled per identifier because
+each one increments the *customer's* lockout counter, and the search filter is escaped because an
+administrator-supplied filter takes an anonymous caller's input. Group search, nested-group
+resolution and the deprovisioning poll are deferred with reasons in
+`docs/plans/2026-08-15-m4-external-identity-ldap-ad.md`.
 
 ### Provider configuration is per company
 

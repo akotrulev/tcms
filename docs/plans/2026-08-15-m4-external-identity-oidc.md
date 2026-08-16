@@ -1034,29 +1034,24 @@ Gets its own file. The shape, so plan 1 does not accidentally block it:
   claim — handle it explicitly or document the limitation, because unhandled it silently stops
   mapping **for exactly the users in the most groups**.
 
-## Plan 3 (sketch) — LDAP / Active Directory
+## Plan 3 — LDAP / Active Directory
 
-- ~~**`ldap://` is refused unless an explicit `allowInsecure` flag is set** for lab use.~~ →
-  **superseded 2026-08-15 by `docs/plans/2026-08-15-m4-external-identity-ldap-ad.md` D2: there is no
-  such flag.** A URL must be `ldaps://`, or `ldap://` with StartTLS. The exposure a plain bind
-  creates is the *user's own directory password* — the credential to the customer's AD, and very
-  often to everything else they own — which is a strictly larger blast radius than §219's http issuer
-  question, where what was at risk was the signing-key URL. The lab needs no exception because
-  UnboundID's in-memory server serves LDAPS, so the tests drive the encrypted path rather than one
-  production never takes.
-- **Key on `objectGUID` (AD) / `entryUUID` (OpenLDAP), never the DN.** A DN encodes tree position,
-  so moving someone between OUs orphans the account and its authorship. Store the DN as a mutable
-  display/re-bind attribute.
-- Slots into `user_identity` unchanged as `(company, provider, objectGUID)` — **no schema change**,
-  which is what makes it cheap.
-- Groups come from a search (`memberOf`, or `member=<dn>`), configurable — directories differ and
-  `memberOf` is not always populated. **Nested groups need bounded recursive resolution**;
-  unbounded recursion on a large directory is a real outage.
-- Referrals and paging: AD caps result sizes, and unhandled this **silently truncates group
-  resolution for exactly the largest groups**.
-- Deprovisioning is a scheduled poll, not a push — and it **deactivates, never deletes** (§6j
-  authorship).
-- Needs `spring-boot-starter-ldap`; plan 1 adds no dependency, this one does.
+~~(sketch)~~ → **planned in full and shipped §223: `docs/plans/2026-08-15-m4-external-identity-ldap-ad.md`.**
+That plan is the authority — D1–D9 carry the decisions, including the ones that reversed this
+sketch (no `allowInsecure` flag, D2; `spring-ldap-core` rather than a Boot starter, which does not
+exist in the shape the sketch assumed). Two of the sketch's bullets are **deferred rather than
+dropped**, with the reasons from that plan's scope check:
+
+- ~~Groups come from a search (`memberOf`, or `member=<dn>`), configurable; **nested groups need
+  bounded recursive resolution**.~~ → **deferred: the consumer does not exist.** Plan 2
+  (`claim → role mapping`) owns the mapping table, the `assignable` question at save time and the
+  `permission_version` bump — and unlike `group_claim`'s single column, the LDAP shape is a base, a
+  filter, a membership attribute and a recursion bound whose form is plan 2's decision. Adding
+  those columns now would be columns nothing reads, chosen before the model that has to read them.
+- ~~Deprovisioning is a scheduled poll, not a push — deactivates, never deletes.~~ → **deferred: a
+  slice of its own with its own failure mode** — an unreachable directory must never deactivate a
+  company's staff — needing the `CompanyScopedEvent` / `CompanyContextTaskDecorator` discipline
+  rather than a login path. It is not needed to sign anybody in.
 
 ---
 
