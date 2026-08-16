@@ -3012,3 +3012,60 @@ UI** — which is a legitimate outcome and must be recorded as one rather than s
 | `§239 RT-3` | Open the **editor** on the `RT-0` case, change nothing, press **Save** | **200, and the case is unchanged on screen.** ⚠️ Then read the row: `test_step.shared_step_id` for those two steps is now **NULL**, because the field left the payload and a save rewrites the step list. This is the column draining on its own, and it is the intended behaviour rather than data loss — the reference pointed at nothing. Worth watching the response body for a `sharedStepId` key, which must be **absent**, not null. |
 | `§239 RT-4` | On the `RT-0` case (before running `RT-3`), open the **version history** panel and read the newest entry | The stored snapshot still renders, and still carries the step text. Old snapshots keep a `sharedStepId` property the shape no longer declares; nothing reads a snapshot today, so what this row really checks is that the **history panel itself** is undisturbed. |
 | `§239 RT-5` | **Clone** the `RT-0` case | 201, and the clone's steps carry the same `action` text and **no** reference. `CaseCloneService` stopped copying the field; the clone is the first row written entirely without it. |
+
+---
+
+## §240 — whose draft that is, the plan that left the list, and what a number is OF (audit D + E)
+
+**Fourteen rows, none run** (§65). Ids are `§240 DR-*` (D1), `§240 AR-*` (D2) and `§240 RF-*` (E1
+and E2); `DR`, `AR` and `RF` were grepped against this file and the mutation queue before minting,
+as were `DB`, `PA` and `FR` (all in use).
+
+**Lanes.** `DR-*` are lane `A1` — authoring — because the screens are the case editor and the New
+Case form, which that lane already visits, and because `M2-67`…`M2-75` are already there and **half
+of them now assert the OLD shape**. `AR-*` are lane `A2` — plans. `RF-*` are lane `A3` — runs,
+because a report is generated over a run.
+
+> **`M2-71` and `M2-72` are now WRONG and must be re-read before they are driven.** They were
+> written to demonstrate §128's shared buffer: `M2-71` expects the lead to be offered *the
+> engineer's* draft with their name on it, and `M2-72` expects the lead's save to have *destroyed*
+> the engineer's work. `V64` makes both false — the lead is offered nothing, and the engineer's
+> draft survives marked stale. **They are left in place rather than edited**, because a browser row
+> that has never been driven is a claim about a build nobody ran, and rewriting it would erase the
+> record that the shape changed. `DR-3` and `DR-4` below are their replacements and say so.
+>
+> **`M2-75` is still correct** — the New Case form makes no `…/draft` request — but it is no longer
+> the whole story, which is `DR-5`.
+
+### A1 — whose unsaved work is on offer
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§240 DR-1` | Open `TC-1` → **Edit**, type, wait for **"Backup saved …"**, close the tab, reopen the editor | The banner reads **"Your unsaved changes from …"** and the sentence under it is **"You left work on this case without saving it."** No name anywhere. This is `M2-67` with the new copy, and the reason it is a row of its own is that the *name* was the whole of the old sentence. |
+| `§240 DR-2` | Restore that draft and press **Save changes** | Unchanged from `M2-74`: the save lands, and reopening the editor offers nothing. Included because the clear-on-save now names the saver, and a per-person delete that deleted the wrong row would look identical here until somebody else opened the case. |
+| `§240 DR-3` | **Two accounts, two browsers** — replaces `M2-71`. As the engineer, open `TC-3` → **Edit**, type, wait for the backup. As the lead, open `TC-3` → **Edit** | The lead is offered **nothing at all**: no banner, and the form holds the saved case. Confirm in the network tab that the lead's `GET …/draft` answered **204**, not 200 — the two are indistinguishable on screen and only one of them means what this row is about. |
+| `§240 DR-4` | ⚠️ **The row no gate can reach, and the whole of D1** — replaces `M2-72`. Continuing `DR-3`: as the **lead**, press **Save changes** on `TC-3`. Then as the **engineer**, reload the editor | The engineer's draft is **still there**, and the banner now carries the stale sentence: *"The case has been saved since this draft was written, so restoring it will discard that change."* Under §128 their work was gone with nothing on screen to say so. **Two accounts and two browsers, and no suite can substitute for it.** |
+| `§240 DR-5` | Open **New case** (`/cases/new`), type a title, an objective and a step, wait ~3 seconds, then **close the tab**. Reopen `/cases/new` | The restore banner appears with **"Your unsaved changes from …"**, and **Restore** puts every field back. `M2-75` still holds: there is **no `…/draft` request** in the network tab, because this buffer is `localStorage`. Both halves matter — the work comes back, and the server was never asked. |
+| `§240 DR-6` | Continuing `DR-5`: **Restore**, then press **Create case** | The case is created, and reopening `/cases/new` offers **nothing**. Then check `localStorage` for `tcms.newCaseDraft.<projectId>` — it must be **absent**. A buffer that survived its own create would offer a copy of a case that now exists. |
+| `§240 DR-7` | Type into **New case**, wait for the backup, then **without creating** navigate to a *different project* and open its **New case** form | **No banner.** The key is per project, and the failure this row exists for is a half-written case crossing the isolation boundary in the one place no server check can see it. Then go back to the first project's New Case form: the draft is **still offered**. |
+| `§240 DR-8` | With unsaved work in **New case**, run `tcmsFaults.status(503, 30)` and keep typing | **Nothing changes**, and that is the expectation: this buffer never touches the network, so a faulted API cannot break it. The contrast with `F-12` (the edit-mode buffer's status line goes to "Could not save a backup…") is the point — one row, two buffers, two behaviours. |
+
+### A2 — the plan that could leave the list
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§240 AR-1` | On the plan list, note an **APPROVED** plan, press its archive control (the tray icon at the end of the row) | The row **disappears from the list**, and a snackbar-free, dialog-free act — there is deliberately no confirmation. Turn on **Show archived**: the plan is back, with an **Archived** chip beside its NAME and its status chip still reading **Approved**. That last detail is the whole reason this is not a fourth status. |
+| `§240 AR-2` | With **Show archived** on, copy the URL and open it in a new tab | The list still includes the archived plan — the toggle is in the query string (`?archived=true`), so the view can be sent to somebody. |
+| `§240 AR-3` | Open the archived plan (click through from the archived list) | The plan page opens normally and every control works. Edit its name and save: **200**. This is the row that proves archiving is a visibility fact rather than a lock — the tempting implementation freezes the plan, and nothing on this screen would look wrong if it did until somebody tried. |
+| `§240 AR-4` | ⚠️ **Against a plan that runs were executed against** (lane `A3`'s fixture): archive it, then try to **Delete** it | The delete is still refused with the **409 naming the runs**. Archiving is what to do *instead of* that delete, not a way through it, and a build that quietly allowed the delete after archiving would look like a feature. |
+| `§240 AR-5` | As a **Viewer**, open the plan list | The archive control is **present and disabled**, with the tooltip naming the permission (§31: disable, don't hide). **Show archived** is **not** gated — somebody who cannot archive still has to be able to find the plan somebody else did. |
+| `§240 AR-6` | Restore the archived plan (**Show archived** on, press the same control, now an out-tray icon) | It returns to the working list with its status unchanged, and the Archived chip goes. Then press archive twice in quick succession on another plan: the second press must not change anything — no re-stamp, no second audit entry (check the project's audit view if the lane visits it). |
+
+### A3 — what a number is of, and the retry that queued nothing
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§240 RF-1` | Generate a **run summary** (MD) and open the on-screen report | The provenance table's last row before the selection reads **Data freshness: Live — computed directly from this project's records as at …**. Download the MD and the HTML: **the same sentence, verbatim, in both**. |
+| `§240 RF-2` | ⚠️ **The whole of E1, and it needs two documents.** Generate an **aggregate execution** report over the same project and open it beside `RF-1`'s | This one reads **"As of … — computed from the execution fact projection, which was refreshed at that instant, immediately before this report was produced."** Read the two side by side: before this slice they were indistinguishable on the page, which is why a single report proves nothing here. |
+| `§240 RF-3` | Record a result in a run, then **immediately** generate an aggregate report | The freshness instant is **within seconds of now**, not up to fifteen minutes old, and the new result is in the numbers. The refresh runs inside the job — this row is what tells a reader that the sentence is about *this* report rather than about the schedule. |
+| `§240 RF-4` | ⚠️ **Requires `curl` or the MCP client — the SPA deliberately sends no key.** `POST …/reports/generate` twice with the same `Idempotency-Key` | The first answers **202** with a new job; the second answers **200** with **the same `jobId`** and the same `Location`. Then open the reports page: **one** row, not two. The status is the only thing that tells a caller their retry queued nothing, and a build that answered 202 twice looks identical until the list is read. |

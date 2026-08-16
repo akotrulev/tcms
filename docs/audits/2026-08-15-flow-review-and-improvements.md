@@ -11,10 +11,13 @@ the handoff sections. Observations verified against source; each improvement nam
 ## 0. Progress ledger — what has been implemented
 
 ~~**Scope authorised 2026-08-16: A1–A8 (every P1).** B, C, D and E are **not** in that scope.~~ →
-**widened the same day: `B` was authorised in full after A1–A8 closed, and all eleven are done
+~~**widened the same day: `B` was authorised in full after A1–A8 closed, and all eleven are done
 (§232).** `C`, `D` and `E` remain out of scope and untouched, except `E2`, which is closed as a side
 effect — `POST /reports/generate` still takes no `Idempotency-Key`, and B4's row explains why that
-one is a decision rather than an omission. Gates run on `shanks` per `CLAUDE.md`.
+one is a decision rather than an omission.~~ → **superseded twice: `C` ran to completion (§233–§239)
+and `D` + `E` landed as §240. EVERY ROW IN THIS DOCUMENT IS NOW IMPLEMENTED**, `E2` included — it
+was the last row still marked out of scope and is the one §240 phase 3 closed. Gates run on
+`shanks` per `CLAUDE.md`.
 
 ~~**Seven of the eight are done. `A8` is the remainder**, and it is the whole of what is left in the
 authorised scope — see `docs/handoff/229-the-assignee-and-the-correction.md` for what §229 shipped
@@ -47,6 +50,15 @@ everything above it.~~ → **ELEVEN OF ELEVEN. C4 landed as §239 and the C run 
 the eleven decisions were *finish*; C4 was the one *retire*, and the only slice in the run to
 remove a user-visible affordance.
 
+→ **2026-08-16, after the C run: D AND E ARE DONE — all five, as §240**
+(`docs/handoff/240-the-buffer-the-archive-and-the-freshness.md`). Three migrations (`V64`, `V65`,
+`V66`), no permission seeded or moved. Two decisions were the user's before any code was written:
+D2 is an **orthogonal flag** rather than a fourth `PlanStatus`, and D1 is **both halves** rather
+than either alone. **Two of the five reverse a decision this repository shipped deliberately and
+pinned with a test** — §128's shared draft buffer, and (from the other direction) §205's removal of
+an `Idempotency-Key` the server did not read. **Nothing in this audit is now open**: A, B, C, D and
+E are closed, and `E2` is no longer the out-of-scope row below.
+
 Status marks used in the tables: **✅ DONE** · **🔨 IN PROGRESS** · **⬜ NOT STARTED** ·
 **⛔ OUT OF SCOPE** (this session).
 
@@ -66,7 +78,9 @@ Status marks used in the tables: **✅ DONE** · **🔨 IN PROGRESS** · **⬜ N
 | C6 + C7 + C10 | ✅ DONE | §234 | The artifact slice, in the §3.6 order. **C7** gave `artifact.write_once` its first writer — a sign-off toggle on both creates, `updatable = false` so it is decided at registration and never after, and **on the wire**, so the register greys Correct… and Remove… instead of answering a `409` the client could not predict. Both pre-existing write-once tests dropped their SQL fixtures. **C6** made `GENERATED_REPORT` registrable: the request names the **job** and the row stores the **artifact**, because `report_artifact` has no `project_id` and only the job can be proved to belong to the path's project (`ReportFacts`, the `PlanFacts` pattern). "Save to register" on `ReportViewPage` reuses the register's own dialog rather than carrying a second form. **C10** put the register on the MCP surface — `tcms_list_artifacts` + `tcms_write_artifact` (register/edit/status/delete, the delete behind §210's consent prompt), 21 tools → 23. Two findings the plan did not contain: `PATCH …/artifacts/{artifactId}` **declares no `If-Match`** and cannot simply gain one (`Artifact` carries no `lockVersion` on the wire), recorded as a decision with its cost; and the two new tools pushed the MCP capability summary past the host's 2KB ceiling, **silently dropping the section that tells a user which permission to ask for** — it degrades to the keys alone now, with a test. |
 | C11 + C8 | ✅ DONE | §233 | C11: the tier-claims rule extended to qualifier claims, checked against the spec's matrix cells; ran red on **nine** live sites (this audit listed four, two already fixed by A6, seven unlisted) — all corrected, `schema` copies regenerated for the one that was a contract description. C8: both keys annotated *checked-by-project-read* in the roles spec, **including the `V16` divergence** (AS holds `project:read`, so its `—` for `doc:read`/`artifact:read` is unenforced); both service headers corrected. C6's `ArtifactKind.java` stale-prose fix rode along; C6 itself (save-to-register) is still open. |
 | B1–B11 | ✅ DONE | §232 phases 1–4 | Every asymmetry. Four phases: **p1** the case `PATCH` (partial at last), the round trip, the tag-semantics label and the report-format capability read; **p2** the idempotency gaps and the plan create; **p3** the by-ids case read, the destructive-suite preview and the criterion-metric marking; **p4** ingestion failures and the run's recorded scope. Three migrations — `V59` (artifact + shared-step keys), `V60` (ingestion uniqueness narrowed to `COMPLETED`), `V61` (`test_run.scope_request`). See `docs/handoff/232-*.md` for what each row's proposal became, and why three of them were built differently from the way the row worded them. |
-| E2 | ⛔ OUT OF SCOPE | — | `Idempotency-Key` on `POST /reports/generate`. Pairs naturally with A3 and was deliberately **not** taken: it is a P2, the authorised scope was A1–A8 and then B, and it is a contract change to a write. **B4 touched the same family and left this one alone on purpose**: a duplicated report is two files, where a duplicated register row is a document nobody can tell from a deliberate second one and a duplicated upload is a second copy of the bytes. Cheapest remaining reports work. |
+| D1 + D2 + D3 | ✅ DONE | §240 phases 1–2 (D1, D2) and 3 (D3) | **D1** — `V64` re-keys `test_case_draft` on `(case_id, user_id)` and the New Case form gets a `localStorage` buffer. The row's *"key by `(case_id, user_id)`"* is what shipped; what it does not say is that §128 chose the 1:1 key **deliberately**, disclosed its cost as `updatedBy` on the wire, and pinned it with `anotherPersonsSaveClearsIt` — a test written so a later slice would have to change it rather than change behaviour quietly. It was a defect after all. The question §128 raised against the re-key — *"which of the four drafts do I open"* — **does not arise**, which is the finding: a reader opens their own. `CaseDraft.updatedBy` leaves the contract with the hazard it disclosed. **The create-mode half is client-side by decision, not "at minimum"**: `case_id` is an FK, so create mode was missing a case id and not an owner, and a draft nobody else can be shown does not need a server. **D2** — `V65`, an orthogonal `archived_at`, per the user's decision. Not a fourth status: that re-opens §97's conflation and unsays the approval every time it is set. A **visibility** act only — the plan still reads, edits, approves, runs and reports, and the delete's 409 is untouched, which is asserted rather than assumed. `plan:edit`, not `plan:delete`. Shaped on `PUT /projects/{id}/archive` (M2), so: boolean on the wire, no `archived_by`, actor in the audit row — **three convention rules caught the first draft's extra column between them**. **D3** — the row asked for a note and the note is the deliverable: `TestRun`'s header and the contract's `GET /runs/{runId}` now say that a slice adding run edit maps the version, serves `lockVersion` and takes an `If-Match` **in that same slice**, and keeps the two result writers off the counter. |
+| E1 | ✅ DONE | §240 phase 3 | A **Data freshness** line on every report header, last of the provenance lines because it qualifies every number under it. Neither half of the sentence can be written by one side: the report type declares a `DataFreshness` (default `LIVE`, so a future fact-based report cannot inherit a claim that its numbers are current) and the job supplies the watermark. The projected form names the **refresh** rather than the 15-minute schedule — `ReportJobRunner` refreshes inside the computing transaction, so a *generated* report is exact while the same table read outside a job is a tick behind, and that is the half a reader cannot work out. The SPA's copy of the header block carries it too. `ReportRenderingTest`'s computed check covered the field the moment it existed. |
+| E2 | ✅ DONE | §240 phase 3 | `V66`. ~~⛔ OUT OF SCOPE~~ — `Idempotency-Key` on `POST /reports/generate`. Pairs naturally with A3 and was deliberately **not** taken: it is a P2, the authorised scope was A1–A8 and then B, and it is a contract change to a write. **B4 touched the same family and left this one alone on purpose**: a duplicated report is two files, where a duplicated register row is a document nobody can tell from a deliberate second one and a duplicated upload is a second copy of the bytes. Cheapest remaining reports work.~~ → **Taken as §240 phase 3.** B4's deferral was right and the reason it stopped being right is that a report job is not a row: it refreshes `execution_fact` for the whole company, computes, renders and writes **two** artifacts, so a duplicate is a second full **pass**. And the caller most likely to retry — CI, or the MCP transport — is the one with no job list on screen. §205 had already found the asymmetry from the other side: `packages/mcp` **declared and sent** a key this endpoint discarded, so the tool looked correct and every retry queued a second job; the key is back on and that conformance entry is gone. A replay answers **200** with the job it already queued (`202` means work was started). The SPA still sends none, and now says why that is a choice. `IdempotencyKeyCapTest` 9 → 10. |
 
 **Also changed in phase 2:** `CaseBulkEndpointTest` is renamed in spirit rather than on disk — its
 `@DisplayName` and header now say it covers **both** writers of `test_case.lifecycle_status`,
@@ -99,8 +113,12 @@ endpoint keeps its skip-with-a-reason contract and the single-case one answers 4
 (`ReviewService`) is per-project opt-in, off by default; author-cannot-approve and min-peer-LGTM
 bind only on the `→ APPROVED` edge when an open review exists. Steps belong to their case (§94);
 two authoring aids coexist — the shared-step library (`library:manage`, declared vestigial in §94)
-and the derived suggestion corpus (`GET /step-suggestions`, text-copy, no link). Autosave buffer is
-one row per case (not per person); create mode has no buffer.
+and the derived suggestion corpus (`GET /step-suggestions`, text-copy, no link). ~~Autosave buffer is
+one row per case (not per person); create mode has no buffer.~~ → **D1, §240: `V64` keys the buffer
+`(case_id, user_id)`, so a colleague's save makes yours STALE rather than deleting it, and
+`CaseDraft.updatedBy` left the contract with the hazard it disclosed. Create mode buffers in the
+browser** (`useNewCaseDraft`, keyed per project), which is a decision rather than a stopgap — the
+missing half was a case id, not an owner.
 
 ### Suites
 Flat since §98: membership = filed (`test_case.suite_id`) ∪ added (`suite_case`) ∪ tagged
@@ -112,7 +130,10 @@ via `PUT /suites/{id}/status`. Conditions inherit to the **filed arm only**. `su
 written once (v1) and never again, yet reviews pin to `currentVersionNo`.
 
 ### Plans
-`DRAFT → IN_REVIEW → APPROVED`, no terminal state since `V32` dropped `CLOSED`. Scope = unsectioned
+`DRAFT → IN_REVIEW → APPROVED`, no terminal state since `V32` dropped `CLOSED` — and **since D2
+(§240, `V65`) a plan can be ARCHIVED, which is orthogonal to that ladder and touches none of it**:
+a visibility fact, `plan:edit`, reversible, and deliberately not a lock. The delete's 409 is
+unchanged; archiving is what to do instead of it. Scope = unsectioned
 arm + live-selector sections (§97); `test_plan_version` written only on scope moves. Create takes
 6 fields; criteria/prose/sections are edit-only. Statistics computed live; only `pass_rate` and
 `coverage` of the five criterion metrics evaluate. UI is the seven-tab `PlanStatisticsPage` with
@@ -146,8 +167,10 @@ Remove… on the row menu. Still **no MCP surface** (C10, which named A6 as its 
 
 ### Reports
 Three types (`run_summary` live · `aggregate_execution` fact-based, ≤15 min stale ·
-`coverage_matrix`), generated async (202, polling), rendered MD/HTML (`PDF` in the enum, always
-400). ~~**No `GET /reports/jobs`** — the job list is component state and a reload orphans every
+`coverage_matrix`), generated async (202, polling — **and since E2 (§240, `V66`) a replayed
+`Idempotency-Key` answers 200 with the job it already queued**), rendered MD/HTML (`PDF` in the enum,
+always 400). **Every header carries a `Data freshness` line since E1 (§240)**, so the projection-based
+report and the two live ones can be told apart on paper. ~~**No `GET /reports/jobs`** — the job list is component state and a reload orphans every
 artifact. `report:view` cannot open the on-screen model (served through the `report:export`-gated
 artifact route). Saved definitions: backend complete, frontend has no Save button. No reaper for
 jobs stranded in `RUNNING`.~~ → **all four closed 2026-08-16 (A2/A3/A5, §227 phase 1)**: the job
@@ -223,18 +246,23 @@ had assumed.
 
 ### D. Data-loss guards (P2, small)
 
-| # | Improvement | Evidence |
-|---|---|---|
-| D1 | **Autosave per person, and for create mode.** The draft buffer is one row per case (last keystroke wins across two editors; `updatedBy` is the only tell) and the New Case form has no buffer at all (PK is an FK to `test_case`). Key by `(case_id, user_id)`; give create mode a client-side draft at minimum. | `test_case_draft` PK; authoring trace friction 8 |
-| D2 | **Plan deletion after execution.** A plan named by any run is a permanent 409 and there is no terminal state since `V32`. If `CLOSED` stays deleted, consider an `ARCHIVED`-style visibility flag so old plans leave the working list. | Authoring trace friction 12 |
-| D3 | **Run-level concurrency.** `test_run.lock_version` exists and is deliberately unmapped; there is also no run-edit endpoint (name/release/build fixed at create). If run edit ever ships, map the lock in the same slice — note the pairing now so they don't land separately. | `TestRun.java:58-70` |
+**All three are done (§240 phases 1–3.)** The Status column says where; the notes in the §0 ledger
+say what shipped against a row's own wording, which happened twice here.
+
+| # | Status | Improvement | Evidence |
+|---|---|---|---|
+| D1 | ✅ §240 p1 | **Autosave per person, and for create mode.** The draft buffer is one row per case (last keystroke wins across two editors; `updatedBy` is the only tell) and the New Case form has no buffer at all (PK is an FK to `test_case`). Key by `(case_id, user_id)`; give create mode a client-side draft at minimum. | `test_case_draft` PK; authoring trace friction 8 |
+| D2 | ✅ §240 p2 | **Plan deletion after execution.** A plan named by any run is a permanent 409 and there is no terminal state since `V32`. If `CLOSED` stays deleted, consider an `ARCHIVED`-style visibility flag so old plans leave the working list. | Authoring trace friction 12 |
+| D3 | ✅ §240 p3 | **Run-level concurrency.** `test_run.lock_version` exists and is deliberately unmapped; there is also no run-edit endpoint (name/release/build fixed at create). If run edit ever ships, map the lock in the same slice — note the pairing now so they don't land separately. | `TestRun.java:58-70` |
 
 ### E. Reporting coherence (P2)
 
-| # | Improvement | Evidence |
-|---|---|---|
-| E1 | **Stamp freshness on every pass-rate surface.** Three surfaces answer "pass rate" with different freshness and denominators: run summary (live), plan statistics (live, policy echoed), `aggregate_execution` (≤15 min stale, no "not run" rows). The fact-based report should carry its projection watermark ("as of HH:MM") the way plan statistics already echoes its aggregation policy. | Execution trace friction 13 |
-| E2 | **Consider `Idempotency-Key` on `POST /reports/generate`.** The one create of eleven that takes none (found by the §205 conformance sweep as a header-declaration defect); a retried 202 queues the report twice. Cheap once A3's job listing exists. | §205; `tcms_report.generate` |
+**Both are done (§240 phase 3).**
+
+| # | Status | Improvement | Evidence |
+|---|---|---|---|
+| E1 | ✅ §240 p3 | **Stamp freshness on every pass-rate surface.** Three surfaces answer "pass rate" with different freshness and denominators: run summary (live), plan statistics (live, policy echoed), `aggregate_execution` (≤15 min stale, no "not run" rows). The fact-based report should carry its projection watermark ("as of HH:MM") the way plan statistics already echoes its aggregation policy. | Execution trace friction 13 |
+| E2 | ✅ §240 p3 | **Consider `Idempotency-Key` on `POST /reports/generate`.** The one create of eleven that takes none (found by the §205 conformance sweep as a header-declaration defect); a retried 202 queues the report twice. Cheap once A3's job listing exists. | §205; `tcms_report.generate` |
 
 ---
 
