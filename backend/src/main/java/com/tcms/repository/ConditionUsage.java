@@ -7,7 +7,7 @@ import java.util.UUID;
  * {@link ConditionRepository#countCaseUsage} and {@link ConditionRepository#countSuiteUsage} both
  * return.
  *
- * <p>{@link SharedStepUsage}'s shape, shared by two queries here rather than split into two records,
+ * <p>Shared by two queries here rather than split into two records,
  * because the pair is the same question asked of the two referencing tables and giving each its own
  * type would suggest the numbers are combinable. They are not — see {@link ConditionView}.
  *

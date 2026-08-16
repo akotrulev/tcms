@@ -37,7 +37,7 @@ import org.hibernate.type.SqlTypes;
  * and an <em>impact warning</em>, and a warning computed from a permanent zero is not a cautious
  * answer — it is a confident wrong one, telling an author that editing an entry three hundred cases
  * attach will affect nothing. {@link ConditionService} derives both counts from the referencing
- * tables instead, exactly as {@link SharedStepService} does, so there is one shape here and not two.
+ * tables instead, so there is one shape here and not two.
  *
  * <h2>{@code lock_version} is mapped WITH {@code @Version}, from this entity's first writer</h2>
  *

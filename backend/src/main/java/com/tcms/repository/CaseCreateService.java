@@ -104,7 +104,6 @@ public class CaseCreateService {
     private final TestCaseRepository cases;
     private final SuiteRepository suites;
     private final CaseSteps steps;
-    private final SharedStepService sharedSteps;
     private final CaseClassifications classifications;
     private final CaseConditions conditions;
     private final CaseTags tags;
@@ -122,7 +121,6 @@ public class CaseCreateService {
             TestCaseRepository cases,
             SuiteRepository suites,
             CaseSteps steps,
-            SharedStepService sharedSteps,
             CaseClassifications classifications,
             CaseConditions conditions,
             CaseTags tags,
@@ -138,7 +136,6 @@ public class CaseCreateService {
         this.cases = cases;
         this.suites = suites;
         this.steps = steps;
-        this.sharedSteps = sharedSteps;
         this.classifications = classifications;
         this.conditions = conditions;
         this.tags = tags;
@@ -252,12 +249,6 @@ public class CaseCreateService {
                 // belonging to another case. Adopting it would move that step's identity — and
                 // therefore its recorded results — onto this one.
                 Set.of(),
-                // The live library alone, with no stored half to union in — for the same reason.
-                // A new case references nothing yet, so a retired entry is correctly refused here
-                // while an existing case keeps saving with one: the concession CaseEdit#validate
-                // makes is to references already made, not to making new ones.
-                sharedSteps.liveLibraryIds(
-                        project.getId(), CaseEdit.referencedSharedStepIds(request.steps())),
                 vocabulary,
                 // Empty, for the same reason as the step ids above: nothing is stored yet, so there
                 // is no classification to leave alone. A create that omits the field makes an

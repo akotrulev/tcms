@@ -19,10 +19,6 @@ import java.util.UUID;
  * @param testData nullable. Separate from {@link #action} because a step's data is what varies
  *                 between otherwise identical runs, and merging it into the prose is what makes a
  *                 case impossible to parameterize later.
- * @param sharedStepId nullable, and served unresolved: the shape has the id and no room for the
- *                 library step's title, and the shared-step library endpoint is not built. A
- *                 marker for a future consumer, not a lookup this endpoint owes — see
- *                 {@link TestStep#getSharedStepId()}.
  */
 public record TestStepView(
         UUID id,
@@ -30,8 +26,7 @@ public record TestStepView(
         StepKeyword keyword,
         String action,
         String testData,
-        String expectedResult,
-        UUID sharedStepId) {
+        String expectedResult) {
 
     static TestStepView of(TestStep step) {
         return new TestStepView(
@@ -40,7 +35,6 @@ public record TestStepView(
                 step.getKeyword(),
                 step.getAction(),
                 step.getTestData(),
-                step.getExpectedResult(),
-                step.getSharedStepId());
+                step.getExpectedResult());
     }
 }

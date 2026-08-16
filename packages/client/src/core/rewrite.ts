@@ -138,7 +138,6 @@ function stepInputFrom(step: Schemas['TestStep']): Schemas['TestStepInput'] {
     action: step.action,
     testData: step.testData ?? null,
     expectedResult: step.expectedResult ?? null,
-    sharedStepId: step.sharedStepId ?? null,
   };
 }
 

@@ -812,7 +812,6 @@ class PlanCreateEndpointTest extends IntegrationTestBase {
         step.put("action", "Do the thing");
         step.put("testData", null);
         step.put("expectedResult", null);
-        step.put("sharedStepId", null);
         payload.put("steps", List.of(step));
         payload.put("changeComment", null);
 

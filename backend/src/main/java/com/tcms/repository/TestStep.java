@@ -75,18 +75,6 @@ public class TestStep {
     @Column(name = "expected_result")
     private String expectedResult;
 
-    /**
-     * The library step this one was expanded from, or null for a step written in place.
-     *
-     * <p>Carried on the wire but not resolved: the contract's {@code TestStep} has the id and no
-     * room for the shared step's title, and {@code GET /projects/{projectId}/shared-steps} — the
-     * library that would give the id a name — is not built. The SPA renders the step's own text
-     * either way, so the id is a marker a future consumer can follow rather than a lookup this
-     * endpoint owes.
-     */
-    @Column(name = "shared_step_id")
-    private UUID sharedStepId;
-
     /** JPA only. */
     protected TestStep() {
     }
@@ -125,7 +113,6 @@ public class TestStep {
         this.action = edit.action();
         this.testData = edit.testData();
         this.expectedResult = edit.expectedResult();
-        this.sharedStepId = edit.sharedStepId();
     }
 
     public UUID getId() {
@@ -154,9 +141,5 @@ public class TestStep {
 
     public String getExpectedResult() {
         return expectedResult;
-    }
-
-    public UUID getSharedStepId() {
-        return sharedStepId;
     }
 }

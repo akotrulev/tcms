@@ -107,7 +107,7 @@ const CASE_ECHO = {
   steps: [
     {
       id: 'st-1', keyword: null, action: 'Sign in',
-      testData: null, expectedResult: 'In.', sharedStepId: null,
+      testData: null, expectedResult: 'In.',
     },
   ],
 };

@@ -18,15 +18,16 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * One cap on {@code Idempotency-Key}, declared in eight places — checked rather than shared.
+ * One cap on {@code Idempotency-Key}, declared in nine places — checked rather than shared.
  *
  * <h2>Why there is no shared constant</h2>
  *
- * <p>Seven services accept the header and each caps its length itself:
+ * <p>Nine services accept the header and each caps its length itself:
  * {@code CaseCreateService}, {@code SuiteWriteService} ({@code repository}),
  * {@code RunCreateService}, {@code PlanCreateService}, {@code IngestionEdit} ({@code execution}),
- * {@code DocPageWriteService} ({@code documentation}), {@code BoardService} ({@code work}) and — since
- * §138 — {@code AiProposalService} ({@code repository}).
+ * {@code DocPageWriteService} ({@code documentation}), {@code BoardService} ({@code work}),
+ * {@code AiProposalService} ({@code repository}, §138) and {@code ArtifactWriteService}
+ * (B4, {@code V59}).
  * They live in four Modulith modules, and <strong>the only module all four may import is
  * {@code tenancy}</strong> — which everything depends on and which depends on nothing.
  *
@@ -48,10 +49,10 @@ import org.junit.jupiter.api.Test;
  * text, exactly as {@link ConfigConventionTest}'s are. A check that is cheap is a check that
  * survives.
  */
-@DisplayName("Idempotency-Key — one cap, ten declarations, no drift")
+@DisplayName("Idempotency-Key — one cap, nine declarations, no drift")
 class IdempotencyKeyCapTest {
 
-    /** The cap every declaration must agree on. Changing it means changing all eight. */
+    /** The cap every declaration must agree on. Changing it means changing all nine. */
     private static final int EXPECTED_CAP = 200;
 
     /**
@@ -68,14 +69,21 @@ class IdempotencyKeyCapTest {
      *
      * <p><strong>Asked again at the ninth and tenth (B4, {@code V59} —
      * {@code ArtifactWriteService} and {@code SharedStepService}), and answered the same way for
-     * the same reason.</strong> Two of the ten are now a single constant apart from being one
-     * symbol, which is the strongest form the case for extraction has taken; what still decides it
-     * is the paragraph above, and nothing about the alternative's cost changed. What is new at the
-     * tenth is a duplicate that is not merely a row: the artifact upload writes an
-     * {@code attachment} and a <em>blob</em>, so a retry left a second copy of a document on disk
-     * behind a register showing two entries.
+     * the same reason.</strong> Two of them were a single constant apart from being one symbol,
+     * which is the strongest form the case for extraction has taken; what still decides it is the
+     * paragraph above, and nothing about the alternative's cost changed. What was new at the tenth
+     * is a duplicate that is not merely a row: the artifact upload writes an {@code attachment} and
+     * a <em>blob</em>, so a retry left a second copy of a document on disk behind a register
+     * showing two entries.
+     *
+     * <p><strong>Ten became NINE at §239, and this is the first time this number has gone
+     * DOWN.</strong> {@code SharedStepService} was deleted with the rest of the shared-step library
+     * (audit C4), and its copy of the cap went with it. Note what that says about the trade this
+     * test exists to defend: a shared constant would have outlived the feature that introduced it,
+     * and somebody would later have had to work out whether anything still used it. A per-service
+     * copy is deleted by deleting the service.
      */
-    private static final int EXPECTED_DECLARATIONS = 10;
+    private static final int EXPECTED_DECLARATIONS = 9;
 
     private static final Pattern DECLARATION = Pattern.compile(
             "\\bstatic final int MAX_IDEMPOTENCY_KEY\\s*=\\s*(\\d+)\\s*;");
@@ -95,7 +103,7 @@ class IdempotencyKeyCapTest {
     }
 
     @Test
-    @DisplayName("the declarations are exactly the ten services known to accept the header")
+    @DisplayName("the declarations are exactly the nine services known to accept the header")
     void theCountIsPinned() {
         assertThat(declarations())
                 .as("a create endpoint that accepts Idempotency-Key without capping it indexes "

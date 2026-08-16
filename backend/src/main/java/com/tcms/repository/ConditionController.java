@@ -167,7 +167,7 @@ public class ConditionController {
      * <p>Points at the list rather than at {@code /{conditionId}}, even though that path now
      * exists: the new path serves {@code PUT} and no {@code GET}, and {@code Location} is required
      * to be a URI the client can dereference. Naming it would answer 405 to anything that followed
-     * it — the same trap {@link SharedStepController#location} avoids for the opposite reason.
+     * it.
      */
     private static URI location(UUID projectId, UUID conditionId) {
         return URI.create("/api/v1/projects/" + projectId + "/conditions?created=" + conditionId);

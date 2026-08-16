@@ -68,7 +68,7 @@ public interface TestStepRepository extends JpaRepository<TestStep, UUID> {
      *
      * <p>{@code (action, testData, expectedResult)} is the group key because the whole triple is
      * what a pick fills in — see {@link StepSuggestionView}. {@code COUNT(DISTINCT caseId)} and not
-     * {@code COUNT(*)} for §6e's reason and {@link SharedStepRepository#countUsage}'s: a case that
+     * {@code COUNT(*)} for §6e's reason: a case that
      * repeats a step is one case using it, and counting rows lets one loop-heavy case out-rank a
      * step forty cases share.
      *

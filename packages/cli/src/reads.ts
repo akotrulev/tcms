@@ -230,7 +230,7 @@ const caseShow: Command = {
 
 const libraryList: Command = {
   name: 'library list',
-  summary: 'The reusable condition and shared-step libraries',
+  summary: 'The reusable condition library',
   usage: 'tcms library list [--q TEXT] [--type PRE|POST|BOTH]',
   options: {
     q: { type: 'string' },
@@ -244,9 +244,8 @@ const libraryList: Command = {
     const type = first(options['type']);
 
     /*
-      Read-only, and the noun is `library` rather than `condition` for that reason: writing to
-      either half costs `library:manage`, which this surface deliberately does not carry (§A3
-      gates it by an impact modal an API caller never sees), so `tcms library create` is a
+      Read-only: writing costs `library:manage`, which this surface deliberately does not carry
+      (§A3 gates it by an impact modal an API caller never sees), so `tcms library create` is a
       command that could only ever 403. The same shape and the same name as `tcms_list_library`,
       which is the rule the two surfaces share — one command per operation here, one
       workflow-shaped tool there, and the same word for the same thing.
@@ -254,28 +253,24 @@ const libraryList: Command = {
       It exists because `suite edit --precondition` takes a **library** id and, until this
       command, no read on this surface served one. A write whose argument cannot be learned from
       the surface that offers it is a write nobody can make.
-    */
-    const [conditions, sharedSteps] = await Promise.all([
-      client.GET('/projects/{projectId}/conditions', {
-        params: {
-          path,
-          query: {
-            ...(q === undefined ? {} : { q }),
-            ...(type === undefined ? {} : { type: type as 'PRE' | 'POST' | 'BOTH' }),
-          },
-        },
-        tcms: request,
-      }),
-      client.GET('/projects/{projectId}/shared-steps', {
-        // No `type` here, and that is the contract rather than an omission: `GET /shared-steps`
-        // declares `q` alone, and passing a conditions-only filter to it would narrow nothing
-        // while reading as though it had.
-        params: { path, query: q === undefined ? {} : { q } },
-        tcms: request,
-      }),
-    ]);
 
-    if (json) return out.json({ conditions, sharedSteps });
+      The noun stayed `library` rather than narrowing to `condition` when §239 retired the
+      shared-step half: conditions are the only library left, but the command name is a locator
+      for anything scripted against it, and renaming it to say so would break every one of those
+      to describe an absence.
+    */
+    const conditions = await client.GET('/projects/{projectId}/conditions', {
+      params: {
+        path,
+        query: {
+          ...(q === undefined ? {} : { q }),
+          ...(type === undefined ? {} : { type: type as 'PRE' | 'POST' | 'BOTH' }),
+        },
+      },
+      tcms: request,
+    });
+
+    if (json) return out.json({ conditions });
 
     out.line('Conditions');
     table(out, conditions, [
@@ -288,14 +283,6 @@ const libraryList: Command = {
       // `suite_condition`, and blending them would be a guess (the contract says so).
       { header: 'CASES', value: (row) => show(row.usageCount) },
       { header: 'SUITES', value: (row) => show(row.suiteUsageCount) },
-    ]);
-
-    out.line();
-    out.line('Shared steps');
-    table(out, sharedSteps, [
-      { header: 'ID', value: (row) => show(row.id) },
-      { header: 'TITLE', value: (row) => show(row.title) },
-      { header: 'USED BY', value: (row) => show(row.usageCount) },
     ]);
   },
 };

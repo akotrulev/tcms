@@ -278,19 +278,21 @@ const listSuites: ToolDefinition = {
 
 const listLibrary: ToolDefinition = {
   name: 'tcms_list_library',
-  title: 'Read the reusable condition and step libraries',
+  title: 'Read the reusable condition library',
   description:
-    'The project\'s reusable pre/post conditions and shared steps, which a case may reference '
-    + 'instead of repeating. **Read-only here by design**: writing to either costs library:manage, '
-    + 'which this surface deliberately does not carry, because that permission is gated by an '
-    + 'impact modal an API caller never sees. Reference an existing entry; do not invent one.',
+    'The project\'s reusable pre/post conditions, which a case or suite may attach by id instead '
+    + 'of repeating the text. **Read-only here by design**: writing costs library:manage, which '
+    + 'this surface deliberately does not carry, because that permission is gated by an impact '
+    + 'modal an API caller never sees. Reference an existing entry; do not invent one. There is no '
+    + 'shared-step library — it was retired in §239 because nothing ever resolved an entry\'s body, '
+    + 'so a reference propagated to nothing. Steps are written on the case that owns them.',
   gate: { mode: 'all', permissions: ['case:read'] },
   inputSchema: {
     type: 'object',
     additionalProperties: false,
     properties: {
-      q: { type: 'string', description: 'Free text over both libraries.' },
-      type: { type: 'string', description: 'PRE or POST, for conditions.' },
+      q: { type: 'string', description: 'Free text over the condition titles.' },
+      type: { type: 'string', description: 'PRE or POST.' },
       ...PAGING_PROPERTIES,
     },
   },
@@ -301,19 +303,11 @@ const listLibrary: ToolDefinition = {
     const q = str(input, 'q');
     const type = str(input, 'type');
 
-    const [conditions, sharedSteps] = await Promise.all([
-      session.client.GET('/projects/{projectId}/conditions', {
-        params: { path, query: { ...optional('q', q), ...optional('type', type) } }, tcms,
-      }),
-      session.client.GET('/projects/{projectId}/shared-steps', {
-        params: { path, query: { ...optional('q', q) } }, tcms,
-      }),
-    ]);
+    const conditions = await session.client.GET('/projects/{projectId}/conditions', {
+      params: { path, query: { ...optional('q', q), ...optional('type', type) } }, tcms,
+    });
 
-    return {
-      conditions: window(conditions, input),
-      sharedSteps: window(sharedSteps, input),
-    };
+    return { conditions: window(conditions, input) };
   },
 };
 

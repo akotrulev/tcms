@@ -258,8 +258,7 @@ public class CaseCloneService {
                     step.getKeyword() == null ? null : step.getKeyword().name(),
                     step.getAction(),
                     step.getTestData(),
-                    step.getExpectedResult(),
-                    step.getSharedStepId()));
+                    step.getExpectedResult()));
         }
 
         List<UUID> classificationValueIds = new ArrayList<>();

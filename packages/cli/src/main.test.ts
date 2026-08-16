@@ -253,12 +253,11 @@ describe('reads', () => {
     expect(out.stdout).toContain('Lock version: 4');
   });
 
-  it('reads both libraries in one command, and passes the filters through', async () => {
+  it('reads the library and passes both filters through', async () => {
     const out = recorder();
     const stub = api({
       '/projects': { status: 200, body: [PROJECT] },
       '/conditions': { status: 200, body: [{ id: 'cond-1', title: 'Log in', type: 'PRE', body: [], usageCount: 4, suiteUsageCount: 1, lockVersion: 1 }] },
-      '/shared-steps': { status: 200, body: [{ id: 'ss-1', title: 'Open the app', body: [], usageCount: 9 }] },
     });
 
     expect(await mainWith(['library', 'list', '--q', 'log', '--type', 'PRE'], out, stub.fetch)).toBe(EXIT.ok);
@@ -266,13 +265,13 @@ describe('reads', () => {
     // The id is the first column because it is what a write takes; the title is how a person
     // finds the row and the id is what they then have to type.
     expect(out.stdout).toContain('cond-1');
-    expect(out.stdout).toContain('ss-1');
     const asked = stub.urls.find((url) => url.includes('/conditions')) ?? '';
     expect(asked).toContain('q=log');
     expect(asked).toContain('type=PRE');
-    // `type` is a conditions-only filter and the shared-step read must not carry it — the two
-    // halves of this command are two endpoints, and one of them has no such parameter.
-    expect(stub.urls.find((url) => url.includes('/shared-steps')) ?? '').not.toContain('type=');
+    // ONE endpoint since §239. This command read `/shared-steps` too until the shared-step
+    // library was retired, and the assertion that used to sit here — that `type`, a
+    // conditions-only filter, did not leak onto that second read — went with it.
+    expect(stub.urls.filter((url) => url.includes('/shared-steps'))).toEqual([]);
   });
 
   /*

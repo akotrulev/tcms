@@ -243,7 +243,7 @@ describe('read-modify-write', () => {
     tags: ['smoke'],
     steps: [{
       id: 'st-1', position: 1, keyword: null, action: 'Sign in',
-      testData: null, expectedResult: 'In.', sharedStepId: null,
+      testData: null, expectedResult: 'In.',
     }],
   } as unknown as Parameters<typeof caseInputFrom>[0];
 

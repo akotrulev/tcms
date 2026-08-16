@@ -153,7 +153,6 @@ export function step(overrides: Partial<Schemas['TestStep']> = {}): Schemas['Tes
     action: 'Sign in',
     testData: null,
     expectedResult: 'The dashboard renders.',
-    sharedStepId: null,
     ...overrides,
   };
 }

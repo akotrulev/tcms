@@ -230,7 +230,6 @@ public record CaseUpdateRequest(
             String keyword,
             String action,
             String testData,
-            String expectedResult,
-            UUID sharedStepId) {
+            String expectedResult) {
     }
 }

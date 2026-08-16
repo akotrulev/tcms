@@ -19,7 +19,7 @@ package com.tcms.repository;
  *
  * <h2>This is a projection, and there is no entity behind it</h2>
  *
- * <p>Unlike {@link ConditionView} or {@link SharedStepView} there is no {@code of(entity)} factory,
+ * <p>Unlike {@link ConditionView} there is no {@code of(entity)} factory,
  * because there is no row to map: the record is the target of the constructor expression in
  * {@link TestStepRepository#findSuggestions} and is built by Hibernate directly from the
  * {@code GROUP BY}. A second identical record to separate "projection" from "view" would be

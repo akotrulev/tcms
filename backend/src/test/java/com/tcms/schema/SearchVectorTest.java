@@ -21,7 +21,9 @@ import org.junit.jupiter.api.Test;
  *
  * <h2>Why the two mechanisms differ, and why that is tested rather than trusted</h2>
  *
- * <p>{@code test_case}, {@code condition} and {@code shared_step} use
+ * <p>{@code test_case}, {@code condition} and {@code shared_step} — the last of these RETIRED in
+ * §239 and kept on disk until the contract migration drops it, so its trigger and index are still
+ * schema facts and still asserted here — use
  * {@code GENERATED ... STORED}: all their searchable text is same-row, so a generated
  * column cannot be bypassed by any INSERT path and cannot fall out of step with the row.
  * {@code doc_page} cannot — a page's text lives in {@code doc_block} rows, and a

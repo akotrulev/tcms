@@ -103,8 +103,7 @@ record CaseEdit(
             StepKeyword keyword,
             String action,
             String testData,
-            String expectedResult,
-            UUID sharedStepId) {
+            String expectedResult) {
     }
 
     /**
@@ -219,27 +218,6 @@ record CaseEdit(
      *                        than inserted — it names a step belonging to another case, and honoring
      *                        it would move that step's identity, and therefore its recorded results,
      *                        onto this one.
-     * @param acceptableSharedStepIds the shared-step ids a step on this case may reference:
-     *                        <strong>this project's live library entries, unioned with the ids this
-     *                        case's stored steps already reference.</strong> Resolved by the caller,
-     *                        which is the only party holding both halves — {@link
-     *                        SharedStepService#liveLibraryIds} answers the first and the stored
-     *                        steps answer the second.
-     *                        <p>The library half is the check that was missing entirely.
-     *                        {@code test_step.shared_step_id} carries a foreign key, so an id
-     *                        naming nothing fails at the constraint and answers 500 where a field
-     *                        error belongs — but an id naming a <em>sibling project's</em> entry
-     *                        satisfies the key and is stored, and every later read of the case then
-     *                        resolves a library entry through a project the reader was never
-     *                        granted. The same argument {@code suiteId} above makes, on a column
-     *                        nobody made it for.
-     *                        <p>The stored half is why this is not simply "live in this project".
-     *                        Retiring a library entry is a soft delete <em>because references to it
-     *                        survive</em> ({@link SharedStep#getDeletedAt}), so without it, the day
-     *                        an entry is retired every case using it becomes unsaveable — a title
-     *                        fix on an untouched step would be refused over a reference the author
-     *                        never made and cannot see. That is a worse defect than the one the
-     *                        check closes, and it is only avoided by resolving the union.
      * @param vocabulary the classification this project offers — the same list the editor was
      *                   served, so a value the client could pick is a value this accepts. Absence
      *                   from it is refused for the three reasons {@link ClassificationVocabulary}
@@ -278,7 +256,6 @@ record CaseEdit(
             CaseUpdateRequest request,
             Set<UUID> liveSuiteIds,
             Set<UUID> existingStepIds,
-            Set<UUID> acceptableSharedStepIds,
             ClassificationVocabulary vocabulary,
             Set<UUID> storedClassificationValueIds,
             Set<UUID> acceptableConditionIds,
@@ -342,7 +319,7 @@ record CaseEdit(
 
         String gherkin = trimToNull(request.gherkinSource());
         List<StepEdit> steps =
-                normalizeSteps(request.steps(), existingStepIds, acceptableSharedStepIds, errors);
+                normalizeSteps(request.steps(), existingStepIds, errors);
 
         boolean statesItsProcedure = procedure == ProcedureRule.REQUIRED;
 
@@ -355,9 +332,9 @@ record CaseEdit(
         // complained about, so a payload whose only step was rejected arrives here with an empty
         // list, and the reader is told to add a step they demonstrably just added, underneath the
         // sentence explaining why the one they added was refused. Found by driving a refused
-        // sharedStepId against the real server; the same pair was already reachable through a
-        // blank action and an unknown step id, so this predates the reference check and is fixed
-        // for all three.
+        // shared-step reference against the real server (§64, before §239 retired the library);
+        // the same pair was already reachable through a blank action and an unknown step id, so it
+        // predated that reference check and outlives it.
         boolean noStepsSubmitted = request.steps() == null || request.steps().isEmpty();
         if (statesItsProcedure && format == StepFormat.STRUCTURED && noStepsSubmitted) {
             errors.computeIfAbsent("steps", k -> new ArrayList<>())
@@ -535,26 +512,14 @@ record CaseEdit(
         CaseUpdateRequest asRequest = asRequest(row, steps);
 
         Set<UUID> existingStepIds = new HashSet<>();
-        Set<UUID> storedSharedStepIds = new HashSet<>();
         for (TestStep step : steps) {
             existingStepIds.add(step.getId());
-            if (step.getSharedStepId() != null) {
-                storedSharedStepIds.add(step.getSharedStepId());
-            }
         }
 
-        // The stored references, and deliberately NOT the project's live library. This method
-        // reconstructs what is already on the row; it is not an authoring act, so there is nothing
-        // here for a library check to protect. Resolving the live set instead would mean a bulk
-        // MOVE_TO_SUITE over a case referencing a RETIRED entry failed to reconstruct, and the
-        // case would be skipped as "cannot validate its own content" — a case the caller can see,
-        // refused for a reason it did not cause, by a check added for a different path entirely.
-        // It also keeps this method free of a query, which is what lets it stay a pure function.
         Outcome outcome = validate(
                 asRequest,
                 liveSuiteIds,
                 existingStepIds,
-                storedSharedStepIds,
                 // Never consulted: the request's classification is null above, so nothing is
                 // checked against a vocabulary. Passing `none()` rather than resolving one is what
                 // keeps this a pure function — the caller would otherwise need a project read to
@@ -645,8 +610,7 @@ record CaseEdit(
                                 step.getKeyword() == null ? null : step.getKeyword().name(),
                                 step.getAction(),
                                 step.getTestData(),
-                                step.getExpectedResult(),
-                                step.getSharedStepId()))
+                                step.getExpectedResult()))
                         .toList(),
                 // Null means "leave the classification alone", which is exactly what a bulk action
                 // does — none of the eight touches it. The case's stored values are supplied
@@ -867,10 +831,11 @@ record CaseEdit(
      * ids this case already attaches</em>. Both halves are load-bearing and they fail in opposite
      * directions. Without the library half, an id naming a sibling project's condition satisfies the
      * foreign key and is stored, and every later read resolves a condition through a project the
-     * reader was never granted — the argument {@code suiteId} and {@code sharedStepId} each make on
-     * a column nobody made it for. Without the stored half, the day a condition is retired every
-     * case attaching it becomes unsaveable, and a title fix on an untouched case would be refused
-     * over an attachment the author never made and cannot see.
+     * reader was never granted — the argument {@code suiteId} makes on a column nobody made it
+     * for, and which {@code sharedStepId} made too until §239 retired the shared-step library.
+     * Without the stored half, the day a condition is retired every case attaching it becomes
+     * unsaveable, and a title fix on an untouched case would be refused over an attachment the
+     * author never made and cannot see.
      *
      * <h2>Duplicates within one list are collapsed; the two lists are independent</h2>
      *
@@ -1008,7 +973,6 @@ record CaseEdit(
     private static List<StepEdit> normalizeSteps(
             List<CaseUpdateRequest.StepInput> submitted,
             Set<UUID> existingStepIds,
-            Set<UUID> acceptableSharedStepIds,
             Map<String, List<String>> errors) {
 
         if (submitted == null || submitted.isEmpty()) {
@@ -1029,39 +993,25 @@ record CaseEdit(
                         .add("Step " + (i + 1) + " refers to a step that is not on this case.");
                 continue;
             }
-            if (step.sharedStepId() != null
-                    && !acceptableSharedStepIds.contains(step.sharedStepId())) {
-                errors.computeIfAbsent("steps", k -> new ArrayList<>())
-                        .add("Step " + (i + 1) + " refers to a shared step that is not in this "
-                                + "project's library.");
-                continue;
-            }
             normalized.add(new StepEdit(
                     step.id(),
                     keyword(step.keyword(), i, errors),
                     action,
                     trimToNull(step.testData()),
-                    trimToNull(step.expectedResult()),
-                    step.sharedStepId()));
+                    trimToNull(step.expectedResult())));
         }
         return normalized;
     }
 
     /**
-     * The shared-step ids a submitted payload references — what the caller resolves the library
-     * half of {@link #validate}'s {@code acceptableSharedStepIds} from.
-     *
-     * <p>Here rather than at each call site so the two write paths cannot disagree about which ids
-     * they looked up, and so the empty case — the overwhelmingly common one, since most cases
-     * reference no library entry at all — is answered once. An empty result means the caller makes
-     * no query.
-     */
-    /**
      * Every condition id the payload names, across both lists — what the caller resolves the live
      * library half of {@code acceptableConditionIds} from.
      *
-     * <p>{@link #referencedSharedStepIds}'s twin, and empty for most cases, which is what keeps the
-     * membership query from running at all on a save that attaches nothing.
+     * <p>Here rather than at each call site so the two write paths cannot disagree about which ids
+     * they looked up, and empty for most cases, which is what keeps the membership query from
+     * running at all on a save that attaches nothing. An empty result means the caller makes no
+     * query. (It had a twin, {@code referencedSharedStepIds}, until §239 retired the shared-step
+     * library.)
      */
     static Set<UUID> referencedConditionIds(
             List<CaseConditionInput> preconditions, List<CaseConditionInput> postconditions) {
@@ -1078,19 +1028,6 @@ record CaseEdit(
             }
         }
         return ids;
-    }
-
-    static Set<UUID> referencedSharedStepIds(List<CaseUpdateRequest.StepInput> submitted) {
-        if (submitted == null || submitted.isEmpty()) {
-            return Set.of();
-        }
-        Set<UUID> referenced = new HashSet<>();
-        for (CaseUpdateRequest.StepInput step : submitted) {
-            if (step.sharedStepId() != null) {
-                referenced.add(step.sharedStepId());
-            }
-        }
-        return referenced;
     }
 
     /**

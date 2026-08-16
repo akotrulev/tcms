@@ -559,8 +559,6 @@ class ContractConventionTest {
             Map.entry("RoleAssignment", List.of(com.tcms.identity.RoleAssignmentView.class)),
             Map.entry("RoleAssignmentInput", List.of(com.tcms.identity.RoleGrantRequest.class)),
             Map.entry("RunStatusInput", List.of(com.tcms.execution.RunStatusRequest.class)),
-            Map.entry("SharedStep", List.of(com.tcms.repository.SharedStepView.class)),
-            Map.entry("SharedStepInput", List.of(com.tcms.repository.SharedStepWriteRequest.class)),
             Map.entry("StepResult", List.of(com.tcms.execution.StepResultView.class)),
             Map.entry("StepSuggestion", List.of(com.tcms.repository.StepSuggestionView.class)),
             Map.entry("Suite", List.of(com.tcms.repository.SuiteView.class)),

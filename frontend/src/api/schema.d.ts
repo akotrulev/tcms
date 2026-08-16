@@ -3832,19 +3832,26 @@ export interface paths {
         put?: never;
         /**
          * Add an entry to the reusable condition library
-         * @description **`library:manage`** — the same gate as `POST /shared-steps`, and for the same reason:
-         *     creating an entry propagates nowhere, so the permission is the whole control on this path.
+         * @description **`library:manage`** — creating an entry propagates nowhere, so the permission is the
+         *     whole control on this path.
          *
-         *     Until §95 this collection was a read of a table **nothing could write** — the mirror of the
-         *     gap `POST /shared-steps` closed, and the more consequential half, because conditions are the
-         *     product's one genuinely *shared* authoring object: a case attaches one **by id** and an edit
-         *     to it propagates everywhere it is used. See the `PUT`.
+         *     Until §95 this collection was a read of a table **nothing could write**. `/shared-steps`
+         *     had the same gap and closed it the same way; this is the half that mattered, because
+         *     **conditions are now the product's only genuinely shared authoring object**. A case
+         *     attaches one **by id**, and an edit to it propagates everywhere it is used — see the `PUT`,
+         *     which is the one mutation in the API whose blast radius is not the thing being edited.
+         *     ~~Shared steps were the sibling mechanism.~~ → **retired in §239**: the library was
+         *     half-built, its picker copied an entry's *title* into the step's `action`, and the
+         *     reference it set beside it was resolved by no read path in the product, so an edit to a
+         *     shared step propagated to precisely nothing. What replaced it is `/step-suggestions`,
+         *     which is copy-not-reference by construction. **Do not read this endpoint as one of a
+         *     pair.**
          *
          *     Conditions are **project-scoped**, so an entry is reachable only from the project it was
          *     created in.
          *
-         *     No `Idempotency-Key`, on `POST /shared-steps`' terms: a duplicate is visible in the picker
-         *     next to its twin the moment the create returns.
+         *     No `Idempotency-Key`: a duplicate is visible in the picker next to its twin the moment the
+         *     create returns.
          */
         post: {
             parameters: {
@@ -3967,151 +3974,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/projects/{projectId}/shared-steps": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                projectId: components["parameters"]["ProjectId"];
-            };
-            cookie?: never;
-        };
-        /**
-         * Reusable step library
-         * @description Most-used first, narrowed by an optional title fragment — the same shape and the same
-         *     ranking rule as `/conditions` (plan §6h).
-         *
-         *     **`usageCount` is derived, not stored.** It counts the *distinct live cases* whose steps
-         *     reference this entry, computed by the query rather than read from `shared_step.usage_count`.
-         *     The stored column exists and stays at its `DEFAULT 0`: a denormalized counter has to be
-         *     maintained by every path that rewrites a case's steps, and a case edit replaces the whole
-         *     step list, so the counter drifts on the first path that forgets and nothing reveals it.
-         *     A number that ranks the picker has to be right to be worth showing.
-         *
-         *     Distinct *cases*, not step rows: a case may reference the same entry twice, and counting
-         *     rows would inflate it (the §6e rule about execution count versus distinct-case count).
-         *     This deliberately differs from `Condition.usageCount`, which is still the stored 0 —
-         *     a condition's usage spans `case_condition` **and** `suite_condition`, and the suite side
-         *     propagates by inheritance, so that count is a design question rather than a join.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    q?: string;
-                };
-                header?: never;
-                path: {
-                    projectId: components["parameters"]["ProjectId"];
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Shared steps */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["SharedStep"][];
-                    };
-                };
-                401: components["responses"]["Unauthorized"];
-                404: components["responses"]["NotFound"];
-            };
-        };
-        put?: never;
-        /**
-         * Add an entry to the reusable step library
-         * @description **`library:manage`** — Instance Admin, Company Admin, Test Lead and Test Engineer (roles
-         *     spec, Repository table). Viewer and Automation Service do not hold it. The spec's note
-         *     that library work is *"gated by an impact modal, not by permission"* is about **editing**
-         *     an entry, whose change propagates to every case referencing it; creating one propagates
-         *     nowhere, so the permission is the whole control here.
-         *
-         *     Until this operation existed the library was a read of a table **nothing could write**,
-         *     while `CaseStep.sharedStepId` had been accepted on case saves since M1 — so the product
-         *     could store a reference to a library it had no way to populate.
-         *
-         *     Shared steps are **project-scoped** (roles spec: two client products legitimately have
-         *     different login flows), so an entry is reachable only from the project it was created in.
-         *
-         *     ~~No `Idempotency-Key`. A duplicate library entry is visible in the picker next to its twin
-         *     the moment the create returns — the same reasoning that keeps the header off `POST` suites
-         *     and on `POST` cases.~~ → **superseded by B4 (`V59`), and note that the sentence it cites was
-         *     itself superseded by `V42`**: suites take the header now, for the reason that applies here
-         *     too. The argument reasons entirely from a person looking at a picker, and the caller it has
-         *     to defend — `tcms_write_shared_step` — has none, so a timeout followed by a retry has no
-         *     correction loop at all. A library entry is also a reference target
-         *     (`test_step.sharedStepId`), so two copies of one entry split which cases point at which.
-         *
-         *     A retry answers `200` with the entry the first request created, re-rendered from the live
-         *     row — including its **current** `usageCount`, which is not the zero the original `201`
-         *     carried.
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: {
-                    /**
-                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
-                     *     already succeeded answers **200** with the resource that intent created, instead of creating
-                     *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                     *     §136; the parameter has been shared by six other creates since `V14`.)
-                     *
-                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
-                     *     it across retries. A key generated per attempt is the mistake that makes the header look
-                     *     right and do nothing.
-                     *
-                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
-                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
-                     */
-                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
-                };
-                path: {
-                    projectId: components["parameters"]["ProjectId"];
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["SharedStepInput"];
-                };
-            };
-            responses: {
-                /**
-                 * @description Already created — the entry a previous request carrying this `Idempotency-Key` made.
-                 *     **No `Location`**: nothing was created by this request.
-                 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["SharedStep"];
-                    };
-                };
-                /** @description Created */
-                201: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["SharedStep"];
-                    };
-                };
-                400: components["responses"]["BadRequest"];
-                401: components["responses"]["Unauthorized"];
-                403: components["responses"]["Forbidden"];
-                404: components["responses"]["NotFound"];
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/projects/{projectId}/step-suggestions": {
         parameters: {
             query?: never;
@@ -4129,9 +3991,10 @@ export interface paths {
          *
          *     **The corpus is derived, not curated.** It is computed from every step written in the
          *     project's live cases, so it is populated as soon as the project has a case and needs no
-         *     maintenance to stay that way. That is the correction to `/shared-steps`, whose failure was
-         *     that somebody had to remember to put things in it: a library nobody populates ranks nothing
-         *     and its picker opens empty forever.
+         *     maintenance to stay that way. That was the correction to `/shared-steps`, whose failure
+         *     was that somebody had to remember to put things in it: a library nobody populates ranks
+         *     nothing and its picker opens empty forever. **§239 finished the argument and retired that
+         *     endpoint**, so this is not one option of two — it is how step reuse works.
          *
          *     **A suggestion is text to copy, not an entity to reference.** Picking one fills `action`,
          *     `testData` and `expectedResult` into the author's step and creates **no link** — the step
@@ -4147,8 +4010,9 @@ export interface paths {
          *     the author would fill them from memory — which is the divergence this endpoint exists to
          *     stop. Two steps sharing an action but not an expected result are two suggestions.
          *
-         *     **`useCount` counts distinct live cases**, not step rows — the §6e rule, and the same one
-         *     `SharedStep.usageCount` follows. A case that repeats a step twice is one case using it;
+         *     **`useCount` counts distinct live cases**, not step rows — the §6e rule, and the rule the
+         *     retired `SharedStep.usageCount` followed too. A case that repeats a step twice is one
+         *     case using it;
          *     counting rows would let a single loop-heavy case out-rank a step forty cases share.
          *     Soft-deleted cases are excluded, so the ranking reflects current practice rather than
          *     history.
@@ -10083,8 +9947,8 @@ export interface components {
              *     from a *sibling project's* Feature dimension is refused with a field error rather than
              *     stored: it belongs to the same company, so it satisfies the foreign key and the
              *     company check, and every later read would resolve it through a project the reader was
-             *     never granted. The same argument `suiteId` and `TestStepInput.sharedStepId` each make,
-             *     on the third column that needed it.
+             *     never granted. The same argument `suiteId` makes, on the other column that needed it —
+             *     and `TestStepInput.sharedStepId` made until §239 retired it.
              *
              *     **At most one value per SINGLE-cardinality dimension** (Test Type and Test Level; plan
              *     §6d). A second is a `400` keyed on this field, not the `23505` the V2 trigger would
@@ -10165,13 +10029,6 @@ export interface components {
             action: string;
             testData?: string | null;
             expectedResult?: string | null;
-            /**
-             * Format: uuid
-             * @description Set ⇒ this step is a reference to a `/shared-steps` entry, and the UI marks it as
-             *     shared. Served unresolved: the id, not the block. `action` still carries the text,
-             *     so a reader never depends on a second fetch to see what the step says.
-             */
-            sharedStepId?: string | null;
         };
         TestStepInput: {
             /** Format: uuid */
@@ -10180,25 +10037,6 @@ export interface components {
             action: string;
             testData?: string | null;
             expectedResult?: string | null;
-            /**
-             * Format: uuid
-             * @description A `/shared-steps` entry **of this project**. Accepted when the entry is live here, or
-             *     when this case's stored steps already reference it.
-             *
-             *     Both halves are load-bearing. Without the first, an id from a sibling project is
-             *     stored unchecked — it satisfies the foreign key, so nothing fails, and every reader of
-             *     the case then resolves a library entry through a project they were never granted; an
-             *     id naming nothing at all fails the foreign key and answers 500 where a field error
-             *     belongs. Without the second, **retiring a library entry makes every case using it
-             *     unsaveable**, which is worse than the defect the check closes: references survive a
-             *     retirement by design (the same rule `Condition` states for attachments), so a save
-             *     that merely leaves an existing reference alone must not be re-litigated against a
-             *     library that has moved on.
-             *
-             *     Refused as a field error rather than a 404 — the case and the project both resolved,
-             *     and the value came from a picker the message can land on.
-             */
-            sharedStepId?: string | null;
         };
         StepSuggestion: {
             action: string;
@@ -10352,9 +10190,10 @@ export interface components {
             /**
              * @description Distinct **live cases** attaching this entry **directly** (`case_condition`). Derived by
              *     the query since §95, never read from `condition.usage_count` — that column stays at its
-             *     `DEFAULT 0` for `SharedStep.usageCount`'s reason: a denormalized counter has to be
-             *     maintained by every path that rewrites a case's condition list, a case edit replaces the
-             *     list wholesale, and a counter that drifts silently is worse than one computed.
+             *     `DEFAULT 0` for the reason the retired `SharedStep.usageCount` gave: a denormalized
+             *     counter has to be maintained by every path that rewrites a case's condition list, a case
+             *     edit replaces the list wholesale, and a counter that drifts silently is worse than one
+             *     computed.
              *
              *     Distinct *cases*, not attachment rows — a case may legitimately attach the same entry as
              *     both a pre- and a postcondition.
@@ -10362,8 +10201,9 @@ export interface components {
             usageCount: number;
             /**
              * @description Suites attaching this entry (`suite_condition`). **A second number rather than a bigger
-             *     first one**, and that is the resolution of the design question `/shared-steps` posed:
-             *     a condition's usage spans two tables, and blending them would be a guess.
+             *     first one**, and that is the resolution of the design question the retired
+             *     `/shared-steps` posed: a condition's usage spans two tables, and blending them would be
+             *     a guess.
              *
              *     ~~The suite side propagates by inheritance down the whole ancestor chain, so a suite
              *     attachment reaches every case beneath it — a figure no join here can produce, since the
@@ -10402,9 +10242,9 @@ export interface components {
             /** @enum {string} */
             type: "PRE" | "POST" | "BOTH";
             /**
-             * @description The ordered actions. Blank lines are dropped and an all-blank body is refused, on
-             *     `SharedStepInput`'s terms: a trailing empty row is what the editor appends, and storing
-             *     it puts a blank line into every case that attaches the entry.
+             * @description The ordered actions. Blank lines are dropped and an all-blank body is refused: a
+             *     trailing empty row is what the editor appends, and storing it puts a blank line into
+             *     every case that attaches the entry.
              */
             body: string[];
         };
@@ -10460,36 +10300,6 @@ export interface components {
             conditionId: string;
             /** @description Refused with a 400 when present — see above. */
             inlineBody?: string[];
-        };
-        SharedStep: {
-            /** Format: uuid */
-            id: string;
-            title: string;
-            body: string[];
-            /**
-             * @description Distinct **live** cases whose steps reference this entry. Derived by the query, never
-             *     read from the stored column — see the `GET` description for why a denormalized counter
-             *     was refused. A retired case stops counting; retiring the entry itself does not
-             *     renumber anything, because the references survive it.
-             */
-            usageCount: number;
-        };
-        /**
-         * @description `usageCount` is absent by construction: it is derived from the references to the entry, so
-         *     a client cannot state it, and offering the field would invite a value the server discards.
-         */
-        SharedStepInput: {
-            /**
-             * @description What the picker lists and what a referencing step shows as its action. The summary of
-             *     the block, not the first line of it.
-             */
-            title: string;
-            /**
-             * @description The ordered actions. A list rather than a paragraph for `Condition.body`'s reason —
-             *     "sign in" is realistically three actions (ERD §4). At least one, and blank entries are
-             *     dropped: an empty library block is a picker row that inserts nothing.
-             */
-            body: string[];
         };
         /**
          * @description One action, one argument, over a selection of cases.

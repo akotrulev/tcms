@@ -70,7 +70,7 @@ public interface ConditionRepository extends JpaRepository<Condition, UUID> {
      * column — it read {@code 0} on every row for ever, and the slice that gives this library an
      * impact warning cannot compute one from a permanent zero (see {@link Condition}) — so the
      * counts are now derived from the referencing tables and the sort happens in
-     * {@link ConditionService#rank}, exactly as {@link SharedStepService#rank} does.
+     * {@link ConditionService#rank}.
      *
      * <p>The order here is therefore the <em>tie-break</em> order only, and it still matters: the
      * service's comparator ends in the same title-then-id fallback, so a stable order coming out of
@@ -112,7 +112,7 @@ public interface ConditionRepository extends JpaRepository<Condition, UUID> {
     /**
      * Which of the given ids are live entries <strong>of this project</strong>.
      *
-     * <p>{@link SharedStepRepository#findLiveIdsInProject}'s twin, and the {@code projectId}
+     * <p>The {@code projectId}
      * predicate carries the same weight: this resolves ids a caller <em>sent</em>, which proves
      * nothing. Without it a case save could attach a sibling project's condition — the foreign key
      * is satisfied, so nothing fails — and every later read of that case would resolve a condition
@@ -140,7 +140,7 @@ public interface ConditionRepository extends JpaRepository<Condition, UUID> {
     /**
      * How many distinct <strong>live cases</strong> attach each of the given entries directly.
      *
-     * <p>{@link SharedStepRepository#countUsage}'s shape and its three rules, which transfer intact:
+     * <p>Three rules, which the retired shared-step library's usage count shared:
      * entries nothing references are <strong>absent from the result, not zero</strong> (a
      * {@code GROUP BY} over the referencing table cannot emit a row for something nothing
      * references, so the caller defaults them); {@code c.deletedAt IS NULL} is what makes the number

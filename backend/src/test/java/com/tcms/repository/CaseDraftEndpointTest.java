@@ -639,7 +639,7 @@ class CaseDraftEndpointTest extends IntegrationTestBase {
                 + "\"estimatedDurationSec\": 120,"
                 + "\"stepFormat\": \"STRUCTURED\",\"gherkinSource\": null,"
                 + "\"steps\": [{\"id\": null,\"keyword\": null,\"action\": \"Open the basket\","
-                + "\"testData\": null,\"expectedResult\": null,\"sharedStepId\": null}],"
+                + "\"testData\": null,\"expectedResult\": null}],"
                 + "\"changeComment\": null}";
     }
 

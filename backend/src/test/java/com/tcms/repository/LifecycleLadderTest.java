@@ -22,7 +22,8 @@ import org.junit.jupiter.api.Test;
  * the <em>wiring</em> (that each caller passes its own {@code Keys} and the row's stored status)
  * while this one asserts the <em>rule</em>.
  *
- * <p>No Spring context and no database, for {@code CaseSharedStepReferenceTest}'s reason: the rule
+ * <p>No Spring context and no database, for the reason the retired
+ * {@code CaseSharedStepReferenceTest} gave: the rule
  * is a pure function of two enum values and a record, which is the whole point of it taking both
  * ends rather than looking anything up.
  *

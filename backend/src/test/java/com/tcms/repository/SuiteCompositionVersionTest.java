@@ -600,7 +600,6 @@ class SuiteCompositionVersionTest extends IntegrationTestBase {
         step.put("action", "Do the thing");
         step.put("testData", null);
         step.put("expectedResult", null);
-        step.put("sharedStepId", null);
         payload.put("steps", List.of(step));
         payload.put("changeComment", null);
         return payload;
@@ -691,7 +690,6 @@ class SuiteCompositionVersionTest extends IntegrationTestBase {
             carried.put("action", step.get("action").asText());
             carried.put("testData", null);
             carried.put("expectedResult", null);
-            carried.put("sharedStepId", null);
             steps.add(carried);
         }
         payload.put("steps", steps);

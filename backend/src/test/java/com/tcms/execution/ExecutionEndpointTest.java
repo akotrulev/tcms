@@ -2446,7 +2446,6 @@ class ExecutionEndpointTest extends IntegrationTestBase {
         step.put("action", action);
         step.put("testData", null);
         step.put("expectedResult", null);
-        step.put("sharedStepId", null);
         return step;
     }
 

@@ -117,7 +117,6 @@ const CASE_ECHO = {
       action: 'Sign in',
       testData: 'ops@acme.test',
       expectedResult: 'The dashboard renders.',
-      sharedStepId: null,
     },
   ],
 };

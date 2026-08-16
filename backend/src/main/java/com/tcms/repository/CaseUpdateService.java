@@ -96,7 +96,6 @@ public class CaseUpdateService {
     private final SuiteRepository suites;
     private final CaseSteps steps;
     private final TestStepRepository stepRows;
-    private final SharedStepService sharedSteps;
     private final CaseClassifications classifications;
     private final CaseConditions conditions;
     private final CaseTags tags;
@@ -121,7 +120,6 @@ public class CaseUpdateService {
             SuiteRepository suites,
             CaseSteps steps,
             TestStepRepository stepRows,
-            SharedStepService sharedSteps,
             CaseClassifications classifications,
             CaseConditions conditions,
             CaseTags tags,
@@ -140,7 +138,6 @@ public class CaseUpdateService {
         this.suites = suites;
         this.steps = steps;
         this.stepRows = stepRows;
-        this.sharedSteps = sharedSteps;
         this.classifications = classifications;
         this.conditions = conditions;
         this.tags = tags;
@@ -256,12 +253,8 @@ public class CaseUpdateService {
 
         List<TestStep> storedSteps = stepRows.findForCase(testCase.getId());
         Set<UUID> existingStepIds = new HashSet<>();
-        Set<UUID> storedSharedStepIds = new HashSet<>();
         for (TestStep step : storedSteps) {
             existingStepIds.add(step.getId());
-            if (step.getSharedStepId() != null) {
-                storedSharedStepIds.add(step.getSharedStepId());
-            }
         }
 
         /*
@@ -270,9 +263,9 @@ public class CaseUpdateService {
           This line is the whole semantic change: a field the caller did not mention is the field
           the case already has, so `{"title": "x"}` renames the case and touches nothing else. It
           has to happen HERE, before anything reads the request, because three things below make
-          decisions from it — the shared-step union, the condition union, and the folder the
-          declines are resolved at. A partially-overlaid request would check the payload against one
-          case and store another.
+          decisions from it — the condition union and the folder the declines are resolved at. A
+          partially-overlaid request would check the payload against one case and store another.
+          (It was three until §239 retired the shared-step library and its union with it.)
 
           `sent` is kept for exactly one purpose, one line down: the automation tags are read only
           when the caller mentioned them, and that is the last question that can be asked of the
@@ -286,15 +279,6 @@ public class CaseUpdateService {
 
         CaseUpdateRequest request =
                 CaseUpdateRequest.overlay(CaseEdit.asRequest(testCase, storedSteps), sent, body);
-
-        // The library's live entries UNIONED with what this case already references — see
-        // CaseEdit#validate. The union is the whole point: the first half refuses a sibling
-        // project's entry, and without the second, retiring an entry would make every case using
-        // it unsaveable. Only the ids the payload actually names are looked up, so a case with no
-        // shared steps — most of them — costs no query.
-        Set<UUID> acceptableSharedStepIds = new HashSet<>(storedSharedStepIds);
-        acceptableSharedStepIds.addAll(sharedSteps.liveLibraryIds(
-                project.getId(), CaseEdit.referencedSharedStepIds(request.steps())));
 
         // Resolved BEFORE validating and then reused for the render, rather than being read again
         // inside it. Two reads would be two answers to "what does this project offer" a few lines
@@ -352,7 +336,6 @@ public class CaseUpdateService {
                 request,
                 liveSuiteIds,
                 existingStepIds,
-                acceptableSharedStepIds,
                 vocabulary,
                 classifications.liveValueIdsOf(testCase.getId(), vocabulary),
                 acceptableConditionIds,

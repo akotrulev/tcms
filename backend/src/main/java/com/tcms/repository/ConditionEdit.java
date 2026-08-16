@@ -9,17 +9,18 @@ import java.util.Map;
  * A validated, normalized write to one library condition — everything {@link Condition} needs and
  * nothing it has to check.
  *
- * <p>Same shape and the same reason as {@link SharedStepEdit}, {@link SuiteEdit} and
+ * <p>Same shape and the same reason as {@link SuiteEdit} and
  * {@link CaseEdit}: the request is normalized once, before anything acts on it, so no service,
  * entity or query re-derives whether the input was acceptable.
  *
  * <h2>One validator for create and edit, and that is a decision</h2>
  *
- * <p>{@link SharedStepEdit} spells its entry point {@code validateCreate}, leaving room for an edit
- * with different rules. There is no such room here and pretending otherwise would be the more
- * dangerous shape: an edit propagates to every case attaching the entry, so a rule enforced on
- * create and relaxed on edit would let an entry reach — through the back door and across hundreds
- * of cases — a state the create refused. The two paths validate identically by construction.
+ * <p>The retired {@code SharedStepEdit} spelled its entry point {@code validateCreate}, leaving
+ * room for an edit with different rules. There is no such room here and pretending otherwise would
+ * be the more dangerous shape: an edit propagates to every case attaching the entry, so a rule
+ * enforced on create and relaxed on edit would let an entry reach — through the back door and
+ * across hundreds of cases — a state the create refused. The two paths validate identically by
+ * construction.
  *
  * @param body never empty, and every element non-blank — see {@link #validate}
  */
@@ -28,10 +29,11 @@ record ConditionEdit(String title, ConditionType type, List<String> body) {
     /**
      * The longest title the picker will accept.
      *
-     * <p>The column is unbounded {@code TEXT}, so this is a product rule, matched to
-     * {@link SharedStepEdit#MAX_TITLE} because both are one line of a narrow typeahead result
-     * rather than a sentence on a page. Stated as its own constant rather than borrowed, so that
-     * changing one library's cap does not silently move the other's.
+     * <p>The column is unbounded {@code TEXT}, so this is a product rule: one line of a narrow
+     * typeahead result rather than a sentence on a page. It was stated as its own constant rather
+     * than borrowed from the shared-step library's matching cap so that changing one library's
+     * would not silently move the other's — and §239, which retired that library, is why this one
+     * still reads correctly with nothing to be matched against.
      */
     static final int MAX_TITLE = 150;
 
@@ -51,15 +53,10 @@ record ConditionEdit(String title, ConditionType type, List<String> body) {
      *
      * <h2>Blank body lines are dropped, and an all-blank body is refused</h2>
      *
-     * <p>{@link SharedStepEdit#validateCreate}'s rule, and it transfers exactly: the editor appends
-     * an empty row as you type, so a submitted body routinely carries a trailing blank the author
+     * <p>The editor appends an empty row as you type, so a submitted body routinely carries a trailing blank the author
      * never meant to send. Storing it puts an empty line into every case attaching the entry, in a
      * list whose positions are the whole structure. Dropping them silently is right for a trailing
      * row and wrong for a body that was <em>only</em> blank rows, which is a form nobody filled in.
-     *
-     * <p>The stakes are higher here than for a shared step, which is worth saying rather than
-     * leaving to the reader: a shared step's empty body is one bad picker row, while a condition's
-     * is an empty precondition block on every case that attaches it.
      *
      * <h2>{@code type} is required and has no default</h2>
      *

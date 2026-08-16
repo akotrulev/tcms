@@ -136,7 +136,7 @@ public class ConditionService {
     /**
      * Resolves both usage counts for a page of entries and sorts by the case count.
      *
-     * <p>{@link SharedStepService#rank}'s shape, with two count queries instead of one. Three
+     * <p>Two count queries rather than one. Three
      * queries for the whole page rather than one per row — the shape that turns a typeahead into
      * N+1 against the largest table in the schema — and never a correlated subquery.
      *
@@ -188,7 +188,7 @@ public class ConditionService {
      * Creates a library entry. {@code library:manage}.
      *
      * <p>No {@code Idempotency-Key} and no uniqueness check on the title, both on
-     * {@link SharedStepService#create}'s terms: a duplicate is visible in the picker next to its
+     * these terms: a duplicate is visible in the picker next to its
      * twin the moment the create returns, and two entries may legitimately be called "Signed in"
      * and differ in their actions.
      */
@@ -304,7 +304,7 @@ public class ConditionService {
     /**
      * Which of the submitted ids a case in this project may attach.
      *
-     * <p>{@link SharedStepService#liveLibraryIds}'s twin, and it answers only the <em>library</em>
+     * <p>It answers only the <em>library</em>
      * half of the rule — the ids are live entries of this project — never the second half, which is
      * whether the case already attaches the id. That one is the caller's, because only the caller
      * has the stored attachments, and folding it in here would mean this method silently approved

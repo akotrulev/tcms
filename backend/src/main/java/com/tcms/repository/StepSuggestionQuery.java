@@ -11,7 +11,7 @@ import java.util.Locale;
  * what a blank {@code q} means — has exactly one home.
  *
  * <p><strong>This is the fourth copy of {@code escapeLike} in this module</strong>
- * ({@link ConditionQuery}, {@code SharedStepQuery}, {@code CaseSpecifications}, here). It is
+ * ({@link ConditionQuery}, {@code CaseSpecifications}, here). It is
  * duplicated rather than extracted because the convention this module already follows is one query
  * record per endpoint, and a shared helper is a change to three shipped call sites that this slice
  * has no reason to touch. Recorded so the fifth copy is a deliberate decision to extract rather than

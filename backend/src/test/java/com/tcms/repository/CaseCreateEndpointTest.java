@@ -1157,7 +1157,6 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
         step.put("action", action);
         step.put("testData", null);
         step.put("expectedResult", null);
-        step.put("sharedStepId", null);
         return step;
     }
 
@@ -1451,9 +1450,9 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
         try (var statement = connection.prepareStatement("""
                 INSERT INTO test_step
                     (id, company_id, case_id, position, keyword, action, test_data,
-                     expected_result, shared_step_id)
+                     expected_result)
                 VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), 0, NULL,
-                        'Someone else''s step', NULL, NULL, NULL)
+                        'Someone else''s step', NULL, NULL)
                 ON CONFLICT (id) DO NOTHING
                 """)) {
             statement.setString(1, id.toString());
