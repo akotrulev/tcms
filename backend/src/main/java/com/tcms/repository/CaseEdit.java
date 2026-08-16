@@ -170,12 +170,25 @@ record CaseEdit(
     enum ProcedureRule {
 
         /**
-         * The payload must state it — the <strong>update</strong> path.
+         * The payload must state it — the <strong>update</strong> path, <em>for a case that already
+         * has a procedure</em>.
          *
-         * <p>A {@code PATCH} body is the whole editable set (§144) sent by an author with the field
-         * in front of them, so an empty one is a statement that this case has no procedure rather
-         * than a question left open. It is also the funnel: a stub reaches its steps by being
-         * opened and saved, and this is the rule that makes saving it mean writing it.
+         * <p>~~A {@code PATCH} body is the whole editable set (§144) sent by an author with the
+         * field in front of them, so an empty one is a statement that this case has no procedure.
+         * It is also the funnel: a stub reaches its steps by being opened and saved, and this is
+         * the rule that makes saving it mean writing it.~~ → <strong>narrowed by B2, and the first
+         * clause stopped being true at B1</strong>: a body is no longer the whole editable set, so
+         * an absent {@code steps} is a field nobody mentioned rather than a statement about the
+         * case.
+         *
+         * <p>What this rule now says is the destructive half of it: a case that says how it is run
+         * may not have that unsaid by a {@code steps: []}. Which cases it applies to is
+         * {@code CaseUpdateService.hasProcedure}'s answer, read off the STORED row.
+         *
+         * <p>The funnel argument survives where it was ever really enforced — the SPA's editor,
+         * whose own schema requires a procedure before it will save, with the author looking at the
+         * field. What it cost on the API was the round trip: §200 made a stepless case a legal
+         * stored row and this rule refused to store it back.
          */
         REQUIRED,
 
@@ -275,11 +288,13 @@ record CaseEdit(
             Set<UUID> retainedAttachmentIds,
             List<UUID> storedDeclinedIds,
             java.util.function.Predicate<String> automationKeyTaken,
+            UUID storedOwnerId,
+            List<String> storedAutomationTags,
             ProcedureRule procedure) {
 
         Map<String, List<String>> errors = new LinkedHashMap<>();
 
-        refuseUnsupported(request, errors);
+        refuseUnsupported(request, storedOwnerId, storedAutomationTags, errors);
 
         List<UUID> classification = normalizeClassification(
                 request.classificationValueIds(), vocabulary, storedClassificationValueIds, errors);
@@ -517,7 +532,97 @@ record CaseEdit(
             List<UUID> storedDeclinedIds,
             java.util.function.Predicate<String> automationKeyTaken) {
 
-        CaseUpdateRequest asRequest = new CaseUpdateRequest(
+        CaseUpdateRequest asRequest = asRequest(row, steps);
+
+        Set<UUID> existingStepIds = new HashSet<>();
+        Set<UUID> storedSharedStepIds = new HashSet<>();
+        for (TestStep step : steps) {
+            existingStepIds.add(step.getId());
+            if (step.getSharedStepId() != null) {
+                storedSharedStepIds.add(step.getSharedStepId());
+            }
+        }
+
+        // The stored references, and deliberately NOT the project's live library. This method
+        // reconstructs what is already on the row; it is not an authoring act, so there is nothing
+        // here for a library check to protect. Resolving the live set instead would mean a bulk
+        // MOVE_TO_SUITE over a case referencing a RETIRED entry failed to reconstruct, and the
+        // case would be skipped as "cannot validate its own content" — a case the caller can see,
+        // refused for a reason it did not cause, by a check added for a different path entirely.
+        // It also keeps this method free of a query, which is what lets it stay a pure function.
+        Outcome outcome = validate(
+                asRequest,
+                liveSuiteIds,
+                existingStepIds,
+                storedSharedStepIds,
+                // Never consulted: the request's classification is null above, so nothing is
+                // checked against a vocabulary. Passing `none()` rather than resolving one is what
+                // keeps this a pure function — the caller would otherwise need a project read to
+                // reconstruct a field the bulk actions do not change.
+                ClassificationVocabulary.none(),
+                storedClassificationValueIds,
+                // Never consulted either, for the same reason: both condition lists are null on the
+                // request above, so nothing is checked against the library. An empty acceptable set
+                // is therefore correct AND keeps this a pure function with no query in it.
+                Set.of(),
+                storedPreconditionIds,
+                storedPostconditionIds,
+                // Never consulted, third instance of the same shape: declinedConditionIds is null
+                // on the request above, so nothing is checked against it. An empty declinable set
+                // keeps this a pure function — resolving the real one needs the suite chain and
+                // therefore two queries.
+                Set.of(),
+                // The RETENTION bound, and it is deliberately the stored set itself — "retain all
+                // of it" (§192). It cannot be Set.of() the way `declinable` above can: that one is
+                // never read for a null request field, this one always is, and an empty set would
+                // reconstruct every bulk-touched case as declining nothing. Nor can it be the real
+                // set, which is the same query this method exists without. THE CALLER NARROWS IT
+                // INSTEAD: CaseBulkService's MOVE_TO_SUITE arm resolves the target folder's
+                // attachments ONCE for the whole batch — the target is one suite for every case in
+                // the operation — and passes the already-narrowed list as storedDeclinedIds.
+                Set.copyOf(storedDeclinedIds),
+                storedDeclinedIds,
+                automationKeyTaken,
+                // Both null, and neither is ever consulted: the reconstruction leaves the two
+                // refused fields absent (see above), so the comparison B2 added has nothing to
+                // compare. Passing the row's real owner would be equally correct and would put a
+                // getter call in a method whose whole property is that it is a pure function of
+                // what it was handed.
+                null,
+                null,
+                // A stored row is not an authoring act, so the procedure rule has nothing here to
+                // protect — the fourth argument of this shape, after the vocabulary, the library and
+                // the declinable set above. It differs from those three in that it cannot be spelled
+                // as an empty set, and in what it would cost: since §200 a stub is a legal row, so
+                // REQUIRED here would refuse to reconstruct a case the database holds and every
+                // authored bulk action would skip it under a message telling its author to save it
+                // once — which the update path, where the rule DOES apply, would then refuse.
+                ProcedureRule.DEFERRED);
+        return outcome instanceof Outcome.Valid valid
+                ? Optional.of(valid.edit())
+                : Optional.empty();
+    }
+
+
+    /**
+     * A stored case, spelled as the request that would store it again unchanged.
+     *
+     * <p><strong>Two callers, and they are the two halves of the same guarantee.</strong>
+     * {@link #of} uses it to reconstruct an edit for a bulk action that changed one field, so the
+     * version row it writes describes the whole case. {@link CaseUpdateRequest#overlay} uses it as
+     * the <em>base</em> of a {@code PATCH}: what the caller did not mention is what is already
+     * stored, which is the whole of B1's leave-alone semantics and is why it is not a second
+     * mapping written beside the first.
+     *
+     * <p>Everything a request may carry that a stored row does not <em>is</em> null here — the five
+     * collections whose null already means "leave alone", the two refused fields, and
+     * {@code changeComment} — and each of those nulls has its own reason recorded below. The
+     * overlay depends on all of them: a base that guessed at a collection would make an absent list
+     * on the wire mean "rewrite it with what I read", which is the read-modify-write race the
+     * absent-means-leave-alone reading exists to avoid.
+     */
+    static CaseUpdateRequest asRequest(TestCase row, List<TestStep> steps) {
+        return new CaseUpdateRequest(
                 row.getTitle(),
                 row.getSuiteId(),
                 row.getDescription(),
@@ -580,67 +685,6 @@ record CaseEdit(
                 // decision as a side effect of relocating the case. The stored set is supplied
                 // separately, below, so the reconstruction still hashes as the whole case.
                 null);
-
-        Set<UUID> existingStepIds = new HashSet<>();
-        Set<UUID> storedSharedStepIds = new HashSet<>();
-        for (TestStep step : steps) {
-            existingStepIds.add(step.getId());
-            if (step.getSharedStepId() != null) {
-                storedSharedStepIds.add(step.getSharedStepId());
-            }
-        }
-
-        // The stored references, and deliberately NOT the project's live library. This method
-        // reconstructs what is already on the row; it is not an authoring act, so there is nothing
-        // here for a library check to protect. Resolving the live set instead would mean a bulk
-        // MOVE_TO_SUITE over a case referencing a RETIRED entry failed to reconstruct, and the
-        // case would be skipped as "cannot validate its own content" — a case the caller can see,
-        // refused for a reason it did not cause, by a check added for a different path entirely.
-        // It also keeps this method free of a query, which is what lets it stay a pure function.
-        Outcome outcome = validate(
-                asRequest,
-                liveSuiteIds,
-                existingStepIds,
-                storedSharedStepIds,
-                // Never consulted: the request's classification is null above, so nothing is
-                // checked against a vocabulary. Passing `none()` rather than resolving one is what
-                // keeps this a pure function — the caller would otherwise need a project read to
-                // reconstruct a field the bulk actions do not change.
-                ClassificationVocabulary.none(),
-                storedClassificationValueIds,
-                // Never consulted either, for the same reason: both condition lists are null on the
-                // request above, so nothing is checked against the library. An empty acceptable set
-                // is therefore correct AND keeps this a pure function with no query in it.
-                Set.of(),
-                storedPreconditionIds,
-                storedPostconditionIds,
-                // Never consulted, third instance of the same shape: declinedConditionIds is null
-                // on the request above, so nothing is checked against it. An empty declinable set
-                // keeps this a pure function — resolving the real one needs the suite chain and
-                // therefore two queries.
-                Set.of(),
-                // The RETENTION bound, and it is deliberately the stored set itself — "retain all
-                // of it" (§192). It cannot be Set.of() the way `declinable` above can: that one is
-                // never read for a null request field, this one always is, and an empty set would
-                // reconstruct every bulk-touched case as declining nothing. Nor can it be the real
-                // set, which is the same query this method exists without. THE CALLER NARROWS IT
-                // INSTEAD: CaseBulkService's MOVE_TO_SUITE arm resolves the target folder's
-                // attachments ONCE for the whole batch — the target is one suite for every case in
-                // the operation — and passes the already-narrowed list as storedDeclinedIds.
-                Set.copyOf(storedDeclinedIds),
-                storedDeclinedIds,
-                automationKeyTaken,
-                // A stored row is not an authoring act, so the procedure rule has nothing here to
-                // protect — the fourth argument of this shape, after the vocabulary, the library and
-                // the declinable set above. It differs from those three in that it cannot be spelled
-                // as an empty set, and in what it would cost: since §200 a stub is a legal row, so
-                // REQUIRED here would refuse to reconstruct a case the database holds and every
-                // authored bulk action would skip it under a message telling its author to save it
-                // once — which the update path, where the rule DOES apply, would then refuse.
-                ProcedureRule.DEFERRED);
-        return outcome instanceof Outcome.Valid valid
-                ? Optional.of(valid.edit())
-                : Optional.empty();
     }
 
     /**
@@ -901,15 +945,57 @@ record CaseEdit(
      * (plan §6c) — so accepting {@code tags} is not a reason to accept it.
      */
     private static void refuseUnsupported(
-            CaseUpdateRequest request, Map<String, List<String>> errors) {
+            CaseUpdateRequest request,
+            UUID storedOwnerId,
+            List<String> storedAutomationTags,
+            Map<String, List<String>> errors) {
 
         String message = "This field cannot be changed here yet.";
-        if (request.ownerId() != null) {
+        // ~~Refused when PRESENT.~~ → **B2: refused when it would CHANGE something.** The old rule
+        // was right about the capability and wrong about the round trip: both fields are served by
+        // the GET, so a caller reading a case and sending it back — the shape this API asks a
+        // non-form client to use — was refused for two fields it had not touched, and the only fix
+        // available to it was to know which of the fields it had just read to drop again
+        // (`core/rewrite.ts` does exactly that, and says so).
+        //
+        // Echoing what is stored is not a write, so it is not refused. Sending something ELSE still
+        // is, by name, because no path writes either column: silently ignoring a changed value is
+        // the save-that-lies this whole boundary exists to avoid. On the create path both stored
+        // values are null, so any value at all is a change and the answer is unchanged.
+        if (request.ownerId() != null && !request.ownerId().equals(storedOwnerId)) {
             errors.computeIfAbsent("ownerId", k -> new ArrayList<>()).add(message);
         }
-        if (request.automationTags() != null) {
+        if (request.automationTags() != null
+                && !sameTags(request.automationTags(), storedAutomationTags)) {
             errors.computeIfAbsent("automationTags", k -> new ArrayList<>()).add(message);
         }
+    }
+
+    /**
+     * Whether two automation-tag lists say the same thing.
+     *
+     * <p>Order-insensitive and duplicate-insensitive, because {@code case_automation_tag} is a set
+     * with a unique key and the read serves it sorted — a caller echoing the read back must not be
+     * refused for having sorted it differently, and a caller sending the same tag twice has still
+     * changed nothing. Blank entries are dropped for the same reason the write path would drop
+     * them, so a trailing empty string in a hand-built body is not a "change" either.
+     */
+    private static boolean sameTags(List<String> sent, List<String> stored) {
+        return new HashSet<>(normalizeForComparison(sent))
+                .equals(new HashSet<>(normalizeForComparison(stored)));
+    }
+
+    private static Set<String> normalizeForComparison(List<String> tags) {
+        Set<String> normalized = new LinkedHashSet<>();
+        if (tags != null) {
+            for (String tag : tags) {
+                String trimmed = trimToNull(tag);
+                if (trimmed != null) {
+                    normalized.add(trimmed);
+                }
+            }
+        }
+        return normalized;
     }
 
     /**

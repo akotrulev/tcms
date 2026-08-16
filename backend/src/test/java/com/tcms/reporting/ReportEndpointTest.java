@@ -599,6 +599,61 @@ class ReportEndpointTest extends IntegrationTestBase {
     }
 
     @Nested
+    @DisplayName("Capabilities — what this deployment can render (B5)")
+    class Capabilities {
+
+        @Test
+        @DisplayName("the renderers on the classpath, and not the enum a client compiled against")
+        void whatThisServerCanRender() throws Exception {
+            JsonNode body = parse(capabilities(SCREEN_ONLY, PROJECT));
+
+            // HTML and MD have renderers in the image; PDF does not, and its absence here is the
+            // whole point of the operation — the generate enum offers it and every deployment
+            // refuses it, so a picker built from the enum is wrong on every install.
+            assertThat(formats(body)).containsExactly("HTML", "MD");
+            // JSON is renderable on every deployment (`JsonReportRenderer` writes the model for
+            // every job) and is not a format anybody asks for. A list derived from the renderer
+            // registry alone would offer it.
+            assertThat(formats(body)).doesNotContain("JSON");
+        }
+
+        @Test
+        @DisplayName("what it lists is what generate accepts, both ways")
+        void theListAgreesWithTheRefusal() throws Exception {
+            // The pair that makes the answer trustworthy rather than merely present: a capability
+            // list nothing compares to the refusal is a second opinion about the same fact, and it
+            // is the one that goes stale the day a renderer is added.
+            for (String format : formats(parse(capabilities(LEAD, PROJECT)))) {
+                assertThat(generateWith(LEAD, PROJECT, format).getResponse().getStatus())
+                        .as("%s is offered and must be accepted", format)
+                        .isEqualTo(202);
+            }
+            assertThat(generateWith(LEAD, PROJECT, "PDF").getResponse().getStatus())
+                    .as("PDF is not offered and must still be refused by name")
+                    .isEqualTo(400);
+        }
+
+        @Test
+        @DisplayName("report:view is enough, and no key at all is 403")
+        void gatedOnTheReadKey() throws Exception {
+            assertThat(capabilities(SCREEN_ONLY, PROJECT).getResponse().getStatus()).isEqualTo(200);
+            assertThat(capabilities(REPORT_BLIND, PROJECT).getResponse().getStatus()).isEqualTo(403);
+        }
+
+        @Test
+        @DisplayName("a member with no grant gets 404 rather than 403")
+        void noGrantIsNotFound() throws Exception {
+            assertThat(capabilities(NO_GRANT, PROJECT).getResponse().getStatus()).isEqualTo(404);
+        }
+
+        private java.util.List<String> formats(JsonNode body) {
+            java.util.List<String> formats = new java.util.ArrayList<>();
+            body.get("formats").forEach(row -> formats.add(row.asText()));
+            return formats;
+        }
+    }
+
+    @Nested
     @DisplayName("Downloading — report:export")
     class Downloading {
 
@@ -1108,6 +1163,20 @@ class ReportEndpointTest extends IntegrationTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andReturn();
+    }
+
+    private MvcResult capabilities(UUID userId, UUID projectId) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders
+                        .get("/api/v1/projects/" + projectId + "/reports/capabilities")
+                        .header("Authorization", "Bearer " + tokenFor(userId))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andReturn();
+    }
+
+    /** A well-formed generate whose only variable is the format — the capability pair's driver. */
+    private MvcResult generateWith(UUID userId, UUID projectId, String format) throws Exception {
+        return generate(userId, projectId, "{\"type\":\"" + RUN_SUMMARY + "\",\"format\":\""
+                + format + "\",\"parameters\":{\"runId\":\"" + RUN + "\"}}");
     }
 
     private MvcResult poll(UUID userId, UUID projectId, UUID jobId) throws Exception {

@@ -11,16 +11,25 @@ import java.util.UUID;
  * <p>This is a {@code PATCH}, so <strong>absent and null are different instructions</strong>:
  * omitting {@code objective} means "leave it alone" and sending {@code null} means "clear it". A
  * primitive {@code int} for {@code estimatedDurationSec} would arrive as {@code 0} for both, and
- * clearing an estimate would silently become an estimate of zero seconds. Jackson gives absent and
- * null the same Java value here — both are {@code null} — which is why {@link CaseEdit} resolves
- * them against the stored case rather than this record trying to tell them apart.
+ * clearing an estimate would silently become an estimate of zero seconds.
  *
- * <p><strong>Consequence, stated because it is a real limitation:</strong> a field cannot be
- * distinguished from a field explicitly set to null, so this endpoint treats null as "clear it" for
- * every nullable field and requires the client to send the whole editable set. The SPA does exactly
- * that — its editor submits every field it renders on every save — so the semantics match the only
- * client. A caller wanting true partial-update semantics needs {@code JsonNullable} or a presence
- * map, which is a shape change on the contract and not something to infer from one field's absence.
+ * <p>~~Jackson gives absent and null the same Java value here — both are {@code null} — so this
+ * endpoint treats null as "clear it" for every nullable field and requires the client to send the
+ * whole editable set. A caller wanting true partial-update semantics needs {@code JsonNullable} or
+ * a presence map, which is a shape change on the contract.~~ → <strong>superseded by B1: the two
+ * ARE distinguished, and the paragraph above is now true of this endpoint rather than of HTTP in
+ * general.</strong> It cost neither a dependency nor a shape change on the wire — the update path
+ * binds {@link com.tcms.api.PatchBody} beside this record and {@link #overlay} lays what was sent
+ * over the case as it stands, so what a caller did not mention is what is already stored. The two
+ * clients this changes are the ones that are not forms: {@code tcms case edit --title x} means what
+ * it says now, and a round-tripped case is a no-op.
+ *
+ * <p><strong>The four required fields are still required</strong>, which is the plan's shape and not
+ * an oversight: {@code title}, {@code stepFormat}, {@code priority} and {@code automationStatus} are
+ * {@code NOT NULL} columns whose contract declares them required, and leave-alone semantics make a
+ * missing one <em>resolvable</em> without making it meaningless. A body omitting them is accepted
+ * and keeps the stored values; a body sending one as null is refused by name, which is the same
+ * answer it always gave.
  *
  * <h2>The two fields this endpoint refuses — it was six</h2>
  *
@@ -108,6 +117,104 @@ public record CaseUpdateRequest(
         // describing rows no deployment could contain — the writerless shape §116, §117, §132 and
         // §186 each found one instance of.
         List<UUID> declinedConditionIds) {
+
+    /**
+     * This request laid over the case as it stands — <strong>B1's leave-alone semantics, in one
+     * place</strong>.
+     *
+     * <h2>What changed, and what the old reading cost</h2>
+     *
+     * <p>The header above records the limitation this method removes: Jackson gives an absent field
+     * and an explicit {@code null} the same Java value, so the update path had to pick one meaning
+     * for both and picked <em>clear it</em>. Correct for the SPA, which submits every field it
+     * renders, and a trap with no symptom for everybody else — {@code {"title": "x"}} renamed a case
+     * and emptied four columns beside it, answering 200. The client-side answer
+     * ({@code @tcms/client}'s {@code core/rewrite.ts}) was a read-modify-write, which is the right
+     * shape in the wrong place: it makes every client that is not a form hold a copy of the rule.
+     *
+     * <p>{@link com.tcms.api.PatchBody} is what makes the two distinguishable, so the reading is now
+     * the one the verb implies: <strong>absent leaves alone, an explicit null clears</strong>, and a
+     * list is unchanged — null leaves alone, {@code []} clears, which is what §68 settled and what a
+     * list's own empty spelling always made available.
+     *
+     * <h2>The four required fields are NOT resolved from the stored case, and that is the shape</h2>
+     *
+     * <p>{@code title}, {@code stepFormat}, {@code priority} and {@code automationStatus} come from
+     * the body as sent, so omitting one is the 400 it has always been. This is deliberately the
+     * <em>plan's</em> arrangement — {@code TestPlanUpdateInput} requires a {@code name} and leaves
+     * everything else alone — and it is what B1 asked for in as many words.
+     *
+     * <p>The alternative, resolving them too, makes this a fully partial {@code PATCH} and costs
+     * something that is not obvious: {@code TestCaseInput.required} is one schema serving both the
+     * create and the update, so a server that stopped enforcing the four here would leave that
+     * array true of {@code POST} and false of {@code PATCH} — and
+     * {@code CaseUpdateEndpointTest.contractRequiredMatchesWhatTheServerEnforces}, which derives the
+     * array by dropping each field in turn from a body this endpoint accepts, would discover
+     * nothing at all. Splitting the schema in two is the honest way to have both, and it is a
+     * contract change with a generated-type consequence (§144's defect, in reverse) rather than a
+     * line here. Named as not done, with the reason.
+     *
+     * <h2>Three fields the base deliberately does not supply</h2>
+     *
+     * <ul>
+     *   <li>{@code changeComment} is about <em>this save</em>, so an absent one is no comment and
+     *       never the last save's. Inheriting it would attach one author's sentence to another's
+     *       edit and — because the comment is hashed — write a version whose diff is empty.</li>
+     *   <li>{@code ownerId} and {@code automationTags} are the two the update path refuses. Absent
+     *       is left absent so a caller who never mentioned them is never refused for them; a caller
+     *       who sends them is judged on what they sent (see {@code CaseEdit.refuseUnsupported},
+     *       which since B2 refuses only a <em>change</em>).</li>
+     * </ul>
+     *
+     * @param stored the case as it is, from {@link CaseEdit#asRequest}
+     * @param sent what the caller's body bound to — every absent field is null here, which is
+     *     exactly why it cannot be used alone
+     * @param body the same body, still able to say which fields it carried
+     */
+    static CaseUpdateRequest overlay(
+            CaseUpdateRequest stored, CaseUpdateRequest sent, com.tcms.api.PatchBody body) {
+
+        return new CaseUpdateRequest(
+                // The four the schema REQUIRES are taken from the body as sent, so an absent one is
+                // still the 400 it has always been. See the javadoc: this is the plan's shape, and
+                // `CaseUpdateEndpointTest.contractRequiredMatchesWhatTheServerEnforces` is what
+                // holds the two together — resolving them from the stored case would empty that
+                // check's population and leave `TestCaseInput.required` a claim nothing makes.
+                sent.title(),
+                body.has("suiteId") ? sent.suiteId() : stored.suiteId(),
+                body.has("description") ? sent.description() : stored.description(),
+                body.has("objective") ? sent.objective() : stored.objective(),
+                body.has("expectedOutcome") ? sent.expectedOutcome() : stored.expectedOutcome(),
+                sent.stepFormat(),
+                body.has("gherkinSource") ? sent.gherkinSource() : stored.gherkinSource(),
+                sent.priority(),
+                body.has("severity") ? sent.severity() : stored.severity(),
+                sent.automationStatus(),
+                body.has("automationKey") ? sent.automationKey() : stored.automationKey(),
+                body.has("notAutomatableReason")
+                        ? sent.notAutomatableReason() : stored.notAutomatableReason(),
+                body.has("estimatedDurationSec")
+                        ? sent.estimatedDurationSec() : stored.estimatedDurationSec(),
+                // The one collection whose absence is NOT already "leave alone": a null `steps`
+                // normalizes to an empty list, so an absent one would delete the procedure. The
+                // stored steps are the base, which makes an unmentioned procedure survive an edit
+                // to the title — and `[]` still clears, because a list keeps its own empty
+                // spelling here as everywhere else.
+                body.has("steps") ? sent.steps() : stored.steps(),
+                // Never inherited — see the javadoc.
+                sent.changeComment(),
+                // The five below already read null as "leave alone", so the overlay has nothing to
+                // add: an absent field binds to null and null is the instruction. They are written
+                // out rather than defaulted so that adding a sixth collection means answering this
+                // question for it.
+                sent.classificationValueIds(),
+                sent.tags(),
+                sent.ownerId(),
+                sent.automationTags(),
+                sent.preconditions(),
+                sent.postconditions(),
+                sent.declinedConditionIds());
+    }
 
     /**
      * {@code TestStepInput} — one step as submitted.

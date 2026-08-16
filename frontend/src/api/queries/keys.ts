@@ -134,6 +134,16 @@ export const keys = {
   dashboard: (p: string) => ['projects', p, 'dashboard'] as const,
   reportDefinitions: (p: string) => ['projects', p, 'reports'] as const,
   /**
+   * What this deployment can render (B5).
+   *
+   * Project-keyed because the route is, and **not** because the answer varies by project — it does
+   * not. Deliberately **outside the `reports` prefix**, which both `reportDefinitions` and
+   * `reportJobs` sit under and which every generate and every save invalidates: this answer changes
+   * when an operator installs a renderer, which is never during a session, so a key inside that
+   * prefix would refetch a constant on every write in the feature.
+   */
+  reportCapabilities: (p: string) => ['projects', p, 'report-capabilities'] as const,
+  /**
    * One generation job (§87's poll).
    *
    * Keyed by the job as well as the project, because a screen holds several at once: generating a

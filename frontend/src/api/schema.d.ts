@@ -2034,8 +2034,10 @@ export interface paths {
          *     because a plan's Test cases tab authors a case from a title alone, where the alternatives
          *     were refusing the save or inventing a step nobody wrote. What you get back is a `DRAFT`
          *     stub; `caseHealth.signals` reports `INCOMPLETE` only once such a case is **approved**, since
-         *     a draft that is not finished yet is not a fault. Note the asymmetry when round-tripping: a
-         *     stub read back and `PATCH`ed unchanged is refused until its procedure is filled in.
+         *     a draft that is not finished yet is not a fault. ~~Note the asymmetry when round-tripping: a
+         *     stub read back and `PATCH`ed unchanged is refused until its procedure is filled in.~~ →
+         *     **closed by B2**: the `PATCH` requires a procedure of a case that has one, so a stub
+         *     round-trips as a no-op and only *emptying* a written procedure is refused.
          */
         post: {
             parameters: {
@@ -2260,34 +2262,43 @@ export interface paths {
         head?: never;
         /**
          * Update a test case
-         * @description **`PATCH` by verb only: the body is the whole editable set, not a delta.** Jackson gives
+         * @description ~~**`PATCH` by verb only: the body is the whole editable set, not a delta.** Jackson gives
          *     absent and null the same Java value, so this endpoint cannot tell "leave `objective` alone"
          *     from "clear it" and resolves both as *clear it* — sending `{"title": "x"}` renames the case
-         *     and empties every nullable scalar beside it, and omitting `stepFormat`, `priority` or
-         *     `automationStatus` is a `400` on fields the caller never mentioned. `CaseUpdateRequest`'s
-         *     header records the decision and what changing it would cost (`JsonNullable`, or a presence
-         *     map — a shape change on this contract).
+         *     and empties every nullable scalar beside it. `@tcms/client`'s `core/rewrite.ts` is the
+         *     read-modify-write every non-form client needs because of it.~~ → **superseded by B1: this
+         *     is a partial `PATCH`.**
          *
-         *     The three **list** fields are the exception, and only because a list has an empty spelling
-         *     of its own: `tags`, `classificationValueIds`, `preconditions` and `postconditions` are left
-         *     alone when absent and cleared by `[]`.
+         *     **An absent field is left alone; an explicit `null` clears it.** `{"title": "x"}` renames
+         *     the case and touches nothing else. The server can tell the two apart because it keeps the
+         *     body beside the binding (`api.PatchBody`) and lays what was sent over the case as it stands
+         *     — no `JsonNullable`, no shape change here, and the same reading the verb has always
+         *     implied. What it fixes is not a nicety: a delta edit used to answer `200` having emptied
+         *     four columns nobody mentioned, and the only client that never hit it was the one that
+         *     submits every field on every save.
          *
-         *     The SPA satisfies this by construction — its editor submits every field it renders on every
-         *     save. A client that is not a form reads the case first and sends it back with its change
-         *     applied; `@tcms/client`'s `core/rewrite.ts` is that read-modify-write, shared so the CLI and
-         *     the MCP server cannot disagree about it. Sending a delta here is §143's second recorded
-         *     defect and it had never worked once.
+         *     **List** fields are unchanged, because a list always had an empty spelling of its own:
+         *     `tags`, `classificationValueIds`, `preconditions`, `postconditions` and
+         *     `declinedConditionIds` are left alone when absent and cleared by `[]`. `steps` now follows
+         *     the same rule — absent keeps the stored procedure, `[]` asks to delete it.
          *
-         *     `ownerId` and `automationTags` are on `TestCaseInput` and are **refused with a 400 when
-         *     present** — each needs a write path no slice has built. A round-trip must therefore drop
-         *     them rather than echo what the `GET` returned.
+         *     `title`, `stepFormat`, `priority` and `automationStatus` **stay required by the schema** and
+         *     are resolved from the stored case when absent, so a body omitting them is accepted and a
+         *     body sending one as `null` is refused by name. `@tcms/client`'s `core/rewrite.ts` still
+         *     composes the whole set — the generated types demand those four — and it is now a
+         *     convenience rather than the thing standing between a delta and data loss.
          *
-         *     **This is where the procedure is required**, and the only rule `POST` is more permissive
-         *     about: a `STRUCTURED` case must carry at least one `step` and a `GHERKIN` one a
-         *     `gherkinSource`. A body here is an author's whole restatement of the case, so an empty
-         *     procedure says the case has none rather than leaving the question open — and this is how a
-         *     stub created by `POST` gets its steps. A read-modify-write over a stub is therefore refused
-         *     until the caller supplies them.
+         *     `ownerId` and `automationTags` are on `TestCaseInput` and neither has a write path. They are
+         *     **refused with a 400 when they would change something** and accepted when they echo what the
+         *     `GET` served (B2), so a round-trip no longer has to know to drop the two fields it just read.
+         *
+         *     **This is where the procedure is required**, with the exception B2 added: a `STRUCTURED` case
+         *     that *has* steps must keep at least one, and a `GHERKIN` one must keep its `gherkinSource` —
+         *     so `steps: []` on a written case is refused, which is the body that was ever really a
+         *     mistake. A **stub** created by `POST` with no procedure at all can be saved as it is, so
+         *     reading one back and `PATCH`ing it unchanged is a no-op rather than a `400` about steps
+         *     nobody has written yet. The SPA's editor still requires a procedure before it will save, in
+         *     its own schema, where the author is looking at the field.
          */
         patch: {
             parameters: {
@@ -6915,6 +6926,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/reports/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Which report formats this deployment can produce
+         * @description **The answer to a question `format`'s enum deliberately does not answer.** That enum is the
+         *     set a person may *ask* for and is not narrowed to what is installed — see `generate`, which
+         *     argues it — so a generated client offers `PDF` on every deployment and every deployment
+         *     refuses it. That refusal is correct and it arrives too late to be useful to a picker.
+         *
+         *     This operation is the other half: what the *server* can render, read from the renderers on
+         *     its classpath rather than from a list anybody maintains. A client builds its picker from
+         *     this and gets a menu whose every option works; a client that ignores it and asks for
+         *     something absent still gets the 400 naming what this server can produce, because a
+         *     capability read is a courtesy and never the authority.
+         *
+         *     **Project-scoped and gated on `report:view`, though the answer is the same for every
+         *     project on the instance.** The scoping is not about the data — it is that the only consumer
+         *     is a picker on a screen already needing that key, and an ungated route would tell an
+         *     unauthenticated stranger which optional renderers this deployment has installed.
+         *
+         *     `JSON` is renderable on every deployment and is **not** listed: it is the serialized model
+         *     written for every job (`V27`), not a format a person chooses.
+         */
+        get: operations["getReportCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/reports/jobs": {
         parameters: {
             query?: never;
@@ -11534,6 +11584,21 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /**
+         * @description What this deployment can produce. See `GET …/reports/capabilities` for why it is an answer
+         *     rather than a property of the wire.
+         */
+        ReportCapabilities: {
+            /**
+             * @description Every value of `generate`'s `format` this server can actually render, sorted. A picker
+             *     built from this offers only options that work; the enum stays wider on purpose, so a
+             *     deployment that installs the PDF renderer can be asked for one without a contract
+             *     change. Never empty in a working deployment — `MD` and `HTML` ship in the image — and
+             *     a client should still render an empty list as "this server cannot produce reports"
+             *     rather than as a loading state that never ends.
+             */
+            formats: ("PDF" | "MD" | "HTML")[];
+        };
         ReportJob: {
             /** Format: uuid */
             jobId: string;
@@ -14784,6 +14849,31 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getReportCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What this server can render. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportCapabilities"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

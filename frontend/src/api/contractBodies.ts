@@ -85,10 +85,12 @@
  * is a control that reports success and changes nothing — §186's `SuiteInput`, which was a
  * hand-written literal typed as the endpoint's input and had stopped being it.
  *
- * **A `PATCH` here is not a delta and the `required` check therefore applies to one.** The contract
- * says so in as many words on the case endpoint — *"the body is the whole editable set"*, because
- * Jackson gives absent and null the same Java value — so a partial patch is a request that clears
- * every field it omits, which is exactly what the required question reports.
+ * **A `PATCH` here is checked against `required` like any other body, and that stays right after
+ * B1.** ~~The contract says so in as many words on the case endpoint — *"the body is the whole
+ * editable set"* — so a partial patch is a request that clears every field it omits.~~ → the case
+ * `PATCH` is partial now: absent leaves alone, an explicit null clears. What did **not** change is
+ * the four fields `TestCaseInput` requires, which that endpoint still enforces (the plan's shape),
+ * so a body missing one is still a 400 and this check still reports it.
  *
  * **A `multipart/form-data` body is refused rather than checked**, on §198's `uuid` grounds: what the
  * caller hands `api.upload` is a `FormData`, whose parts are strings and `File`s with no JSON shape

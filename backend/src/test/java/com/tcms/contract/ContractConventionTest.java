@@ -651,6 +651,9 @@ class ContractConventionTest {
             // schema is named for the wire and the record for the field it sits on.
             Map.entry("NotificationSubscriptionInput",
                     List.of("com.tcms.integration.NotificationChannelInput$SubscriptionInput")),
+            // Package-private, like every view in `reporting` — named as a string for that reason
+            // and not because the pairing is in doubt.
+            Map.entry("ReportCapabilities", List.of("com.tcms.reporting.ReportCapabilitiesView")),
             Map.entry("ReportDefinition", List.of("com.tcms.reporting.ReportDefinitionView")),
             // Package-private inside a package-private controller, so it is doubly unnameable.
             Map.entry("ReportDefinitionInput",

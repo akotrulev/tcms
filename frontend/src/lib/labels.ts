@@ -346,10 +346,13 @@ export const reportJobStatusColors = {
  * the one that goes into a wiki or a pull request. The description is rendered beside the option
  * rather than left to the acronym.
  *
- * **The list is not narrowed to what the server can render.** `ReportFormat`'s own comment carries
- * the argument: what is installed is a property of the deployment, and a copy of it here would be
- * wrong in both directions — offering nothing where PDF has been installed, and claiming to know
- * where it has not. The refusal names what the server can produce, and it lands on this field.
+ * **This map is still not narrowed to what the server can render, and the picker now is** (B5).
+ * The distinction is worth keeping straight: a label is what a format is *called*, and every format
+ * the contract can name needs one whether or not this deployment renders it — a job requested
+ * before a renderer was removed still has to be readable. Which options are *offered* is
+ * `GET …/reports/capabilities`'s answer, read by `GenerateReportDialog`. A hard-coded list of
+ * installed renderers here would be the second copy of somebody else's configuration this comment
+ * used to warn about; asking the server is not.
  */
 export const reportFormatLabels = {
   MD: 'Markdown',

@@ -500,6 +500,29 @@ public final class OpenApiContract {
     }
 
     /**
+     * The members of every inline {@code enum} in the document, keyed by where it sits.
+     *
+     * <p>The complement of {@link #enumSchemas}, and the header above says why that one stops at
+     * named schemas: an anonymous list has no name to correspond by, so a whole-population rule
+     * over these would be two thirds guesswork. This is not that rule. It is the accessor a
+     * <em>specific</em> caller uses when it knows exactly which inline enum it is about — B5's
+     * askable-format list, which the server has to hold a copy of and must not be allowed to
+     * drift from.
+     *
+     * <p>Keys are the walker's locations, so the caller matches on a substring of the path rather
+     * than reconstructing the document's shape. Values are in declaration order.
+     */
+    public Map<String, List<String>> inlineEnums() {
+        Map<String, List<String>> enums = new LinkedHashMap<>();
+        walk((location, node) -> {
+            if (node.get("enum") instanceof List<?> members) {
+                enums.put(location, members.stream().map(String::valueOf).toList());
+            }
+        });
+        return enums;
+    }
+
+    /**
      * Visits every mapping node in the document, deepest-last, handing the visitor a
      * JSON-Pointer-ish location so a failure message names the line a human has to edit.
      */

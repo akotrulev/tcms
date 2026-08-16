@@ -4,13 +4,19 @@
  * ## The rule, and why it is not the one `core/mutation.ts` states
  *
  * `core/mutation.ts` says a *flag* edit "states its whole intent in its arguments — `PATCH` reads
- * an absent key as leave it alone". That premise is true of HTTP and **false of this API**.
- * `CaseUpdateRequest`'s header records why: Jackson gives absent and null the same Java value, so
- * the server cannot tell "leave `objective` alone" from "clear it", and resolves both as *clear
- * it*. The same holds for a plan's description and milestone, and a suite's description. Three
- * shapes additionally declare a **required** field — `TestCaseInput` four of them, `SuiteInput`
- * and `TestPlanUpdateInput` a name each — so a delta is not merely lossy there, it is a `400`
- * about fields the caller never mentioned.
+ * an absent key as leave it alone". That premise is true of HTTP and **was false of this API**:
+ * Jackson gives absent and null the same Java value, so the server could not tell "leave
+ * `objective` alone" from "clear it" and resolved both as *clear it*.
+ *
+ * **B1 fixed that on the case endpoint** — it keeps the body beside the binding and lays what was
+ * sent over the stored case, so an absent field is now left alone there. The plan's and the
+ * suite's `PATCH`es are **unchanged** and still clear what they do not carry, which is why this
+ * module still exists and why its case arm has not been deleted with the defect that prompted it.
+ *
+ * Three shapes additionally declare a **required** field — `TestCaseInput` four of them,
+ * `SuiteInput` and `TestPlanUpdateInput` a name each — and that has not changed either: the
+ * generated types demand them, so composing the whole set is what types, whatever the server would
+ * now tolerate.
  *
  * §143 drove it: `tcms case edit TC-1 --title x` answered three field errors and **had never
  * worked once**. The stubs passed because a stub answers 200 to whatever arrives.
@@ -56,11 +62,12 @@ type Schemas = components['schemas'];
 /**
  * A case's whole editable set, as the server would re-store it unchanged.
  *
- * **`ownerId` and `automationTags` are dropped, not echoed.** Both are on `TestCaseInput`, both
- * are served by the `GET`, and both are **refused with a 400 when present** on the write —
- * `CaseUpdateRequest`'s "the two fields this endpoint refuses". Echoing what was read would turn
- * every round-trip into a rejection, which is the one way a read-modify-write can be worse than
- * the delta it replaces.
+ * **`ownerId` and `automationTags` are dropped, not echoed.** Both are on `TestCaseInput` and both
+ * are served by the `GET`. ~~Both are refused with a 400 when present.~~ → **B2: refused only when
+ * they would CHANGE something**, so echoing them is no longer a rejection. They stay dropped
+ * anyway, and the reason is now the one the lists below give rather than self-defence: absent is
+ * "leave alone", the projection's job is to state an unchanged save, and the shortest true
+ * statement of "do not touch the owner" is to say nothing about it.
  *
  * `preconditions` and `postconditions` are dropped for the opposite reason: absent leaves them
  * alone (they are lists), and the read serves `CaseConditionRef`, which is not the shape the

@@ -937,20 +937,35 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("PATCHing the stub back unchanged is still 400 — the asymmetry is the point")
-        void theEditPathStillRefusesIt() throws Exception {
-            // The funnel. A stub reaches its steps by being opened and saved, and this is the rule
-            // that makes saving it mean writing it. If this ever answers 200, the deferral has
-            // stopped being a create-path concession and become the product's position on whether a
-            // case says how to run it.
+        @DisplayName("PATCHing the stub back unchanged is a no-op — the asymmetry was the defect")
+        void theEditPathRoundTripsIt() throws Exception {
+            /*
+              ~~The funnel. A stub reaches its steps by being opened and saved, and this is the rule
+              that makes saving it mean writing it. If this ever answers 200, the deferral has
+              stopped being a create-path concession and become the product's position on whether a
+              case says how to run it.~~ → REVERSED BY B2, and the reversal is deliberate.
+
+              What the old rule actually charged for was the ROUND TRIP: this exact request — a
+              stub read back and sent again unchanged — was a 400 about steps nobody had written,
+              for a caller who had changed nothing. §200 made a stepless case a legal stored row,
+              and this endpoint then refused to store that row back, so every non-form client had
+              to invent a procedure to fix a typo in a stub's title.
+
+              The funnel is not gone; it moved to where the author is. The SPA's editor requires a
+              procedure in its own schema, which is the screen the argument was ever about. What
+              the server still refuses is the body that is genuinely destructive — `steps: []`
+              against a case that HAS steps — and `CaseUpdateEndpointTest.PartialEdits` drives both
+              sides of that line.
+            */
             Map<String, Object> payload = newCase("Cover the refund path");
             payload.put("steps", List.of());
             UUID caseId = idOf(post(LEAD, ACME, ACME_BANKING, payload, null));
 
             MvcResult edited = patchFor(LEAD, ACME, ACME_BANKING, caseId, payload);
 
-            assertThat(edited.getResponse().getStatus()).isEqualTo(400);
-            assertThat(errorsOf(edited)).containsKey("steps");
+            assertThat(edited.getResponse().getStatus())
+                    .as("a stub must round-trip: %s", edited.getResponse().getContentAsString())
+                    .isEqualTo(200);
         }
 
         /*

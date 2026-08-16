@@ -18,7 +18,10 @@
  *
  * ~~"`PATCH` leaves the rest alone"~~ → **false of three of these endpoints, and §143 drove it.**
  * The case, suite and plan `PATCH`es take the whole editable set: an omitted required field is a
- * `400` about something the caller never named, and an omitted nullable scalar is *cleared*. Those
+ * `400` about something the caller never named, and an omitted nullable scalar is *cleared*.
+ * (**B1 narrowed this to two**: the case endpoint leaves an unmentioned field alone now. The suite
+ * and the plan still clear, the four fields `TestCaseInput` requires are still required, and the
+ * generated types demand them regardless — so all three arms still compose the whole set.) Those
  * three arms therefore read the resource and lay the model's change on top —
  * `@tcms/client`'s `core/rewrite.ts`, shared with the CLI, and it carries the argument for why
  * doing so does **not** reopen the `If-Match` hole above (the base and the version come from the
@@ -414,11 +417,12 @@ const writeCase: ToolDefinition = {
     }
 
     /*
-      Read-modify-write: this `PATCH` takes the whole editable set, so the delta alone was a 400
-      naming `stepFormat`, `priority` and `automationStatus` — fields the model never mentioned
-      and, for `stepFormat`, cannot mention through this schema at all. §143 found it against a
-      real server; the stubs answered 200 to whatever arrived. `core/rewrite.ts` has the shape
-      and the `If-Match` argument, and the version comes from THIS read.
+      Read-modify-write: the delta alone was a 400 naming `stepFormat`, `priority` and
+      `automationStatus` — fields the model never mentioned and, for `stepFormat`, cannot mention
+      through this schema at all. §143 found it against a real server; the stubs answered 200 to
+      whatever arrived. Still true after B1: what that changed is the fields nobody names (they are
+      left alone rather than cleared), not the four the schema requires. `core/rewrite.ts` has the
+      shape and the `If-Match` argument, and the version comes from THIS read.
     */
     const current = await session.client.GET('/projects/{projectId}/cases/{caseId}', {
       params: { path }, tcms: session.request,
@@ -1325,8 +1329,20 @@ const report: ToolDefinition = {
       action: ACTION(['generate', 'poll'], 'What to do.'),
       type: { type: 'string', description: 'The report type. Omit when naming a saved definition.' },
       // The enum is stated rather than left open, because a format this deployment cannot render
-      // is a 400 the model would have to discover by being refused.
-      format: { type: 'string', enum: ['PDF', 'MD', 'HTML'], description: 'For `generate`: the output format.' },
+      // is a 400 the model would have to discover by being refused — and the enum is the set that
+      // may be ASKED for, which is not the set installed here. `MD` and `HTML` are in every image;
+      // `PDF` needs a renderer most deployments do not have, and the description says so rather
+      // than the tool offering a value that is refused everywhere. (The SPA asks
+      // `GET …/reports/capabilities` instead; this surface has no read tool to hang that on, and
+      // adding one to answer a two-element list is a tool for a sentence.)
+      format: {
+        type: 'string',
+        enum: ['PDF', 'MD', 'HTML'],
+        description:
+          'For `generate`: the output format. `MD` and `HTML` render everywhere; `PDF` is refused '
+          + 'unless this deployment has installed a renderer, and the refusal names what it can '
+          + 'produce.',
+      },
       definitionId: { type: 'string', description: 'Regenerate a saved report.' },
       parameters: { type: 'object', description: 'The report\'s own parameters.' },
       jobId: { type: 'string', description: 'For `poll`.' },

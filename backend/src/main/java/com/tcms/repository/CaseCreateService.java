@@ -295,6 +295,13 @@ public class CaseCreateService {
                 // what it asks to decline.
                 List.of(),
                 cases::existsByAutomationKey,
+                // Nothing is stored yet, so every value of either refused field is a CHANGE and the
+                // answer is what it always was: a 400 naming the field. B2 narrowed the rule to
+                // "refused when it would change something" for the update path's round trip; on
+                // this path the narrowing is vacuous, which is worth stating because it looks like
+                // a pair of nulls that could mean anything.
+                null,
+                null,
                 // §200: a case may be created before anybody has written how to run it. This is the
                 // one rule the create path relaxes relative to the update path, and it is a rule
                 // about the payload rather than about there being no prior case — so unlike the

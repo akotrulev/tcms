@@ -20,6 +20,7 @@ import {
   useDocPages,
   useGenerateReport,
   usePlans,
+  useReportCapabilities,
   useRuns,
   useSaveReportDefinition,
 } from '../../api/queries';
@@ -126,16 +127,16 @@ import {
  * caller who needs them can send them — the API takes them — and the day a screen needs them,
  * they land beside these. Named as not built rather than left to be discovered as missing.
  *
- * **The format is a closed enum and is offered in full**, including the one that is refused on
- * every deployment today. That looks like `ui-rules`' render-then-reject and is the contract's
- * explicit design: *"the enum is not narrowed to what is installed: what a deployment can render
- * is a property of that deployment, and the refusal names it."* A client-side list of installed
- * renderers would be a second copy of somebody else's configuration — silently wrong in both
- * directions, offering nothing where PDF has been installed and claiming to know where it has not.
- * The refusal is a **400 at request time carrying a field error**, engineered for exactly this, so
- * it lands on the format field naming what the server *can* produce. That is a better answer than
- * a picker that quietly lacks an option, and it is why the hint under PDF says what it needs
- * rather than that it is unavailable.
+ * ~~**The format is a closed enum and is offered in full**, including the one that is refused on
+ * every deployment today.~~ → **superseded (B5): it is offered as the server answers.** The
+ * argument for the enum is untouched and still right — *"the enum is not narrowed to what is
+ * installed"*, and a client-side list of installed renderers would be a second copy of somebody
+ * else's configuration. What was wrong was the conclusion drawn from it: that the picker therefore
+ * had to offer PDF on every deployment, where nothing can produce it. Both halves hold at once as
+ * soon as the *server* is asked — `useReportCapabilities` is not a copy of its configuration, it is
+ * its configuration — so the enum stays wide, the picker offers what exists here, and the 400
+ * naming what this server can produce stays exactly where it was for a caller who ignores the
+ * answer.
  *
  * ## The run picker is this report's parameters, not a general one
  *
@@ -243,8 +244,21 @@ const TYPES = [
   },
 ] as const;
 
-/** Ordered by what people ask for, not by the contract's declaration order. */
-const FORMATS: readonly ReportFormat[] = ['HTML', 'MD', 'PDF'];
+/**
+ * Ordered by what people ask for, not by the contract's declaration order — and **filtered by what
+ * the server says it can render** (B5).
+ *
+ * The order lives here and the membership does not: `GET …/reports/capabilities` answers which
+ * formats have a renderer on this deployment, and the enum this list is typed against stays the
+ * wider "may be asked for" set on purpose. Sorting the server's answer alphabetically would put
+ * Markdown above the format §6e says a client is actually sent.
+ *
+ * While the capability read is in flight the picker offers **nothing**, which is deliberate: a
+ * default list shown for one paint and then narrowed is a menu that changes under a reader's
+ * cursor, and the alternative default — the whole enum — is exactly the wrong list this exists to
+ * stop offering.
+ */
+const FORMAT_ORDER: readonly ReportFormat[] = ['HTML', 'MD', 'PDF'];
 
 type FormField = keyof ReportFormInput;
 
@@ -370,6 +384,7 @@ export function GenerateReportDialog({
 }) {
   const generate = useGenerateReport(projectId);
   const save = useSaveReportDefinition(projectId);
+  const capabilities = useReportCapabilities(projectId);
   const runs = useRuns(projectId);
   const pages = useDocPages(projectId);
   const plans = usePlans(projectId);
@@ -409,6 +424,15 @@ export function GenerateReportDialog({
   useEffect(() => {
     if (open) setFocus(definition ? 'format' : 'runId');
   }, [open, setFocus, definition]);
+
+  /*
+    What this deployment can render, in this dialog's order (B5). The intersection is taken against
+    `FORMAT_ORDER` rather than sorting the server's answer, and an unrecognised member is dropped:
+    a server one release ahead may name a format this build has no label for, and MUI renders the
+    raw value where `reportFormatLabels` has no entry — an option reading "XLSX" that the form's
+    own `z.enum` then refuses on submit.
+  */
+  const formats = FORMAT_ORDER.filter((value) => capabilities.data?.formats.includes(value));
 
   const format = watch('format');
   const type = watch('type');
@@ -806,7 +830,7 @@ export function GenerateReportDialog({
               slotProps={{ htmlInput: { 'data-testid': `${TestId}.Format` } }}
               {...register('format')}
             >
-              {FORMATS.map((value) => (
+              {formats.map((value) => (
                 <MenuItem key={value} value={value} data-testid={`${TestId}.Format.${value}`}>
                   {reportFormatLabels[value]}
                 </MenuItem>

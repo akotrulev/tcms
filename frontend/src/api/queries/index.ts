@@ -191,6 +191,7 @@ export {
   useDashboard,
   useDeleteReportDefinition,
   useGenerateReport,
+  useReportCapabilities,
   useReportDefinitions,
   useReportJob,
   useReportJobs,

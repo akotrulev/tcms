@@ -176,6 +176,33 @@ class ReportController {
     }
 
     /**
+     * Which formats this deployment can produce (B5).
+     *
+     * <p>Under {@code /reports/capabilities} and therefore <strong>after</strong> the two
+     * {@code /jobs} routes in this file only by reading order — Spring matches the literal segment
+     * before {@code /jobs/{jobId}} regardless, because a static path wins over a variable one. It is
+     * still worth knowing when adding the next route here: {@code /jobs/capabilities} would have
+     * been ambiguous with the poll and this is not.
+     */
+    @GetMapping("/capabilities")
+    ResponseEntity<Object> capabilities(
+            @AuthenticationPrincipal Jwt jwt, @PathVariable UUID projectId) {
+
+        ReportReadService.Outcome<ReportCapabilitiesView> outcome =
+                reads.capabilities(UUID.fromString(jwt.getSubject()), projectId);
+
+        return switch (outcome) {
+            case ReportReadService.Outcome.NotFound<ReportCapabilitiesView> ignored ->
+                    ResponseEntity.notFound().build();
+            case ReportReadService.Outcome.Forbidden<ReportCapabilitiesView> ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbidden(
+                            "You do not have permission to view reports in this project."));
+            case ReportReadService.Outcome.Found<ReportCapabilitiesView> found ->
+                    ResponseEntity.ok(found.value());
+        };
+    }
+
+    /**
      * The report on screen — what {@code ReportJob.modelUrl} points at.
      *
      * <p>Served {@code inline} and typed {@code application/json}, where the artifact route below is

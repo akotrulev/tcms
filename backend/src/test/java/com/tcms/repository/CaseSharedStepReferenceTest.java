@@ -255,6 +255,10 @@ class CaseSharedStepReferenceTest {
                 Set.of(),
                 List.of(),
                 key -> false,
+                // Neither refused field is on the requests below, so B2's comparison is never
+                // reached and the stored halves of it are null.
+                null,
+                null,
                 // REQUIRED, which is the update path's rule and the stricter of the two: this class
                 // asserts what a step REFERENCE is refused for, and every request below carries
                 // steps, so §200's deferral cannot colour a refusal under test either way.

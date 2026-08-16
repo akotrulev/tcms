@@ -286,14 +286,31 @@ export type ReportJobStatus = S['ReportJob']['status'];
  * frontend build until the picker offers it.
  *
  * It is deliberately **not** "the formats this server can render". That is a property of the
- * deployment (`openapi.yaml`, verbatim: *"the enum is not narrowed to what is installed"*), the
- * client cannot observe it, and a hard-coded copy here would be a second definition of somebody
- * else's configuration — right until the day PDF is installed and the SPA still refuses to offer
- * it. What the server cannot render, it refuses at request time with a sentence naming what it can.
+ * deployment (`openapi.yaml`, verbatim: *"the enum is not narrowed to what is installed"*), and a
+ * hard-coded copy here would be a second definition of somebody else's configuration — right until
+ * the day PDF is installed and the SPA still refuses to offer it. ~~The client cannot observe
+ * it.~~ → **it can, since B5**: `ReportCapabilities` below is the server's own answer, and the
+ * picker is built from the intersection. What the server cannot render it still refuses at request
+ * time with a sentence naming what it can, for the caller that did not ask.
  */
 export type ReportFormat = NonNullable<
   Op['generateReport']['requestBody']
 >['content']['application/json']['format'];
+
+/**
+ * What the **server** can render, which is a different question from the one above (B5).
+ *
+ * The paragraph above is still the whole argument for why the request enum is not narrowed to what
+ * is installed — and what it left unsaid is that a picker built from the enum is then wrong on
+ * every deployment, offering PDF that nothing can produce. `GET …/reports/capabilities` answers the
+ * other half, and this is its shape: the intersection of "may be asked for" and "has a renderer
+ * here", computed by the server from the renderers on its classpath.
+ *
+ * `formats` is typed as the request union, so a picker fed from it stays exhaustive against
+ * `lib/labels.ts` — a fourth format added to the contract still fails the build until it is
+ * labelled, whether or not any deployment renders it yet.
+ */
+export type ReportCapabilities = S['ReportCapabilities'];
 
 // documentation & artifacts
 export type DocPage = S['DocPage'];

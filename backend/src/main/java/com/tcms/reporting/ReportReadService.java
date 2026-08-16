@@ -138,6 +138,25 @@ class ReportReadService {
     }
 
     /**
+     * What this server can render, for the picker that would otherwise offer what it cannot (B5).
+     *
+     * <p>{@link #VIEW_REPORT}, the same key as the list and the poll: knowing which formats exist is
+     * part of reading reports, and a caller who may not read them has no picker to fill.
+     *
+     * <p><strong>Gated through the project even though the answer is the same for every project on
+     * the instance.</strong> That is not a mistake and it is not caution — an ungated route would
+     * answer a caller with no membership at all, and what it would tell them is which optional
+     * renderers this deployment has installed. It is a small fact and it is still a fact about the
+     * server, offered to an unauthenticated stranger for no benefit: the only consumer is a picker
+     * on a screen that already needs {@code report:view} to be of any use.
+     */
+    @Transactional(readOnly = true)
+    Outcome<ReportCapabilitiesView> capabilities(UUID userId, UUID projectId) {
+        return gate(projects.readGranted(userId, projectId, VIEW_REPORT,
+                project -> Optional.of(ReportCapabilitiesView.of(renderers.supported()))));
+    }
+
+    /**
      * The stored model a job produced — what the on-screen view renders.
      *
      * <p><strong>{@link #VIEW_REPORT}, and this method is the whole reason the split is real.</strong>

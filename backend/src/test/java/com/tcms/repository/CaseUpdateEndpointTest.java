@@ -1073,6 +1073,228 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
     // The refused fields — six, then five, and two since §96
     // =====================================================================
 
+    /**
+     * B1 and B2 — <strong>what a body that does not mention a field means</strong>.
+     *
+     * <h2>The defect these are written to catch</h2>
+     *
+     * <p>Until B1 this endpoint could not tell an absent field from an explicit {@code null} —
+     * Jackson gives both the same Java value — so it read both as <em>clear it</em>. Every test in
+     * this class before them sent the whole editable set, which is what the SPA does, so the whole
+     * suite was green against an endpoint on which {@code {"title": "x"}} renamed a case, emptied
+     * its objective, its description, its expected outcome and its estimate, deleted all three of
+     * its steps, and answered <strong>200</strong>.
+     *
+     * <p>That is why {@link #absentLeavesEverythingElseAlone} asserts on the fields it did
+     * <em>not</em> send. A test that only checked the title would pass against either reading, and
+     * a test that sent the whole set — every other one here — cannot see the difference at all.
+     *
+     * <h2>B2's two round trips</h2>
+     *
+     * <p>A {@code GET} followed by an unchanged {@code PATCH} was a 400 twice over: once for the
+     * two fields the read serves and the write refuses, and once for a stub, whose empty procedure
+     * the create path admits and the update path required. Both are round trips a client that is
+     * not a form has to be able to make, and neither refusal was about anything the caller changed.
+     */
+    @Nested
+    @DisplayName("Partial edits — absent leaves alone, null clears (B1/B2)")
+    class PartialEdits {
+
+        /**
+         * The smallest legal edit: the four the schema requires, plus whatever is being changed.
+         *
+         * <p>Those four are sent because {@code TestCaseInput} declares them required and this
+         * endpoint still enforces it — the plan's arrangement, and the reason
+         * {@code contractRequiredMatchesWhatTheServerEnforces} above still has a population. Every
+         * OTHER field is deliberately absent, which is the whole subject of this class: before B1
+         * each of them would have been cleared by this body.
+         */
+        private Map<String, Object> delta(String... keyThenValue) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("title", "Full refund to card");
+            body.put("stepFormat", "STRUCTURED");
+            body.put("priority", "CRITICAL");
+            body.put("automationStatus", "MANUAL");
+            for (int i = 0; i < keyThenValue.length; i += 2) {
+                body.put(keyThenValue[i], keyThenValue[i + 1]);
+            }
+            return body;
+        }
+
+        @Test
+        @DisplayName("a title-only body renames the case and touches nothing else")
+        void absentLeavesEverythingElseAlone() throws Exception {
+            // The stored case first, so the assertions below are against values that were really
+            // there rather than against nulls that were always null.
+            patch(LEAD, ACME, ACME_BANKING, caseId("full"), edit("Before"), null);
+            assertThat(objectiveOf(caseId("full"))).isNotNull();
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"),
+                    delta("title", "Renamed by a delta"), null);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("a delta must be accepted: %s", result.getResponse().getContentAsString())
+                    .isEqualTo(200);
+            assertThat(titleOf(caseId("full"))).isEqualTo("Renamed by a delta");
+            // The four the old reading emptied, and the procedure it deleted.
+            assertThat(objectiveOf(caseId("full")))
+                    .isEqualTo("Prove a merchant can recover funds.");
+            assertThat(scalarOf(caseId("full"), "description"))
+                    .isEqualTo("Refunds the whole captured amount.");
+            assertThat(scalarOf(caseId("full"), "expected_outcome"))
+                    .isEqualTo("The payment reaches REFUNDED.");
+            assertThat(scalarOf(caseId("full"), "estimated_duration_sec")).isEqualTo("240");
+            assertThat(stepsOf(caseId("full"))).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("an explicit null still clears, which is the other half of the same rule")
+        void nullClears() throws Exception {
+            patch(LEAD, ACME, ACME_BANKING, caseId("full"), edit("Before"), null);
+
+            Map<String, Object> body = delta();
+            body.put("objective", null);
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), body, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(objectiveOf(caseId("full"))).isNull();
+            // And only that one: a rule that cleared everything the body did not carry would pass
+            // the assertion above and be the defect this class exists for.
+            assertThat(scalarOf(caseId("full"), "description"))
+                    .isEqualTo("Refunds the whole captured amount.");
+        }
+
+        @Test
+        @DisplayName("a body carrying only the required four changes nothing, and writes no version")
+        void aMinimalBodyChangesNothing() throws Exception {
+            patch(LEAD, ACME, ACME_BANKING, caseId("full"), edit("Before"), null);
+            int versionsBefore = versionsOf(caseId("full")).size();
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"),
+                    delta("title", "Before"), null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(titleOf(caseId("full"))).isEqualTo("Before");
+            // The hash is over the whole case, so an empty body producing a version row would mean
+            // the overlay had rebuilt the case as something else — the cheapest possible detector
+            // of a base that is not the stored row.
+            assertThat(versionsOf(caseId("full"))).hasSize(versionsBefore);
+        }
+
+        @Test
+        @DisplayName("steps absent keeps the procedure; steps [] on a written case is still refused")
+        void theProcedureIsKeptUnlessItIsNamed() throws Exception {
+            MvcResult kept = patch(LEAD, ACME, ACME_BANKING, caseId("full"),
+                    delta("title", "Still has its steps"), null);
+            assertThat(kept.getResponse().getStatus()).isEqualTo(200);
+            assertThat(stepsOf(caseId("full"))).hasSize(3);
+
+            // The body that was ever really a mistake, and the one thing B2 did not relax: asking
+            // to delete a procedure that exists.
+            Map<String, Object> emptied = delta();
+            emptied.put("steps", List.of());
+            MvcResult refused = patch(LEAD, ACME, ACME_BANKING, caseId("full"), emptied, null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(refused)).containsKey("steps");
+        }
+
+        @Test
+        @DisplayName("a stub round-trips: a case with no procedure may be saved as it is")
+        void aStubIsSaveable() throws Exception {
+            // §200 made this a legal stored row on the create path and the update path refused it,
+            // so `GET` then `PATCH` unchanged was a 400 about steps nobody had written yet.
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("stub"),
+                    delta("title", "A case somebody renamed"), null);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("a stub must round-trip: %s", result.getResponse().getContentAsString())
+                    .isEqualTo(200);
+            assertThat(titleOf(caseId("stub"))).isEqualTo("A case somebody renamed");
+            assertThat(stepsOf(caseId("stub"))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a stub that is given steps keeps them, and cannot then be emptied")
+        void aStubThatGrowsAProcedureKeepsIt() throws Exception {
+            // The funnel, still standing where it matters: once a case says how it is run, the
+            // endpoint stops accepting a body that would unsay it.
+            Map<String, Object> written = delta("title", "A case somebody started");
+            written.put("steps", List.of(step(null, "Open the screen")));
+            assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("stub"), written, null)
+                    .getResponse().getStatus()).isEqualTo(200);
+
+            Map<String, Object> emptied = delta("title", "A case somebody started");
+            emptied.put("steps", List.of());
+            assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("stub"), emptied, null)
+                    .getResponse().getStatus()).isEqualTo(400);
+        }
+
+        @Test
+        @DisplayName("echoing the owner the GET served is not a change, and is not refused")
+        void echoingTheStoredOwnerIsAccepted() throws Exception {
+            Map<String, Object> body = delta("title", "Renamed with the owner echoed");
+            // What `GET /cases/{id}` serves for this case. A round-trip that sent it back used to
+            // be refused for a field it had not touched.
+            body.put("ownerId", LEAD.toString());
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), body, null);
+
+            assertThat(result.getResponse().getStatus())
+                    .as("an echoed owner must not be a refusal: %s",
+                            result.getResponse().getContentAsString())
+                    .isEqualTo(200);
+            assertThat(titleOf(caseId("full"))).isEqualTo("Renamed with the owner echoed");
+        }
+
+        @Test
+        @DisplayName("a DIFFERENT owner is still refused — no path writes that column")
+        void changingTheOwnerIsStillRefused() throws Exception {
+            Map<String, Object> body = delta("ownerId", ENGINEER.toString());
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), body, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("ownerId");
+        }
+
+        @Test
+        @DisplayName("echoed automation tags are not a change, in any order; a new one is")
+        void echoingTheStoredAutomationTagsIsAccepted() throws Exception {
+            Map<String, Object> echoed = delta();
+            // Reversed on purpose: `case_automation_tag` is a set with a unique key, so a caller
+            // who sorted the read differently has still changed nothing.
+            echoed.put("automationTags", List.of("@regression", "@smoke"));
+
+            assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("full"), echoed, null)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+
+            Map<String, Object> added = delta();
+            added.put("automationTags", List.of("@smoke", "@regression", "@nightly"));
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), added, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("automationTags");
+        }
+
+        @Test
+        @DisplayName("a body that is not a case answers this API's 400, not the converter's")
+        void anUnreadableBodyIsThisApisProblem() throws Exception {
+            // The binding moved into the controller when the body started being read twice, so the
+            // 400 the message converter used to raise is now this endpoint's to answer. A body
+            // whose enum member does not exist is the cheapest way to reach it.
+            Map<String, Object> body = delta();
+            body.put("priority", "URGENTISSIMO");
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), body, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result)).containsKey("body");
+        }
+    }
+
     @Nested
     @DisplayName("The unimplemented fields — refused loudly, never accepted and dropped")
     class RefusedFields {
@@ -1829,6 +2051,29 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
         }
     }
 
+    private String objectiveOf(UUID caseId) throws SQLException {
+        return scalarOf(caseId, "objective");
+    }
+
+    /**
+     * One column of one case, as text — B1's assertions are about columns the payload never named.
+     *
+     * <p>Read through the app role like every other fixture read here, and as text so one helper
+     * serves a varchar and an integer: what these tests assert is whether a value SURVIVED, and
+     * `"240"` answers that as well as `240` does.
+     */
+    private String scalarOf(UUID caseId, String column) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "SELECT " + column + "::text FROM test_case WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, caseId.toString());
+            try (ResultSet rs = statement.executeQuery()) {
+                assertThat(rs.next()).as("no case %s", caseId).isTrue();
+                return rs.getString(1);
+            }
+        }
+    }
+
     private long lockVersionOf(UUID caseId) throws SQLException {
         try (Connection connection = appConnection(ACME);
              var statement = connection.prepareStatement(
@@ -1939,6 +2184,16 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
             // Owns a step whose id must not be adoptable by the case under edit.
             testCase(connection, caseId("other"), ACME, ACME_BANKING, PAYMENTS, "TC-6", 6,
                     "Another case", "MANUAL", null, null, 1, false);
+
+            // A STUB: created from a title alone (§200's create path), no steps, no gherkin. The
+            // fixture B2 is about — until it, this row could be read and not written back.
+            testCase(connection, caseId("stub"), ACME, ACME_BANKING, REFUNDS, "TC-7", 7,
+                    "A case somebody started", "MANUAL", null, LEAD, 1, false);
+
+            // Selection tags on the case under edit, so B2's "echoing what was read is not a
+            // change" has something stored to echo. Nothing in the product writes these.
+            automationTag(connection, ACME, caseId("full"), "@smoke");
+            automationTag(connection, ACME, caseId("full"), "@regression");
         }
         try (Connection connection = appConnection(UMBRA)) {
             testCase(connection, caseId("umbra"), UMBRA, UMBRA_BANKING, UMBRA_SUITE, "TC-1", 1,
@@ -2145,6 +2400,20 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
             statement.setInt(12, currentVersionNo);
             statement.setString(13, "2026-01-01T00:00:00Z");
             statement.setString(14, deleted ? "2026-01-01T00:00:00Z" : null);
+            statement.executeUpdate();
+        }
+    }
+
+    /** A CI selection tag. No endpoint writes one — see `CaseUpdateRequest`'s refused two. */
+    private void automationTag(Connection connection, UUID companyId, UUID caseId, String tag)
+            throws SQLException {
+
+        try (var statement = connection.prepareStatement(
+                "INSERT INTO case_automation_tag (company_id, case_id, tag) "
+                        + "VALUES (CAST(? AS uuid), CAST(? AS uuid), ?) ON CONFLICT DO NOTHING")) {
+            statement.setString(1, companyId.toString());
+            statement.setString(2, caseId.toString());
+            statement.setString(3, tag);
             statement.executeUpdate();
         }
     }

@@ -76,6 +76,15 @@ public class CaseController {
     private final CaseStatusService statuses;
     private final CaseDraftService drafts;
     private final CaseCloneService clones;
+    /**
+     * The application's own mapper, for the one body this controller binds loosely (B1).
+     *
+     * <p>Injected rather than constructed: a `new ObjectMapper()` here would read the PATCH body
+     * under different rules from every other body in the application — Boot configures this one,
+     * including how an unknown property is treated, and two configurations is exactly the drift
+     * that makes one endpoint accept what the rest refuse.
+     */
+    private final com.fasterxml.jackson.databind.ObjectMapper mapper;
 
     @SuppressWarnings("checkstyle:ParameterNumber")
     public CaseController(
@@ -89,7 +98,8 @@ public class CaseController {
             CaseQuarantineService quarantine,
             CaseStatusService statuses,
             CaseDraftService drafts,
-            CaseCloneService clones) {
+            CaseCloneService clones,
+            com.fasterxml.jackson.databind.ObjectMapper mapper) {
         this.search = search;
         this.detail = detail;
         this.history = history;
@@ -101,6 +111,7 @@ public class CaseController {
         this.statuses = statuses;
         this.drafts = drafts;
         this.clones = clones;
+        this.mapper = mapper;
     }
 
     /**
@@ -337,7 +348,29 @@ public class CaseController {
             @PathVariable UUID projectId,
             @PathVariable UUID caseId,
             @RequestHeader(name = HttpHeaders.IF_MATCH, required = false) String ifMatch,
-            @RequestBody CaseUpdateRequest request) {
+            @RequestBody com.fasterxml.jackson.databind.JsonNode body) {
+
+        /*
+          B1 — bound as a node, then as the record, so the service can ask what was SENT.
+
+          The record alone cannot answer it: Jackson gives an absent field and an explicit null the
+          same value, which is why this endpoint used to read both as "clear it" and why a delta
+          edit emptied four columns and answered 200. `PatchBody` keeps the node beside the binding;
+          `CaseUpdateRequest.overlay` is where the two meet.
+
+          A body that cannot be read as the record is the 400 the message converter used to answer
+          one layer earlier. It is caught here rather than left to a global handler because the
+          answer has to be this API's `Problem` — a 400 whose body is a different shape is one no
+          client parses.
+        */
+        com.tcms.api.PatchBody patch = new com.tcms.api.PatchBody(body);
+        CaseUpdateRequest request;
+        try {
+            request = patch.as(mapper, CaseUpdateRequest.class);
+        } catch (com.tcms.api.PatchBody.MalformedBody unreadable) {
+            return ResponseEntity.badRequest().body(Problem.validation(Map.of(
+                    "body", List.of("The request body could not be read as a test case."))));
+        }
 
         Long expected;
         try {
@@ -351,8 +384,8 @@ public class CaseController {
                             + "header, or omit the header."))));
         }
 
-        CaseUpdateService.Outcome outcome =
-                cases.update(UUID.fromString(jwt.getSubject()), projectId, caseId, request, expected);
+        CaseUpdateService.Outcome outcome = cases.update(
+                UUID.fromString(jwt.getSubject()), projectId, caseId, request, patch, expected);
 
         return switch (outcome) {
             case CaseUpdateService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();

@@ -100,6 +100,12 @@ public class CaseUpdateService {
     private final CaseClassifications classifications;
     private final CaseConditions conditions;
     private final CaseTags tags;
+    /**
+     * Read only when the caller mentions `automationTags` (B2). Nothing here writes the table — the
+     * field is still refused when it would CHANGE anything — so this is the comparison's evidence
+     * and not a write path arriving quietly.
+     */
+    private final CaseAutomationTagRepository automationTags;
     private final ConditionService conditionLibrary;
     private final CaseRenderer renderer;
     private final CaseVersions versions;
@@ -118,6 +124,7 @@ public class CaseUpdateService {
             CaseClassifications classifications,
             CaseConditions conditions,
             CaseTags tags,
+            CaseAutomationTagRepository automationTags,
             ConditionService conditionLibrary,
             CaseRenderer renderer,
             CaseVersions versions,
@@ -135,6 +142,7 @@ public class CaseUpdateService {
         this.classifications = classifications;
         this.conditions = conditions;
         this.tags = tags;
+        this.automationTags = automationTags;
         this.conditionLibrary = conditionLibrary;
         this.renderer = renderer;
         this.versions = versions;
@@ -170,6 +178,11 @@ public class CaseUpdateService {
     /**
      * Applies an edit.
      *
+     * @param sent the body as it bound — every absent field is null here, which is why it is never
+     *     used alone. {@link CaseUpdateRequest#overlay} is what turns it into an edit.
+     * @param body the same body, still able to say which fields it carried (B1). A caller with no
+     *     body to hand — there is none today — would pass an empty one and get a save that changes
+     *     nothing, which is the honest answer rather than a wipe.
      * @param expectedLockVersion the parsed {@code If-Match}, or null when the header was absent
      */
     @Transactional
@@ -177,13 +190,15 @@ public class CaseUpdateService {
             UUID userId,
             UUID projectId,
             UUID caseId,
-            CaseUpdateRequest request,
+            CaseUpdateRequest sent,
+            com.tcms.api.PatchBody body,
             Long expectedLockVersion) {
 
         UUID companyId = CompanyContext.require();
 
         GateResult<Outcome> gated = projects.writeGranted(userId, projectId, EDIT_CASE,
-                project -> apply(companyId, userId, project, caseId, request, expectedLockVersion));
+                project -> apply(
+                        companyId, userId, project, caseId, sent, body, expectedLockVersion));
 
         return switch (gated) {
             case GateResult.Unreachable<Outcome> ignored -> new Outcome.NotFound();
@@ -192,12 +207,27 @@ public class CaseUpdateService {
         };
     }
 
+    /**
+     * Whether the stored case says how it is run — B2's dividing line.
+     *
+     * <p>Read off the STORED row and never off the payload: the question is whether this save could
+     * be deleting a procedure, and the payload is the thing being judged. A case is deemed to have
+     * one if it holds a step or a Gherkin source, whichever format it claims — a case whose format
+     * was switched to GHERKIN while its old steps are still on the row has a procedure by either
+     * reading, and treating it as a stub would let the next save silently drop both.
+     */
+    private static boolean hasProcedure(TestCase testCase, List<TestStep> storedSteps) {
+        return !storedSteps.isEmpty()
+                || (testCase.getGherkinSource() != null && !testCase.getGherkinSource().isBlank());
+    }
+
     private Outcome apply(
             UUID companyId,
             UUID userId,
             Project project,
             UUID caseId,
-            CaseUpdateRequest request,
+            CaseUpdateRequest sent,
+            com.tcms.api.PatchBody body,
             Long expectedLockVersion) {
 
         // The second gate, and the one a two-segment path needs: is this case in THAT project.
@@ -221,14 +251,38 @@ public class CaseUpdateService {
             liveSuiteIds.add(suite.getId());
         }
 
+        List<TestStep> storedSteps = stepRows.findForCase(testCase.getId());
         Set<UUID> existingStepIds = new HashSet<>();
         Set<UUID> storedSharedStepIds = new HashSet<>();
-        for (TestStep step : stepRows.findForCase(testCase.getId())) {
+        for (TestStep step : storedSteps) {
             existingStepIds.add(step.getId());
             if (step.getSharedStepId() != null) {
                 storedSharedStepIds.add(step.getSharedStepId());
             }
         }
+
+        /*
+          B1 — the body laid over the case as it stands, and everything below reads the RESULT.
+
+          This line is the whole semantic change: a field the caller did not mention is the field
+          the case already has, so `{"title": "x"}` renames the case and touches nothing else. It
+          has to happen HERE, before anything reads the request, because three things below make
+          decisions from it — the shared-step union, the condition union, and the folder the
+          declines are resolved at. A partially-overlaid request would check the payload against one
+          case and store another.
+
+          `sent` is kept for exactly one purpose, one line down: the automation tags are read only
+          when the caller mentioned them, and that is the last question that can be asked of the
+          body rather than of the merge.
+        */
+        List<String> storedAutomationTags = body.has("automationTags")
+                ? automationTags.findForCase(testCase.getId()).stream()
+                        .map(CaseAutomationTag::getTag)
+                        .toList()
+                : List.of();
+
+        CaseUpdateRequest request =
+                CaseUpdateRequest.overlay(CaseEdit.asRequest(testCase, storedSteps), sent, body);
 
         // The library's live entries UNIONED with what this case already references — see
         // CaseEdit#validate. The union is the whole point: the first half refuses a sibling
@@ -295,11 +349,27 @@ public class CaseUpdateService {
                 retained,
                 conditions.storedDeclinedIds(testCase.getId()),
                 key -> cases.existsByAutomationKeyOtherThan(key, testCase.getId()),
-                // The path the procedure rule is FOR (§200). A PATCH body is the whole editable set
-                // sent by an author with the field in front of them, so an empty one says this case
-                // has no procedure rather than leaving the question open — and this is the funnel a
-                // stub created elsewhere reaches its steps through.
-                CaseEdit.ProcedureRule.REQUIRED);
+                testCase.getOwnerId(),
+                storedAutomationTags,
+                // ~~The path the procedure rule is FOR (§200): a PATCH body is the whole editable
+                // set, so an empty procedure says this case has none, and this is the funnel a stub
+                // reaches its steps through.~~ → **B2: it is REQUIRED of a case that has one, and
+                // DEFERRED of a stub.**
+                //
+                // The funnel argument was about the SPA's editor and is still enforced there, in
+                // its Zod schema, where the author is looking at the field. What it cost on the API
+                // was the round trip: §200 made a stepless case a legal stored row on the create
+                // path, and this rule then refused to store that same row back — so `GET` then
+                // `PATCH` unchanged was a 400 about steps for every stub in the product, and a
+                // client fixing a typo in a stub's title had to invent a procedure to do it.
+                //
+                // What is still refused is the thing worth refusing: EMPTYING a procedure that
+                // exists. A case with steps that sends `steps: []` is asking to delete them and is
+                // told to write one instead — which is the same message, on the same field, for the
+                // only body that was ever really a mistake.
+                hasProcedure(testCase, storedSteps)
+                        ? CaseEdit.ProcedureRule.REQUIRED
+                        : CaseEdit.ProcedureRule.DEFERRED);
 
         if (validated instanceof CaseEdit.Outcome.Invalid invalid) {
             return new Outcome.Invalid(invalid.errors());

@@ -225,6 +225,21 @@ export function CaseFilterBar({
             setTagDraft('');
           }}
           sx={{ minWidth: 220 }}
+          /*
+            B3 — which semantics this filter has, said on the control that has them.
+
+            Three surfaces in the product take a set of tags and two of them mean the opposite of
+            this one: a suite's tag rules and a run's `tags` arm are unions ("any case carrying one
+            of these"), and this is an intersection. Both of those already said so on their own
+            helper text; this one said nothing, so the only way to learn that a second tag NARROWS
+            the grid was to add one and watch the list get shorter — which reads as a filter that
+            is broken rather than one that ANDs.
+
+            The sentence is unconditional rather than shown once a second tag is applied: a person
+            deciding whether to type another tag is exactly the person who needs it, and by then
+            they have already committed to the experiment.
+          */
+          helperText="All of these — a case must carry every one."
           slotProps={{
             htmlInput: { 'data-testid': `${TestIdPrefix}.TagInput`, 'aria-label': 'Filter by tag' },
           }}

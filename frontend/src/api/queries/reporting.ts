@@ -1,7 +1,13 @@
 /** The repository status dashboard, and §6e's report pipeline (§87/§88's backend, F1's client). */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { TIMEOUTS, api, fetchArtifactJson } from '../client';
-import type { ReportDefinition, ReportJob, ReportJobStatus, RepositoryDashboard } from '../types';
+import type {
+  ReportCapabilities,
+  ReportDefinition,
+  ReportJob,
+  ReportJobStatus,
+  RepositoryDashboard,
+} from '../types';
 import { parseReportDocument, type ReportDocument } from '../../lib/reportDocument';
 import { base, keys } from './keys';
 
@@ -90,6 +96,31 @@ export function useDeleteReportDefinition(projectId: string) {
     mutationFn: (definitionId: string) =>
       api.del<void>(`${base(projectId)}/reports/${definitionId}`),
     onSuccess: () => void client.invalidateQueries({ queryKey: keys.reportDefinitions(projectId) }),
+  });
+}
+
+/**
+ * What this deployment can render (B5).
+ *
+ * The picker used to be built from the contract's `format` enum, which is the set a person may
+ * *ask* for and deliberately not the set any server has installed — so every deployment offered
+ * PDF and every deployment refused it with a 400. The enum stays as it is; what changed is that
+ * the server now answers the other question, and this is what asks it.
+ *
+ * **`staleTime: Infinity`** — the answer changes when an operator installs a renderer, which no
+ * session outlives. Refetching it is a request per mount for a constant.
+ *
+ * **No `meta: { handled: true }`.** A failure here is not rendered anywhere: the dialog falls back
+ * to offering nothing rather than to a broken picker, and without the global notification the
+ * reader would see a Format field with no options and no reason at all.
+ */
+export function useReportCapabilities(projectId: string): UseQueryResult<ReportCapabilities> {
+  return useQuery({
+    queryKey: keys.reportCapabilities(projectId),
+    queryFn: ({ signal }) =>
+      api.get<ReportCapabilities>(`${base(projectId)}/reports/capabilities`, { signal }),
+    enabled: !!projectId,
+    staleTime: Infinity,
   });
 }
 

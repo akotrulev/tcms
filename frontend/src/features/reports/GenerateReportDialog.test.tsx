@@ -20,12 +20,15 @@ import { drivingAFailedWrite } from '../../test/renderFailures'
  *      silently, produces a job that FAILS with "this report needs a run", and looks on screen
  *      exactly like a correct request. Nothing else in the app can catch that shape.
  *   2. **A project with no runs cannot ask for a run summary**, and says why before the click.
- *   3. **The format refusal lands on the format field.** PDF is offered on purpose — the enum is
- *      not narrowed to what a deployment has installed — so the 400 naming what the server *can*
+ *   3. **The format refusal lands on the format field.** The 400 naming what the server *can*
  *      produce is the whole affordance, and it is worthless in a banner where the picker is not.
- *   4. **PDF is offered at all.** Asserted directly, because "don't render an action the backend
- *      rejects" is the rule a later reader would apply to remove it, and the reason not to is the
- *      contract's own (`ReportFormat`'s comment). A test is where that decision survives.
+ *      Still reachable after B5, and the test says how: the capability read is a courtesy to the
+ *      picker and never the authority, so a format it offered can still be refused.
+ *   4. ~~**PDF is offered at all.**~~ → **what the SERVER says it can render is offered, both
+ *      ways** (B5). The old assertion defended a real decision — the enum is not narrowed to what
+ *      is installed — by making every deployment offer an option every deployment refuses. Two
+ *      tests now: PDF absent where the server does not have it, present where it does. The
+ *      decision it was protecting is what makes the second one possible.
  *
  * R6 adds four more, and three of them are about the *second* report being reachable and honest:
  *
@@ -82,9 +85,19 @@ const pages = [
   }),
 ]
 
-function mockReads(rows: unknown[], docPages: unknown[] = pages) {
+/**
+ * @param formats what this deployment says it can render (B5). Two by default, which is every
+ *     shipped image; a test that needs PDF offered says so, because the point of the parameter is
+ *     that the picker is the server's answer and not a constant.
+ */
+function mockReads(
+  rows: unknown[],
+  docPages: unknown[] = pages,
+  formats: string[] = ['HTML', 'MD'],
+) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.includes('/doc-pages')) return docPages
+    if (path.includes('/reports/capabilities')) return { formats }
     if (path.includes('/runs')) return rows
     if (path.includes('/plans')) return plans
     if (path.includes('/me/permissions')) return heldPermissions(['report:export', 'report:view'], {}, PROJECT)
@@ -182,7 +195,7 @@ describe('GenerateReportDialog', () => {
     expect(post).not.toHaveBeenCalled()
   })
 
-  it('offers PDF even though every deployment refuses it today', async () => {
+  it('offers what this server can render, and not what the enum can name (B5)', async () => {
     mockReads(runs)
 
     render(
@@ -194,18 +207,40 @@ describe('GenerateReportDialog', () => {
     await screen.findByTestId('Reports.Generate.Format')
     await userEvent.click(screen.getByRole('combobox', { name: /format/i }))
 
-    // All three, because the set is the contract's and not this deployment's — a picker narrowed
-    // to what is installed would be a copy of somebody else's configuration, wrong in the other
-    // direction the day PDF is installed.
     expect(await screen.findByTestId('Reports.Generate.Format.HTML')).toBeInTheDocument()
     expect(screen.getByTestId('Reports.Generate.Format.MD')).toBeInTheDocument()
-    expect(screen.getByTestId('Reports.Generate.Format.PDF')).toBeInTheDocument()
+    // ~~All three, because the set is the contract's and not this deployment's.~~ → the enum is
+    // still the contract's and the PICKER is this deployment's: PDF is in `ReportFormat`, in the
+    // labels, and in the request body's enum, and it is not offered here because this server
+    // answered that it cannot render one. The old assertion was the right decision read one step
+    // too far — it made every deployment offer an option every deployment refuses.
+    expect(screen.queryByTestId('Reports.Generate.Format.PDF')).not.toBeInTheDocument()
+  })
+
+  it('offers PDF where the server says it has a renderer', async () => {
+    // The other direction, and the reason the enum was never narrowed: a deployment that installs
+    // the PDF renderer must be askable for one without a contract change or a new build.
+    mockReads(runs, pages, ['HTML', 'MD', 'PDF'])
+
+    render(
+      <TestProviders client={createTestQueryClient()}>
+        <GenerateReportDialog projectId={PROJECT} open onClose={() => {}} onQueued={() => {}} />
+      </TestProviders>,
+    )
+
+    await screen.findByTestId('Reports.Generate.Format')
+    await userEvent.click(screen.getByRole('combobox', { name: /format/i }))
+
+    expect(await screen.findByTestId('Reports.Generate.Format.PDF')).toBeInTheDocument()
   })
 
   it("puts the server's format refusal on the format field, where the picker is", async () => {
     // The refused write is the subject: this asserts which field the refusal lands on.
     drivingAFailedWrite()
-    mockReads(runs)
+    // Offered AND refused, which is not a contradiction: the capability read is a courtesy to the
+    // picker and never the authority. An operator removing the renderer between the two calls is
+    // the ordinary way to be here, and it is why the 400 survives B5 unchanged.
+    mockReads(runs, pages, ['HTML', 'MD', 'PDF'])
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', {
         format: ['PDF rendering is not installed on this server. It can produce: MD, HTML.'],
