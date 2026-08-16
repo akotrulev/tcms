@@ -33,8 +33,8 @@
  *
  * ## What counts as a claim
  *
- * Two forms, and the narrowness is the design. A rule over every sentence that mentions a role and a
- * key would need an ignore list bigger than the finding, which is the shape that gets a check
+ * Three forms, and the narrowness is the design. A rule over every sentence that mentions a role and
+ * a key would need an ignore list bigger than the finding, which is the shape that gets a check
  * silenced rather than fixed ({@link JAVADOC_TEST_CLASS}'s argument one file over, verbatim).
  *
  * 1. **{@link TIER_PHRASE}** — `Lead-only`, `Lead and up`, `leads and above`. A tier line, and the
@@ -44,6 +44,13 @@
  *    emphasis spellings this repository writes them in. Here a role *is* named, and the check is
  *    against that role's row: `Viewer and Automation Service do not hold it` is a true sentence and
  *    the commonest instance of the form.
+ * 3. **{@link QUALIFIER_CLAIM}** — a grant asserted as *narrowed*: `artifact:edit` is `PLAN_SCOPE`,
+ *    `case:delete` is `OWN`-qualified, held plan-scope-only. Added 2026-08-16 (audit C11): `V51`
+ *    and `V52` emptied both restrictive qualifiers, and seven of §212's hand-found repairs were this
+ *    exact shape — a claim the first two forms structurally cannot see, because it names a qualifier
+ *    and not a tier. Checked against the spec's own cells: a qualifier narrows a grant *in the
+ *    matrix* (`quarantine only`, the one live instance), so a claim whose key has no narrowing cell
+ *    is asserting data the catalogue does not hold.
  *
  * **Past tense is not a claim.** `suite:delete` *was* Lead-only is the true and load-bearing first
  * half of every migration header that moved it, and this repository's strikethrough notation
@@ -69,7 +76,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { CORPUS, REPO, filesOf, liveSentences, proseOf } from './corpus.js';
-import { ROLES_SPEC, roleMatrix, type Role } from './roleMatrix.js';
+import { NOT_GRANTED, ROLES_SPEC, roleMatrix, specMatrix, type Role } from './roleMatrix.js';
 
 /** A tier line. Whatever key it is written about is being put above the contributor below it. */
 const TIER_PHRASE = /(?:\*\*)?[Ll]eads?[- ](?:only|and up|and above)(?:\*\*)?/g;
@@ -89,6 +96,37 @@ const TIER_PHRASE = /(?:\*\*)?[Ll]eads?[- ](?:only|and up|and above)(?:\*\*)?/g;
  */
 const ACTIVE = /(?:does|do)\s+(?:\*+)?not(?:\*+)?\s+hold\b/g;
 const PASSIVE = /(?:is|are)?\s*(?:\*+)?not(?:\*+)?\s*held by|withheld from/g;
+
+/**
+ * A qualifier claim — form 3 in the header. A linking verb in front of the enum name (backticks,
+ * bold and the `-qualified` suffix all optional), or the hyphenated compound `plan-scope-only`.
+ *
+ * The SPACED `plan scope only` is deliberately not matched: in this repository's prose it appears
+ * only inside quotation marks, as the cell text `matrixCopies.test.ts` and `roleMatrix.ts` give as
+ * their example of a wrong copy — quoting a claim is not making one, and the hyphenated compound is
+ * the spelling every live claim was actually written in.
+ */
+const QUALIFIER_CLAIM =
+  /(?:is|are|stays?|remains?)\s+(?:\*+)?`?(PLAN_SCOPE|OWN)`?(?:-qualified)?|\bplan-scope-only\b/g;
+
+/**
+ * History or negation in front of a qualifier phrase — {@link PAST}'s job, with a wider wordlist,
+ * because qualifier prose narrates its own emptying far more often than tier prose does: `granted
+ * it plan-scope-only` tells `V19`'s story, `carried "case:edit is OWN-qualified" until 2026-07-31`
+ * quotes a line the spec reversed, and `No grant is OWN-qualified` is the repair itself. Kept
+ * separate from {@link PAST} rather than merged, because `granted` in *that* list would excuse a
+ * present-passive tier line (`is granted Lead-only`) the first form exists to catch.
+ */
+const NOT_A_QUALIFIER_CLAIM =
+  /\b(?:was|were|been|used to|had|granted|carried|until|before|no|not|nothing|never|stopped|ceased)\b[^.]{0,60}$/;
+
+/**
+ * What a cell narrowing a grant by this qualifier would have to mention. The spec's cells spell a
+ * narrowing in words (`quarantine only`) rather than enum names, so the check is a hint word, not
+ * equality — loose on purpose, because the cost of looseness is a missed finding and the cost of
+ * exactness is re-flagging every true sentence the day a migration qualifies a grant again.
+ */
+const NARROWED_BY: Record<string, RegExp> = { OWN: /own/i, PLAN_SCOPE: /plan/i };
 
 /**
  * A verb that puts the phrase after it in history.
@@ -146,6 +184,8 @@ const NEAR = 60;
 
 type Finding = { path: string; key: string; role: Role; sentence: string };
 
+type QualifierFinding = { path: string; key: string; qualifier: string; sentence: string };
+
 /**
  * Claims that read as false and are not, with the reason.
  *
@@ -173,30 +213,59 @@ describe('a tier claim in this repository\'s prose', () => {
 
   const files = CORPUS.flatMap((entry) => filesOf(entry)).filter((path) => path !== SELF);
 
+  /**
+   * Nearest either side, and either side because a relative clause moves the key in front of its
+   * own verb — `run:close`, which a Test Engineer does not hold — about as often as the plain
+   * order leaves it behind.
+   */
+  const nearestKey = (sentence: string, at: number, length: number): string | undefined => {
+    const before = sentence.slice(Math.max(0, at - NEAR), at);
+    const after = sentence.slice(at + length).slice(0, NEAR);
+    const behind = [...before.matchAll(KEY)].at(-1)?.[0];
+    const ahead = [...after.matchAll(KEY)].at(0);
+    return behind !== undefined
+      && (ahead === undefined || before.length - before.lastIndexOf(behind) <= ahead.index)
+      ? behind
+      : ahead?.[0];
+  };
+
+  const matrix = specMatrix();
+  const qualifierFindings: QualifierFinding[] = [];
+
   const findings: Finding[] = files.flatMap((path) => {
     const prose = proseOf(path, readFileSync(join(REPO, path), 'utf8'));
-    return liveSentences(prose).flatMap(({ text: sentence }) => {
+    return liveSentences(prose).flatMap(({ text }) => {
+      // Whitespace-normalised before any matching, so {@link NEAR} measures words and not
+      // indentation: a YAML description wrapped under twelve spaces of indent put sixty characters
+      // between a key and the qualifier written about it — one line apart on screen, and outside
+      // the window as raw text. The offsets inside this copy answer nothing about the file, and
+      // nothing here needs them to.
+      const sentence = text.replace(/\s+/g, ' ');
       const found: Finding[] = [];
       const say = (key: string, role: Role) => {
         if (!held[role].has(key)) return;
-        found.push({ path, key, role, sentence: sentence.replace(/\s+/g, ' ').trim() });
+        found.push({ path, key, role, sentence: sentence.trim() });
       };
+
+      for (const match of sentence.matchAll(QUALIFIER_CLAIM)) {
+        if (NOT_A_QUALIFIER_CLAIM.test(sentence.slice(0, match.index))) continue;
+        const key = nearestKey(sentence, match.index, match[0].length);
+        if (key === undefined) continue;
+        const qualifier = match[1] ?? 'PLAN_SCOPE';
+        const cells = matrix.get(key);
+        const narrowed = cells !== undefined && [...cells.values()].some(
+          (cell) => cell !== NOT_GRANTED && NARROWED_BY[qualifier]?.test(cell),
+        );
+        if (narrowed) continue;
+        qualifierFindings.push({ path, key, qualifier, sentence: sentence.trim() });
+      }
 
       for (const pattern of [TIER_PHRASE, ACTIVE, PASSIVE]) {
         for (const match of sentence.matchAll(pattern)) {
           if (PAST.test(sentence.slice(0, match.index))) continue;
           const before = sentence.slice(Math.max(0, match.index - NEAR), match.index);
           const after = sentence.slice(match.index + match[0].length).slice(0, NEAR);
-
-          // Nearest either side, and either side because a relative clause moves the key in front
-          // of its own verb — `run:close`, which a Test Engineer does not hold — about as often as
-          // the plain order leaves it behind.
-          const behind = [...before.matchAll(KEY)].at(-1)?.[0];
-          const ahead = [...after.matchAll(KEY)].at(0);
-          const key = behind !== undefined
-            && (ahead === undefined || before.length - before.lastIndexOf(behind) <= ahead.index)
-            ? behind
-            : ahead?.[0];
+          const key = nearestKey(sentence, match.index, match[0].length);
           if (key === undefined) continue;
 
           if (pattern === TIER_PHRASE) {
@@ -257,12 +326,44 @@ describe('a tier claim in this repository\'s prose', () => {
       .toBe('');
   });
 
+  it('still recognises the qualifier form', () => {
+    // The vacuity guard the third form needs and the corpora cannot give it: a repository whose
+    // prose is clean matches nothing, which reads exactly like a pattern that stopped matching.
+    // These are the three live spellings §C11's sweep actually found, quoted as instrument.
+    for (const spelling of [
+      'a Test Engineer\'s `artifact:edit` is `PLAN_SCOPE`, so a project write is refused',
+      '`case:delete` is OWN-qualified for a Test Engineer (roles spec §A5)',
+      '`artifact:edit` is held outright by a Test Lead and plan-scope-only by a Test Engineer',
+    ]) {
+      expect([...spelling.matchAll(QUALIFIER_CLAIM)].length, spelling).toBeGreaterThan(0);
+    }
+    // And the spaced quote-form stays out — see the pattern's own header.
+    expect([...'a copy that says `plan scope only` where the spec says `✓`'
+      .matchAll(QUALIFIER_CLAIM)]).toHaveLength(0);
+  });
+
+  it('claims no narrowing the spec does not print', () => {
+    const unresolved = [...new Set(qualifierFindings
+      .filter((finding) => CLAIMED_BUT_TRUE_BY_DECISION[finding.sentence] === undefined)
+      .map((finding) => `  ${finding.path}\n    says \`${finding.key}\` is ${finding.qualifier}`
+        + `-narrowed: "${finding.sentence.slice(0, 220)}"`))];
+
+    expect(unresolved.join('\n'), `${unresolved.length} sentences claim a grant carries a `
+      + `qualifier the roles spec's matrix does not print:\n\n${unresolved.join('\n')}\n\n`
+      + '`V51` emptied `OWN` and `V52` emptied `PLAN_SCOPE`; the mechanism is retained (spec §A5) '
+      + 'and the data is gone. Correct the sentence, write it in the past tense, or strike it '
+      + 'through (`~~x~~ → y`) — or, if a migration really re-qualified a grant, the spec\'s own '
+      + 'cell moves first and this rule reads it from there.')
+      .toBe('');
+  });
+
   it('excuses nothing that has stopped needing it', () => {
     // §162's rule. A one-directional ignore list cannot report a member that came back.
     for (const [sentence, reason] of Object.entries(CLAIMED_BUT_TRUE_BY_DECISION)) {
       expect(reason.length, `${sentence} is excused without a reason`).toBeGreaterThan(40);
       expect(
-        findings.some((finding) => finding.sentence === sentence),
+        findings.some((finding) => finding.sentence === sentence)
+          || qualifierFindings.some((finding) => finding.sentence === sentence),
         `${sentence.slice(0, 80)} is excused and nothing says it any more — take the entry out`,
       ).toBe(true);
     }

@@ -226,6 +226,8 @@ Both new — the plan described the features (defect filing from a failed step; 
 
 **`doc:publish` moved 2026-08-15** (`V52`, §210). It was Lead-only as *the human's signal that a document is ready*; it is a contributor's now, because publishing a page is not an approval and the tier draws no other line. The key stays separate from `doc:edit` — publishing still moves a state and is still its own gate and its own audit row.
 
+**`doc:read` is checked by the project read gate, not evaluated as its own key** (annotated 2026-08-16, flow audit C8 — a decision, not a defect; a matrix sweep finding "no evaluation site" for this key is finding this paragraph). `DocPageService` gates every documentation read on `ProjectAccess.canView` — `project:read` — with the reasoning in its header: when that was decided, every role that could reach a project held `doc:read`, so a second gate would never have answered differently. Since `V16` there is one exception: **Automation Service holds `project:read` (the §A6 visibility precondition) and no `doc:read`, so its `—` in the table above is not enforced** — an AS credential that can see the project can read its pages. Accepted: the key's own evaluation site arrives when a company can define roles, and until then a permission check no reachable caller can drive is one nobody can tell is inverted.
+
 #### Artifacts
 
 | Permission | IA | CA | TL | TE | AS | V |
@@ -237,6 +239,8 @@ Both new — the plan described the features (defect filing from a failed step; 
 ~~Project-scope artifact edit is Lead-only; sign-off artifacts are write-once.~~
 
 **→ superseded 2026-08-15 (`V52`, §210): `artifact:edit` is unqualified for Test Engineer and `artifact:delete` is granted to it.** This is the one row of the change with a consequence beyond its own tier: `artifact:edit` was the **only key in the catalogue that ever carried `PLAN_SCOPE`**, so de-qualifying it leaves **both** restrictive qualifiers carried by zero rows — see §A5, which is where the argument for keeping the mechanism now stands on two reasons instead of three.
+
+**`artifact:read` is checked by the project read gate — the same annotation as `doc:read`** (2026-08-16, flow audit C8): `ArtifactService` gates the register's reads on project visibility, its header records why, and the Automation Service `—` above is likewise unenforced since `V16`. One decision covering two keys, recorded under each so neither sweep re-litigates it alone.
 
 **Sign-off artifacts are still write-once.** That is a property of the artifact kind enforced by `ArtifactWriteService`, not of the permission, and nothing here touches it. What a contributor gains is the *project-scope* artifact every plan inherits read-only (plan §6n) — a real widening, and the reason `SeedDataTest.artifactEditIsUnqualifiedEverywhere` was inverted rather than deleted: a gate written against the old data stops narrowing **silently**, with no 403 and no 500 anywhere.
 

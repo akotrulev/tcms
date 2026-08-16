@@ -332,8 +332,9 @@ class DocPageAttachmentEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("A TEST ENGINEER REMOVES A FILE A LEAD ATTACHED — there is no OWN arm here")
         void anEngineerRemovesSomebodyElsesFile() throws Exception {
-            // The one most likely to be "fixed" into failing. evidence:delete is OWN-qualified and
-            // copying that here reads as obviously safer; it is incoherent, because doc:edit
+            // The one most likely to be "fixed" into failing. evidence:delete carried OWN until
+            // V51 (§207), and copying an authorship arm here reads as obviously safer; it is
+            // incoherent, because doc:edit
             // already lets this same person delete the lead's paragraph beside the image.
             UUID leadsFile = attached(LEAD, ACME_BANKING, page, "lead-signoff.pdf");
 

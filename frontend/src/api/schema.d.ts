@@ -12384,9 +12384,12 @@ export interface components {
              *     is inherited by *every* plan (plan §6n), so a plan id on one would name a relationship
              *     that does not exist.
              *
-             *     This is also the field the permission qualifier reads: `artifact:edit` is held outright
-             *     by a Test Lead and **plan-scope-only** by a Test Engineer, so a `PROJECT` here can be a
-             *     `403` where a `PLAN` from the same caller is a `201`.
+             *     This is also the field the permission qualifier reads. ~~`artifact:edit` is held
+             *     outright by a Test Lead and **plan-scope-only** by a Test Engineer, so a `PROJECT` here
+             *     can be a `403` where a `PLAN` from the same caller is a `201`.~~ → **`V52` (§210)
+             *     de-qualified that grant, so no seeded role is refused by scope today** — the check is
+             *     retained (roles spec §A5), and this field is still what it reads if a migration
+             *     narrows a grant again.
              * @enum {string}
              */
             scope: "PROJECT" | "PLAN";

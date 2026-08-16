@@ -43,8 +43,11 @@ public enum ArtifactKind {
     /**
      * A report (plan §6e) pinned into the register, freezing that output as a cycle artifact.
      *
-     * <p><strong>Not registrable yet</strong> — the {@code reporting} module does not exist, so
-     * there is no report to pin.
+     * <p><strong>Not registrable yet</strong> — <del>the {@code reporting} module does not exist,
+     * so there is no report to pin</del> → the module exists and generates (§87, and §227 gave it
+     * a job list and its own model route), so what is missing is only the writer:
+     * {@code artifact.report_artifact_id} waits on a "save this report to the register" control,
+     * decided <em>finish</em> on 2026-08-16 (audit 2026-08-15 §C6) and not yet built.
      */
     GENERATED_REPORT
 }

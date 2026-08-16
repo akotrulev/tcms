@@ -30,10 +30,12 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>The same call {@link DocPageService} makes, on the same evidence: {@code artifact:read} has the
  * identical role distribution to {@code doc:read} in the roles spec — granted to five of the six
- * roles, and the sixth is Automation Service, which holds no {@code project:read} either. So a
- * second check would add a gate that has never once answered differently from the first, and a
+ * roles, and the sixth is Automation Service, <del>which holds no {@code project:read} either</del>
+ * → since {@code V16} it holds the visibility precondition, so the AS column's {@code —} is the one
+ * cell this gate does not enforce (see the annotation under the spec's Artifacts table, 2026-08-16,
+ * flow audit C8). For every reachable caller but that one the two gates answer identically, and a
  * permission check no test can drive is one nobody can tell is inverted. When a company can define
- * its own roles that stops being true and this is where the check goes.
+ * its own roles the key gets its own check and this is where it goes.
  *
  * <p>This is deliberately <em>not</em> the reasoning used for the write path, where
  * {@code artifact:edit} genuinely differs between roles — and differs <em>within</em> a role by the

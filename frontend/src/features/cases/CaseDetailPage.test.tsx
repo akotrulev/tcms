@@ -211,12 +211,14 @@ describe('CaseDetailPage — the Delete gate reads the row, not just the caller'
  *
  * `AttachmentList.test.tsx` proves the panel gates on whatever key it is handed and refuses no row
  * on authorship. Nothing there proves this page hands it `case:edit` — and the two plausible wrong
- * answers are both silent. `case:delete` would compile, render, and refuse a Test Engineer their
- * own screenshot on a case a lead created (that key is OWN-qualified one gate up on this very
- * page). `evidence:attach` would compile too and refuse everybody outside a run.
+ * answers are both silent. `case:delete` would compile, render, and refuse a caller whose served
+ * grant carries an `OWN` qualifier — which this fixture's does, deliberately: no seeded grant has
+ * carried `OWN` since `V51` (§207), and the fabricated shape is what keeps the retained client arm
+ * distinguishable from the key beside it. `evidence:attach` would compile too and refuse everybody
+ * outside a run.
  *
- * So the check is a caller who holds `case:edit` and whose `case:delete` is `OWN`-qualified over a
- * **colleague's** case: Delete on the case is disabled, and Attach on its files is not. One
+ * So the check is a caller who holds `case:edit` and whose served `case:delete` carries `OWN`, over
+ * a **colleague's** case: Delete on the case is disabled, and Attach on its files is not. One
  * fixture, two opposite verdicts, and only the right key produces both.
  */
 describe('CaseDetailPage — the attachment panel is gated on case:edit', () => {

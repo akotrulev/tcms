@@ -44,8 +44,11 @@ export interface Gate {
    * The same question asked **about a row at a given scope** — the client half of the server's
    * `canDoOnScope`.
    *
-   * A qualified grant is held *and* restricted: a Test Engineer's `artifact:edit` is `PLAN_SCOPE`,
-   * so {@link can} says true (it is held) while a project-scope write is refused. Until §65 the
+   * A qualified grant is held *and* restricted: ~~a Test Engineer's `artifact:edit` is
+   * `PLAN_SCOPE`, so {@link can} says true (it is held) while a project-scope write is refused~~ →
+   * **`V52` (§210) de-qualified that last grant, so nothing carries `PLAN_SCOPE` any more** and
+   * this arm currently answers what {@link can} answers — kept live for {@link canOnAuthored}'s
+   * reason, one method down. Until §65 the
    * response could not say so and this method could not exist — the control enabled and the submit
    * failed, which is the one place §31's disable-don't-hide was knowingly unfollowable.
    *

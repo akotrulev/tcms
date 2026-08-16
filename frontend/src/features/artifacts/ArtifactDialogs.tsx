@@ -265,8 +265,10 @@ export function RegisterArtifactDialog({
   /**
    * May this caller register at PROJECT scope?
    *
-   * A Test Engineer's `artifact:edit` is `PLAN_SCOPE` (roles spec's Artifacts table, V19): they
-   * curate their own cycle and may not rewrite the document every cycle inherits read-only. Asked
+   * ~~A Test Engineer's `artifact:edit` is `PLAN_SCOPE` (roles spec's Artifacts table, V19): they
+   * curate their own cycle and may not rewrite the document every cycle inherits read-only.~~ →
+   * **`V52` (§210) de-qualified the grant**, so today this answers true for every writer — and it
+   * is what narrows the form again the day a migration qualifies the key. Asked
    * of the gate rather than decided here — what the qualifier means belongs on one side of the wire.
    */
   const canProjectScope = gate.canOnScope('artifact:edit', false);

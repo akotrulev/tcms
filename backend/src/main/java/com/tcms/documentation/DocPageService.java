@@ -17,10 +17,13 @@ import org.springframework.transaction.annotation.Transactional;
  * another client's ids (§6t).
  *
  * <p>The gate is the project read gate and <strong>not</strong> {@code doc:read}. Every role that
- * can reach a project holds {@code doc:read} (roles spec §A2 grants it to five of the six, and the
- * sixth is Automation Service, which holds no {@code project:read} either) — so asking for it would
- * add a second gate that has never yet answered differently from the first. When a company can
- * define its own roles, that stops being true and this is where the check goes; recorded rather than
+ * can reach a project holds {@code doc:read} (roles spec §A3 grants it to five of the six, and the
+ * sixth is Automation Service — <del>which holds no {@code project:read} either</del> → {@code V16}
+ * granted it the visibility precondition, so this is the one role for which the two gates genuinely
+ * diverge: an AS credential that can see the project can read its pages, and the {@code —} in the
+ * spec's Documentation table is not enforced). Annotated in the roles spec under that table
+ * (2026-08-16, flow audit C8) and accepted: when a company can
+ * define its own roles, the key gets its own check and this is where it goes; recorded rather than
  * pre-built, because a permission check no test can drive is one nobody can tell is inverted.
  */
 @Service

@@ -40,8 +40,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Unlike the read — which uses the project gate because {@code artifact:read}'s distribution is
  * identical to {@code project:read}'s — this permission genuinely differs between roles, and differed
- * <em>within</em> a role by the row's scope. The roles spec grants it outright to Instance Admin,
- * Company Admin and Test Lead, and granted it <strong>plan-scope-only</strong> to a Test Engineer,
+ * <em>within</em> a role by the row's scope. The roles spec granted it outright to Instance Admin,
+ * Company Admin and Test Lead, and <strong>plan-scope-only</strong> to a Test Engineer,
  * because a project-scope artifact is inherited read-only by every plan (plan §6n): editing one
  * edits every cycle at once, which was a Lead-level act, while curating your own cycle's sign-off
  * was not.

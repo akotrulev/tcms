@@ -8208,8 +8208,10 @@ components:
         createdBy:
           # WHO WROTE THE CASE — and it is NOT `owner`, which is who is responsible for it now.
           # The two diverge routinely (a case is authored once and reassigned), and only this one
-          # decides authorization: `case:delete` is OWN-qualified for a Test Engineer (roles spec
-          # §A5), and the server compares `test_case.created_by`. Until this field existed the
+          # is what the server's OWN arm compares (`test_case.created_by`). No seeded grant has
+          # carried OWN since `V51` (§207); the field stays on the wire because the qualifier is
+          # data and the client's twin arm (`useCan.canOnAuthored`) is retained with it (roles
+          # spec §A5). Until this field existed the
           # client had no way to ask the same question, so the Delete button enabled for every
           # case and a Test Engineer learned which ones were theirs by being refused.
           #
@@ -11657,9 +11659,12 @@ components:
             is inherited by *every* plan (plan §6n), so a plan id on one would name a relationship
             that does not exist.
 
-            This is also the field the permission qualifier reads: `artifact:edit` is held outright
-            by a Test Lead and **plan-scope-only** by a Test Engineer, so a `PROJECT` here can be a
-            `403` where a `PLAN` from the same caller is a `201`.
+            This is also the field the permission qualifier reads. ~~`artifact:edit` is held
+            outright by a Test Lead and **plan-scope-only** by a Test Engineer, so a `PROJECT` here
+            can be a `403` where a `PLAN` from the same caller is a `201`.~~ → **`V52` (§210)
+            de-qualified that grant, so no seeded role is refused by scope today** — the check is
+            retained (roles spec §A5), and this field is still what it reads if a migration
+            narrows a grant again.
         planId:
           type: string
           format: uuid

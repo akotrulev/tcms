@@ -24,7 +24,12 @@ outstanding backend and `packages` gates. **The authorised scope is closed.** Ev
 below is B, C, D or E, none of it started; `E2` and `C10` are the cheapest next steps and both name
 work in this run as their prerequisite. → **2026-08-16, later the same day: all eleven C decisions
 are made** (recorded in the C table's new Decision column) — every one is *finish*, none is *retire*
-except C4, and none is deferred. Implementation of C has not started; the sequencing is §3.6.
+except C4, and none is deferred. ~~Implementation of C has not started; the sequencing is §3.6.~~ →
+**C implementation started 2026-08-16, in the §3.6 order. Slice 1 (C11 + C8, with C6's
+`ArtifactKind.java` prose rider) is done — §233.** The extended rule found nine stale qualifier
+claims (the audit's four minus the two A6 had already fixed, plus seven it never listed), and C8's
+annotation records the half the service headers denied: since `V16` Automation Service holds
+`project:read`, so its `—` cells for the two read keys are unenforced.
 
 Status marks used in the tables: **✅ DONE** · **🔨 IN PROGRESS** · **⬜ NOT STARTED** ·
 **⛔ OUT OF SCOPE** (this session).
@@ -39,6 +44,7 @@ Status marks used in the tables: **✅ DONE** · **🔨 IN PROGRESS** · **⬜ N
 | A6 | ✅ DONE | §229 phase 2 | `PATCH /projects/{projectId}/artifacts/{artifactId}` (`ArtifactWriteService.edit`, `artifact:edit` scope-qualified against the **row's** scope, `write_once` refused with 409) + **Correct…** and **Remove…** on the register's row menu, the second behind a confirmation that names what a `FILE`'s removal costs. Three editable fields — scope, kind and every payload column are `updatable = false`, so *"this points at the wrong thing"* stays **supersede**. **A `SUPERSEDED` row is editable and the status endpoint still refuses it**: a status is a fact about another row and a title is not. The kebab no longer shuts on a superseded row, which is what put the new edit path within reach of every row anybody had ever replaced. `DELETE` shipped in §126 with both its 409 guards and had **no caller at all** until now. |
 | A7 | ✅ DONE | §227 phase 2 | `SuitePanel` — above the case grid whenever a suite is selected — carrying the suite's key, name, lifecycle chip, membership count, an execution-history link, and **`ReviewPanel` for `SUITE`**, which had never been mounted anywhere. **A rail-side panel rather than a suite detail page**, of the audit's two options: a suite is flat since §98 and every write it has hangs off the rail, so a page of its own would be a header plus this panel reached by navigating away from the list you pick the suite in. Not *in* the rail either — 260px renders assignees, verdicts and a comment thread as a stack of ellipses. |
 | A8 | ✅ DONE | §230 | `?linkCase=<caseId>` carried from the case's Traceability panel into the documentation space, where a banner names it and every block's dialog opens with it **already chosen**. **`frontend/` alone — no endpoint, no payload, no permission, `openapi.yaml` untouched**, which is the finding: every piece of the journey existed and nothing joined them. The new button asks **`doc:edit`** (the destination's key, not the panel's own `case:edit` one line away), and the three navigations on the destination screen that dropped the query string — the no-page-id redirect, the page tree, the page-missing redirect — all carry it now. The first of those killed the intent *on arrival*, in the one route the feature is entered by. |
+| C11 + C8 | ✅ DONE | §233 | C11: the tier-claims rule extended to qualifier claims, checked against the spec's matrix cells; ran red on **nine** live sites (this audit listed four, two already fixed by A6, seven unlisted) — all corrected, `schema` copies regenerated for the one that was a contract description. C8: both keys annotated *checked-by-project-read* in the roles spec, **including the `V16` divergence** (AS holds `project:read`, so its `—` for `doc:read`/`artifact:read` is unenforced); both service headers corrected. C6's `ArtifactKind.java` stale-prose fix rode along; C6 itself (save-to-register) is still open. |
 | B1–B11 | ✅ DONE | §232 phases 1–4 | Every asymmetry. Four phases: **p1** the case `PATCH` (partial at last), the round trip, the tag-semantics label and the report-format capability read; **p2** the idempotency gaps and the plan create; **p3** the by-ids case read, the destructive-suite preview and the criterion-metric marking; **p4** ingestion failures and the run's recorded scope. Three migrations — `V59` (artifact + shared-step keys), `V60` (ingestion uniqueness narrowed to `COMPLETED`), `V61` (`test_run.scope_request`). See `docs/handoff/232-*.md` for what each row's proposal became, and why three of them were built differently from the way the row worded them. |
 | E2 | ⛔ OUT OF SCOPE | — | `Idempotency-Key` on `POST /reports/generate`. Pairs naturally with A3 and was deliberately **not** taken: it is a P2, the authorised scope was A1–A8 and then B, and it is a contract change to a write. **B4 touched the same family and left this one alone on purpose**: a duplicated report is two files, where a duplicated register row is a document nobody can tell from a deliberate second one and a duplicated upload is a second copy of the bytes. Cheapest remaining reports work. |
 
@@ -175,8 +181,8 @@ where the row's own proposal was not what was built — three of them were, and 
 ### C. Finish or retire the inert machinery (P3 — each is a decision, not a task)
 
 **All eleven decided 2026-08-16** (user, prompted per item). The **Decision** column is the outcome;
-nothing in this section is implemented yet — each decision now becomes a slice, sequenced at the end
-of §3.
+~~nothing in this section is implemented yet~~ → **implementation runs in the §3.6 order; C11 and
+C8 are done (§233), with C6's stale-prose half** — each remaining decision becomes a slice.
 
 | # | Decision (2026-08-16) | Decision to make | Evidence |
 |---|---|---|---|

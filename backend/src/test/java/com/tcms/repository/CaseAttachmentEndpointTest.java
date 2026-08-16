@@ -288,8 +288,8 @@ class CaseAttachmentEndpointTest extends IntegrationTestBase {
         @DisplayName("A TEST ENGINEER REMOVES A FILE A LEAD ATTACHED — there is no OWN arm here")
         void anEngineerRemovesSomebodyElsesFile() throws Exception {
             // THE assertion of this slice, and the one most likely to be "fixed" into failing.
-            // evidence:delete is OWN-qualified for a Test Engineer and copying that here reads as
-            // obviously safer. It is incoherent: case:edit already lets this same person rewrite
+            // evidence:delete carried OWN for a Test Engineer until V51 (§207), and copying an
+            // authorship arm here reads as obviously safer. It is incoherent: case:edit already lets this same person rewrite
             // every step, the title and the preconditions of the lead's case, so refusing them the
             // screenshot would make the file stricter than the step that references it.
             UUID leadsFile = attached(LEAD, ACME_BANKING, CASE_A, "lead-spec.pdf");

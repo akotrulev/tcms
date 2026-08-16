@@ -108,8 +108,11 @@ public interface ProjectAccess {
      * does {@code PLAN_SCOPE} mean" in every module that owns a scoped row, which is the second
      * authorization-resolution path plan §6b names.
      *
-     * <p>The rule it answers is the roles spec's Artifacts row: {@code artifact:edit} is held
-     * outright by a Test Lead and plan-scope-only by a Test Engineer. Project-scope artifacts are
+     * <p>The rule it answers is roles spec §A5's scope qualifier. <del>{@code artifact:edit} is
+     * held outright by a Test Lead and plan-scope-only by a Test Engineer.</del> {@code V52} (§210)
+     * de-qualified that last grant, so no seeded row narrows by scope today and the restrictive arm
+     * here is unreachable — kept because the qualifier is data, and a caller that stopped asking
+     * would fail open the day a migration qualifies a grant again. Project-scope artifacts are
      * inherited read-only by every plan (plan §6n), so they are the project's shared documents and
      * editing one edits every cycle.
      *

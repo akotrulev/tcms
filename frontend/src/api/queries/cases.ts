@@ -318,8 +318,10 @@ export function useUpdateCase(projectId: string, caseId: string) {
 /**
  * Soft-deletes a case.
  *
- * `meta.handled` because the refusal is the message: `case:delete` is `OWN`-qualified for a Test
- * Engineer, so a 403 here says *this* case is someone else's — a sentence the dialog renders in
+ * `meta.handled` because the refusal is the message: ~~`case:delete` is `OWN`-qualified for a Test
+ * Engineer, so a 403 here says *this* case is someone else's~~ → **`V51` (§207) emptied `OWN`, so
+ * no seeded grant refuses by authorship any more** — a 403 can still arrive (a grant revoked while
+ * the dialog is open), and it is still a sentence the dialog renders in
  * place, beside the case it is about. A global toast would show it at the corner and let the
  * dialog close as though nothing had happened.
  *
