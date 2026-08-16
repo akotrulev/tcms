@@ -345,6 +345,76 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
 
+  /auth/social/providers:
+    get:
+      operationId: listSocialProviders
+      tags: [auth]
+      summary: Which social sign-in providers this instance has configured
+      description: |
+        Instance-level configuration, identical for every caller — it names no company and no
+        account, so answering it publicly discloses nothing (§6r's oracle rule does not bite).
+        GitHub, GitLab and Google are authorities for people, not companies; they are configured
+        by the operator, never as `identity_provider` rows.
+      security: []
+      responses:
+        '200':
+          description: The configured providers, possibly none.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SocialProviderList' }
+
+  /auth/social/{provider}/authorize:
+    get:
+      operationId: socialAuthorize
+      tags: [auth]
+      summary: Begin a social sign-in (browser navigation, not an XHR)
+      description: |
+        Records an in-flight attempt and redirects the browser to the provider's authorization
+        endpoint. **`302` in every case, success and failure alike** — an unconfigured provider
+        and an unreachable issuer both land on the SPA's failure landing with one opaque marker,
+        for the reason `GET /auth/sso/{providerId}/authorize` gives.
+
+        Never creates an account: the callback resolves an already-linked identity or refuses.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/SocialProviderKey'
+      responses:
+        '302':
+          description: To the provider, or to the SPA's failure landing.
+          headers:
+            Location:
+              schema: { type: string }
+
+  /auth/social/callback:
+    get:
+      operationId: socialCallback
+      tags: [auth]
+      summary: Complete a social round-trip (browser navigation, not an XHR)
+      description: |
+        One callback for both intents — signing in and linking — told apart by the attempt row
+        the `state` resolves, never by the URL (`GET /auth/sso/callback`'s reasoning, applied to
+        intents). The attempt is single-use and claimed before the code is exchanged.
+
+        `302` in every case. Success carries the outcome in the URL **fragment** (a session for
+        a sign-in, a `linked` marker for a completed link); every failure carries the same
+        opaque error marker. The provider's own token never reaches the SPA.
+      security: []
+      parameters:
+        - name: state
+          in: query
+          required: false
+          schema: { type: string }
+        - name: code
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '302':
+          description: To the SPA, carrying the outcome in the fragment.
+          headers:
+            Location:
+              schema: { type: string }
+
   /me:
     get:
       tags: [auth]
@@ -385,6 +455,61 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/EffectivePermissions' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/social-identities:
+    get:
+      operationId: listMySocialIdentities
+      tags: [auth]
+      summary: The social identities linked to the calling account
+      description: |
+        Under `/me`, not `/auth`: `/api/v1/auth/**` is public and everything here requires the
+        session it manages. No permission key gates any of it — managing your own sign-in
+        identities is self-service on your own account, like changing a password.
+      responses:
+        '200':
+          description: All linked identities, possibly none.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SocialIdentityList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/social-identities/{provider}:
+    post:
+      operationId: startSocialLink
+      tags: [auth]
+      summary: Begin linking a social identity to the calling account
+      description: |
+        Answers `{ url }` for the SPA to navigate to rather than a `302`: a top-level browser
+        navigation cannot carry the Authorization header, so the authenticated leg must be an
+        API call that returns the redirect, and the navigation that follows holds only the
+        single-use `state`.
+      parameters:
+        - $ref: '#/components/parameters/SocialProviderKey'
+      responses:
+        '200':
+          description: Where to send the browser.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SocialRedirect' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: unlinkSocialIdentity
+      tags: [auth]
+      summary: Remove a linked social identity from the calling account
+      parameters:
+        - $ref: '#/components/parameters/SocialProviderKey'
+      responses:
+        '204':
+          description: Unlinked (or was never linked — the end state is the same).
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: |
+            Refused: this identity is the account's only way to sign in (no password and no
+            other linked identity). Set a password or link another provider first.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
   # ------------------------------------------------------------ projects ----
   /projects:
@@ -6585,6 +6710,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    SocialProviderKey:
+      name: provider
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/SocialProvider' }
     AttachmentId:
       name: attachmentId
       in: path
@@ -11453,6 +11583,57 @@ components:
           description: |
             The plaintext, shown once. Store it in the CI system's secret store immediately; it
             cannot be recovered, and nothing here can show it again.
+
+    SocialProvider:
+      type: string
+      enum: [GITHUB, GITLAB, GOOGLE]
+      description: |
+        An instance-level social sign-in authority — for people, not companies, which is why
+        this is a closed enum and not an `identity_provider` row.
+
+    SocialProviderList:
+      type: object
+      required: [providers]
+      description: |
+        What `GET /auth/social/providers` answers with. Present means configured by the
+        operator; absent means the button does not exist. Often empty; never an error.
+      properties:
+        providers:
+          type: array
+          items: { $ref: '#/components/schemas/SocialProvider' }
+
+    SocialRedirect:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          description: The provider's authorization URL; navigate the browser to it.
+
+    SocialIdentity:
+      type: object
+      required: [provider, linkedAt]
+      properties:
+        provider: { $ref: '#/components/schemas/SocialProvider' }
+        linkedAt:
+          type: string
+          format: date-time
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+        emailAtLink:
+          type: string
+          nullable: true
+          description: What the provider asserted at link time. Provenance, never a key.
+
+    SocialIdentityList:
+      type: object
+      required: [identities]
+      properties:
+        identities:
+          type: array
+          items: { $ref: '#/components/schemas/SocialIdentity' }
 
     SsoProviderDiscovery:
       type: object
