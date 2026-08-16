@@ -699,11 +699,10 @@ class ArchitectureRulesTest {
                             + "subject) precisely so that a corporate rename does not fork "
                             + "somebody into a second account. A reader here is the thing §6r "
                             + "exists to keep out"),
-            Map.entry("UserIdentity.linkedAt",
-                    "when the binding was made. Written on every link, and there is no screen in "
-                            + "the product that lists a person's external identities — the "
-                            + "federation surface built in §217 configures PROVIDERS, not the "
-                            + "identities under them. Exits when that screen exists"),
+            // UserIdentity.linkedAt exited with V58: the security page lists a person's SOCIAL
+            // identities and reads linkedAt through a derived method whose property name puts
+            // `linkedAt` in the read corpus — its entry's "exits when that screen exists"
+            // condition, arriving one table over.
             Map.entry("AppUser.locale",
                     "V1 NOT NULL, set to the constant \"en\" by AppUser.invite and never read. A "
                             + "stored preference with no writer but the default and no reader at "
