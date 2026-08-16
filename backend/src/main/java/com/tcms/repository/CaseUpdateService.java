@@ -451,14 +451,16 @@ public class CaseUpdateService {
         // which therefore wrote no version. The buffer's job ends when somebody presses Save; it is
         // not a record of what changed.
         //
-        // Cleared regardless of WHO saved, because the buffer is per case and not per person (see
-        // TestCaseDraft) — a colleague's save discards your unsaved draft. That is the 1:1 primary
-        // key's cost showing up a second time, and it is why CaseDraftView carries updatedBy: the
-        // shape is honest about being shared or it is not honest at all.
+        // THE SAVER'S OWN BUFFER, and nobody else's (V64, audit D1). ~~Cleared regardless of WHO
+        // saved, because the buffer is per case and not per person — a colleague's save discards
+        // your unsaved draft, which is the 1:1 primary key's cost showing up a second time.~~ That
+        // was the defect D1 names: a save by somebody who was not in the room threw away work that
+        // was not theirs to throw away. A colleague's draft now survives this save and comes back
+        // marked `stale`, which is a statement the returning editor can act on.
         //
         // Usually deletes nothing. Most saves are not preceded by an autosave, so this is one
         // statement affecting zero rows rather than a load-then-delete — see the repository.
-        drafts.deleteForCase(testCase.getId());
+        drafts.deleteForCase(testCase.getId(), userId);
 
         auditEvents.save(AuditEvent.record(
                 project.getId(),

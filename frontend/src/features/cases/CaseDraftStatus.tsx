@@ -37,12 +37,21 @@ export function CaseDraftStatus({
   getValues,
   enabled,
   save,
+  commitLabel,
   testId,
 }: {
   control: Control<CaseInput>;
   getValues: UseFormGetValues<CaseInput>;
   enabled: boolean;
   save: (content: Record<string, unknown>) => Promise<unknown>;
+  /**
+   * What the button that ends the buffer's job is called — `Save changes` or `Create case`. Named
+   * rather than derived from a `mode` prop, because this component's whole contribution is one
+   * sentence and the sentence has to point at a control the reader can see. D1 gave create mode a
+   * buffer of its own (`useNewCaseDraft`), and telling somebody on the New Case form to press
+   * "Save changes" would name a button that is not there.
+   */
+  commitLabel: string;
   testId: string;
 }) {
   // Subscribe to every field. The return value is deliberately unused — see the header.
@@ -60,7 +69,7 @@ export function CaseDraftStatus({
     <Box role="status" aria-live="polite" sx={{ mb: 2, minHeight: 20 }} data-testid={testId}>
       {autosave.status === 'failed' ? (
         <Typography variant="caption" color="error">
-          Could not save a backup of your changes. Your work is still here — use Save changes to
+          Could not save a backup of your changes. Your work is still here — use {commitLabel} to
           keep it.
         </Typography>
       ) : autosave.status === 'saving' ? (
@@ -69,8 +78,8 @@ export function CaseDraftStatus({
         </Typography>
       ) : autosave.status === 'saved' ? (
         <Typography variant="caption" color="text.secondary">
-          Backup saved {formatTimeOfDay(autosave.savedAt)}. This is not the case itself — use Save
-          changes to publish your edit.
+          Backup saved {formatTimeOfDay(autosave.savedAt)}. This is not the case itself — use{' '}
+          {commitLabel} to publish your work.
         </Typography>
       ) : null}
     </Box>

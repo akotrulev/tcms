@@ -11,6 +11,7 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { aCase } from '../../test/fixtures'
 import { heldPermissions } from '../../test/permissions'
 import { CaseEditorPage } from './CaseEditorPage'
+import { newCaseDraftKey } from './useNewCaseDraft'
 
 /**
  * The step editor — **the case editor's first test file**, added with §94's rework of it.
@@ -764,7 +765,8 @@ describe('the draft buffer', () => {
       lockVersion: 3,
       stale: false,
       updatedAt: new Date(Date.now() - 60_000).toISOString(),
-      updatedBy: { id: 'u9', displayName: 'E. Engineer', email: 'eng@acme.test', avatarUrl: null },
+      // No `updatedBy` — it left the contract with `V64` (audit D1). The row is keyed on the
+      // reader, so the field could only ever have answered "you".
       content: {
         title: 'The unsaved title',
         suiteId: 'suite-1',
@@ -817,26 +819,29 @@ describe('the draft buffer', () => {
     )
   }
 
-  it('offers the buffered draft and NAMES WHO TYPED IT', async () => {
-    // The 1:1 primary key's cost, on screen. There is one buffer per case, so the draft on offer
-    // may be a colleague's — restoring it without saying so publishes their half-finished sentence
-    // under your name, with nothing in the audit trail showing it had ever been theirs.
+  it('offers the buffered draft as YOURS', async () => {
+    // ~~The 1:1 primary key's cost, on screen: there is one buffer per case, so the draft on offer
+    // may be a colleague's and restoring it without saying so publishes their half-finished
+    // sentence under your name.~~ → V64 (audit D1) keys the row on the reader, so the offer is
+    // always your own work and the banner says so. The disclosure this test used to assert
+    // (`E. Engineer`) described a hazard the schema no longer has.
     mockEditReads(draft())
     renderEditMode()
 
     const prompt = await screen.findByTestId('CaseEditor.DraftPrompt')
-    expect(prompt).toHaveTextContent('E. Engineer')
+    expect(prompt).toHaveTextContent(/your unsaved changes/i)
     expect(prompt).toHaveTextContent(/without saving/i)
   })
 
   it('warns when the draft is stale, and still offers it', async () => {
     // Advisory, never enforcing: the words are the author's, and dropping them would be the
-    // product deciding that somebody else's edit invalidates your sentence.
+    // product deciding that somebody else's edit invalidates your sentence. Since V64 this is the
+    // ONLY thing a colleague's save does to your buffer — it used to delete it outright.
     mockEditReads(draft({ stale: true }))
     renderEditMode()
 
     const prompt = await screen.findByTestId('CaseEditor.DraftPrompt')
-    expect(prompt).toHaveTextContent(/saved by someone else/i)
+    expect(prompt).toHaveTextContent(/has been saved since this draft was written/i)
     expect(within(prompt).getByTestId('CaseEditor.DraftRestore')).toBeEnabled()
   })
 
@@ -898,16 +903,113 @@ describe('the draft buffer', () => {
     expect(screen.getByTestId('CaseEditor.Field.Title')).toHaveValue('The saved title')
   })
 
-  it('the CREATE form asks for no draft at all', async () => {
-    // Stated rather than left to be discovered: the buffer's key is a foreign key to `test_case`,
-    // so there is nothing to key a draft on until the case exists. The New Case form is exactly as
-    // lossy as it was before this slice.
+  it('the CREATE form asks the SERVER for no draft', async () => {
+    // Still true, and still for the reason §128 gave: the buffer's key is a foreign key to
+    // `test_case`, so there is nothing to key a SERVER row on until the case exists. V64 re-keyed
+    // that table on the person and did not change this — what create mode was missing is a case
+    // id, not an owner. Its buffer is the browser's (`useNewCaseDraft`), tested below.
     mockReads()
     renderEditor()
 
     await screen.findByTestId('CaseEditor.Field.Title')
     const paths = vi.mocked(api.get).mock.calls.map(([path]) => path)
     expect(paths.some((path) => String(path).includes('/draft'))).toBe(false)
+  })
+})
+
+/**
+ * The New Case form's browser-side buffer — **D1's second half** (audit
+ * `docs/audits/2026-08-15-flow-review-and-improvements.md`).
+ *
+ * §128 shipped the edit-mode buffer and stated the hole: create mode had none, so closing a tab on
+ * a half-written case lost every word of it. These pin the properties that make the replacement
+ * worth having, none of which `tsc` can see:
+ *
+ *   1. **What was typed comes back**, through the same restore banner edit mode uses.
+ *   2. **A successful create clears it**, or the next visit to New Case offers a copy of a case
+ *      that now exists — and a REFUSED create does not, which is the path where the work matters.
+ *   3. **The key is per project.** A single global key would offer another client's half-written
+ *      case: the tenancy boundary breached in the one place no server check can see it, because
+ *      nothing was ever sent to a server.
+ *   4. **A discard is honoured**, so a refused offer is not re-made.
+ */
+describe('the New Case draft buffer (D1)', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  /** What `useNewCaseDraft` stores — written directly, which is what a previous session leaves. */
+  function buffer(content: Record<string, unknown>, projectId = PROJECT) {
+    window.localStorage.setItem(
+      newCaseDraftKey(projectId),
+      JSON.stringify({ updatedAt: new Date(Date.now() - 60_000).toISOString(), content }),
+    )
+  }
+
+  const TYPED = {
+    title: 'A case somebody was still writing',
+    suiteId: 'suite-1',
+    objective: 'Half a sentence',
+    steps: [{ id: null, action: 'A drafted step', testData: null, expectedResult: null }],
+    stepFormat: 'STRUCTURED',
+    priority: 'MEDIUM',
+    automationStatus: 'MANUAL',
+    classificationValueIds: [],
+    preconditions: [],
+    postconditions: [],
+    tags: [],
+  }
+
+  it('offers what the last session typed, and restoring puts it back in the form', async () => {
+    const user = userEvent.setup()
+    buffer(TYPED)
+    mockReads()
+    renderEditor()
+
+    await user.click(await screen.findByTestId('CaseEditor.DraftRestore'))
+
+    expect(screen.getByTestId('CaseEditor.Field.Title')).toHaveValue(
+      'A case somebody was still writing',
+    )
+    expect(actionFields()[0]).toHaveValue('A drafted step')
+  })
+
+  it('never offers a draft buffered under another project', async () => {
+    buffer(TYPED, 'a-different-project')
+    mockReads()
+    renderEditor()
+
+    await screen.findByTestId('CaseEditor.Field.Title')
+    expect(screen.queryByTestId('CaseEditor.DraftPrompt')).not.toBeInTheDocument()
+  })
+
+  it('discarding it means it is not offered again', async () => {
+    const user = userEvent.setup()
+    buffer(TYPED)
+    mockReads()
+    renderEditor()
+
+    await user.click(await screen.findByTestId('CaseEditor.DraftDiscard'))
+
+    expect(screen.queryByTestId('CaseEditor.DraftPrompt')).not.toBeInTheDocument()
+    expect(window.localStorage.getItem(newCaseDraftKey(PROJECT))).toBeNull()
+  })
+
+  it('a successful create clears the buffer', async () => {
+    // "And clears the row" — V1's clause about the server buffer, applied to the browser's.
+    const user = userEvent.setup()
+    buffer(TYPED)
+    mockReads()
+    vi.spyOn(api, 'post').mockResolvedValue(
+      loadedCase({ id: 'c-new', key: 'TC-99', keySeq: 99, title: 'Created' }) as never,
+    )
+    renderEditor()
+
+    await user.click(await screen.findByTestId('CaseEditor.DraftRestore'))
+    await waitFor(() => expect(screen.getByTestId('CaseEditor.Submit')).toBeEnabled())
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    await waitFor(() => expect(window.localStorage.getItem(newCaseDraftKey(PROJECT))).toBeNull())
   })
 })
 

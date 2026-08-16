@@ -2200,10 +2200,14 @@ paths:
         product, and a Viewer is the client's stakeholder invited to read coverage rather
         than to watch it being written.
 
-        **There is one buffer per case, not one per person.** `test_case_draft.case_id` is
-        the primary key, so two people editing one case share it and the last keystroke
-        wins. `updatedBy` is served for exactly that reason: a returning editor must be told
-        whose words they are being offered before adopting them.
+        **There is one buffer per person per case** (`test_case_draft (case_id, user_id)`,
+        `V64`). This serves the caller's own draft and never a colleague's. Until `V64` the
+        row was keyed on the case alone, two editors shared it, and `updatedBy` was served
+        so a returning editor could be told whose words they were being offered — that
+        field is gone with the hazard it disclosed, because under this key it could only
+        answer "you".
+
+        What a colleague's save does to your draft now is make it **stale**, not delete it.
       responses:
         '200':
           description: The buffered draft
@@ -2231,7 +2235,9 @@ paths:
         validated, versioned, audited, `If-Match`ed. A server-side promote would be a second
         write path into `test_case` whose input is by construction unvalidated.
 
-        **A successful `PATCH` clears this buffer**, whoever saved.
+        **A successful `PATCH` clears the saver's own buffer**, and only theirs (`V64`).
+        A colleague's draft on the same case survives and is reported `stale` on their next
+        read.
 
         **No `If-Match`.** `lockVersion` is recorded, not enforced: an autosave that answered
         `409` is one the user cannot resolve, because they never asked for it and there is no
@@ -2266,7 +2272,7 @@ paths:
       tags: [repository]
       summary: Discard the buffered draft
       description: |
-        Throws the buffer away. **Idempotent**: discarding a draft that is not there
+        Throws the caller's own buffer away. **Idempotent**: discarding a draft that is not there
         succeeds, because the caller asked for a state and that is the state it is in. A
         second click, a retry after a timeout, and a concurrent save that already cleared the
         row must none of them read as an error.
@@ -9326,7 +9332,8 @@ components:
       required: [lockVersion, stale, updatedAt, content]
       description: |
         A buffered draft, and everything a returning editor needs in order to decide whether
-        to adopt it.
+        to adopt it. **The caller's own** — the row is keyed `(case_id, user_id)` since
+        `V64`.
       properties:
         lockVersion:
           type: integer
@@ -9335,7 +9342,9 @@ components:
         stale:
           type: boolean
           description: |
-            `true` when the case has moved since the draft was written.
+            `true` when the case has moved since the draft was written — a colleague saved
+            it, or you saved it yourself from another tab. Since `V64` this is the **only**
+            thing another person's save does to your buffer; it no longer deletes it.
 
             **Computed by the server, not left to the client.** The client holds both
             numbers and could compare them, and that is precisely how two screens end up
@@ -9352,17 +9361,13 @@ components:
             When it was last buffered, from the server's clock. "Restore unsaved changes"
             means something different for work from four minutes ago and work from four
             weeks ago.
-        updatedBy:
-          allOf: [{ $ref: '#/components/schemas/UserRef' }]
-          nullable: true
-          description: |
-            Who typed it. **This field carries the cost of the 1:1 primary key**: there is
-            one buffer per case, so the draft on offer may be a colleague's, and restoring it
-            silently would publish their half-finished sentence under your name.
-
-            Null when the account no longer resolves — "somebody, no longer in this
-            company", which is the honest answer and the reason it is not defaulted to the
-            caller.
+        # ~~updatedBy — who typed it, carrying the cost of the 1:1 primary key: there was one
+        # buffer per case, so the draft on offer might be a colleague's and restoring it
+        # silently would publish their half-finished sentence under your name.~~
+        # → REMOVED with `V64` (audit D1). The row is keyed on the reader, so the field could
+        # only ever answer "you" — and a field that discloses a hazard the schema no longer
+        # has is worse than no field, because it asks a returning editor to weigh something
+        # that cannot happen.
         content:
           allOf: [{ $ref: '#/components/schemas/TestCaseInput' }]
           description: The buffered form state, unvalidated.

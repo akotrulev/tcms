@@ -2935,10 +2935,14 @@ export interface paths {
          *     product, and a Viewer is the client's stakeholder invited to read coverage rather
          *     than to watch it being written.
          *
-         *     **There is one buffer per case, not one per person.** `test_case_draft.case_id` is
-         *     the primary key, so two people editing one case share it and the last keystroke
-         *     wins. `updatedBy` is served for exactly that reason: a returning editor must be told
-         *     whose words they are being offered before adopting them.
+         *     **There is one buffer per person per case** (`test_case_draft (case_id, user_id)`,
+         *     `V64`). This serves the caller's own draft and never a colleague's. Until `V64` the
+         *     row was keyed on the case alone, two editors shared it, and `updatedBy` was served
+         *     so a returning editor could be told whose words they were being offered — that
+         *     field is gone with the hazard it disclosed, because under this key it could only
+         *     answer "you".
+         *
+         *     What a colleague's save does to your draft now is make it **stale**, not delete it.
          */
         get: {
             parameters: {
@@ -2995,7 +2999,9 @@ export interface paths {
          *     validated, versioned, audited, `If-Match`ed. A server-side promote would be a second
          *     write path into `test_case` whose input is by construction unvalidated.
          *
-         *     **A successful `PATCH` clears this buffer**, whoever saved.
+         *     **A successful `PATCH` clears the saver's own buffer**, and only theirs (`V64`).
+         *     A colleague's draft on the same case survives and is reported `stale` on their next
+         *     read.
          *
          *     **No `If-Match`.** `lockVersion` is recorded, not enforced: an autosave that answered
          *     `409` is one the user cannot resolve, because they never asked for it and there is no
@@ -3050,7 +3056,7 @@ export interface paths {
         post?: never;
         /**
          * Discard the buffered draft
-         * @description Throws the buffer away. **Idempotent**: discarding a draft that is not there
+         * @description Throws the caller's own buffer away. **Idempotent**: discarding a draft that is not there
          *     succeeds, because the caller asked for a state and that is the state it is in. A
          *     second click, a retry after a timeout, and a concurrent save that already cleared the
          *     row must none of them read as an error.
@@ -10523,7 +10529,8 @@ export interface components {
         };
         /**
          * @description A buffered draft, and everything a returning editor needs in order to decide whether
-         *     to adopt it.
+         *     to adopt it. **The caller's own** — the row is keyed `(case_id, user_id)` since
+         *     `V64`.
          */
         CaseDraft: {
             /**
@@ -10532,7 +10539,9 @@ export interface components {
              */
             lockVersion: number;
             /**
-             * @description `true` when the case has moved since the draft was written.
+             * @description `true` when the case has moved since the draft was written — a colleague saved
+             *     it, or you saved it yourself from another tab. Since `V64` this is the **only**
+             *     thing another person's save does to your buffer; it no longer deletes it.
              *
              *     **Computed by the server, not left to the client.** The client holds both
              *     numbers and could compare them, and that is precisely how two screens end up
@@ -10551,16 +10560,6 @@ export interface components {
              *     weeks ago.
              */
             updatedAt: string;
-            /**
-             * @description Who typed it. **This field carries the cost of the 1:1 primary key**: there is
-             *     one buffer per case, so the draft on offer may be a colleague's, and restoring it
-             *     silently would publish their half-finished sentence under your name.
-             *
-             *     Null when the account no longer resolves — "somebody, no longer in this
-             *     company", which is the honest answer and the reason it is not defaulted to the
-             *     caller.
-             */
-            updatedBy?: components["schemas"]["UserRef"] | null;
             /** @description The buffered form state, unvalidated. */
             content: components["schemas"]["TestCaseInput"];
         };

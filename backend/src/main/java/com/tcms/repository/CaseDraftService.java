@@ -5,11 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
-import com.tcms.tenancy.CompanyContext;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -55,12 +53,24 @@ import org.springframework.transaction.annotation.Transactional;
  * soft-deleted case answers 404 with its draft row still sitting in the table — consistent with the
  * case itself, which also survives and is also unreadable.
  *
- * <h2>What has no buffer at all, stated rather than left to be discovered</h2>
+ * <h2>One buffer per PERSON per case since {@code V64} (audit D1)</h2>
  *
- * <p><strong>A case being created has none.</strong> The primary key is a foreign key to
- * {@code test_case}, so there is nothing to key a draft on until the case exists — the New Case form
- * is exactly as lossy as it was before this slice. Fixing that is a different table with a different
- * lifetime (what expires an abandoned new-case draft, and who sees it), not a column on this one.
+ * <p>Every verb here is keyed on the authenticated subject as well as the case, so the draft a
+ * caller reads, writes and discards is their own and a colleague's is a different row this service
+ * will not serve them. §128 shipped the 1:1 shape and disclosed its cost ({@code updatedBy} on the
+ * wire, and a save clearing whoever's draft was there); {@link TestCaseDraft}'s header records what
+ * changed and why the question that argued against the re-key — <em>"which of the four drafts do I
+ * open"</em> — turns out not to arise.
+ *
+ * <h2>What has no buffer HERE, stated rather than left to be discovered</h2>
+ *
+ * <p><strong>A case being created has no row in this table.</strong> {@code case_id} is a foreign
+ * key to {@code test_case}, so there is nothing to key a draft on until the case exists. That is
+ * still true, and D1's other half does not change it: the New Case form buffers <em>in the
+ * browser</em> ({@code frontend/src/features/cases/useNewCaseDraft.ts}), which is deliberate rather
+ * than a stopgap — a server-side new-case buffer is a different table with a different lifetime
+ * (what expires an abandoned one, and who sees it), and a draft nobody else can be shown does not
+ * need a server to hold it.
  */
 @Service
 public class CaseDraftService {
@@ -86,7 +96,6 @@ public class CaseDraftService {
     private final ProjectService projects;
     private final TestCaseRepository cases;
     private final TestCaseDraftRepository drafts;
-    private final CaseOwners people;
 
     /**
      * The application's configured mapper, injected for {@link CaseVersions}' reason: a private
@@ -101,13 +110,11 @@ public class CaseDraftService {
             ProjectService projects,
             TestCaseRepository cases,
             TestCaseDraftRepository drafts,
-            CaseOwners people,
             ObjectMapper json,
             Clock clock) {
         this.projects = projects;
         this.cases = cases;
         this.drafts = drafts;
-        this.people = people;
         this.json = json;
         this.clock = clock;
     }
@@ -196,30 +203,30 @@ public class CaseDraftService {
         }
 
         Instant now = clock.instant();
-        Optional<TestCaseDraft> existing = drafts.findScopedById(caseId);
+        Optional<TestCaseDraft> existing = drafts.findScopedById(caseId, userId);
         TestCaseDraft draft = existing
                 .map(stored -> {
-                    stored.overwrite(serialized, userId, now);
+                    stored.overwrite(serialized, now);
                     return stored;
                 })
-                .orElseGet(() -> TestCaseDraft.of(caseId, serialized, userId, now));
+                .orElseGet(() -> TestCaseDraft.of(caseId, userId, serialized, now));
         drafts.save(draft);
 
-        return new Outcome.Found(render(CompanyContext.require(), testCase, draft, request));
+        return new Outcome.Found(render(testCase, draft, request));
     }
 
     /**
-     * The case's buffered draft, if there is one.
+     * The caller's own buffered draft on this case, if there is one.
      *
-     * <p>Read in a transaction and rendered inside it, because {@link CaseOwners} resolves the
-     * author's name through the tenancy filter — §121 phase 4's lesson, where a resolution done
-     * after the transaction closed would have run with no {@code app.current_company} and named
-     * nobody, failing closed and silently.
+     * <p>Read in a transaction and rendered inside it, because the staleness comparison reads the
+     * case row through the tenancy filter — §121 phase 4's lesson, where a resolution done after the
+     * transaction closed would have run with no {@code app.current_company} and read nothing,
+     * failing closed and silently.
      */
     @Transactional(readOnly = true)
     public Outcome findOne(UUID userId, UUID projectId, UUID caseId) {
         GateResult<Outcome> gated = projects.writeGranted(
-                userId, projectId, EDIT_CASE, project -> read(project, caseId));
+                userId, projectId, EDIT_CASE, project -> read(userId, project, caseId));
 
         return switch (gated) {
             case GateResult.Unreachable<Outcome> ignored -> new Outcome.NotFound();
@@ -228,22 +235,21 @@ public class CaseDraftService {
         };
     }
 
-    private Outcome read(Project project, UUID caseId) {
+    private Outcome read(UUID userId, Project project, UUID caseId) {
         Optional<TestCase> found = cases.findLiveInProject(project.getId(), caseId);
         if (found.isEmpty()) {
             return new Outcome.NotFound();
         }
-        Optional<TestCaseDraft> draft = drafts.findScopedById(caseId);
+        Optional<TestCaseDraft> draft = drafts.findScopedById(caseId, userId);
         if (draft.isEmpty()) {
             return new Outcome.Empty();
         }
         return new Outcome.Found(render(
-                CompanyContext.require(), found.get(), draft.get(),
-                deserialize(draft.get().getContent())));
+                found.get(), draft.get(), deserialize(draft.get().getContent())));
     }
 
     /**
-     * Throws the buffer away.
+     * Throws the caller's own buffer away.
      *
      * <p>Discarding a draft that does not exist <strong>succeeds</strong> rather than 404ing. The
      * caller asked for a state — no unsaved work on this case — and that is the state it is in;
@@ -257,7 +263,7 @@ public class CaseDraftService {
             if (cases.findLiveInProject(project.getId(), caseId).isEmpty()) {
                 return new Outcome.NotFound();
             }
-            drafts.deleteForCase(caseId);
+            drafts.deleteForCase(caseId, userId);
             return new Outcome.Discarded();
         });
 
@@ -276,18 +282,17 @@ public class CaseDraftService {
      * {@link CaseDraftView#stale()}.
      */
     private CaseDraftView render(
-            UUID companyId, TestCase testCase, TestCaseDraft draft, CaseDraftInput content) {
+            TestCase testCase, TestCaseDraft draft, CaseDraftInput content) {
 
-        UUID author = draft.getUpdatedBy();
+        // No author lookup any more, and no `updatedBy` on the view. The row is the caller's own
+        // under V64, so the only answer that field could give is "you" — a disclosure of a hazard
+        // the re-key removed, which is exactly the stale-prose shape this repository keeps paying
+        // for. `stale` is what survives, and it is the field that was doing the work.
         return new CaseDraftView(
                 content.lockVersion(),
                 content.lockVersion() == null
                         || content.lockVersion() != testCase.getLockVersion(),
                 draft.getUpdatedAt(),
-                // One lookup, and only when the row names somebody. `updated_by` is nullable in V1,
-                // and CaseOwners returns a HashMap precisely so a null key is a miss rather than the
-                // NullPointerException Map.of() throws by contract (§38, and §121 phase 4's red run).
-                author == null ? null : people.resolve(companyId, List.of(author)).get(author),
                 content.content());
     }
 

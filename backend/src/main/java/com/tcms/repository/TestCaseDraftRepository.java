@@ -17,10 +17,10 @@ import org.springframework.transaction.annotation.Transactional;
 // and readOnly = true puts Hibernate in a mode where the flush is skipped — so the write would
 // silently do nothing on a path where every assertion about the read still passes.
 @Transactional
-public interface TestCaseDraftRepository extends JpaRepository<TestCaseDraft, UUID> {
+public interface TestCaseDraftRepository extends JpaRepository<TestCaseDraft, TestCaseDraftId> {
 
     /**
-     * One case's buffered draft, or empty.
+     * One person's buffered draft on one case, or empty.
      *
      * <p><strong>Empty is the ordinary state of almost every case</strong>, not an edge one: a draft
      * exists only between a keystroke and the next explicit save, so the common answer is nothing.
@@ -29,6 +29,10 @@ public interface TestCaseDraftRepository extends JpaRepository<TestCaseDraft, UU
      * {@code 200 []} on a case with no versions, arriving at a different status code because there
      * is no collection to be empty.
      *
+     * <p><strong>Keyed on the reader as well as the case since {@code V64}</strong> (audit D1). A
+     * colleague's buffer on the same case is a different row and is not served here, which is what
+     * makes the answer to "which draft do I open" one row rather than a choice.
+     *
      * <p><strong>Not {@code findById}</strong>, for the reason {@link CaseFlakeRepository} states: a
      * primary-key lookup resolves through the persistence context and Hibernate filters do not apply
      * to that path. RLS still covers it, and using one layer where both are available is how a
@@ -36,12 +40,21 @@ public interface TestCaseDraftRepository extends JpaRepository<TestCaseDraft, UU
      */
     @Query("""
             SELECT d FROM TestCaseDraft d
-             WHERE d.caseId = :caseId
+             WHERE d.caseId = :caseId AND d.userId = :userId
             """)
-    Optional<TestCaseDraft> findScopedById(@Param("caseId") UUID caseId);
+    Optional<TestCaseDraft> findScopedById(
+            @Param("caseId") UUID caseId, @Param("userId") UUID userId);
 
     /**
-     * Drops a case's buffer — the {@code clears the row} half of V1's comment on the table.
+     * Drops one person's buffer on a case — the {@code clears the row} half of V1's comment on the
+     * table.
+     *
+     * <h2>The caller's own row, and never anybody else's ({@code V64}, audit D1)</h2>
+     *
+     * <p>~~{@link CaseUpdateService} clears the buffer regardless of who saved, because the row is
+     * per case.~~ It clears the <em>saver's</em> buffer now. A colleague's draft survives their
+     * colleague's save and comes back marked stale, which is the whole of what D1 bought: the
+     * previous shape discarded unsaved work belonging to somebody who was not in the room.
      *
      * <h2>A bulk delete rather than {@code delete(entity)}, and the reason is the caller</h2>
      *
@@ -67,7 +80,7 @@ public interface TestCaseDraftRepository extends JpaRepository<TestCaseDraft, UU
     @Modifying
     @Query("""
             DELETE FROM TestCaseDraft d
-             WHERE d.caseId = :caseId
+             WHERE d.caseId = :caseId AND d.userId = :userId
             """)
-    int deleteForCase(@Param("caseId") UUID caseId);
+    int deleteForCase(@Param("caseId") UUID caseId, @Param("userId") UUID userId);
 }

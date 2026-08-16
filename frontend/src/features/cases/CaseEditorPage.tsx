@@ -43,6 +43,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { CaseSchema, fromCasePayload, isBlankStep, toCasePayload, type CaseInput } from './caseSchema';
 import { CaseDraftStatus } from './CaseDraftStatus';
+import { useNewCaseDraft } from './useNewCaseDraft';
+import type { CaseDraft } from '../../api/types';
 import { ClassificationPicker } from './ClassificationPicker';
 import { ConditionEditDialog } from './ConditionEditDialog';
 import { ConditionsPanel } from './ConditionsPanel';
@@ -551,16 +553,29 @@ function CaseEditorForm({
   const movingFolder = mode === 'edit' && !!existing && (existing.suiteId ?? '') !== watch('suiteId');
 
   /*
-    ============================ The autosave buffer (§128) ============================
+    ============================ The autosave buffer (§128, D1) ============================
 
-    `test_case_draft` is a real table with a real writer now, so the editor stops being a screen
-    that loses everything when a tab closes. Edit mode only: the buffer's primary key is a foreign
-    key to `test_case`, so a case being created has nothing to key a draft on — the New Case form
-    is exactly as lossy as it was before, which is stated rather than left to be discovered.
+    `test_case_draft` is a real table with a real writer, so the editor stops being a screen that
+    loses everything when a tab closes.
+
+    TWO BUFFERS, one per mode, behind one banner and one status line:
+
+      * EDIT — the server's, keyed `(case_id, user_id)` since `V64` (audit D1). It is yours, a
+        colleague's save no longer clears it, and what their save does instead is set `stale`.
+      * CREATE — the browser's. `test_case_draft.case_id` is a foreign key to `test_case`, so a case
+        being created still has nothing to key a server row on; §128 stated that and stopped there,
+        leaving the New Case form lossy. `useNewCaseDraft`'s header says why a `localStorage` buffer
+        is the right shape here rather than a smaller version of the server one.
+
+    The two share `useCaseAutosave`, the restore banner and `toCasePayload`/`fromCasePayload` — the
+    same argument that put the mapping in `caseSchema` in the first place. A second copy of the
+    restore flow for create mode is how a field wired into one buffer and forgotten in the other
+    comes back empty.
   */
   const draftQuery = useCaseDraft(projectId, mode === 'edit' ? existing?.id : undefined);
   const saveDraft = useSaveCaseDraft(projectId, existing?.id ?? '');
   const discardDraft = useDiscardCaseDraft(projectId, existing?.id ?? '');
+  const newCaseDraft = useNewCaseDraft(projectId, mode === 'create');
 
   /*
     Whether the restore offer has been answered. `false` until the author accepts or dismisses it —
@@ -573,9 +588,26 @@ function CaseEditorForm({
     back what they had already saved. Nothing errors. Nothing is logged.
   */
   const [restoreDecided, setRestoreDecided] = useState(false);
-  const offeredDraft = draftQuery.data ?? null;
+  /*
+    One offer, from whichever buffer this mode has. The create-mode draft carries no `lockVersion`
+    and is never `stale` — there is no saved case for it to be stale against, which is the one real
+    difference between the two and is expressed here rather than by a second banner.
+  */
+  const offeredDraft:
+    | { updatedAt: string; stale: boolean; content: CaseDraft['content'] }
+    | null =
+    mode === 'create'
+      ? newCaseDraft.offered
+        ? {
+            updatedAt: newCaseDraft.offered.updatedAt,
+            stale: false,
+            content: newCaseDraft.offered.content as CaseDraft['content'],
+          }
+        : null
+      : (draftQuery.data ?? null);
   const promptOpen = !restoreDecided && offeredDraft !== null;
-  const draftSettled = draftQuery.isSuccess || draftQuery.isError;
+  // The browser's buffer is read synchronously on mount, so create mode has nothing to wait for.
+  const draftSettled = mode === 'create' || draftQuery.isSuccess || draftQuery.isError;
 
   /*
     A failed draft read resolves the gate too, and that is a deliberate call rather than an
@@ -585,8 +617,7 @@ function CaseEditorForm({
     of the session. The status line below still reports what the buffer is doing.
   */
   const autosaveEnabled =
-    mode === 'edit' &&
-    !!existing &&
+    (mode === 'create' || !!existing) &&
     draftSettled &&
     !promptOpen &&
     isDirty &&
@@ -599,7 +630,9 @@ function CaseEditorForm({
     budget on CI. That file's header has the measurements.
   */
   const saveDraftContent = (content: Record<string, unknown>) =>
-    saveDraft.mutateAsync({ lockVersion: existing?.lockVersion ?? 0, content });
+    mode === 'create'
+      ? newCaseDraft.save(content)
+      : saveDraft.mutateAsync({ lockVersion: existing?.lockVersion ?? 0, content });
 
   /**
    * Puts the buffered draft back into the form.
@@ -629,7 +662,8 @@ function CaseEditorForm({
     // Discards the row as well as the offer. Keeping it would re-offer the same draft on the next
     // mount, after the author has already said no — and the autosave is about to overwrite it
     // anyway, so leaving it would be a promise to keep something we are about to replace.
-    discardDraft.mutate();
+    if (mode === 'create') newCaseDraft.discard();
+    else discardDraft.mutate();
     setRestoreDecided(true);
   };
 
@@ -686,6 +720,11 @@ function CaseEditorForm({
         navigate(`/projects/${projectId}/cases/${saved.id}`);
       } else {
         const created = await createCase.mutateAsync(payload);
+        // The browser buffer's "and clears the row" (D1) — the same clause V1 writes about the
+        // server one, and it fires for the same reason: a buffer that survived its own create would
+        // offer, on the next visit to New Case, a copy of a case that now exists. AFTER the await,
+        // so a refused create keeps the work rather than clearing it on the way to an error.
+        newCaseDraft.discard();
         enqueueSnackbar(`Created ${created.key}`, { variant: 'success' });
         navigate(`/projects/${projectId}/cases/${created.id}`);
       }
@@ -801,22 +840,21 @@ function CaseEditorForm({
             </Stack>
           }
         >
-          <AlertTitle>Unsaved changes from {formatAge(offeredDraft.updatedAt)}</AlertTitle>
+          <AlertTitle>Your unsaved changes from {formatAge(offeredDraft.updatedAt)}</AlertTitle>
           {/*
-            WHO typed it, and this is not decoration. There is ONE buffer per case, so the draft on
-            offer may be a colleague's — restoring it silently would publish their half-finished
-            sentence under your name, with nothing in the audit trail showing it had ever been
-            theirs. `updatedBy` is on the wire for exactly this sentence.
+            ~~WHO typed it, and this is not decoration: there is ONE buffer per case, so the draft
+            on offer may be a colleague's.~~ → V64 (audit D1) keys the row on the reader, so it is
+            always yours and `updatedBy` left the contract with the hazard it disclosed. What a
+            colleague's save produces is the `stale` sentence below — which is the one that was
+            doing the work all along.
           */}
-          {offeredDraft.updatedBy
-            ? `${offeredDraft.updatedBy.displayName} left work on this case without saving it.`
-            : 'Somebody left work on this case without saving it.'}
+          You left work on this case without saving it.
           {offeredDraft.stale && (
             <>
               {' '}
               <strong>
-                The case has been saved by someone else since this draft was written, so restoring
-                it will discard their change.
+                The case has been saved since this draft was written, so restoring it will discard
+                that change.
               </strong>
             </>
           )}
@@ -830,6 +868,7 @@ function CaseEditorForm({
         getValues={getValues}
         enabled={autosaveEnabled}
         save={saveDraftContent}
+        commitLabel={mode === 'edit' ? 'Save changes' : 'Create case'}
         testId={`${TestIdPrefix}.DraftStatus`}
       />
 

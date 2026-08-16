@@ -1,6 +1,5 @@
 package com.tcms.repository;
 
-import com.tcms.api.UserRef;
 import java.time.Instant;
 
 /**
@@ -21,18 +20,19 @@ import java.time.Instant;
  * @param updatedAt   when it was last buffered. The editor shows it, because "restore unsaved
  *                    changes" means something different for work from four minutes ago and work from
  *                    four weeks ago.
- * @param updatedBy   <strong>who typed it, and this is the field that carries the 1:1 key's
- *                    cost.</strong> There is one buffer per case (see {@link TestCaseDraft}), so the
- *                    draft on offer may be a colleague's. Null when the account no longer resolves,
- *                    which {@link CaseOwners} treats as unattributed everywhere else in this module
- *                    and which reads here as "somebody, no longer in this company" — the honest
- *                    answer, and the reason it is not defaulted to the caller.
  * @param content     the buffered form state, unvalidated. Exactly the shape {@code PATCH} takes.
  */
 public record CaseDraftView(
         Long lockVersion,
         boolean stale,
         Instant updatedAt,
-        UserRef updatedBy,
         CaseUpdateRequest content) {
+
+    // ~~updatedBy — who typed it, and the field that carried the 1:1 key's cost: there was one
+    // buffer per case, so the draft on offer might be a colleague's and adopting it silently would
+    // publish their half-finished sentence under your name.~~ → REMOVED with V64 (audit D1). The
+    // row is keyed on the reader now, so this could only ever answer "you", and a field that
+    // discloses a hazard the schema no longer has is worse than no field: it tells a returning
+    // editor to weigh something that cannot happen. `stale` is what a colleague's save produces
+    // instead, and it was already the field doing the work.
 }

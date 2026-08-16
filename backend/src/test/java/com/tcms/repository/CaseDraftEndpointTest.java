@@ -74,7 +74,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * {@code src/test/java} before writing — §19's first defect and the five repeats since.
  */
 @AutoConfigureMockMvc
-@DisplayName("The case draft buffer — autosave, whose words they are, and the save that clears it")
+@DisplayName("The case draft buffer — autosave, one row per person, and the save that clears yours")
 class CaseDraftEndpointTest extends IntegrationTestBase {
 
     private static final UUID ACME = UUID.fromString("d8000000-0000-4000-8000-00000000000a");
@@ -310,21 +310,50 @@ class CaseDraftEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("the draft names WHO typed it — there is one buffer per case")
-        void theDraftNamesWhoTypedIt() throws Exception {
-            // The 1:1 primary key's cost, made visible. Two people editing one case share the row,
-            // so a returning editor may be offered a colleague's words — and restoring them
-            // silently would publish that person's half-finished sentence under your name, with
-            // nothing in the audit trail showing it had ever been theirs.
+        @DisplayName("ONE BUFFER PER PERSON — a colleague's draft is not yours to be offered")
+        void oneBufferPerPerson() throws Exception {
+            // ~~The 1:1 primary key's cost, made visible: two people editing one case share the
+            // row, so a returning editor may be offered a colleague's words, and restoring them
+            // silently would publish that person's half-finished sentence under your name. The old
+            // assertion read `updatedBy` for exactly that sentence.~~
+            //
+            // → V64 (audit D1). The key is (case_id, user_id), so the engineer's words are the
+            // engineer's row and the lead is offered nothing at all — the 204 below IS the change.
+            // `updatedBy` left the contract with the hazard, because under this key it could only
+            // ever answer "you".
+            put(ENGINEER, ACME, ACME_BANKING, CHECKOUT, draftBody(0, "Engineer's words"));
+
+            assertThat(get(LEAD, ACME, ACME_BANKING, CHECKOUT).getResponse().getStatus())
+                    .as("the lead has buffered nothing on this case, so there is nothing to restore")
+                    .isEqualTo(204);
+
+            put(LEAD, ACME, ACME_BANKING, CHECKOUT, draftBody(0, "Lead's words"));
+
+            assertThat(json.readTree(get(ENGINEER, ACME, ACME_BANKING, CHECKOUT)
+                            .getResponse().getContentAsString())
+                    .get("content").get("title").asText())
+                    .as("and the two rows coexist — the lead's write did not overwrite the engineer's")
+                    .isEqualTo("Engineer's words");
+            assertThat(json.readTree(get(LEAD, ACME, ACME_BANKING, CHECKOUT)
+                            .getResponse().getContentAsString())
+                    .get("content").get("title").asText())
+                    .isEqualTo("Lead's words");
+            assertThat(draftRowCount(ACME)).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("the served draft carries no updatedBy — it could only say \"you\"")
+        void theDraftDoesNotNameItsAuthor() throws Exception {
+            // The removal is asserted rather than left to the schema, because a field that
+            // discloses a hazard the schema no longer has is worse than no field: it asks a
+            // returning editor to weigh whose words these are when the answer is always theirs.
             put(ENGINEER, ACME, ACME_BANKING, CHECKOUT, draftBody(0, "Engineer's words"));
 
             JsonNode body = json.readTree(
-                    get(LEAD, ACME, ACME_BANKING, CHECKOUT).getResponse().getContentAsString());
+                    get(ENGINEER, ACME, ACME_BANKING, CHECKOUT).getResponse().getContentAsString());
 
-            assertThat(body.get("updatedBy").get("id").asText()).isEqualTo(ENGINEER.toString());
-            assertThat(body.get("updatedBy").get("displayName").asText())
-                    .as("resolved inside the service's transaction — an unset company names nobody")
-                    .isEqualTo("E. Engineer");
+            assertThat(body.has("updatedBy")).isFalse();
+            assertThat(body.has("updatedAt")).as("when it was buffered is still served").isTrue();
         }
 
         @Test
@@ -548,18 +577,33 @@ class CaseDraftEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a colleague's save clears YOUR buffer — the shared row, stated")
-        void anotherPersonsSaveClearsIt() throws Exception {
-            // Not a defect, and worth an assertion precisely because it looks like one. The buffer
-            // is per case, so the person who presses Save ends the buffer's job whoever they are.
-            // Pinning it here means a later slice that makes the buffer per-person has to change a
-            // test that says what the old shape was, rather than silently changing behaviour.
+        @DisplayName("a colleague's save LEAVES YOUR BUFFER and marks it stale (V64, was: cleared it)")
+        void anotherPersonsSaveLeavesYoursAlone() throws Exception {
+            // ~~Not a defect, and worth an assertion precisely because it looks like one: the
+            // buffer is per case, so the person who presses Save ends the buffer's job whoever they
+            // are. Pinning it here means a later slice that makes the buffer per-person has to
+            // change a test that says what the old shape was.~~
+            //
+            // → This IS that slice (V64, audit D1). It was a defect after all — a save by somebody
+            // who was not in the room threw away work that was not theirs to throw away — and the
+            // old assertion is kept above, struck through, so the reversal is legible.
             long version = lockVersionOf(ACME, SETTLEMENT);
             put(ENGINEER, ACME, ACME_BANKING, SETTLEMENT, draftBody(version, "engineer's words"));
 
-            patchCase(LEAD, ACME, ACME_BANKING, SETTLEMENT, version, caseEdit("Lead saved"));
+            assertThat(patchCase(LEAD, ACME, ACME_BANKING, SETTLEMENT, version,
+                    caseEdit("Lead saved")).getResponse().getStatus())
+                    .isEqualTo(200);
 
-            assertThat(draftExists(ACME, SETTLEMENT)).isFalse();
+            assertThat(draftExists(ACME, SETTLEMENT, ENGINEER))
+                    .as("the engineer's unsaved work survives a save they did not make")
+                    .isTrue();
+
+            JsonNode offered = json.readTree(get(ENGINEER, ACME, ACME_BANKING, SETTLEMENT)
+                    .getResponse().getContentAsString());
+            assertThat(offered.get("content").get("title").asText()).isEqualTo("engineer's words");
+            assertThat(offered.get("stale").asBoolean())
+                    .as("and what the colleague's save DID do is exactly this — the case moved on")
+                    .isTrue();
         }
 
         @Test
@@ -688,11 +732,26 @@ class CaseDraftEndpointTest extends IntegrationTestBase {
                 .andReturn();
     }
 
+    /** Whether ANYBODY has a buffer on this case — the question the clear-on-save tests ask. */
     private boolean draftExists(UUID companyId, UUID caseId) throws SQLException {
         try (Connection connection = appConnection(companyId);
                 var statement = connection.prepareStatement(
                         "SELECT 1 FROM test_case_draft WHERE case_id = CAST(? AS uuid)")) {
             statement.setString(1, caseId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next();
+            }
+        }
+    }
+
+    /** Whether ONE PERSON has one — the question V64 made different from the one above. */
+    private boolean draftExists(UUID companyId, UUID caseId, UUID userId) throws SQLException {
+        try (Connection connection = appConnection(companyId);
+                var statement = connection.prepareStatement(
+                        "SELECT 1 FROM test_case_draft "
+                                + "WHERE case_id = CAST(? AS uuid) AND user_id = CAST(? AS uuid)")) {
+            statement.setString(1, caseId.toString());
+            statement.setString(2, userId.toString());
             try (ResultSet rows = statement.executeQuery()) {
                 return rows.next();
             }
