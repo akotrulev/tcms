@@ -57,6 +57,23 @@ import org.springframework.validation.annotation.Validated;
  *        is noise rather than a flake — the number a human would then use to decide whether to
  *        quarantine a test. Four is the smallest floor that survives one coincidence: at {@code 1} a
  *        single flip is a perfect score, and at {@code 2} a flip and a recovery still is.
+ * @param stuckJobTimeout how long a job may sit {@code RUNNING} before the reaper calls it failed.
+ *        Fifteen minutes.
+ *        <p><strong>This exists because a worker that dies after claiming leaves a row nobody can
+ *        resolve.</strong> {@code ReportJobRunner}'s header used to argue there should be no reaper
+ *        at all, on the grounds that a stuck job is re-requested by the user — which is true and was
+ *        never the objection: a re-request costs one click, and the *stuck* row stays
+ *        {@code RUNNING} for ever, so the client watching it watches a spinner with no end and no
+ *        error, and the reports list shows a job permanently about to finish. The argument that
+ *        survives is the one about retries, and this reaper does not retry: it moves the row to
+ *        {@code FAILED} with a sentence, and a re-request is still a new row.
+ *        <p>Fifteen minutes rather than a number close to how long a report takes. The reports this
+ *        product computes are seconds of work, so almost any timeout would be correct on duration
+ *        alone — and the failure this guards is a dead process, which does not come back at minute
+ *        fourteen. What a short timeout buys is the chance of failing a job that was merely slow,
+ *        under a lock or a very large project, and that failure is invisible: the client is told the
+ *        report could not be produced while the worker is still producing it, and then the artifact
+ *        lands on a row that says FAILED. Long enough that only a genuinely dead claim reaches it.
  * @param enabled whether {@link ExecutionFactScheduler} is registered at all.
  *        <p><strong>Its real job is the test suite</strong>, exactly as
  *        {@code tcms.case-health.enabled}'s is, and the reason is worth restating because the
@@ -77,6 +94,7 @@ public record ReportingProperties(
         @NotNull Integer failingRepeatedlyWindow,
         @NotNull Duration flakeWindow,
         @NotNull Integer flakeMinimumTransitions,
+        @NotNull Duration stuckJobTimeout,
         boolean enabled) {
 
     /**
@@ -106,6 +124,16 @@ public record ReportingProperties(
                             + "window selects no executions, so every case scores null and the "
                             + "board's quarantine worklist is empty for a reason nobody can see. "
                             + "Was " + flakeWindow);
+        }
+        // A zero or negative timeout reaps every job the instant it is claimed — the worker's own
+        // in-flight row included — so every report fails and the log says the reaper is working.
+        // The other three checks above reject a value that WORKS and is confidently wrong; this one
+        // is the same class.
+        if (stuckJobTimeout != null && (stuckJobTimeout.isZero() || stuckJobTimeout.isNegative())) {
+            throw new IllegalArgumentException(
+                    "tcms.reporting.stuck-job-timeout must be a positive duration — a non-positive "
+                            + "one fails every job at the moment it is claimed, including the one "
+                            + "the worker is running. Was " + stuckJobTimeout);
         }
         if (flakeMinimumTransitions != null && flakeMinimumTransitions < 1) {
             throw new IllegalArgumentException(

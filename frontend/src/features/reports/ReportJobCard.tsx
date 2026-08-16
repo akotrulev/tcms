@@ -1,9 +1,9 @@
 import { Alert, Box, Button, Chip, CircularProgress, Stack, Typography } from '@mui/material';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { Link as RouterLink } from 'react-router-dom';
-import { isJobFinished, useReportJob } from '../../api/queries';
+import { isJobFinished } from '../../api/queries';
 import type { ReportJob } from '../../api/types';
-import { DataRegion } from '../../components/DataRegion';
+import { formatDateTime } from '../../lib/format';
 import {
   humanize,
   reportFormatLabels,
@@ -14,6 +14,17 @@ import { DownloadReportButton } from './DownloadReportButton';
 
 /**
  * One generation request, watched to its end.
+ *
+ * ## It takes the row and fetches nothing — changed in §227
+ *
+ * ~~The card polls its own job by id.~~ It used to, because the screen above it had no list: each
+ * card was the only thing that knew a job existed, so each held its own `useReportJob`. With
+ * `GET …/reports/jobs` serving the whole set, one poll answers every card, and keeping the
+ * per-card fetch would mean *n* requests every two seconds for rows the page already has — plus
+ * two ages of one job on screen whenever a card's poll and the list's landed apart.
+ *
+ * So this is presentational. The page owns the fetching, which is also what lets the region's
+ * loading, empty and failed states be stated once for the panel instead of once per card.
  *
  * ## The four states are four renderings, and FAILED is the one that gets built wrong
  *
@@ -43,9 +54,7 @@ const TestId = 'Reports.Job';
 const formatLabel = (format: string): string =>
   reportFormatLabels[format as keyof typeof reportFormatLabels] ?? format;
 
-export function ReportJobCard({ projectId, jobId }: { projectId: string; jobId: string }) {
-  const job = useReportJob(projectId, jobId);
-
+export function ReportJobCard({ projectId, job }: { projectId: string; job: ReportJob }) {
   return (
     <Box
       data-testid={TestId}
@@ -56,13 +65,7 @@ export function ReportJobCard({ projectId, jobId }: { projectId: string; jobId: 
         p: 2,
       }}
     >
-      <DataRegion
-        testId={`${TestId}.Region`}
-        state={{ ...job, refetch: () => void job.refetch() }}
-        skeleton={<Typography variant="body2">Requesting…</Typography>}
-      >
-        {(row) => <JobBody job={row} projectId={projectId} />}
-      </DataRegion>
+      <JobBody job={job} projectId={projectId} />
     </Box>
   );
 }
@@ -87,6 +90,18 @@ function JobBody({ job, projectId }: { job: ReportJob; projectId: string }) {
           label={formatLabel(job.format)}
           data-testid={`${TestId}.Format`}
         />
+        {/*
+          When it was asked for. On the card rather than only in a tooltip because the list is
+          ordered by it: an order a reader cannot see is one they have to take on trust, and two
+          run summaries of the same project are told apart by nothing else.
+        */}
+        <Typography
+          variant="caption"
+          sx={{ color: 'text.secondary' }}
+          data-testid={`${TestId}.RequestedAt`}
+        >
+          {formatDateTime(job.requestedAt)}
+        </Typography>
         <Box sx={{ flex: 1 }} />
         {running && <CircularProgress size={14} data-testid={`${TestId}.Spinner`} />}
         <Chip
@@ -121,8 +136,9 @@ function JobBody({ job, projectId }: { job: ReportJob; projectId: string }) {
         produced only one of the two from rendering a link to `undefined`.
 
         The view is a real `<Link>`, not an `onClick` navigation: it earns middle-click, ⌘-click
-        and copy-link for free, and copying that link is the one way a report outlives this tab
-        while nothing lists jobs.
+        and copy-link for free. ~~Copying that link is the one way a report outlives this tab
+        while nothing lists jobs.~~ → the list is the way now; the link is how a report is handed
+        to a colleague who holds the project grant.
 
         Neither is permission-gated. The caller held `report:export` to reach the 202 that made
         this card, and a control disabled for the person who created the thing it opens teaches
@@ -148,8 +164,14 @@ function JobBody({ job, projectId }: { job: ReportJob; projectId: string }) {
 
       {running && (
         <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid={`${TestId}.Waiting`}>
-          Generated in the background — this updates itself. Leaving this page loses the link:
-          the report is still made, but nothing in this version can list it again.
+          {/*
+            ~~"Leaving this page loses the link: the report is still made, but nothing in this
+            version can list it again."~~ — true until §227 gave the server a job list, and the
+            single most important sentence on this screen to have removed with it. Copy that
+            describes a gap outlives the gap unless it is deleted in the same change.
+          */}
+          Generated in the background — this updates itself, and it stays in this list when you
+          come back.
         </Typography>
       )}
     </Stack>

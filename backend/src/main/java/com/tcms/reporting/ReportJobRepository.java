@@ -1,5 +1,7 @@
 package com.tcms.reporting;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -8,7 +10,8 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The job record's three reads: claim one, poll one, and find the job an artifact belongs to.
+ * The job record's reads: claim one, poll one, list a project's, find the job an artifact belongs
+ * to, and sweep the ones a dead worker left claimed.
  *
  * <p><strong>{@code @Transactional(readOnly = true)} is not optional.</strong> Isolation is
  * established in {@code CompanyAwareTransactionManager#doBegin}, and Spring Data gives a transaction
@@ -68,4 +71,27 @@ public interface ReportJobRepository extends JpaRepository<ReportJob, UUID> {
             """)
     Optional<ReportJob> findByArtifact(
             @Param("projectId") UUID projectId, @Param("artifactId") UUID artifactId);
+
+    /**
+     * The project's recent generation requests, newest first.
+     *
+     * <p>Bounded in the method name rather than by a {@code Pageable}, because the bound is a
+     * property of the operation and not a choice a caller makes: {@code GET …/reports/jobs} declares
+     * no paging, so a page size that arrived as an argument would be a knob with exactly one
+     * setting, and the day somebody passed a different one the contract would not know.
+     *
+     * <p>Ordered by {@code requestedAt} and not by {@code finishedAt}: a queue is read in the order
+     * things were asked for, and half these rows have no finish time at all.
+     */
+    List<ReportJob> findTop100ByProjectIdOrderByRequestedAtDesc(UUID projectId);
+
+    /**
+     * Jobs claimed before {@code cutoff} and still {@code RUNNING} — the reaper's whole query.
+     *
+     * <p>{@code startedAt} rather than {@code requestedAt}: the age that matters is how long the
+     * work has been <em>claimed</em>, and a job that sat in a long queue before a healthy worker
+     * took it is not stuck. {@code startedAt} is non-null on every {@code RUNNING} row by
+     * construction — {@link ReportJob#claim} writes both in one call — so this needs no null arm.
+     */
+    List<ReportJob> findByStatusAndStartedAtBefore(ReportJobStatus status, Instant cutoff);
 }

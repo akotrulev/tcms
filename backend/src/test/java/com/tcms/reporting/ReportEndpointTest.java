@@ -384,8 +384,26 @@ class ReportEndpointTest extends IntegrationTestBase {
             assertThat(job.get("downloadUrl").asText())
                     .startsWith("/api/v1/projects/" + PROJECT + "/reports/artifacts/")
                     .endsWith("/content");
+            // NOT the artifact route, and that is the §227 change: the on-screen model has a route
+            // of its own so it can cost report:view. A modelUrl under /artifacts/ is the defect —
+            // reading a report would cost exactly what carrying it away costs.
             assertThat(job.get("modelUrl").asText())
-                    .startsWith("/api/v1/projects/" + PROJECT + "/reports/artifacts/");
+                    .isEqualTo("/api/v1/projects/" + PROJECT + "/reports/jobs/" + jobId + "/model");
+            assertThat(job.get("requestedAt").isNull())
+                    .as("a job exists by having been asked for, so this is never null")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("an unfinished job offers no model URL, so a client never asks for one")
+        void anUnfinishedJobHasNoModelUrl() throws Exception {
+            UUID jobId = requestAs(LEAD, PROJECT);
+
+            // Keyed on the artifact id rather than on the status: the two agree in the designed
+            // system and only the artifact id is false for a job completed by a deployment older
+            // than §88's stored model, which is exactly the row that would 404 behind the link.
+            assertThat(parse(poll(LEAD, PROJECT, jobId)).get("modelUrl").isNull()).isTrue();
+            assertThat(model(LEAD, PROJECT, jobId).getResponse().getStatus()).isEqualTo(404);
         }
 
         @Test
@@ -422,6 +440,163 @@ class ReportEndpointTest extends IntegrationTestBase {
     // =====================================================================
     // GET /reports/artifacts/{artifactId}/content — report:export
     // =====================================================================
+
+    /**
+     * The on-screen model — {@code report:view}, and the whole point of the route.
+     *
+     * <p>{@link #SCREEN_ONLY} is what makes this class falsifiable. Until §227 the model was served
+     * through the download route, so that persona — the one §6e's two-key split exists for, and the
+     * one this fixture invents a custom role to express — could watch a job succeed and then be
+     * refused the report it had just watched being made. Every assertion below is green against the
+     * old route if the persona is dropped.
+     */
+    @Nested
+    @DisplayName("The on-screen model — report:view")
+    class Model {
+
+        @Test
+        @DisplayName("the screen-only role reads the model it may not download")
+        void screenOnlyReadsTheModel() throws Exception {
+            UUID jobId = requestAs(LEAD, PROJECT);
+            runWorker();
+
+            MvcResult result = model(SCREEN_ONLY, PROJECT, jobId);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            // JSON and inline: this is a document to render, not a file to keep — which is the
+            // difference the permission split describes, spelled in the response.
+            assertThat(result.getResponse().getContentType())
+                    .startsWith(MediaType.APPLICATION_JSON_VALUE);
+            assertThat(result.getResponse().getHeader("Content-Disposition")).isNull();
+            // The stored model, not a recomputation: §6e's "what you see is what exports" is a
+            // property only while these bytes are the ones the export was rendered from.
+            JsonNode document = json.readTree(result.getResponse().getContentAsString());
+            assertThat(document.get("header")).isNotNull();
+            assertThat(document.get("report").get("title").asText()).contains("Run summary");
+        }
+
+        @Test
+        @DisplayName("the same persona is still refused the download — the split is real in both directions")
+        void screenOnlyStillCannotDownload() throws Exception {
+            // The pair. Without this half the model route could be gated on report:export and the
+            // test above would still pass for a persona that happened to hold both.
+            assertThat(download(SCREEN_ONLY, PROJECT, artifactOfACompletedJob(PROJECT))
+                    .getResponse().getStatus()).isEqualTo(403);
+        }
+
+        @Test
+        @DisplayName("a role holding neither key is refused, with no body")
+        void neitherKeyReadsTheModel() throws Exception {
+            UUID jobId = requestAs(LEAD, PROJECT);
+            runWorker();
+
+            MvcResult result = model(REPORT_BLIND, PROJECT, jobId);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(403);
+            assertThat(result.getResponse().getContentAsByteArray()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a sibling project's job is 404 through this project's path")
+        void theModelIsScopedToTheProjectInThePath() throws Exception {
+            UUID jobId = requestAs(LEAD, SIBLING);
+            runWorker();
+
+            assertThat(model(LEAD, PROJECT, jobId).getResponse().getStatus()).isEqualTo(404);
+            assertThat(model(LEAD, SIBLING, jobId).getResponse().getStatus())
+                    .as("the same job's model reads from its own project, so the 404 above is the "
+                            + "scoping and not a job that never completed")
+                    .isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("a member with no grant gets 404 rather than 403")
+        void noGrantIsNotFound() throws Exception {
+            UUID jobId = requestAs(LEAD, PROJECT);
+            runWorker();
+
+            assertThat(model(NO_GRANT, PROJECT, jobId).getResponse().getStatus()).isEqualTo(404);
+        }
+    }
+
+    /**
+     * The job list — {@code report:view}, and the project's rather than the caller's.
+     *
+     * <p>The opposite call to {@link Definitions}, one nested class down, and the two are asserted
+     * against each other on purpose: a definition is a saved question owned by whoever wrote it,
+     * and a job is a report produced about this project. Getting the list "mine" would hide every
+     * report requested by somebody who has since left ({@code requested_by} is nullable since §66),
+     * which is exactly the history a release wants.
+     */
+    @Nested
+    @DisplayName("Listing jobs — report:view, and the rows are the project's")
+    class Listing {
+
+        @Test
+        @DisplayName("a project with no jobs answers an empty array, not a 404")
+        void anEmptyProjectAnswersEmpty() throws Exception {
+            // SIBLING, because `clearJobs()` runs per test and nothing here has asked for one in
+            // it. A 404 would be the answer to "this project does not exist", which is a different
+            // fact and the one a client must not have to tell apart from "nothing generated yet".
+            MvcResult result = jobs(LEAD, SIBLING);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(parse(result)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("every job the project has, newest first, whoever asked for it")
+        void listsTheProjectsJobs() throws Exception {
+            UUID first = requestAs(LEAD, PROJECT);
+            UUID second = requestAs(LEAD, PROJECT);
+
+            JsonNode rows = parse(jobs(SCREEN_ONLY, PROJECT));
+
+            // SCREEN_ONLY asked for neither, which is the whole assertion: a "mine" reading answers
+            // [] here and passes every other test in this class.
+            assertThat(ids(rows)).contains(first.toString(), second.toString());
+            // Newest first, which is the order the operation declares and the only thing making the
+            // list readable without a second sort in every client. Asserted as the *property* —
+            // `requestedAt` never rising down the list — rather than as a position: two requests a
+            // few milliseconds apart can share a timestamp, and a positional assertion would then
+            // be a coin toss rather than a check on the ORDER BY.
+            // Parsed rather than compared as text: Jackson writes a variable number of fractional
+            // digits, so `…:00Z` and `…:00.5Z` sort the wrong way round as strings.
+            java.util.List<Instant> stamps = new java.util.ArrayList<>();
+            rows.forEach(row -> stamps.add(Instant.parse(row.get("requestedAt").asText())));
+            assertThat(stamps).isSortedAccordingTo(java.util.Comparator.reverseOrder());
+        }
+
+        @Test
+        @DisplayName("a sibling project's jobs are not in this project's list")
+        void theListIsScopedToTheProjectInThePath() throws Exception {
+            UUID sibling = requestAs(LEAD, SIBLING);
+
+            assertThat(ids(parse(jobs(LEAD, PROJECT)))).doesNotContain(sibling.toString());
+            assertThat(ids(parse(jobs(LEAD, SIBLING))))
+                    .as("the same job is in its own project's list, so the absence above is the "
+                            + "scoping and not a job that failed to be written")
+                    .contains(sibling.toString());
+        }
+
+        @Test
+        @DisplayName("a role holding neither key gets 403")
+        void neitherKeyLists() throws Exception {
+            assertThat(jobs(REPORT_BLIND, PROJECT).getResponse().getStatus()).isEqualTo(403);
+        }
+
+        @Test
+        @DisplayName("a member with no grant gets 404 rather than 403")
+        void noGrantIsNotFound() throws Exception {
+            assertThat(jobs(NO_GRANT, PROJECT).getResponse().getStatus()).isEqualTo(404);
+        }
+
+        private java.util.List<String> ids(JsonNode rows) {
+            java.util.List<String> ids = new java.util.ArrayList<>();
+            rows.forEach(row -> ids.add(row.get("jobId").asText()));
+            return ids;
+        }
+    }
 
     @Nested
     @DisplayName("Downloading — report:export")
@@ -938,6 +1113,21 @@ class ReportEndpointTest extends IntegrationTestBase {
     private MvcResult poll(UUID userId, UUID projectId, UUID jobId) throws Exception {
         return mvc.perform(MockMvcRequestBuilders
                         .get("/api/v1/projects/" + projectId + "/reports/jobs/" + jobId)
+                        .header("Authorization", "Bearer " + tokenFor(userId))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andReturn();
+    }
+
+    private MvcResult model(UUID userId, UUID projectId, UUID jobId) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders
+                        .get("/api/v1/projects/" + projectId + "/reports/jobs/" + jobId + "/model")
+                        .header("Authorization", "Bearer " + tokenFor(userId)))
+                .andReturn();
+    }
+
+    private MvcResult jobs(UUID userId, UUID projectId) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders
+                        .get("/api/v1/projects/" + projectId + "/reports/jobs")
                         .header("Authorization", "Bearer " + tokenFor(userId))
                         .accept(MediaType.APPLICATION_JSON))
                 .andReturn();

@@ -22,12 +22,20 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The report pipeline's three operations: ask for one, watch it, take it away.
+ * The report pipeline: ask for one, watch it, read it, take it away — and list what this project has
+ * asked for before.
  *
  * <p>They are one controller because they are one conversation — a client that calls the first calls
- * the other two, in that order, about the same job — and because the download's binary body brings
+ * the others, in that order, about the same job — and because the download's binary body brings
  * response handling that would otherwise sit beside every reporting endpoint written after it
  * ({@code EvidenceController}'s reason for existing separately from {@code RunController}).
+ *
+ * <h2>The list is here and the saved definitions are not</h2>
+ *
+ * <p>{@code GET /jobs} joins this controller rather than {@link ReportDefinitionController} because
+ * a job is the same conversation one step earlier: it answers "which of these reports exists" with
+ * the identical {@link ReportJobView} the accept and the poll answer with. A definition is a
+ * different conversation with a different lifetime, which is that class's whole reason for existing.
  *
  * <h2>The 202 and the poll answer the same shape</h2>
  *
@@ -143,7 +151,66 @@ class ReportController {
     }
 
     /**
-     * The bytes — what {@code ReportJob.downloadUrl} and {@code modelUrl} point at.
+     * Everything this project has generated, newest first.
+     *
+     * <p>The route a report's durable handle depends on: before it, the only way to reach a finished
+     * report was an id a client happened to still be holding, so a reload lost every download link
+     * while the artifacts sat in the store named by nothing a client could ask for.
+     */
+    @GetMapping("/jobs")
+    ResponseEntity<Object> jobs(
+            @AuthenticationPrincipal Jwt jwt, @PathVariable UUID projectId) {
+
+        ReportReadService.Outcome<List<ReportJobView>> outcome =
+                reads.list(UUID.fromString(jwt.getSubject()), projectId);
+
+        return switch (outcome) {
+            case ReportReadService.Outcome.NotFound<List<ReportJobView>> ignored ->
+                    ResponseEntity.notFound().build();
+            case ReportReadService.Outcome.Forbidden<List<ReportJobView>> ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbidden(
+                            "You do not have permission to view reports in this project."));
+            case ReportReadService.Outcome.Found<List<ReportJobView>> found ->
+                    ResponseEntity.ok(found.value());
+        };
+    }
+
+    /**
+     * The report on screen — what {@code ReportJob.modelUrl} points at.
+     *
+     * <p>Served {@code inline} and typed {@code application/json}, where the artifact route below is
+     * {@code attachment} and octet-stream. That is the whole difference between the two, and it is
+     * the difference the permission split describes: this is a document a client parses and renders,
+     * and that one is a file somebody keeps. Neither the filename nor a {@code Content-Disposition}
+     * appears here, because nothing about this response is meant to land in a downloads folder.
+     */
+    @GetMapping("/jobs/{jobId}/model")
+    ResponseEntity<Resource> model(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID jobId) {
+
+        ReportReadService.Outcome<ReportReadService.Download> outcome =
+                reads.openModel(UUID.fromString(jwt.getSubject()), projectId, jobId);
+
+        return switch (outcome) {
+            case ReportReadService.Outcome.NotFound<ReportReadService.Download> ignored ->
+                    ResponseEntity.notFound().build();
+            // Bodiless, for the artifact route's reason one method down: the response is typed to a
+            // binary Resource, and a JSON problem document under a status the client can already
+            // read teaches it nothing it could act on.
+            case ReportReadService.Outcome.Forbidden<ReportReadService.Download> ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            case ReportReadService.Outcome.Found<ReportReadService.Download> found ->
+                    ResponseEntity.ok()
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .contentLength(found.value().blob().size())
+                            .body(new InputStreamResource(found.value().blob().stream()));
+        };
+    }
+
+    /**
+     * The bytes — what {@code ReportJob.downloadUrl} points at.
      *
      * <p>{@code attachment}, where evidence is served {@code inline}: a screenshot is shown beside
      * the step it failed on, and a report is a file somebody keeps. The filename is composed

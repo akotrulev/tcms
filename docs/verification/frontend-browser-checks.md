@@ -2624,3 +2624,38 @@ own half: the mode switch, the copy, and the absence of any navigation.
 | `§223 LD-2` | Submit a wrong password in directory mode | **One sentence, identical to a wrong TCMS password** — "That email and password don't match an account." Anything naming the directory, the provider or a bind is an oracle for which accounts are federated. |
 | `§223 LD-3` | Click **Use my TCMS password instead**, then sign in locally | Local sign-in works from the same screen with no reload — the mode note and the Directory-password label are gone, and the same two inputs carry the local attempt. |
 | `§223 LD-4` | A company with both an OIDC and an LDAP provider enabled: type the address, tab out | **Two buttons; one navigates, one switches.** The OIDC one leaves for the issuer as `§222 SS-4` proved; the LDAP one stays and switches the form. This is `SsoProviderChoice.kind` doing its one job on screen. |
+
+## §227 phase 1 — the reports that stopped disappearing, and the report a reader may open
+
+**Seven rows, none run** (§65). Ids are `§227 RP-*`; `RP` is unused elsewhere in this file — grep
+before minting a prefix (`§154`'s banner).
+
+Lane: **A6 — reports**, which is where the boards and the reporting screens sit. The lane already
+requires runs and results to exist, and `RP-1`–`RP-3` additionally require a report to have been
+generated **and the tab reloaded**, which is the whole point of the slice.
+
+**`RP-4` needs the screen-only persona and there is no seeded role for it.** `report:view` without
+`report:export` is expressible and no built-in role holds that combination — the backend suite
+invents a custom role (`ReportEndpointTest`'s `Report Reader (§87 test fixture)`) and the product
+has no way to create one, because there are no custom roles. **So `RP-4` is undriveable through
+the UI as the product stands**, and it is written here rather than dropped: the options are (a)
+insert a custom `role` + `role_permission` row by hand against the lane's database and grant it,
+which is the same shape §110 used for other unrepresentable states, or (b) accept that the split is
+proved by `ReportEndpointTest.Model` alone and mark the row so. Choosing (b) silently is the thing
+this paragraph exists to prevent.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§227 RP-1` | **A6**, generate a report, wait for it to complete, then **reload the page** | The report is **still listed**, under "Generated reports", with its View and Download controls. Before §227 the reload emptied the panel permanently and the artifact became unreachable. This one row is the slice. |
+| `§227 RP-2` | **A6**, open the reports screen in a **second browser profile** signed in as a different member of the same project | The **same** rows. The list is the project's and not the caller's — a "mine" implementation answers an empty panel here and passes `RP-1`. |
+| `§227 RP-3` | **A6**, on a project where nothing has been generated | The empty region *"No reports yet"*, not a hidden panel and not a spinner. |
+| `§227 RP-4` | **A6**, as a caller holding `report:view` and **not** `report:export` (see the paragraph above): open a completed report's View | **The report renders.** Before §227 this was a 403 and the page said so. If this cannot be driven, say which of (a)/(b) was chosen. |
+| `§227 RP-5` | **A6**, same caller if available: press Download on the same report | **Refused.** The pair — without it the model route could have been gated on `report:export` and `RP-4` would still pass for a caller holding both. |
+| `§227 RP-6` | **A6**, generate a report and type a name into **"Save these settings as"** | The report queues **and** the row appears under "Saved reports". Then press the row's **Generate** (↻): a dialog offering the format alone, and a new job on the list using the saved selection. The saved definition supplies the parameters — if the new report covers a *different* run from the one that was saved, the regenerate is posting the form's own defaults over the saved ones, which is the trap this dialog's header names. |
+| `§227 RP-7` | **A6**, press the row's Delete and confirm | The row goes; **the reports it produced are still in the list above and still download.** `ON DELETE SET NULL` on both columns is what makes that true, and a reader who assumes otherwise is who the dialog's second sentence is for. |
+
+**Not driveable from a browser at all, and named so it is not mistaken for an omission:** the
+reaper. Producing a job stranded in `RUNNING` means killing the process between the claim and the
+completion, which no UI can do; `ReportJobPipelineTest.Reaping` writes the state in SQL and is the
+only observer. What a pass *could* do — and is worth one line if the lane has database access — is
+set a live job's `started_at` back an hour and watch the card turn Failed within thirty seconds.

@@ -345,6 +345,22 @@ tcms:
     # at 2 a flip and a recovery still is. ReportingProperties refuses to start below 1.
     flake-minimum-transitions: ${TCMS_FLAKE_MINIMUM_TRANSITIONS:4}
 
+    # How long a report job may sit RUNNING before the reaper marks it FAILED.
+    #
+    # The failure this guards is a worker that died after claiming: the row stays RUNNING for
+    # ever, the client polling it watches a spinner with no end and no error, and the reports
+    # list shows a job permanently about to finish. It is NOT a retry — the row goes to FAILED
+    # with a sentence and a re-request is still a new row, which is what keeps one request per
+    # row true.
+    #
+    # Fifteen minutes, not a number near how long a report takes. These reports are seconds of
+    # work, so the duration is not what the value is choosing; what a SHORT timeout buys is the
+    # chance of failing a job that was merely slow — under a lock, or on a very large project —
+    # and telling the client it could not be produced while the worker is still producing it.
+    # A dead process does not come back at minute fourteen. ReportingProperties refuses a
+    # non-positive value, which would reap every job at the instant it was claimed.
+    stuck-job-timeout: ${TCMS_STUCK_JOB_TIMEOUT:PT15M}
+
   outbox:
     # The transactional outbox (decision round 3 #52). V1 has carried the table since M0 and
     # CompanyScopedEvent has asserted since M0 that a failed handler lands in it; this is the

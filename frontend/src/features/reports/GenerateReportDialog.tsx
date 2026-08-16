@@ -21,13 +21,20 @@ import {
   useGenerateReport,
   usePlans,
   useRuns,
+  useSaveReportDefinition,
 } from '../../api/queries';
-import type { AggregationPolicy, ReportFormat, ReportJob } from '../../api/types';
+import type {
+  AggregationPolicy,
+  ReportDefinition,
+  ReportFormat,
+  ReportJob,
+} from '../../api/types';
 import { describeError } from '../../lib/describeError';
 import {
   aggregationHelp,
   aggregationLabels,
   docPageStatusLabel,
+  humanize,
   reportFormatHints,
   reportFormatLabels,
   runStatusLabels,
@@ -70,6 +77,33 @@ import {
  * `coverage_matrix` brings the second emptiness gate, and it is a real one rather than symmetry: a
  * coverage matrix's whole spine is a document, so a project with no pages has nothing to report on,
  * exactly as a project with no runs has nothing for a run summary.
+ *
+ * ## Two modes since §227: ad-hoc, and regenerating something saved
+ *
+ * Passing `definition` puts the dialog in the second. Everything the saved row already answers —
+ * the type and the whole parameter selection — is **not rendered**, because the request does not
+ * send it: with a `definitionId` the server takes the type from the definition and *merges* the
+ * request's parameters over the saved ones, so a form that re-posted its own defaults would
+ * silently overwrite the selection somebody saved. Only the format is asked for, which is right:
+ * `report_definition` has no format column on purpose (it is chosen per download, and a saved
+ * report is not the file it produced).
+ *
+ * A blank read of that mode is the trap it was written against — the natural implementation
+ * pre-fills the form from `definition.parameters` and posts it back, which works until a parameter
+ * the form cannot express (this file lists three) is dropped on every regeneration.
+ *
+ * ## Saving is a field on this form, not a screen of its own
+ *
+ * The `POST` and `DELETE` behind saved definitions have been implemented, gated and tested on the
+ * server since §92, and the panel that lists them had no Save control — so the list was `[]` on
+ * every deployment for a reason no reader could see. The control is an optional name on this form
+ * rather than a second dialog because the thing being saved *is* what this form composes; asking
+ * for it anywhere else would mean a second copy of every parameter control.
+ *
+ * The save runs **before** the generate and a failure stops both. The other order queues a report
+ * and then loses the definition, which is the outcome nobody can tell from a save that worked.
+ * Saving costs `report:view` where generating costs `report:export` — two keys on one form, which
+ * is the contract's decision and is stated in `useSaveReportDefinition`.
  *
  * ## Why the aggregate form validates what the server would also refuse
  *
@@ -143,6 +177,9 @@ const ReportSchema = z
     runId: z.string(),
     docPageId: z.string(),
     format: z.enum(['MD', 'HTML', 'PDF']),
+    // Empty means "do not save". Not a checkbox plus a name: a checkbox ticked with an empty name
+    // is a state the form would have to refuse, and the name alone cannot be in it.
+    saveAs: z.string(),
     policy: z.enum(POLICIES),
     planIds: z.array(z.string()),
     featureIds: z.array(z.string()),
@@ -221,6 +258,15 @@ type FormField = keyof ReportFormInput;
 const FIELDS: readonly FormField[] = ['type', 'runId', 'docPageId', 'format'];
 
 /**
+ * The fields the **save** may name, which are not the same three.
+ *
+ * `POST /reports` refuses a blank `name` and an uncomputable `type`; it never sees a run or a
+ * format. Keeping the two lists apart is what stops a save's `type` error landing on a control the
+ * regenerate mode does not render.
+ */
+const SAVE_FIELDS: readonly FormField[] = ['type', 'saveAs'];
+
+/**
  * `yyyy-mm-dd` from a date input to the instant the contract wants.
  *
  * **The range on the wire is half-open and the one on this form is not**, which is the whole
@@ -269,12 +315,23 @@ function aggregateParameters(values: ReportFormInput): Record<string, unknown> {
 function applyServerError(
   error: unknown,
   setError: (field: FormField | 'root', message: string) => void,
+  fields: readonly FormField[] = FIELDS,
+  /**
+   * What the server calls a field, where this form calls it something else.
+   *
+   * One entry, and it exists because the save's `name` is this form's `saveAs` — a control that
+   * also decides *whether* to save, which is why it is not simply called `name`. Without the
+   * rename the server's "give it a name" lands in the banner, three inches from the empty box it
+   * is about.
+   */
+  aliases: Readonly<Record<string, FormField>> = {},
 ) {
   if (error instanceof ApiError && error.fieldErrors) {
     let landed = false;
     const stray: string[] = [];
-    for (const [field, messages] of Object.entries(error.fieldErrors)) {
-      if ((FIELDS as readonly string[]).includes(field)) {
+    for (const [name, messages] of Object.entries(error.fieldErrors)) {
+      const field = aliases[name] ?? name;
+      if ((fields as readonly string[]).includes(field)) {
         setError(field as FormField, messages.join(' '));
         landed = true;
       } else {
@@ -295,14 +352,24 @@ export function GenerateReportDialog({
   open,
   onClose,
   onQueued,
+  definition,
 }: {
   projectId: string;
   open: boolean;
   onClose: () => void;
   /** The 202's job, handed to the screen that will watch it. */
   onQueued: (job: ReportJob) => void;
+  /**
+   * A saved report to regenerate, or absent for an ad-hoc request.
+   *
+   * When present the dialog asks for the format and nothing else — see the header. It is the whole
+   * row rather than an id because the title and the fixed type are read off it, and a dialog that
+   * took an id would have to fetch a list the screen behind it is already holding.
+   */
+  definition?: ReportDefinition;
 }) {
   const generate = useGenerateReport(projectId);
+  const save = useSaveReportDefinition(projectId);
   const runs = useRuns(projectId);
   const pages = useDocPages(projectId);
   const plans = usePlans(projectId);
@@ -322,6 +389,7 @@ export function GenerateReportDialog({
       runId: '',
       docPageId: '',
       format: 'HTML',
+      saveAs: '',
       policy: 'LATEST',
       planIds: [],
       featureIds: [],
@@ -331,15 +399,29 @@ export function GenerateReportDialog({
     mode: 'onBlur',
   });
 
+  /**
+   * The format is the only control in regenerate mode, so it is what the focus goes to there.
+   *
+   * `setFocus('runId')` unconditionally would put the caret in a field that is not rendered — a
+   * no-op that reads as the dialog opening unfocused, which is the a11y failure this effect exists
+   * to prevent.
+   */
   useEffect(() => {
-    if (open) setFocus('runId');
-  }, [open, setFocus]);
+    if (open) setFocus(definition ? 'format' : 'runId');
+  }, [open, setFocus, definition]);
 
   const format = watch('format');
   const type = watch('type');
   const policy = watch('policy');
-  const isAggregate = type === AGGREGATE;
-  const isCoverage = type === COVERAGE;
+  const saveAs = watch('saveAs');
+  /**
+   * Regenerating a saved report. Every parameter control is gated off it, including the two
+   * emptiness alerts: a saved run summary already names its run, so "this project has no runs" is
+   * both irrelevant and, on a project whose runs were archived, false about the report.
+   */
+  const regenerating = !!definition;
+  const isAggregate = !regenerating && type === AGGREGATE;
+  const isCoverage = !regenerating && type === COVERAGE;
   /**
    * The run picker's type, named rather than derived as "not the other two".
    *
@@ -348,9 +430,52 @@ export function GenerateReportDialog({
    * This file's own header records that shape as §66's, which is why the gates below key on what a
    * type NEEDS rather than on what it is not.
    */
-  const needsRun = type === RUN_SUMMARY;
+  const needsRun = !regenerating && type === RUN_SUMMARY;
 
   const submit = handleSubmit(async (values) => {
+    // Regenerating: the definition supplies the type and the base parameters, and the request
+    // deliberately sends neither. See the header.
+    if (definition) {
+      try {
+        const job = await generate.mutateAsync({
+          definitionId: definition.id,
+          format: values.format,
+        });
+        onQueued(job);
+        onClose();
+      } catch (error) {
+        applyServerError(error, (field, message) => setError(field, { type: 'server', message }));
+      }
+      return;
+    }
+
+    /*
+      Saved first, and a failure stops the generate. The other order queues a report and then loses
+      the definition — an outcome indistinguishable, from the screen, from a save that worked.
+    */
+    if (values.saveAs.trim() !== '') {
+      try {
+        await save.mutateAsync({
+          type: values.type,
+          name: values.saveAs.trim(),
+          parameters:
+            values.type === AGGREGATE
+              ? aggregateParameters(values)
+              : values.type === COVERAGE
+                ? { docPageId: values.docPageId }
+                : { runId: values.runId },
+        });
+      } catch (error) {
+        applyServerError(
+          error,
+          (field, message) => setError(field, { type: 'server', message }),
+          SAVE_FIELDS,
+          { name: 'saveAs' },
+        );
+        return;
+      }
+    }
+
     try {
       const job = await generate.mutateAsync({
         type: values.type,
@@ -396,13 +521,27 @@ export function GenerateReportDialog({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
-      <form onSubmit={submit} noValidate aria-busy={generate.isPending}>
-        <DialogTitle>Generate a report</DialogTitle>
+      <form onSubmit={submit} noValidate aria-busy={generate.isPending || save.isPending}>
+        <DialogTitle>
+          {definition ? `Generate “${definition.name}”` : 'Generate a report'}
+        </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {errors.root && (
               <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
                 {errors.root.message}
+              </Alert>
+            )}
+            {definition && (
+              /*
+                What the saved row decides, said rather than rendered as disabled controls. A greyed
+                form full of somebody's saved selection invites the reading that it can be adjusted
+                here — which is the one thing the request cannot express without overwriting the
+                saved parameters it merges over.
+              */
+              <Alert severity="info" data-testid={`${TestId}.FromDefinition`}>
+                This uses the settings saved with <strong>{definition.name}</strong> —{' '}
+                {humanize(definition.type)}. Choose the format to produce it in.
               </Alert>
             )}
             {/*
@@ -417,6 +556,7 @@ export function GenerateReportDialog({
                 nothing to report on until a run has been started.
               </Alert>
             )}
+            {!regenerating && (
             <TextField
               label="Report"
               required
@@ -440,6 +580,7 @@ export function GenerateReportDialog({
                 </MenuItem>
               ))}
             </TextField>
+            )}
             {isCoverage && pages.isSuccess && documents.length === 0 && (
               <Alert severity="info" data-testid={`${TestId}.NoDocuments`}>
                 This project has no documentation pages yet. A coverage matrix reports on the
@@ -671,6 +812,27 @@ export function GenerateReportDialog({
                 </MenuItem>
               ))}
             </TextField>
+            {/*
+              Optional, and the helper text says what "saved" does and does not cover: the format is
+              chosen per download and is NOT part of a definition, which is a surprise worth
+              spending a clause on rather than discovering by regenerating one.
+
+              Not rendered while regenerating — saving a definition that came from a definition is
+              a second copy of the same question, and the parameters this form would save in that
+              mode are the empty ones it did not render.
+            */}
+            {!regenerating && (
+              <TextField
+                label="Save these settings as"
+                error={!!errors.saveAs}
+                helperText={
+                  errors.saveAs?.message ??
+                  'Optional. A saved report keeps its selection so the same one can be produced next release — the format is chosen each time.'
+                }
+                slotProps={{ htmlInput: { 'data-testid': `${TestId}.SaveAs` } }}
+                {...register('saveAs')}
+              />
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -686,12 +848,19 @@ export function GenerateReportDialog({
             // recorded yet.
             disabled={
               generate.isPending ||
+              save.isPending ||
               (needsRun && available.length === 0) ||
               (isCoverage && documents.length === 0)
             }
             data-testid={`${TestId}.Submit`}
           >
-            {generate.isPending ? 'Requesting…' : 'Generate'}
+            {save.isPending
+              ? 'Saving…'
+              : generate.isPending
+                ? 'Requesting…'
+                : saveAs.trim() !== ''
+                  ? 'Save and generate'
+                  : 'Generate'}
           </Button>
         </DialogActions>
       </form>

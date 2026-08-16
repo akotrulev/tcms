@@ -1,5 +1,6 @@
 package com.tcms.reporting;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -30,15 +31,27 @@ import java.util.UUID;
  * path is project-scoped because that is what the download gate resolves against — see
  * {@link ReportJobRepository#findByArtifact} for why the artifact alone cannot scope itself.
  *
+ * <h2>The two URLs name two routes, and the difference is a permission</h2>
+ *
+ * <p>{@code downloadUrl} is the artifact route ({@code report:export}); {@code modelUrl} is the
+ * job's own model route ({@code report:view}). They used to be the same route with the same key,
+ * which made reading a report on screen cost exactly what carrying it away costs — the two-key split
+ * §6e describes, unexpressible in the product that declared it. The model URL is composed from the
+ * <em>job</em> id rather than the artifact id for that reason: the gate that answers it is the poll's
+ * gate, and a route keyed by artifact would have to prove the artifact's project through the job
+ * anyway ({@link ReportJobRepository#findByArtifact}).
+ *
  * @param modelUrl the serialized {@link ReportModel} — written for every job, so the on-screen view
  *     and the export are one model rendered twice rather than two computations that can disagree
- *     (plan §6e). Equal to {@code downloadUrl} when the requested format was itself JSON.
+ *     (plan §6e). Null in exactly the states that have no stored model, so a client that follows the
+ *     field never asks for one that is not there.
  */
 public record ReportJobView(
         UUID jobId,
         String type,
         String status,
         String format,
+        Instant requestedAt,
         String downloadUrl,
         String modelUrl,
         String error) {
@@ -49,9 +62,25 @@ public record ReportJobView(
                 job.getType(),
                 job.getStatus().name(),
                 job.getFormat().name(),
+                job.getRequestedAt(),
                 contentUrl(job.getProjectId(), job.getArtifactId()),
-                contentUrl(job.getProjectId(), job.getModelArtifactId()),
+                modelUrl(job),
                 job.getError());
+    }
+
+    /**
+     * The on-screen model's route, or null when there is nothing stored to serve.
+     *
+     * <p>Keyed on {@code modelArtifactId} rather than on {@code status}: the two agree in the
+     * designed system, and the artifact id is the one that is actually false when a deployment older
+     * than §88 completed the job. Reading the status instead would offer a URL that 404s on exactly
+     * the rows this field exists to describe.
+     */
+    private static String modelUrl(ReportJob job) {
+        return job.getModelArtifactId() == null
+                ? null
+                : "/api/v1/projects/" + job.getProjectId() + "/reports/jobs/" + job.getId()
+                        + "/model";
     }
 
     /**

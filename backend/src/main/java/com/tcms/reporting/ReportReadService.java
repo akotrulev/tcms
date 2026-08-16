@@ -4,26 +4,34 @@ import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
 import com.tcms.storage.ReportStore;
 import com.tcms.storage.StoredBlob;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The two reads a generated report needs: where did my job get to, and give me the bytes.
+ * The reads a generated report needs: what has this project produced, where did my job get to, show
+ * it to me, and give me the bytes.
  *
  * <p>Separate from {@link ReportJobService}, whose header says it in one line — that class is the
- * request half and writes one row. These two share nothing with it but the table, and they are the
+ * request half and writes one row. These share nothing with it but the table, and they are the
  * only things in the module that a person waits on.
  *
- * <h2>Two endpoints, two keys, and the split is not arbitrary</h2>
+ * <h2>Four endpoints, two keys, and the split is not arbitrary</h2>
  *
- * <p>The poll costs {@code report:view} and the download costs {@code report:export}, both seeded by
- * {@code V3} since M0 and neither invented here — a key {@code V3} seeds to nobody is a 403 no
- * administrator can grant their way out of (§67's argument against {@code evidence:read}, §79's,
- * §80's, §82's). Watching your own request finish is not taking anything away; fetching the file is
- * exactly what "export" names. A role that may read reports on screen and not carry them off is
- * therefore expressible, which is the only reason the catalogue has two keys rather than one.
+ * <p>The list, the poll and the on-screen model cost {@code report:view}; the download costs
+ * {@code report:export}. Both keys were seeded by {@code V3} since M0 and neither is invented here —
+ * a key {@code V3} seeds to nobody is a 403 no administrator can grant their way out of (§67's
+ * argument against {@code evidence:read}, §79's, §80's, §82's). Watching your own request finish is
+ * not taking anything away, and neither is reading the report on screen; fetching the file is
+ * exactly what "export" names. A role that may read reports and not carry them off is therefore
+ * expressible, which is the only reason the catalogue has two keys rather than one.
+ *
+ * <p>~~That role was expressible in the catalogue and not in the product~~ → <strong>closed by
+ * {@link #openModel}.</strong> Until it existed the on-screen view was served through {@link #open},
+ * so reading a report cost the export key and the two-key split described a distinction nothing
+ * implemented.
  *
  * <h2>Both gates answer 403 where every other read in the product answers 404</h2>
  *
@@ -102,6 +110,61 @@ class ReportReadService {
         return gate(projects.readGranted(userId, projectId, VIEW_REPORT,
                 project -> jobs.findByIdAndProjectId(jobId, project.getId())
                         .map(ReportJobView::of)));
+    }
+
+    /**
+     * The project's recent generation requests, newest first.
+     *
+     * <p>Costs {@link #VIEW_REPORT}, the same key as {@link #poll}, because it answers the same rows
+     * — a list gated above the thing it lists would refuse a caller the ids they can already resolve
+     * one at a time.
+     *
+     * <p><strong>The project's jobs, not the caller's</strong>, which is the opposite call to
+     * {@link ReportDefinitionService#list}. A definition is a saved question owned by whoever wrote
+     * it; a job is a report produced <em>about this project</em>, and {@code requested_by} is
+     * nullable since §66 — so a "mine" reading would hide every report requested by somebody who has
+     * since left, which is exactly the history a release wants.
+     *
+     * <p>An empty list is served for a reachable project with no jobs, and a 404 for an unreachable
+     * one; the gate below cannot tell a caller which by design (§6t).
+     */
+    @Transactional(readOnly = true)
+    Outcome<List<ReportJobView>> list(UUID userId, UUID projectId) {
+        return gate(projects.readGranted(userId, projectId, VIEW_REPORT,
+                project -> Optional.of(
+                        jobs.findTop100ByProjectIdOrderByRequestedAtDesc(project.getId()).stream()
+                                .map(ReportJobView::of)
+                                .toList())));
+    }
+
+    /**
+     * The stored model a job produced — what the on-screen view renders.
+     *
+     * <p><strong>{@link #VIEW_REPORT}, and this method is the whole reason the split is real.</strong>
+     * The model used to be reached through {@link #open}, which is the download and costs
+     * {@link #EXPORT_REPORT} — so the persona §6e's two keys exist for, <em>may read on screen and
+     * may not carry off</em>, could watch a job succeed and then be refused the report it had just
+     * watched being made. Both keys were seeded by {@code V3} in M0 and the product had no way to
+     * tell them apart until here.
+     *
+     * <p>Not {@code @Transactional}, for {@link #open}'s reason: what escapes is an open stream the
+     * controller writes to the response after this method returns.
+     *
+     * <p>A job with no {@code modelArtifactId} — unfinished, failed, or generated by a deployment
+     * older than §88's JSON artifact — is a {@code NotFound}. {@code ReportJob.modelUrl} is null in
+     * exactly those cases, so a client following the field never arrives here.
+     */
+    Outcome<Download> openModel(UUID userId, UUID projectId, UUID jobId) {
+        Outcome<Located> located = gate(projects.readGranted(userId, projectId, VIEW_REPORT,
+                project -> jobs.findByIdAndProjectId(jobId, project.getId())
+                        .map(ReportJob::getModelArtifactId)
+                        .flatMap(modelId -> locate(project.getId(), modelId))));
+
+        return switch (located) {
+            case Outcome.NotFound<Located> ignored -> new Outcome.NotFound<>();
+            case Outcome.Forbidden<Located> ignored -> new Outcome.Forbidden<>();
+            case Outcome.Found<Located> found -> read(found.value());
+        };
     }
 
     /**

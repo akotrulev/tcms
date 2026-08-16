@@ -19,7 +19,9 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -361,6 +363,104 @@ class ReportJobPipelineTest extends IntegrationTestBase {
             // There is no retry policy on purpose — the user re-requests, which is a NEW row, so
             // the record of what was asked and what it produced stays one request per row.
             assertThat(runIn(ACME)).isZero();
+        }
+    }
+
+    /**
+     * The reaper — a job whose worker died after claiming it.
+     *
+     * <p>The failure it closes has no symptom anywhere: the row stays {@code RUNNING} for ever, the
+     * client polling it watches a spinner with no end and no {@code error}, and the reports list
+     * shows a job permanently about to finish. {@code ReportJobRunner}'s header used to argue
+     * against a reaper, and every word of that argument was about <em>retrying</em> — which this
+     * does not do.
+     *
+     * <p>The stuck state is written in SQL rather than produced by killing a worker, because the
+     * thing under test is what the sweep does with a row in that state, and there is no way to
+     * abandon a claim from inside a single-threaded test that does not also change the code being
+     * tested.
+     */
+    @Nested
+    @DisplayName("Reaping")
+    class Reaping {
+
+        @Test
+        @DisplayName("a claim older than the timeout becomes FAILED, with a sentence for the client")
+        void anAbandonedClaimIsFailed() throws SQLException {
+            UUID jobId = accepted(request(LEAD, ACME_PROJECT, RUN_SUMMARY, ReportFormat.MD));
+            abandon(jobId, Duration.ofHours(1));
+
+            assertThat(runIn(ACME))
+                    .as("the reaped row counts as work the tick did")
+                    .isEqualTo(1);
+
+            ReportJob job = readIn(ACME, () -> jobs.findById(jobId).orElseThrow());
+            assertThat(job.getStatus()).isEqualTo(ReportJobStatus.FAILED);
+            // A sentence about the report, written for the person watching — never a stack frame,
+            // and never left null, which is the one state nobody can act on.
+            assertThat(job.getError()).contains("stopped before it finished");
+            assertThat(job.getError()).doesNotContain("Exception");
+            // NOT back to PENDING. A re-request is a new row, so the record of what was asked for
+            // and what it produced stays one request per row.
+            assertThat(job.getArtifactId()).isNull();
+            assertThat(runIn(ACME))
+                    .as("a reaped job is not retried by the next tick either")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("a claim younger than the timeout is left alone")
+        void aRecentClaimSurvives() throws SQLException {
+            UUID jobId = accepted(request(LEAD, ACME_PROJECT, RUN_SUMMARY, ReportFormat.MD));
+            // One minute against a fifteen-minute timeout. Without this half the sweep could be
+            // reaping every RUNNING row it sees — including the one a healthy worker is on — and
+            // the test above would still be green.
+            abandon(jobId, Duration.ofMinutes(1));
+
+            assertThat(runIn(ACME)).isZero();
+            assertThat(readIn(ACME, () -> jobs.findById(jobId).orElseThrow()).getStatus())
+                    .isEqualTo(ReportJobStatus.RUNNING);
+        }
+
+        @Test
+        @DisplayName("another company's stranded job is not this company's to reap")
+        void theSweepIsBoundedByTheOpenCompany() throws SQLException {
+            UUID umbraJob = accepted(
+                    request(UMBRA_LEAD, UMBRA_PROJECT, RUN_SUMMARY, ReportFormat.MD));
+            abandon(UMBRA, umbraJob, Duration.ofHours(1));
+
+            // The sweep runs the same unqualified query the claim does, so it is bounded by RLS and
+            // the Hibernate filter alone — and a sweep that ran across companies would be a worker
+            // failing another tenant's reports.
+            assertThat(runIn(ACME)).isZero();
+            assertThat(readIn(UMBRA, () -> jobs.findById(umbraJob).orElseThrow()).getStatus())
+                    .isEqualTo(ReportJobStatus.RUNNING);
+        }
+
+        private void abandon(UUID jobId, Duration age) throws SQLException {
+            abandon(ACME, jobId, age);
+        }
+
+        /**
+         * Puts a job in the state a dead worker leaves: RUNNING, claimed {@code age} ago.
+         *
+         * <p>The company is a parameter because the connection is RLS-bound — an update run with
+         * the wrong company open touches zero rows and the assertion below is what says so, rather
+         * than a test that quietly proves nothing.
+         */
+        private void abandon(UUID companyId, UUID jobId, Duration age) throws SQLException {
+            try (Connection connection = appConnection(companyId);
+                    PreparedStatement statement = connection.prepareStatement("""
+                            UPDATE report_job
+                               SET status = 'RUNNING', attempts = 1, started_at = ?
+                             WHERE id = ?
+                            """)) {
+                statement.setObject(1, Instant.now().minus(age).atOffset(ZoneOffset.UTC));
+                statement.setObject(2, jobId);
+                assertThat(statement.executeUpdate())
+                        .as("the fixture must have updated exactly the job it named")
+                        .isEqualTo(1);
+            }
         }
     }
 

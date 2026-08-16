@@ -27,17 +27,18 @@ import { drivingAFailedRead } from '../../test/renderFailures'
  *   3. **A COMPLETED job renders the STORED model** — the artifact the export was rendered from,
  *      fetched from the URL the server composed, verbatim. If this screen ever recomputed instead,
  *      §6e's "what you see is what exports" would become a promise rather than a property.
- *   4. **The 403 is worded, not generic** — and it is the slice's finding: the artifact route is
+ *   4. **The 403 is worded, not generic.** ~~And it is the slice's finding: the artifact route is
  *      gated on `report:export`, so a persona holding `report:view` alone can watch this job
- *      succeed and then be refused the report it watched being made. Unobservable in mock mode,
- *      which signs in holding every key.
+ *      succeed and then be refused the report it watched being made.~~ → closed in §227, which
+ *      gave the model its own route under `report:view`. What is left is the ordinary refusal,
+ *      still worded rather than generic.
  *   5. **A COMPLETED job with no stored model says so.** With no URL there is no request to
  *      succeed or fail, so anything less than an explicit statement is a spinner that never stops.
  */
 
 const PROJECT = '11111111-1111-1111-1111-111111111111'
 const JOB = 'job-1'
-const MODEL_URL = `/api/v1/projects/${PROJECT}/reports/artifacts/model-1/content`
+const MODEL_URL = `/api/v1/projects/${PROJECT}/reports/jobs/${JOB}/model`
 const DOWNLOAD_URL = `/api/v1/projects/${PROJECT}/reports/artifacts/artifact-1/content`
 
 const job = (over: Record<string, unknown> = {}) => ({
@@ -45,6 +46,7 @@ const job = (over: Record<string, unknown> = {}) => ({
   type: 'run_summary',
   status: 'COMPLETED',
   format: 'HTML',
+  requestedAt: '2026-08-16T09:30:00Z',
   downloadUrl: DOWNLOAD_URL,
   modelUrl: MODEL_URL,
   error: null,
@@ -184,9 +186,11 @@ describe('ReportViewPage', () => {
     renderPage()
 
     const refusal = await screen.findByTestId('ReportView.Forbidden')
-    // Names the key, because "the permission this view needs" is true and useless — and says the
-    // on-screen view costs the same key as the download, which is the surprising part.
-    expect(refusal).toHaveTextContent(/report:export/)
+    // Names the key, because "the permission this view needs" is true and useless. ~~And says the
+    // on-screen view costs the same key as the download, which is the surprising part.~~ → §227
+    // gave the model its own route under `report:view`, so the surprising half is gone and the
+    // key named is the one that is actually missing.
+    expect(refusal).toHaveTextContent(/report:view/)
     expect(screen.queryByTestId('ReportView.Model.Error')).not.toBeInTheDocument()
   })
 

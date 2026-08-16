@@ -16,15 +16,12 @@ import { ReportView } from './ReportView';
  *
  * `ui-rules` §7: a modal is for a short, self-contained task that needs the screen behind it. A
  * report is neither — it is a document somebody reads, scrolls, and refers back to, and it benefits
- * from a URL in the one way this feature badly needs. **A job id in the address bar is the only
- * durable handle a report has in this version**: nothing lists jobs, so §89's cards live in
- * component state and a reload loses them. A link to *this* URL survives that, and can be pasted to
- * a colleague who holds the project grant.
+ * from a URL: a link to *this* address can be pasted to a colleague who holds the project grant.
  *
- * That is **not** the client-side job register §89 refused. The refusal was about inventing a list
- * the server does not have; this URL names one job and is resolved by the server's own
- * `GET …/reports/jobs/{jobId}`, which is the operation that exists. A list endpoint is still the
- * missing piece and still the server's.
+ * ~~A job id in the address bar is the only durable handle a report has in this version: nothing
+ * lists jobs, so §89's cards live in component state and a reload loses them. … A list endpoint is
+ * still the missing piece and still the server's.~~ → **§227 shipped it.** The reports screen reads
+ * `GET …/reports/jobs`, so this URL is now a convenience rather than the only way back to a report.
  *
  * ## The page is a job first and a report second, because the job is what exists
  *
@@ -35,16 +32,17 @@ import { ReportView } from './ReportView';
  * fetch that has not been made, and when the poll lands COMPLETED the model request fires by
  * itself. FAILED renders the worker's sentence and stops — the poll stops with it.
  *
- * ## The 403 is the slice's finding and is worded here rather than left generic
+ * ## The 403 is worded here rather than left generic, and what it means changed in §227
  *
- * The artifact route is gated on **`report:export`**, because it is the download route and the
+ * ~~The artifact route is gated on **`report:export`**, because it is the download route and the
  * stored model is served through it. So a persona holding `report:view` alone — the split §6e
  * describes and §87 built a custom role to make expressible, *"may read on screen, may not carry
  * off"* — can watch this job succeed and then be refused the report it just watched being made.
- * `describeError`'s generic 403 copy would tell them to ask for "the permission this view needs",
- * which is true and useless; the sentence below names the key and says plainly that the on-screen
- * view and the download are the same permission today. The fix belongs to the server and is
- * recorded in the handoff — this screen must not pretend the split works.
+ * The fix belongs to the server and is recorded in the handoff — this screen must not pretend the
+ * split works.~~ → **the server fixed it.** `modelUrl` points at `GET …/reports/jobs/{jobId}/model`
+ * and costs `report:view`, so this 403 is now the ordinary one: a caller who cannot read reports
+ * here at all. The sentence still names the key, because `describeError`'s generic copy would say
+ * "the permission this view needs", which is true and useless.
  */
 
 const TestId = 'ReportView';
@@ -154,12 +152,11 @@ function JobBody({
     return (
       <Alert severity="warning" data-testid={`${TestId}.Forbidden`}>
         <AlertTitle sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
-          You can watch this report being made, but not open it
+          You cannot read reports in this project
         </AlertTitle>
         <Typography variant="body2">
-          Reading a report on screen needs the same permission as downloading one
-          (<strong>report:export</strong>), which you do not have on this project. Ask a project lead
-          to grant it.
+          Opening a report needs <strong>report:view</strong>, which you do not have here. Ask a
+          project lead to grant it.
         </Typography>
       </Alert>
     );

@@ -180,10 +180,13 @@ export {
   isJobFinished,
   TERMINAL_JOB_STATES,
   useDashboard,
+  useDeleteReportDefinition,
   useGenerateReport,
   useReportDefinitions,
   useReportJob,
+  useReportJobs,
   useReportModel,
+  useSaveReportDefinition,
 } from './reporting';
 export {
   useApiTokens,

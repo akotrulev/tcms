@@ -132,6 +132,15 @@ export const keys = {
    */
   reportJob: (p: string, jobId: string) => ['projects', p, 'reports', 'jobs', jobId] as const,
   /**
+   * Every generation request this project has made (§227's list).
+   *
+   * A **prefix** of `reportJob` above, deliberately: the list and the single-job poll answer the
+   * same rows, so invalidating the list after a generate brings both current in one call. The
+   * alternative — a sibling key like `['reports', 'jobList']` — makes a screen holding a card and
+   * the list show two ages of one job, which is the drift the key factory exists to prevent.
+   */
+  reportJobs: (p: string) => ['projects', p, 'reports', 'jobs'] as const,
+  /**
    * The stored model that job produced (F2's on-screen view).
    *
    * Keyed by the **job** and not by the artifact URL, though the URL is what the request sends. The

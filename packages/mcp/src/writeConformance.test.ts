@@ -221,6 +221,7 @@ const REPORT_JOB = {
   type: 'run_summary',
   status: 'PENDING',
   format: 'HTML',
+  requestedAt: '2026-08-16T09:30:00Z',
   downloadUrl: null,
   modelUrl: null,
   error: null,
