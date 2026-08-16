@@ -6,11 +6,12 @@ import { useForm } from 'react-hook-form';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError, BASE } from '../../api/client';
-import { useDirectoryLogin, useSsoProviders } from '../../api/queries';
+import { useDirectoryLogin, useSocialProviders, useSsoProviders } from '../../api/queries';
 import type { SsoProviderChoice } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
 import { useAuth } from '../../auth/useAuth';
 import { offerToSaveCredentials } from '../../lib/credentials';
+import { socialProviderLabels } from '../../lib/labels';
 import { rememberSsoReturnPath } from './ssoReturnPath';
 
 /**
@@ -79,6 +80,16 @@ export function LoginPage() {
    */
   const discovery = useSsoProviders();
   const providers = discovery.data?.providers ?? [];
+
+  /**
+   * The instance-level social buttons (V58) — unlike discovery these are not an oracle for
+   * anything: the answer is operator configuration, identical for every caller, so they render
+   * unconditionally rather than per address. An empty answer and a failed read both render as
+   * no section at all, because a sign-in screen with a "social sign-in is broken" banner tells
+   * an anonymous caller something and helps nobody.
+   */
+  const social = useSocialProviders();
+  const socialProviders = social.data?.providers ?? [];
 
   /** Set when {@link SsoCallbackPage} sent them back. One sentence, no cause — see that file. */
   const ssoFailed = navState?.ssoFailed === true;
@@ -445,6 +456,34 @@ export function LoginPage() {
                 }}
               >
                 Continue with {provider.displayName}
+              </Button>
+            ))}
+          </Stack>
+        )}
+
+        {socialProviders.length > 0 && (
+          <Stack sx={{ gap: 1, mt: 2 }} data-testid={`${TestIdPrefix}.SocialProviders`}>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              Or continue with
+            </Typography>
+            {socialProviders.map((provider) => (
+              <Button
+                key={provider}
+                variant="outlined"
+                size="large"
+                fullWidth
+                data-testid={`${TestIdPrefix}.SocialProvider`}
+                /*
+                  A NAVIGATION, not a fetch — the company-SSO buttons' reasoning verbatim: the
+                  endpoint answers 302 to a third-party origin, and the point is to put the
+                  browser itself at that provider's login page.
+                */
+                onClick={() => {
+                  rememberSsoReturnPath(from);
+                  window.location.assign(`${BASE}/auth/social/${provider}/authorize`);
+                }}
+              >
+                Continue with {socialProviderLabels[provider]}
               </Button>
             ))}
           </Stack>
