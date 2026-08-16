@@ -129,6 +129,25 @@ tcms:
       ttl: PT8H
       remember-me-ttl: P30D
 
+    # Instance-level social sign-in (GitHub / GitLab / Google) — the 2026-08-16 plan. These are
+    # authorities for PEOPLE, not companies, so their relying-party credentials are operator
+    # configuration and never identity_provider rows. ABSENT MEANS OFF: a provider is a live
+    # sign-in route exactly when both halves are present (SocialProperties.configured), so the
+    # empty default `${VAR:}` is correct here — these are optional features, not required
+    # secrets, and §108's no-colon rule is about values the app must refuse to start without.
+    social:
+      github:
+        client-id: ${TCMS_SOCIAL_GITHUB_CLIENT_ID:}
+        client-secret: ${TCMS_SOCIAL_GITHUB_CLIENT_SECRET:}
+      gitlab:
+        client-id: ${TCMS_SOCIAL_GITLAB_CLIENT_ID:}
+        client-secret: ${TCMS_SOCIAL_GITLAB_CLIENT_SECRET:}
+      google:
+        client-id: ${TCMS_SOCIAL_GOOGLE_CLIENT_ID:}
+        client-secret: ${TCMS_SOCIAL_GOOGLE_CLIENT_SECRET:}
+      # Separate so a self-managed GitLab works; blank means gitlab.com.
+      gitlab-base-url: ${TCMS_SOCIAL_GITLAB_BASE_URL:}
+
   identity:
     # The key every OIDC client secret is encrypted with. NO COLON, for §108's reason: `${VAR:?msg}`
     # is shell and Compose syntax that Spring reads as a DEFAULT, and this repository has already
