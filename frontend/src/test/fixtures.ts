@@ -29,6 +29,7 @@ import type {
   AuthResult,
   Configuration,
   CurrentUser,
+  DocPageSearchHit,
   DocPageSummary,
   ExternalLink,
   IdentityProvider,
@@ -308,6 +309,15 @@ export function aTeam(overrides: Partial<Team> = {}): Team {
 
 export function aDocPageSummary(overrides: Partial<DocPageSummary> = {}): DocPageSummary {
   return { id: 'dp1', key: 'DOC-1', title: 'A page', slug: 'a-page', status: 'DRAFT', updatedAt: AT, ...overrides }
+}
+
+/**
+ * One search hit. `snippet` is required on the wire and nullable — a page with no blocks matched on
+ * its title alone — so it defaults to a fragment rather than to null: a factory whose default was
+ * the absent case would make every search test drive the one branch that renders nothing.
+ */
+export function aDocPageSearchHit(overrides: Partial<DocPageSearchHit> = {}): DocPageSearchHit {
+  return { ...aDocPageSummary(), snippet: 'a fragment of the page', ...overrides }
 }
 
 /**

@@ -13,6 +13,7 @@ import type {
   BlockLinkInput,
   DocPage,
   DocPageInput,
+  DocPageSearchHit,
   DocPageStatus,
   DocPageSummary,
   LinkRelationship,
@@ -23,6 +24,31 @@ export function useDocPages(projectId: string): UseQueryResult<DocPageSummary[]>
   return useQuery({
     queryKey: keys.docPages(projectId),
     queryFn: ({ signal }) => api.get<DocPageSummary[]>(`${base(projectId)}/doc-pages`, { signal }),
+  });
+}
+
+/**
+ * Full-text search over the project's documentation.
+ *
+ * Not a typeahead, and the budget says so: matching is by lexeme, so a half-typed word answers
+ * nothing at all and results-as-you-type would read as broken until the moment a word completes.
+ * The box submits, so this is an ordinary interactive read.
+ *
+ * Disabled on an empty query rather than asking the server for nothing — the server answers `[]`
+ * either way, and a query that does not run leaves no cache entry to render while the reader is
+ * still deciding what to look for.
+ */
+export function useDocPageSearch(
+  projectId: string,
+  query: string,
+): UseQueryResult<DocPageSearchHit[]> {
+  return useQuery({
+    queryKey: keys.docPageSearch(projectId, query),
+    queryFn: ({ signal }) =>
+      api.get<DocPageSearchHit[]>(`${base(projectId)}/doc-pages/search${qs({ q: query })}`, {
+        signal,
+      }),
+    enabled: query.trim().length > 0,
   });
 }
 

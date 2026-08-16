@@ -243,7 +243,8 @@ C2, C3, C4, C5, C9) becomes a slice.
    2. ✅ **C6 + C7 + C10** (§234) — one artifact slice: save-report-to-register, the write-once toggle,
       then the full MCP artifact surface (which wants both shipped first so the tools cover the
       whole register).
-   3. ⬜ **C3** — docs search (endpoint + search box), self-contained. **Next.**
+   3. 🔨 **C3** — docs search (endpoint + search box), self-contained. **In progress as §235.**
+      Phase 1 (contract + backend, `fbc9c3a`) ✅ · phase 2 (the search box) ✅ · phase 3 (docs) ⬜.
    4. ⬜ **C5 + C9** — the run-detail pair: minimal defect-link write, step-level evidence in the
       runner.
    5. ⬜ **C2** — quarantine consumers (denominator exclusion is a semantics change to reports;

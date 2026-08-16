@@ -315,6 +315,7 @@ export type ReportCapabilities = S['ReportCapabilities'];
 // documentation & artifacts
 export type DocPage = S['DocPage'];
 export type DocPageSummary = S['DocPageSummary'];
+export type DocPageSearchHit = S['DocPageSearchHit'];
 export type DocBlock = S['DocBlock'];
 export type DocPageInput = S['DocPageInput'];
 export type DocBlockInput = S['DocBlockInput'];

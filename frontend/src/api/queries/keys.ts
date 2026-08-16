@@ -110,6 +110,12 @@ export const keys = {
   docPages: (p: string) => ['projects', p, 'doc-pages'] as const,
   docPage: (p: string, id: string) => ['projects', p, 'doc-pages', id] as const,
   /*
+    The query text is IN the key, which is the whole of how a slow answer to "refu" cannot land on
+    top of the answer to "refund". `'search'` sits before it so a page id can never collide with a
+    search term — `docPage(p, 'search')` is a different key from this one at every length.
+  */
+  docPageSearch: (p: string, q: string) => ['projects', p, 'doc-pages', 'search', q] as const,
+  /*
     An attachment's BYTES, keyed by the server's own content URL.
 
     Keyed on the URL rather than on (project, page, attachment) because the thing being cached is

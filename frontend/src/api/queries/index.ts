@@ -151,6 +151,7 @@ export {
   useDeleteDocPage,
   useDeleteDocPageFile,
   useDocPage,
+  useDocPageSearch,
   useDocPages,
   useLinkBlock,
   useRelabelBlockLink,

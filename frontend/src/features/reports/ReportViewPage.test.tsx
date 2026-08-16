@@ -7,6 +7,7 @@ import { reportJobStatusLabels } from '../../lib/labels'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { aProject } from '../../test/fixtures'
+import { heldPermissions } from '../../test/permissions'
 import { ReportViewPage } from './ReportViewPage'
 import { drivingAFailedRead } from '../../test/renderFailures'
 
@@ -79,13 +80,22 @@ const storedModel = {
 }
 
 /**
- * The project read and the job poll go through one spy, keyed on the path — the page makes both and
- * a blanket `mockResolvedValue` would answer the project request with a job, which renders a
- * breadcrumb reading "run_summary" and hides that the page never asked for the project at all.
+ * The reads this page makes, keyed on the path — a blanket `mockResolvedValue` would answer the
+ * project request with a job, which renders a breadcrumb reading "run_summary" and hides that the
+ * page never asked for the project at all.
+ *
+ * **The two arms above the fall-through were added in §235 to close a red this file had carried
+ * since §234**, which gave the page a "Save to register" control and with it a permission read and
+ * a plan read. Both landed on the catch-all and were answered with a *project*, so
+ * `GET /me/permissions` served six properties the contract does not declare and none of the two it
+ * requires. The fall-through is the shape of double §199's rule exists to catch: a new read added
+ * to a page silently inherits whatever the last arm returns.
  */
 function answerReads(row: Record<string, unknown>) {
   return vi.spyOn(api, 'get').mockImplementation((path: string) => {
     if (path.includes('/reports/jobs/')) return Promise.resolve(row as never)
+    if (path.startsWith('/me/permissions')) return Promise.resolve(heldPermissions([]) as never)
+    if (path.includes('/plans')) return Promise.resolve([] as never)
     return Promise.resolve(aProject({ id: PROJECT, key: 'ACME', name: 'Acme Platform' }) as never)
   })
 }

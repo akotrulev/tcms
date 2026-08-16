@@ -1,13 +1,27 @@
-import { Alert, Box, Button, Chip, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  IconButton,
+  InputAdornment,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import AddIcon from '@mui/icons-material/AddOutlined';
 import AddLinkIcon from '@mui/icons-material/AddLinkOutlined';
+import ClearIcon from '@mui/icons-material/CloseOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import SearchIcon from '@mui/icons-material/SearchOutlined';
 import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type {
   BlockLink,
   DocPage,
   DocBlock,
+  DocPageSearchHit,
   DocPageStatus,
   DocPageSummary,
   TestCaseSummary,
@@ -17,6 +31,7 @@ import {
   useCase,
   useDeleteDocPageFile,
   useDocPage,
+  useDocPageSearch,
   useDocPages,
   useProject,
   useSetDocPageStatus,
@@ -85,6 +100,14 @@ export function DocsPage() {
   */
   const [searchParams, setSearchParams] = useSearchParams();
   const intendedCaseId = searchParams.get('linkCase') ?? undefined;
+  /*
+    §235 — the search, in the URL for the same reason the carried case is: a reader deep-links a
+    colleague at "everything we say about chargebacks", reloads, or presses Back out of a page they
+    opened from the results, and all three have to survive. It is also what makes the rail's state
+    and the request agree — there is one q, and the query key is built from it.
+  */
+  const searchQuery = searchParams.get('q') ?? '';
+  const hits = useDocPageSearch(projectId, searchQuery);
   const intended = useCase(projectId, intendedCaseId);
   const stopLinking = () => {
     const next = new URLSearchParams(searchParams);
@@ -213,18 +236,50 @@ export function DocsPage() {
 
       <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 2, alignItems: 'flex-start' }}>
         <Box sx={{ width: { xs: '100%', md: 260 }, flexShrink: 0 }}>
-          <Panel title="Pages" testId="Docs.TreePanel" dense>
+          <Panel title={searchQuery ? 'Results' : 'Pages'} testId="Docs.TreePanel" dense>
             <Box sx={{ p: 1 }}>
-              <DataRegion
-                testId="Docs.Tree"
-                state={{ ...pages, refetch: () => void pages.refetch() }}
-                isEmpty={(rows) => rows.length === 0}
-                empty={{ kind: 'no-records', title: 'No pages', body: 'Write the first specification page.' }}
-              >
-                {(rows) => (
-                  <PageTree pages={rows} projectId={projectId} activeId={pageId} suffix={suffix} />
-                )}
-              </DataRegion>
+              <DocsSearchField
+                query={searchQuery}
+                onSearch={(next) => {
+                  const params = new URLSearchParams(searchParams);
+                  if (next) params.set('q', next);
+                  else params.delete('q');
+                  setSearchParams(params);
+                }}
+              />
+
+              {searchQuery ? (
+                <DataRegion
+                  testId="Docs.Results"
+                  state={{ ...hits, refetch: () => void hits.refetch() }}
+                  isEmpty={(rows) => rows.length === 0}
+                  empty={{
+                    kind: 'no-filter-match',
+                    title: 'No pages match',
+                    body: 'Whole words only — a half-typed one finds nothing. Try a different term.',
+                  }}
+                >
+                  {(rows) => (
+                    <SearchResults
+                      hits={rows}
+                      projectId={projectId}
+                      activeId={pageId}
+                      suffix={suffix}
+                    />
+                  )}
+                </DataRegion>
+              ) : (
+                <DataRegion
+                  testId="Docs.Tree"
+                  state={{ ...pages, refetch: () => void pages.refetch() }}
+                  isEmpty={(rows) => rows.length === 0}
+                  empty={{ kind: 'no-records', title: 'No pages', body: 'Write the first specification page.' }}
+                >
+                  {(rows) => (
+                    <PageTree pages={rows} projectId={projectId} activeId={pageId} suffix={suffix} />
+                  )}
+                </DataRegion>
+              )}
             </Box>
           </Panel>
         </Box>
@@ -266,6 +321,154 @@ export function DocsPage() {
         </Box>
       </Stack>
     </Box>
+  );
+}
+
+/**
+ * The search box — **submit, not as-you-type**, and that is the feature rather than a shortcut.
+ *
+ * The server matches lexemes, so a half-typed word matches nothing at all: results-as-you-type
+ * would show "No pages match" for every keystroke until the moment a word completed, which reads as
+ * a broken search rather than as an unfinished query. It also sidesteps the debounce-and-detached-
+ * node trap that cost this repo a flaky test for weeks (§186).
+ *
+ * The draft is local and the committed query is the URL's. They differ only between typing and
+ * Enter, and re-syncing on the URL is what makes Back — which changes `query` under this component
+ * — put the box back in step with the results beside it.
+ */
+function DocsSearchField({
+  query,
+  onSearch,
+}: {
+  query: string;
+  onSearch: (next: string) => void;
+}) {
+  const [draft, setDraft] = useState(query);
+  useEffect(() => setDraft(query), [query]);
+
+  return (
+    <Box
+      component="form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSearch(draft.trim());
+      }}
+      sx={{ mb: 1 }}
+    >
+      <TextField
+        size="small"
+        fullWidth
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        placeholder="Search documentation"
+        slotProps={{
+          htmlInput: { 'aria-label': 'Search documentation', 'data-testid': 'Docs.Search.Input' },
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+            endAdornment: draft ? (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  aria-label="Clear search"
+                  data-testid="Docs.Search.Clear"
+                  onClick={() => {
+                    setDraft('');
+                    onSearch('');
+                  }}
+                >
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ) : undefined,
+          },
+        }}
+      />
+    </Box>
+  );
+}
+
+/**
+ * The hits, in the order the server ranked them.
+ *
+ * Not re-sorted here, unlike {@link PageTree}, which sorts siblings by title: the ordering *is* the
+ * answer a ranked search gives, and a client that re-sorted it would be throwing away the weights
+ * `V2` stores and the reason the endpoint computes a rank at all.
+ */
+function SearchResults({
+  hits,
+  projectId,
+  activeId,
+  suffix,
+}: {
+  hits: DocPageSearchHit[];
+  projectId: string;
+  activeId: string | undefined;
+  suffix: string;
+}) {
+  return (
+    <Stack component="ul" sx={{ listStyle: 'none', m: 0, p: 0, gap: 0.25 }}>
+      {hits.map((hit) => {
+        const active = hit.id === activeId;
+        return (
+          <Box component="li" key={hit.id}>
+            <RouterLink
+              to={`/projects/${projectId}/docs/${hit.id}${suffix}`}
+              data-testid="Docs.Results.Item"
+              style={{ textDecoration: 'none' }}
+            >
+              <Box
+                aria-current={active ? 'page' : undefined}
+                sx={{
+                  px: 1,
+                  py: 0.75,
+                  borderRadius: 1,
+                  color: active ? 'primary.main' : 'text.primary',
+                  bgcolor: active ? 'action.selected' : 'transparent',
+                  '&:hover': { bgcolor: 'action.hover' },
+                }}
+              >
+                <Box
+                  sx={{
+                    fontSize: '0.8125rem',
+                    fontWeight: active ? 600 : 500,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {hit.title}
+                </Box>
+                <Identifier variant="muted">{hit.key}</Identifier>
+                {/*
+                  Clamped rather than truncated to one line: the fragment exists to show WHICH
+                  mention this is, and a single ellipsised line is usually the words either side of
+                  the match and none of the match itself.
+                */}
+                {hit.snippet && (
+                  <Typography
+                    variant="caption"
+                    data-testid="Docs.Results.Snippet"
+                    sx={{
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      color: 'text.secondary',
+                    }}
+                  >
+                    {hit.snippet}
+                  </Typography>
+                )}
+              </Box>
+            </RouterLink>
+          </Box>
+        );
+      })}
+    </Stack>
   );
 }
 
