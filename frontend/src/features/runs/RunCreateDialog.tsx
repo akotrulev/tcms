@@ -19,8 +19,10 @@ import { z } from 'zod';
 import { ApiError } from '../../api/client';
 import {
   useCases,
+  useConfigurations,
   useCreateRun,
   usePlans,
+  useProjectMembers,
   useProjectTags,
   useSuites,
 } from '../../api/queries';
@@ -62,6 +64,22 @@ import { formatCount } from '../../lib/format';
  * stays recorded as the association. Nothing about a form with four filled-in controls suggests
  * that, so the helper text under the scope block states it, and the plan select's own text changes
  * when an arm is in play. A rule the client cannot see is one it teaches by producing surprises.
+ *
+ * ## Configuration and assignee — added by A4, and both were *contract fields with no control*
+ *
+ * `TestRunInput` has carried `configurationId` and `assigneeId` since M2 and this form sent `null`
+ * for both, in two lines with a comment each. So every run in the product ran in the project's
+ * default environment and every execution in it was permanently unassigned — not because anybody
+ * chose that, but because the form had no way to say anything else.
+ *
+ * - **Configuration** waited on a read: the list lived only on `TestPlanDetail`, so a run scoped by
+ *   suites or tags rather than by a plan (§99) had nowhere to get it from. `GET /configurations`
+ *   is that read, and "the project's default" stays the first option rather than becoming an
+ *   unlabelled blank — a project is seeded with exactly one, so most runs mean it.
+ * - **Assignee** assigns the *whole* checklist, which is a real thing to want at 9am on a
+ *   regression day and the wrong thing to apply quietly. It defaults to nobody, which is what an
+ *   unassigned checklist a team picks up from means, and per-row reassignment afterwards is the
+ *   runner's own control (`ExecutionPage`).
  */
 
 /** Mirrors `RunEdit.MAX_NAME`. */
@@ -100,6 +118,12 @@ const RunSchema = z
     */
     commitSha: z.string().optional(),
     branch: z.string().max(MAX_BRANCH).optional(),
+    // '' is a value on both, and means the same thing the wire's null means: "the project's
+    // default" and "nobody". Neither is validated here — the server owns "is that a configuration
+    // of this project" and "is that an active member", and a client-side copy of either would be a
+    // second answer built from a list this form fetched at a different instant.
+    configurationId: z.string(),
+    assigneeId: z.string(),
   })
   /*
     A run needs somewhere to get its cases from, and this is the one rule the client can check
@@ -138,7 +162,9 @@ type FormField =
   | 'releaseVersion'
   | 'buildNumber'
   | 'commitSha'
-  | 'branch';
+  | 'branch'
+  | 'configurationId'
+  | 'assigneeId';
 
 const FIELDS: readonly FormField[] = [
   'name',
@@ -150,6 +176,8 @@ const FIELDS: readonly FormField[] = [
   'buildNumber',
   'commitSha',
   'branch',
+  'configurationId',
+  'assigneeId',
 ];
 
 function applyServerError(
@@ -164,10 +192,12 @@ function applyServerError(
         setError(field as FormField, messages.join(' '));
         landed = true;
       } else {
-        // `configurationId` and `assigneeId` have no control on this form, so their sentences go
-        // to the banner rather than nowhere. §99 moved `caseIds`, `suiteIds` and `tags` OUT of
-        // this branch by giving each of them a control — which is what makes the server's
-        // "every arm the caller used" rule visible instead of collapsing into one banner line.
+        // A sentence about a field this form has no control for goes to the banner rather than
+        // nowhere — a dropped field error is a submit the user watches do nothing. §99 moved
+        // `caseIds`, `suiteIds` and `tags` out of this branch by giving each of them a control,
+        // and A4 moved `configurationId` and `assigneeId` out the same way, so `FIELDS` now covers
+        // every field the server can name. **The branch stays** and stays tested: it is the
+        // fallback for the next field the contract grows, and the failure it prevents is silent.
         stray.push(messages.join(' '));
       }
     }
@@ -202,6 +232,10 @@ export function RunCreateDialog({
     hundred hand-picked cases is what the suite and tag arms exist to replace.
   */
   const catalogue = useCases(projectId, { size: 200 }, 'key,asc');
+  // Both gated on `open`, like the board's member picker: a run list nobody is starting a run from
+  // should not be asking who could be assigned one or what environments exist.
+  const configurations = useConfigurations(projectId, open);
+  const members = useProjectMembers(projectId, open);
 
   const {
     register,
@@ -223,6 +257,8 @@ export function RunCreateDialog({
       buildNumber: '',
       commitSha: '',
       branch: '',
+      configurationId: '',
+      assigneeId: '',
     },
     mode: 'onBlur',
   });
@@ -260,8 +296,10 @@ export function RunCreateDialog({
         // Null, not '' — `planId` is a nullable uuid on the wire and an empty string is a 400 on
         // format rather than the "no plan" this control means.
         planId: values.planId || null,
-        // Absent means "the project's default configuration", which every project is seeded with.
-        configurationId: null,
+        // Null still means "the project's default configuration", which every project is seeded
+        // with — it is now what the first option of a real select sends rather than a hard-coded
+        // line with no way to say anything else.
+        configurationId: values.configurationId || null,
         releaseVersion: values.releaseVersion?.trim() || null,
         buildNumber: values.buildNumber?.trim() || null,
         commitSha: values.commitSha?.trim() || null,
@@ -269,7 +307,9 @@ export function RunCreateDialog({
         caseIds: values.caseIds,
         suiteIds: values.suiteIds,
         tags: values.tags,
-        assigneeId: null,
+        // Assigns EVERY execution this create materialises. Null is the ordinary answer — a
+        // checklist the team picks up from — and it is now a choice rather than the only option.
+        assigneeId: values.assigneeId || null,
         // Omitted rather than sent false, so an ordinary create is byte-identical to what every
         // caller sent before this slice.
         ...(overrideApprovalGate ? { overrideApprovalGate: true } : {}),
@@ -521,6 +561,76 @@ export function RunCreateDialog({
                 />
               )}
             />
+            {/*
+              A4's two. Both are contract fields this form sent a hard-coded null for, so what is
+              new is not the payload but the ability to mean something else by it. Neither is
+              required and neither has a client-side rule — see the schema.
+            */}
+            <Stack direction="row" spacing={2}>
+              <TextField
+                label="Configuration"
+                select
+                fullWidth
+                defaultValue=""
+                error={!!errors.configurationId}
+                helperText={
+                  errors.configurationId?.message ?? 'The environment this pass runs in.'
+                }
+                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Configuration` } }}
+                {...register('configurationId')}
+              >
+                {/*
+                  Named rather than blank, for the plan select's reason: "the project's default" is
+                  a decision the server makes, and a blank first row reads as a field somebody
+                  forgot to fill in. Every project has exactly one Default seeded, so this is the
+                  honest label for what an untouched form sends.
+                */}
+                <MenuItem value="" data-testid={`${TestId}.Configuration.Default`}>
+                  <Box component="span" sx={{ color: 'text.secondary' }}>
+                    The project’s default
+                  </Box>
+                </MenuItem>
+                {(configurations.data ?? []).map((configuration) => (
+                  <MenuItem
+                    key={configuration.id}
+                    value={configuration.id}
+                    data-testid={`${TestId}.Configuration.${configuration.id}`}
+                  >
+                    {configuration.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                label="Assign to"
+                select
+                fullWidth
+                defaultValue=""
+                error={!!errors.assigneeId}
+                helperText={
+                  errors.assigneeId?.message ??
+                  // States the blast radius, because it is the one thing about this control that
+                  // surprises: it is not "who runs this pass", it is every row of the checklist.
+                  'Optional — gives every case in the run to one person.'
+                }
+                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Assignee` } }}
+                {...register('assigneeId')}
+              >
+                <MenuItem value="" data-testid={`${TestId}.Assignee.None`}>
+                  <Box component="span" sx={{ color: 'text.secondary' }}>
+                    Nobody — the team picks it up
+                  </Box>
+                </MenuItem>
+                {(members.data ?? []).map((member) => (
+                  <MenuItem
+                    key={member.id}
+                    value={member.id}
+                    data-testid={`${TestId}.Assignee.${member.id}`}
+                  >
+                    {member.displayName}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Stack>
             <Stack direction="row" spacing={2}>
               <TextField
                 label="Release"

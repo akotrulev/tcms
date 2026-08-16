@@ -27,6 +27,7 @@ import { PermissionGate } from '../../components/PermissionGate';
 import { StatusChip } from '../../components/StatusChip';
 import { BlockedDialog } from './BlockedDialog';
 import { EvidencePanel } from './EvidencePanel';
+import { ExecutionAssignee } from './ExecutionAssignee';
 import { ExecutionGrid } from './ExecutionGrid';
 import { ExecutionQueue } from './ExecutionQueue';
 import { formatDateTime } from '../../lib/format';
@@ -751,6 +752,23 @@ function ExecutionForm({
               </Button>
             </Stack>
           </Panel>
+
+          {/*
+            A4. A panel of its own below the verdicts rather than a row inside them: it is not part
+            of recording a result — a different key gates it (`run:execute`, not `result:*`), it
+            writes a different column, and a control mixed into that stack would read as a fifth
+            thing to do before saving.
+          */}
+          <Box sx={{ mt: 3 }}>
+            <Panel title="Assignment" testId="Execution.AssignmentPanel">
+              <ExecutionAssignee
+                projectId={projectId}
+                runId={runId}
+                execution={execution}
+                frozen={frozen}
+              />
+            </Panel>
+          </Box>
         </Box>
       </Stack>
 

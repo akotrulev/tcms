@@ -2660,6 +2660,47 @@ completion, which no UI can do; `ReportJobPipelineTest.Reaping` writes the state
 only observer. What a pass *could* do — and is worth one line if the lane has database access — is
 set a live job's `started_at` back an hour and watch the card turn Failed within thirty seconds.
 
+## §229 phase 1 — the assignee that could not be given, and the environment nobody chose (A4)
+
+**Thirteen rows, none run** (§65). Ids are `§229 AS-*`; `AS` is unused elsewhere in this file —
+grepped before minting (`§154`'s banner).
+
+Lanes: **A3 — runs** for every row. `AS-1`–`AS-4` need a signed-in **Test Engineer**;
+`AS-5`/`AS-6` need a **Viewer** and a **CI token holder** respectively; `AS-11` needs a **Test
+Lead** to close the run.
+
+**A fixture this lane does not already have:** a second person with a grant on the project. The
+assignee selects are built from `GET /members`, which answers *active company members holding a
+grant on this project* — so on a one-person company both selects render "Nobody" and nothing else,
+and `AS-1`, `AS-7` and `AS-8` cannot be driven at all. Invite a second account and grant it Viewer
+on the project **before** starting this lane; a Viewer is enough, because the list is about who may
+be *given* work rather than who may do it.
+
+**What is easy to get wrong when driving these:** the assignee select is disabled while `useCan` is
+still resolving, exactly like `§227 LC-*`'s menu. Read it after the page settles.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§229 AS-1` | **A3**, open an execution from a run, find the **Assignment** panel below Record the result, pick a person | The select shows them immediately and the panel does not flicker back. Then press **Back to the run**: that case's row now reads **assigned to <name>** instead of *unassigned*. The row that proves the whole item — before this slice nothing in the product could write the column. |
+| `§229 AS-2` | Same execution, set the select back to **Nobody** | The row on the run reads *unassigned* again. Sending `''` rather than `null` is a 400 on a uuid's format, so a refusal here is that defect and not a permission. |
+| `§229 AS-3` | Assign, then **record a verdict** on the same execution without reloading | The verdict saves — **no 409**. The assignment bumped `lockVersion` and the response was written into the cache; if this 409s, `useAssignExecution`'s `setQueryData` is not landing and every assignment costs the tester a reload. |
+| `§229 AS-4` | Assign a case that already has a recorded result | The result, its author and its timestamp are **unchanged** on screen. A mutator that stamped `executedBy` would put the assigner's name on somebody else's verdict. |
+| `§229 AS-5` | **A3** as a **Viewer**: open the same execution | The select is **present and disabled**, with the gate's tooltip naming who to ask (§31). Not hidden — a control that vanishes teaches nothing. |
+| `§229 AS-6` | **A3** with a **CI token** (`Automation Service`): `PUT …/executions/{id}/assignee` over `curl` | **403.** Not driveable from the browser — the credential has no session — and it is the single most important observation in this lane, because it is the only one that distinguishes `run:execute` from the two keys that would have compiled. |
+| `§229 AS-7` | **A3**, start a new run: the **New test run** dialog now has **Configuration** and **Assign to** | Configuration opens on *The project's default* and lists the project's environments; Assign to opens on *Nobody* and lists the members. Both are new — the form sent a hard-coded `null` for each until this slice. |
+| `§229 AS-8` | Submit that dialog with a person chosen in **Assign to** | Every row of the new run reads **assigned to <name>** — the whole checklist, which is what the helper text says and the one thing about this control that surprises. |
+| `§229 AS-9` | Submit the dialog touching **neither** new control | The run is created and its rows read *unassigned*; the run's configuration is the project's **Default**. The barrier: an untouched select must send `null`, not `''`. |
+| `§229 AS-10` | **A3**, clone a run: the **Clone** dialog's Configuration select | First option reads **Keep <the source's configuration>**, and the source's own row is **not** offered a second time below it. Assign to opens on *Nobody* — the two defaults point in opposite directions on purpose. |
+| `§229 AS-11` | **A3**, as a **Test Lead** close a run, then open one of its executions | The Assignment select is disabled and reads *"This run has ended, so its checklist can no longer be reorganised."* Reopen the run: it goes live again. |
+| `§229 AS-12` | With the run closed in another tab, change the assignee in a tab opened before the close | A **red alert under the select** saying the checklist can no longer be reorganised — in place, not a corner toast. This is the one 409 a real user meets, and it is why the mutation is marked handled. |
+| `§229 AS-13` | On a project whose configuration list has only the seeded `Default` | The Configuration select still opens and offers exactly one row besides *The project's default*. Worth one row because it is every freshly provisioned project, and a select with one option is where a "never empty" claim is cheapest to disprove. |
+
+**Not driveable from a browser and named so it is not read as an omission:** the assignee who is a
+company member **without** a project grant. `GET /members` will not offer them, so the select cannot
+produce that request — the server accepts it (deliberately: it is the same predicate `POST /runs`
+applies to the same column), and `ExecutionEndpointTest.Assignment` is the only observer. Driving it
+needs `curl`.
+
 ## §228 — the status a case could not be given, and the folder nobody could see reviewed
 
 **The row ids below say `§227` and stay that way.** They were minted before the section was numbered

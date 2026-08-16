@@ -3,6 +3,7 @@ import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult 
 import { useRef } from 'react';
 import { api, newIntentKey, qs } from '../client';
 import type {
+  Configuration,
   Evidence,
   TestExecution,
   TestRun,
@@ -11,6 +12,33 @@ import type {
   TestRunInput as TestRunInputShape,
 } from '../types';
 import { base, keys } from './keys';
+
+/**
+ * The project's environments — `GET /configurations`, the read a run form needed and never had.
+ *
+ * The list existed on `TestPlanDetail` and nowhere else, so a run scoped by suites or tags rather
+ * than by a plan (§99) was created against a configuration nobody could name. `RunCloneDialog`'s
+ * header recorded the consequence as *"there is no configuration picker anywhere in this SPA"*.
+ *
+ * **`enabled` rather than an unconditional fetch**, and `staleTime` matching the other per-project
+ * vocabularies — `useProjectMembers`'s reasoning exactly: the only consumers are two dialogs, and
+ * the environment matrix changes on the timescale of a new browser, not of a page view.
+ *
+ * Never empty: every project is seeded with a `Default`, which is why `configurationId` is
+ * optional on the wire while the column is `NOT NULL`.
+ */
+export function useConfigurations(
+  projectId: string,
+  enabled: boolean,
+): UseQueryResult<Configuration[]> {
+  return useQuery({
+    queryKey: keys.configurations(projectId),
+    queryFn: ({ signal }) =>
+      api.get<Configuration[]>(`${base(projectId)}/configurations`, { signal }),
+    enabled: enabled && !!projectId,
+    staleTime: 5 * 60_000,
+  });
+}
 
 export function useRuns(projectId: string, planId?: string): UseQueryResult<TestRun[]> {
   return useQuery({
@@ -305,6 +333,41 @@ export function useDeleteEvidence(projectId: string, runId: string, executionId:
       ),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.execution(projectId, runId, executionId) });
+    },
+  });
+}
+
+/**
+ * Assigns one execution — or unassigns it with `null`.
+ *
+ * **`assignee_id`'s second writer, and the SPA's first.** The column has been rendered on the run
+ * detail and the execution queue since M2 and the only thing that could set it was `POST /runs`'s
+ * whole-checklist `assigneeId`, which had no control on the create dialog either — so in the
+ * shipped product every execution was permanently unassigned.
+ *
+ * **No `If-Match`**, unlike `useSubmitResult` beside it: the server takes none, because a
+ * reassignment refused over a verdict somebody recorded in between is a conflict about a field
+ * neither call touches. The response still carries a bumped `lockVersion`, and writing it into the
+ * execution's cache is what keeps the runner's next save from 409ing against this write.
+ *
+ * The run is invalidated as well as the execution: `TestRunDetail` carries every row's assignee, so
+ * a queue left showing "unassigned" beside a case somebody just took is the stale-claim class §42
+ * found on the other end of this screen.
+ */
+export function useAssignExecution(projectId: string, runId: string, executionId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (assigneeId: string | null) =>
+      api.put<TestExecution>(
+        `${base(projectId)}/runs/${runId}/executions/${executionId}/assignee`,
+        { assigneeId },
+      ),
+    // The 409 here is "the run has ended", which is a decision to hand back beside the control that
+    // raised it — the same call `useSetRunStatus` makes about its own refusals.
+    meta: { handled: true },
+    onSuccess: (updated) => {
+      client.setQueryData(keys.execution(projectId, runId, executionId), updated);
+      void client.invalidateQueries({ queryKey: keys.run(projectId, runId) });
     },
   });
 }

@@ -220,6 +220,25 @@ public class TestExecution {
         this.updatedAt = now;
     }
 
+    /**
+     * Gives this row of the checklist to somebody, or takes it back with {@code null}.
+     *
+     * <p><strong>The column's second writer</strong>, and until it existed {@link #materialise} was
+     * the only one — so an assignee could be chosen once, for the whole run at once, and never
+     * afterwards. Nothing is refused here: whether that person is an active member of this company
+     * is the caller's question, because the refusal has to name a request field in a 400 and an
+     * entity cannot produce one.
+     *
+     * <p>{@code updatedAt} moves and <em>nothing about the verdict does</em>. Assigning is not
+     * executing: {@link #executedBy}, {@link #executedAt} and {@link #statusId} are the record of
+     * what happened, and touching them here would attribute a result to whoever reorganised the
+     * work.
+     */
+    void assignTo(UUID assigneeId, Instant now) {
+        this.assigneeId = assigneeId;
+        this.updatedAt = now;
+    }
+
     /** True when a verdict is already on the row — the difference between submit and amend. */
     boolean hasResult() {
         return statusId != null;

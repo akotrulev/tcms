@@ -44,6 +44,7 @@ import type {
   Team,
   TestCase,
   TestCaseSummary,
+  TestExecution,
   TestPlan,
   TestPlanSummary,
   TestRun,
@@ -220,6 +221,38 @@ export function aRun(overrides: Partial<TestRun> = {}): TestRun {
     startedAt: null,
     completedAt: null,
     counts: noCounts(),
+    ...overrides,
+  }
+}
+
+/**
+ * One execution as `GET …/executions/{id}` and both writes on it serve it.
+ *
+ * The least interesting execution the contract admits: materialised, no verdict, nobody assigned,
+ * no steps, no evidence — which is exactly the state `RunCreateService` writes and therefore the
+ * one every test about *changing* an execution should be overriding away from.
+ */
+export function anExecution(overrides: Partial<TestExecution> = {}): TestExecution {
+  return {
+    id: 'ex1',
+    caseId: 'c1',
+    caseKey: 'TC-1',
+    caseTitle: 'A case',
+    caseVersionNo: 1,
+    status: null,
+    assignee: null,
+    executedBy: null,
+    executedAt: null,
+    durationMs: null,
+    defects: [],
+    comment: null,
+    releaseVersion: null,
+    stepFormat: 'STRUCTURED',
+    preconditions: [],
+    postconditions: [],
+    steps: [],
+    evidence: [],
+    lockVersion: 0,
     ...overrides,
   }
 }

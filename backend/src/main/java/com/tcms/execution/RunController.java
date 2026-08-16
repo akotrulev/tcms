@@ -43,19 +43,22 @@ public class RunController {
     private final RunCreateService creates;
     private final RunStatusService lifecycle;
     private final RunCloneService clones;
+    private final ExecutionAssignmentService assignments;
 
     public RunController(
             RunService runs,
             ExecutionService executions,
             RunCreateService creates,
             RunStatusService lifecycle,
-            RunCloneService clones) {
+            RunCloneService clones,
+            ExecutionAssignmentService assignments) {
 
         this.runs = runs;
         this.executions = executions;
         this.creates = creates;
         this.lifecycle = lifecycle;
         this.clones = clones;
+        this.assignments = assignments;
     }
 
     /**
@@ -145,6 +148,24 @@ public class RunController {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         problem.setTitle("This run needs approved cases");
         problem.setDetail(message);
+        return problem;
+    }
+
+    /**
+     * The assignment refusal — worded for the act, naming no permission key (§32).
+     *
+     * <p>A body, unlike the three bodiless 403s {@code ErrorBodyPolicyTest} pins: those exist
+     * because there is nothing to say — a binary download cannot carry a {@code Problem}, and two
+     * artifact refusals have no field to land a sentence on. Here there is something to say and
+     * somebody to say it to. <strong>What the sentence deliberately does not do is name
+     * {@code run:execute}</strong>: a tester refused here should learn what they cannot do, not a
+     * key to go and ask for by name.
+     */
+    private static ProblemDetail assignForbiddenProblem() {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        problem.setTitle("Not allowed");
+        problem.setDetail("You do not have permission to work runs in this project, so you "
+                + "cannot change who a case is assigned to.");
         return problem;
     }
 
@@ -252,6 +273,20 @@ public class RunController {
      * The frozen-run refusal on a write to an execution — {@code V1}'s "immutable once the run
      * closes", which §67 deferred and §72 applies to the verdict and its evidence at once.
      */
+    /**
+     * The same freeze, refusing a <em>reassignment</em> — and a sentence of its own rather than
+     * {@link #runClosedProblem()}.
+     *
+     * <p>{@code RunLifecycle.CLOSED_MESSAGE} says "its results and evidence can no longer change",
+     * which is true and is about neither of the things this caller was doing. A refusal that
+     * describes an operation the reader did not attempt sends them looking for a result they never
+     * recorded.
+     */
+    private static ProblemDetail assignmentFrozenProblem() {
+        return refusedProblem("This run has ended, so its checklist can no longer be reorganised. "
+                + "Reopen the run to make changes.");
+    }
+
     private static ProblemDetail runClosedProblem() {
         return refusedProblem(RunLifecycle.CLOSED_MESSAGE);
     }
@@ -316,6 +351,44 @@ public class RunController {
                     ResponseEntity.status(HttpStatus.CONFLICT).body(staleProblem());
             case ExecutionService.Outcome.RunClosed ignored ->
                     ResponseEntity.status(HttpStatus.CONFLICT).body(runClosedProblem());
+        };
+    }
+
+    /**
+     * Gives one row of the checklist to somebody, or takes it back.
+     *
+     * <p>{@code PUT} because the body is the state the caller wants rather than the move they want —
+     * the two status endpoints' reasoning, and it makes a double-click land in the same place.
+     *
+     * <p><strong>No {@code If-Match} here, unlike the verdict beside it.</strong>
+     * {@link ExecutionAssignmentService#assign} carries the argument: an assignment refused because
+     * somebody recorded a result in between would be a conflict about a field neither call touches.
+     *
+     * <p>One 403 rather than the verdict's two, because there is one key here — so there is one
+     * sentence, and it says what the caller cannot do rather than which permission to ask for.
+     */
+    @PutMapping("/{runId}/executions/{executionId}/assignee")
+    public ResponseEntity<Object> assign(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID runId,
+            @PathVariable UUID executionId,
+            @RequestBody ExecutionAssigneeRequest request) {
+
+        ExecutionAssignmentService.Outcome outcome = assignments.assign(
+                UUID.fromString(jwt.getSubject()), projectId, runId, executionId, request);
+
+        return switch (outcome) {
+            case ExecutionAssignmentService.Outcome.Assigned assigned ->
+                    ResponseEntity.ok(assigned.view());
+            case ExecutionAssignmentService.Outcome.NotFound ignored ->
+                    ResponseEntity.notFound().build();
+            case ExecutionAssignmentService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(assignForbiddenProblem());
+            case ExecutionAssignmentService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+            case ExecutionAssignmentService.Outcome.RunClosed ignored ->
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(assignmentFrozenProblem());
         };
     }
 

@@ -4531,6 +4531,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/configurations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The environments a run can be executed in
+         * @description The project's `configuration` rows — *"Chrome / Windows"*, *"staging"*, a device
+         *     matrix cell. Every project is seeded with a `Default` by `tcms_seed_project_defaults`,
+         *     so this list is **never empty**, which is what lets `test_run.configuration_id` be
+         *     `NOT NULL` and `TestRunInput.configurationId` be optional.
+         *
+         *     **Gated on the project read alone**, like `GET /statuses` beside it and for the same
+         *     reason: this is a project vocabulary, every client with a run form needs it, and none
+         *     of those readers is an administrator. There is no configuration *write* on this
+         *     contract — the set is seeded and edited by an operator — so this is a read with no
+         *     writer rather than half of a CRUD pair.
+         *
+         *     Ordered **default first, then by name** — the order a picker wants, and the order a
+         *     plan's `configurations` array already comes back in.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Configurations */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Configuration"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/runs": {
         parameters: {
             query?: never;
@@ -5029,6 +5086,97 @@ export interface paths {
                 409: components["responses"]["Conflict"];
             };
         };
+        trace?: never;
+    };
+    "/projects/{projectId}/runs/{runId}/executions/{executionId}/assignee": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+                executionId: components["parameters"]["ExecutionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Give one row of the checklist to somebody, or take it back
+         * @description `test_execution.assignee_id` has been served on every execution read since M2 and had
+         *     **exactly one writer** until this operation: `POST /runs`'s whole-checklist
+         *     `assigneeId`, which assigns two hundred rows to one person or leaves all of them
+         *     unassigned. So in the shipped product an execution's assignee could be set once, for
+         *     every case at once, and never afterwards.
+         *
+         *     `PUT`, not `PATCH`, and the same reasoning the two status endpoints use: the body is
+         *     the state the caller wants rather than the move they want, so sending it twice lands
+         *     in the same place. **`null` unassigns** — the field is required and nullable, so
+         *     "nobody" is a thing this operation can say, which is what makes it a toggle rather
+         *     than a one-way door.
+         *
+         *     **The permission is `run:execute`, not `run:create` and not `result:submit`.** Handing
+         *     a case to a tester is part of working a run by hand, and `run:execute` is the one key
+         *     in the catalogue that separates a *person* from a *credential* (see the result PATCH):
+         *     `Automation Service` holds `run:create` and `result:submit` and not this, so a leaked
+         *     CI token cannot reorganise a team's workload. It is deliberately **not** its own new
+         *     key — the catalogue has taken no new permission since `V3`, and a key seeded to nobody
+         *     is a 403 no administrator can grant their way out of.
+         *
+         *     **`assigneeId` must be an ACTIVE member of this company**, which is the predicate
+         *     `POST /runs` already applies to the same column — read from the same place rather than
+         *     re-spelled, so the two writers of one column cannot disagree about who may hold it.
+         *     Note that it is *company* membership and not the narrower "holds a grant on this
+         *     project" that `GET /members` answers: a picker built from that list can therefore only
+         *     offer people this operation accepts, never the reverse.
+         *
+         *     **No `If-Match`.** The result PATCH takes one because two testers recording verdicts on
+         *     one row is the ordinary case and a lost verdict is unrecoverable. An assignment is a
+         *     scheduling fact whose last writer is the one that meant it, and requiring the header
+         *     here would fail a coordinator's reassignment because somebody recorded a result in
+         *     between — a refusal about a field neither call touched. The write still bumps
+         *     `lockVersion`, so a tester holding a stale read gets the ordinary 409 and reloads.
+         *
+         *     **A closed run refuses with 409**, the same freeze the verdict and its evidence are
+         *     under (`V1`: *"immutable once the run closes"*). A finished checklist has no work left
+         *     to hand out, and reopening the run is the way forward.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                    runId: components["parameters"]["RunId"];
+                    executionId: components["parameters"]["ExecutionId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ExecutionAssigneeInput"];
+                };
+            };
+            responses: {
+                /** @description Assigned — the whole execution, as the read serves it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TestExecution"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/projects/{projectId}/runs/{runId}/executions/{executionId}/evidence": {
@@ -10690,7 +10838,12 @@ export interface components {
             name: string;
             /** Format: uuid */
             planId?: string | null;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The environment this pass runs in — one of `GET /configurations`. Omitted or null
+             *     means the project's seeded `Default`, which is why the column can be `NOT NULL`
+             *     while this field is optional.
+             */
             configurationId?: string | null;
             releaseVersion?: string | null;
             buildNumber?: string | null;
@@ -10728,7 +10881,16 @@ export interface components {
              *     its tags is unused. What *is* refused is the run resolving to nothing at all.
              */
             tags?: string[];
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Assigns the **whole** checklist to one person — every execution this create
+             *     materialises, which is what makes it a starting point rather than a plan. Per-row
+             *     reassignment afterwards is
+             *     `PUT /runs/{runId}/executions/{executionId}/assignee`, which took this column's
+             *     second writer.
+             *
+             *     An active member of this company; anything else is a 400 on this field.
+             */
             assigneeId?: string | null;
             /**
              * @description §6g's "documented lead override for the 2am release" (§82) — the one property here
@@ -10857,6 +11019,20 @@ export interface components {
                 statusId: string;
                 comment?: string | null;
             }[];
+        };
+        /**
+         * @description Who is to work this row of the checklist. One field, **required and nullable**: the
+         *     operation states the assignee rather than changing it, so `null` is how it says
+         *     "nobody" and an omitted field is a 400 rather than a quiet no-op.
+         */
+        ExecutionAssigneeInput: {
+            /**
+             * Format: uuid
+             * @description An **active member of this company** — the same predicate `POST /runs` applies to
+             *     the same column. `null` leaves the row unassigned, which is the ordinary state of
+             *     a checklist a team picks up from.
+             */
+            assigneeId: string | null;
         };
         DefectLink: {
             /** Format: uuid */

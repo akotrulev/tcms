@@ -21,6 +21,14 @@ export const keys = {
   projectSettings: (p: string) => ['projects', p, 'settings'] as const,
   statuses: (p: string) => ['projects', p, 'statuses'] as const,
   projectMembers: (p: string) => ['projects', p, 'members'] as const,
+  /**
+   * The project's environments — the vocabulary a run form picks from.
+   *
+   * Beside `statuses` and `projectMembers` rather than under `runs`, because it is a property of
+   * the project and outlives every run that names it. A run-scoped key would be invalidated by a
+   * run write, which is exactly the refetch this list never needs.
+   */
+  configurations: (p: string) => ['projects', p, 'configurations'] as const,
   suites: (p: string) => ['projects', p, 'suites'] as const,
   suiteHistory: (p: string, s: string) => ['projects', p, 'suites', s, 'history'] as const,
   cases: (p: string, filters: CaseFilters, sort: string) =>

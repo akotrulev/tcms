@@ -5,7 +5,7 @@ import { ApiError, api } from '../../api/client'
 import { TestProviders } from '../../test/TestProviders'
 import { heldPermissions } from '../../test/permissions'
 import { createTestQueryClient } from '../../test/queryClient'
-import { aCaseSummary, aPlan, aRun, aSuite } from '../../test/fixtures'
+import { aCaseSummary, aConfiguration, aPlan, aRun, aSuite } from '../../test/fixtures'
 import { RunCreateDialog } from './RunCreateDialog'
 import type { PermissionKey } from '../../api/types'
 import { drivingAFailedWrite } from '../../test/renderFailures'
@@ -60,6 +60,16 @@ const tagUsage = [
   { tag: 'smoke', caseCount: 9 },
   { tag: 'payments', caseCount: 3 },
 ]
+/** A4's vocabularies — the environment list and the people a whole checklist could go to. */
+const ANA = '11111111-1111-4111-8111-111111111111'
+const configurations = [
+  aConfiguration(),
+  aConfiguration({ id: 'cfg-staging', name: 'Staging', isDefault: false }),
+]
+const roster = [
+  { id: ANA, displayName: 'Ana Petrova', email: 'ana@example.test', avatarUrl: null },
+]
+
 const caseRows = [
   aCaseSummary({ id: 'case-1', key: 'TC-1', title: 'Refund the whole amount' }),
   aCaseSummary({ id: 'case-2', key: 'TC-2', title: 'Partial refund rounds' }),
@@ -76,6 +86,10 @@ function mockPlans(rows: unknown[], held: PermissionKey[] = []) {
     if (path.includes('/suites')) return suites
     if (path.includes('/tags')) return tagUsage
     if (path.includes('/cases')) return { items: caseRows, facets: [], page: 0, size: 200, total: 2 }
+    // A4's two vocabularies. Answered explicitly rather than through the `[]` fallthrough, because
+    // a select with no options is a control this file could assert nothing about.
+    if (path.includes('/configurations')) return configurations
+    if (path.includes('/members')) return roster
     return []
   }) as unknown as typeof api.get)
 }
@@ -108,6 +122,12 @@ function gateRefusal() {
 async function choosePlan() {
   await userEvent.click(screen.getByRole('combobox', { name: /plan/i }))
   await userEvent.click(await screen.findByTestId('Runs.Create.Plan.TP-1'))
+}
+
+/** The same, for A4's two selects — named by their label rather than hard-coded like the plan's. */
+async function chooseSelect(label: RegExp, optionTestId: string) {
+  await userEvent.click(screen.getByRole('combobox', { name: label }))
+  await userEvent.click(await screen.findByTestId(optionTestId))
 }
 
 describe('RunCreateDialog', () => {
@@ -339,13 +359,18 @@ describe('RunCreateDialog', () => {
     expect(screen.queryByTestId('Runs.Create.Error')).not.toBeInTheDocument()
   })
 
-  it('puts a field error with no input — configurationId — in the form-level banner', async () => {
+  it('puts a field error with no input at all in the form-level banner', async () => {
     // The refused write is the subject: a field with no input on screen still has a place.
+    //
+    // ~~`configurationId`~~ → A4 gave that one a control, and with it every field the server can
+    // name now lands on itself. The branch is still the right one to have and the failure it
+    // prevents is silent, so this drives a field the form does not know — which is exactly the
+    // state the next contract addition arrives in.
     drivingAFailedWrite()
     mockPlans(plans)
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', {
-        configurationId: ['That configuration is not in this project.'],
+        somethingTheContractGrewLater: ['That value is not one this project uses.'],
       }),
     )
 
@@ -362,8 +387,58 @@ describe('RunCreateDialog', () => {
 
     // Dropped rather than shown, the user sees a submit that did nothing at all.
     expect(await screen.findByTestId('Runs.Create.Error')).toHaveTextContent(
-      'That configuration is not in this project.',
+      'That value is not one this project uses.',
     )
+  })
+
+  it('A4: sends the chosen configuration and assignee, and null for neither chosen', async () => {
+    mockPlans(plans)
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValue(aRun({ id: 'run-1', key: 'TR-1' }) as never)
+
+    render(
+      <TestProviders client={createTestQueryClient()}>
+        <RunCreateDialog projectId={PROJECT} open onClose={() => {}} onCreated={() => {}} />
+      </TestProviders>,
+    )
+
+    await screen.findByTestId('Runs.Create.Name')
+    await userEvent.type(screen.getByTestId('Runs.Create.Name'), 'Regression 4.3.0')
+    await choosePlan()
+    await chooseSelect(/configuration/i, 'Runs.Create.Configuration.cfg-staging')
+    await chooseSelect(/assign to/i, `Runs.Create.Assignee.${ANA}`)
+    await userEvent.click(screen.getByTestId('Runs.Create.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    const [, body] = post.mock.calls[0] as [string, Record<string, unknown>]
+    expect(body.configurationId).toBe('cfg-staging')
+    expect(body.assigneeId).toBe(ANA)
+  })
+
+  it('A4: an untouched form still means "the default, and nobody" — null, not empty strings', async () => {
+    mockPlans(plans)
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValue(aRun({ id: 'run-1', key: 'TR-1' }) as never)
+
+    render(
+      <TestProviders client={createTestQueryClient()}>
+        <RunCreateDialog projectId={PROJECT} open onClose={() => {}} onCreated={() => {}} />
+      </TestProviders>,
+    )
+
+    await screen.findByTestId('Runs.Create.Name')
+    await userEvent.type(screen.getByTestId('Runs.Create.Name'), 'Regression 4.3.0')
+    await choosePlan()
+    await userEvent.click(screen.getByTestId('Runs.Create.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    const [, body] = post.mock.calls[0] as [string, Record<string, unknown>]
+    // The barrier: '' is a 400 on a uuid's format, so a control whose untouched state sends one
+    // breaks every create that does not touch it — which is most of them.
+    expect(body.configurationId).toBeNull()
+    expect(body.assigneeId).toBeNull()
   })
 
   it('lands a name error on the name input, not in the banner', async () => {

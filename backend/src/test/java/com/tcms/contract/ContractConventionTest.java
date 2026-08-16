@@ -465,6 +465,8 @@ class ContractConventionTest {
             Map.entry("Evidence", List.of(com.tcms.execution.EvidenceView.class)),
             Map.entry("ExecutionHistoryEntry",
                     List.of(com.tcms.execution.CaseHistoryView.EntryView.class)),
+            Map.entry("ExecutionAssigneeInput",
+                    List.of(com.tcms.execution.ExecutionAssigneeRequest.class)),
             Map.entry("ExecutionResultInput",
                     List.of(com.tcms.execution.ExecutionResultRequest.class)),
             // §169. The third record over doc_link, and the second write shape: BlockLink is the

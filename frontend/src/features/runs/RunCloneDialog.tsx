@@ -1,11 +1,13 @@
 import {
   Alert,
+  Box,
   Button,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
+  MenuItem,
   Stack,
   TextField,
 } from '@mui/material';
@@ -14,7 +16,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
-import { useCloneRun } from '../../api/queries';
+import { useCloneRun, useConfigurations, useProjectMembers } from '../../api/queries';
 import type { TestRun } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
 import { PermissionGate } from '../../components/PermissionGate';
@@ -26,20 +28,24 @@ import { formatCount } from '../../lib/format';
  * Cloning a test run (§129 phase 3) — *"run this again against the new build"*, the highest-value
  * of the three clones and the most repeated action this product has.
  *
- * ## Three fields, and one that is deliberately absent
+ * ## ~~Three fields, and one that is deliberately absent~~ → five, and both absences are closed
  *
- * Name, release and build. **Configuration and assignee are not offered**, and neither absence is
- * an oversight:
+ * ~~Name, release and build. **Configuration and assignee are not offered**, and neither absence is
+ * an oversight:~~
  *
- * - There is **no configuration picker anywhere in this SPA** — `RunCreateDialog` sends
+ * - ~~There is **no configuration picker anywhere in this SPA** — `RunCreateDialog` sends
  *   `configurationId: null` and lets the server use the project's default — so a select here would
- *   be the first, built over a list no hook reads. Omitting the field keeps the *source's*
- *   configuration, which is what re-running a cycle means; changing it is a slice with a picker in
- *   it.
- * - **A run has no assignee to copy.** The column is on `test_execution`, one per case, so the
+ *   be the first, built over a list no hook reads.~~ → **A4: `GET /configurations` is that hook,
+ *   and this is one of its two consumers.** The argument was never that changing the environment
+ *   was wrong — it was that the read did not exist, and it named the slice that would close it.
+ *   Omitting the field still keeps the *source's* configuration, which is why the first option
+ *   says so rather than being blank.
+ * - ~~**A run has no assignee to copy.** The column is on `test_execution`, one per case, so the
  *   field would assign the whole checklist to one person — a real thing to want, and not the
- *   default this dialog should quietly apply. Omitted means an unassigned checklist, exactly as
- *   every run created through the product today.
+ *   default this dialog should quietly apply.~~ → **A4: offered, and still not applied quietly.**
+ *   "A real thing to want" is exactly the case for a control; what the old note refused was a
+ *   *default*, and there still is none — the field opens on "nobody", so a clone left alone
+ *   produces the unassigned checklist it always did.
  *
  * ## Release and build are NOT prefilled, and that is the interesting decision
  *
@@ -70,22 +76,33 @@ const CloneSchema = z.object({
     .max(MAX_NAME, `Keep the name under ${MAX_NAME} characters.`),
   releaseVersion: z.string().max(MAX_RELEASE).optional(),
   buildNumber: z.string().max(MAX_RELEASE).optional(),
+  // '' means "leave the field off the request", which is what the two absences meant before they
+  // had controls — the source's configuration, and nobody assigned.
+  configurationId: z.string(),
+  assigneeId: z.string(),
 });
 
 type CloneFormInput = z.infer<typeof CloneSchema>;
 
 const TestId = 'RunDetail.Clone';
 
-type FormField = 'name' | 'releaseVersion' | 'buildNumber';
+type FormField = 'name' | 'releaseVersion' | 'buildNumber' | 'configurationId' | 'assigneeId';
 
-const FIELDS: readonly FormField[] = ['name', 'releaseVersion', 'buildNumber'];
+const FIELDS: readonly FormField[] = [
+  'name',
+  'releaseVersion',
+  'buildNumber',
+  'configurationId',
+  'assigneeId',
+];
 
 /**
  * Maps a refused clone onto the form.
  *
- * `configurationId` and `assigneeId` have no control here — by the decision above — so their
- * sentences go to the banner rather than nowhere, which is `RunCreateDialog`'s rule and the reason
- * that dialog has a test for exactly this case.
+ * ~~`configurationId` and `assigneeId` have no control here — by the decision above — so their
+ * sentences go to the banner rather than nowhere~~ → both have one since A4, so both land on
+ * themselves. The banner branch stays for the next field the contract grows, which is
+ * `RunCreateDialog`'s rule and the reason that dialog has a test for exactly this case.
  */
 function applyServerError(
   error: unknown,
@@ -128,6 +145,8 @@ export function RunCloneDialog({
   onCloned: (created: TestRun) => void;
 }) {
   const clone = useCloneRun(projectId, run.id);
+  const configurations = useConfigurations(projectId, open);
+  const members = useProjectMembers(projectId, open);
 
   const {
     register,
@@ -137,7 +156,13 @@ export function RunCloneDialog({
     formState: { errors },
   } = useForm<CloneFormInput>({
     resolver: zodResolver(CloneSchema),
-    defaultValues: { name: copyOf(run.name, MAX_NAME), releaseVersion: '', buildNumber: '' },
+    defaultValues: {
+      name: copyOf(run.name, MAX_NAME),
+      releaseVersion: '',
+      buildNumber: '',
+      configurationId: '',
+      assigneeId: '',
+    },
     mode: 'onBlur',
   });
 
@@ -162,6 +187,12 @@ export function RunCloneDialog({
         // would be an override to nothing that the source's own validation never accepted.
         ...(values.releaseVersion?.trim() ? { releaseVersion: values.releaseVersion.trim() } : {}),
         ...(values.buildNumber?.trim() ? { buildNumber: values.buildNumber.trim() } : {}),
+        // Same omitted-not-null rule for both of A4's fields, and it means different things on
+        // each: an absent `configurationId` keeps the SOURCE's environment, an absent `assigneeId`
+        // assigns nobody. The contract states both, and the two helper texts say them out loud
+        // because a reader cannot tell one default from the other by looking at the form.
+        ...(values.configurationId ? { configurationId: values.configurationId } : {}),
+        ...(values.assigneeId ? { assigneeId: values.assigneeId } : {}),
         // Absent unless the override was taken, or every cloned run in the product claims an
         // override nobody made.
         ...(overrideApprovalGate ? { overrideApprovalGate: true } : {}),
@@ -255,6 +286,75 @@ export function RunCloneDialog({
                 }}
                 {...register('buildNumber')}
               />
+            </Stack>
+
+            {/*
+              A4's two, and their defaults point in OPPOSITE directions — which is why each says
+              so on itself rather than sharing a line. Leaving the configuration alone keeps the
+              source's; leaving the assignee alone gives the copy to nobody, because a run has no
+              assignee for the clone to inherit (the column is per execution).
+            */}
+            <Stack direction="row" spacing={2}>
+              <TextField
+                label="Configuration"
+                select
+                fullWidth
+                defaultValue=""
+                error={!!errors.configurationId}
+                helperText={
+                  errors.configurationId?.message ?? `Leave as-is to keep ${run.configuration.name}.`
+                }
+                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Configuration` } }}
+                {...register('configurationId')}
+              >
+                <MenuItem value="" data-testid={`${TestId}.Configuration.Keep`}>
+                  <Box component="span" sx={{ color: 'text.secondary' }}>
+                    Keep {run.configuration.name}
+                  </Box>
+                </MenuItem>
+                {(configurations.data ?? [])
+                  // The source's own row is already the first option, under the label that says
+                  // what leaving it does — offering it twice would be two controls' worth of
+                  // choice for one outcome.
+                  .filter((configuration) => configuration.id !== run.configuration.id)
+                  .map((configuration) => (
+                    <MenuItem
+                      key={configuration.id}
+                      value={configuration.id}
+                      data-testid={`${TestId}.Configuration.${configuration.id}`}
+                    >
+                      {configuration.name}
+                    </MenuItem>
+                  ))}
+              </TextField>
+              <TextField
+                label="Assign to"
+                select
+                fullWidth
+                defaultValue=""
+                error={!!errors.assigneeId}
+                helperText={
+                  errors.assigneeId?.message ??
+                  'Optional — gives every case in the copy to one person.'
+                }
+                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Assignee` } }}
+                {...register('assigneeId')}
+              >
+                <MenuItem value="" data-testid={`${TestId}.Assignee.None`}>
+                  <Box component="span" sx={{ color: 'text.secondary' }}>
+                    Nobody — the team picks it up
+                  </Box>
+                </MenuItem>
+                {(members.data ?? []).map((member) => (
+                  <MenuItem
+                    key={member.id}
+                    value={member.id}
+                    data-testid={`${TestId}.Assignee.${member.id}`}
+                  >
+                    {member.displayName}
+                  </MenuItem>
+                ))}
+              </TextField>
             </Stack>
 
             {/*

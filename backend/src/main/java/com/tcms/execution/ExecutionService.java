@@ -494,8 +494,17 @@ public class ExecutionService {
         return byStep;
     }
 
-    /** The whole execution, rendered through the one assembler both endpoints share. */
-    private TestExecutionView detail(UUID companyId, TestExecution execution) {
+    /**
+     * The whole execution, rendered through the one assembler every endpoint on this row shares.
+     *
+     * <p>Package-private rather than private <strong>since the assignee got a writer</strong> —
+     * {@link ExecutionAssignmentService} answers with the same body this and the {@code GET} answer,
+     * which is §34's {@code viewOfCreated} property: the response to a write is the response to the
+     * read that follows it. A second assembler would put the pinned steps, the partitioned evidence
+     * and the resolved people together a second way, and only one of the two would be the one a
+     * reviewer read.
+     */
+    TestExecutionView detail(UUID companyId, TestExecution execution) {
         Map<UUID, CaseStatusView> vocabulary = statuses.byId(execution.getProjectId());
         PinnedCase pin = cases.pinnedCases(List.of(execution.getCaseVersionId()))
                 .get(execution.getCaseVersionId());

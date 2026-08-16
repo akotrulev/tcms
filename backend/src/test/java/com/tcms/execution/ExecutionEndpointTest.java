@@ -1704,8 +1704,216 @@ class ExecutionEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // A4 — the assignee gets a writer, and the environments get a reader
+    // =====================================================================
+
+    /**
+     * {@code PUT …/executions/{id}/assignee} — {@code test_execution.assignee_id}'s second writer.
+     *
+     * <h2>The failures this class exists to catch</h2>
+     *
+     * <ol>
+     *   <li><strong>The gate collapsing onto {@code run:create} or {@code result:submit}.</strong>
+     *       Both would compile, both would let every persona here through that should be through —
+     *       and both are held by {@code Automation Service}, so a leaked CI token could reorganise
+     *       a team's workload. {@link #theRobotMayNotReassignWork} is the only test in this file
+     *       that can tell the three keys apart, and it is the whole reason the key was chosen.</li>
+     *   <li><strong>"Is this person real" answered by {@code app_user}.</strong> That table is
+     *       instance-level (ERD §0.1's exception list), so an existence check accepts a user id
+     *       belonging to <em>another client entirely</em> — {@link #anotherCompanysUserIsRefused}
+     *       drives Umbra's lead at Acme's endpoint, which is the shape {@code RunCreateService}'s
+     *       own comment says cost it a red test.</li>
+     *   <li><strong>The verdict moving.</strong> Assigning is not executing, and a mutator that
+     *       stamped {@code executed_by} would attribute a result to whoever reorganised the
+     *       work.</li>
+     * </ol>
+     */
+    @Nested
+    @DisplayName("Assignment — one row of the checklist, given and taken back")
+    class Assignment {
+
+        @Test
+        @DisplayName("an engineer assigns, and the row a re-read serves carries the person")
+        void assigningIsServedBack() throws Exception {
+            MvcResult assigned = assign(ENGINEER, ACME, RUN, EXEC_A, LEAD);
+
+            assertThat(assigned.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(assigned).get("assignee").get("id").asText())
+                    .isEqualTo(LEAD.toString());
+            // Through the GET as well as through the write's own body: a write that answers
+            // something the read does not is §34's viewOfCreated defect.
+            assertThat(body(get(VIEWER, ACME, executionPath(RUN, EXEC_A)))
+                    .get("assignee").get("displayName").asText())
+                    .isEqualTo("L. Lead of Acme");
+        }
+
+        @Test
+        @DisplayName("null unassigns — the toggle, not a one-way door")
+        void nullTakesItBack() throws Exception {
+            assign(ENGINEER, ACME, RUN, EXEC_A, LEAD);
+
+            MvcResult cleared = assign(ENGINEER, ACME, RUN, EXEC_A, null);
+
+            assertThat(cleared.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(cleared).get("assignee").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("assigning does NOT touch the verdict, its author or its timestamp")
+        void theVerdictIsUntouched() throws Exception {
+            patch(ENGINEER, ACME, RUN, EXEC_A, resultPayload(passedStatus(), "Worked"), "0");
+            JsonNode before = body(get(VIEWER, ACME, executionPath(RUN, EXEC_A)));
+
+            assign(LEAD, ACME, RUN, EXEC_A, LEAD);
+            JsonNode after = body(get(VIEWER, ACME, executionPath(RUN, EXEC_A)));
+
+            // THE assertion of this class after the gate: a mutator that stamped executedBy would
+            // record the engineer's verdict under the lead's name, with a 200 and no other tell.
+            assertThat(after.get("status").get("id").asText())
+                    .isEqualTo(before.get("status").get("id").asText());
+            assertThat(after.get("executedBy").get("id").asText())
+                    .isEqualTo(before.get("executedBy").get("id").asText());
+            assertThat(after.get("executedAt").asText())
+                    .isEqualTo(before.get("executedAt").asText());
+        }
+
+        @Test
+        @DisplayName("a Viewer is refused — 403, on a project they can read")
+        void aViewerIsRefused() throws Exception {
+            assertThat(assign(VIEWER, ACME, RUN, EXEC_A, LEAD).getResponse().getStatus())
+                    .isEqualTo(403);
+        }
+
+        @Test
+        @DisplayName("the Automation Service credential is refused — the key this gate was picked for")
+        void theRobotMayNotReassignWork() throws Exception {
+            // The persona that separates the three candidate keys. It HOLDS run:create (it opens
+            // the runs it posts into) and result:submit (ingesting is its purpose) and it does not
+            // hold run:execute — so this 403 is the only observation in the suite that would go
+            // green if somebody "simplified" the gate onto either of the other two.
+            assertThat(assign(ROBOT, ACME, RUN, EXEC_A, LEAD).getResponse().getStatus())
+                    .isEqualTo(403);
+        }
+
+        @Test
+        @DisplayName("a user of ANOTHER company is a 400 on the field, not a silent write")
+        void anotherCompanysUserIsRefused() throws Exception {
+            MvcResult refused = assign(ENGINEER, ACME, RUN, EXEC_A, OUTSIDER);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(refused)).containsKey("assigneeId");
+            // And the row did not move. An existence check against app_user would have written
+            // Umbra's lead onto Acme's checklist and answered 200.
+            assertThat(body(get(VIEWER, ACME, executionPath(RUN, EXEC_A))).get("assignee").isNull())
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("a member with no project grant is accepted — company membership is the rule")
+        void aCompanyMemberWithoutAGrantIsAccepted() throws Exception {
+            // NOT a bug, and worth pinning so nobody "tightens" it into one: this is the same
+            // predicate POST /runs applies to the same column, and narrowing it here would make
+            // the two writers of one column disagree about who may hold it. GET /members answers
+            // the narrower question, so a picker built from it simply offers fewer people.
+            assertThat(assign(ENGINEER, ACME, RUN, EXEC_A, NO_GRANT).getResponse().getStatus())
+                    .isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("a closed run refuses the reassignment — 409, naming the way back")
+        void aClosedRunIsFrozen() throws Exception {
+            putStatus(LEAD, ACME, RUN, "COMPLETED");
+
+            MvcResult refused = assign(ENGINEER, ACME, RUN, EXEC_A, LEAD);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(body(refused).get("detail").asText())
+                    .contains("checklist can no longer be reorganised")
+                    .contains("Reopen the run");
+        }
+
+        @Test
+        @DisplayName("assigning the same person twice writes ONE audit row")
+        void repeatingIsIdempotent() throws Exception {
+            assign(ENGINEER, ACME, RUN, EXEC_A, LEAD);
+            assign(ENGINEER, ACME, RUN, EXEC_A, LEAD);
+
+            assertThat(auditCount("execution.assigned")).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("the audit row names BOTH ends of the move")
+        void theAuditRowNamesTheMove() throws Exception {
+            assign(ENGINEER, ACME, RUN, EXEC_A, LEAD);
+            assign(ENGINEER, ACME, RUN, EXEC_A, null);
+
+            // "Who took this off the lead" is unanswerable from a row that only names where it
+            // landed — which for an unassignment is nothing at all.
+            assertThat(auditEvents(ACME).get("execution.unassigned"))
+                    .contains(LEAD.toString())
+                    .containsIgnoringWhitespaces("\"to\":null");
+        }
+
+        @Test
+        @DisplayName("an unreachable execution is 404 even for a caller who could write")
+        void unreachableBeatsForbidden() throws Exception {
+            assertThat(assign(LEAD, ACME, RUN, EXEC_OLD, LEAD).getResponse().getStatus())
+                    .isEqualTo(404);
+        }
+    }
+
+    @Nested
+    @DisplayName("Configurations — the vocabulary a run form could not read")
+    class Configurations {
+
+        @Test
+        @DisplayName("a Viewer reads the project's environments, seeded Default first")
+        void everyReaderSeesThem() throws Exception {
+            MvcResult listed = get(VIEWER, ACME, "/projects/" + ACME_BANKING + "/configurations");
+
+            assertThat(listed.getResponse().getStatus()).isEqualTo(200);
+            JsonNode rows = body(listed);
+            // Never empty: tcms_seed_project_defaults gives every project one, which is what lets
+            // test_run.configuration_id be NOT NULL while the input field is optional.
+            assertThat(rows).isNotEmpty();
+            assertThat(rows.get(0).get("isDefault").asBoolean()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a company member with no grant gets 404 — never 403, never an empty list")
+        void noGrantSeesNothing() throws Exception {
+            assertThat(get(NO_GRANT, ACME, "/projects/" + ACME_BANKING + "/configurations")
+                    .getResponse().getStatus())
+                    .isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("the other client cannot read this project's environments")
+        void theOtherCompanyIsRefused() throws Exception {
+            assertThat(get(OUTSIDER, UMBRA, "/projects/" + ACME_BANKING + "/configurations")
+                    .getResponse().getStatus())
+                    .isEqualTo(404);
+        }
+    }
+
+    // =====================================================================
     // helpers — HTTP
     // =====================================================================
+
+    /** {@code PUT …/assignee}. A null {@code assigneeId} is sent as JSON null, never omitted. */
+    private MvcResult assign(
+            UUID userId, UUID companyId, UUID runId, UUID executionId, UUID assigneeId)
+            throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .put("/api/v1" + executionPath(runId, executionId) + "/assignee")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"assigneeId\":"
+                                + (assigneeId == null ? "null" : "\"" + assigneeId + "\"") + "}"))
+                .andReturn();
+    }
 
     private MvcResult attach(
             UUID userId, UUID companyId, UUID executionId, String filename, String contentType,

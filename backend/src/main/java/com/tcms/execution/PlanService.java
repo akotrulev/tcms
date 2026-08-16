@@ -43,7 +43,7 @@ public class PlanService {
     private final ProjectService projects;
     private final TestPlanRepository plans;
     private final PlanScopeItemRepository scopeItems;
-    private final ConfigurationRepository configurations;
+    private final ConfigurationService configurations;
     private final CaseFacts cases;
     private final PlanCriteria criteria;
 
@@ -51,7 +51,7 @@ public class PlanService {
             ProjectService projects,
             TestPlanRepository plans,
             PlanScopeItemRepository scopeItems,
-            ConfigurationRepository configurations,
+            ConfigurationService configurations,
             CaseFacts cases,
             PlanCriteria criteria) {
 
@@ -188,13 +188,11 @@ public class PlanService {
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> PlanScope.ofItems(e.getValue())));
     }
 
+    /**
+     * Delegated since the register got its own endpoint — see {@link ConfigurationService#of}, which
+     * is this method's body moved rather than a second copy of it.
+     */
     private List<ConfigurationView> configurationsOf(UUID projectId) {
-        return configurations.findByProjectIdOrderByIsDefaultDescNameAsc(projectId).stream()
-                .map(configuration -> new ConfigurationView(
-                        configuration.getId(),
-                        configuration.getName(),
-                        configuration.isDefault(),
-                        criteria.attributes(configuration.getAttributes())))
-                .toList();
+        return configurations.of(projectId);
     }
 }
