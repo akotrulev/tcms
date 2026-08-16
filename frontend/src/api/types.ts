@@ -327,6 +327,14 @@ export type ArtifactStatus = S['Artifact']['status'];
 export type ArtifactCirculation = S['ArtifactStatusInput']['status'];
 export type ArtifactInput = S['ArtifactInput'];
 /**
+ * The register's whole **editable** surface — three fields, and the absences are the design.
+ *
+ * Scope, plan, kind and every payload column are `updatable = false` on the row: correcting what an
+ * artifact *points at* is superseding it (plan §6n), and its status has its own operation. So this
+ * is deliberately not `Partial<ArtifactInput>`, which would offer four fields the server refuses.
+ */
+export type ArtifactEditInput = S['ArtifactEditInput'];
+/**
  * The register fields that travel **beside an uploaded file** — the `artifact` part of
  * `POST /projects/{projectId}/artifacts/files`.
  *

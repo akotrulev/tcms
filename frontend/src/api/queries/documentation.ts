@@ -4,6 +4,7 @@ import { ApiError, api, fetchArtifact, qs } from '../client';
 import type {
   Artifact,
   ArtifactCirculation,
+  ArtifactEditInput,
   ArtifactFileInput,
   ArtifactInput,
   Attachment,
@@ -315,6 +316,55 @@ export function useRegisterArtifactFile(projectId: string) {
  * register as an inherited row (plan §6n), so archiving one changes lists this mutation never
  * named. The prefix is what refreshes the inherited copy.
  */
+/**
+ * Corrects an artifact's title, category or description — **A6, and the register's first edit**.
+ *
+ * `artifact:edit` has had a UI writer since §126 and it could only ever *register* or *archive*;
+ * nothing could change what a row says. So `ArtifactTable`'s own comment was right that a typo
+ * could only be answered by superseding or by delete-and-recreate, and both of those say something
+ * untrue about the project in order to fix a spelling.
+ *
+ * Invalidation is `useCreateArtifact`'s prefix and for its reason: a project-scope artifact appears
+ * in every plan's register as an inherited row, so correcting one changes lists this mutation never
+ * named.
+ *
+ * `handled` because the dialog lands the server's `errors` map on its own controls — including the
+ * scope-qualified 403 and the write-once 409, which is a sentence about the record rather than
+ * about the caller.
+ */
+export function useUpdateArtifact(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ artifactId, input }: { artifactId: string; input: ArtifactEditInput }) =>
+      api.patch<Artifact>(`${base(projectId)}/artifacts/${artifactId}`, input),
+    meta: { handled: true },
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: ['projects', projectId, 'artifacts'] }),
+  });
+}
+
+/**
+ * Unregisters an artifact — **`DELETE /artifacts/{id}` shipped in §126 and had no caller at all**.
+ *
+ * Same prefix invalidation, same reason. **No optimistic removal**: the server refuses two states
+ * with a 409 — a sign-off record, and a row another artifact supersedes — and taking the row off
+ * screen before the answer arrives would put it back with an error beside it, for the one action
+ * whose refusal the reader most needs to read.
+ *
+ * `handled` because that 409 belongs in the confirm dialog that raised it, not in a corner toast
+ * detached from the row it is about.
+ */
+export function useDeleteArtifact(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (artifactId: string) =>
+      api.del<void>(`${base(projectId)}/artifacts/${artifactId}`),
+    meta: { handled: true },
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: ['projects', projectId, 'artifacts'] }),
+  });
+}
+
 export function useSetArtifactStatus(projectId: string) {
   const client = useQueryClient();
   return useMutation({

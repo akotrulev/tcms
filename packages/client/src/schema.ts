@@ -6519,7 +6519,60 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Correct an artifact's title, category or description
+         * @description **The register had no edit path at all until this operation**, despite `artifact:edit`
+         *     being a seeded key with two writers (register, and archive/restore). So a typo in a title
+         *     could only be answered by superseding the row — which asserts on the record that a *newer
+         *     document* replaced it — or by deleting and re-registering, which loses the author and the
+         *     date. Both say something untrue about the project in order to fix a spelling.
+         *
+         *     **Three fields, and the exclusions are the interesting half.** `scope`, `planId`, `kind`
+         *     and all three payload columns (`docPageId`, `url`, the attachment) are `updatable = false`
+         *     on the entity, each for a reason recorded there: a row that changed scope would move
+         *     between two different permission verdicts, and a row that swapped its payload would keep
+         *     the `created_at`, the author and the audit trail of the document it replaced. Plan §6n's
+         *     answer to *"this points at the wrong thing"* is to supersede it, and that is unchanged.
+         *     `status` has its own operation for §6g's reason.
+         *
+         *     **`title` and `category` are required; `description` is nullable and a `null` clears it.**
+         *     This is §68's convention, unchanged and deliberately not extended: Jackson gives an absent
+         *     field and an explicit `null` the same Java value, so no operation in this API can tell them
+         *     apart, and inventing a distinction here would mean a third reading of a `PATCH` body in a
+         *     product that already has two. Requiring the two `NOT NULL` columns is what makes the rule
+         *     safe rather than merely consistent — a partial writer that omitted `title` would otherwise
+         *     be asking to clear a column that cannot be cleared.
+         *
+         *     Read as: *this is the editable metadata, stated whole*. The SPA's dialog renders all three
+         *     and submits all three, which is the same shape every other write in this module has. The
+         *     flow review's B1 — unify the case `PATCH`'s absent-clears with something safer — is a
+         *     separate decision over the contract as a whole and is **not** pre-empted here.
+         *
+         *     **Requires `artifact:edit`, scope-qualified against the ROW's scope** — the status
+         *     operation's rule, word for word, and for its reason: reading a scope out of the body would
+         *     let a Test Engineer edit the project's test strategy by not mentioning where it lives. The
+         *     refusal is a `403` carrying `errors.scope`.
+         *
+         *     **A write-once artifact is refused with `409`.** `artifact.write_once` marks a sign-off
+         *     record whose stated meaning is that corrections supersede and never overwrite — the
+         *     delete's first guard, applied to the other act it was always about. Nothing sets the column
+         *     `true` yet; it is honoured now rather than when a writer appears, for the delete's reason.
+         *
+         *     **A `SUPERSEDED` artifact is still editable, and that is a decision.** The status operation
+         *     refuses it because a status is a fact about *another* row; a title is not, and a register
+         *     that cannot correct a typo in what it says was replaced is the same dead end this operation
+         *     exists to close. Being permanent is `write_once`'s job, and that guard is above.
+         *
+         *     Idempotent: a body that changes nothing answers `200` with the row and writes no audit
+         *     event — the status operation's call, for the same reason.
+         *
+         *     No `If-Match`. `Artifact` carries a `lock_version` and the register does not put it on the
+         *     wire, so there is nothing for a client to send back; this is the same last-write-wins the
+         *     status operation has. Worth knowing rather than assuming: two people correcting one title
+         *     is not the concurrent case this module has (that is two people *registering*), and adding
+         *     the header would mean widening the read schema first.
+         */
+        patch: operations["updateArtifact"];
         trace?: never;
     };
     "/projects/{projectId}/artifacts/{artifactId}/status": {
@@ -12011,6 +12064,33 @@ export interface components {
             supersedes?: string | null;
         };
         /**
+         * @description A correction, for `PATCH /projects/{projectId}/artifacts/{artifactId}` — the register's
+         *     editable metadata, stated whole.
+         *
+         *     These three are its **entire** editable surface. Scope, plan, kind and every payload column
+         *     are `updatable = false` on the entity; correcting what an artifact *points at* is
+         *     superseding it (plan §6n), and its status has its own operation.
+         */
+        ArtifactEditInput: {
+            /**
+             * @description Required, because the column is `NOT NULL` — see the operation for why §68's
+             *     null-clears convention makes requiring it the safe reading rather than merely the
+             *     consistent one.
+             */
+            title: string;
+            /**
+             * @description Required for `title`'s reason. Same free vocabulary the registration takes: the list is
+             *     project-configurable (plan §6n) and the register groups by it rather than switching on
+             *     it, so there is nothing to validate it against.
+             */
+            category: string;
+            /**
+             * @description The one clearable field, and `null` is how it clears. A register entry that once
+             *     carried a note and no longer needs one is an ordinary thing.
+             */
+            description?: string | null;
+        };
+        /**
          * @description The state the caller wants, for
          *     `PUT /projects/{projectId}/artifacts/{artifactId}/status`.
          */
@@ -14062,6 +14142,37 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    updateArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                artifactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtifactEditInput"];
+            };
+        };
+        responses: {
+            /** @description The corrected row */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Artifact"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     setArtifactStatus: {

@@ -2660,6 +2660,32 @@ completion, which no UI can do; `ReportJobPipelineTest.Reaping` writes the state
 only observer. What a pass *could* do — and is worth one line if the lane has database access — is
 set a live job's `started_at` back an hour and watch the card turn Failed within thirty seconds.
 
+## §229 phase 2 — the correction the register could not make (A6)
+
+**Eight rows, none run** (§65). Ids are `§229 AR-*`; `AR` is unused elsewhere in this file — grepped
+before minting (`§154`'s banner).
+
+Lane: **A5 — artifacts** for every row. `AR-1`–`AR-6` need a **Test Lead**; `AR-7` needs a caller
+holding `artifact:edit` and **not** `artifact:delete`, which no seeded role is — so it needs a
+hand-built grant, and *"not driveable with the seeded six"* is a legitimate outcome to record.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§229 AR-1` | **A5**, open the row menu on any artifact | Four items: **Correct…**, Archive, Restore, **Remove…**. The first and last are new — before this slice the register could register and archive, and nothing else. |
+| `§229 AR-2` | Press **Correct…**, change the title, Save | The row's title changes in place. The dialog carries an info banner saying scope and target cannot be changed here and pointing at superseding, which is the sentence somebody who opened it to fix a wrong URL needs to read. |
+| `§229 AR-3` | Correct… on a row that has a description, empty the description box, Save | The caption line under the title **goes**. Sending `''` instead of `null` would store a present-and-blank description, which renders as an empty line — visible only by looking for it. |
+| `§229 AR-4` | Correct… twice with no change the second time | Both save. Nothing in the UI distinguishes them, and that is correct — the second writes no audit row, which is only visible in `audit_event`. Worth one SQL check if the lane has database access. |
+| `§229 AR-5` | Open the row menu on a **superseded** row | The kebab **opens** (it used to be disabled entirely), **Correct… is live**, Archive and Restore are greyed. The *why* is on the status chip beside the title, which is where a reader looks — a tooltip on a disabled `MenuItem` never fires. |
+| `§229 AR-6` | Press **Remove…** on a **FILE** artifact | A confirmation naming that the uploaded file goes with it, and an info line pointing at **Archive** for the case somebody actually meant. Cancel, and nothing happens; confirm, and the row goes. Archiving deliberately has no such dialog — it destroys nothing. |
+| `§229 AR-7` | As a caller holding `artifact:edit` and not `artifact:delete` | **Remove… greyed, Correct… live.** The two keys are separate on purpose — a company may grant one without the other — and `artifact:delete` is *unqualified*, so the menu asks it with `can` rather than `canOnScope`. Not driveable with the seeded six; say so rather than skipping. |
+| `§229 AR-8` | Remove… a row that another artifact supersedes | A **red alert inside the confirmation dialog**, not a corner toast: deleting it would leave the newer row pointing at nothing. The client cannot predict either 409 (`write_once` is not on the wire at all), which is why they are rendered in place. |
+
+**Not driveable from a browser and named so it is not read as an omission:** the `write_once` 409.
+Nothing in the product sets that column — the backend test sets it in SQL — so a browser pass can
+only reach it with database access. If the lane has it, `UPDATE artifact SET write_once = true` on
+one row and then Correct… is one row's worth of evidence for a guard that otherwise has no live
+observer at all.
+
 ## §229 phase 1 — the assignee that could not be given, and the environment nobody chose (A4)
 
 **Thirteen rows, none run** (§65). Ids are `§229 AS-*`; `AS` is unused elsewhere in this file —

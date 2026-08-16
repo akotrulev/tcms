@@ -386,6 +386,126 @@ public class ArtifactWriteService {
     }
 
     /**
+     * Corrects an artifact's title, category or description — <strong>the register's first edit
+     * path, and the gap {@code artifact:edit} had carried since {@code V1}</strong>.
+     *
+     * <p>The key has been seeded since M0 and had two consumers, both of which <em>register</em> or
+     * <em>circulate</em> a row; nothing could change what one says. So a typo in a title could be
+     * answered only by superseding — which asserts on the record that a newer <em>document</em>
+     * replaced it — or by deleting and re-registering, which loses the author and the date. Both
+     * say something untrue about the project in order to fix a spelling.
+     *
+     * <h2>The gate is {@link #setStatus}'s, word for word</h2>
+     *
+     * <p>{@code artifact:edit}, scope-qualified against the <strong>row's</strong> scope rather than
+     * the request's — and it is not a choice this method gets to make, because there is no scope in
+     * the request at all: {@link ArtifactEditInput} has three fields and none of them is scope.
+     * That is the same rule expressed one layer further down, where it cannot be defeated by an
+     * omitted field.
+     *
+     * <h2>Two refusals, and only one of them exists</h2>
+     *
+     * <p>{@code write_once} is honoured — a sign-off record's stated meaning is that corrections
+     * supersede and never overwrite, which is a rule about editing at least as much as about
+     * deleting, and the delete has enforced it since §126. Nothing sets the column {@code true}
+     * yet; it is honoured now for the delete's reason, which is that enforcement arriving after the
+     * control it protects is a guarantee that is believed and does nothing.
+     *
+     * <p><strong>{@link ArtifactStatus#SUPERSEDED} is NOT refused, and that is a decision.</strong>
+     * {@link #setStatus} refuses it because a status is a fact about <em>another</em> row; a title
+     * is not. A register that cannot correct a typo in what it says was replaced is the same dead
+     * end this method exists to close, one row further back. Permanence is {@code write_once}'s
+     * job, and it is the guard above — the delete draws exactly this line in its own header.
+     *
+     * <p>Idempotent, like {@link #setStatus}: a body that changes nothing answers 200 and writes no
+     * audit event.
+     */
+    @Transactional
+    public Outcome edit(
+            UUID userId, UUID projectId, UUID artifactId, ArtifactEditInput input) {
+
+        return gated(projects.writeGrantedByRowScope(userId, projectId, PERMISSION,
+                (project, rowScope) -> {
+                    Optional<Artifact> found = artifacts.findInProject(project.getId(), artifactId);
+                    if (found.isEmpty()) {
+                        return new Outcome.NotFound();
+                    }
+                    Artifact artifact = found.get();
+                    // Before validation, and before the write-once refusal: a caller who may not
+                    // touch this row learns nothing about their payload, which is the ordering
+                    // §34's thePermissionIsCheckedFirst pins one module over.
+                    if (!rowScope.mayActOn(artifact.getScope() == ArtifactScope.PLAN)) {
+                        return new Outcome.ForbiddenAtScope();
+                    }
+
+                    Map<String, List<String>> errors = validateEdit(input);
+                    if (!errors.isEmpty()) {
+                        return new Outcome.Invalid(errors);
+                    }
+                    if (artifact.isWriteOnce()) {
+                        return new Outcome.Unchangeable(
+                                "This is a sign-off record, and the register keeps those as they "
+                                        + "were signed. Supersede it with a correction instead.");
+                    }
+
+                    String title = input.title().trim();
+                    String category = input.category().trim();
+                    String description = trimmedOrNull(input.description());
+                    boolean unchanged = title.equals(artifact.getTitle())
+                            && category.equals(artifact.getCategory())
+                            && Objects.equals(description, artifact.getDescription());
+
+                    Instant now = clock.instant();
+                    if (!unchanged) {
+                        artifact.amend(title, category, description, userId, now);
+                        artifacts.saveAndFlush(artifact);
+                        auditAmendment(project.getId(), userId, artifact, now);
+                    }
+
+                    Map<UUID, UserRef> authors = people.resolve(
+                            CompanyContext.require(), List.of(artifact.getUpdatedBy()));
+                    return new Outcome.Updated(ArtifactView.of(
+                            project.getId(),
+                            artifact,
+                            files.forArtifact(artifact).orElse(null),
+                            false,
+                            authors));
+                }));
+    }
+
+    /**
+     * The edit's field rules — the create's, minus every field the edit cannot reach.
+     *
+     * <p>Not {@link #validate} with a flag. That method's job is the cross-field scope/kind/
+     * supersedes reasoning, none of which has an input here, and threading a third mode through it
+     * would make the create's rules read as conditional when they are not.
+     */
+    private static Map<String, List<String>> validateEdit(ArtifactEditInput input) {
+        Map<String, List<String>> errors = new LinkedHashMap<>();
+
+        if (isBlank(input.title())) {
+            // Covers the omitted field too: §68's convention makes an absent scalar a null, and a
+            // null title is a request to clear a NOT NULL column. Answered as a field error rather
+            // than as a 500 from the database.
+            errors.put("title", List.of("Give the artifact a title."));
+        } else if (input.title().trim().length() > Artifact.MAX_TITLE) {
+            errors.put("title", List.of("Keep the title to " + Artifact.MAX_TITLE + " characters."));
+        }
+        if (isBlank(input.category())) {
+            errors.put("category", List.of("Give the artifact a category."));
+        } else if (input.category().trim().length() > Artifact.MAX_CATEGORY) {
+            errors.put("category",
+                    List.of("Keep the category to " + Artifact.MAX_CATEGORY + " characters."));
+        }
+        if (input.description() != null
+                && input.description().trim().length() > Artifact.MAX_DESCRIPTION) {
+            errors.put("description",
+                    List.of("Keep the description to " + Artifact.MAX_DESCRIPTION + " characters."));
+        }
+        return errors;
+    }
+
+    /**
      * Takes an artifact out of circulation, or puts it back —
      * <strong>{@link ArtifactStatus#ARCHIVED}'s only writer</strong>.
      *
@@ -863,6 +983,27 @@ public class ArtifactWriteService {
                         + ",\"supersededBy\":\"" + replacement.getId() + "\""
                         + ",\"supersededByTitle\":" + AuditEvent.jsonString(replacement.getTitle())
                         + "}",
+                now));
+    }
+
+    /**
+     * A correction, recorded with the values it produced.
+     *
+     * <p>The new title rather than the old one, unlike {@link #auditRemoval}: the row is still in
+     * the register, so "what did it say before" is answerable from the previous event and "what
+     * does it say now" is not answerable from a row that only names an id. Category travels with
+     * it because the register groups by it — a document that moved from Compliance to Other has
+     * moved on somebody's screen.
+     */
+    private void auditAmendment(UUID projectId, UUID userId, Artifact artifact, Instant now) {
+        auditEvents.save(AuditEvent.record(
+                projectId,
+                userId,
+                "ARTIFACT_AMENDED",
+                AUDIT_TARGET,
+                List.of(artifact.getId()),
+                "{\"title\":" + AuditEvent.jsonString(artifact.getTitle())
+                        + ",\"category\":" + AuditEvent.jsonString(artifact.getCategory()) + "}",
                 now));
     }
 

@@ -274,6 +274,25 @@ public class Artifact {
     }
 
     /**
+     * Corrects the metadata — <strong>the register's only edit, and its whole editable surface</strong>.
+     *
+     * <p>Three fields, because every other mapped column is {@code updatable = false} and says why
+     * at its own declaration. This method cannot widen that by accident: a caller reaching for
+     * {@code scope} or a payload column finds no setter at all, which is the difference between a
+     * rule and a convention.
+     *
+     * <p>Nothing is refused here, for {@link #supersededBy}'s reason: whether this row is one that
+     * may be edited — {@link #writeOnce} — is the caller's question, because the refusal names a
+     * state in a 409 and an entity cannot produce one.
+     */
+    void amend(String title, String category, String description, UUID actorId, Instant now) {
+        this.title = title;
+        this.category = category;
+        this.description = description;
+        touch(actorId, now);
+    }
+
+    /**
      * Takes the artifact out of circulation, or puts it back.
      *
      * <p>{@link ArtifactStatus#SUPERSEDED} is not one of the two and the guard is a programming

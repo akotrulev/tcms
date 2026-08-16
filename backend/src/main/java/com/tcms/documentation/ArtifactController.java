@@ -11,6 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -118,6 +119,54 @@ public class ArtifactController {
             case ArtifactWriteService.Outcome.Updated ignored ->
                     ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             case ArtifactWriteService.Outcome.Unchangeable ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        };
+    }
+
+    /**
+     * Corrects an artifact's title, category or description.
+     *
+     * <p>{@code PATCH} rather than {@code PUT} because the body is a <em>subset</em> of the row —
+     * scope, kind and the payload columns are not settable at all — so a {@code PUT} would name a
+     * representation this endpoint cannot accept whole. That it happens to require two of its three
+     * fields does not make it a replacement: see {@link ArtifactEditInput} for §68's convention and
+     * why requiring them is what makes it safe.
+     *
+     * <p>Every status here is the status endpoint's, and for the same reasons — including the 403
+     * with a body, which is the scope-qualified refusal read against the <strong>row's</strong>
+     * scope. The 409 is a different one: {@code write_once}, which is the delete's first guard
+     * applied to the other act it was always about.
+     */
+    @PatchMapping("/{artifactId}")
+    public ResponseEntity<Object> update(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID artifactId,
+            @RequestBody ArtifactEditInput input) {
+
+        ArtifactWriteService.Outcome outcome =
+                writes.edit(UUID.fromString(jwt.getSubject()), projectId, artifactId, input);
+
+        return switch (outcome) {
+            case ArtifactWriteService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
+            case ArtifactWriteService.Outcome.Invalid invalid -> ResponseEntity.badRequest()
+                    .body(problem("The artifact could not be changed.", invalid.errors()));
+            case ArtifactWriteService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            case ArtifactWriteService.Outcome.ForbiddenAtScope ignored -> ResponseEntity
+                    .status(HttpStatus.FORBIDDEN)
+                    .body(editScopeProblem());
+            case ArtifactWriteService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case ArtifactWriteService.Outcome.Unchangeable refused -> ResponseEntity
+                    .status(HttpStatus.CONFLICT)
+                    .body(conflict("This artifact cannot be changed", refused.message()));
+            // The create's and the delete's. Unreachable here — see the delete's switch for why
+            // the arms stay written rather than collapsed into a default.
+            case ArtifactWriteService.Outcome.Created ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.Deleted ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.Undeletable ignored ->
                     ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         };
     }
@@ -266,6 +315,25 @@ public class ArtifactController {
      * requires the value to be a literal sentence there, so a parameterized builder hands it a
      * variable and the rule stops being able to see the words.
      */
+    /**
+     * The same refusal about correcting a row, which is a third sentence rather than a parameter.
+     *
+     * <p>Three near-identical builders is not duplication being tolerated — {@code
+     * ErrorBodyPolicyTest} reads the <strong>construction site</strong> and requires the value to
+     * be a literal sentence there, so a parameterized builder hands it a variable and the rule
+     * stops being able to see the words. See {@link #statusScopeProblem()}.
+     */
+    private static ProblemDetail editScopeProblem() {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.FORBIDDEN, "Your role can correct a plan's artifacts, but not the project's.");
+        detail.setTitle("Not allowed at this scope");
+        detail.setProperty("errors", Map.of(
+                "scope",
+                List.of("Your role can correct a plan's artifacts, but not the project's. Project "
+                        + "artifacts are inherited by every plan, so a Test Lead owns them.")));
+        return detail;
+    }
+
     private static ProblemDetail statusScopeProblem() {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(
                 HttpStatus.FORBIDDEN, "Your role can change a plan's artifacts, but not the project's.");

@@ -401,6 +401,8 @@ class ContractConventionTest {
                     List.of(com.tcms.auth.SsoController.ProviderDiscoveryResponse.class)),
             Map.entry("Artifact", List.of(com.tcms.documentation.ArtifactView.class)),
             Map.entry("ArtifactFileInput", List.of(com.tcms.documentation.ArtifactFileInput.class)),
+            Map.entry("ArtifactEditInput",
+                    List.of(com.tcms.documentation.ArtifactEditInput.class)),
             Map.entry("ArtifactInput", List.of(com.tcms.documentation.ArtifactInput.class)),
             Map.entry("ArtifactStatusInput",
                     List.of(com.tcms.documentation.ArtifactStatusInput.class)),

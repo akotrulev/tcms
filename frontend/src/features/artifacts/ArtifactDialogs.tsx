@@ -18,7 +18,13 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { Artifact, DocPageSummary, TestPlanSummary } from '../../api/types';
 import { ApiError } from '../../api/client';
-import { useArtifacts, useCreateArtifact, useRegisterArtifactFile } from '../../api/queries';
+import {
+  useArtifacts,
+  useCreateArtifact,
+  useDeleteArtifact,
+  useRegisterArtifactFile,
+  useUpdateArtifact,
+} from '../../api/queries';
 import { useCan } from '../../auth/useCan';
 import { MAX_UPLOAD_BYTES, uploadRefusal } from '../../lib/attachments';
 import { describeError } from '../../lib/describeError';
@@ -642,6 +648,303 @@ export function RegisterArtifactDialog({
           </Button>
         </DialogActions>
       </form>
+    </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ A6 --- */
+
+const EditSchema = z.object({
+  title: z
+    .string()
+    .min(1, 'Give the artifact a title.')
+    .max(MAX_TITLE, `Keep the title to ${MAX_TITLE} characters.`),
+  category: z.string().min(1, 'Choose a category.').max(MAX_CATEGORY),
+  description: z.string().max(MAX_DESCRIPTION, `Keep it to ${MAX_DESCRIPTION} characters.`),
+});
+
+type EditFormInput = z.infer<typeof EditSchema>;
+
+type EditFieldName = 'title' | 'category' | 'description' | 'root';
+
+const EDIT_FIELDS: readonly EditFieldName[] = ['title', 'category', 'description'];
+
+const EditTestId = 'Artifacts.Edit';
+
+/**
+ * Correcting an artifact — **three fields, and the absences are the design.**
+ *
+ * `scope`, `planId`, `kind` and every payload column are `updatable = false` on the row, so this
+ * dialog offers none of them. That is not a narrower form than the registration for convenience: a
+ * control here for a value the server cannot accept is `ui-rules`' write-path-ignores defect, and
+ * the honest answer to *"this points at the wrong thing"* is Register a replacement, which the
+ * register already has as **supersede**.
+ *
+ * **Prefilled, unlike `RunCloneDialog`'s release**, and the difference is what an absent field
+ * means on each wire: there, absent keeps the source's value, so a prefilled box a user empties
+ * would be silently ignored; here the body states the metadata whole (§68), so what is on screen
+ * is what will be saved and prefilling is the only honest starting point.
+ *
+ * The category picker is `CATEGORIES` — the same list the registration offers, for the same reason
+ * (the register **groups** by this, and "Environment" beside "environments" is two groups that
+ * should be one). A row whose category came from somewhere else keeps it as an extra option rather
+ * than being silently retyped.
+ */
+export function EditArtifactDialog({
+  open,
+  onClose,
+  projectId,
+  artifact,
+}: {
+  open: boolean;
+  onClose: () => void;
+  projectId: string;
+  artifact: Artifact;
+}) {
+  const update = useUpdateArtifact(projectId);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setError,
+    setFocus,
+    formState: { errors, isSubmitting },
+  } = useForm<EditFormInput>({
+    resolver: zodResolver(EditSchema),
+    defaultValues: {
+      title: artifact.title,
+      category: artifact.category,
+      description: artifact.description ?? '',
+    },
+    mode: 'onBlur',
+  });
+
+  /*
+    Re-seeded whenever the dialog opens on a row. One dialog instance serves every row of the
+    table, so without this the second artifact somebody edits opens showing the first one's title —
+    the defect that looks like a caching bug and is a defaultValues one.
+  */
+  useEffect(() => {
+    if (!open) return;
+    reset({
+      title: artifact.title,
+      category: artifact.category,
+      description: artifact.description ?? '',
+    });
+    setFocus('title');
+  }, [open, artifact, reset, setFocus]);
+
+  const submit = handleSubmit(async (values) => {
+    try {
+      await update.mutateAsync({
+        artifactId: artifact.id,
+        input: {
+          title: values.title.trim(),
+          category: values.category,
+          // '' is the empty textarea and `null` is the wire's "clear it". Sending the empty string
+          // would store a description that is present and blank, which renders as an empty caption
+          // line under the title.
+          description: values.description.trim() || null,
+        },
+      });
+      onClose();
+    } catch (error) {
+      applyEditError(error, (field, message) => setError(field, { type: 'server', message }));
+    }
+  });
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={EditTestId}>
+      <form onSubmit={submit} noValidate aria-busy={isSubmitting}>
+        <DialogTitle>Correct this artifact</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {errors.root && (
+              <Alert severity="error" role="alert" data-testid={`${EditTestId}.Error`}>
+                {errors.root.message}
+              </Alert>
+            )}
+            {/*
+              What this dialog cannot change, said once rather than implied by four missing
+              controls. Somebody who opened it to fix a wrong URL should leave knowing the register
+              has an answer for that, not concluding the feature is broken.
+            */}
+            <Alert severity="info" data-testid={`${EditTestId}.Scope`}>
+              Where this artifact sits and what it points at cannot be changed here — register a
+              replacement instead, and the register will record that it superseded this one.
+            </Alert>
+            <TextField
+              label="Title"
+              required
+              autoComplete="off"
+              error={!!errors.title}
+              helperText={errors.title?.message}
+              slotProps={{ htmlInput: { 'data-testid': `${EditTestId}.Title`, maxLength: MAX_TITLE } }}
+              {...register('title')}
+            />
+            <TextField
+              label="Category"
+              select
+              defaultValue={artifact.category}
+              error={!!errors.category}
+              helperText={errors.category?.message ?? 'The register groups by this.'}
+              slotProps={{ htmlInput: { 'data-testid': `${EditTestId}.Category` } }}
+              {...register('category')}
+            >
+              {/*
+                The row's own category first when it is not one of the defaults — plan §6n calls the
+                list project-configurable and the server takes free text, so a value from an API
+                caller or an older list must not be silently rewritten by opening this dialog.
+              */}
+              {!(CATEGORIES as readonly string[]).includes(artifact.category) && (
+                <MenuItem value={artifact.category}>{artifact.category}</MenuItem>
+              )}
+              {CATEGORIES.map((category) => (
+                <MenuItem key={category} value={category}>
+                  {category}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Description"
+              multiline
+              minRows={2}
+              error={!!errors.description}
+              helperText={errors.description?.message ?? 'Optional. Emptying it removes it.'}
+              slotProps={{
+                htmlInput: { 'data-testid': `${EditTestId}.Description`, maxLength: MAX_DESCRIPTION },
+              }}
+              {...register('description')}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} data-testid={`${EditTestId}.Cancel`}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={isSubmitting}
+            data-testid={`${EditTestId}.Submit`}
+          >
+            Save
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
+  );
+}
+
+/** `applyServerError`'s rule over this form's three keys — including the write-once 409. */
+function applyEditError(
+  error: unknown,
+  setError: (field: EditFieldName, message: string) => void,
+) {
+  if (error instanceof ApiError && error.fieldErrors) {
+    let landed = false;
+    for (const [field, messages] of Object.entries(error.fieldErrors)) {
+      if ((EDIT_FIELDS as readonly string[]).includes(field)) {
+        setError(field as EditFieldName, messages.join(' '));
+        landed = true;
+      }
+    }
+    if (landed) return;
+  }
+  // The 409 lands here, and it is the one refusal with no field: a sign-off record is kept as it
+  // was signed, and the way forward is superseding it. `describeError` renders the server's own
+  // sentence, which names that.
+  setError('root', describeError(error).body);
+}
+
+const DeleteTestId = 'Artifacts.Delete';
+
+/**
+ * Unregistering an artifact — **`DELETE` shipped in §126 with both its 409 guards and no caller.**
+ *
+ * ## This one confirms, and the archive beside it does not
+ *
+ * `ArtifactRowActions` records why archiving skips the dialog: it destroys nothing and the way back
+ * is the item beneath the one just pressed. Neither is true here — the row is gone (there is no
+ * `deleted_at` on `artifact`), and **for a `FILE` the bytes go with it**, which is the register's
+ * only act that destroys something rather than removing a pointer to a document that goes on
+ * existing elsewhere. So the dialog names the kind's consequence rather than asking a generic
+ * "are you sure".
+ *
+ * ## The two refusals arrive here, in place
+ *
+ * A sign-off record and a row another artifact supersedes are both `409`s the client cannot
+ * predict — `write_once` is not on the wire at all, and the superseding row may be outside the
+ * page's own scope. So they are rendered beside the button that raised them rather than as a
+ * corner toast, which is why `useDeleteArtifact` marks itself handled.
+ */
+export function DeleteArtifactDialog({
+  open,
+  onClose,
+  projectId,
+  artifact,
+}: {
+  open: boolean;
+  onClose: () => void;
+  projectId: string;
+  artifact: Artifact;
+}) {
+  const remove = useDeleteArtifact(projectId);
+
+  const confirm = async () => {
+    try {
+      await remove.mutateAsync(artifact.id);
+      onClose();
+    } catch {
+      // Rendered below from the mutation's own error — rethrowing would reach the global surface
+      // this mutation opts out of.
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={DeleteTestId}>
+      <DialogTitle>Remove this artifact from the register?</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <Box>
+            <Box sx={{ fontWeight: 500 }}>{artifact.title}</Box>
+            <FormHelperText>
+              {artifact.kind === 'FILE'
+                ? 'This deletes the uploaded file as well. The register keeps no copy.'
+                : 'This removes the register entry. Whatever it points at is not affected.'}
+            </FormHelperText>
+          </Box>
+          {/*
+            The distinction the register is built on, stated where somebody is about to get it
+            wrong: removal answers "that should never have been in here", and an artifact that has
+            merely served its purpose is archived — which is the item directly above this one.
+          */}
+          <Alert severity="info">
+            If the document is simply out of date, <strong>Archive</strong> it instead — an archived
+            artifact stays readable and the register keeps the record.
+          </Alert>
+          {remove.isError && (
+            <Alert severity="error" role="alert" data-testid={`${DeleteTestId}.Error`}>
+              {describeError(remove.error).body}
+            </Alert>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} data-testid={`${DeleteTestId}.Cancel`}>
+          Cancel
+        </Button>
+        <Button
+          color="error"
+          variant="contained"
+          disabled={remove.isPending}
+          onClick={() => void confirm()}
+          data-testid={`${DeleteTestId}.Confirm`}
+        >
+          {remove.isPending ? 'Removing…' : 'Remove'}
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 }

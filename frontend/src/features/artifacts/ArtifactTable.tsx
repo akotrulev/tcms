@@ -3,6 +3,7 @@ import { Box, Chip, IconButton, Menu, MenuItem, Stack, Table, TableBody, TableCe
 import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useSetArtifactStatus } from '../../api/queries';
+import { DeleteArtifactDialog, EditArtifactDialog } from './ArtifactDialogs';
 import type { Artifact } from '../../api/types';
 import { useCan } from '../../auth/useCan';
 import { FileDownloadLink } from '../../components/FileDownloadLink';
@@ -212,45 +213,64 @@ function statusReason(artifact: Artifact, titles: Map<string, string>): string {
 }
 
 /**
- * Archive and Restore for one row.
+ * Correct, Archive, Restore and Remove for one row.
  *
- * ## Both items are always rendered, and each is enabled by the row's own state
+ * ## Every item is always rendered, and each is enabled by the row's own state
  *
  * §31's disable-don't-hide, and `ui-rules` §4's other half — one control whose label flips between
- * Archive and Restore is the meaning-swapping toggle that rule names, so the two acts are two
- * items and the state decides which is live. A superseded row disables both with the sentence the
- * server's own 409 gives, because that state is a fact about another row and there is no way out
- * of it from here.
+ * Archive and Restore is the meaning-swapping toggle that rule names, so the two acts are two items
+ * and the state decides which is live.
  *
- * ## The permission is asked at the ROW's scope
+ * ## ~~A superseded row disables the whole menu~~ → only the two status items (A6)
  *
- * `canOnScope('artifact:edit', rowIsPlanScoped)` is exactly what the server evaluates, so the
- * disable is the gate rather than a guess about it: a Test Engineer's grant is `PLAN_SCOPE`, and a
- * project-scope artifact is inherited read-only by every plan (plan §6n). Asking the plain key
- * instead would enable the control for every engineer on a row the server refuses — the
- * renders-then-rejects shape.
+ * It did, and it was right while the menu was Archive and Restore: `SUPERSEDED` is a fact about
+ * *another* row, so neither act has anywhere to go and the server's own 409 says so. **Correcting a
+ * title is not a status act**, and the server does not refuse it on a superseded row for exactly
+ * that reason — so a kebab that stays shut would put the register's one edit path out of reach on
+ * every row somebody has ever replaced. The button opens; the two status items are greyed by the
+ * status test they already had, and *why* the row is superseded is the sentence already on its
+ * status chip beside the title — which is where a reader looks, and where a tooltip actually
+ * fires (MUI raises no hover events on a disabled `MenuItem`).
  *
- * No confirmation dialog, and that is a deviation from `ui-rules` §4's "every destructive action
- * confirms" taken deliberately: archiving destroys nothing, the row stays on screen with its new
- * status, and the way back is the item directly beneath the one just pressed. §7 of the same skill
- * refuses a blocking modal where the interruption is not the value. **Removal** — which is
- * destructive, and still has no control anywhere in the SPA — is where that dialog belongs.
+ * ## The two permissions are asked differently, and the difference is the schema's
+ *
+ * `canOnScope('artifact:edit', rowIsPlanScoped)` is exactly what the server evaluates for the first
+ * three items: `V19` made that key qualifiable, and although nothing carries `PLAN_SCOPE` since
+ * `V52` the mechanism is retained deliberately (roles spec §A5), so asking the plain key would be a
+ * client that fails **open** the day a migration qualifies it again. `artifact:delete` is
+ * unqualified for everyone who holds it — `V19`'s own comment says so and
+ * `ArtifactWriteService.delete` gates it with plain `writeGranted` — so Remove asks `can`, and
+ * asking it by scope would invent a narrowing the server does not have.
+ *
+ * ## Archive does not confirm and Remove does
+ *
+ * Archiving destroys nothing, the row stays on screen with its new status, and the way back is the
+ * item directly beneath the one just pressed — `ui-rules` §7 refuses a blocking modal where the
+ * interruption is not the value. ~~**Removal** — which is destructive, and still has no control
+ * anywhere in the SPA — is where that dialog belongs.~~ → **A6: it has one, and that is where the
+ * dialog went.** See `DeleteArtifactDialog`, which names what a `FILE`'s removal costs and points
+ * at Archive for the case somebody actually meant.
  */
 function ArtifactRowActions({ artifact, projectId }: { artifact: Artifact; projectId: string }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const gate = useCan(projectId);
   const setStatus = useSetArtifactStatus(projectId);
 
   const planScoped = artifact.scope === 'PLAN';
   const allowed = gate.canOnScope('artifact:edit', planScoped);
-  const superseded = artifact.status === 'SUPERSEDED';
-  const reason = superseded
-    ? 'A newer artifact replaced this one, so the register keeps it as the record of what it replaced.'
-    : (gate.reasonOnScope('artifact:edit', planScoped) ?? undefined);
+  const mayRemove = gate.can('artifact:delete');
+  const reason = gate.reasonOnScope('artifact:edit', planScoped) ?? undefined;
 
   const move = (status: 'ACTIVE' | 'ARCHIVED') => {
     setAnchor(null);
     setStatus.mutate({ artifactId: artifact.id, status });
+  };
+
+  const open = (act: (value: boolean) => void) => {
+    setAnchor(null);
+    act(true);
   };
 
   return (
@@ -259,7 +279,9 @@ function ArtifactRowActions({ artifact, projectId }: { artifact: Artifact; proje
         <Box component="span">
           <IconButton
             size="small"
-            disabled={!allowed || superseded || setStatus.isPending}
+            // No longer `|| superseded` — see the header. A caller who holds neither key still
+            // gets a disabled button with the gate's reason on it.
+            disabled={(!allowed && !mayRemove) || setStatus.isPending}
             onClick={(event) => setAnchor(event.currentTarget)}
             data-testid="Artifacts.Row.Actions"
             aria-label={`Actions for ${artifact.title}`}
@@ -270,20 +292,46 @@ function ArtifactRowActions({ artifact, projectId }: { artifact: Artifact; proje
       </Tooltip>
       <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
         <MenuItem
-          disabled={artifact.status !== 'ACTIVE'}
+          disabled={!allowed}
+          onClick={() => open(setEditing)}
+          data-testid="Artifacts.Row.Edit"
+        >
+          Correct…
+        </MenuItem>
+        <MenuItem
+          disabled={!allowed || artifact.status !== 'ACTIVE'}
           onClick={() => move('ARCHIVED')}
           data-testid="Artifacts.Row.Archive"
         >
           Archive
         </MenuItem>
         <MenuItem
-          disabled={artifact.status !== 'ARCHIVED'}
+          disabled={!allowed || artifact.status !== 'ARCHIVED'}
           onClick={() => move('ACTIVE')}
           data-testid="Artifacts.Row.Restore"
         >
           Restore
         </MenuItem>
+        <MenuItem
+          disabled={!mayRemove}
+          onClick={() => open(setRemoving)}
+          data-testid="Artifacts.Row.Delete"
+        >
+          Remove…
+        </MenuItem>
       </Menu>
+      <EditArtifactDialog
+        open={editing}
+        onClose={() => setEditing(false)}
+        projectId={projectId}
+        artifact={artifact}
+      />
+      <DeleteArtifactDialog
+        open={removing}
+        onClose={() => setRemoving(false)}
+        projectId={projectId}
+        artifact={artifact}
+      />
     </>
   );
 }

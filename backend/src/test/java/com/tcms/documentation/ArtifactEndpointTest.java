@@ -1201,8 +1201,297 @@ class ArtifactEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // A6 — the register's first edit path
+    // =====================================================================
+
+    /**
+     * {@code PATCH …/artifacts/{artifactId}} — <strong>correcting a row, which nothing could
+     * do</strong>.
+     *
+     * <h2>The failures this class exists to catch</h2>
+     *
+     * <ol>
+     *   <li><strong>The gate read from the request instead of the row.</strong> There is no scope in
+     *       an edit body at all, so the mistake here is subtler than the status endpoint's: gating
+     *       on the plain key rather than {@code writeGrantedByRowScope}. Nothing carries
+     *       {@code PLAN_SCOPE} since {@code V52}, so the seeded personas cannot tell the two apart —
+     *       {@link #aPlanScopedGrantCannotCorrectTheProjects} grants the qualifier by hand for
+     *       exactly that reason, which is the only way this suite can see the seam the roles spec
+     *       §A5 says must stay wired.</li>
+     *   <li><strong>An edit reaching a column the entity forbids.</strong> The scope, the kind and
+     *       the payload survive a body that names them — not because the service filters them, but
+     *       because {@link ArtifactEditInput} has no field for them and the columns are
+     *       {@code updatable = false}. Asserted from outside, because "the record has three
+     *       components" is not something a reader of the endpoint can see.</li>
+     *   <li><strong>{@code write_once} honoured on delete and forgotten here.</strong> The column's
+     *       stated meaning is that corrections supersede and never overwrite, which is a rule about
+     *       editing before it is one about deleting, and the delete has enforced it since §126.</li>
+     * </ol>
+     */
+    @Nested
+    @DisplayName("Correcting — the three editable fields, and the columns that are not")
+    class Correcting {
+
+        @Test
+        @DisplayName("a lead corrects the title, category and description in one request")
+        void correctsTheThreeFields() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Environment guide")));
+
+            MvcResult corrected = edit(LEAD, ACME_BANKING, id,
+                    "Environment guide (staging)", "Environment", "Now covers staging too.");
+
+            assertThat(corrected.getResponse().getStatus()).isEqualTo(200);
+            JsonNode after = row(ACME_BANKING, id);
+            assertThat(after.get("title").asText()).isEqualTo("Environment guide (staging)");
+            assertThat(after.get("category").asText()).isEqualTo("Environment");
+            assertThat(after.get("description").asText()).isEqualTo("Now covers staging too.");
+        }
+
+        @Test
+        @DisplayName("a null description clears it — the one clearable field")
+        void nullClearsTheDescription() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Environment guide")));
+            edit(LEAD, ACME_BANKING, id, "Environment guide", "Compliance", "A note.");
+
+            edit(LEAD, ACME_BANKING, id, "Environment guide", "Compliance", null);
+
+            assertThat(row(ACME_BANKING, id).get("description").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("the scope, the kind and the payload survive a body that names them")
+        void theUneditableColumnsAreUntouched() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Environment guide")));
+            JsonNode before = row(ACME_BANKING, id);
+
+            // A body carrying every field the create takes. The record binds three of them and the
+            // columns are updatable = false, so the extras are neither applied nor refused —
+            // asserted from outside, because that is a property of the entity rather than of any
+            // line in the service.
+            MvcResult corrected = mvc.perform(MockMvcRequestBuilders
+                            .patch("/api/v1/projects/" + ACME_BANKING + "/artifacts/" + id)
+                            .header(HttpHeaders.AUTHORIZATION, bearer(LEAD))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"title\":\"Renamed\",\"category\":\"Tooling\","
+                                    + "\"scope\":\"PLAN\",\"planId\":\"" + BANKING_PLAN + "\","
+                                    + "\"kind\":\"DOC_PAGE_REF\","
+                                    + "\"url\":\"https://elsewhere.example.test/\"}"))
+                    .andReturn();
+
+            assertThat(corrected.getResponse().getStatus()).isEqualTo(200);
+            JsonNode after = row(ACME_BANKING, id);
+            assertThat(after.get("title").asText()).isEqualTo("Renamed");
+            assertThat(after.get("scope").asText()).isEqualTo(before.get("scope").asText());
+            assertThat(after.get("kind").asText()).isEqualTo(before.get("kind").asText());
+            assertThat(after.get("url").asText()).isEqualTo(before.get("url").asText());
+        }
+
+        @Test
+        @DisplayName("a blank title is a 400 on the field, not a cleared NOT NULL column")
+        void aBlankTitleIsRefused() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Environment guide")));
+
+            MvcResult refused = edit(LEAD, ACME_BANKING, id, "  ", "Compliance", null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorFields(refused)).contains("title");
+            assertThat(row(ACME_BANKING, id).get("title").asText()).isEqualTo("Environment guide");
+        }
+
+        @Test
+        @DisplayName("an omitted title is the same 400 — §68 makes absent and null one value")
+        void anOmittedTitleIsRefused() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Environment guide")));
+
+            MvcResult refused = mvc.perform(MockMvcRequestBuilders
+                            .patch("/api/v1/projects/" + ACME_BANKING + "/artifacts/" + id)
+                            .header(HttpHeaders.AUTHORIZATION, bearer(LEAD))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"category\":\"Tooling\"}"))
+                    .andReturn();
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorFields(refused)).contains("title");
+        }
+
+        @Test
+        @DisplayName("a SUPERSEDED row is still correctable — being replaced is not being frozen")
+        void aSupersededRowIsEditable() throws Exception {
+            UUID original = createdId(create(LEAD, ACME_BANKING, urlBody("Sign-off")));
+            createdId(create(LEAD, ACME_BANKING,
+                    replacing(urlBody("Sign-off v2"), original)));
+
+            MvcResult corrected =
+                    edit(LEAD, ACME_BANKING, original, "Sign-off (superseded)", "SignOff", null);
+
+            // The status endpoint refuses this row because a STATUS is a fact about another row.
+            // A title is not, and a register that cannot fix a typo in what it says was replaced
+            // is the dead end this operation exists to close.
+            assertThat(corrected.getResponse().getStatus()).isEqualTo(200);
+            assertThat(row(ACME_BANKING, original).get("title").asText())
+                    .isEqualTo("Sign-off (superseded)");
+            assertThat(row(ACME_BANKING, original).get("status").asText()).isEqualTo("SUPERSEDED");
+        }
+
+        @Test
+        @DisplayName("a write-once artifact is refused with 409 and told to supersede instead")
+        void aWriteOnceRowIsRefused() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("January sign-off")));
+            // Nothing in the product sets this column, which is exactly why the guard needs a
+            // fixture: enforcement that arrives after the writer is a guarantee that is believed
+            // and does nothing (the delete's own argument).
+            markWriteOnce(id);
+
+            MvcResult refused = edit(LEAD, ACME_BANKING, id, "January sign-off v2", "SignOff", null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(body(refused).get("detail").asText()).contains("Supersede");
+            assertThat(row(ACME_BANKING, id).get("title").asText()).isEqualTo("January sign-off");
+        }
+
+        @Test
+        @DisplayName("a Viewer is refused, bodiless — they hold no artifact:edit at all")
+        void aViewerIsRefused() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Environment guide")));
+
+            MvcResult refused = edit(VIEWER, ACME_BANKING, id, "Renamed", "Tooling", null);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            assertThat(refused.getResponse().getContentAsString()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a PLAN_SCOPE grant corrects a plan's row and not the project's — 403 with a field")
+        void aPlanScopedGrantCannotCorrectTheProjects() throws Exception {
+            UUID projectRow = createdId(create(LEAD, ACME_BANKING, urlBody("Test strategy")));
+            UUID planRow = createdId(create(LEAD, ACME_BANKING, planBody("Cycle snapshot")));
+            // Hand-qualified: V52 emptied the column, so no seeded persona can see this seam any
+            // more — and roles spec §A5 keeps the mechanism precisely so a future migration gets
+            // the narrowing back rather than having to rebuild a gate that would fail OPEN.
+            qualifyEngineersArtifactEdit("PLAN_SCOPE");
+            try {
+                assertThat(edit(ENGINEER, ACME_BANKING, planRow, "Cycle snapshot v2", "Cycle", null)
+                        .getResponse().getStatus())
+                        .isEqualTo(200);
+
+                MvcResult refused =
+                        edit(ENGINEER, ACME_BANKING, projectRow, "Renamed", "Compliance", null);
+                assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+                assertThat(errorFields(refused))
+                        .as("the form puts the sentence on the scope, which is the one thing the "
+                                + "caller cannot change about this request")
+                        .contains("scope");
+            } finally {
+                // `role_permission` is INSTANCE-level: no company_id, seeded once by V3, shared by
+                // every test in the container. Leaving PLAN_SCOPE behind reddened three tests in
+                // two other nested classes on the first run, all of them asserting that V52
+                // emptied this exact column — so the restore is the price of driving the seam at
+                // all, and it is a `finally` rather than an @AfterEach so the pair is one thing a
+                // reader sees at once.
+                qualifyEngineersArtifactEdit("ALL");
+            }
+        }
+
+        @Test
+        @DisplayName("a correction that changes nothing writes no audit row")
+        void anUnchangedCorrectionIsSilent() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Environment guide")));
+
+            assertThat(edit(LEAD, ACME_BANKING, id, "Environment guide", "Compliance", null)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+
+            assertThat(amendmentCount(ACME))
+                    .as("two people saving the same correction are agreeing, not conflicting")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("a real correction writes one audit row carrying the new values")
+        void aCorrectionIsAudited() throws Exception {
+            UUID id = createdId(create(LEAD, ACME_BANKING, urlBody("Environment guide")));
+
+            edit(LEAD, ACME_BANKING, id, "Environment guide v2", "Environment", null);
+
+            assertThat(amendmentCount(ACME)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a sibling project's artifact is 404 through this project's path")
+        void anotherProjectsArtifactIsNotReachable() throws Exception {
+            UUID locked = UUID.fromString("af009000-0000-4000-8000-000000000002");
+            insertArtifact(locked, ACME, ACME_LOCKED, "Internal doc");
+
+            assertThat(edit(LEAD, ACME_BANKING, locked, "Renamed", "Tooling", null)
+                    .getResponse().getStatus())
+                    .isEqualTo(404);
+        }
+    }
+
+    // =====================================================================
     // helpers — requests
     // =====================================================================
+
+    /**
+     * {@code PATCH …/artifacts/{artifactId}} with the three editable fields.
+     *
+     * <p>A {@code null} description is sent as JSON {@code null} rather than omitted — the two are
+     * the same value to Jackson (§68), and spelling it makes the intent readable at the call site.
+     */
+    private MvcResult edit(
+            UUID userId, UUID projectId, UUID artifactId,
+            String title, String category, String description) throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .patch("/api/v1/projects/" + projectId + "/artifacts/" + artifactId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(userId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":" + quote(title)
+                                + ",\"category\":" + quote(category)
+                                + ",\"description\":"
+                                + (description == null ? "null" : quote(description)) + "}"))
+                .andReturn();
+    }
+
+    /** The column {@code V1} declared and no product path writes — see the write-once test. */
+    private void markWriteOnce(UUID artifactId) throws SQLException {
+        try (Connection connection = appConnection(ACME)) {
+            execute(connection,
+                    "UPDATE artifact SET write_once = true WHERE id = '" + artifactId + "'");
+        }
+    }
+
+    /**
+     * Puts {@code PLAN_SCOPE} back on the Test Engineer's {@code artifact:edit}, for this test only.
+     *
+     * <p>{@code V52} emptied {@code role_permission.qualifier}, so the seeded catalogue can no
+     * longer express the narrowing the scope gate implements — and a gate nothing can exercise is a
+     * gate that could be deleted with every test still green. Roles spec §A5 is explicit that the
+     * mechanism is retained against a future migration, so this is what keeps that retention
+     * observable rather than asserted.
+     *
+     * <p><strong>The caller must put it back.</strong> This table is instance-level and shared by
+     * every test in the container — see the {@code finally} at the one call site.
+     */
+    private void qualifyEngineersArtifactEdit(String qualifier) throws SQLException {
+        try (Connection connection = migrationOwnerConnection()) {
+            execute(connection,
+                    "UPDATE role_permission SET qualifier = '" + qualifier + "'"
+                            + " WHERE role_id = (SELECT id FROM role WHERE name = 'Test Engineer')"
+                            + " AND permission_key = 'artifact:edit'");
+        }
+    }
+
+    /** How many corrections have been recorded — the idempotence assertions turn on the count. */
+    private long amendmentCount(UUID companyId) throws SQLException {
+        try (Connection connection = appConnection(companyId);
+             var statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM audit_event WHERE action = 'ARTIFACT_AMENDED'");
+             ResultSet rows = statement.executeQuery()) {
+            rows.next();
+            return rows.getLong(1);
+        }
+    }
 
     private MvcResult delete(UUID userId, UUID projectId, UUID artifactId) throws Exception {
         return mvc.perform(MockMvcRequestBuilders

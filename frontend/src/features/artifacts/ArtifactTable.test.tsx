@@ -147,7 +147,7 @@ describe('ArtifactTable', () => {
       )
     })
 
-    it('names what replaced a superseded row, and refuses both acts on it', async () => {
+    it('names what replaced a superseded row, and refuses the two STATUS acts on it', async () => {
       renderTable([superseded, replacement])
 
       const chip = screen.getAllByTestId('Artifacts.Row.Status')[0]
@@ -157,9 +157,104 @@ describe('ArtifactTable', () => {
       await userEvent.hover(chip)
       expect(await screen.findByRole('tooltip')).toHaveTextContent('Sign-off v2')
 
-      const actions = screen.getAllByTestId('Artifacts.Row.Actions')
-      expect(actions.find((button) => button.getAttribute('aria-label')?.includes('Sign-off v1')))
-        .toBeDisabled()
+      /*
+        ~~The whole kebab was disabled here~~ → **A6**: the menu opens, and only the two acts that
+        have nowhere to go are greyed. `SUPERSEDED` is a fact about another row, so neither status
+        act applies; correcting a title is not a status act and the server does not refuse it — so
+        a shut kebab would put the register's one edit path out of reach on every row anybody has
+        ever replaced.
+      */
+      const actions = screen
+        .getAllByTestId('Artifacts.Row.Actions')
+        .find((button) => button.getAttribute('aria-label')?.includes('Sign-off v1'))!
+      await waitFor(() => expect(actions).toBeEnabled())
+      await userEvent.click(actions)
+
+      expect(await screen.findByTestId('Artifacts.Row.Edit')).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      )
+      expect(screen.getByTestId('Artifacts.Row.Archive')).toHaveAttribute('aria-disabled', 'true')
+      expect(screen.getByTestId('Artifacts.Row.Restore')).toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('A6: corrects a row through PATCH, sending only the three editable fields', async () => {
+      const patch = vi
+        .spyOn(api, 'patch')
+        .mockResolvedValue(anArtifact({ id: 'a-new', title: 'Sign-off v2 (final)' }) as never)
+      renderTable([replacement])
+
+      await waitFor(() => expect(screen.getByTestId('Artifacts.Row.Actions')).toBeEnabled())
+      await userEvent.click(screen.getByTestId('Artifacts.Row.Actions'))
+      await userEvent.click(await screen.findByTestId('Artifacts.Row.Edit'))
+
+      const title = await screen.findByTestId('Artifacts.Edit.Title')
+      await userEvent.clear(title)
+      await userEvent.type(title, 'Sign-off v2 (final)')
+      await userEvent.click(screen.getByTestId('Artifacts.Edit.Submit'))
+
+      await waitFor(() => expect(patch).toHaveBeenCalled())
+      const [path, body] = patch.mock.calls[0] as [string, Record<string, unknown>]
+      expect(path).toBe('/projects/p1/artifacts/a-new')
+      expect(body.title).toBe('Sign-off v2 (final)')
+      // Scope, kind and the payload columns are `updatable = false` — a control for any of them
+      // would be `ui-rules`' write-path-ignores defect, so the body must not carry them either.
+      expect(body).not.toHaveProperty('scope')
+      expect(body).not.toHaveProperty('kind')
+      expect(body).not.toHaveProperty('url')
+    })
+
+    it('A6: an emptied description is sent as null, not as an empty string', async () => {
+      const patch = vi.spyOn(api, 'patch').mockResolvedValue(anArtifact({ id: 'a-new' }) as never)
+      renderTable([anArtifact({ id: 'a-new', description: 'The old note' })])
+
+      await waitFor(() => expect(screen.getByTestId('Artifacts.Row.Actions')).toBeEnabled())
+      await userEvent.click(screen.getByTestId('Artifacts.Row.Actions'))
+      await userEvent.click(await screen.findByTestId('Artifacts.Row.Edit'))
+
+      await userEvent.clear(await screen.findByTestId('Artifacts.Edit.Description'))
+      await userEvent.click(screen.getByTestId('Artifacts.Edit.Submit'))
+
+      await waitFor(() => expect(patch).toHaveBeenCalled())
+      const [, body] = patch.mock.calls[0] as [string, Record<string, unknown>]
+      // '' would store a description that is present and blank, which renders as an empty caption
+      // line under the title. `null` is the wire's "clear it".
+      expect(body.description).toBeNull()
+    })
+
+    it('A6: Remove confirms first, and the confirmation names what a FILE costs', async () => {
+      mockPermissions(['artifact:edit', 'artifact:delete'])
+      const del = vi.spyOn(api, 'del').mockResolvedValue(undefined as never)
+      renderTable([anArtifact({ id: 'a-file', kind: 'FILE', title: 'Environment guide' })])
+
+      await waitFor(() => expect(screen.getByTestId('Artifacts.Row.Actions')).toBeEnabled())
+      await userEvent.click(screen.getByTestId('Artifacts.Row.Actions'))
+      await userEvent.click(await screen.findByTestId('Artifacts.Row.Delete'))
+
+      // The dialog, not the request — archiving skips confirmation because it destroys nothing and
+      // this does not: for a FILE the bytes go with the row.
+      expect(await screen.findByText(/deletes the uploaded file as well/i)).toBeInTheDocument()
+      expect(del).not.toHaveBeenCalled()
+
+      await userEvent.click(screen.getByTestId('Artifacts.Delete.Confirm'))
+      await waitFor(() => expect(del).toHaveBeenCalledWith('/projects/p1/artifacts/a-file'))
+    })
+
+    it('A6: Remove is disabled for a caller holding artifact:edit and not artifact:delete', async () => {
+      // The two keys are separate on purpose — a company may grant one without the other — so the
+      // menu asks them separately. `artifact:delete` is UNQUALIFIED for everyone who holds it,
+      // which is why Remove asks `can` rather than `canOnScope`.
+      mockPermissions(['artifact:edit'])
+      renderTable([replacement])
+
+      await waitFor(() => expect(screen.getByTestId('Artifacts.Row.Actions')).toBeEnabled())
+      await userEvent.click(screen.getByTestId('Artifacts.Row.Actions'))
+
+      expect(await screen.findByTestId('Artifacts.Row.Delete')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      )
+      expect(screen.getByTestId('Artifacts.Row.Edit')).not.toHaveAttribute('aria-disabled', 'true')
     })
 
     it('disables the actions for a PROJECT row when the grant is PLAN_SCOPE, and not for a plan row', async () => {
