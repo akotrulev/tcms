@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -92,10 +93,21 @@ class ReportController {
             com.fasterxml.jackson.databind.JsonNode parameters) {
     }
 
+    /**
+     * Queues a report.
+     *
+     * <p>{@code Idempotency-Key} is optional and honoured since {@code V66} (audit E2): a retry
+     * answers <strong>200 with the job it already queued</strong> rather than 202 with a second
+     * one. This was the last of the eleven creates in the API to take the header, and the §205
+     * sweep found the asymmetry from the other side — {@code packages/mcp} declared and sent a key
+     * this endpoint discarded, so every MCP retry produced a duplicate job with nothing to show for
+     * it.
+     */
     @PostMapping("/generate")
     ResponseEntity<Object> generate(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID projectId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestBody GenerateRequest request) {
 
         ReportJobService.Outcome outcome = jobs.request(
@@ -104,7 +116,8 @@ class ReportController {
                 request.definitionId(),
                 request.type(),
                 request.format(),
-                request.parameters() == null ? null : request.parameters().toString());
+                request.parameters() == null ? null : request.parameters().toString(),
+                idempotencyKey);
 
         return switch (outcome) {
             case ReportJobService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
@@ -120,6 +133,13 @@ class ReportController {
                     .location(URI.create("/api/v1/projects/" + projectId + "/reports/jobs/"
                             + accepted.job().jobId()))
                     .body(accepted.job());
+            // 200, not 202: this request queued nothing. The Location is the same either way,
+            // because what a caller does next is identical — poll the job it is now holding.
+            case ReportJobService.Outcome.Replayed replayed -> ResponseEntity
+                    .ok()
+                    .location(URI.create("/api/v1/projects/" + projectId + "/reports/jobs/"
+                            + replayed.job().jobId()))
+                    .body(replayed.job());
         };
     }
 

@@ -323,6 +323,37 @@ class ReportJobPipelineTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("the header says WHERE THE NUMBERS CAME FROM, and the two answers differ (E1)")
+        void theHeaderStatesItsFreshness() throws IOException {
+            // E1's finding: three surfaces in this product answer "pass rate" and they do not read
+            // the same data — two go to the tables, one goes to execution_fact. Two documents that
+            // print the same percentage and cannot be told apart is the defect, and it is only
+            // visible when the two report types are rendered side by side, which is what this does.
+            UUID live = accepted(requests(LEAD, ACME_PROJECT, RUN_SUMMARY, ReportFormat.MD,
+                    "{\"runId\":\"" + RUN + "\"}"));
+            UUID projected = accepted(requests(
+                    LEAD, ACME_PROJECT, "aggregate_execution", ReportFormat.MD, "{}"));
+            runIn(ACME);
+            runIn(ACME);
+
+            String liveOut = read(artifact(
+                    readIn(ACME, () -> jobs.findById(live).orElseThrow()).getArtifactId())
+                    .getStorageKey());
+            String projectedOut = read(artifact(
+                    readIn(ACME, () -> jobs.findById(projected).orElseThrow()).getArtifactId())
+                    .getStorageKey());
+
+            assertThat(liveOut).contains("**Data freshness:** Live —");
+            // "As of", and the instant is the refresh ReportJobRunner performs immediately before
+            // computing — so a GENERATED report is exact, while the same table read outside a job
+            // is up to a scheduler tick behind. Naming the refresh rather than the schedule is the
+            // half a reader cannot work out for themselves.
+            assertThat(projectedOut).contains("**Data freshness:** As of ");
+            assertThat(projectedOut).contains("execution fact projection");
+            assertThat(projectedOut).doesNotContain("Live —");
+        }
+
+        @Test
         @DisplayName("a JSON request writes ONE artifact, with both columns naming it")
         void aJsonRequestWritesOneArtifact() {
             UUID jobId = accepted(request(LEAD, ACME_PROJECT, RUN_SUMMARY, ReportFormat.JSON));
@@ -527,8 +558,11 @@ class ReportJobPipelineTest extends IntegrationTestBase {
         // ReportEndpointTest.Regenerating's subject, because what §92 added is decided before the
         // pipeline this class drives ever sees the job.
         return readIn(companyOf(projectId),
+                // idempotencyKey null: every request in this class is a distinct intent, and the
+                // replay is ReportEndpointTest's subject (E2, V66) because it is decided at the
+                // edge, before the pipeline this class drives ever sees a job.
                 () -> requests.request(userId, projectId, null, type,
-                        format == null ? null : format.name(), parameters));
+                        format == null ? null : format.name(), parameters, null));
     }
 
     private int runIn(UUID companyId) {

@@ -22,12 +22,12 @@ import org.junit.jupiter.api.Test;
  *
  * <h2>Why there is no shared constant</h2>
  *
- * <p>Nine services accept the header and each caps its length itself:
+ * <p>Ten services accept the header and each caps its length itself:
  * {@code CaseCreateService}, {@code SuiteWriteService} ({@code repository}),
  * {@code RunCreateService}, {@code PlanCreateService}, {@code IngestionEdit} ({@code execution}),
  * {@code DocPageWriteService} ({@code documentation}), {@code BoardService} ({@code work}),
- * {@code AiProposalService} ({@code repository}, §138) and {@code ArtifactWriteService}
- * (B4, {@code V59}).
+ * {@code AiProposalService} ({@code repository}, §138), {@code ArtifactWriteService}
+ * (B4, {@code V59}) and {@code ReportJobService} ({@code reporting}, E2, {@code V66}).
  * They live in four Modulith modules, and <strong>the only module all four may import is
  * {@code tenancy}</strong> — which everything depends on and which depends on nothing.
  *
@@ -82,8 +82,17 @@ class IdempotencyKeyCapTest {
      * test exists to defend: a shared constant would have outlived the feature that introduced it,
      * and somebody would later have had to work out whether anything still used it. A per-service
      * copy is deleted by deleting the service.
+     *
+     * <p><strong>NINE became TEN at §240 ({@code ReportJobService}, audit E2, {@code V66}).</strong>
+     * The trade is unchanged, and what is new at the tenth is the shape of the duplicate: every
+     * other entry on this list prevents a second <em>row</em>, and this one prevents a second
+     * <em>pass</em> — a report job refreshes {@code execution_fact} for the whole company,
+     * computes, renders and writes two artifacts. It is also the entry that was owed rather than
+     * proposed: §205 found {@code packages/mcp} declaring and sending a key this endpoint
+     * discarded, which is a header that looks right and does nothing — the failure the paragraph
+     * above is about, arriving from the client side.
      */
-    private static final int EXPECTED_DECLARATIONS = 9;
+    private static final int EXPECTED_DECLARATIONS = 10;
 
     private static final Pattern DECLARATION = Pattern.compile(
             "\\bstatic final int MAX_IDEMPOTENCY_KEY\\s*=\\s*(\\d+)\\s*;");
@@ -103,7 +112,7 @@ class IdempotencyKeyCapTest {
     }
 
     @Test
-    @DisplayName("the declarations are exactly the nine services known to accept the header")
+    @DisplayName("the declarations are exactly the ten services known to accept the header")
     void theCountIsPinned() {
         assertThat(declarations())
                 .as("a create endpoint that accepts Idempotency-Key without capping it indexes "

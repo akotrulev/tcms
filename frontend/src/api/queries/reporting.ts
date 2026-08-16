@@ -169,6 +169,14 @@ export function useReportJobs(projectId: string): UseQueryResult<ReportJob[]> {
  * what a person pressing Generate twice is asking for. `useCreateRun` takes one because two runs
  * from one intent is a corrupted checklist; two identical run summaries are two files.
  *
+ * **The server does honour the header as of `V66` (audit E2)** — a replayed key answers `200` with
+ * the job it already queued — and this caller still sends none, which is now a choice rather than
+ * the absence of anything to choose. The endpoint took the header for the callers that cannot see
+ * a duplicate: CI, and the MCP transport, neither of which has this screen's job list. A press of
+ * Generate here IS the intent, so a key minted per press would deduplicate nothing this mutation
+ * does — TanStack does not retry a mutation — while a key minted per mount would make the second
+ * press silently hand back the first report.
+ *
  * The interactive budget, deliberately not the long one: this call writes a row and returns. The
  * long budget belongs on the download, where the bytes actually travel.
  */

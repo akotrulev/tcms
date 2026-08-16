@@ -67,8 +67,17 @@ class ReportHeaders {
         this.computations = computations;
     }
 
+    /**
+     * @param watermark when the data behind the numbers was last brought up to date — for a
+     *     projected report that is {@code ReportJobRunner}'s refresh, taken inside the computing
+     *     transaction. Distinct from {@code generatedAt}, which is when the document was assembled,
+     *     and the distinction is the whole of E1: the two are seconds apart on a job and hours
+     *     apart on anything reading {@code execution_fact} outside one.
+     */
     @Transactional(readOnly = true)
-    ReportHeader of(ReportJob job, ReportParameters parameters, Instant generatedAt) {
+    ReportHeader of(
+            ReportJob job, ReportParameters parameters, Instant generatedAt, Instant watermark) {
+
         UUID companyId = job.getCompanyId();
         String project = projectLabel(job.getProjectId());
 
@@ -82,7 +91,46 @@ class ReportHeaders {
                 scopeNote(project),
                 requesterName(companyId, job.getRequestedBy()),
                 STAMP.format(generatedAt),
+                freshnessNote(job.getType(), watermark),
                 selection(parameters));
+    }
+
+    /**
+     * E1's sentence — <strong>the one header line that is different per report type</strong>.
+     *
+     * <p>Two forms, because there are two answers this product can give, and each says what a
+     * reader would otherwise have to know the schema to work out:
+     *
+     * <ul>
+     *   <li><strong>Live.</strong> The computation read the tables inside the job's transaction, so
+     *       the numbers are the database's as at the instant printed — nothing sits between them
+     *       and the rows.</li>
+     *   <li><strong>Projected.</strong> The computation read {@code execution_fact}, and the
+     *       watermark is when that projection was last brought up to date. It names the refresh
+     *       rather than the schedule deliberately: {@code ReportJobRunner} refreshes immediately
+     *       before computing, so a <em>generated</em> report is exact while the same table read
+     *       outside a job is up to a scheduler tick behind, and a reader holding two documents
+     *       cannot tell those apart without being told.</li>
+     * </ul>
+     *
+     * <p>A report type this server no longer installs cannot fail a header — {@link #of} never
+     * refuses — so an unknown type takes the honest unknown rather than a default that would claim
+     * freshness on behalf of a computation nobody can ask.
+     */
+    private String freshnessNote(String type, Instant watermark) {
+        DataFreshness freshness = computations.find(type)
+                .map(ReportComputation::freshness)
+                .orElse(null);
+        if (freshness == null) {
+            return "Unknown — this report type is no longer installed on this server.";
+        }
+        return switch (freshness) {
+            case LIVE -> "Live — computed directly from this project's records as at "
+                    + STAMP.format(watermark) + ".";
+            case PROJECTED -> "As of " + STAMP.format(watermark)
+                    + " — computed from the execution fact projection, which was refreshed at that "
+                    + "instant, immediately before this report was produced.";
+        };
     }
 
     /**

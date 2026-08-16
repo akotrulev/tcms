@@ -63,6 +63,7 @@ const storedModel = {
     scopeNote: 'This report covers ACME — Acme Platform in full and no other project.',
     generatedBy: 'Dana Lead',
     generatedAt: '2026-08-04 12:00:00 UTC',
+    dataFreshness: 'Live — computed directly from this project\'s records as at 2026-08-04 12:00:00 UTC.',
     selection: [{ label: 'runId', value: 'TR-3' }],
   },
   report: {

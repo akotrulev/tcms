@@ -74,6 +74,29 @@ import org.hibernate.annotations.Filter;
  * legitimate verdict rolls back with "someone else recorded a result first" pointing at an execution
  * that is not the one they were looking at. {@code TestPlan}'s header named that cost before this
  * slice existed. The guard the row actually needed was a predicate, not a counter.
+ *
+ * <h2>What is owed if run EDIT ever ships — D3, and this note is the deliverable</h2>
+ *
+ * <p>The argument above turns on one premise: <strong>there is no {@code PATCH /runs/{runId}}</strong>.
+ * A run's name, release and build are fixed at create, so no field here is written from a value a
+ * client read, and that is what makes an unmapped {@code lock_version} correct rather than merely
+ * convenient.
+ *
+ * <p>The day an edit endpoint ships, the premise is gone and this decision has to be re-made <em>in
+ * the same slice</em>. Audit D3 asked for the pairing to be recorded now, because the two are a
+ * slice apart in the ordinary course of things and the failure between them is silent: an edit
+ * endpoint that renames a run from a form the user opened five minutes ago is precisely a
+ * <em>discarded edit</em>, {@code ApiToken}'s first rubric answer, and it would land with no
+ * {@code If-Match} to refuse it and a column reading {@code 0} for ever that looks like a guard.
+ * Nothing would fail; the second author's rename would just win, and the first would never learn
+ * their save had been undone.
+ *
+ * <p>So: <strong>a slice that adds run edit maps {@code @Version} here, in that slice, and serves
+ * {@code lockVersion} on {@code TestRun} with an {@code If-Match} on the edit.</strong> The cost
+ * the paragraph above names does not go away — every recorded result would then contend on the
+ * counter — so that slice also has to keep the two result writers off it, which is what
+ * {@code startIfNotStarted}'s predicate and {@code @DynamicUpdate} already do and why they must
+ * survive the change rather than be replaced by the annotation.
  */
 @Entity
 @Table(name = "test_run")

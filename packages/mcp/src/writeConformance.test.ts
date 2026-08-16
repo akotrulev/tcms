@@ -82,7 +82,8 @@ const WATCHED = ['idempotency-key', 'if-match'] as const;
  * the population. Left as it is rather than renamed: it is quoted by name in the failure message
  * above and in `writes.ts`, and a rename is a diff across three files that says nothing new.
  *
- * Empty is the target and two members are the measurement.
+ * Empty is the target. Two members were the measurement at §234; ONE is, since V66 closed the
+ * report generate (audit E2).
  */
 const CREATE_WITHOUT_A_KEY: Record<string, string> = {
   'tcms_write_artifact.edit':
@@ -93,11 +94,11 @@ const CREATE_WITHOUT_A_KEY: Record<string, string> = {
     + 'on both the response and the request, not a header here. What it costs is bounded by what '
     + 'the edit can reach: three metadata fields, no payload and no scope, on a row whose real '
     + 'corrections go through supersede.',
-  'tcms_report.generate':
-    'POST …/reports/generate declares no Idempotency-Key and ReportController takes no such header, '
-    + 'so a retried 202 queues a second job. The arm sends none rather than one that does nothing; '
-    + 'closing it is a column and a replay lookup on report_job, which is a contract change and a '
-    + 'migration rather than a line here.',
+  // ~~'tcms_report.generate' — POST …/reports/generate declares no Idempotency-Key and
+  // ReportController takes no such header, so a retried 202 queues a second job.~~ → CLOSED by
+  // V66 (audit E2): the endpoint declares the parameter and replays it, and the arm sends a key
+  // again. It was the older of the two entries and the one §205 found; what remains is C10's,
+  // which is an If-Match the contract cannot yet express.
 };
 
 describe('write conformance — surface spec §8.3', () => {

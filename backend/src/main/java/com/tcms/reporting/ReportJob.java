@@ -101,6 +101,18 @@ public class ReportJob {
     @Column(name = "requested_at", nullable = false, updatable = false)
     private Instant requestedAt;
 
+    /**
+     * The {@code Idempotency-Key} of the request that queued this job, or null when none was sent
+     * ({@code V66}, audit E2).
+     *
+     * <p>Opaque, write-once, never read as data — {@code V14}'s design, as on eight other creates.
+     * A replayed key answers <strong>200 with this job</strong> rather than 202 with a second one,
+     * which matters more here than on a row: a job refreshes {@code execution_fact} for the whole
+     * company, computes, renders and writes two artifacts, so a duplicate is a second full pass.
+     */
+    @Column(name = "created_idempotency_key", updatable = false)
+    private String createdIdempotencyKey;
+
     @Column(name = "started_at")
     private Instant startedAt;
 
@@ -119,6 +131,7 @@ public class ReportJob {
             ReportFormat format,
             String parameters,
             UUID userId,
+            String idempotencyKey,
             Instant now) {
 
         ReportJob job = new ReportJob();
@@ -132,6 +145,7 @@ public class ReportJob {
         job.status = ReportJobStatus.PENDING;
         job.attempts = 0;
         job.requestedBy = userId;
+        job.createdIdempotencyKey = idempotencyKey;
         job.requestedAt = now;
         return job;
     }

@@ -1563,7 +1563,7 @@ export interface paths {
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
                      *     already succeeded answers **200** with the resource that intent created, instead of creating
                      *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -2067,7 +2067,7 @@ export interface paths {
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
                      *     already succeeded answers **200** with the resource that intent created, instead of creating
                      *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -2629,7 +2629,7 @@ export interface paths {
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
                      *     already succeeded answers **200** with the resource that intent created, instead of creating
                      *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -3517,7 +3517,7 @@ export interface paths {
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
                      *     already succeeded answers **200** with the resource that intent created, instead of creating
                      *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -4222,7 +4222,7 @@ export interface paths {
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
                      *     already succeeded answers **200** with the resource that intent created, instead of creating
                      *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -4429,7 +4429,7 @@ export interface paths {
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
                      *     already succeeded answers **200** with the resource that intent created, instead of creating
                      *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -4805,7 +4805,7 @@ export interface paths {
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
                      *     already succeeded answers **200** with the resource that intent created, instead of creating
                      *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -4869,7 +4869,20 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Run detail with its executions */
+        /**
+         * Run detail with its executions
+         * @description **There is no `PATCH` here, and adding one is paired work (audit D3).** A run's name,
+         *     release and build are fixed at create, which is the premise `TestRun` relies on to leave
+         *     `test_run.lock_version` unmapped: no field is written from a value a client read, so there
+         *     is no discarded edit for a version counter to refuse.
+         *
+         *     An edit endpoint ends that premise. Whichever slice adds one **maps the version, serves
+         *     `lockVersion` on `TestRunDetail`, and takes an `If-Match` — in that same slice**, because
+         *     the failure between the two is silent: two people renaming a run from forms opened minutes
+         *     apart, and the later write wins with nothing to say it happened. `TestRun`'s header carries
+         *     the full argument, including what the counter would cost the result writers if it were
+         *     allowed to reach them.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -4957,7 +4970,7 @@ export interface paths {
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
                      *     already succeeded answers **200** with the resource that intent created, instead of creating
                      *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -5548,7 +5561,7 @@ export interface paths {
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
                      *     already succeeded answers **200** with the resource that intent created, instead of creating
                      *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -6606,7 +6619,7 @@ export interface paths {
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
                      *     already succeeded answers **200** with the resource that intent created, instead of creating
                      *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -7126,6 +7139,14 @@ export interface paths {
          *     absent, or names a run in another project — are checked inside the worker and surface as a
          *     FAILED job carrying that sentence, because validating them here would mean either a second
          *     copy of every report's rules or a database read on the request path.
+         *
+         *     **`Idempotency-Key` is optional and honoured** since `V66` (audit E2): a retry answers
+         *     `200` with the job it already queued rather than `202` with a second one. This was the
+         *     last of the eleven creates in this API to take the header, and the asymmetry was found
+         *     from the other side — `packages/mcp` declared and sent a key this endpoint discarded, so
+         *     every retry it made produced a duplicate. It matters more here than a duplicate row: a
+         *     job refreshes the execution fact projection for the whole company, computes, renders and
+         *     writes two artifacts, so a duplicate is a second full pass.
          */
         post: operations["generateReport"];
         delete?: never;
@@ -8970,7 +8991,7 @@ export interface paths {
                      * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
                      *     already succeeded answers **200** with the resource that intent created, instead of creating
                      *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
                      *
                      *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                      *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -13812,7 +13833,7 @@ export interface components {
          * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
          *     already succeeded answers **200** with the resource that intent created, instead of creating
          *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-         *     §136; the parameter has been shared by six other creates since `V14`.)
+         *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
          *
          *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
          *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -14936,7 +14957,7 @@ export interface operations {
                  * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
                  *     already succeeded answers **200** with the resource that intent created, instead of creating
                  *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                 *     §136; the parameter has been shared by six other creates since `V14`.)
+                 *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
                  *
                  *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
                  *     it across retries. A key generated per attempt is the mistake that makes the header look
@@ -15180,7 +15201,22 @@ export interface operations {
     generateReport: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                 *     already succeeded answers **200** with the resource that intent created, instead of creating
+                 *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                 *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
+                 *
+                 *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                 *     it across retries. A key generated per attempt is the mistake that makes the header look
+                 *     right and do nothing.
+                 *
+                 *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                 *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 projectId: components["parameters"]["ProjectId"];
             };
@@ -15367,6 +15403,22 @@ export interface operations {
             };
         };
         responses: {
+            /**
+             * @description **Replayed** — this project has already queued a job under this `Idempotency-Key`, and
+             *     that job is the body (`V66`, audit E2). Nothing was queued by this request, which is
+             *     what the status says: `202` here means work was started.
+             *
+             *     `Location` points at the same poll either way, because what the caller does next is
+             *     identical.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportJob"];
+                };
+            };
             /**
              * @description Queued. The job is PENDING and `downloadUrl` is null; poll the job to find out when it
              *     is not.

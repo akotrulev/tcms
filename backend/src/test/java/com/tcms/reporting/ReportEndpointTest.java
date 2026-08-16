@@ -242,6 +242,47 @@ class ReportEndpointTest extends IntegrationTestBase {
     class Generating {
 
         @Test
+        @DisplayName("A RETRY QUEUES NOTHING — same key, 200, and the job it already made (E2)")
+        void aReplayedKeyQueuesNothing() throws Exception {
+            // The last of the eleven creates in this API to take the header. What a duplicate costs
+            // here is not a row: a job refreshes execution_fact for the whole company, computes,
+            // renders and writes two artifacts, so a second one is a second full pass — and the
+            // caller most likely to retry (CI, or an MCP client) is the one with no job list on
+            // screen to notice it.
+            String key = "generate-once-" + UUID.randomUUID();
+
+            MvcResult first = generate(LEAD, PROJECT, body(RUN_SUMMARY, "MD"), key);
+            MvcResult retry = generate(LEAD, PROJECT, body(RUN_SUMMARY, "MD"), key);
+
+            assertThat(first.getResponse().getStatus()).isEqualTo(202);
+            // 200, not 202: this request queued nothing, and the status is the only thing that
+            // tells the caller so.
+            assertThat(retry.getResponse().getStatus()).isEqualTo(200);
+            assertThat(parse(retry).get("jobId").asText())
+                    .isEqualTo(parse(first).get("jobId").asText());
+            assertThat(retry.getResponse().getHeader("Location"))
+                    .as("the same poll either way — what the caller does next is identical")
+                    .isEqualTo(first.getResponse().getHeader("Location"));
+        }
+
+        @Test
+        @DisplayName("a DIFFERENT key is a different job, and no key at all is the old behaviour")
+        void adifferentKeyIsADifferentJob() throws Exception {
+            String first = parse(generate(LEAD, PROJECT, body(RUN_SUMMARY, "MD"),
+                    "gen-a-" + UUID.randomUUID())).get("jobId").asText();
+            String second = parse(generate(LEAD, PROJECT, body(RUN_SUMMARY, "MD"),
+                    "gen-b-" + UUID.randomUUID())).get("jobId").asText();
+
+            assertThat(first).isNotEqualTo(second);
+
+            // The header is OPTIONAL, so a caller that sends none keeps getting a new job per
+            // request — every caller that existed before V66.
+            MvcResult keyless = generate(LEAD, PROJECT, body(RUN_SUMMARY, "MD"));
+            assertThat(keyless.getResponse().getStatus()).isEqualTo(202);
+            assertThat(parse(keyless).get("jobId").asText()).isNotIn(first, second);
+        }
+
+        @Test
         @DisplayName("a lead gets 202, the job's own shape, and a Location that resolves")
         void acceptedWithALocation() throws Exception {
             MvcResult result = generate(LEAD, PROJECT, body(RUN_SUMMARY, "MD"));
@@ -1157,12 +1198,22 @@ class ReportEndpointTest extends IntegrationTestBase {
     }
 
     private MvcResult generate(UUID userId, UUID projectId, String body) throws Exception {
-        return mvc.perform(MockMvcRequestBuilders
-                        .post("/api/v1/projects/" + projectId + "/reports/generate")
-                        .header("Authorization", "Bearer " + tokenFor(userId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
-                .andReturn();
+        return generate(userId, projectId, body, null);
+    }
+
+    /** With an {@code Idempotency-Key} when one is given — E2, {@code V66}. */
+    private MvcResult generate(UUID userId, UUID projectId, String body, String idempotencyKey)
+            throws Exception {
+
+        var request = MockMvcRequestBuilders
+                .post("/api/v1/projects/" + projectId + "/reports/generate")
+                .header("Authorization", "Bearer " + tokenFor(userId))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body);
+        if (idempotencyKey != null) {
+            request = request.header("Idempotency-Key", idempotencyKey);
+        }
+        return mvc.perform(request).andReturn();
     }
 
     private MvcResult capabilities(UUID userId, UUID projectId) throws Exception {

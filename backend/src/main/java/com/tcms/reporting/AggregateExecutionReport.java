@@ -178,6 +178,17 @@ class AggregateExecutionReport implements ReportComputation {
                 + "resolved under a stated aggregation policy.";
     }
 
+    /**
+     * <strong>The one report in the catalogue that is not live</strong> (E1). Every query below
+     * reads {@code execution_fact}, so the header says "as of" and names the refresh
+     * {@code ReportJobRunner} performs immediately before this method runs — see
+     * {@link DataFreshness#PROJECTED}.
+     */
+    @Override
+    public DataFreshness freshness() {
+        return DataFreshness.PROJECTED;
+    }
+
     /** {@code readOnly = true}, {@code REQUIRED} — {@link RunSummaryReport} states why at length. */
     @Override
     @Transactional(readOnly = true)

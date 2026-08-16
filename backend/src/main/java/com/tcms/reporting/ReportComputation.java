@@ -36,4 +36,25 @@ interface ReportComputation {
      * @throws IllegalArgumentException when the parameters do not describe something computable
      */
     ReportModel compute(UUID projectId, ReportParameters parameters);
+
+    /**
+     * Where this report's numbers come from — <strong>E1, and the one thing about freshness only
+     * the computation knows</strong>.
+     *
+     * <p>Three surfaces in this product answer "pass rate" and they do not answer it from the same
+     * data: the run summary reads live rows, plan statistics reads live rows and echoes its
+     * aggregation policy, and the aggregate report reads {@code execution_fact}, a projection.
+     * A reader comparing two printed reports has no way to tell which — and §6e's whole argument
+     * about the header is that a number forwarded to a client must carry what it is a number
+     * <em>of</em>.
+     *
+     * <p>Declared here rather than passed in by the job for {@link ReportHeader}'s reason about the
+     * aggregation policy: it is the report's own property, not the request's. The default is
+     * {@link DataFreshness#LIVE} because that is what a computation reading tables directly is, and
+     * a type that reads the projection has to say so — the wrong way round would let a new
+     * fact-based report inherit a claim that its numbers are current.
+     */
+    default DataFreshness freshness() {
+        return DataFreshness.LIVE;
+    }
 }

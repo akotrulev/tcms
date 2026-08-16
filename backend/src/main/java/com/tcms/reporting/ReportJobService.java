@@ -116,7 +116,27 @@ public class ReportJobService {
          */
         record Accepted(ReportJobView job) implements Outcome {
         }
+
+        /**
+         * The same request again — an {@code Idempotency-Key} this project has already queued a job
+         * under ({@code V66}, audit E2). <strong>200 with that job</strong>, not 202 with a second.
+         *
+         * <p>Distinct from {@link Accepted} so the controller can answer a different status, which
+         * is what tells a caller whether their retry did anything: every other create in this API
+         * draws the same 201-vs-200 line, and 202 here means "this request queued work".
+         */
+        record Replayed(ReportJobView job) implements Outcome {
+        }
     }
+
+    /**
+     * The ceiling on one {@code Idempotency-Key}, in characters.
+     *
+     * <p>Declared here rather than shared, like the other nine — {@code IdempotencyKeyCapTest}
+     * checks that they all agree, and its header says at length why a shared constant would have to
+     * live in {@code tenancy} and must not.
+     */
+    private static final int MAX_IDEMPOTENCY_KEY = 200;
 
     /**
      * Records a generation request, or refuses it.
@@ -140,6 +160,9 @@ public class ReportJobService {
      *     {@code report_artifact.filter_snapshot} is later set from, which is what makes a number
      *     read six months later explainable ({@code V1}: "a report you cannot reproduce is a report
      *     nobody trusts").
+     * @param idempotencyKey the request's {@code Idempotency-Key} header, or null when absent
+     *     ({@code V66}, audit E2). Optional: a caller that sends none gets a new job per request,
+     *     which is every caller that existed before the column did.
      */
     @Transactional
     public Outcome request(
@@ -148,13 +171,15 @@ public class ReportJobService {
             UUID definitionId,
             String type,
             String format,
-            String parameters) {
+            String parameters,
+            String idempotencyKey) {
 
         UUID companyId = CompanyContext.require();
 
         GateResult<Outcome> gate = projects.writeGranted(userId, projectId, EXPORT_REPORT,
                 project -> accept(
-                        companyId, project, definitionId, type, format, parameters, userId));
+                        companyId, project, definitionId, type, format, parameters, userId,
+                        idempotencyKey));
 
         return switch (gate) {
             case GateResult.Allowed<Outcome> allowed -> allowed.value();
@@ -170,7 +195,25 @@ public class ReportJobService {
             String type,
             String format,
             String parameters,
-            UUID userId) {
+            UUID userId,
+            String idempotencyKey) {
+
+        // FIRST, before validating anything and before a saved definition is read. A retry of a
+        // request that landed must answer with the job it made even if the payload has since
+        // drifted — the client is asking "did my intent land", and answering 400 would send it to
+        // fix fields on a report that is already running. CaseCreateService's ordering, for its
+        // reason.
+        if (idempotencyKey != null) {
+            if (idempotencyKey.length() > MAX_IDEMPOTENCY_KEY) {
+                return new Outcome.Invalid(Map.of("Idempotency-Key",
+                        List.of("Send a key of at most " + MAX_IDEMPOTENCY_KEY + " characters.")));
+            }
+            Optional<ReportJob> already = jobs.findByProjectIdAndCreatedIdempotencyKey(
+                    project.getId(), idempotencyKey);
+            if (already.isPresent()) {
+                return new Outcome.Replayed(ReportJobView.of(already.get()));
+            }
+        }
 
         Optional<ReportDefinition> definition = definitionId == null
                 ? Optional.empty()
@@ -199,6 +242,7 @@ public class ReportJobService {
                 parsed.orElseThrow(),
                 resolved.parameters(),
                 userId,
+                idempotencyKey,
                 clock.instant());
 
         jobs.save(job);

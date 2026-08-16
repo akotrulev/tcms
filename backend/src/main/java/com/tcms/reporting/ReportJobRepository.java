@@ -55,6 +55,24 @@ public interface ReportJobRepository extends JpaRepository<ReportJob, UUID> {
     Optional<ReportJob> findByIdAndProjectId(UUID id, UUID projectId);
 
     /**
+     * The job a previous request with this {@code Idempotency-Key} queued, if any ({@code V66},
+     * audit E2).
+     *
+     * <p><strong>The two predicates plus the company are exactly the three columns of
+     * {@code report_job_created_idempotency_key_idx}</strong>, and that is a correctness requirement
+     * rather than a coincidence: a lookup narrower than the constraint finds nothing and then
+     * violates the index on insert — a validated request that 500s. {@code V14}'s header carries the
+     * full account. {@code company_id} is supplied by RLS and the Hibernate filter rather than named
+     * here, which is the third column.
+     *
+     * <p>Deliberately not filtered on {@code status}. A retry of a request whose job has since
+     * FAILED must still be recognised as that same intent — answering "no such job, here is a new
+     * one" would silently re-run a report the caller was only asking about, and the failure is on
+     * the job for them to read.
+     */
+    Optional<ReportJob> findByProjectIdAndCreatedIdempotencyKey(UUID projectId, String key);
+
+    /**
      * The job that produced this artifact, in either slot.
      *
      * <p>This is how the download route proves an artifact belongs to the project in its path:

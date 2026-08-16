@@ -298,7 +298,7 @@ class ReportJobRunner {
         // parameters must fail the job rather than fail while assembling a header for a report that
         // was never going to exist — the error the client polls would then name the company lookup
         // instead of the run id they mistyped.
-        ReportHeader header = headers.of(job, parameters, clock.instant());
+        ReportHeader header = headers.of(job, parameters, clock.instant(), watermark);
 
         return new Computed(
                 job.getCompanyId(),

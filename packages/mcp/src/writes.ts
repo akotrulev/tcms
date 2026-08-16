@@ -1507,19 +1507,20 @@ const report: ToolDefinition = {
   gate: { mode: 'all', permissions: ['report:view', 'report:export'] },
   arms: [
     /*
-      ~~A generation allocates a job row, so it is a create and carries a key: an agent that
-      retries a lost 202 must not queue the work twice.~~ → **it carried one and the endpoint has
-      never read it** (§205). `POST …/reports/generate` declares no `Idempotency-Key` parameter —
-      it is one of the twelve creates in the contract that does not — and `ReportController.generate`
-      takes no such header, so the sentence above described a protection nothing provided: a retried
-      202 **does** queue the work twice. The key is no longer sent, because a header the server
-      ignores is the mistake the parameter's own description names, and because sending it made the
-      shortfall look closed to anybody reading this file.
+      A generation allocates a job row, so it is a create and carries a key: an agent that retries
+      a lost 202 must not queue the work twice.
 
-      It is still a **create**: it allocates a row, and pretending otherwise to make the rule fit
-      would be the declaration bending to the check. `writeConformance.test.ts` records the gap as
-      a decision with what it costs, and closing it is a column on `report_job` plus a replay lookup
-      plus a contract change — a slice, not a line here.
+      ~~It carried one and the endpoint never read it (§205)~~ — for two slices this arm sent
+      nothing, because a header the server ignores is the mistake the parameter's own description
+      names, and sending it made the shortfall look closed to anybody reading this file. → **The
+      server reads it as of `V66` (audit E2)**: a replayed key answers 200 with the job it already
+      queued. The key goes back on, and the entry `writeConformance.test.ts` kept for this arm is
+      gone with it.
+
+      What the gap actually cost is worth keeping: THIS transport is the one that pays for a
+      duplicate report and cannot see it. A retry here refreshed `execution_fact` for the whole
+      company a second time, computed, rendered and wrote two more artifacts, with no job list on
+      screen for anybody to notice.
     */
     { action: 'generate', kind: 'create', permission: 'report:export' },
   ],
@@ -1571,8 +1572,9 @@ const report: ToolDefinition = {
         definitionId: str(input, 'definitionId'),
         parameters: input['parameters'],
       }) as { format: 'PDF' | 'MD' | 'HTML' },
-      // No `Idempotency-Key`: this endpoint declares none and reads none. See the arm above.
-      tcms: session.request,
+      // One key per CALL, like every other create arm: `session.callId` is the intent, so a
+      // transport-level retry of one tool call replays rather than queues a second job (V66).
+      tcms: { ...session.request, ...createIntent({ key: session.callId }) },
     });
   },
 };
