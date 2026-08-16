@@ -2917,3 +2917,40 @@ of what it now means; do not treat a pass on `M4-10` as covering them.
 | `§236 SE-3` | Attach a second file to the execution as a whole via the **Evidence** panel, then re-read both places | The execution-level file is in the Evidence panel only; step 2's is under step 2 only. Neither appears twice. `TestExecution.evidence` carries `step_result_id IS NULL` rows alone and `StepResult.evidence` carries the rest — a file in both means the server's partition has been bypassed by a client-side merge. |
 | `§236 SE-4` | Network tab on the step attach | The `multipart/form-data` body carries a **`stepId` part**. `M4-11`'s boundary check applies here too. If `stepId` is absent the file still uploads and still succeeds — landing on the execution — which is why this is a network-tab row and not a screen row. |
 | `§236 SE-5` | Close the run, then reopen the execution | Both **Attach to this step** and the execution-level **Attach** are disabled with *"This run has ended…"*, and **every attached file stays visible and still opens**. The defect panel's controls are disabled with the matching sentence. A closed run's evidence is the part of the record most likely to be read. |
+
+## §237 — the badge on the checklist, and the two pass rates (C2)
+
+**Nine rows, none run** (§65). Ids are `§237 QB-*` (the runner badge) and `§237 QR-*` (the two
+reports); both prefixes were grepped against this file and the mutation queue before minting.
+
+**Lanes.** `QB-*` are lane `A3` — runs, and need that lane's state plus **one quarantined case that
+is in the run**. `QR-*` are lane `A3` as well because a report is generated over a run, and they
+need the same fixture. **No new fixture is authored**: the quarantine is set through the case's own
+**Quarantine…** dialog, which `M3` already drives, so the only addition to `A3`'s charter is to
+quarantine one of its cases *before* generating the reports.
+
+**Order matters here in a way it usually does not.** `QR-1` must be read **before** anything is
+quarantined and `QR-2` after, because the finding is the *difference between two readings of one
+report* — a single reading cannot tell a working exclusion from a rate that was always going to say
+that. Note the headline figure from `QR-1` and carry it.
+
+**One row needs a case with no result.** `QR-5` needs a quarantined case that is in the project and
+has **no execution in the selection**, which `A3` does not produce by itself — quarantine a case
+that has never been run. If the lane's fixture cannot supply one, record `QR-5` as **not driven,
+and why**; that is a legitimate outcome and a silent skip is not.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§237 QB-1` | Open a run whose checklist includes a **quarantined** case, in **Grid** mode | A **Quarantined** chip beside that case's *title*, and on **no other row**. It is an outlined amber chip, not a filled one — it must not read as a verdict, and it must not be in the **Result** column. |
+| `§237 QB-2` | Read the chip's tooltip | It says the results are not trusted **and that the case is still to be run** — *"Run it and record a verdict as normal."* A tooltip that stops at "quarantined" is the regression: the word alone reads as "don't bother", which is the one thing it must not mean. |
+| `§237 QB-3` | Switch to **Focus** mode and read the queue rail | The same chip on the same case, in the 260px rail. **This is the row the decision rests on** — the queue is where a tester *chooses* the next case, and a badge that waited for the detail screen would arrive after the choice was made. |
+| `§237 QB-4` | Open that case's execution | The chip is in the header beside the status chip. `TestExecution` is an `allOf` over `TestExecutionSummary`, so a chip on the checklist and none here means a renderer stopped passing the flag through. |
+| `§237 QB-5` | Record a verdict on the quarantined case, in Grid mode and again in Focus | It is accepted, exactly as any other row. **Nothing is disabled, nothing is hidden, no confirmation is asked.** Quarantine changes what the *reports* say and nothing about what the runner may do; a row that refused would hide work from the person doing it. |
+| `§237 QB-6` | **Release** the case from quarantine (the case's own screen), then return to the run | Every chip is gone, on all three surfaces, without a hard reload. The flag is read live per request, so a chip that survives is a cache key the release did not invalidate. |
+| `§237 QR-1` | **Before quarantining anything**, generate an **Aggregate execution report** over the project | Both **Pass rate (of contributing executions)** and **Pass rate (excluding quarantined cases)** are printed and are **the same number**. **Quarantined cases in this selection** reads `0 (0 executions…)`, and the **Quarantined cases** section is a sentence saying nobody is quarantined — never a missing section. Write the headline figure down. |
+| `§237 QR-2` | Quarantine a case that has **failed** in the selection, then regenerate the same report | The **headline** figure is **unchanged from `QR-1`** — that is the assertion, and the one a "simplification" to a single rate would break. The **excluding** figure has moved. The metadata line names the case count and the execution count. |
+| `§237 QR-3` | Read the **Quarantined cases** section of that report | Three columns — case, **reason**, quarantined at — with the sentence the person typed in the Quarantine dialog. The narrative says the exclusion is *"read as it stands now rather than as it stood when each result was recorded"*, and reconciles the table's row count against the metadata's contributing count. |
+| `§237 QR-4` | Check every **other** section of the same report — status breakdown, failures by suite, by feature, the automation split, retries | The quarantined case's results are **still counted in all of them**, and the status breakdown still sums to the headline. The exclusion is one figure wide; a section that shrank means it leaked. |
+| `§237 QR-5` | Quarantine a case with **no result in the selection** and regenerate | It **is** listed in the section and the metadata counts stay where they were. The narrative reads *"…of those contributed 0 of…"*. A quarantined test nobody is running is the finding, not a row to drop. |
+| `§237 QR-6` | Generate a **Run summary** report for the run containing the quarantined case | The same pair of rates and the same section, with the scope word **"this run"** rather than "this selection". The per-tester and per-suite tables still count the quarantined rows. |
+| `§237 QR-7` | Quarantine **every** case that has a result in the run, then regenerate the run summary | **Pass rate (excluding quarantined cases)** is an em dash `—`, never `0.0%`. Zero over zero is not zero per cent, and a report claiming total failure for a run whose every result was merely discounted is the one direction a defect must not take. |
