@@ -7,6 +7,7 @@ import com.tcms.project.ProjectRepository;
 import com.tcms.project.StatusKind;
 import com.tcms.tenancy.CompanyContext;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -37,8 +38,13 @@ import org.springframework.transaction.annotation.Transactional;
  *       {@code case_id} and {@code suite_path} and deliberately nothing else — a star schema
  *       duplicates the <em>dimensions</em> it aggregates by, not the labels of the rows it
  *       aggregates. A list of forty UUIDs is not the section §6e describes, so this report groups
- *       failures <em>by suite</em>, which the fact log can name, and the per-case list waits for the
- *       slice that decides where case labels come from.</li>
+ *       failures <em>by suite</em>, which the fact log can name, and <del>the per-case list waits
+ *       for the slice that decides where case labels come from</del> — <strong>that slice landed in
+ *       R7 and this paragraph did not notice for eight rounds.</strong>
+ *       {@link ExecutionSource#caseLabels} is it, and its own javadoc names this header as the thing
+ *       it was answering. So the per-case failure list is now buildable here and is still not built:
+ *       that is a decision nobody has taken rather than a dependency nobody has. The quarantine
+ *       section below is the first per-case table in this report and it uses exactly that seam.</li>
  *   <li><strong>Evidence thumbnails and defects raised</strong> are {@code execution}'s and M4's
  *       respectively. Named here as not built rather than quietly dropped.</li>
  * </ul>
@@ -58,6 +64,18 @@ import org.springframework.transaction.annotation.Transactional;
  * and a percentage whose denominator is only in a javadoc is exactly that. The run's scope comes
  * from somewhere else — §46 found the same for plan statistics — and this report does not pretend
  * to have it.
+ *
+ * <h2>Two pass rates, and the headline one never moves</h2>
+ *
+ * <p>Quarantined cases are excluded from a <em>second</em> figure printed beside the first, never
+ * from the first. Replacing the headline was the other reading of the request and it fails the
+ * paragraph above on its own terms: a single figure whose denominator moved silently is precisely
+ * the "94% pass" §6e refuses, and here it would also put this report out of agreement with the run
+ * page's own Result bar with nothing on the page to say which is lying.
+ *
+ * <p>The flag is read live rather than frozen onto the fact log, which makes the excluded figure —
+ * and only that figure — retroactive. {@link ExecutionSource#quarantinedCases} carries the argument
+ * and the reason the tidier answer would have been an inert one.
  *
  * <h2>No aggregation policy, and that is derived rather than skipped</h2>
  *
@@ -131,13 +149,23 @@ class RunSummaryReport implements ReportComputation {
         ExecutionSource.RunHeader run = source.findRun(projectId, runId).orElseThrow(
                 () -> new IllegalArgumentException("This project has no run with that id"));
 
-        Totals totals = totals(projectId, runId);
+        // Read once and used three times — the totals filter by it, the metadata counts it and the
+        // section names the cases. Three reads of a live flag inside one report is how a report
+        // comes to disagree with itself about which tests it left out.
+        List<ExecutionSource.QuarantinedCase> quarantined = source.quarantinedCases(projectId);
+
+        Totals totals = totals(
+                projectId, runId,
+                quarantined.stream().map(ExecutionSource.QuarantinedCase::caseId).toList());
         List<StatusRow> statuses = statuses(projectId, runId);
 
         List<ReportModel.Section> sections = new ArrayList<>();
         sections.add(resultsSection(totals, statuses));
         sections.add(testerSection(companyId, projectId, runId, totals));
         sections.add(suiteSection(projectId, runId));
+        // Last, and after every section whose numbers include the rows it is about: this section
+        // does not change any of them, it says which of them the second pass rate left out.
+        sections.add(quarantineSection(totals, quarantined));
 
         return new ReportModel(
                 "Run summary — " + run.key(),
@@ -163,6 +191,18 @@ class RunSummaryReport implements ReportComputation {
         metadata.add(new ReportModel.Entry("Passed", count(totals.passed())));
         metadata.add(new ReportModel.Entry(
                 "Pass rate (of recorded)", share(totals.passed(), totals.executions())));
+        // Both rates, and the original one is untouched. Replacing it with the excluded figure was
+        // the other option and it is the one §6e refuses: a single 95.2% cannot be told from a 95.2%
+        // with nothing quarantined. The run page's own Result bar still counts every row, and a
+        // report that silently disagreed with the screen it is generated from is the §46 defect.
+        metadata.add(new ReportModel.Entry(
+                "Pass rate (excluding quarantined cases)",
+                share(totals.trustedPassed(), totals.trustedExecutions())));
+        metadata.add(new ReportModel.Entry(
+                "Quarantined cases in this run",
+                count(totals.quarantinedCases()) + " (" + count(totals.quarantinedExecutions())
+                        + " execution" + (totals.quarantinedExecutions() == 1 ? "" : "s")
+                        + ", not counted in the rate above)"));
         metadata.add(new ReportModel.Entry("Total recorded duration", duration(totals.totalMs())));
         metadata.add(new ReportModel.Entry("Aggregation policy",
                 "Not applicable — one run holds at most one result per case"));
@@ -278,6 +318,55 @@ class RunSummaryReport implements ReportComputation {
                         List.of("Suite", "Executions", "Passed", "Failed"), rows));
     }
 
+    /**
+     * What the second pass rate left out, and why — {@link AggregateExecutionReport}'s section, for
+     * the same reason, over one run.
+     *
+     * <p>{@code CaseQuarantineService}'s header is the specification and that class states it:
+     * <em>"when gating reads this column it must say so on the face of the report."</em> The reason
+     * column is the point rather than a courtesy, and
+     * {@code case_flake_quarantine_complete} guarantees it is never blank.
+     *
+     * <p>The one difference from the aggregate report's copy is the scope word — <em>this run</em>
+     * rather than <em>this selection</em> — because a run is not a selection and a reader comparing
+     * a run summary against a release report needs to know which of the two a figure was narrowed
+     * by. The table is the project's live quarantines either way, and the narrative reconciles it
+     * against the metadata count, which is the contributing subset.
+     */
+    private ReportModel.Section quarantineSection(
+            Totals totals, List<ExecutionSource.QuarantinedCase> quarantined) {
+
+        if (quarantined.isEmpty()) {
+            return ReportModel.Section.text("Quarantined cases",
+                    "No case in this project is quarantined, so the two pass rates above are the "
+                            + "same number and every recorded result counted towards both.");
+        }
+
+        String narrative = "These cases are excluded from the "
+                + "\"Pass rate (excluding quarantined cases)\" figure above and from nothing else — "
+                + "every other number in this report, including the headline pass rate and the "
+                + "per-tester and per-suite tables, counts their results in full. Quarantine is "
+                + "read as it stands now rather than as it stood when each result was recorded. "
+                + "This table lists every case quarantined in the project — all "
+                + count(quarantined.size()) + " of them — while " + count(totals.quarantinedCases())
+                + " of those contributed " + count(totals.quarantinedExecutions()) + " of this "
+                + "run's " + count(totals.executions()) + " recorded execution"
+                + (totals.executions() == 1 ? "" : "s") + ".";
+
+        List<List<String>> rows = new ArrayList<>();
+        for (ExecutionSource.QuarantinedCase entry : quarantined) {
+            rows.add(List.of(
+                    entry.label().display(),
+                    entry.reason(),
+                    entry.quarantinedAt() == null ? "" : entry.quarantinedAt().toString()));
+        }
+
+        return ReportModel.Section.of(
+                "Quarantined cases",
+                narrative,
+                new ReportModel.Table(List.of("Case", "Reason", "Quarantined at"), rows));
+    }
+
     // =====================================================================
     // The queries — execution_fact and nothing else
     // =====================================================================
@@ -291,21 +380,39 @@ class RunSummaryReport implements ReportComputation {
      * one run today, and deriving a number in a way that is only correct by a constraint elsewhere
      * is how it becomes wrong when that constraint moves.
      */
-    private Totals totals(UUID projectId, UUID runId) {
-        Object[] row = (Object[]) entities.createNativeQuery("""
+    private Totals totals(UUID projectId, UUID runId, List<UUID> quarantined) {
+        // Composed as text rather than bound as an array: an empty quarantine set is the ordinary
+        // state and `IN ()` is not valid SQL, so the empty case is the literal false — every FILTER
+        // counts nothing, the excluded figures equal the headline ones, and the metadata still
+        // prints a zero rather than omitting a line a reader could not tell from an uncomputed one.
+        String isQuarantined = quarantined.isEmpty()
+                ? "false"
+                : "f.case_id IN (:quarantinedCaseIds)";
+
+        Query query = entities.createNativeQuery("""
                 SELECT count(*)                                AS executions,
                        count(DISTINCT f.case_id)               AS cases,
                        count(*) FILTER (WHERE f.counts_as_pass) AS passed,
-                       COALESCE(sum(f.duration_ms), 0)         AS total_ms
+                       COALESCE(sum(f.duration_ms), 0)         AS total_ms,
+                       count(*) FILTER (WHERE %1$s)            AS quarantined_executions,
+                       count(DISTINCT f.case_id) FILTER (
+                           WHERE %1$s)                         AS quarantined_cases,
+                       count(*) FILTER (
+                           WHERE %1$s AND f.counts_as_pass)    AS quarantined_passed
                   FROM execution_fact f
                  WHERE f.project_id = :projectId
                    AND f.run_id = :runId
-                """)
+                """.formatted(isQuarantined))
                 .setParameter("projectId", projectId)
-                .setParameter("runId", runId)
-                .getSingleResult();
+                .setParameter("runId", runId);
+        if (!quarantined.isEmpty()) {
+            query.setParameter("quarantinedCaseIds", quarantined);
+        }
 
-        return new Totals(number(row[0]), number(row[1]), number(row[2]), number(row[3]));
+        Object[] row = (Object[]) query.getSingleResult();
+        return new Totals(
+                number(row[0]), number(row[1]), number(row[2]), number(row[3]),
+                number(row[4]), number(row[5]), number(row[6]));
     }
 
     /**
@@ -467,7 +574,25 @@ class RunSummaryReport implements ReportComputation {
         return value == null ? 0L : ((Number) value).longValue();
     }
 
-    private record Totals(long executions, long cases, long passed, long totalMs) {}
+    /**
+     * @param quarantinedExecutions how many of {@link #executions} belong to a case that is
+     *     quarantined <em>right now</em> — not a property of the fact, and
+     *     {@link ExecutionSource#quarantinedCases} carries the argument for reading it live.
+     */
+    private record Totals(
+            long executions, long cases, long passed, long totalMs,
+            long quarantinedExecutions, long quarantinedCases, long quarantinedPassed) {
+
+        /** The denominator with the quarantined rows taken out. */
+        long trustedExecutions() {
+            return executions - quarantinedExecutions;
+        }
+
+        /** The numerator with them taken out, so the two move together or not at all. */
+        long trustedPassed() {
+            return passed - quarantinedPassed;
+        }
+    }
 
     private record StatusRow(String kind, long executions) {}
 

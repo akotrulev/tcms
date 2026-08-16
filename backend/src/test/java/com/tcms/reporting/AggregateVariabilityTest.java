@@ -76,6 +76,11 @@ class AggregateVariabilityTest extends IntegrationTestBase {
     private static final String INCONSISTENCY = "Inconsistent results";
     private static final String SPLIT = "Manual and automated";
     private static final String RETRIES = "First attempt and retries";
+    private static final String QUARANTINE = "Quarantined cases";
+
+    /** {@code case_flake.quarantined_by} is a foreign key, so the decision needs a decider. */
+    private static final UUID QUARANTINER =
+            UUID.fromString("c3007000-0000-4000-8000-000000000001");
 
     private static final UUID ACME = UUID.fromString("c3000000-0000-4000-8000-000000000001");
     private static final UUID PROJECT = UUID.fromString("c3001000-0000-4000-8000-000000000001");
@@ -154,6 +159,9 @@ class AggregateVariabilityTest extends IntegrationTestBase {
             seedCompanyDefaults(connection, ACME);
             seedProjectDefaults(connection, ACME, PROJECT);
 
+            // Instance-level and never cleared, so this is an upsert: `quarantined_by` is a foreign
+            // key and `case_flake_quarantine_complete` will not take a quarantine without one.
+            decider(connection);
             configuration(connection, FIREFOX, "Firefox");
             suite(connection, BILLING, "AS-1", 1, "Billing");
 
@@ -209,6 +217,103 @@ class AggregateVariabilityTest extends IntegrationTestBase {
         assertThat(splitRows(whole()).keySet())
                 .as("both automation statuses and both sources are represented")
                 .contains("AUTOMATED · INGESTED", "AUTOMATED · MANUAL", "MANUAL · MANUAL");
+    }
+
+    @Nested
+    @DisplayName("quarantine — a second pass rate, and a first that does not move")
+    class Quarantine {
+
+        @Test
+        @DisplayName("with nothing quarantined both rates agree and the section says so")
+        void anEmptyQuarantineIsStatedRatherThanOmitted() {
+            // Computed and printed when there is nothing to report, for the reason every status row
+            // here is: a line that appears only when there is something to say cannot be told from
+            // a build that does not compute it.
+            ReportModel model = inTransaction(() -> compute(policy("ALL")));
+
+            assertThat(value(model, "Pass rate (of contributing executions)"))
+                    .isEqualTo(value(model, "Pass rate (excluding quarantined cases)"));
+            assertThat(value(model, "Quarantined cases in this selection"))
+                    .startsWith("0 (0 executions");
+            assertThat(narrative(model, QUARANTINE))
+                    .contains("No case in this project is quarantined");
+        }
+
+        @Test
+        @DisplayName("the headline pass rate and the status breakdown do not move")
+        void theCrossCheckedNumbersAreUntouched() {
+            // THE constraint of this slice. AggregateExecutionCrossCheckTest pins these counts
+            // against GET /plans/{planId}/statistics, and PlanStatisticsService lives in `execution`
+            // — a module that may not read case_flake at all. An exclusion applied HERE and not
+            // there would break the guard §46 paid for in defects, by design, leaving nothing to
+            // tell it from the drift it exists to catch.
+            ReportModel before = inTransaction(() -> compute(policy("ALL")));
+            String headline = value(before, "Pass rate (of contributing executions)");
+            List<List<String>> statuses = table(before, "Results").rows();
+
+            quarantine(ALWAYS_FAILING, "Red in every run since the migration");
+
+            ReportModel after = inTransaction(() -> compute(policy("ALL")));
+
+            assertThat(value(after, "Pass rate (of contributing executions)")).isEqualTo(headline);
+            assertThat(value(after, "Contributing executions")).isEqualTo("11");
+            assertThat(table(after, "Results").rows()).isEqualTo(statuses);
+        }
+
+        @Test
+        @DisplayName("the excluded rate DOES move, or the feature is a note field with ceremony")
+        void theSecondRateMoves() {
+            // The other half, and the one a snapshot column on execution_fact would have failed: a
+            // case is quarantined BECAUSE it went red, so every result worth discounting was filed
+            // before the decision. A frozen dimension would read false on all of them and this
+            // assertion would find the two rates still equal.
+            ReportModel before = inTransaction(() -> compute(policy("ALL")));
+            String both = value(before, "Pass rate (of contributing executions)");
+
+            quarantine(ALWAYS_FAILING, "Red in every run since the migration");
+
+            ReportModel after = inTransaction(() -> compute(policy("ALL")));
+
+            assertThat(value(after, "Pass rate (excluding quarantined cases)"))
+                    .as("two failures removed from the denominator must raise the rate")
+                    .isNotEqualTo(both);
+            assertThat(value(after, "Quarantined cases in this selection"))
+                    .isEqualTo("1 (2 executions, not counted in the rate above)");
+        }
+
+        @Test
+        @DisplayName("the section names the case and the sentence somebody wrote")
+        void theReasonIsOnTheFaceOfTheReport() {
+            // CaseQuarantineService's header: "when gating reads this column it must say so on the
+            // face of the report". The reason is the column that makes the exclusion evaluable
+            // without opening the test.
+            quarantine(ALWAYS_FAILING, "Red in every run since the migration");
+
+            ReportModel.Table table = table(inTransaction(() -> compute(policy("ALL"))), QUARANTINE);
+
+            assertThat(table.columns()).containsExactly("Case", "Reason", "Quarantined at");
+            assertThat(table.rows()).hasSize(1);
+            assertThat(table.rows().getFirst().get(0)).isEqualTo("TC-6 — Case TC-6");
+            assertThat(table.rows().getFirst().get(1))
+                    .isEqualTo("Red in every run since the migration");
+        }
+
+        @Test
+        @DisplayName("the exclusion follows the selection's policy rather than the raw fact log")
+        void theExclusionIsCountedOverTheRESOLVEDSet() {
+            // The FILTERs sit on `resolved`, not on `selected`. ALWAYS_FAILING has two executions
+            // and the default policy collapses it to one, so the same quarantine must count 2 under
+            // ALL and 1 under the default. Counting over `selected` would report two exclusions
+            // from a denominator that only ever held one, and the arithmetic would stop closing.
+            quarantine(ALWAYS_FAILING, "Red in every run since the migration");
+
+            assertThat(value(inTransaction(() -> compute(policy("ALL"))),
+                    "Quarantined cases in this selection"))
+                    .isEqualTo("1 (2 executions, not counted in the rate above)");
+            assertThat(value(inTransaction(() -> compute(whole())),
+                    "Quarantined cases in this selection"))
+                    .isEqualTo("1 (1 execution, not counted in the rate above)");
+        }
     }
 
     @Nested
@@ -480,6 +585,39 @@ class AggregateVariabilityTest extends IntegrationTestBase {
                 .orElse(null);
     }
 
+    private static String value(ReportModel model, String label) {
+        return model.metadata().stream()
+                .filter(entry -> label.equals(entry.label()))
+                .map(ReportModel.Entry::value)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No metadata entry '" + label + "'"));
+    }
+
+    /**
+     * All four authored columns together — {@code case_flake_quarantine_complete} refuses anything
+     * else. An {@code UPDATE}: {@link #refresh} writes a flake row for every live case, and the
+     * fixture has already run it.
+     */
+    private void quarantine(UUID caseId, String reason) {
+        try (Connection connection = appConnection(ACME);
+                PreparedStatement statement = connection.prepareStatement("""
+                        UPDATE case_flake
+                           SET quarantined = true, quarantined_at = now(),
+                               quarantined_by = CAST(? AS uuid),
+                               quarantine_reason = ?
+                         WHERE case_id = CAST(? AS uuid)
+                        """)) {
+            statement.setString(1, QUARANTINER.toString());
+            statement.setString(2, reason);
+            statement.setString(3, caseId.toString());
+            assertThat(statement.executeUpdate())
+                    .as("no flake row for that case — the refresh writes one per live case")
+                    .isEqualTo(1);
+        } catch (SQLException failure) {
+            throw new IllegalStateException(failure);
+        }
+    }
+
     private static String narrative(ReportModel model, String heading) {
         return model.sections().stream()
                 .filter(section -> heading.equals(section.heading()))
@@ -566,6 +704,19 @@ class AggregateVariabilityTest extends IntegrationTestBase {
             statement.setString(4, key);
             statement.setLong(5, keySeq);
             statement.setString(6, name);
+            statement.executeUpdate();
+        }
+    }
+
+    private void decider(Connection connection) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO app_user (id, email, canonical_name, status)
+                VALUES (CAST(? AS uuid), CAST(? AS citext), ?, 'ACTIVE')
+                    ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, QUARANTINER.toString());
+            statement.setString(2, "quarantiner@avr.test");
+            statement.setString(3, "Quinn Quarantiner");
             statement.executeUpdate();
         }
     }

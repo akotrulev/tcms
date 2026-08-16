@@ -219,6 +219,134 @@ class RunSummaryReportTest extends IntegrationTestBase {
     }
 
     @Nested
+    @DisplayName("Quarantine — the exclusion, and the fact that it excludes nothing else")
+    class Quarantine {
+
+        @Test
+        @DisplayName("with nothing quarantined the two rates are equal and the section says so")
+        void anEmptyQuarantineIsStatedRatherThanOmitted() {
+            // The whole point of computing this when there is nothing to report. A section that
+            // appeared only when somebody had quarantined something is one a reader cannot tell
+            // from a build that never computes it — the shape §47, §53, §72 and §81 each paid for.
+            ReportModel model = model();
+
+            assertThat(entry(model, "Pass rate (of recorded)")).isEqualTo("50.0%");
+            assertThat(entry(model, "Pass rate (excluding quarantined cases)")).isEqualTo("50.0%");
+            assertThat(entry(model, "Quarantined cases in this run")).startsWith("0 (0 executions");
+            assertThat(section(model, "Quarantined cases").narrative())
+                    .contains("No case in this project is quarantined");
+            assertThat(section(model, "Quarantined cases").table()).isNull();
+        }
+
+        @Test
+        @DisplayName("quarantining the failure moves the second rate and leaves the first alone")
+        void theHeadlineRateDoesNotMove() throws SQLException {
+            // THE test of this slice. Four recorded, two passed — 50%. Take the one FAILED case out
+            // and the trusted set is three recorded, two passed — 66.7%. The headline stays 50.0%,
+            // and that is the assertion that would fail if somebody "simplified" this to one rate:
+            // a lone 66.7% cannot be told from a 66.7% with nothing quarantined.
+            quarantine(FAILED, "Fails on Firefox roughly one run in four");
+
+            ReportModel model = model();
+
+            assertThat(entry(model, "Pass rate (of recorded)"))
+                    .as("the reproducible figure, and the one the cross-check pins")
+                    .isEqualTo("50.0%");
+            assertThat(entry(model, "Pass rate (excluding quarantined cases)")).isEqualTo("66.7%");
+            assertThat(entry(model, "Recorded executions"))
+                    .as("the headline counts are untouched — only a NEW figure excludes anything")
+                    .isEqualTo("4");
+            assertThat(entry(model, "Quarantined cases in this run"))
+                    .isEqualTo("1 (1 execution, not counted in the rate above)");
+        }
+
+        @Test
+        @DisplayName("every other section still counts the quarantined case in full")
+        void nothingElseInTheReportMoves() throws SQLException {
+            // The exclusion is one figure wide. A quarantine that also emptied the status breakdown
+            // or the per-suite table would make the sections stop summing to the headline, which is
+            // the arithmetic §96 spent a slice on and which nobody re-checks by hand.
+            quarantine(FAILED, "Fails on Firefox roughly one run in four");
+
+            ReportModel model = model();
+
+            assertThat(section(model, "Results").table().rows()).containsExactly(
+                    List.of("PASSED", "2", "50.0%"),
+                    List.of("FAILED", "1", "25.0%"),
+                    List.of("BLOCKED", "1", "25.0%"));
+            assertThat(section(model, "Progress by tester").table().rows())
+                    .as("Bob's one execution is the quarantined one and he still did it")
+                    .contains(List.of("Bob Tester", "1", "0", "0.0%"));
+        }
+
+        @Test
+        @DisplayName("the section names the case and the sentence somebody wrote")
+        void theReasonIsOnTheFaceOfTheReport() throws SQLException {
+            // CaseQuarantineService's header is the specification: "when gating reads this column it
+            // must say so on the face of the report". "These results were left out" is only
+            // actionable next to why — without it the only way to evaluate the exclusion is to read
+            // the test, which is the work the quarantine deferred.
+            quarantine(FAILED, "Fails on Firefox roughly one run in four");
+
+            ReportModel.Table table = section(model(), "Quarantined cases").table();
+
+            assertThat(table.columns()).containsExactly("Case", "Reason", "Quarantined at");
+            assertThat(table.rows()).hasSize(1);
+            assertThat(table.rows().getFirst().get(0)).isEqualTo("TC-3 — Case TC-3");
+            assertThat(table.rows().getFirst().get(1))
+                    .isEqualTo("Fails on Firefox roughly one run in four");
+        }
+
+        @Test
+        @DisplayName("a case quarantined with no result in this run is listed, and counted nowhere")
+        void aQuarantineWithNothingRecordedIsStillNamed() throws SQLException {
+            // UNRECORDED is in the run and has no verdict, so it has no fact row at all. Listing it
+            // is the finding — a quarantined test nobody is running is exactly the debt the board
+            // card exists to surface — while every count stays at zero because it contributed
+            // nothing. The table and the metadata line are therefore DIFFERENT numbers on purpose,
+            // and the narrative reconciles them rather than leaving a reader to.
+            quarantine(UNRECORDED, "Quarantined before anybody ran it");
+
+            ReportModel model = model();
+
+            assertThat(entry(model, "Quarantined cases in this run"))
+                    .isEqualTo("0 (0 executions, not counted in the rate above)");
+            assertThat(entry(model, "Pass rate (excluding quarantined cases)")).isEqualTo("50.0%");
+            assertThat(section(model, "Quarantined cases").table().rows()).hasSize(1);
+            assertThat(section(model, "Quarantined cases").narrative())
+                    .contains("all 1 of them")
+                    .contains("0 of those contributed");
+        }
+
+        @Test
+        @DisplayName("quarantining every recorded case leaves a dash, never a zero percent")
+        void anEmptyTrustedDenominatorIsNotZeroPercent() throws SQLException {
+            // 0/0 is not 0%. A report claiming "0.0%" for a run whose every result was discounted
+            // would read as total failure, which is the one direction §46 says a defect must never
+            // take by default.
+            quarantine(PASSED_ONE, "one");
+            quarantine(PASSED_TWO, "two");
+            quarantine(FAILED, "three");
+            quarantine(BLOCKED, "four");
+
+            assertThat(entry(model(), "Pass rate (excluding quarantined cases)")).isEqualTo("—");
+        }
+
+        @Test
+        @DisplayName("a sibling company's quarantine cannot discount this project's results")
+        void quarantineIsScopedByProject() throws SQLException {
+            // The read is bounded by projectId as well as by RLS — caseLabels' reason, and the one
+            // case RLS alone does not refuse is a sibling PROJECT of the same company.
+            quarantine(FAILED, "Fails on Firefox roughly one run in four");
+
+            ReportModel model = compute(UMBRA, UMBRA_RUN);
+
+            assertThat(entry(model, "Quarantined cases in this run")).startsWith("0 (0 executions");
+            assertThat(entry(model, "Pass rate (excluding quarantined cases)")).isEqualTo("100.0%");
+        }
+    }
+
+    @Nested
     @DisplayName("Who did the work — §6e's per-tester progress")
     class Testers {
 
@@ -375,6 +503,30 @@ class RunSummaryReportTest extends IntegrationTestBase {
     // =====================================================================
     // Fixture plumbing
     // =====================================================================
+
+    /**
+     * All four authored columns together — not tidiness, {@code case_flake_quarantine_complete}
+     * refuses anything else. An {@code UPDATE} rather than an insert because
+     * {@code ExecutionFactRefreshService.refresh} writes a row for every live case, which the
+     * fixture has already run.
+     */
+    private void quarantine(UUID caseId, String reason) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+                PreparedStatement statement = connection.prepareStatement("""
+                        UPDATE case_flake
+                           SET quarantined = true, quarantined_at = now(),
+                               quarantined_by = CAST(? AS uuid),
+                               quarantine_reason = ?
+                         WHERE case_id = CAST(? AS uuid)
+                        """)) {
+            statement.setString(1, ALICE.toString());
+            statement.setString(2, reason);
+            statement.setString(3, caseId.toString());
+            assertThat(statement.executeUpdate())
+                    .as("the refresh writes a flake row per live case; without one this seeds nothing")
+                    .isEqualTo(1);
+        }
+    }
 
     private ReportModel model() {
         return compute(RUN);

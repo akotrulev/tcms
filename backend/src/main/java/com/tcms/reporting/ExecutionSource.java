@@ -2,6 +2,7 @@ package com.tcms.reporting;
 
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,10 +20,12 @@ import org.springframework.stereotype.Component;
  * <p>ArchUnit permits a cross-module dependency only toward {@code tenancy}, {@code identity} and
  * {@code project} (plan §3), and this module declares {@code tenancy} alone. The projection below
  * nonetheless names {@code test_execution} and {@code test_run} ({@code execution}),
- * {@code test_case}, {@code test_case_version} and {@code suite} ({@code repository}),
- * {@code case_status} and {@code case_classification} ({@code project} / {@code repository}) —
- * seven tables across three modules. Concentrating every one of them in a single file is what makes the coupling reviewable,
- * and what makes it one file to rewrite on the day these facts arrive as events instead.
+ * {@code test_case}, {@code test_case_version}, {@code suite} and {@code case_flake}
+ * ({@code repository}), {@code case_status} and {@code case_classification} ({@code project} /
+ * {@code repository}) — <del>seven</del> <strong>eight</strong> tables across three modules
+ * ({@link #quarantinedCases} added the eighth). Concentrating every one of them in a single file is
+ * what makes the coupling reviewable, and what makes it one file to rewrite on the day these facts
+ * arrive as events instead.
  *
  * <h2>Native SQL, and why there is no entity for {@code execution_fact} either</h2>
  *
@@ -415,6 +418,107 @@ class ExecutionSource {
         String display() {
             return key + " — " + title;
         }
+    }
+
+    /**
+     * The project's live quarantines — <strong>{@code case_flake}'s first reader outside the screen
+     * that writes it, and the whole of this slice's crossing.</strong>
+     *
+     * <p>{@code CaseQuarantineService}'s header named the slice this is: <em>"Nothing downstream
+     * reads the flag yet … excluding a case from a pass rate silently is how a green number stops
+     * meaning anything … when gating reads this column it must say so on the face of the report — a
+     * separate slice, with §6e's discipline."</em> Both consumers below print the exclusion beside
+     * the figure it did not touch, which is what that sentence asks for.
+     *
+     * <h2>Live, not snapshotted onto {@code execution_fact} — and the tidier answer is the inert one</h2>
+     *
+     * <p>The star-schema reading says this belongs on the fact log as a frozen dimension: <em>was
+     * this case quarantined when the result was filed</em>. It would be architecturally consistent
+     * with every other column {@link #projectRecordedExecutions} freezes, and it would do
+     * <strong>nothing</strong>. A test is quarantined <em>because</em> it went red, within the hour
+     * ({@link com.tcms.repository.CaseFlake#unscored} says so in those words), so every result a
+     * reader wants discounted was filed <em>before</em> the decision. A frozen column reads
+     * {@code false} on exactly those rows: the feature would be inert on the day it is used and
+     * would begin working only on results filed later — a build that works rendering identically to
+     * one that does not, which is the shape §47, §53, §72 and §81 each paid for.
+     *
+     * <p>So the flag is read at report time and the cost is stated rather than hidden: quarantining
+     * a test today <em>does</em> move the quarantine-excluded figure for last month. That is
+     * tolerable only because it moves <em>no figure that already existed</em> — both consumers keep
+     * their original pass rate unchanged and print the new one beside it, and the new one's own
+     * narrative says the exclusion is as of now. A retroactive number nobody was told about would be
+     * the §6e defect; a retroactive number labelled as the one that moves is an answer to a
+     * different question.
+     *
+     * <p>It also means {@link #projectRecordedExecutions}' {@code ON CONFLICT} set-list and
+     * {@link #recomputeFlakeScores}' are both untouched by this slice — including the second one's
+     * standing warning that a set-list of {@code EXCLUDED.*} there would release every quarantined
+     * test on the next tick. Nothing here writes {@code case_flake}.
+     *
+     * <h2>No {@code deleted_at} predicate — {@link #caseLabels}' call, not a second opinion</h2>
+     *
+     * <p>{@code work.BoardFacts.quarantinedCases} drops soft-deleted cases and is right to: a board
+     * card is work somebody has to do, and there is no work in a case nobody runs. A report figure
+     * is history to account for, and {@link #projectRecordedExecutions} deliberately projects a
+     * deleted case's results anyway — so dropping the case here would leave its executions inside
+     * the <em>excluded</em> denominator while the team's last word on them was "do not trust this".
+     * The two queries differ because the questions do, and the divergence is stated so it does not
+     * read as one of them having forgotten the predicate.
+     *
+     * @param projectId bounds the lookup for {@link #caseLabels}' reason — RLS scopes to the company
+     *     and no further, and a sibling project's quarantine must not discount this report's results
+     * @return one entry per live quarantine, ordered by display key so two reports of one project
+     *     list them the same way. Empty when nobody has quarantined anything, which is the ordinary
+     *     state and which both callers print as a zero rather than as a missing line.
+     */
+    List<QuarantinedCase> quarantinedCases(UUID projectId) {
+        List<?> rows = entities.createNativeQuery("""
+                SELECT c.id, c.key, c.title, f.quarantine_reason, f.quarantined_at
+                  FROM case_flake f
+                  JOIN test_case c ON c.id = f.case_id
+                 WHERE f.project_id = :projectId
+                   AND f.quarantined
+                 ORDER BY c.key_seq
+                """)
+                .setParameter("projectId", projectId)
+                .getResultList();
+
+        List<QuarantinedCase> quarantined = new ArrayList<>(rows.size());
+        for (Object result : rows) {
+            Object[] row = (Object[]) result;
+            quarantined.add(new QuarantinedCase(
+                    UUID.fromString(row[0].toString()),
+                    new CaseLabel((String) row[1], (String) row[2]),
+                    (String) row[3],
+                    toInstant(row[4])));
+        }
+        return List.copyOf(quarantined);
+    }
+
+    /**
+     * One quarantined case, as a report may speak about it.
+     *
+     * @param reason never null — {@code case_flake_quarantine_complete} ({@code V38}) makes the four
+     *     authored columns all-or-nothing, so a row with {@code quarantined} true has all of them.
+     *     It is the sentence a person wrote, and it is the whole reason the section exists: "these
+     *     results were left out" is only actionable next to "why".
+     */
+    record QuarantinedCase(UUID caseId, CaseLabel label, String reason, Instant quarantinedAt) {}
+
+    /**
+     * {@code TIMESTAMPTZ} arrives as {@link java.sql.Timestamp} through a native query, unlike the
+     * {@link Instant} an entity mapping would hand back — {@code execution.CaseFacts}' helper, for
+     * its reason, in the first method here that reads a timestamp column at all.
+     */
+    private static Instant toInstant(Object value) {
+        return switch (value) {
+            case null -> null;
+            case Instant instant -> instant;
+            case java.sql.Timestamp timestamp -> timestamp.toInstant();
+            case java.time.OffsetDateTime offset -> offset.toInstant();
+            default -> throw new IllegalStateException(
+                    "Unexpected timestamp type " + value.getClass());
+        };
     }
 
     /**
