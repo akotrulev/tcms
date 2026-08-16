@@ -10533,7 +10533,7 @@ components:
         always reached through its run or its case, nobody says "TE-4038" out loud, and a
         per-execution counter would be the highest-volume contention point in the schema for no
         benefit. Identified by its UUID, or by (runId, caseId).
-      required: [id, caseId, caseKey, caseTitle, caseVersionNo, status, assignee, executedBy, executedAt, durationMs, defects]
+      required: [id, caseId, caseKey, caseTitle, caseVersionNo, status, assignee, executedBy, executedAt, durationMs, defects, quarantined]
       properties:
         id: { type: string, format: uuid }
         caseId: { type: string, format: uuid }
@@ -10560,6 +10560,16 @@ components:
         defects:
           type: array
           items: { $ref: '#/components/schemas/DefectLink' }
+        # A property of the CASE, read live, not a property of this execution. True when
+        # somebody has quarantined the case — decided its results are not to be trusted —
+        # which says nothing about whether this particular result is good. It is here so a
+        # tester can see it BEFORE picking the row up: a badge that appeared only after you
+        # opened the execution is one you see after you have already chosen it.
+        #
+        # Never a reason to hide or skip the row. A quarantined case still runs, still takes
+        # a verdict, and still counts towards this run's pass rate — the reports print a
+        # second rate that excludes it and leave the first one alone (§237).
+        quarantined: { type: boolean }
 
     TestExecution:
       allOf:

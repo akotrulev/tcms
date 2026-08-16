@@ -229,6 +229,41 @@ const healthHelp: Record<HealthSignal, string> = {
 };
 
 /**
+ * A case somebody has pulled out of the trusted set — §237, `case_flake.quarantined`.
+ *
+ * Quieter than a result status and shaped like `HealthChip` for the same reason: this is a warning
+ * about the *case*, not a verdict on the execution it sits beside, and a second saturated chip per
+ * row turns a run's checklist into confetti while the result stops standing out.
+ *
+ * **It never means skip it.** A quarantined case is still on the checklist, still takes a verdict,
+ * and still counts towards the run's own pass rate — what changes is that the reports print a
+ * *second* rate that leaves it out and leave the first one alone. The tooltip says so, because
+ * "Quarantined" on its own reads as "don't bother", which is the one thing it must not mean.
+ *
+ * The tooltip cannot say *why* the case was quarantined: the reason lives on `case_flake` and the
+ * execution wire carries only the flag. That is a deliberate stop rather than an oversight — the
+ * reason is a sentence, the checklist is a table, and the case's own screen (`FlakePanel`) and the
+ * board card both render it in full. The chip's job is to make a reader ask.
+ */
+export function QuarantineChip({ testId }: { testId?: string }) {
+  const color = severityVar.WARNING;
+  return (
+    <Tooltip title="Somebody has quarantined this case — its results are not trusted, and the reports print a pass rate that leaves it out. Run it and record a verdict as normal.">
+      <Chip
+        size="small"
+        label="Quarantined"
+        data-testid={testId}
+        sx={{
+          bgcolor: 'transparent',
+          color,
+          border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`,
+        }}
+      />
+    </Tooltip>
+  );
+}
+
+/**
  * One raised signal, in the colour the server says it deserves.
  *
  * Both props come off one `RaisedSignal` and must keep coming off the *same* one: the pair is

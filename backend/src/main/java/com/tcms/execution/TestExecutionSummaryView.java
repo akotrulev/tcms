@@ -21,6 +21,14 @@ import java.util.UUID;
  *                      nullable).
  * @param executedBy    null for an unexecuted row <em>and</em> for an ingested one, where
  *                      {@code executed_by_token} names a CI token rather than a person.
+ * @param quarantined   <strong>a property of the case, read live, and not of this execution</strong>
+ *                      (§237). True when somebody has decided this test's results are not to be
+ *                      trusted — which says nothing about whether <em>this</em> result is good, and
+ *                      changes nothing about the row: a quarantined case still appears on the
+ *                      checklist, still takes a verdict, and still counts towards this run's pass
+ *                      rate. It is here rather than only on {@link TestExecutionView} because a
+ *                      badge a tester sees only after opening the execution is one they see after
+ *                      they have already chosen it.
  */
 public record TestExecutionSummaryView(
         UUID id,
@@ -33,5 +41,6 @@ public record TestExecutionSummaryView(
         UserRef executedBy,
         Instant executedAt,
         Long durationMs,
-        List<DefectLinkView> defects) {
+        List<DefectLinkView> defects,
+        boolean quarantined) {
 }

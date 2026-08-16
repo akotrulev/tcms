@@ -2,6 +2,7 @@ import { Box, Stack, Tooltip, Typography } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import type { TestExecutionSummary } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
+import { QuarantineChip } from '../../components/StatusChip';
 import { statusLabels } from '../../lib/labels';
 import { orderedQueue } from './queueOrder';
 
@@ -139,9 +140,17 @@ export function ExecutionQueue({
                   >
                     {execution.caseTitle}
                   </Typography>
-                  <Identifier variant="muted" sx={{ fontSize: '0.6875rem' }}>
-                    {execution.caseKey}
-                  </Identifier>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Identifier variant="muted" sx={{ fontSize: '0.6875rem' }}>
+                      {execution.caseKey}
+                    </Identifier>
+                    {/* The rail is 260px, so this is the one surface where the chip has to earn
+                        its width. It does: the queue is where a tester CHOOSES the next case, and
+                        a badge that waited for the detail screen would arrive after the choice. */}
+                    {execution.quarantined && (
+                      <QuarantineChip testId={`${RowTestId}.Quarantined`} />
+                    )}
+                  </Box>
                 </Box>
               </Box>
             </Box>

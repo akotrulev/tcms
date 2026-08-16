@@ -52,6 +52,7 @@ function summary(): TestExecutionSummary {
     executedAt: null,
     durationMs: null,
     defects: [],
+    quarantined: false,
   }
 }
 

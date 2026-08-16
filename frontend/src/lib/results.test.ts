@@ -234,6 +234,7 @@ const execution = (
   executedAt: null,
   durationMs: null,
   defects: [],
+  quarantined: false,
 })
 
 const statuses: CaseStatus[] = [status('PASSED'), status('FAILED')]

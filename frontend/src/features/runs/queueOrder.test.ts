@@ -22,6 +22,7 @@ const execution = (caseKey: string, id = caseKey): TestExecutionSummary =>
     executedAt: null,
     durationMs: null,
     defects: [],
+    quarantined: false,
   })
 
 const keys = (rows: TestExecutionSummary[]) => orderedQueue(rows).map((r) => r.caseKey)

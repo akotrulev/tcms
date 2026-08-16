@@ -254,6 +254,7 @@ export function anExecution(overrides: Partial<TestExecution> = {}): TestExecuti
     executedAt: null,
     durationMs: null,
     defects: [],
+    quarantined: false,
     comment: null,
     releaseVersion: null,
     stepFormat: 'STRUCTURED',

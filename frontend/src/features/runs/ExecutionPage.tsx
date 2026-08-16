@@ -26,7 +26,7 @@ import { StepEvidence } from './StepEvidence';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
-import { StatusChip } from '../../components/StatusChip';
+import { QuarantineChip, StatusChip } from '../../components/StatusChip';
 import { BlockedDialog } from './BlockedDialog';
 import { EvidencePanel } from './EvidencePanel';
 import { ExecutionAssignee } from './ExecutionAssignee';
@@ -117,6 +117,7 @@ export function ExecutionPage() {
                 </Box>
               </Tooltip>
               {execution.data.status?.kind && <StatusChip kind={execution.data.status.kind} />}
+              {execution.data.quarantined && <QuarantineChip testId="Execution.Quarantined" />}
             </>
           )
         }

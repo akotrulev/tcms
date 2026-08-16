@@ -79,10 +79,15 @@ import org.springframework.stereotype.Component;
  *       (§99). Cases named directly, cases belonging to a named suite, and cases carrying a named
  *       tag, unioned. Every one of the three is a {@code repository} fact, which is why the whole
  *       resolution is one query here rather than three lookups the service unions in Java.</li>
+ *   <li><strong>Which of a set of cases is quarantined</strong> — {@link #quarantinedCaseIds}
+ *       (§237), and the only entry here that reads a table outside the case/suite/plan family.
+ *       {@code case_flake} is {@code repository}'s, the quarantine flag is a decision a person
+ *       recorded about a case, and the runner has to badge it on the checklist rather than only on
+ *       the screen a tester reaches after choosing a row.</li>
  * </ol>
  *
- * <p>Items 5–6 are new in M2 slice 2, 7–8 in M1 slice 15 and 9–10 in M1 slice 16, and they are
- * deliberately
+ * <p>Items 5–6 are new in M2 slice 2, 7–8 in M1 slice 15, 9–10 in M1 slice 16 and the last in §237,
+ * and they are deliberately
  * <strong>here</strong> rather than in the services that want them. Adding a second class that
  * names {@code test_case} would end the one property that makes this seam reviewable — that a
  * reader can find every crossing by opening one file — and it would end it for the most tempting
@@ -767,6 +772,45 @@ class CaseFacts {
      *              question and two near-identical methods is how one of them loses its
      *              {@code deleted_at} predicate.
      */
+    /**
+     * Which of these cases somebody has <strong>quarantined</strong> — the twelfth crossing, and the
+     * first thing this module reads out of {@code case_flake}.
+     *
+     * <p>The runner needs it so a tester can see, <em>on the checklist</em>, that the team has
+     * decided not to trust a case's results. Serving it only on the single-execution screen was the
+     * cheaper option and it is a badge you see after you have already chosen the row; the cost of
+     * the wider answer is this one query for a whole run, which is
+     * {@link ExecutionViews}' fifth bulk lookup and not a per-row one.
+     *
+     * <p><strong>It changes nothing about the execution.</strong> A quarantined case still appears,
+     * still takes a verdict and still counts towards this run's pass rate — the reports print a
+     * second rate that leaves it out and leave the first one alone
+     * ({@code reporting.ExecutionSource.quarantinedCases}). Filtering the row out here would be the
+     * silent-denominator defect one layer earlier, and it would hide work from the person doing it.
+     *
+     * <p>No {@code deleted_at} predicate and no {@code project_id} one: the ids come from
+     * executions this run already holds, which RLS and the run's own project have already bounded.
+     * Adding a project predicate here would be a second gate over a set that cannot contain a
+     * foreign id — unlike {@link #liveIds}, whose whole job is that ids arrived from a caller.
+     *
+     * @return the subset that is quarantined; empty when none is, which is the ordinary state
+     */
+    Set<UUID> quarantinedCaseIds(Collection<UUID> caseIds) {
+        if (caseIds.isEmpty()) {
+            return Set.of();
+        }
+        @SuppressWarnings("unchecked")
+        List<UUID> rows = entities.createNativeQuery("""
+                SELECT f.case_id
+                  FROM case_flake f
+                 WHERE f.quarantined
+                   AND f.case_id IN (:caseIds)
+                """)
+                .setParameter("caseIds", caseIds)
+                .getResultList();
+        return new LinkedHashSet<>(rows);
+    }
+
     private Set<UUID> liveIds(String table, UUID projectId, Collection<UUID> ids) {
         if (ids.isEmpty()) {
             return Set.of();

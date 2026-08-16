@@ -56,6 +56,7 @@ function summary(
     executedAt: null,
     durationMs: null,
     defects: [],
+    quarantined: false,
   }
 }
 
@@ -121,6 +122,7 @@ function execution(id: string, steps: StepResult[]): TestExecution {
     executedAt: null,
     durationMs: null,
     defects: [],
+    quarantined: false,
     comment: null,
     releaseVersion: null,
     stepFormat: 'STRUCTURED',

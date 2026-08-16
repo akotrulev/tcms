@@ -6,7 +6,7 @@ import { executionQueryOptions, useSubmitResult } from '../../api/queries';
 import type { CaseStatus, TestExecution, TestExecutionSummary } from '../../api/types';
 import { PermissionGate } from '../../components/PermissionGate';
 import { ScrollX } from '../../components/ScrollX';
-import { StatusChip } from '../../components/StatusChip';
+import { QuarantineChip, StatusChip } from '../../components/StatusChip';
 import { describeError } from '../../lib/describeError';
 import { statusLabels } from '../../lib/labels';
 import { CaseKeyLink, ExecuteCaseLink } from './ExecutionRowLinks';
@@ -201,14 +201,19 @@ function GridRow({
         <CaseKeyLink execution={execution} projectId={projectId} testId={RowTestId} />
       </TableCell>
       <TableCell>
-        <ExecuteCaseLink
-          execution={execution}
-          projectId={projectId}
-          runId={runId}
-          linkSuffix={linkSuffix}
-          maxWidth={480}
-          testId={RowTestId}
-        />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ExecuteCaseLink
+            execution={execution}
+            projectId={projectId}
+            runId={runId}
+            linkSuffix={linkSuffix}
+            maxWidth={480}
+            testId={RowTestId}
+          />
+          {/* Beside the title rather than in the Result column: this is a warning about the
+              CASE, and putting it where the verdict goes would read as a verdict. */}
+          {execution.quarantined && <QuarantineChip testId={`${RowTestId}.Quarantined`} />}
+        </Box>
         {error && (
           <Typography
             variant="caption"

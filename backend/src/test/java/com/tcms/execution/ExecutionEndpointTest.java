@@ -21,6 +21,7 @@ import com.tcms.tenancy.OutboxEvents;
 import com.tcms.tenancy.OutboxRepository;
 import com.tcms.tenancy.OutboxStatus;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -1913,6 +1914,113 @@ class ExecutionEndpointTest extends IntegrationTestBase {
                         .content("{\"assigneeId\":"
                                 + (assigneeId == null ? "null" : "\"" + assigneeId + "\"") + "}"))
                 .andReturn();
+    }
+
+    @Nested
+    @DisplayName("The quarantine badge — the checklist, and the screen it opens")
+    class QuarantineBadge {
+
+        @Test
+        @DisplayName("nothing quarantined serves false on every row, never a missing property")
+        void theFlagIsAlwaysPresent() throws Exception {
+            // `quarantined` is required on TestExecutionSummary, so an absent property is a contract
+            // violation and not merely a falsy value. A consumer that read `undefined` as "no badge"
+            // would look correct right up until the day something did quarantine a case.
+            JsonNode run = body(get(LEAD, ACME, "/projects/" + ACME_BANKING + "/runs/" + RUN));
+
+            for (JsonNode execution : run.get("executions")) {
+                assertThat(execution.has("quarantined")).isTrue();
+                assertThat(execution.get("quarantined").asBoolean()).isFalse();
+            }
+        }
+
+        @Test
+        @DisplayName("the badge reaches the CHECKLIST, not only the execution it opens")
+        void bothScreensCarryIt() throws Exception {
+            // The decision of this half. A badge served only on the single-execution screen is one a
+            // tester sees after they have already picked the row up, which is after the moment it
+            // could have changed anything. TestExecution is an allOf over TestExecutionSummary, so
+            // one property and one bulk lookup serve both — the flag is asserted on both here so a
+            // future renderer that stops passing it through fails rather than degrades.
+            quarantine(caseA, "Times out on the shared staging database about once a week");
+
+            JsonNode run = body(get(LEAD, ACME, "/projects/" + ACME_BANKING + "/runs/" + RUN));
+            JsonNode row = row(run, EXEC_A);
+            assertThat(row.get("quarantined").asBoolean()).isTrue();
+
+            JsonNode detail = body(get(LEAD, ACME, executionPath(RUN, EXEC_A)));
+            assertThat(detail.get("quarantined").asBoolean()).isTrue();
+        }
+
+        @Test
+        @DisplayName("it badges the case, so only that case's rows carry it")
+        void itIsAPropertyOfTheCaseAndNotOfTheRun() throws Exception {
+            // caseA is executed in RUN, OLD_RUN and FRESH_RUN. Quarantine is a decision about the
+            // test, so every row for it badges and caseB's does not — a flag resolved per execution
+            // rather than per case would badge one of the three.
+            quarantine(caseA, "Times out on the shared staging database about once a week");
+
+            JsonNode run = body(get(LEAD, ACME, "/projects/" + ACME_BANKING + "/runs/" + RUN));
+            assertThat(row(run, EXEC_A).get("quarantined").asBoolean()).isTrue();
+            assertThat(row(run, EXEC_B).get("quarantined").asBoolean()).isFalse();
+
+            JsonNode older = body(get(LEAD, ACME, "/projects/" + ACME_BANKING + "/runs/" + OLD_RUN));
+            assertThat(row(older, EXEC_OLD).get("quarantined").asBoolean())
+                    .as("the same case in an older run is the same quarantined test")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("a quarantined case is still on the checklist and still takes a verdict")
+        void theRowIsNeverHiddenOrRefused() throws Exception {
+            // The whole shape of this slice in one test. Filtering the row out, or refusing the
+            // result, would be the silent-denominator defect one layer earlier — and it would hide
+            // work from the person doing it. Quarantine changes what the REPORTS say, and nothing
+            // about what the runner may do.
+            quarantine(caseA, "Times out on the shared staging database about once a week");
+
+            JsonNode run = body(get(LEAD, ACME, "/projects/" + ACME_BANKING + "/runs/" + RUN));
+            assertThat(run.get("executions")).hasSize(2);
+            assertThat(run.get("counts").get("total").asLong()).isEqualTo(2);
+
+            assertThat(patch(ENGINEER, ACME, RUN, EXEC_A,
+                    resultPayload(passedStatus(), "Ran it anyway"), "0")
+                    .getResponse().getStatus())
+                    .as("a quarantined test is still run and still judged")
+                    .isEqualTo(200);
+        }
+
+        private JsonNode row(JsonNode run, UUID executionId) {
+            for (JsonNode execution : run.get("executions")) {
+                if (executionId.toString().equals(execution.get("id").asText())) {
+                    return execution;
+                }
+            }
+            throw new AssertionError("No execution " + executionId + " on the checklist");
+        }
+
+        /**
+         * All four authored columns together — {@code case_flake_quarantine_complete} refuses
+         * anything else. An {@code INSERT}: no recompute has run in this fixture, so there is no
+         * row, which is the ordinary state {@code CaseFlake.unscored} exists for.
+         */
+        private void quarantine(UUID caseId, String reason) throws SQLException {
+            try (Connection connection = appConnection(ACME);
+                    PreparedStatement statement = connection.prepareStatement("""
+                            INSERT INTO case_flake
+                                (case_id, company_id, project_id,
+                                 quarantined, quarantined_at, quarantined_by, quarantine_reason)
+                            VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid),
+                                    true, now(), CAST(? AS uuid), ?)
+                            """)) {
+                statement.setString(1, caseId.toString());
+                statement.setString(2, ACME.toString());
+                statement.setString(3, ACME_BANKING.toString());
+                statement.setString(4, LEAD.toString());
+                statement.setString(5, reason);
+                statement.executeUpdate();
+            }
+        }
     }
 
     @Nested

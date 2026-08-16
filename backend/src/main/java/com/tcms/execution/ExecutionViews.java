@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,13 +25,14 @@ import org.springframework.stereotype.Component;
  * detail needs are added <em>around</em> this output ({@link TestExecutionView#of}) rather than by a
  * second renderer.
  *
- * <h2>Four bulk lookups, never per row</h2>
+ * <h2><del>Four</del> Five bulk lookups, never per row</h2>
  *
  * <ol>
  *   <li>the pinned snapshots, one query for the whole run ({@link CaseFacts#pinnedCases});</li>
  *   <li>the people, two queries ({@link ExecutionPeople});</li>
  *   <li>the defect links, one query;</li>
- *   <li>the statuses, one query, done by the caller because it also needs them for the tally.</li>
+ *   <li>the statuses, one query, done by the caller because it also needs them for the tally;</li>
+ *   <li>the quarantined cases, one query ({@link CaseFacts#quarantinedCaseIds}, §237).</li>
  * </ol>
  *
  * <p>None is proportional to a run's size in queries, which matters here more than on any other
@@ -80,6 +82,10 @@ class ExecutionViews {
         Map<UUID, UserRef> resolved = people.resolve(companyId, userIds);
         Map<UUID, List<DefectLinkView>> defects = defectsByExecution(
                 rows.stream().map(TestExecution::getId).toList());
+        // Keyed by CASE, not by execution — quarantine is a decision about the test, and a run that
+        // holds the same case twice would badge both rows from this one set.
+        Set<UUID> quarantined = cases.quarantinedCaseIds(
+                rows.stream().map(TestExecution::getCaseId).collect(Collectors.toSet()));
 
         List<TestExecutionSummaryView> views = new ArrayList<>(rows.size());
         // Built alongside the views rather than looked up inside the comparator: a comparator that
@@ -110,7 +116,8 @@ class ExecutionViews {
                     row.getExecutedBy() == null ? null : resolved.get(row.getExecutedBy()),
                     row.getExecutedAt(),
                     row.getDurationMs(),
-                    defects.getOrDefault(row.getId(), List.of())));
+                    defects.getOrDefault(row.getId(), List.of()),
+                    quarantined.contains(row.getCaseId())));
         }
 
         views.sort(Comparator.comparingLong(view -> keySeqByExecution.get(view.id())));

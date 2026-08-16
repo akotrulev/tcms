@@ -11533,6 +11533,7 @@ export interface components {
             executedAt: string | null;
             durationMs: number | null;
             defects: components["schemas"]["DefectLink"][];
+            quarantined: boolean;
         };
         TestExecution: components["schemas"]["TestExecutionSummary"] & {
             comment: string | null;

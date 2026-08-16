@@ -250,6 +250,7 @@ export function executionSummary(
     executedAt: null,
     durationMs: null,
     defects: [],
+    quarantined: false,
     ...overrides,
   };
 }
@@ -267,6 +268,7 @@ export function execution(overrides: Partial<Schemas['TestExecution']> = {}): Sc
     executedAt: null,
     durationMs: null,
     defects: [],
+    quarantined: false,
     comment: null,
     releaseVersion: null,
     stepFormat: 'STRUCTURED',
