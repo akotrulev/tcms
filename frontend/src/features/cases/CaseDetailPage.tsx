@@ -888,11 +888,6 @@ function StructuredSteps({ steps }: { steps: TestStep[] }) {
                 </TableCell>
                 <TableCell sx={{ verticalAlign: 'top' }} data-testid="CaseDetail.Steps.Row.Action">
                   {step.action}
-                  {step.sharedStepId && (
-                    <Tooltip title="This step is shared. Editing it changes every case that uses it.">
-                      <Chip size="small" variant="outlined" label="Shared" sx={{ ml: 1 }} />
-                    </Tooltip>
-                  )}
                 </TableCell>
                 <TableCell sx={{ verticalAlign: 'top', color: 'text.secondary' }}>
                   {step.testData || '—'}

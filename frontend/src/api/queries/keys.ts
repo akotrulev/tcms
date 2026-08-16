@@ -60,7 +60,6 @@ export const keys = {
    */
   tags: (p: string) => ['projects', p, 'tags'] as const,
   conditions: (p: string, q: string, type?: string) => ['projects', p, 'conditions', q, type ?? 'ALL'] as const,
-  sharedSteps: (p: string, q: string) => ['projects', p, 'shared-steps', q] as const,
   /**
    * The derived step corpus (§94), keyed by the fragment it was narrowed with.
    *

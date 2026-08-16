@@ -22,7 +22,6 @@ import {
   Autocomplete,
   Box,
   Button,
-  Chip,
   IconButton,
   MenuItem,
   Stack,
@@ -36,8 +35,6 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
-import LibraryAddIcon from '@mui/icons-material/LibraryAddOutlined';
-import LinkOffIcon from '@mui/icons-material/LinkOffOutlined';
 import { useSnackbar } from 'notistack';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
@@ -49,7 +46,6 @@ import { CaseDraftStatus } from './CaseDraftStatus';
 import { ClassificationPicker } from './ClassificationPicker';
 import { ConditionEditDialog } from './ConditionEditDialog';
 import { ConditionsPanel } from './ConditionsPanel';
-import { SharedStepPicker } from './SharedStepPicker';
 import { resolveStepMove } from './stepReorder';
 import {
   useCase,
@@ -169,9 +165,10 @@ function SortableStep({
  *
  * ## Copy, never reference
  *
- * A pick fills the three fields and creates no link — the opposite of `SharedStepPicker` beside it,
- * which sets `sharedStepId` and makes the step track a library entry. The corpus carries no ids at
- * all, so this cannot accidentally become the other thing.
+ * A pick fills the three fields and creates no link, and the corpus carries no ids at all, so it
+ * cannot accidentally become a reference. Since §239 it is the ONLY step-reuse affordance: the
+ * shared-step library beside it, which set `sharedStepId` and claimed the step tracked a library
+ * entry, was retired because nothing ever resolved the entry — see the module header.
  */
 function StepActionField({
   projectId,
@@ -443,7 +440,6 @@ function CaseEditorForm({
           action: step.action,
           testData: step.testData ?? '',
           expectedResult: step.expectedResult ?? '',
-          sharedStepId: step.sharedStepId ?? null,
         })),
         BLANK_STEP,
       ],
@@ -530,7 +526,6 @@ function CaseEditorForm({
     if (move) steps.move(move.from, move.to);
   };
 
-  const [pickerOpen, setPickerOpen] = useState(false);
   const stepFormat = watch('stepFormat');
   const automationStatus = watch('automationStatus');
 
@@ -1006,38 +1001,6 @@ function CaseEditorForm({
                         </IconButton>
                       </Tooltip>
                       <Identifier variant="muted">Step {index + 1}</Identifier>
-                      {/*
-                        Read off `fields` rather than through `watch('steps')`: sharedStepId is
-                        never edited by an input, so it only ever changes through append / update /
-                        remove — exactly the operations that refresh `fields`. Watching would
-                        re-render the whole step list on every keystroke in any field for a value
-                        that cannot have changed.
-                      */}
-                      {field.sharedStepId && (
-                        <>
-                          <Tooltip title="This step references the project's step library. Editing the library entry changes every case using it.">
-                            <Chip
-                              size="small"
-                              variant="outlined"
-                              label="Shared"
-                              data-testid={`${TestIdPrefix}.Steps.SharedChip`}
-                            />
-                          </Tooltip>
-                          <IconButton
-                            size="small"
-                            onClick={() =>
-                              // `update` rather than setValue: it refreshes `fields`, which is
-                              // what this row is reading. setValue would clear the reference in
-                              // the form values and leave the chip on screen.
-                              steps.update(index, { ...steps.fields[index], sharedStepId: null })
-                            }
-                            aria-label={`Detach step ${index + 1} from the library`}
-                            data-testid={`${TestIdPrefix}.Steps.Detach`}
-                          >
-                            <LinkOffIcon fontSize="small" />
-                          </IconButton>
-                        </>
-                      )}
                       <Box sx={{ flex: 1 }} />
                       {/*
                         Reordering is safe because a step keeps its stable id: results and
@@ -1147,27 +1110,20 @@ function CaseEditorForm({
                 </DndContext>
 
                 {/*
-                  There is no "Add step" button any more (§94). The last row is always blank and
-                  typing into it appends the next one, so a button that adds an eighth empty row to
-                  a list already ending in one is an affordance for something that has already
-                  happened. `CaseEditor.Steps.AddButton` is gone with it — a locator, not just a
-                  control, so anything driving this screen looks for the blank row instead.
+                  This panel has NO buttons under the list, and both absences are decisions.
+
+                  "Add step" went in §94: the last row is always blank and typing into it appends
+                  the next one, so a button that adds an eighth empty row to a list already ending
+                  in one is an affordance for something that has already happened.
+                  `CaseEditor.Steps.AddButton` is gone with it — a locator, not just a control, so
+                  anything driving this screen looks for the blank row instead.
+
+                  "Insert shared step" went in §239, and `CaseEditor.Steps.InsertSharedButton` with
+                  it. Step reuse is the corpus in the action field: it needs nobody to populate it,
+                  and a pick copies text into THIS case. The library it replaced was the other
+                  mechanism half-built — the picker wrote the entry's title into `action` and set a
+                  reference nothing on any read path ever resolved.
                 */}
-                <Stack direction="row" sx={{ gap: 1, alignSelf: 'flex-start' }}>
-                  {/*
-                    Not permission-gated: reading the library needs no permission beyond the
-                    project grant this page already required, and `library:manage` gates writing
-                    an entry — which the dialog gates on its own button. Gating here would refuse
-                    a Viewer the list they are allowed to read.
-                  */}
-                  <Button
-                    startIcon={<LibraryAddIcon />}
-                    onClick={() => setPickerOpen(true)}
-                    data-testid={`${TestIdPrefix}.Steps.InsertSharedButton`}
-                  >
-                    Insert shared step
-                  </Button>
-                </Stack>
               </Stack>
             )}
           </Panel>
@@ -1579,34 +1535,6 @@ function CaseEditorForm({
           </Stack>
         </Box>
       </Stack>
-
-      {/*
-        Mounted unconditionally and controlled by `open`, rather than rendered only when open:
-        MUI keeps the dialog out of the tree until it opens anyway, and an unmounted component
-        would re-run the library query from scratch on every open instead of reading the cache.
-      */}
-      <SharedStepPicker
-        projectId={projectId}
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onPick={(shared) => {
-          // The title, not the body — see SharedStepPicker. `id` is deliberately absent: this is
-          // a new step, and sending an id the case does not own is refused by the server.
-          //
-          // Inserted BEFORE the trailing blank row rather than appended after it (§94): appending
-          // would leave the invitation stranded in the middle of the list, reading as an empty
-          // step somebody forgot to fill in.
-          const rows = getValues('steps');
-          const last = rows.at(-1);
-          const at = last && isBlankStep(last) ? rows.length - 1 : rows.length;
-          steps.insert(
-            at,
-            { action: shared.title, testData: '', expectedResult: '', sharedStepId: shared.id },
-            NO_FOCUS,
-          );
-          ensureTrailingBlank();
-        }}
-      />
 
       {/*
         Keyed on the entry (or 'new'), which is what makes the dialog's own state reset between

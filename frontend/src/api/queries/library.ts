@@ -1,8 +1,14 @@
 /**
- * The reusable library — conditions and shared steps.
+ * The reusable library — conditions, and the step corpus that sits beside them.
  *
  * Both are search-as-you-type, so both carry the typeahead budget rather than the interactive
  * one. That is the whole reason they sit together: the endpoint class, not the entity.
+ *
+ * `useSharedSteps` and `useCreateSharedStep` were the third member until §239. The shared-step
+ * library was retired because it was half-built: the picker wrote the entry's TITLE into the
+ * step's `action` and set a reference that no read path — case detail, case version snapshot,
+ * report, export — ever resolved, so the "editing the entry changes every case using it" the UI
+ * promised was never true. `useStepSuggestions` below is what step reuse is now.
  */
 import {
   useMutation,
@@ -10,15 +16,8 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import { useRef } from 'react';
-import { TIMEOUTS, api, newIntentKey, qs } from '../client';
-import type {
-  Condition,
-  ConditionInput,
-  SharedStep,
-  SharedStepInput,
-  StepSuggestion,
-} from '../types';
+import { TIMEOUTS, api, qs } from '../client';
+import type { Condition, ConditionInput, StepSuggestion } from '../types';
 import { base, keys } from './keys';
 
 /**
@@ -51,27 +50,17 @@ export function useConditions(
   });
 }
 
-export function useSharedSteps(projectId: string, q: string): UseQueryResult<SharedStep[]> {
-  return useQuery({
-    queryKey: keys.sharedSteps(projectId, q),
-    queryFn: ({ signal }) =>
-      api.get<SharedStep[]>(`${base(projectId)}/shared-steps${qs({ q })}`, {
-        signal,
-        timeoutMs: TIMEOUTS.typeahead,
-      }),
-  });
-}
-
 /**
  * What the case editor's action field completes from (§94) — the project's own step corpus.
  *
  * ## Why it sits beside the library and is not part of it
  *
  * Same endpoint class — search-as-you-type, hence the same budget — and the opposite mechanism.
- * `useSharedSteps` reads a **curated** table and a pick creates a **reference**; this reads a
- * corpus **derived** from every step the project's live cases already contain, and a pick copies
- * the text. The corpus needs nobody to populate it, which is the correction to the library whose
- * picker opens empty on every project where nobody remembered to fill it in.
+ * The retired shared-step library read a **curated** table and a pick created a **reference**;
+ * this reads a corpus **derived** from every step the project's live cases already contain, and a
+ * pick copies the text. The corpus needs nobody to populate it, which is the correction to the
+ * library whose picker opened empty on every project where nobody remembered to fill it in — and
+ * §239 finished the argument by retiring the library outright.
  *
  * ## `enabled` on a non-blank fragment
  *
@@ -100,46 +89,11 @@ export function useStepSuggestions(projectId: string, q: string): UseQueryResult
 }
 
 /**
- * Adds an entry to the step library. `library:manage`.
- *
- * Invalidates by prefix rather than by the key the picker is currently mounted on, because the
- * key carries the search term: a new entry created while the box reads "refund" must also appear
- * once the box is cleared, and those are two different cached lists. `keys.sharedSteps` is a
- * function of `q`, so the prefix is the only thing that reaches all of them.
- *
- * `handled` — the dialog renders its own field errors and its own 403, so the global notification
- * would be a second, vaguer copy of a message already on screen.
- */
-export function useCreateSharedStep(projectId: string) {
-  const client = useQueryClient();
-  /*
-    One key per mounted dialog (B4, `V59`) — `useCreateCase`'s rule and its reason: it survives
-    re-renders and failed attempts, so pressing Save again after a timeout sends the SAME key and
-    the server answers with the entry the first attempt created.
-
-    The endpoint refused this header until B4, on the grounds that a duplicate is visible in the
-    picker next to its twin. That argument was about a person looking at a picker; the SPA is that
-    person, and it is still worth sending — a timeout is exactly the moment the twin is created and
-    the reader is looking at a spinner.
-  */
-  const intentKey = useRef(newIntentKey());
-  return useMutation({
-    mutationFn: (input: SharedStepInput) =>
-      api.post<SharedStep>(`${base(projectId)}/shared-steps`, input, {
-        idempotencyKey: intentKey.current,
-      }),
-    meta: { handled: true },
-    onSuccess: () =>
-      client.invalidateQueries({ queryKey: ['projects', projectId, 'shared-steps'] }),
-  });
-}
-
-/**
  * Adds an entry to the condition library. `library:manage`.
  *
- * `useCreateSharedStep`'s shape, prefix-invalidated for its reason: the key carries the search
- * term, so an entry created while the box reads "refund" must also appear once the box is cleared,
- * and those are two different cached lists.
+ * Prefix-invalidated rather than keyed on the list the picker is currently mounted on, because
+ * the key carries the search term: an entry created while the box reads "refund" must also appear
+ * once the box is cleared, and those are two different cached lists.
  */
 export function useCreateCondition(projectId: string) {
   const client = useQueryClient();

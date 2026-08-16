@@ -36,7 +36,6 @@ const filled: CaseInput = {
       action: 'Open the refund screen',
       testData: '120.00 EUR',
       expectedResult: 'The form opens',
-      sharedStepId: null,
     },
     {
       id: null,
@@ -44,7 +43,6 @@ const filled: CaseInput = {
       action: 'Submit',
       testData: '',
       expectedResult: '',
-      sharedStepId: 'shared-9',
     },
   ],
   classificationValueIds: ['cv-1', 'cv-2'],
@@ -71,7 +69,6 @@ describe('the draft round trip', () => {
       action: '',
       testData: '',
       expectedResult: '',
-      sharedStepId: null,
     })
     expect({ ...restored, steps: restored.steps.slice(0, -1) }).toEqual({
       ...filled,
@@ -95,13 +92,13 @@ describe('toCasePayload', () => {
     const payload = toCasePayload({
       ...filled,
       steps: [
-        { id: null, keyword: null, action: '  Pay  ', testData: ' x ', expectedResult: '', sharedStepId: null },
-        { id: null, keyword: null, action: '   ', testData: '', expectedResult: '', sharedStepId: null },
+        { id: null, keyword: null, action: '  Pay  ', testData: ' x ', expectedResult: '' },
+        { id: null, keyword: null, action: '   ', testData: '', expectedResult: '' },
       ],
     })
 
     expect(payload.steps).toEqual([
-      { id: null, keyword: null, action: 'Pay', testData: 'x', expectedResult: null, sharedStepId: null },
+      { id: null, keyword: null, action: 'Pay', testData: 'x', expectedResult: null },
     ])
   })
 

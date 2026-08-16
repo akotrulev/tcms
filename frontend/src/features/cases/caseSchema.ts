@@ -40,7 +40,6 @@ export const StepSchema = z.object({
   action: z.string(),
   testData: z.string().nullable().optional(),
   expectedResult: z.string().nullable().optional(),
-  sharedStepId: z.string().nullable().optional(),
 });
 
 /** The three authored fields — the shape both emptiness helpers below read. */
@@ -298,7 +297,6 @@ export function toCasePayload(data: CaseInput): Record<string, unknown> {
             action: step.action,
             testData: step.testData || null,
             expectedResult: step.expectedResult || null,
-            sharedStepId: step.sharedStepId ?? null,
           }))
         : [],
     classificationValueIds: data.classificationValueIds,
@@ -316,7 +314,7 @@ export function toCasePayload(data: CaseInput): Record<string, unknown> {
 }
 
 /** The blank trailing step row the editor always keeps at the end of the list (§94). */
-const BLANK_ROW = { id: null, keyword: null, action: '', testData: '', expectedResult: '', sharedStepId: null };
+const BLANK_ROW = { id: null, keyword: null, action: '', testData: '', expectedResult: '' };
 
 const str = (value: unknown): string => (typeof value === 'string' ? value : '');
 const nullableStr = (value: unknown): string | null => (typeof value === 'string' ? value : null);
@@ -376,7 +374,6 @@ export function fromCasePayload(content: unknown): CaseInput {
       action: str(step.action),
       testData: str(step.testData),
       expectedResult: str(step.expectedResult),
-      sharedStepId: typeof step.sharedStepId === 'string' ? step.sharedStepId : null,
     }));
 
   return {

@@ -93,7 +93,6 @@ export type Condition = S['Condition'];
 export type CaseConditionRef = S['CaseConditionRef'];
 export type ConditionInput = S['ConditionInput'];
 export type CaseConditionInput = S['CaseConditionInput'];
-export type SharedStep = S['SharedStep'];
 /**
  * One entry in the project's derived step corpus (§94).
  *
@@ -101,7 +100,6 @@ export type SharedStep = S['SharedStep'];
  * an entity to reference. See `/projects/{projectId}/step-suggestions` in `openapi.yaml`.
  */
 export type StepSuggestion = S['StepSuggestion'];
-export type SharedStepInput = S['SharedStepInput'];
 /**
  * One tag in use in the project, with the number of live cases carrying it (§97).
  *
