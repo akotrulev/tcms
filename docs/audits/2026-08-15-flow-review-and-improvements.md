@@ -22,7 +22,9 @@ and for the one gate it could not re-run.~~ → **all eight are done as of §230
 (`docs/handoff/230-the-requirement-a-case-could-not-reach.md`), which also completed §229 phase 2's
 outstanding backend and `packages` gates. **The authorised scope is closed.** Everything still open
 below is B, C, D or E, none of it started; `E2` and `C10` are the cheapest next steps and both name
-work in this run as their prerequisite.
+work in this run as their prerequisite. → **2026-08-16, later the same day: all eleven C decisions
+are made** (recorded in the C table's new Decision column) — every one is *finish*, none is *retire*
+except C4, and none is deferred. Implementation of C has not started; the sequencing is §3.6.
 
 Status marks used in the tables: **✅ DONE** · **🔨 IN PROGRESS** · **⬜ NOT STARTED** ·
 **⛔ OUT OF SCOPE** (this session).
@@ -172,19 +174,23 @@ where the row's own proposal was not what was built — three of them were, and 
 
 ### C. Finish or retire the inert machinery (P3 — each is a decision, not a task)
 
-| # | Decision to make | Evidence |
-|---|---|---|
-| C1 | **Versioning story.** Four resources, four behaviours: cases (full table + panel, no restore/diff), suites (v1 then never), plans (scope-only, no endpoint), doc pages (hash-gated, write-only, `pinned`/`change_comment` never set). Either ship one read+diff(+restore) surface across them, or trim the write paths that nothing reads. The review apparatus pinning `Suite.currentVersionNo` to a number that never moves is the sharpest edge. | `SuiteVersions`, `PageVersions` headers |
-| C2 | **Quarantine.** The flag is recorded (`PUT /cases/{id}/quarantine`, reason required) and nothing downstream reads it — runs, reports, pass rates and flake all include quarantined cases. Decide the consumer (exclude from `aggregate_execution` denominators? badge in the runner?) or it is a note field with ceremony. | Authoring trace friction 16 |
-| C3 | **Search.** `doc_page.search_vector` (and `V2`'s triggers) are maintained, GIN-indexed, and no endpoint queries them — while `PlanDocumentPanel` justifies its design on pages being "found by everybody who searches documentation". A docs search endpoint is the cheapest visible win from machinery already paid for. | Doc trace friction 8 |
-| C4 | **Shared-step library.** §94 declared it vestigial next to the suggestion corpus, and the picker's insert writes the entry's *title* as the action while the body lives elsewhere. Either retire it (migrate `sharedStepId` refs to copied text) or make it real (picker inserts the body; suggestions offer "promote to library"). Half-alive is the one wrong state. | §94; `SharedStepPicker.tsx` |
-| C5 | **Defects pre-M4.** `DefectLink` renders on run detail, `defect:create` is seeded, `defect_link` is in the ERD — and no endpoint writes one. Either hide the read-only column until M4 or ship the minimal external-link write (the key and table already exist; it is the same shape as case external links). | Execution trace friction 7 |
-| C6 | **`GENERATED_REPORT` artifacts.** The reporting module now exists and `artifact.report_artifact_id` is waiting — "save this report to the register" from `ReportViewPage` would close the loop between two shipped features (and give reports a durable home, reinforcing A3). | `ArtifactKind.java` prose is stale on this |
-| C7 | **`write_once` has no writer.** The delete guard honours it; nothing sets it. Expose it on sign-off-kind registrations or drop the column. | Doc trace friction 16 |
-| C8 | **Dead permission keys.** `doc:read` and `artifact:read` have no evaluation site (both services gate on project read, with recorded rationale). Fine — but they sit in the catalogue, the matrix, and every copy-checking test as keys that can never 403. Worth an explicit "checked-by-project-read" annotation in the roles spec so the next matrix sweep doesn't re-litigate them. | `DocPageService.java:19`, `ArtifactService.java:29` |
-| C9 | **Step-level evidence.** The API takes `stepId`, the hook forwards it, `EvidencePanel` never passes one. Either wire the runner's step rows to it or note it as UI-deferred in the verification queue. | Execution trace friction 8 |
-| C10 | **MCP artifact tools.** The register has no MCP surface at all (self-documented in `writes.ts` §211 as waiting for the register to get a surface). A6 (edit+delete UI) is the prerequisite; after it, a read tool at minimum makes the register visible to the agent lane. | `packages/mcp/src/writes.ts` header |
-| C11 | **Stale prose sweep.** `useCan.ts:47`, `ArtifactDialogs.tsx:190,262`, `ArtifactTable.tsx:227` still assert the pre-`V52` `PLAN_SCOPE` grant as current; `ArtifactKind.java` says the reporting module "does not exist". The tier-claims rule (§212) catches key-naming claims — these escape it because they name a *qualifier*, not a tier. Hand-fix, or extend the rule to qualifier claims. | Doc trace frictions 6, 13 |
+**All eleven decided 2026-08-16** (user, prompted per item). The **Decision** column is the outcome;
+nothing in this section is implemented yet — each decision now becomes a slice, sequenced at the end
+of §3.
+
+| # | Decision (2026-08-16) | Decision to make | Evidence |
+|---|---|---|---|
+| C1 | **Fix the sharp edge only**: make `suite_version` actually advance on membership/status change so review pinning means something; leave the other three resources' versioning as-is. | **Versioning story.** Four resources, four behaviours: cases (full table + panel, no restore/diff), suites (v1 then never), plans (scope-only, no endpoint), doc pages (hash-gated, write-only, `pinned`/`change_comment` never set). Either ship one read+diff(+restore) surface across them, or trim the write paths that nothing reads. The review apparatus pinning `Suite.currentVersionNo` to a number that never moves is the sharpest edge. | `SuiteVersions`, `PageVersions` headers |
+| C2 | **Finish it — reports + runner badge**: exclude quarantined cases from `aggregate_execution` / pass-rate denominators AND badge them in the runner. | **Quarantine.** The flag is recorded (`PUT /cases/{id}/quarantine`, reason required) and nothing downstream reads it — runs, reports, pass rates and flake all include quarantined cases. Decide the consumer (exclude from `aggregate_execution` denominators? badge in the runner?) or it is a note field with ceremony. | Authoring trace friction 16 |
+| C3 | **Ship docs search**: a search endpoint over the existing tsvector + a search box in the documentation space. Wider (cases/plans) search is not part of this decision. | **Search.** `doc_page.search_vector` (and `V2`'s triggers) are maintained, GIN-indexed, and no endpoint queries them — while `PlanDocumentPanel` justifies its design on pages being "found by everybody who searches documentation". A docs search endpoint is the cheapest visible win from machinery already paid for. | Doc trace friction 8 |
+| C4 | **Retire it**: migrate `sharedStepId` refs to copied text, remove the picker and library UI; the suggestion corpus stays as the authoring aid. | **Shared-step library.** §94 declared it vestigial next to the suggestion corpus, and the picker's insert writes the entry's *title* as the action while the body lives elsewhere. Either retire it (migrate `sharedStepId` refs to copied text) or make it real (picker inserts the body; suggestions offer "promote to library"). Half-alive is the one wrong state. | §94; `SharedStepPicker.tsx` |
+| C5 | **Ship the minimal external-link write** (same shape as case external links); M4's tracker integration stays future. | **Defects pre-M4.** `DefectLink` renders on run detail, `defect:create` is seeded, `defect_link` is in the ERD — and no endpoint writes one. Either hide the read-only column until M4 or ship the minimal external-link write (the key and table already exist; it is the same shape as case external links). | Execution trace friction 7 |
+| C6 | **Ship it, and fix the stale prose with it**: "Save to register" on `ReportViewPage` creating a `GENERATED_REPORT` artifact, plus correcting `ArtifactKind.java`'s claim that the reporting module does not exist (overlaps C11). | **`GENERATED_REPORT` artifacts.** The reporting module now exists and `artifact.report_artifact_id` is waiting — "save this report to the register" from `ReportViewPage` would close the loop between two shipped features (and give reports a durable home, reinforcing A3). | `ArtifactKind.java` prose is stale on this |
+| C7 | **Expose it on registration**: a write-once (sign-off) toggle on artifact registration, one field through contract, form and service. | **`write_once` has no writer.** The delete guard honours it; nothing sets it. Expose it on sign-off-kind registrations or drop the column. | Doc trace friction 16 |
+| C8 | **Annotate in the roles spec**: an explicit "checked-by-project-read" annotation on both keys; docs-only, no behaviour change. | **Dead permission keys.** `doc:read` and `artifact:read` have no evaluation site (both services gate on project read, with recorded rationale). Fine — but they sit in the catalogue, the matrix, and every copy-checking test as keys that can never 403. Worth an explicit "checked-by-project-read" annotation in the roles spec so the next matrix sweep doesn't re-litigate them. | `DocPageService.java:19`, `ArtifactService.java:29` |
+| C9 | **Wire the runner**: each step row gets an attach-evidence affordance that passes `stepId`; frontend-only. | **Step-level evidence.** The API takes `stepId`, the hook forwards it, `EvidencePanel` never passes one. Either wire the runner's step rows to it or note it as UI-deferred in the verification queue. | Execution trace friction 8 |
+| C10 | **Full MCP surface, delete included**: read plus register/edit arms, and delete behind the §210 consent prompt like the other three delete arms. Supersedes `writes.ts`'s "no artifact tools by decision" — strike it through there, don't delete it. | **MCP artifact tools.** The register has no MCP surface at all (self-documented in `writes.ts` §211 as waiting for the register to get a surface). A6 (edit+delete UI) is the prerequisite; after it, a read tool at minimum makes the register visible to the agent lane. | `packages/mcp/src/writes.ts` header |
+| C11 | **Hand-fix AND extend the rule**: fix the four sites, and extend the §212 tier-claims test to qualifier claims (`PLAN_SCOPE`/`OWN`/plan-scope-only wording) so the next V52-style migration cannot leave the same trail. | **Stale prose sweep.** `useCan.ts:47`, `ArtifactDialogs.tsx:190,262`, `ArtifactTable.tsx:227` still assert the pre-`V52` `PLAN_SCOPE` grant as current; `ArtifactKind.java` says the reporting module "does not exist". The tier-claims rule (§212) catches key-naming claims — these escape it because they name a *qualifier*, not a tier. Hand-fix, or extend the rule to qualifier claims. | Doc trace frictions 6, 13 |
 
 ### D. Data-loss guards (P2, small)
 
@@ -214,4 +220,20 @@ where the row's own proposal was not what was built — three of them were, and 
 4. **B1/B2** — case `PATCH` semantics; contract change, so one slice with both `gen:api`
    regenerations and the §197/§203 harnesses will police it.
 5. **C-items** — one decision session over the finish-or-retire list; several (C3, C6, C9) are
-   small once decided.
+   small once decided. → **done 2026-08-16; see the Decision column.**
+6. **C implementation order (proposed 2026-08-16, decisions in hand):**
+   1. **C11 + C8** — the prose/spec hygiene pair: hand-fix the four stale sites, extend the
+      tier-claims rule to qualifier claims, annotate the two dead keys. No behaviour change,
+      and C6's `ArtifactKind.java` fix rides with it.
+   2. **C6 + C7 + C10** — one artifact slice: save-report-to-register, the write-once toggle,
+      then the full MCP artifact surface (which wants both shipped first so the tools cover the
+      whole register).
+   3. **C3** — docs search (endpoint + search box), self-contained.
+   4. **C5 + C9** — the run-detail pair: minimal defect-link write, step-level evidence in the
+      runner.
+   5. **C2** — quarantine consumers (denominator exclusion is a semantics change to reports;
+      keep it its own slice).
+   6. **C1** — suite version advancement (touches the review-pinning seam; last because it is
+      the one most likely to grow).
+   7. **C4** — retire the shared-step library (migration + UI removal; independent, can land
+      anywhere after 1).
