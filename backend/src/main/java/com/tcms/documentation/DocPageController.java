@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -94,6 +95,28 @@ public class DocPageController {
             @AuthenticationPrincipal Jwt jwt, @PathVariable UUID projectId) {
 
         return pages.findTree(UUID.fromString(jwt.getSubject()), projectId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Full-text search over this project's pages, best first.
+     *
+     * <p>Mapped above {@link #page} rather than below it despite sharing its shape: Spring's pattern
+     * comparator ranks a literal segment over a template one, so {@code /search} cannot be swallowed
+     * by {@code /{pageId}} whatever the declaration order — and it could not collide anyway, because
+     * that variable is a {@link UUID} and {@code search} does not parse as one.
+     *
+     * <p>{@code q} is optional and absent means blank, which matches nothing and answers {@code []}.
+     * The alternative is a 400 for the state a reader reaches by clearing the box.
+     */
+    @GetMapping("/search")
+    public ResponseEntity<List<DocPageSearchHitView>> search(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @RequestParam(name = "q", defaultValue = "") String q) {
+
+        return pages.search(UUID.fromString(jwt.getSubject()), projectId, q)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }

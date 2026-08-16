@@ -48,16 +48,21 @@ public interface ConditionRepository extends JpaRepository<Condition, UUID> {
      *
      * <p>{@code condition.search_vector} exists and is populated ({@code V2}, title weighted A and
      * the body B), and it is the right long-term corpus for §6h's typeahead. HQL cannot express
-     * {@code @@} without a custom function, and a native query would drop the Hibernate company
-     * filter — the same constraint, and the same choice, as the case list's free-text search
-     * (§25). The row set is bounded to one project's library, so the sequential scan is over
+     * {@code @@} without a custom function, and this is a dynamic query, so the operator is not
+     * available to it. ~~A native query would drop the Hibernate company filter~~ → §235 shipped
+     * one for documentation search and it spells {@code company_id} out beside RLS, which is what
+     * {@code ProjectRepository} has always done; read {@code CaseSpecifications#keyOrText} for the
+     * correction. The row set is bounded to one project's library, so the sequential scan is over
      * hundreds of rows rather than the instance.
      *
      * <p>Consequences of that choice, both real and both deliberate: the search is over the
      * <strong>title only</strong> — the shape the picker was built and driven against, back when
      * the SPA's mock served this search — and it is a substring match rather than a stemmed one:
      * "logging" does not find "log in".
-     * Both close when the {@code @@} path lands.
+     * ~~Both close when the {@code @@} path lands.~~ → <strong>the path landed in §235 and this was
+     * deliberately not moved onto it.</strong> Docs search is type-then-submit over prose; this is a
+     * typeahead, where stemming buys "log in" and costs every prefix a user is midway through
+     * typing. Substring is the right instrument for this box and the wrong one for that page.
      *
      * <h2>The ranking MOVED to the service in §95</h2>
      *

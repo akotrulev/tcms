@@ -222,12 +222,24 @@ final class CaseSpecifications {
      * <h2>{@code LIKE}, not the tsvector, and why that is not a shortcut</h2>
      *
      * <p>{@code test_case.search_vector} exists and a V2 trigger maintains it, and this does not use
-     * it. Two reasons, both concrete. Criteria cannot express {@code @@} without registering a
-     * custom function, so using it here would mean a native query — which drops the Hibernate
-     * company filter and leaves RLS as the only boundary, the single-point-of-defence trade
-     * {@code ProjectRepository}'s header refuses. And full-text search matches <em>lexemes</em>:
-     * {@code refund} would not find "refunds" typed halfway through a word, which is what this box
-     * is used for — a type-ahead over titles the user is halfway through remembering.
+     * it. Two reasons were given, and <strong>only the second one survives</strong> — §235, which
+     * shipped the {@code @@} path for documentation, checked both.
+     *
+     * <p>~~Criteria cannot express {@code @@} without registering a custom function, so using it
+     * here would mean a native query — which drops the Hibernate company filter and leaves RLS as
+     * the only boundary, the single-point-of-defence trade {@code ProjectRepository}'s header
+     * refuses.~~ → <strong>that header refuses no such thing.</strong> It writes a native query and
+     * spells {@code company_id = :companyId} out beside RLS, because the predicate is the intent and
+     * the two agreeing is what makes a mismatch return nothing rather than something.
+     * {@code DocPageRepository#search} follows it. The Criteria half is still true — this is a
+     * dynamic specification and a native query is not available to it at all — but "native means one
+     * boundary" was never the codebase's position.
+     *
+     * <p>The reason that stands: full-text search matches <em>lexemes</em>, so a <em>prefix</em>
+     * finds nothing — {@code refun} would not find "refunds", and this box is a type-ahead fired on
+     * every keystroke over titles the user is halfway through remembering. Stemming is the right
+     * behaviour for prose searched on submit and the wrong one here, which is the whole of why the
+     * two searches in this product are built differently.
      *
      * <p>{@code title} is covered by {@code test_case_title_trgm_idx}, a GIN trigram index that
      * serves {@code LIKE '%…%'}. {@code description} has no such index and is scanned; the contract

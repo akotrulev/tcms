@@ -478,6 +478,8 @@ class ContractConventionTest {
             Map.entry("DocPageInput", List.of(com.tcms.documentation.DocPageInput.class)),
             Map.entry("DocPageStatusInput",
                     List.of(com.tcms.documentation.DocPageStatusInput.class)),
+            Map.entry("DocPageSearchHit",
+                    List.of(com.tcms.documentation.DocPageSearchHitView.class)),
             Map.entry("DocPageSummary", List.of(com.tcms.documentation.DocPageSummaryView.class)),
             Map.entry("EffectivePermissions",
                     List.of(com.tcms.auth.MeController.PermissionsResponse.class)),

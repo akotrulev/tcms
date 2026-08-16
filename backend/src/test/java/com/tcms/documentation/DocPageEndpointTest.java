@@ -1172,6 +1172,147 @@ class DocPageEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // Search
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Search — the first reader a search_vector has ever had (§235)")
+    class Searching {
+
+        @Test
+        @DisplayName("a word only in a block's body finds the page — the reason this exists")
+        void theCorpusIsTheProseAndNotJustTheTitle() throws Exception {
+            UUID prose = idOf(create(LEAD, ACME_BANKING, pageWithBlocks("Payments",
+                    block(null, "paragraph", null,
+                            "A customer may request a refund within thirty days of capture."))));
+            create(LEAD, ACME_BANKING, page("Something else", null));
+
+            // The page tree can already find "Payments". What no screen in this product could do
+            // before is find the page whose TITLE says nothing and whose ninth paragraph is the
+            // requirement somebody is looking for.
+            assertThat(hitIds(search(LEAD, ACME_BANKING, "refund"))).containsExactly(prose);
+        }
+
+        @Test
+        @DisplayName("matching is stemmed both ways, and a prefix matches nothing")
+        void lexemesNotSubstrings() throws Exception {
+            UUID page = idOf(create(LEAD, ACME_BANKING, pageWithBlocks("Policy",
+                    block(null, "paragraph", null, "We issue refunds on request."))));
+
+            assertThat(hitIds(search(LEAD, ACME_BANKING, "refund"))).containsExactly(page);
+            assertThat(hitIds(search(LEAD, ACME_BANKING, "refunded"))).containsExactly(page);
+
+            // The property the case list's typeahead cannot live with, asserted here so that
+            // "docs search behaves differently" is a fact on the record rather than a claim in a
+            // javadoc. A reader of THIS box has finished typing and pressed enter.
+            assertThat(hitIds(search(LEAD, ACME_BANKING, "refun"))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a title match outranks a body match — the weights V2 stored are the reason")
+        void rankingUsesTheStoredWeights() throws Exception {
+            UUID buried = idOf(create(LEAD, ACME_BANKING, pageWithBlocks("Glossary",
+                    block(null, "paragraph", null, "Chargeback is not the same as a refund."))));
+            UUID titled = idOf(create(LEAD, ACME_BANKING, page("Refund policy", null)));
+
+            // ts_rank cannot recover a weight that was never stored, which is why V2 weights the
+            // title 'A' — and why nothing observed that decision for the fourteen months no query
+            // read the column.
+            assertThat(hitIds(search(LEAD, ACME_BANKING, "refund")))
+                    .containsExactly(titled, buried);
+        }
+
+        @Test
+        @DisplayName("the snippet is the fragment the match is in, and null when there is no body")
+        void theSnippetLocatesTheMatch() throws Exception {
+            create(LEAD, ACME_BANKING, pageWithBlocks("Payments",
+                    block(null, "paragraph", null,
+                            "Unrelated opening sentence about invoicing and nothing else at all. "
+                                    + "A customer may request a refund within thirty days.")));
+            create(LEAD, ACME_BANKING, page("Refund policy", null));
+
+            List<JsonNode> hits = hitsOf(search(LEAD, ACME_BANKING, "refund"));
+
+            assertThat(hits.get(0).get("snippet").isNull())
+                    .as("a page with no blocks has no body to quote, and the absence is served as "
+                            + "null rather than as the title again")
+                    .isTrue();
+            assertThat(hits.get(1).get("snippet").asText()).contains("refund");
+        }
+
+        @Test
+        @DisplayName("archived pages are searchable and deleted pages are not")
+        void archivingIsNotDeletingHereEither() throws Exception {
+            UUID archived = idOf(create(LEAD, ACME_BANKING, page("Refund policy", null)));
+            UUID deleted = idOf(create(LEAD, ACME_BANKING, page("Refund appendix", null)));
+
+            setStatus(LEAD, ACME_BANKING, archived, "ARCHIVED");
+            delete(LEAD, ACME_BANKING, deleted);
+
+            // The tree returns ARCHIVED for a reason this endpoint inherits: hiding it would make
+            // the page unfindable from the only screen that can un-archive it.
+            assertThat(hitIds(search(LEAD, ACME_BANKING, "refund"))).containsExactly(archived);
+        }
+
+        @Test
+        @DisplayName("a blank query is 200 and [] — clearing the box is not a validation failure")
+        void nothingToLookForIsNotAnError() throws Exception {
+            create(LEAD, ACME_BANKING, page("Refund policy", null));
+
+            assertThat(search(LEAD, ACME_BANKING, "").getResponse().getStatus()).isEqualTo(200);
+            assertThat(hitIds(search(LEAD, ACME_BANKING, ""))).isEmpty();
+            assertThat(hitIds(search(LEAD, ACME_BANKING, "the of and"))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("the search is bounded to the project — a sibling project's page is not a hit")
+        void theProjectBoundIsEnforced() throws Exception {
+            UUID mine = idOf(create(LEAD, ACME_BANKING, page("Refund policy", null)));
+            create(LEAD, ACME_LOCKED, page("Refund policy", null));
+
+            assertThat(hitIds(search(LEAD, ACME_BANKING, "refund"))).containsExactly(mine);
+        }
+
+        @Test
+        @DisplayName("the search is bounded to the company — the assertion the native query is for")
+        void theCompanyBoundIsEnforced() throws Exception {
+            UUID acme = idOf(create(LEAD, ACME_BANKING, page("Refund policy", null)));
+            UUID umbra = idOf(create(OUTSIDER, UMBRA_BANKING, page("Refund policy", null)));
+
+            /*
+              THE test of this nest. A native query is outside the Hibernate company filter, so the
+              only things standing between one client's search box and another client's
+              specifications are the `company_id = :companyId` predicate this slice wrote by hand
+              and the RLS policy underneath it. Two identically-titled pages in two companies is the
+              fixture where a dropped predicate is visible; without it every other test here passes
+              on a query that returns the instance.
+            */
+            assertThat(hitIds(search(LEAD, ACME_BANKING, "refund"))).containsExactly(acme);
+            assertThat(hitIds(search(OUTSIDER, UMBRA_BANKING, "refund"))).containsExactly(umbra);
+        }
+
+        @Test
+        @DisplayName("a member with no grant on the project gets 404, never 403")
+        void reachabilityIsAnswered404() throws Exception {
+            create(LEAD, ACME_BANKING, page("Refund policy", null));
+
+            // Same gate as the tree, and 403 would confirm the project id names something real.
+            assertThat(search(NO_GRANT, ACME_BANKING, "refund").getResponse().getStatus())
+                    .isEqualTo(404);
+            assertThat(search(OUTSIDER, ACME_BANKING, "refund").getResponse().getStatus())
+                    .isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("a Viewer may search — the gate is the project read gate, not doc:read")
+        void searchingCostsWhatReadingTheTreeCosts() throws Exception {
+            UUID visible = idOf(create(LEAD, ACME_BANKING, page("Refund policy", null)));
+
+            assertThat(hitIds(search(VIEWER, ACME_BANKING, "refund"))).containsExactly(visible);
+        }
+    }
+
+    // =====================================================================
     // Table blocks
     // =====================================================================
 
@@ -1624,6 +1765,14 @@ class DocPageEndpointTest extends IntegrationTestBase {
                 .andReturn();
     }
 
+    private MvcResult search(UUID userId, UUID projectId, String q) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders
+                        .get("/api/v1/projects/" + projectId + "/doc-pages/search")
+                        .param("q", q)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyOf(userId))))
+                .andReturn();
+    }
+
     private MvcResult read(UUID userId, UUID projectId, UUID pageId) throws Exception {
         return mvc.perform(MockMvcRequestBuilders
                         .get("/api/v1/projects/" + projectId + "/doc-pages/" + pageId)
@@ -1753,6 +1902,21 @@ class DocPageEndpointTest extends IntegrationTestBase {
 
     private UUID idOf(MvcResult result) throws Exception {
         return UUID.fromString(body(result).get("id").asText());
+    }
+
+    /** The hits in the order they were served — the ranking is the answer, so order is asserted. */
+    private List<JsonNode> hitsOf(MvcResult result) throws Exception {
+        List<JsonNode> hits = new ArrayList<>();
+        body(result).forEach(hits::add);
+        return hits;
+    }
+
+    private List<UUID> hitIds(MvcResult result) throws Exception {
+        List<UUID> ids = new ArrayList<>();
+        for (JsonNode hit : hitsOf(result)) {
+            ids.add(UUID.fromString(hit.get("id").asText()));
+        }
+        return ids;
     }
 
     private List<JsonNode> blocksOf(MvcResult result) throws Exception {

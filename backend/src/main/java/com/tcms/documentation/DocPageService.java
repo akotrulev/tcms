@@ -1,9 +1,13 @@
 package com.tcms.documentation;
 
 import com.tcms.project.ProjectService;
+import com.tcms.tenancy.CompanyContext;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +32,13 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class DocPageService {
+
+    /**
+     * The search's hard ceiling, and there is no paging past it — a reader who needs the fifty-first
+     * hit needs different words, and every alternative (an offset, a cursor) is a contract for
+     * walking a relevance ranking that changes under the walker on every edit.
+     */
+    private static final int MAX_HITS = 50;
 
     private final ProjectService projects;
     private final DocPageRepository pages;
@@ -63,6 +74,42 @@ public class DocPageService {
                 pages.findLiveForProject(project.getId()).stream()
                         .map(DocPageSummaryView::of)
                         .toList());
+    }
+
+    /**
+     * One project's pages matching a full-text query, best first.
+     *
+     * <p>Two reads rather than one, deliberately. {@link DocPageRepository#search} ranks and returns
+     * ids, and the entities are then loaded through the filtered JPQL path and assembled by the same
+     * {@link DocPageSummaryView} the tree uses. The alternative — selecting the columns in the
+     * native query — is a second assembly of one view and a second place for a search row to
+     * disagree with the sidebar row beside it.
+     *
+     * <p>The order is re-imposed here because {@code IN} has none. A page the ranking named and the
+     * entity read did not return is <em>dropped</em>, not served empty: the two queries can only
+     * disagree if a page was deleted between them, and a hit that has stopped existing is not a hit.
+     */
+    @Transactional(readOnly = true)
+    public Optional<List<DocPageSearchHitView>> search(UUID userId, UUID projectId, String query) {
+        return projects.readVisible(userId, projectId, project -> {
+            List<Object[]> ranked = pages.search(
+                    CompanyContext.require(), project.getId(), query, MAX_HITS);
+            if (ranked.isEmpty()) {
+                return List.<DocPageSearchHitView>of();
+            }
+
+            Map<UUID, String> snippets = new LinkedHashMap<>();
+            ranked.forEach(row -> snippets.put((UUID) row[0], (String) row[1]));
+
+            Map<UUID, DocPage> found = pages
+                    .findLiveInProjectByIds(project.getId(), snippets.keySet()).stream()
+                    .collect(Collectors.toMap(DocPage::getId, page -> page));
+
+            return snippets.entrySet().stream()
+                    .filter(hit -> found.containsKey(hit.getKey()))
+                    .map(hit -> DocPageSearchHitView.of(found.get(hit.getKey()), hit.getValue()))
+                    .toList();
+        });
     }
 
     /**

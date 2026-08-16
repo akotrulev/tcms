@@ -34,10 +34,13 @@ public interface SharedStepRepository extends JpaRepository<SharedStep, UUID> {
      * <h2>{@code LIKE} over the title, not {@code @@} over the search vector</h2>
      *
      * <p>{@code shared_step.search_vector} exists and is populated (V2), and it is the right
-     * long-term corpus. HQL cannot express {@code @@} without a custom function and a native query
-     * would drop the Hibernate company filter — the same constraint and the same choice as the
-     * condition library and the case list's free-text search (§25). So: title only, substring
-     * rather than stemmed. Both close when the {@code @@} path lands.
+     * long-term corpus. HQL cannot express {@code @@} without a custom function, and this is a
+     * dynamic query, so the operator is not available to it. ~~A native query would drop the
+     * Hibernate company filter~~ → corrected in §235, which shipped the {@code @@} path for
+     * documentation with {@code company_id} spelled out beside RLS; see
+     * {@code CaseSpecifications#keyOrText}. So: title only, substring rather than stemmed.
+     * ~~Both close when the {@code @@} path lands.~~ → it landed and this box stayed where it is,
+     * for {@code ConditionRepository}'s reason — a typeahead wants prefixes, and stemming has none.
      *
      * @param needle always bound and never null — {@code '%'} when the caller asked nothing, which
      *               matches every row since {@code title} is {@code NOT NULL}. Resolved once by

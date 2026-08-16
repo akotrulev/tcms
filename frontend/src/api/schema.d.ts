@@ -5597,6 +5597,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/doc-pages/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Search the documentation space
+         * @description Full text over `doc_page.search_vector` — the page title (weighted `A`) and every string in
+         *     every one of its blocks (weighted `B`), maintained by `V2`'s two triggers. **This is the
+         *     product's first and only reader of a search vector.** Three other tables carry one and
+         *     nothing queries them; the case list's `q` is a substring match over title and description and
+         *     deliberately stays one.
+         *
+         *     `q` is parsed by `websearch_to_tsquery`, so a reader gets quoted `"phrase match"`, `or`, and
+         *     `-excluded` for nothing. **Matching is by lexeme, not by substring**, and both halves of that
+         *     are worth knowing: the stemmer runs on the query as well as the document, so `refund` finds
+         *     "refunds" and "refunded" *and* `refundable` finds all three — while a **prefix** matches
+         *     nothing at all, so `refun` answers `[]`. That is the right trade for prose searched by whole
+         *     words on submit and the wrong one for a type-ahead firing on every keystroke, which is why
+         *     this endpoint exists here and the case list's `q` is still a substring match.
+         *
+         *     Ranked by `ts_rank_cd` — so a title match outranks one buried in the ninth paragraph, which
+         *     is the whole reason `V2` stored the weights — then by most recently updated. **The rank is
+         *     not on the wire**: the order is the answer, and a number whose scale is a Postgres internal
+         *     is not something a client can do anything with.
+         *
+         *     Every live page is searched, `ARCHIVED` included, for the reason the page tree returns them
+         *     too: a search that hid them would make an archived page unfindable from the only screen that
+         *     can un-archive it.
+         *
+         *     **One known consequence of the corpus, inherited rather than introduced.** `V2` builds the
+         *     vector with `jsonb_to_tsvector(…, '["string"]')`, which extracts *every* string in a block's
+         *     JSON — so a block's `blockType` is in there beside its prose, and searching `table` or
+         *     `image` matches every page containing one. Narrowing the corpus is a trigger change and a
+         *     migration, and it was deliberately not taken by the slice that only reads the vector; the
+         *     snippet makes the behaviour visible rather than mysterious, which is the argument for
+         *     leaving the two corpora identical in the meantime.
+         *
+         *     Capped at 50 hits and there is no paging — a reader who needs page 3 of a documentation
+         *     search needs different words. Costs the **project read gate**, the same one the page tree
+         *     costs, and not `doc:read`; `DocPageService`'s header carries that argument and its one
+         *     `V16` exception.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /**
+                     * @description The search text. Absent, blank, or parsing to an empty query — punctuation only, or
+                     *     nothing but stop words — answers `[]` rather than 400. There is one behaviour for
+                     *     "nothing to look for" instead of a validation surface in front of it, and a reader
+                     *     clearing the box is the ordinary way to reach it.
+                     */
+                    q?: string;
+                };
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Hits, best first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DocPageSearchHit"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/doc-pages/{pageId}": {
         parameters: {
             query?: never;
@@ -11913,6 +12000,27 @@ export interface components {
             attachments: components["schemas"]["Attachment"][];
             currentVersionNo: number;
             lockVersion: number;
+        };
+        DocPageSearchHit: components["schemas"]["DocPageSummary"] & {
+            /**
+             * @description The fragment of the page's text the match was found in, as `ts_headline` chose it —
+             *     which is the point of returning it at all: a list of titles is the page tree with
+             *     extra steps, and *where* a word appears is what tells a reader which of four
+             *     specifications mentioning "refund" is the one they meant.
+             *
+             *     **Plain text, with no highlight markup**, and that is a decision rather than an
+             *     omission. Emitting `<mark>` would make this endpoint responsible for escaping page
+             *     content the product otherwise stores and renders as text, so one unescaped `<` in
+             *     somebody's specification becomes markup a client is being invited to trust. The
+             *     fragment's *location* carries most of the value; the emphasis is a rendering concern
+             *     and belongs to whoever renders it.
+             *
+             *     **Null when the page has no block text** — a page matched on its title alone, which
+             *     is every page created and not yet written into. Present-and-null rather than absent,
+             *     the distinction `DocBlock.coverage` exists to make: a client showing a title with
+             *     nothing under it is showing the true answer, not a field it failed to read.
+             */
+            snippet: string | null;
         };
         DocBlock: {
             /**
