@@ -1216,8 +1216,8 @@ class DocPageEndpointTest extends IntegrationTestBase {
             UUID titled = idOf(create(LEAD, ACME_BANKING, page("Refund policy", null)));
 
             // ts_rank cannot recover a weight that was never stored, which is why V2 weights the
-            // title 'A' — and why nothing observed that decision for the fourteen months no query
-            // read the column.
+            // title 'A' — a decision taken in M0 and observed by nothing until this test, because
+            // no query read the column.
             assertThat(hitIds(search(LEAD, ACME_BANKING, "refund")))
                     .containsExactly(titled, buried);
         }

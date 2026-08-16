@@ -2851,3 +2851,39 @@ rather than asking for new seed data — run it in the same pass, not before.
 | `§234 AR-2` | **A5**: register an external link with **This is a sign-off record** ticked, then open its row menu | Correct… and Remove… are **greyed**; Archive is **not**; a line in the menu says it is a sign-off record and to register a replacement. This is the §31 half of C7 — before it both were enabled and answered 409 after the correction was typed. |
 | `§234 AR-3` | **A5**: on that sign-off row, register a replacement naming it under **Replaces** | Two rows: the original `SUPERSEDED` and pointing at the replacement, the new one `ACTIVE`. **A write-once row can still be superseded** — that is the correction path the flag forces people onto, and refusing it would make the record uncorrectable. |
 | `§234 AR-4` | **A5**: pin a report at **PLAN** scope, then open a *different* plan's register | The pinned row appears in its own plan's register and **not** in the other plan's, and is absent from the project register. Plan-scope artifacts are not inherited sideways or upward. |
+
+## §235 — the search a documentation space could not do (C3)
+
+**Six rows, none run** (§65). Ids are `§235 DS-*`; `DS` is unused elsewhere in this file — grepped
+before minting (`§154`'s banner).
+
+Lane: **A1 — the repository**, after `DOC-1` and its blocks are authored (the fixture charter at the
+top of this file builds that page, and `§230 LK-*` already depends on it). `DS-5` needs a **second**
+page, so author one there: title *Chargebacks*, one paragraph saying *"A chargeback is not a
+refund — the customer never asks us."*. Every row is driveable as any account that can see the
+project: **the gate is the project read gate, not `doc:read`**, which is `DocPageService`'s own
+argument and is why there is no persona row here. `DS-6` is the only row needing a second account,
+and only to prove the 404.
+
+**Read before driving `DS-2`:** matching is by lexeme. `refund` finds "refunds" and `refundable`
+finds them both, but `refun` finds **nothing** — that is correct behaviour and the copy in the empty
+state says so. A tester who reads it as a bug will file the product's one deliberate limitation.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§235 DS-1` | **A1** → Documentation. Type `refund` in the rail's search box and press **Enter** | The rail's heading changes **Pages → Results** and lists the pages that mention it, each with its key and a **fragment of the page's text containing the word** — not the first line of the page. The address bar gains `?q=refund`. The page open in the main pane does not change. |
+| `§235 DS-2` | Search `refun`, then `refunds`, then `refundable` | `refun` → *No pages match*, with copy saying whole words only. The other two → the same hits as `refund`. This is the whole difference between this box and the case list's, and the one thing about it a user must be told rather than discover. |
+| `§235 DS-3` | With results showing, **reload** the browser, then press **Back** | The reload comes back to the same results with the box still filled — `q` is in the URL, not in component state. Back returns to the previous search (or to the tree), and the box follows it rather than keeping the query that is no longer being run. |
+| `§235 DS-4` | Click a result | Its page opens in the main pane **and the results stay in the rail**, with the clicked row marked current. The search survives being used, which is the point of carrying it on the link. |
+| `§235 DS-5` | Search a word that is in one page's **title** and another page's **body** (`refund`, with *Chargebacks* authored as above) | The title match is **first**. `V2` weights the title `A` and the body `B` and `ts_rank_cd` reads those weights; a list in creation or alphabetical order means the ranking is not reaching the screen. The *Chargebacks* row's fragment shows the sentence containing the word. |
+| `§235 DS-6` | Press the **✕** in the box | `q` leaves the address bar, the heading returns to **Pages**, and the full tree is back. A rail left on an empty result list is a documentation space with no navigation in it. |
+
+Two rows that would be worth having and **cannot be driven from this SPA**, named rather than
+silently skipped:
+
+- **A page with no blocks matched on its title alone**, to see the null snippet render as nothing.
+  Driveable only by creating a page and not writing in it, which the charter's flow does not leave
+  behind; `DocsSearch.test.tsx` covers it and this pass would only be re-asserting it.
+- **The company bound.** It is the most important property of the endpoint and this pass has one
+  company. `DocPageEndpointTest$Searching.theCompanyBoundIsEnforced` is where it is proved, with two
+  companies holding identically-titled pages.

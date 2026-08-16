@@ -2752,3 +2752,13 @@ out wrong.
 |---|---|---|
 | `§234 PM-1` | In `ArtifactWriteService.create`, pass `null` for the report artifact id instead of reading it back from `ReportFacts` | **`ArtifactEndpointTest.PinnedReports.aCompletedReportIsPinnable` red** — the row would register with no payload and `url` would fall through to `externalUrl`, which is null for this kind. The assertion is on the composed URL rather than on the column, so it catches the projection and the write together. |
 | `§234 PM-2` | Drop `updatable = false` from `Artifact.writeOnce` and have `amend` set it from a field | **`SignOffRecords.anEditCannotSetIt` red.** Two layers say no today — the record has no such component and the column is not updatable — so this mutation needs both changed, which is the point: a one-line "cleanup" cannot reach it. |
+
+## §235 — the first reader a search_vector has ever had (C3)
+
+**Three rows, none run** (§65). Ids are `§235 PM-*`.
+
+| # | Mutation | Expected observation |
+|---|---|---|
+| `§235 PM-1` | In `DocPageRepository#search`, delete the `p.company_id = :companyId` line | **`DocPageEndpointTest$Searching.theCompanyBoundIsEnforced` red.** The mutation is the whole subject of §2 of the handoff: RLS is still underneath and would still refuse, so this row is really asking *whether the suite can tell*. If it goes **green**, the belt-and-braces predicate is unobserved and the argument for writing it is weaker than the header claims — which is worth knowing either way, and is why this is the first row. |
+| `§235 PM-2` | In `DocPageService#search`, drop the re-ordering and return the entity read's own order | **`Searching.rankingUsesTheStoredWeights` red.** `IN` has no order, so the answer becomes whatever the JPQL read returns — usually insertion order, which agrees with the ranking often enough that a fixture of two pages ranked the same way as they were created would not catch it. The fixture is authored body-match-first for exactly this reason. |
+| `§235 PM-3` | Change `ts_headline`'s source from `body.text` to `p.title` | **`Searching.theSnippetLocatesTheMatch` red on both halves at once**: the blockless page stops serving null (a title is never null), and the prose page's fragment stops containing the match. One mutation, two failures, which is the pin that the snippet is drawn from the same corpus the vector was built from. |
