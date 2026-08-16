@@ -1,11 +1,15 @@
 /** Who the caller is, how they got in, and what they may do. */
-import { useMutation, useQuery, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import { api, qs } from '../client';
 import type {
   AuthResult,
   CurrentUser,
   EffectivePermissions,
   InvitationPreview,
+  SocialIdentityList,
+  SocialProvider,
+  SocialProviderList,
+  SocialRedirect,
   SsoProviderDiscovery,
 } from '../types';
 import { keys } from './keys';
@@ -133,6 +137,49 @@ export function useSsoProviders(): UseMutationResult<SsoProviderDiscovery, Error
   return useMutation({
     mutationFn: (email: string) => api.post<SsoProviderDiscovery>('/auth/providers', { email }),
     meta: { handled: true },
+  });
+}
+
+/**
+ * Which social sign-in buttons this instance offers (V58). Instance configuration, identical
+ * for every caller — so `staleTime: Infinity`, and `meta: { handled: true }` for the SSO
+ * discovery's reason: on the sign-in page a failure and an empty answer must look the same,
+ * and on the security page the section explains itself.
+ */
+export function useSocialProviders(): UseQueryResult<SocialProviderList> {
+  return useQuery({
+    queryKey: keys.socialProviders,
+    queryFn: ({ signal }) => api.get<SocialProviderList>('/auth/social/providers', { signal }),
+    staleTime: Infinity,
+    meta: { handled: true },
+  });
+}
+
+/** The calling account's linked social identities, for the security page. */
+export function useMySocialIdentities(): UseQueryResult<SocialIdentityList> {
+  return useQuery({
+    queryKey: keys.mySocialIdentities,
+    queryFn: ({ signal }) => api.get<SocialIdentityList>('/me/social-identities', { signal }),
+  });
+}
+
+/**
+ * Begins linking a social identity: the answer is a URL to NAVIGATE to (top-level), never to
+ * fetch — a top-level navigation cannot carry the Authorization header, so the authenticated
+ * leg is this call and the navigation that follows holds only the single-use `state`.
+ */
+export function useStartSocialLink(): UseMutationResult<SocialRedirect, Error, SocialProvider> {
+  return useMutation({
+    mutationFn: (provider: SocialProvider) =>
+      api.post<SocialRedirect>(`/me/social-identities/${provider}`),
+  });
+}
+
+export function useUnlinkSocialIdentity(): UseMutationResult<void, Error, SocialProvider> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (provider: SocialProvider) => api.del<void>(`/me/social-identities/${provider}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.mySocialIdentities }),
   });
 }
 

@@ -388,6 +388,19 @@ export type SsoProviderChoice = S['SsoProviderChoice'];
  */
 export type SsoProviderDiscovery = S['SsoProviderDiscovery'];
 /**
+ * An instance-level social sign-in authority (GitHub, GitLab, Google) — for people, not
+ * companies, which is why it is a closed enum and not an `IdentityProvider` row. A provider
+ * appears in `SocialProviderList` exactly when the operator configured both halves of its
+ * credential; absent means the button does not exist.
+ */
+export type SocialProvider = S['SocialProvider'];
+export type SocialProviderList = S['SocialProviderList'];
+/** The begin-link answer: a URL to NAVIGATE to (top-level), never to fetch. */
+export type SocialRedirect = S['SocialRedirect'];
+/** One linked identity. `emailAtLink` is provenance the provider asserted — never a key. */
+export type SocialIdentity = S['SocialIdentity'];
+export type SocialIdentityList = S['SocialIdentityList'];
+/**
  * A configured issuer, **with no property that could carry its client secret**.
  *
  * `clientSecretSet` is the boolean that replaces it: a form needs to know whether one is stored so

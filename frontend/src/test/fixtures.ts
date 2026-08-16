@@ -38,6 +38,10 @@ import type {
   PlanStatistics,
   Project,
   ProjectSettings,
+  SocialIdentity,
+  SocialIdentityList,
+  SocialProviderList,
+  SocialRedirect,
   ResultCounts,
   SsoProviderChoice,
   Suite,
@@ -488,6 +492,32 @@ export function aDirectoryProvider(
  * One sign-in route, as discovery answers it: an id, a label, and which control to render —
  * `OIDC` navigates to the issuer, `LDAP` switches the form to a directory password.
  */
+export function aSocialProviderList(
+  overrides: Partial<SocialProviderList> = {},
+): SocialProviderList {
+  return { providers: ['GITHUB', 'GITLAB', 'GOOGLE'], ...overrides }
+}
+
+export function aSocialIdentity(overrides: Partial<SocialIdentity> = {}): SocialIdentity {
+  return {
+    provider: 'GITHUB',
+    linkedAt: AT,
+    lastLoginAt: null,
+    emailAtLink: null,
+    ...overrides,
+  }
+}
+
+export function aSocialIdentityList(
+  overrides: Partial<SocialIdentityList> = {},
+): SocialIdentityList {
+  return { identities: [], ...overrides }
+}
+
+export function aSocialRedirect(overrides: Partial<SocialRedirect> = {}): SocialRedirect {
+  return { url: 'https://github.com/login/oauth/authorize?client_id=x&state=y', ...overrides }
+}
+
 export function anSsoProviderChoice(
   overrides: Partial<SsoProviderChoice> = {},
 ): SsoProviderChoice {
