@@ -385,3 +385,62 @@ describe('LoginPage — social sign-in (V58)', () => {
     expect(consumeSsoReturnPath()).toBe('/projects/p1/runs/r9')
   })
 })
+
+describe('LoginPage — where a password sign-in lands', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    sessionStorage.clear()
+  })
+
+  function renderWithDestinations(locationState?: Record<string, unknown>) {
+    vi.spyOn(api, 'get').mockResolvedValue(aSocialProviderList({ providers: [] }))
+    // Discovery fires when the email field blurs on the way to the password; empty is scenery.
+    vi.spyOn(api, 'post').mockResolvedValue({ providers: [] })
+    const session: AuthValue = {
+      user: null,
+      status: 'ready',
+      login: async () => aCurrentUser(),
+      adoptSession: async () => aCurrentUser(),
+      logout: () => {},
+    }
+    return render(
+      <AuthContext value={session}>
+        <ThemeProvider theme={theme}>
+          <QueryClientProvider client={createTestQueryClient()}>
+            <MemoryRouter initialEntries={[{ pathname: '/login', state: locationState ?? null }]}>
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/" element={<div data-testid="Landing.Default" />} />
+                <Route path="/account/security" element={<div data-testid="Landing.Security" />} />
+              </Routes>
+            </MemoryRouter>
+          </QueryClientProvider>
+        </ThemeProvider>
+      </AuthContext>,
+    )
+  }
+
+  async function signIn(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByTestId('Login.EmailField'), 'kim@acme.test')
+    await user.type(screen.getByTestId('Login.PasswordField'), 'correct-horse-battery')
+    await user.click(screen.getByTestId('Login.SubmitButton'))
+  }
+
+  it('lands on the pending destination when one was carried in — the accept fallback leg', async () => {
+    const user = userEvent.setup()
+    renderWithDestinations({ from: '/account/security?welcome=1' })
+
+    await signIn(user)
+
+    expect(await screen.findByTestId('Landing.Security')).toBeInTheDocument()
+  })
+
+  it('lands on the default page without one (regression pin)', async () => {
+    const user = userEvent.setup()
+    renderWithDestinations()
+
+    await signIn(user)
+
+    expect(await screen.findByTestId('Landing.Default')).toBeInTheDocument()
+  })
+})

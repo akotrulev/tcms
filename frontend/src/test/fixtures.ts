@@ -32,6 +32,7 @@ import type {
   DocPageSummary,
   ExternalLink,
   IdentityProvider,
+  InvitationPreview,
   NotificationChannel,
   NotificationDelivery,
   NotificationSubscription,
@@ -492,6 +493,17 @@ export function aDirectoryProvider(
  * One sign-in route, as discovery answers it: an id, a label, and which control to render —
  * `OIDC` navigates to the issuer, `LDAP` switches the form to a directory password.
  */
+export function anInvitationPreview(
+  overrides: Partial<InvitationPreview> = {},
+): InvitationPreview {
+  return {
+    email: 'invitee@acme.test',
+    displayName: 'Kim Invitee',
+    passwordRequired: true,
+    ...overrides,
+  }
+}
+
 export function aSocialProviderList(
   overrides: Partial<SocialProviderList> = {},
 ): SocialProviderList {
