@@ -4,6 +4,7 @@ import com.tcms.api.UserRef;
 import com.tcms.execution.CaseFacts.PinnedCase;
 import com.tcms.project.CaseStatusView;
 import com.tcms.project.StatusKind;
+import com.tcms.tenancy.CompanyContext;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -191,7 +192,7 @@ class ExecutionViews {
 
     private Map<UUID, List<DefectLinkView>> defectsByExecution(List<UUID> executionIds) {
         Map<UUID, List<DefectLinkView>> byExecution = new HashMap<>();
-        for (Object[] row : executions.findDefectLinks(executionIds)) {
+        for (Object[] row : executions.findDefectLinks(CompanyContext.require(), executionIds)) {
             byExecution
                     .computeIfAbsent((UUID) row[1], id -> new ArrayList<>())
                     .add(new DefectLinkView(

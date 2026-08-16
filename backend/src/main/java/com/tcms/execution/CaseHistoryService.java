@@ -494,7 +494,7 @@ public class CaseHistoryService {
 
     private Map<UUID, List<DefectLinkView>> defectsByExecution(List<UUID> executionIds) {
         Map<UUID, List<DefectLinkView>> byExecution = new HashMap<>();
-        for (Object[] row : executions.findDefectLinks(executionIds)) {
+        for (Object[] row : executions.findDefectLinks(CompanyContext.require(), executionIds)) {
             byExecution
                     .computeIfAbsent((UUID) row[1], id -> new ArrayList<>())
                     .add(new DefectLinkView(

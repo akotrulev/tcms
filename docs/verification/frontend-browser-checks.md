@@ -2887,3 +2887,33 @@ silently skipped:
 - **The company bound.** It is the most important property of the endpoint and this pass has one
   company. `DocPageEndpointTest$Searching.theCompanyBoundIsEnforced` is where it is proved, with two
   companies holding identically-titled pages.
+
+## §236 — the defect link and the step's evidence (C5 + C9)
+
+**Seven rows, none run** (§65). Ids are `§236 DK-*` and `§236 SE-*`; both prefixes were grepped
+against this file and the mutation queue before minting. **Every row is lane `A3` — runs** and needs
+that lane's state: a started run with at least one failed execution carrying structured steps. No
+new fixture is authored; `A3`'s own charter already produces both.
+
+**One existing row changes meaning rather than being replaced.** `M4-10` — *"Record a result on a
+step, then attach with that step selected"* — was written in §67 against an affordance the SPA did
+not have and has never had; `EvidencePanel` contained the string `stepId` zero times. It is
+driveable for the first time as of this slice. Drive it, and read `§236 SE-1`–`SE-3` as the detail
+of what it now means; do not treat a pass on `M4-10` as covering them.
+
+**`§236 DK-7` needs a second account.** Everything else is one session as `engineer`.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§236 DK-1` | Open a **failed** execution. In the **Defects** panel press **Link a defect**, enter `PAY-991` and `https://tracker.acme.test/browse/PAY-991`, press **Link** | The row appears carrying the key as an identifier with the external-link arrow. **The form offers no provider field and no status field** — that absence is the decision (`V62`), and a form that grew either is the regression this row exists for. Clicking the key opens the address in a new tab. |
+| `§236 DK-2` | Go back to the **run detail** grid and find that execution's row | The same key is in its **Defects** column. This is the invalidation crossing two screens: the write is on the execution and the read here is the run's, so a panel that updated and a grid that did not means the mutation invalidated the wrong key. |
+| `§236 DK-3` | Open the case's **history** page, and the plan's **statistics** page for a blocker | The link is on both, unchanged. Three readers, one write — and the two history screens are the ones nobody looks at after making a link. |
+| `§236 DK-4` | Press **Link a defect** again with the **same key and the same URL** | No second row, no error banner, no duplicate in the grid. The server answers 200 rather than 201 and the panel simply shows what is already there. Confirm in the network tab that the status **is 200** — a 201 with one row on screen means the twin exists and the list is deduplicating it. |
+| `§236 DK-5` | Enter a key with a URL of `javascript:alert(1)` and press **Link** | Refused with the message under the **Link** field, and **no row is added**. Then confirm nothing was stored by reloading. This is the one row here with a security consequence: the value is rendered as an `href` on three screens. |
+| `§236 DK-6` | Press the bin on a linked defect | The row goes, and it is gone from the run grid and the case history too. **Nothing in the tracker is touched** — if the fixture tracker is real, confirm the defect still exists there. |
+| `§236 DK-7` | As **`viewer`**, open the same execution | The **Defects** panel renders with every link **visible**, and both **Link a defect** and the bin are disabled with a tooltip naming the missing permission. Not hidden — a Viewer must be able to read which defect a failure belongs to. |
+| `§236 SE-1` | On an execution where **no step has been submitted yet**, look under any step row | **Attach to this step** is present and **disabled**, with the sentence *"Record a result for this step before attaching evidence to it."* This is the row that matters: the server answers a 400 naming `stepId` here, so an enabled button would be a guaranteed failure. Mark a step and **do not press Submit** — it must stay disabled, because the mark is local until saved. |
+| `§236 SE-2` | Submit a result marking step 2 failed. Reload. Under step 2, press **Attach to this step** and choose a PNG | It is enabled now. The file appears **under step 2** and **not** in the execution-level Evidence panel below. That split is the whole of C9 — before it every attachment landed in one flat list. |
+| `§236 SE-3` | Attach a second file to the execution as a whole via the **Evidence** panel, then re-read both places | The execution-level file is in the Evidence panel only; step 2's is under step 2 only. Neither appears twice. `TestExecution.evidence` carries `step_result_id IS NULL` rows alone and `StepResult.evidence` carries the rest — a file in both means the server's partition has been bypassed by a client-side merge. |
+| `§236 SE-4` | Network tab on the step attach | The `multipart/form-data` body carries a **`stepId` part**. `M4-11`'s boundary check applies here too. If `stepId` is absent the file still uploads and still succeeds — landing on the execution — which is why this is a network-tab row and not a screen row. |
+| `§236 SE-5` | Close the run, then reopen the execution | Both **Attach to this step** and the execution-level **Attach** are disabled with *"This run has ended…"*, and **every attached file stays visible and still opens**. The defect panel's controls are disabled with the matching sentence. A closed run's evidence is the part of the record most likely to be read. |

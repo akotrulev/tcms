@@ -1915,6 +1915,187 @@ class ExecutionEndpointTest extends IntegrationTestBase {
                 .andReturn();
     }
 
+    @Nested
+    @DisplayName("Defect links — defect_link's first writer (V62, audit C5)")
+    class DefectLinks {
+
+        private static final String KEY = "PAY-991";
+        private static final String URL = "https://tracker.acme.test/browse/PAY-991";
+
+        @Test
+        @DisplayName("a tester links a defect and it comes back on the execution")
+        void links() throws Exception {
+            MvcResult created = linkDefect(ENGINEER, ACME, EXEC_A, KEY, URL);
+
+            assertThat(created.getResponse().getStatus()).isEqualTo(201);
+            JsonNode link = body(created);
+            assertThat(link.get("externalKey").asText()).isEqualTo(KEY);
+            assertThat(link.get("url").asText()).isEqualTo(URL);
+
+            JsonNode execution = body(get(ENGINEER, ACME, executionPath(RUN, EXEC_A)));
+            assertThat(execution.get("defects")).hasSize(1);
+            assertThat(execution.get("defects").get(0).get("id").asText())
+                    .isEqualTo(link.get("id").asText());
+        }
+
+        @Test
+        @DisplayName("provider is EXTERNAL and NOT the JIRA the column used to default to")
+        void providerNamesNoTracker() throws Exception {
+            // The whole of V62's argument, as an observation: a row this endpoint writes must not
+            // claim a tracker the instance has never spoken to. The old DEFAULT made it JIRA, and
+            // nothing would have failed.
+            JsonNode link = body(linkDefect(ENGINEER, ACME, EXEC_A, KEY, URL));
+
+            assertThat(link.get("provider").asText()).isEqualTo("EXTERNAL");
+        }
+
+        @Test
+        @DisplayName("statusCache is null — a tracker's answer nobody has asked for")
+        void statusIsNeverInvented() throws Exception {
+            JsonNode link = body(linkDefect(ENGINEER, ACME, EXEC_A, KEY, URL));
+
+            assertThat(link.get("statusCache").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("the caller cannot set provider or statusCache by sending them")
+        void ignoresFieldsTheInputDoesNotDeclare() throws Exception {
+            // The record has two components, so Jackson drops these — asserted rather than assumed,
+            // because the defence is a property of the binding and a future field named `provider`
+            // would silently start honouring a caller's claim about somebody else's tracker.
+            String payload = json.writeValueAsString(Map.of(
+                    "externalKey", KEY,
+                    "url", URL,
+                    "provider", "JIRA",
+                    "statusCache", "Closed"));
+
+            JsonNode link = body(postDefect(ENGINEER, ACME, EXEC_A, payload));
+
+            assertThat(link.get("provider").asText()).isEqualTo("EXTERNAL");
+            assertThat(link.get("statusCache").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("linking the same defect twice answers 200 with the row that is there")
+        void replayIsNotATwin() throws Exception {
+            JsonNode first = body(linkDefect(ENGINEER, ACME, EXEC_A, KEY, URL));
+
+            MvcResult again = linkDefect(ENGINEER, ACME, EXEC_A, KEY, URL);
+
+            assertThat(again.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(again).get("id").asText()).isEqualTo(first.get("id").asText());
+            assertThat(body(get(ENGINEER, ACME, executionPath(RUN, EXEC_A))).get("defects"))
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a javascript: url is refused — three screens render this as an href")
+        void refusesASchemeThatExecutes() throws Exception {
+            MvcResult refused = linkDefect(
+                    ENGINEER, ACME, EXEC_A, KEY, "javascript:alert(document.cookie)");
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(refused).get("errors").get("url")).isNotNull();
+            // And nothing was stored: a 400 that wrote the row anyway is the failure this pairs
+            // with, and the status alone cannot tell them apart.
+            assertThat(body(get(ENGINEER, ACME, executionPath(RUN, EXEC_A))).get("defects"))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("an empty key is a field error, not a stored blank")
+        void refusesABlankKey() throws Exception {
+            MvcResult refused = linkDefect(ENGINEER, ACME, EXEC_A, "  ", URL);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(refused).get("errors").get("externalKey")).isNotNull();
+        }
+
+        @Test
+        @DisplayName("a Viewer cannot link, and nothing is written when refused")
+        void refusesWithoutThePermission() throws Exception {
+            MvcResult refused = linkDefect(VIEWER, ACME, EXEC_B, KEY, URL);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            assertThat(body(get(LEAD, ACME, executionPath(RUN, EXEC_B))).get("defects")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a company member with no project grant gets 404, never 403")
+        void unreachableProjectIs404() throws Exception {
+            MvcResult refused = linkDefect(NO_GRANT, ACME, EXEC_B, KEY, URL);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("the key that made the link unmakes it — there is no defect:delete")
+        void unlinks() throws Exception {
+            UUID id = UUID.fromString(
+                    body(linkDefect(ENGINEER, ACME, EXEC_A, KEY, URL)).get("id").asText());
+
+            MvcResult removed = unlinkDefect(ENGINEER, ACME, EXEC_A, id);
+
+            assertThat(removed.getResponse().getStatus()).isEqualTo(204);
+            assertThat(body(get(ENGINEER, ACME, executionPath(RUN, EXEC_A))).get("defects"))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a Viewer cannot unlink, and the row survives the refusal")
+        void unlinkNeedsTheKeyToo() throws Exception {
+            UUID id = UUID.fromString(
+                    body(linkDefect(ENGINEER, ACME, EXEC_A, KEY, URL)).get("id").asText());
+
+            MvcResult refused = unlinkDefect(VIEWER, ACME, EXEC_A, id);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            assertThat(body(get(LEAD, ACME, executionPath(RUN, EXEC_A))).get("defects")).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a link on ANOTHER execution is 404 through this path, not 204")
+        void unlinkIsScopedToTheExecutionInThePath() throws Exception {
+            UUID id = UUID.fromString(
+                    body(linkDefect(ENGINEER, ACME, EXEC_A, KEY, URL)).get("id").asText());
+
+            MvcResult refused = unlinkDefect(ENGINEER, ACME, EXEC_B, id);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(404);
+            assertThat(body(get(LEAD, ACME, executionPath(RUN, EXEC_A))).get("defects")).hasSize(1);
+        }
+    }
+
+    private MvcResult linkDefect(
+            UUID userId, UUID companyId, UUID executionId, String externalKey, String url)
+            throws Exception {
+
+        return postDefect(userId, companyId, executionId, json.writeValueAsString(
+                Map.of("externalKey", externalKey, "url", url)));
+    }
+
+    private MvcResult postDefect(
+            UUID userId, UUID companyId, UUID executionId, String payload) throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .post("/api/v1" + executionPath(RUN, executionId) + "/defects")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andReturn();
+    }
+
+    private MvcResult unlinkDefect(
+            UUID userId, UUID companyId, UUID executionId, UUID linkId) throws Exception {
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .delete("/api/v1" + executionPath(RUN, executionId) + "/defects/" + linkId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andReturn();
+    }
+
     private MvcResult attach(
             UUID userId, UUID companyId, UUID executionId, String filename, String contentType,
             byte[] bytes, String caption) throws Exception {

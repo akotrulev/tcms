@@ -467,6 +467,7 @@ class ContractConventionTest {
                     List.of(com.tcms.repository.DashboardView.BreakdownView.class)),
             Map.entry("DashboardTile", List.of(com.tcms.repository.DashboardView.TileView.class)),
             Map.entry("DefectLink", List.of(com.tcms.execution.DefectLinkView.class)),
+            Map.entry("DefectLinkInput", List.of(com.tcms.execution.DefectLinkInput.class)),
             Map.entry("DocBlock", List.of(com.tcms.documentation.DocBlockView.class)),
             Map.entry("DocBlockInput", List.of(com.tcms.documentation.DocBlockInput.class)),
             // In `repository` and not in `documentation`, which is where the row lives: this is the

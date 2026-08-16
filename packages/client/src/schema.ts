@@ -5477,6 +5477,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/runs/{runId}/executions/{executionId}/defects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+                executionId: components["parameters"]["ExecutionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link this result to a defect
+         * @description Needs `defect:create` — seeded by `V3` in M0 and, until `V62`, consumed by nothing.
+         *
+         *     **This product is not a defect tracker; it links out.** The body is therefore a key and a
+         *     URL and nothing that has to be kept in step with whatever holds them. There is no
+         *     `provider` field: pre-M4 there is no `IssueTracker` port to establish one against, so a
+         *     caller naming `JIRA` would be an unverified claim recorded as a fact — which is exactly
+         *     what `V62` removed from the column's `DEFAULT`. Every row this endpoint writes reports
+         *     `provider: EXTERNAL`, meaning *a link a person made*. There is no `statusCache` field for
+         *     the same reason pointed the other way: it is a tracker's answer, and nobody has asked one.
+         *
+         *     **Two success codes.** `201` when a link was written, `200` when this exact defect was
+         *     already linked to this result — the same shape `POST …/cases/{caseId}/external-links`
+         *     answers, and enforced by a unique index rather than only by the lookup, so two concurrent
+         *     retries of one intent cannot both write. A client that treats the two codes alike is
+         *     correct; one that counts creates is not misled.
+         *
+         *     **No `Location` header on the `201`** — there is no `GET` here, because a result's defect
+         *     links are already served on the result as `TestExecution.defects`. A header naming a route
+         *     that answers `404` is §119's warning, so the body is the whole answer.
+         */
+        post: operations["linkDefect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/runs/{runId}/executions/{executionId}/defects/{linkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+                executionId: components["parameters"]["ExecutionId"];
+                linkId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a defect link
+         * @description **Charged `defect:create`, the key that made the link** — there is no `defect:delete`. The
+         *     catalogue has seeded no new permission since `V3`, and one granted to nobody is a `403` no
+         *     administrator can grant their way out of; the alternative was a create with no correction
+         *     path, which leaves a mistyped key rendering as a broken link on three screens forever.
+         *
+         *     **Authorship does not narrow it**, and no qualifier is invented here: nothing in the
+         *     catalogue has carried one since `V51` (roles spec §A5). A link holds no content anybody
+         *     authored and re-linking is one request, so this is narrower than a delete usually is.
+         *
+         *     Nothing in the tracker is touched. This removes TCMS's record that the two are related.
+         */
+        delete: operations["unlinkDefect"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/doc-pages": {
         parameters: {
             query?: never;
@@ -11497,14 +11573,16 @@ export interface components {
             caption?: string | null;
             /**
              * @description **Nullable, and that is load-bearing.** `evidence.created_by` has no `NOT NULL` and no
-             *     foreign key, so a row written before authorship was recorded has no author — and
-             *     `evidence:delete`'s `OWN` qualifier answers such a row **false**: a grant covering
-             *     "your own work" must not stretch to work nobody can attribute.
+             *     foreign key, so a row written before authorship was recorded has no author.
              *
-             *     The client must therefore be able to see the *absence* rather than infer it. A
+             *     ~~and `evidence:delete`'s `OWN` qualifier answers such a row **false**: a grant
+             *     covering "your own work" must not stretch to work nobody can attribute … which is the
+             *     arm the whole qualifier turns on.~~ → **superseded: `V51` emptied `OWN`**, and
+             *     `DELETE …/evidence/{evidenceId}` already says so. The field is not load-bearing for a
+             *     permission any more; it is load-bearing for the *screen*, which names who attached a
+             *     file and must be able to say "nobody recorded" rather than inventing an author. A
              *     non-nullable declaration here would make the SPA collapse "no author" into "some
-             *     author", which is the arm the whole qualifier turns on. Same shape as
-             *     `TestCaseSummary.createdBy` (§66).
+             *     author". Same shape as `TestCaseSummary.createdBy` (§66).
              */
             createdBy: components["schemas"]["UserRef"] | null;
             /** Format: date-time */
@@ -11557,10 +11635,52 @@ export interface components {
             id: string;
             /** @example PAY-991 */
             externalKey: string;
-            /** @example JIRA */
+            /**
+             * @description Which tracker holds the key. `EXTERNAL` — *a link a person made* — for every row
+             *     written through this API, because pre-M4 there is no `IssueTracker` port to establish
+             *     anything else against. `V1` defaulted the column to `JIRA` and `V62` dropped that
+             *     default: it named a product the instance does not talk to, and would have left M4
+             *     unable to tell a real Jira row from a defaulted one.
+             * @example EXTERNAL
+             */
             provider: string;
+            /**
+             * @description Where the defect lives, `http` or `https`. **Required, and the column was nullable
+             *     until `V62`** — nothing had violated this declaration only because the table had no
+             *     writer.
+             */
             url: string;
+            /**
+             * @description The tracker's status as of the last sync — and **`null` for every row until M4**,
+             *     which is a true answer rather than a missing one: nothing has been synced because
+             *     there is nothing to sync. No caller may set it (`DefectLinkInput` has no such field),
+             *     because one person's guess recorded as a tracker's answer is the claim `V62` removed
+             *     from `provider`.
+             */
             statusCache?: string | null;
+        };
+        /**
+         * @description Two fields, and **the absences are the design.** No `provider`, because a caller cannot
+         *     establish one before the `IssueTracker` port exists and an unverified `JIRA` reads as a
+         *     deliberate statement rather than as an unfilled column. No `statusCache` or `syncedAt`,
+         *     because those are a tracker's answers. No `caseId`, because every reader of `defect_link`
+         *     is execution-scoped and the execution is named by the path.
+         */
+        DefectLinkInput: {
+            /**
+             * @description The tracker's own identifier. Free text: this product knows no tracker's key format,
+             *     and refusing a shape it guessed at would reject a real key from a real system.
+             * @example PAY-991
+             */
+            externalKey: string;
+            /**
+             * @description **`http` or `https` only, and this is a security bound rather than tidiness.** Three
+             *     screens render the stored value as an anchor's `href`, where `javascript:` executes in
+             *     the reader's session and `data:` renders attacker-authored HTML on this product's
+             *     origin. Refused at the write, which is the one place it can be refused once.
+             * @example https://tracker.acme.test/browse/PAY-991
+             */
+            url: string;
         };
         /**
          * @description Defaults to the CURRENT version only, and says so — blending results across
@@ -14687,6 +14807,73 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    linkDefect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+                executionId: components["parameters"]["ExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefectLinkInput"];
+            };
+        };
+        responses: {
+            /** @description This defect was already linked here; the stored link is returned unchanged */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefectLink"];
+                };
+            };
+            /** @description Linked */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefectLink"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    unlinkDefect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+                executionId: components["parameters"]["ExecutionId"];
+                linkId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unlinked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     attachDocPageFile: {

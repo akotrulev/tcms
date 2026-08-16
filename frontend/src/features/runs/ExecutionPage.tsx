@@ -21,6 +21,8 @@ import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import type { CaseStatus, StepResult, TestExecution, TestExecutionSummary } from '../../api/types';
 import { useExecution, useProject, useRun, useStatuses, useSubmitResult } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
+import { DefectPanel } from './DefectPanel';
+import { StepEvidence } from './StepEvidence';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
@@ -615,6 +617,10 @@ function ExecutionForm({
                     onComment={(text) =>
                       setStepComments((previous) => ({ ...previous, [step.stepId ?? '']: text }))
                     }
+                    projectId={projectId}
+                    runId={runId}
+                    executionId={execution.id}
+                    frozen={frozen}
                   />
                 ))}
               </Stack>
@@ -641,6 +647,17 @@ function ExecutionForm({
             runId={runId}
             executionId={execution.id}
             evidence={execution.evidence}
+            frozen={frozen}
+          />
+
+          {/* Below Evidence: linking a defect is what a tester does AFTER describing the failure
+              and attaching the proof of it, and it is the one control here that writes somewhere
+              else's record into this one. */}
+          <DefectPanel
+            projectId={projectId}
+            runId={runId}
+            executionId={execution.id}
+            defects={execution.defects}
             frozen={frozen}
           />
         </Stack>
@@ -795,6 +812,10 @@ function StepRow({
   comment,
   onChange,
   onComment,
+  projectId,
+  runId,
+  executionId,
+  frozen,
 }: {
   step: StepResult;
   index: number;
@@ -803,6 +824,10 @@ function StepRow({
   comment: string;
   onChange: (statusId: string | null) => void;
   onComment: (text: string) => void;
+  projectId: string;
+  runId: string;
+  executionId: string;
+  frozen: boolean;
 }) {
   const failedId = statuses.find((s) => s.kind === 'FAILED')?.id;
   const isFailed = value === failedId;
@@ -850,6 +875,19 @@ function StepRow({
               onChange={(event) => onComment(event.target.value)}
               sx={{ mt: 1.5 }}
               slotProps={{ htmlInput: { 'data-testid': 'Execution.Steps.Row.CommentField' } }}
+            />
+          )}
+          {step.stepId && (
+            <StepEvidence
+              projectId={projectId}
+              runId={runId}
+              executionId={executionId}
+              stepId={step.stepId}
+              evidence={step.evidence ?? []}
+              // The SERVER's recorded verdict, never the local mark: `value` is unsaved until
+              // Submit, and the attach endpoint resolves the step against `step_outcome`.
+              recorded={step.statusId != null}
+              frozen={frozen}
             />
           )}
         </Box>

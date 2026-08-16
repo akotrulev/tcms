@@ -233,12 +233,26 @@ public interface TestExecutionRepository extends JpaRepository<TestExecution, UU
      * The defects linked to a batch of executions, as {@code [id, executionId, externalKey,
      * provider, url, statusCache]}.
      *
-     * <p>Native because {@code defect_link} has no entity:
+     * <p><del>Native because {@code defect_link} has no entity:
      * nothing in the product creates one yet — the {@code IssueTracker} port is M4 — so an entity
-     * would be a mapped write surface for a table with no writer. The read is owed all the same,
+     * would be a mapped write surface for a table with no writer.</del> → <strong>superseded by
+     * {@code V62} (audit C5): there is a writer, and {@link DefectLink} is the entity.</strong> The
+     * premise was true when written and stopped being true the moment this table gained
+     * {@link DefectLinkService}. The read is owed all the same,
      * because the contract marks {@code defects} required and answering {@code []} unconditionally
      * would be a claim rather than a lookup: an ingested run could carry links this module did not
      * make.
+     *
+     * <p><strong>It stays native, and for a different reason than the one it was written with.</strong>
+     * This is a batch projection over N executions selecting six columns; an entity read would be a
+     * fetch through an unmapped edge or one query per row, and the mapping deliberately omits
+     * {@code status_cache} — a column this serves and no writer may set ({@code V62}). So the entity
+     * exists for the write and this exists for the read, which is the split, not an oversight.
+     *
+     * <p>{@code company_id} is spelled out beside RLS rather than left to the policy, per §235: the
+     * predicate is the intent, the two agreeing makes a mismatch return nothing rather than
+     * something, and it is what makes {@code defect_link_execution_key_idx}'s leading column usable
+     * here.
      *
      * <p>{@code defect_link} is this module's own table (ERD §5), so this is not the cross-module
      * edge the package comment governs.
@@ -250,8 +264,10 @@ public interface TestExecutionRepository extends JpaRepository<TestExecution, UU
     @Query(value = """
             SELECT d.id, d.execution_id, d.external_key, d.provider, d.url, d.status_cache
             FROM defect_link d
-            WHERE d.execution_id IN (:executionIds)
+            WHERE d.company_id = :companyId AND d.execution_id IN (:executionIds)
             ORDER BY d.external_key
             """, nativeQuery = true)
-    List<Object[]> findDefectLinks(@Param("executionIds") Collection<UUID> executionIds);
+    List<Object[]> findDefectLinks(
+            @Param("companyId") UUID companyId,
+            @Param("executionIds") Collection<UUID> executionIds);
 }

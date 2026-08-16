@@ -4,6 +4,7 @@ import { useRef } from 'react';
 import { api, newIntentKey, qs } from '../client';
 import type {
   Configuration,
+  DefectLink,
   Evidence,
   TestExecution,
   TestRun,
@@ -333,6 +334,45 @@ export function useDeleteEvidence(projectId: string, runId: string, executionId:
       ),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.execution(projectId, runId, executionId) });
+    },
+  });
+}
+
+export interface DefectLinkInput {
+  externalKey: string;
+  url: string;
+}
+
+/**
+ * Links this result to a defect in somebody else's tracker.
+ *
+ * <p>No `provider` field: the server writes `EXTERNAL` and refuses to take a caller's word for a
+ * tracker it cannot reach (`V62`). Both the run detail and the case history render these links, so
+ * both are invalidated — the execution alone would leave the run's table showing the old set.
+ */
+export function useLinkDefect(projectId: string, runId: string, executionId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: DefectLinkInput) =>
+      api.post<DefectLink>(
+        `${base(projectId)}/runs/${runId}/executions/${executionId}/defects`,
+        input,
+      ),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.run(projectId, runId) });
+    },
+  });
+}
+
+export function useUnlinkDefect(projectId: string, runId: string, executionId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (linkId: string) =>
+      api.del<void>(
+        `${base(projectId)}/runs/${runId}/executions/${executionId}/defects/${linkId}`,
+      ),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.run(projectId, runId) });
     },
   });
 }
