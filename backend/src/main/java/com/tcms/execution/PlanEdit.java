@@ -41,10 +41,13 @@ import java.util.stream.Collectors;
  * <h2>The create and the edit are one validator with two entry points</h2>
  *
  * <p>{@link #validateCreate} and {@link #validateUpdate} share every rule about a name, a
- * description, a milestone and a scope, and differ in exactly two places — the create cannot carry
- * criteria (nobody knows what makes a plan releasable at the moment they name it), and the update
- * resolves an absent list against what is stored. Written as two copies, the length limits would
- * agree until the day one of them changed.
+ * description, a milestone and a scope. ~~They differ in exactly two places — the create cannot
+ * carry criteria (nobody knows what makes a plan releasable at the moment they name it), and the
+ * update resolves an absent list against what is stored.~~ → <strong>one place since B9</strong>:
+ * the create accepts criteria, prose, tags and sections, and what still differs is the resolution
+ * of an absent list. That difference is not a policy — on a create there is nothing stored to leave
+ * alone, so absent and empty are one request. Written as two copies, the length limits would agree
+ * until the day one of them changed.
  */
 record PlanEdit(
         String name,
@@ -153,14 +156,24 @@ record PlanEdit(
 
         Fields fields = validateFields(
                 request.name(), request.description(), request.milestoneName(), errors);
+        // `stored` is null and stays null, which is the ONE difference from the update that
+        // survives B9: an absent list on an update means "leave what is stored alone", and on a
+        // create there is nothing stored — so absent and empty are the same request here.
         PlanScope scope = validateScope(
-                request.suiteIds(), request.caseIds(), null, null, null,
+                request.suiteIds(), request.caseIds(), request.tags(), request.sections(), null,
                 liveSuiteIds, liveCaseIds, errors);
+        // B9 — the four the create used to refuse by not declaring. Same validators, so a length
+        // limit or a metric name cannot mean one thing on the create and another on the edit.
+        List<CriterionInput> entry =
+                validateCriteria(request.entryCriteria(), "entryCriteria", errors);
+        List<CriterionInput> exit = validateCriteria(request.exitCriteria(), "exitCriteria", errors);
+        String scopeText = validateProse(request.scopeText(), "scopeText", errors);
+        String outOfScopeText = validateProse(request.outOfScopeText(), "outOfScopeText", errors);
 
         return errors.isEmpty()
                 ? new Outcome.Valid(new PlanEdit(
                         fields.name(), fields.description(), fields.milestoneName(),
-                        request.milestoneDate(), scope, null, null, null, null))
+                        request.milestoneDate(), scope, scopeText, outOfScopeText, entry, exit))
                 : new Outcome.Invalid(errors);
     }
 

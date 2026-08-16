@@ -88,6 +88,13 @@ public class ArtifactWriteService {
     private final DocPageRepository pages;
     private final PlanFacts plans;
     private final ArtifactPeople people;
+    /**
+     * The longest {@code Idempotency-Key} this service will look at — {@code SuiteWriteService}'s
+     * number, and the same reason: an unbounded header is a value a hostile caller controls and the
+     * index would carry.
+     */
+    private static final int MAX_IDEMPOTENCY_KEY = 200;
+
     private final ArtifactFiles files;
     private final AttachmentRepository attachments;
     private final AttachmentStore store;
@@ -154,6 +161,22 @@ public class ArtifactWriteService {
         record Created(ArtifactView view) implements Outcome {
         }
 
+        /**
+         * The artifact a previous request with this {@code Idempotency-Key} registered (B4).
+         *
+         * <p><strong>200 and no {@code Location}</strong>, which is the shape every other keyed
+         * create in this API answers with ({@code CaseCreateService.Outcome.Replayed}, and the
+         * suite's): nothing was created by <em>this</em> request, so a 201 would be a lie a client
+         * could act on, and a {@code Location} for a resource this call did not make is the same
+         * lie in a header.
+         *
+         * <p>The view is re-rendered from the live row rather than stored, so a replay and a reload
+         * cannot disagree — {@code V42}'s argument for why this family is a column and not a
+         * general request table.
+         */
+        record Replayed(ArtifactView view) implements Outcome {
+        }
+
         /** The row after a status move. 200. */
         record Updated(ArtifactView view) implements Outcome {
         }
@@ -201,9 +224,15 @@ public class ArtifactWriteService {
      * that the scope was the problem.
      */
     @Transactional
-    public Outcome create(UUID userId, UUID projectId, ArtifactInput input) {
+    public Outcome create(
+            UUID userId, UUID projectId, ArtifactInput input, String idempotencyKey) {
+
         return gated(projects.writeGrantedByRowScope(userId, projectId, PERMISSION,
                 (project, rowScope) -> {
+                    Outcome replay = replayed(project.getId(), idempotencyKey);
+                    if (replay != null) {
+                        return replay;
+                    }
                     Map<String, List<String>> errors = validate(project.getId(), input, false);
                     if (!errors.isEmpty()) {
                         return new Outcome.Invalid(errors);
@@ -228,6 +257,7 @@ public class ArtifactWriteService {
                             input.kind() == ArtifactKind.EXTERNAL_URL ? input.url().trim() : null,
                             null,
                             userId,
+                            idempotencyKey,
                             now));
 
                     audit(project.getId(), userId, artifact, now);
@@ -283,11 +313,23 @@ public class ArtifactWriteService {
      */
     @Transactional
     public Outcome createFile(
-            UUID userId, UUID projectId, ArtifactFileInput fileInput, BlobUpload upload) {
+            UUID userId,
+            UUID projectId,
+            ArtifactFileInput fileInput,
+            BlobUpload upload,
+            String idempotencyKey) {
 
         ArtifactInput input = fileInput.asRegistration();
         return gated(projects.writeGrantedByRowScope(userId, projectId, PERMISSION,
                 (project, rowScope) -> {
+                    // FIRST, and before the bytes are looked at: a replayed upload must answer with
+                    // the artifact it made rather than writing a second blob. This is the path the
+                    // key matters most on — a retry here duplicates the attachment row AND the
+                    // stored bytes, and the bytes are the copy nobody sees.
+                    Outcome replay = replayed(project.getId(), idempotencyKey);
+                    if (replay != null) {
+                        return replay;
+                    }
                     Map<String, List<String>> errors = validate(project.getId(), input, true);
                     if (!errors.isEmpty()) {
                         return new Outcome.Invalid(errors);
@@ -302,13 +344,17 @@ public class ArtifactWriteService {
                         return new Outcome.Invalid(
                                 Map.of("file", List.of("Choose a file to register.")));
                     }
-                    return writeFile(userId, project, input, upload);
+                    return writeFile(userId, project, input, upload, idempotencyKey);
                 }));
     }
 
     /** The two rows and the bytes, in the only order the foreign key and the filesystem allow. */
     private Outcome writeFile(
-            UUID userId, Project project, ArtifactInput input, BlobUpload upload) {
+            UUID userId,
+            Project project,
+            ArtifactInput input,
+            BlobUpload upload,
+            String idempotencyKey) {
 
         UUID companyId = CompanyContext.require();
         Instant now = clock.instant();
@@ -338,6 +384,7 @@ public class ArtifactWriteService {
                 null,
                 file.getId(),
                 userId,
+                idempotencyKey,
                 now));
 
         audit(project.getId(), userId, artifact, now);
@@ -928,6 +975,42 @@ public class ArtifactWriteService {
      * Collapses the gate's three states onto this class's own — one place rather than a switch per
      * write, so a fourth gate state cannot be handled in some of them.
      */
+    /**
+     * The replay answer for this key, or null when there is nothing to replay (B4).
+     *
+     * <p>Called <strong>first</strong> on both create paths, before validation and before the bytes
+     * are touched — {@code CaseCreateService}'s ordering and its reason: a retry of a create that
+     * succeeded must answer with what it made even if the payload has since drifted, because the
+     * client is asking "did my intent land" and a 400 would send it to fix fields on a row that
+     * already exists.
+     *
+     * <p>Returning null for "no replay" rather than an {@code Optional<Outcome>} keeps both call
+     * sites a two-line guard inside a lambda that already returns {@code Outcome}; the alternative
+     * reads as a stream over a thing that is not a value.
+     */
+    private Outcome replayed(UUID projectId, String idempotencyKey) {
+        if (idempotencyKey == null) {
+            return null;
+        }
+        if (idempotencyKey.length() > MAX_IDEMPOTENCY_KEY) {
+            return new Outcome.Invalid(Map.of("Idempotency-Key",
+                    List.of("Send a key of at most " + MAX_IDEMPOTENCY_KEY + " characters.")));
+        }
+        return artifacts.findByIdempotencyKey(projectId, idempotencyKey)
+                .map(artifact -> (Outcome) new Outcome.Replayed(ArtifactView.of(
+                        projectId,
+                        artifact,
+                        files.forArtifact(artifact).orElse(null),
+                        false,
+                        // The row's LAST author, which is what the view renders — a replayed
+                        // create answers with the artifact as it now stands, and it may have been
+                        // amended since the original request landed. Resolving the creator instead
+                        // would render a person the view's own field does not name.
+                        people.resolve(
+                                CompanyContext.require(), List.of(artifact.getUpdatedBy())))))
+                .orElse(null);
+    }
+
     private Outcome gated(GateResult<Outcome> result) {
         return switch (result) {
             case GateResult.Unreachable<Outcome> ignored -> new Outcome.NotFound();

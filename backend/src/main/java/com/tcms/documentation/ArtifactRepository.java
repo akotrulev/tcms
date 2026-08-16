@@ -27,6 +27,28 @@ public interface ArtifactRepository extends JpaRepository<Artifact, UUID> {
      * the record of what was signed off, and a register that hid it would answer the audit question
      * it exists to answer with a gap. The client marks them; it does not have to ask for them.
      */
+    /**
+     * The artifact a previous request with this key registered, if any (B4, {@code V59}).
+     *
+     * <p>Project-scoped, naming exactly the columns
+     * {@code artifact_created_idempotency_key_idx} covers: a lookup narrower than the constraint
+     * lets a key reused across two projects pass here and violate the index one statement later,
+     * which is a validated request that 500s.
+     *
+     * <p><strong>No status filter, and no "not superseded".</strong> A retry whose original has
+     * since been archived, superseded or deleted is still a retry — registering a second one would
+     * resurrect something somebody deliberately dealt with, and the index would refuse it anyway.
+     * {@code SuiteRepository.findByIdempotencyKey} makes the same call for the same reason.
+     */
+    @Query("""
+            SELECT a FROM Artifact a
+             WHERE a.projectId = :projectId
+               AND a.createdIdempotencyKey = :idempotencyKey
+            """)
+    Optional<Artifact> findByIdempotencyKey(
+            @Param("projectId") UUID projectId,
+            @Param("idempotencyKey") String idempotencyKey);
+
     @Query("""
             SELECT a FROM Artifact a
              WHERE a.projectId = :projectId

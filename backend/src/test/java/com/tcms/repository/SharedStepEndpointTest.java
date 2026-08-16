@@ -196,6 +196,72 @@ class SharedStepEndpointTest extends IntegrationTestBase {
     // usageCount — the decision this slice turns on
     // =====================================================================
 
+    /**
+     * B4 — the header this endpoint refused in writing, and {@code V59} reversed.
+     *
+     * <p>The refusal was {@code SuiteWriteService}'s: <em>"a duplicate library entry is visible in
+     * the picker next to its twin the moment the create returns"</em>. {@code V42} had already
+     * superseded that same sentence for suites, on the grounds that apply here too — it reasons
+     * from a person looking at a picker, and the caller it has to defend is a tool with none.
+     */
+    @Nested
+    @DisplayName("Idempotency — a retry must not create a second library entry (B4)")
+    class Idempotency {
+
+        @Test
+        @DisplayName("a repeated key answers 200 with the same entry, and creates nothing")
+        void aRetryReplaysTheOriginal() throws Exception {
+            String key = "intent-" + UUID.randomUUID();
+            String body = """
+                    {"title":"Sign in as an administrator","body":["Open the console","Sign in"]}
+                    """;
+
+            var first = post(ENGINEER, ACME, ACME_BANKING, body, key);
+            var retry = post(ENGINEER, ACME, ACME_BANKING, body, key);
+
+            assertThat(first.getStatus()).isEqualTo(201);
+            assertThat(retry.getStatus()).isEqualTo(200);
+            assertThat(json.readTree(retry.getContentAsString()).get("id").asText())
+                    .isEqualTo(json.readTree(first.getContentAsString()).get("id").asText());
+            assertThat(libraryAs(ENGINEER, ACME, ACME_BANKING).stream()
+                    .filter(entry -> "Sign in as an administrator"
+                            .equals(entry.get("title").asText()))
+                    .count())
+                    .as("one entry, not two")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a different key creates a second entry — two flows may share a title")
+        void aDifferentKeyIsASecondEntry() throws Exception {
+            String body = """
+                    {"title":"Sign in","body":["Open the app","Sign in"]}
+                    """;
+
+            post(ENGINEER, ACME, ACME_BANKING, body, "intent-" + UUID.randomUUID());
+            post(ENGINEER, ACME, ACME_BANKING, body, "intent-" + UUID.randomUUID());
+
+            // The endpoint has never enforced unique titles and must not start: two entries called
+            // "Sign in" — the admin console's and the customer app's — is the case the library's
+            // own header defends.
+            assertThat(libraryAs(ENGINEER, ACME, ACME_BANKING).stream()
+                    .filter(entry -> "Sign in".equals(entry.get("title").asText()))
+                    .count())
+                    .isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("an absurd key is a field error, not an indexed header")
+        void anOversizedKeyIsRefused() throws Exception {
+            var response = post(ENGINEER, ACME, ACME_BANKING, """
+                    {"title":"Sign in","body":["Open the app"]}
+                    """, "k".repeat(201));
+
+            assertThat(response.getStatus()).isEqualTo(400);
+            assertThat(problemFields(response)).containsKey("Idempotency-Key");
+        }
+    }
+
     @Nested
     @DisplayName("usageCount is derived from the references, never read from the column")
     class DerivedUsage {
@@ -630,12 +696,23 @@ class SharedStepEndpointTest extends IntegrationTestBase {
     private org.springframework.mock.web.MockHttpServletResponse post(
             UUID userId, UUID companyId, UUID projectId, String body) throws Exception {
 
-        return mvc.perform(MockMvcRequestBuilders
-                        .post("/api/v1/projects/" + projectId + "/shared-steps")
-                        .header("Authorization", "Bearer " + tokenFor(userId, companyId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
-                .andReturn().getResponse();
+        return post(userId, companyId, projectId, body, null);
+    }
+
+    /** @param idempotencyKey the header, or null to send none (B4). */
+    private org.springframework.mock.web.MockHttpServletResponse post(
+            UUID userId, UUID companyId, UUID projectId, String body, String idempotencyKey)
+            throws Exception {
+
+        var request = MockMvcRequestBuilders
+                .post("/api/v1/projects/" + projectId + "/shared-steps")
+                .header("Authorization", "Bearer " + tokenFor(userId, companyId))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body);
+        if (idempotencyKey != null) {
+            request = request.header("Idempotency-Key", idempotencyKey);
+        }
+        return mvc.perform(request).andReturn().getResponse();
     }
 
     /** The {@code errors} map of an RFC 7807 validation problem, keyed by field name. */

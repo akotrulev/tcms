@@ -640,6 +640,106 @@ class PlanCreateEndpointTest extends IntegrationTestBase {
         return payload;
     }
 
+    /**
+     * B9 — a complete plan in one request.
+     *
+     * <h2>What was wrong, and it was not the flow</h2>
+     *
+     * <p>{@code TestPlanInput} carried six properties on the argument that <em>a plan is named
+     * before anybody knows what would make it releasable</em>. That is true of the usual flow and
+     * it was being enforced by a schema rather than by a form — so {@code POST …/plans/{id}/clone}
+     * could express sections, a tag arm, prose and both criteria, and {@code POST …/plans} could
+     * not. Clone was strictly more expressive than create, which is the shape the audit named.
+     *
+     * <p>The permission argument the old sentence rested on does not survive contact with the
+     * catalogue either: every seeded role holding {@code plan:create} holds {@code plan:edit}, so
+     * the narrow input bought a second request rather than a boundary.
+     */
+    @Nested
+    @DisplayName("B9 — the create expresses everything the clone copies")
+    class CompleteInOneRequest {
+
+        @Test
+        @DisplayName("criteria sent on the create are stored, canonicalized, and served back")
+        void criteriaAreAccepted() throws Exception {
+            Map<String, Object> payload = plan("Release 4.3");
+            payload.put("entryCriteria", List.of(Map.of(
+                    "metric", "pass_rate", "op", ">=", "value", 90)));
+            payload.put("exitCriteria", List.of(Map.of(
+                    "metric", "coverage", "op", ">=", "value", 80)));
+
+            MvcResult response = post(LEAD, ACME, ACME_BANKING, payload, null);
+            assertThat(response.getResponse().getStatus())
+                    .as("%s", response.getResponse().getContentAsString())
+                    .isEqualTo(201);
+            JsonNode created = body(response);
+
+            assertThat(created.get("entryCriteria")).hasSize(1);
+            assertThat(created.get("entryCriteria").get(0).get("metric").asText())
+                    .isEqualTo("pass_rate");
+            assertThat(created.get("exitCriteria")).hasSize(1);
+            // The columns are written, not left NULL — the distinction the test above defends for a
+            // plan that declared none stays exactly where it was.
+            assertThat(criteriaColumnsOf(UUID.fromString(created.get("id").asText())))
+                    .doesNotContainNull();
+        }
+
+        @Test
+        @DisplayName("scope prose, a tag arm and sections all arrive on the create")
+        void theRestOfThePlanArrives() throws Exception {
+            Map<String, Object> payload = plan("Release 4.3");
+            payload.put("scopeText", "Payments and refunds.");
+            payload.put("outOfScopeText", "Anything behind the partner API.");
+            payload.put("tags", List.of("smoke"));
+            payload.put("sections", List.of(Map.of(
+                    "name", "Refunds",
+                    "suiteIds", List.of(PAYMENTS.toString()),
+                    "position", 0)));
+
+            MvcResult response = post(LEAD, ACME, ACME_BANKING, payload, null);
+            assertThat(response.getResponse().getStatus())
+                    .as("%s", response.getResponse().getContentAsString())
+                    .isEqualTo(201);
+            JsonNode created = body(response);
+
+            assertThat(created.get("scopeText").asText()).isEqualTo("Payments and refunds.");
+            assertThat(created.get("outOfScopeText").asText())
+                    .isEqualTo("Anything behind the partner API.");
+            assertThat(created.get("tags")).hasSize(1);
+            assertThat(created.get("sections")).hasSize(1);
+            assertThat(created.get("sections").get(0).get("name").asText()).isEqualTo("Refunds");
+        }
+
+        @Test
+        @DisplayName("a bad criterion is refused here in the words the edit refuses it in")
+        void theValidatorsAreTheEditsOwn() throws Exception {
+            // The reason `validateCreate` calls the same validators rather than restating them: a
+            // metric this product cannot evaluate must not be storable through the door that was
+            // opened later.
+            Map<String, Object> payload = plan("Release 4.3");
+            payload.put("exitCriteria", List.of(Map.of(
+                    "metric", "vibes", "op", ">=", "value", 90)));
+
+            MvcResult result = post(LEAD, ACME, ACME_BANKING, payload, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(result).get("errors").has("exitCriteria")).isTrue();
+        }
+
+        @Test
+        @DisplayName("sending none of the six is unchanged — every one of them is optional")
+        void theUsualFlowIsUntouched() throws Exception {
+            // The guard against the obvious way to get B9 wrong: making any of them required would
+            // break the New Plan dialog, which asks for a name and a milestone and nothing else.
+            JsonNode created = body(post(LEAD, ACME, ACME_BANKING, plan("Release 4.4"), null));
+
+            assertThat(created.get("entryCriteria")).isEmpty();
+            assertThat(created.get("scopeText").isNull()).isTrue();
+            assertThat(criteriaColumnsOf(UUID.fromString(created.get("id").asText())))
+                    .containsExactly(null, null);
+        }
+    }
+
     private MvcResult post(
             UUID userId, UUID companyId, UUID projectId, Map<String, Object> payload,
             String idempotencyKey) throws Exception {

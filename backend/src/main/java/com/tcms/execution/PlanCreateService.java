@@ -151,8 +151,15 @@ public class PlanCreateService {
             return replay;
         }
 
-        List<UUID> requestedSuites = PlanEdit.distinct(request.suiteIds());
-        List<UUID> requestedCases = PlanEdit.distinct(request.caseIds());
+        // BOTH levels since B9 — the unsectioned arm and every section's, which is the same union
+        // `PlanUpdateService` has always taken. Resolving the top level alone was correct while
+        // `PlanWriteRequest` could not carry a section and became a refusal the moment it could: a
+        // section's suite id would never be in the live set, so a create naming one answered "that
+        // suite is not in this project any more" about a suite that is.
+        List<UUID> requestedSuites = PlanEdit.distinct(
+                union(sectionIds(request, PlanSectionInput::suiteIds), request.suiteIds()));
+        List<UUID> requestedCases = PlanEdit.distinct(
+                union(sectionIds(request, PlanSectionInput::caseIds), request.caseIds()));
         Set<UUID> liveSuites = cases.liveSuiteIds(project.getId(), requestedSuites);
         Set<UUID> liveCases = cases.liveCaseIds(project.getId(), requestedCases);
 
@@ -163,8 +170,50 @@ public class PlanCreateService {
         }
         PlanEdit edit = ((PlanEdit.Outcome.Valid) validated).edit();
 
-        // Both criteria null: PlanWriteRequest carries none, for the reason its header gives.
-        return write(userId, project, edit, null, null, idempotencyKey);
+        // ~~Both criteria null: PlanWriteRequest carries none.~~ → **B9: it carries both**, so they
+        // are serialized here through the same `PlanCriteria.serialize` the update uses — the
+        // canonicalisation is what `PlanVersions` hashes, and a create that wrote its own spelling
+        // of the same criteria would make the plan's first EDIT look like a change.
+        return write(
+                userId,
+                project,
+                edit,
+                criteria.serialize(edit.entryCriteria()),
+                criteria.serialize(edit.exitCriteria()),
+                idempotencyKey);
+    }
+
+
+    /** The two lists as one, either of which may be null. {@code PlanUpdateService}'s own. */
+    private static List<UUID> union(List<UUID> first, List<UUID> second) {
+        List<UUID> all = new java.util.ArrayList<>(first);
+        if (second != null) {
+            all.addAll(second);
+        }
+        return all;
+    }
+
+    /**
+     * The ids one arm of the submitted sections names, or empty when none were submitted (B9).
+     *
+     * <p>A copy of {@code PlanUpdateService.sectionIds} rather than a shared helper, and the reason
+     * is which class owns what: that one resolves against a STORED scope as well, so its union is
+     * three-way. Sharing would mean a parameter that is always null on one of the two call sites.
+     */
+    private static List<UUID> sectionIds(
+            PlanWriteRequest request,
+            java.util.function.Function<PlanSectionInput, List<UUID>> arm) {
+
+        if (request.sections() == null) {
+            return List.of();
+        }
+        List<UUID> ids = new java.util.ArrayList<>();
+        for (PlanSectionInput section : request.sections()) {
+            if (section != null && arm.apply(section) != null) {
+                arm.apply(section).stream().filter(java.util.Objects::nonNull).forEach(ids::add);
+            }
+        }
+        return ids;
     }
 
     /**

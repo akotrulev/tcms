@@ -48,7 +48,7 @@ import org.junit.jupiter.api.Test;
  * text, exactly as {@link ConfigConventionTest}'s are. A check that is cheap is a check that
  * survives.
  */
-@DisplayName("Idempotency-Key — one cap, eight declarations, no drift")
+@DisplayName("Idempotency-Key — one cap, ten declarations, no drift")
 class IdempotencyKeyCapTest {
 
     /** The cap every declaration must agree on. Changing it means changing all eight. */
@@ -65,8 +65,17 @@ class IdempotencyKeyCapTest {
      * and a stored response goes stale the moment the row it describes is edited ({@code V17}, and
      * {@code V42}'s header restating it at the sixth). What is new at the eighth is the caller —
      * the first of them has no screen at all, so nobody notices the duplicate it prevents.
+     *
+     * <p><strong>Asked again at the ninth and tenth (B4, {@code V59} —
+     * {@code ArtifactWriteService} and {@code SharedStepService}), and answered the same way for
+     * the same reason.</strong> Two of the ten are now a single constant apart from being one
+     * symbol, which is the strongest form the case for extraction has taken; what still decides it
+     * is the paragraph above, and nothing about the alternative's cost changed. What is new at the
+     * tenth is a duplicate that is not merely a row: the artifact upload writes an
+     * {@code attachment} and a <em>blob</em>, so a retry left a second copy of a document on disk
+     * behind a register showing two entries.
      */
-    private static final int EXPECTED_DECLARATIONS = 8;
+    private static final int EXPECTED_DECLARATIONS = 10;
 
     private static final Pattern DECLARATION = Pattern.compile(
             "\\bstatic final int MAX_IDEMPOTENCY_KEY\\s*=\\s*(\\d+)\\s*;");
@@ -86,7 +95,7 @@ class IdempotencyKeyCapTest {
     }
 
     @Test
-    @DisplayName("the declarations are exactly the eight services known to accept the header")
+    @DisplayName("the declarations are exactly the ten services known to accept the header")
     void theCountIsPinned() {
         assertThat(declarations())
                 .as("a create endpoint that accepts Idempotency-Key without capping it indexes "

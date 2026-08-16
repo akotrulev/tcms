@@ -2282,11 +2282,16 @@ export interface paths {
          *     `declinedConditionIds` are left alone when absent and cleared by `[]`. `steps` now follows
          *     the same rule — absent keeps the stored procedure, `[]` asks to delete it.
          *
-         *     `title`, `stepFormat`, `priority` and `automationStatus` **stay required by the schema** and
-         *     are resolved from the stored case when absent, so a body omitting them is accepted and a
-         *     body sending one as `null` is refused by name. `@tcms/client`'s `core/rewrite.ts` still
-         *     composes the whole set — the generated types demand those four — and it is now a
-         *     convenience rather than the thing standing between a delta and data loss.
+         *     `title`, `stepFormat`, `priority` and `automationStatus` **stay required**, exactly as the
+         *     schema says: this is the same arrangement `TestPlanUpdateInput` has, where `name` is
+         *     required and everything else is left alone. So the smallest legal edit is those four plus
+         *     whatever is being changed — `@tcms/client`'s `core/rewrite.ts` still composes the whole set,
+         *     and it is now a convenience rather than the thing standing between a delta and data loss.
+         *
+         *     A fully partial body — the four resolved from the stored case too — needs `TestCaseInput`
+         *     split in two, because one schema serves this operation and `POST /cases`, where all four
+         *     genuinely are required. That split is named as not done rather than approximated by a
+         *     server that quietly stops enforcing what the schema declares.
          *
          *     `ownerId` and `automationTags` are on `TestCaseInput` and neither has a write path. They are
          *     **refused with a 400 when they would change something** and accepted when they echo what the
@@ -4011,14 +4016,38 @@ export interface paths {
          *     Shared steps are **project-scoped** (roles spec: two client products legitimately have
          *     different login flows), so an entry is reachable only from the project it was created in.
          *
-         *     No `Idempotency-Key`. A duplicate library entry is visible in the picker next to its twin
+         *     ~~No `Idempotency-Key`. A duplicate library entry is visible in the picker next to its twin
          *     the moment the create returns — the same reasoning that keeps the header off `POST` suites
-         *     and on `POST` cases.
+         *     and on `POST` cases.~~ → **superseded by B4 (`V59`), and note that the sentence it cites was
+         *     itself superseded by `V42`**: suites take the header now, for the reason that applies here
+         *     too. The argument reasons entirely from a person looking at a picker, and the caller it has
+         *     to defend — `tcms_write_shared_step` — has none, so a timeout followed by a retry has no
+         *     correction loop at all. A library entry is also a reference target
+         *     (`test_step.sharedStepId`), so two copies of one entry split which cases point at which.
+         *
+         *     A retry answers `200` with the entry the first request created, re-rendered from the live
+         *     row — including its **current** `usageCount`, which is not the zero the original `201`
+         *     carried.
          */
         post: {
             parameters: {
                 query?: never;
-                header?: never;
+                header?: {
+                    /**
+                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                     *     already succeeded answers **200** with the resource that intent created, instead of creating
+                     *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *
+                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                     *     it across retries. A key generated per attempt is the mistake that makes the header look
+                     *     right and do nothing.
+                     *
+                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                     */
+                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                };
                 path: {
                     projectId: components["parameters"]["ProjectId"];
                 };
@@ -4030,6 +4059,18 @@ export interface paths {
                 };
             };
             responses: {
+                /**
+                 * @description Already created — the entry a previous request carrying this `Idempotency-Key` made.
+                 *     **No `Location`**: nothing was created by this request.
+                 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SharedStep"];
+                    };
+                };
                 /** @description Created */
                 201: {
                     headers: {
@@ -6426,11 +6467,30 @@ export interface paths {
          *     have left that window open and would have needed its own permission check — where this
          *     needs none beyond the create's, because the replacement must sit at the same scope and in
          *     the same plan as the row it replaces.
+         *
+         *     **`Idempotency-Key` since B4** (`V59`), like every other create in this API: a retry answers
+         *     `200` with the artifact the first request registered, and no second row. Without it a
+         *     timeout on a register was a twin nobody could tell from a deliberate second entry.
          */
         post: {
             parameters: {
                 query?: never;
-                header?: never;
+                header?: {
+                    /**
+                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                     *     already succeeded answers **200** with the resource that intent created, instead of creating
+                     *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                     *     §136; the parameter has been shared by six other creates since `V14`.)
+                     *
+                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                     *     it across retries. A key generated per attempt is the mistake that makes the header look
+                     *     right and do nothing.
+                     *
+                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                     */
+                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                };
                 path: {
                     projectId: components["parameters"]["ProjectId"];
                 };
@@ -6442,6 +6502,19 @@ export interface paths {
                 };
             };
             responses: {
+                /**
+                 * @description Already registered — the artifact a previous request carrying this `Idempotency-Key`
+                 *     created, re-rendered from the live row. **No `Location`**: nothing was created by this
+                 *     request.
+                 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Artifact"];
+                    };
+                };
                 /** @description Registered */
                 201: {
                     headers: {
@@ -6513,6 +6586,15 @@ export interface paths {
          *     **The upload proxies through the API**, so the instance's
          *     `spring.servlet.multipart.max-file-size` is a real limit and a file over it is a `413`,
          *     refused before the handler runs.
+         *
+         *     **`Idempotency-Key` since B4** (`V59`), and this is the operation it matters most on. A
+         *     retried upload used to duplicate three things — the register row, the `attachment` row and
+         *     **the blob** — and the blob is the copy nobody sees: the register shows two entries and the
+         *     disk holds two copies of the same signed PDF. It is also the request most likely to be
+         *     retried, being the longest in the product and therefore the one that meets a proxy timeout
+         *     while the server is still writing. A replay answers `200` with the artifact the first
+         *     request registered; the bytes are re-uploaded (a stateless retry cannot avoid that) and
+         *     simply not stored a second time.
          */
         post: operations["registerArtifactFile"];
         delete?: never;
@@ -10637,6 +10719,12 @@ export interface components {
             milestoneDate?: string | null;
             suiteIds?: string[];
             caseIds?: string[];
+            tags?: string[];
+            sections?: components["schemas"]["PlanSectionInput"][];
+            scopeText?: string | null;
+            outOfScopeText?: string | null;
+            entryCriteria?: components["schemas"]["CriterionInput"][];
+            exitCriteria?: components["schemas"]["CriterionInput"][];
         };
         TestPlanUpdateInput: {
             name: string;
@@ -14427,7 +14515,22 @@ export interface operations {
     registerArtifactFile: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                 *     already succeeded answers **200** with the resource that intent created, instead of creating
+                 *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                 *     §136; the parameter has been shared by six other creates since `V14`.)
+                 *
+                 *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                 *     it across retries. A key generated per attempt is the mistake that makes the header look
+                 *     right and do nothing.
+                 *
+                 *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                 *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 projectId: components["parameters"]["ProjectId"];
             };
@@ -14448,6 +14551,18 @@ export interface operations {
             };
         };
         responses: {
+            /**
+             * @description Already registered — the artifact a previous request carrying this `Idempotency-Key`
+             *     created. **No second blob was written.**
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Artifact"];
+                };
+            };
             /** @description Registered */
             201: {
                 headers: {

@@ -2838,15 +2838,32 @@ paths:
         Shared steps are **project-scoped** (roles spec: two client products legitimately have
         different login flows), so an entry is reachable only from the project it was created in.
 
-        No `Idempotency-Key`. A duplicate library entry is visible in the picker next to its twin
+        ~~No `Idempotency-Key`. A duplicate library entry is visible in the picker next to its twin
         the moment the create returns — the same reasoning that keeps the header off `POST` suites
-        and on `POST` cases.
+        and on `POST` cases.~~ → **superseded by B4 (`V59`), and note that the sentence it cites was
+        itself superseded by `V42`**: suites take the header now, for the reason that applies here
+        too. The argument reasons entirely from a person looking at a picker, and the caller it has
+        to defend — `tcms_write_shared_step` — has none, so a timeout followed by a retry has no
+        correction loop at all. A library entry is also a reference target
+        (`test_step.sharedStepId`), so two copies of one entry split which cases point at which.
+
+        A retry answers `200` with the entry the first request created, re-rendered from the live
+        row — including its **current** `usageCount`, which is not the zero the original `201`
+        carried.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/SharedStepInput' }
       responses:
+        '200':
+          description: |
+            Already created — the entry a previous request carrying this `Idempotency-Key` made.
+            **No `Location`**: nothing was created by this request.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SharedStep' }
         '201':
           description: Created
           content:
@@ -4582,12 +4599,25 @@ paths:
         have left that window open and would have needed its own permission check — where this
         needs none beyond the create's, because the replacement must sit at the same scope and in
         the same plan as the row it replaces.
+
+        **`Idempotency-Key` since B4** (`V59`), like every other create in this API: a retry answers
+        `200` with the artifact the first request registered, and no second row. Without it a
+        timeout on a register was a twin nobody could tell from a deliberate second entry.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/ArtifactInput' }
       responses:
+        '200':
+          description: |
+            Already registered — the artifact a previous request carrying this `Idempotency-Key`
+            created, re-rendered from the live row. **No `Location`**: nothing was created by this
+            request.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Artifact' }
         '201':
           description: Registered
           content:
@@ -4643,6 +4673,16 @@ paths:
         **The upload proxies through the API**, so the instance's
         `spring.servlet.multipart.max-file-size` is a real limit and a file over it is a `413`,
         refused before the handler runs.
+
+        **`Idempotency-Key` since B4** (`V59`), and this is the operation it matters most on. A
+        retried upload used to duplicate three things — the register row, the `attachment` row and
+        **the blob** — and the blob is the copy nobody sees: the register shows two entries and the
+        disk holds two copies of the same signed PDF. It is also the request most likely to be
+        retried, being the longest in the product and therefore the one that meets a proxy timeout
+        while the server is still writing. A replay answers `200` with the artifact the first
+        request registered; the bytes are re-uploaded (a stateless retry cannot avoid that) and
+        simply not stored a second time.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         required: true
         content:
@@ -4660,6 +4700,13 @@ paths:
                     filename is stored in a column — it never becomes part of a storage key, which
                     is built from server-generated UUIDs.
       responses:
+        '200':
+          description: |
+            Already registered — the artifact a previous request carrying this `Idempotency-Key`
+            created. **No second blob was written.**
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Artifact' }
         '201':
           description: Registered
           content:
@@ -9517,6 +9564,13 @@ components:
 
     TestPlanInput:
       type: object
+      # ~~Six properties: a plan is named before anybody knows what would make it releasable, so
+      # criteria, prose and sections belong to the edit.~~ → **B9: twelve.** The flow that sentence
+      # describes is still the usual one and is still what the SPA does — nothing here became
+      # required — but it was being enforced by a schema rather than by a form, and the cost was
+      # that `POST /plans/{id}/clone` could express a complete plan and `POST /plans` could not.
+      # A caller holding `plan:create` holds `plan:edit` in every seeded role, so the narrowness
+      # bought a second request rather than a boundary.
       required: [name]
       properties:
         name: { type: string }
@@ -9529,6 +9583,24 @@ components:
         caseIds:
           type: array
           items: { type: string, format: uuid }
+        # The six B9 added. Every one of them means exactly what it means on
+        # `TestPlanUpdateInput` — the same validators run over both — with one difference that is
+        # not a policy: an absent list there means "leave what is stored alone", and on a create
+        # there is nothing stored, so absent and `[]` are the same request.
+        tags:
+          type: array
+          items: { type: string }
+        sections:
+          type: array
+          items: { $ref: '#/components/schemas/PlanSectionInput' }
+        scopeText: { type: string, nullable: true }
+        outOfScopeText: { type: string, nullable: true }
+        entryCriteria:
+          type: array
+          items: { $ref: '#/components/schemas/CriterionInput' }
+        exitCriteria:
+          type: array
+          items: { $ref: '#/components/schemas/CriterionInput' }
 
     TestPlanUpdateInput:
       type: object
@@ -9560,10 +9632,12 @@ components:
         # `null` clears the text; absent leaves it alone.
         scopeText: { type: string, nullable: true }
         outOfScopeText: { type: string, nullable: true }
-        # The two fields TestPlanInput deliberately does not have. A plan is named before
+        # ~~The two fields TestPlanInput deliberately does not have. A plan is named before
         # anybody knows what would make it releasable, so criteria arrive on the edit and
-        # nowhere else. The scope prose above joins them for the same reason: a plan is named
-        # before anybody can say what is out of scope for it.
+        # nowhere else.~~ → superseded by B9: `TestPlanInput` takes both, and the prose above too.
+        # The sentence was right about the usual flow and wrong about where to enforce it — a form
+        # asks for exit criteria at the moment somebody has them, and a schema that refuses them
+        # makes a complete plan two requests for every caller that is not a form.
         entryCriteria:
           type: array
           items: { $ref: '#/components/schemas/CriterionInput' }

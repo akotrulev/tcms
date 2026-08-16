@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -74,10 +75,20 @@ public class ArtifactFileController {
      * <em>before</em> anything touches the disk — the ordering {@link ArtifactWriteService} depends
      * on.
      */
+    /** A header that is present and blank is a header that was not sent — see the sibling. */
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     @PostMapping(path = "/files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Object> register(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID projectId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestPart("artifact") ArtifactFileInput input,
             @RequestPart("file") MultipartFile file) throws IOException {
 
@@ -97,13 +108,25 @@ public class ArtifactFileController {
                 file.getSize(),
                 file.getBytes());
 
-        ArtifactWriteService.Outcome outcome =
-                writes.createFile(UUID.fromString(jwt.getSubject()), projectId, input, upload);
+        ArtifactWriteService.Outcome outcome = writes.createFile(
+                UUID.fromString(jwt.getSubject()), projectId, input, upload,
+                trimToNull(idempotencyKey));
 
         return switch (outcome) {
             case ArtifactWriteService.Outcome.Created created -> ResponseEntity
                     .created(location(projectId, created.view().id()))
                     .body(created.view());
+            /*
+              200, no Location, and NO SECOND BLOB — the reason this path carries a key at all.
+
+              The bytes are read from the request before the replay is known (the container has
+              already streamed them into memory by the time this method runs), and they are then
+              simply not written: `ArtifactWriteService.createFile` answers from the stored row
+              before it reaches the store. So a retried upload costs the upload again and leaves
+              one copy on disk, which is the honest best a stateless retry can do.
+            */
+            case ArtifactWriteService.Outcome.Replayed replayed ->
+                    ResponseEntity.ok(replayed.view());
             case ArtifactWriteService.Outcome.Invalid invalid ->
                     ResponseEntity.badRequest().body(problem(invalid.errors()));
             case ArtifactWriteService.Outcome.Forbidden ignored ->

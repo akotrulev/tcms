@@ -153,6 +153,10 @@ class ArtifactCirculationTest {
                     "https://docs.example.test/strategy",
                     null,
                     ACTOR,
+                    // No key: this fixture is a row, not a request. `V59`'s column is null for
+                    // every artifact registered by a caller that sent no header, which is what a
+                    // hand-built row is.
+                    null,
                     NOW);
         }
     }

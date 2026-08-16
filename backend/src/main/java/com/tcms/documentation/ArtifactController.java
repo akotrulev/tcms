@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -85,20 +86,44 @@ public class ArtifactController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    /** Registers a reference. 201 with the created row, and {@code Location}. */
+    /**
+     * A header that is present and blank is a header that was not sent (B4).
+     *
+     * <p>{@code DocPageController}'s own {@code trimToNull(String header)}, one class over and
+     * private there — the local copy is this codebase's convention for a three-line normaliser
+     * (ten of them in {@code src/main}), and the reason it matters here is specific: an empty
+     * {@code Idempotency-Key} rendered by a client template must not reserve the empty string as a
+     * key that every later unkeyed request then replays.
+     */
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
+     * Registers a reference. 201 with the created row and a {@code Location}, or <strong>200 with
+     * the row a previous request with the same {@code Idempotency-Key} registered</strong> (B4).
+     */
     @PostMapping
     public ResponseEntity<Object> create(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID projectId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestBody ArtifactInput input) {
 
-        ArtifactWriteService.Outcome outcome =
-                writes.create(UUID.fromString(jwt.getSubject()), projectId, input);
+        ArtifactWriteService.Outcome outcome = writes.create(
+                UUID.fromString(jwt.getSubject()), projectId, input, trimToNull(idempotencyKey));
 
         return switch (outcome) {
             case ArtifactWriteService.Outcome.Created created -> ResponseEntity
                     .created(location(projectId, created.view().id()))
                     .body(created.view());
+            // 200 and no Location: nothing was created by THIS request.
+            case ArtifactWriteService.Outcome.Replayed replayed ->
+                    ResponseEntity.ok(replayed.view());
             case ArtifactWriteService.Outcome.Invalid invalid ->
                     ResponseEntity.badRequest().body(problem(invalid.errors()));
             case ArtifactWriteService.Outcome.Forbidden ignored ->
@@ -164,6 +189,8 @@ public class ArtifactController {
             // the arms stay written rather than collapsed into a default.
             case ArtifactWriteService.Outcome.Created ignored ->
                     ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.Replayed ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             case ArtifactWriteService.Outcome.Deleted ignored ->
                     ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             case ArtifactWriteService.Outcome.Undeletable ignored ->
@@ -210,6 +237,8 @@ public class ArtifactController {
             // The create's and the delete's. Unreachable here — see the delete's switch.
             case ArtifactWriteService.Outcome.Created ignored ->
                     ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.Replayed ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             case ArtifactWriteService.Outcome.Deleted ignored ->
                     ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             case ArtifactWriteService.Outcome.Undeletable ignored ->
@@ -246,6 +275,8 @@ public class ArtifactController {
             // than collapsed into a default, because a sealed interface's whole value is that
             // adding a fourth outcome fails to compile here instead of falling into one.
             case ArtifactWriteService.Outcome.Created ignored ->
+                    ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case ArtifactWriteService.Outcome.Replayed ignored ->
                     ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             case ArtifactWriteService.Outcome.Invalid ignored ->
                     ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();

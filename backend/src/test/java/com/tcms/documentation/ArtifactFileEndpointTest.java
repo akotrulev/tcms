@@ -218,6 +218,55 @@ class ArtifactFileEndpointTest extends IntegrationTestBase {
 
     // =====================================================================
 
+    /**
+     * B4 — a retried upload must not write a second blob ({@code V59}).
+     *
+     * <p>The reason the register's key matters most here. Three things used to be duplicated by a
+     * retry — the artifact, the {@code attachment} row and the <strong>bytes</strong> — and only
+     * two of them are visible: the register shows two entries and the store holds two copies. This
+     * is also the request most likely to be retried, being the longest in the product.
+     */
+    @Nested
+    @DisplayName("Idempotency — a retried upload writes one blob (B4)")
+    class Idempotency {
+
+        @Test
+        @DisplayName("a repeated key answers 200 with the same artifact, and stores one attachment")
+        void aRetryStoresNothingNew() throws Exception {
+            String key = "intent-" + UUID.randomUUID();
+            String payload = "{\"scope\":\"PROJECT\",\"category\":\"Environment\","
+                    + "\"title\":\"Environment guide\"}";
+
+            MvcResult first = upload(LEAD, ACME, ACME_BANKING, payload,
+                    "guide.pdf", "application/pdf", "one".getBytes(UTF_8), key);
+            MvcResult retry = upload(LEAD, ACME, ACME_BANKING, payload,
+                    "guide.pdf", "application/pdf", "one".getBytes(UTF_8), key);
+
+            assertThat(first.getResponse().getStatus()).isEqualTo(201);
+            assertThat(retry.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(retry).get("id").asText())
+                    .isEqualTo(body(first).get("id").asText());
+            // The half the artifact count alone would not catch: `attachment` is written first and
+            // flushed, so a replay that skipped only the artifact would still leave an orphan row
+            // pointing at a second blob.
+            assertThat(attachmentRows(ACME)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a different key uploads again — two documents, two blobs")
+        void aDifferentKeyIsASecondUpload() throws Exception {
+            String payload = "{\"scope\":\"PROJECT\",\"category\":\"Environment\","
+                    + "\"title\":\"Environment guide\"}";
+
+            upload(LEAD, ACME, ACME_BANKING, payload, "guide.pdf", "application/pdf",
+                    "one".getBytes(UTF_8), "intent-" + UUID.randomUUID());
+            upload(LEAD, ACME, ACME_BANKING, payload, "guide.pdf", "application/pdf",
+                    "two".getBytes(UTF_8), "intent-" + UUID.randomUUID());
+
+            assertThat(attachmentRows(ACME)).isEqualTo(2);
+        }
+    }
+
     @Nested
     @DisplayName("The gates — artifact:edit, scope-qualified, exactly as the reference create is")
     class Gates {
@@ -560,13 +609,27 @@ class ArtifactFileEndpointTest extends IntegrationTestBase {
             UUID userId, UUID companyId, UUID projectId, String artifactJson,
             String filename, String contentType, byte[] bytes) throws Exception {
 
-        return mvc.perform(MockMvcRequestBuilders
-                        .multipart("/api/v1/projects/" + projectId + "/artifacts/files")
-                        .file(new MockMultipartFile("artifact", "", MediaType.APPLICATION_JSON_VALUE,
-                                artifactJson.getBytes(UTF_8)))
-                        .file(new MockMultipartFile("file", filename, contentType, bytes))
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId)))
-                .andReturn();
+        return upload(userId, companyId, projectId, artifactJson, filename, contentType, bytes,
+                null);
+    }
+
+    /** @param idempotencyKey the header, or null to send none (B4). */
+    @SuppressWarnings("checkstyle:ParameterNumber")
+    private MvcResult upload(
+            UUID userId, UUID companyId, UUID projectId, String artifactJson,
+            String filename, String contentType, byte[] bytes, String idempotencyKey)
+            throws Exception {
+
+        var request = MockMvcRequestBuilders
+                .multipart("/api/v1/projects/" + projectId + "/artifacts/files")
+                .file(new MockMultipartFile("artifact", "", MediaType.APPLICATION_JSON_VALUE,
+                        artifactJson.getBytes(UTF_8)))
+                .file(new MockMultipartFile("file", filename, contentType, bytes))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId));
+        if (idempotencyKey != null) {
+            request = request.header("Idempotency-Key", idempotencyKey);
+        }
+        return mvc.perform(request).andReturn();
     }
 
     /** Registers a file and returns the artifact's id — the setup half of most tests here. */

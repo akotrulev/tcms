@@ -1,6 +1,7 @@
 /** The documentation space and the artifact register. */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
-import { ApiError, api, fetchArtifact, qs } from '../client';
+import { useRef } from 'react';
+import { ApiError, api, fetchArtifact, newIntentKey, qs } from '../client';
 import type {
   Artifact,
   ArtifactCirculation,
@@ -239,9 +240,18 @@ export function useArtifacts(
  */
 export function useCreateArtifact(projectId: string) {
   const client = useQueryClient();
+  /*
+    One key per mounted dialog — `useCreateCase`'s rule and its reason (B4, `V59`): it survives
+    re-renders and failed attempts, so pressing Register again after a timeout sends the SAME key
+    and the server answers with the artifact the first attempt made. A key generated inside
+    `mutationFn` would be a fresh one per attempt, which looks right and does nothing.
+  */
+  const intentKey = useRef(newIntentKey());
   return useMutation({
     mutationFn: (input: ArtifactInput) =>
-      api.post<Artifact>(`${base(projectId)}/artifacts`, input),
+      api.post<Artifact>(`${base(projectId)}/artifacts`, input, {
+        idempotencyKey: intentKey.current,
+      }),
     // The dialog renders field errors on its own inputs — including the scope-qualified 403, which
     // the server words as advice about the scope selector — so the global notification would be a
     // second, vaguer copy of a message already on screen.
@@ -283,6 +293,7 @@ export function useCreateArtifact(projectId: string) {
  */
 export function useRegisterArtifactFile(projectId: string) {
   const client = useQueryClient();
+  const intentKey = useRef(newIntentKey());
   return useMutation({
     mutationFn: ({ artifact, file }: { artifact: ArtifactFileInput; file: File }) => {
       const form = new FormData();
@@ -291,7 +302,15 @@ export function useRegisterArtifactFile(projectId: string) {
         new Blob([JSON.stringify(artifact)], { type: 'application/json' }),
       );
       form.append('file', file);
-      return api.upload<Artifact>(`${base(projectId)}/artifacts/files`, form);
+      /*
+        The key matters more here than anywhere else in this file (B4): this is the longest request
+        the product makes, so it is the one that meets a proxy timeout while the server is still
+        writing — and a retry used to leave a second register row, a second `attachment` row and a
+        second copy of the bytes on disk, of which only the first is visible.
+      */
+      return api.upload<Artifact>(`${base(projectId)}/artifacts/files`, form, {
+        idempotencyKey: intentKey.current,
+      });
     },
     meta: { handled: true },
     onSuccess: () =>

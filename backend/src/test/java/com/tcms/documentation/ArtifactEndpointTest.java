@@ -398,6 +398,120 @@ class ArtifactEndpointTest extends IntegrationTestBase {
     // Inheritance — plan §6n
     // =====================================================================
 
+    /**
+     * B4 — a retried registration must not make a twin ({@code V59}).
+     *
+     * <h2>Why the register was the worst of the eight tables to be missing it</h2>
+     *
+     * <p>Not because a duplicate row is expensive — it is a register entry, and {@code DELETE} has
+     * shipped since §126. It is that the sibling operation writes <strong>bytes</strong>: a retried
+     * upload duplicated the {@code attachment} row and the blob as well as the artifact, and the
+     * blob is the copy nobody sees. {@code ArtifactFileEndpointTest} drives that half; this one
+     * drives the reference create, where the assertion that matters is the row count.
+     */
+    @Nested
+    @DisplayName("Idempotency — a retry must not register a second artifact")
+    class Idempotency {
+
+        @Test
+        @DisplayName("a repeated key answers 200 with the SAME artifact, and registers nothing")
+        void aRetryReplaysTheOriginal() throws Exception {
+            String key = "intent-" + UUID.randomUUID();
+
+            MvcResult first = create(LEAD, ACME_BANKING, urlBody("Test strategy"), key);
+            MvcResult retry = create(LEAD, ACME_BANKING, urlBody("Test strategy"), key);
+
+            assertThat(first.getResponse().getStatus()).isEqualTo(201);
+            assertThat(retry.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(retry).get("id").asText())
+                    .isEqualTo(body(first).get("id").asText());
+            assertThat(countArtifacts(ACME)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a replay answers the row as it stands, not the body that created it")
+        void aReplayRendersTheLiveRow() throws Exception {
+            // The whole reason this family stores a KEY and not a stored response (V17, V42): the
+            // artifact may have been amended since, and a replay that served the original response
+            // would hand back a title the register no longer shows.
+            String key = "intent-" + UUID.randomUUID();
+            MvcResult first = create(LEAD, ACME_BANKING, urlBody("Test strategy"), key);
+            UUID artifactId = UUID.fromString(body(first).get("id").asText());
+
+            MvcResult amended = edit(LEAD, ACME_BANKING, artifactId,
+                    "Test strategy (v2)", "Compliance", null);
+            assertThat(amended.getResponse().getStatus()).isEqualTo(200);
+
+            MvcResult retry = create(LEAD, ACME_BANKING, urlBody("Test strategy"), key);
+
+            assertThat(retry.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(retry).get("title").asText()).isEqualTo("Test strategy (v2)");
+        }
+
+        @Test
+        @DisplayName("a different key is a different artifact — the header is not a dedupe on content")
+        void adifferentKeyRegistersAgain() throws Exception {
+            // The guard. Without it, an implementation that deduplicated on the payload would pass
+            // the test above and refuse a genuine second registration of the same document.
+            create(LEAD, ACME_BANKING, urlBody("Test strategy"), "intent-" + UUID.randomUUID());
+            create(LEAD, ACME_BANKING, urlBody("Test strategy"), "intent-" + UUID.randomUUID());
+
+            assertThat(countArtifacts(ACME)).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("no key at all still registers — the header is optional, as it is everywhere")
+        void noKeyIsNotADedupe() throws Exception {
+            create(LEAD, ACME_BANKING, urlBody("Test strategy"), null);
+            create(LEAD, ACME_BANKING, urlBody("Test strategy"), null);
+
+            // NULLs are not comparable, which is what makes the partial unique index permit these
+            // two — and is why the index is partial rather than plain.
+            assertThat(countArtifacts(ACME)).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("a used key in a project the caller cannot see is a 404, never a replay")
+        void theReplayIsInsideTheGate() throws Exception {
+            // The lookup runs INSIDE the project gate, which is what keeps it from being an oracle:
+            // a company-wide lookup placed before the gate would answer a caller with a row from a
+            // project they hold no grant on, and the header is a value they choose.
+            //
+            // What this does NOT prove is the other half — that the same key is usable again in a
+            // second project — because this fixture has no second project LEAD is granted on. The
+            // index is (company_id, project_id, key) and `findByIdempotencyKey` names exactly those
+            // columns; that pairing is asserted by SchemaConventionTest and by reading, not here.
+            String key = "intent-" + UUID.randomUUID();
+
+            assertThat(create(LEAD, ACME_BANKING, urlBody("Shared name"), key)
+                    .getResponse().getStatus()).isEqualTo(201);
+            assertThat(create(LEAD, ACME_LOCKED, urlBody("Shared name"), key)
+                    .getResponse().getStatus()).isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("an absurd key is a field error, not an indexed 10 MB header")
+        void anOversizedKeyIsRefused() throws Exception {
+            MvcResult result = create(LEAD, ACME_BANKING, urlBody("Test strategy"),
+                    "k".repeat(201));
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(result).get("errors").has("Idempotency-Key")).isTrue();
+            assertThat(countArtifacts(ACME)).isZero();
+        }
+
+        @Test
+        @DisplayName("a blank key is no key — it must not reserve the empty string")
+        void aBlankKeyIsNotAKey() throws Exception {
+            // A client template rendering an empty header would otherwise register the first
+            // artifact under "" and replay it for every unkeyed request afterwards.
+            create(LEAD, ACME_BANKING, urlBody("First"), "   ");
+            create(LEAD, ACME_BANKING, urlBody("Second"), "");
+
+            assertThat(countArtifacts(ACME)).isEqualTo(2);
+        }
+    }
+
     @Nested
     @DisplayName("Inheritance — a plan shows the project's documents, marked")
     class Inheritance {
@@ -1501,12 +1615,22 @@ class ArtifactEndpointTest extends IntegrationTestBase {
     }
 
     private MvcResult create(UUID userId, UUID projectId, String body) throws Exception {
-        return mvc.perform(MockMvcRequestBuilders
-                        .post("/api/v1/projects/" + projectId + "/artifacts")
-                        .header(HttpHeaders.AUTHORIZATION, bearer(userId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
-                .andReturn();
+        return create(userId, projectId, body, null);
+    }
+
+    /** @param idempotencyKey the header, or null to send none (B4). */
+    private MvcResult create(UUID userId, UUID projectId, String body, String idempotencyKey)
+            throws Exception {
+
+        var request = MockMvcRequestBuilders
+                .post("/api/v1/projects/" + projectId + "/artifacts")
+                .header(HttpHeaders.AUTHORIZATION, bearer(userId))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body);
+        if (idempotencyKey != null) {
+            request = request.header("Idempotency-Key", idempotencyKey);
+        }
+        return mvc.perform(request).andReturn();
     }
 
     /**

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -85,19 +86,33 @@ public class SharedStepController {
      *
      * <p>No {@code Idempotency-Key} — see {@link SharedStepService#create}.
      */
+    /** A header that is present and blank is a header that was not sent (B4). */
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     @PostMapping
     public ResponseEntity<Object> create(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID projectId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestBody SharedStepWriteRequest request) {
 
-        SharedStepService.Outcome outcome =
-                sharedSteps.create(UUID.fromString(jwt.getSubject()), projectId, request);
+        SharedStepService.Outcome outcome = sharedSteps.create(
+                UUID.fromString(jwt.getSubject()), projectId, request,
+                trimToNull(idempotencyKey));
 
         return switch (outcome) {
             case SharedStepService.Outcome.Created created -> ResponseEntity
                     .created(location(projectId, created.view().id()))
                     .body(created.view());
+            // 200 and no Location: nothing was created by THIS request.
+            case SharedStepService.Outcome.Replayed replayed ->
+                    ResponseEntity.ok(replayed.view());
             case SharedStepService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
             case SharedStepService.Outcome.Forbidden ignored ->
                     ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(

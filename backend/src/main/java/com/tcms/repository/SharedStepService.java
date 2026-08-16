@@ -51,6 +51,9 @@ public class SharedStepService {
     /** Roles spec, Repository table. Test Engineer and above; not Viewer, not Automation Service. */
     private static final String MANAGE_LIBRARY = "library:manage";
 
+    /** {@code SuiteWriteService}'s cap, for its reason: an unbounded header is a hostile value. */
+    private static final int MAX_IDEMPOTENCY_KEY = 200;
+
     private static final String AUDIT_TARGET = "shared_step";
 
     private final ProjectService projects;
@@ -87,6 +90,15 @@ public class SharedStepService {
 
         /** A new library entry. 201. */
         record Created(SharedStepView view) implements Outcome {
+        }
+
+        /**
+         * The entry a previous request with this {@code Idempotency-Key} created (B4).
+         *
+         * <p>200 and no {@code Location}, like every other keyed create in this API: nothing was
+         * created by <em>this</em> request.
+         */
+        record Replayed(SharedStepView view) implements Outcome {
         }
     }
 
@@ -152,10 +164,14 @@ public class SharedStepService {
     /**
      * Creates a library entry.
      *
-     * <p>No {@code Idempotency-Key}, on {@link SuiteWriteService#create}'s terms: a duplicate entry
+     * <p>~~No {@code Idempotency-Key}, on {@link SuiteWriteService#create}'s terms: a duplicate entry
      * is visible in the picker next to its twin the moment the create returns. The header earns its
      * column on {@code test_case}, where a duplicate is two rows with different keys and identical
-     * titles among hundreds.
+     * titles among hundreds.~~ → <strong>superseded by B4 ({@code V59}), on the grounds {@code V42}
+     * used to supersede the identical argument for a suite</strong>: it reasons entirely from a
+     * person looking at a picker, and {@code tcms_write_shared_step} has no picker — a timeout
+     * followed by a retry has no correction loop at all on that path. A library entry is also a
+     * reference target, so two copies split which cases point at which.
      *
      * <p>No uniqueness check on the title either, and that is a decision rather than an omission.
      * Two entries may legitimately be called "Sign in" and differ in their actions — one for the
@@ -164,11 +180,38 @@ public class SharedStepService {
      * author has to work around.
      */
     @Transactional
-    public Outcome create(UUID userId, UUID projectId, SharedStepWriteRequest request) {
+    public Outcome create(
+            UUID userId, UUID projectId, SharedStepWriteRequest request, String idempotencyKey) {
+
         UUID companyId = CompanyContext.require();
 
         GateResult<Outcome> result =
                 projects.writeGranted(userId, projectId, MANAGE_LIBRARY, project -> {
+                    // FIRST, before validating — a retry of a create that succeeded must answer
+                    // with the entry it made even if the payload has since drifted, because the
+                    // client is asking "did my intent land". `CaseCreateService`'s ordering.
+                    if (idempotencyKey != null) {
+                        if (idempotencyKey.length() > MAX_IDEMPOTENCY_KEY) {
+                            return new Outcome.Invalid(Map.of("Idempotency-Key", List.of(
+                                    "Send a key of at most " + MAX_IDEMPOTENCY_KEY
+                                            + " characters.")));
+                        }
+                        Optional<SharedStep> already =
+                                sharedSteps.findByIdempotencyKey(project.getId(), idempotencyKey);
+                        if (already.isPresent()) {
+                            SharedStep entry = already.get();
+                            // The live usage count, not zero: the entry has existed since the
+                            // original request, so cases may reference it by now. A replay answers
+                            // what the row IS, re-rendered — `V42`'s argument for why this family
+                            // stores a key rather than a stored response. `countUsage` answers
+                            // nothing for an unreferenced id, which is what the default is for.
+                            long usage = sharedSteps.countUsage(List.of(entry.getId())).stream()
+                                    .findFirst()
+                                    .map(SharedStepUsage::cases)
+                                    .orElse(0L);
+                            return new Outcome.Replayed(SharedStepView.of(entry, usage));
+                        }
+                    }
                     SharedStepEdit.Outcome validated = SharedStepEdit.validateCreate(request);
                     if (validated instanceof SharedStepEdit.Outcome.Invalid invalid) {
                         return new Outcome.Invalid(invalid.errors());
@@ -176,8 +219,8 @@ public class SharedStepService {
                     SharedStepEdit edit = ((SharedStepEdit.Outcome.Valid) validated).edit();
 
                     Instant now = clock.instant();
-                    SharedStep created =
-                            SharedStep.create(companyId, project.getId(), edit, userId, now);
+                    SharedStep created = SharedStep.create(
+                            companyId, project.getId(), edit, userId, idempotencyKey, now);
                     sharedSteps.saveAndFlush(created);
 
                     audit(project.getId(), userId, created, now);

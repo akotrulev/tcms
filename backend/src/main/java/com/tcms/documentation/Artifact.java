@@ -181,6 +181,17 @@ public class Artifact {
     @Column(name = "created_by", updatable = false)
     private UUID createdBy;
 
+    /**
+     * The {@code Idempotency-Key} the registration carried, or null (B4, {@code V59}).
+     *
+     * <p>{@code updatable = false} like every other column of this family: it records what created
+     * the row, so a later edit has nothing to say about it. Never read as data — the only question
+     * asked of it is whether this key has been used in this project, and
+     * {@code ArtifactRepository.findByIdempotencyKey} is the one place that asks.
+     */
+    @Column(name = "created_idempotency_key", updatable = false)
+    private String createdIdempotencyKey;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -229,6 +240,7 @@ public class Artifact {
             String externalUrl,
             UUID attachmentId,
             UUID authorId,
+            String idempotencyKey,
             Instant now) {
 
         Artifact artifact = new Artifact();
@@ -244,6 +256,7 @@ public class Artifact {
         artifact.docPageId = docPageId;
         artifact.externalUrl = externalUrl;
         artifact.attachmentId = attachmentId;
+        artifact.createdIdempotencyKey = idempotencyKey;
         // Never from the input — plan §6g. A create that could choose its own status is an author
         // approving their own sign-off, which is the one thing the register exists to make auditable.
         artifact.status = ArtifactStatus.ACTIVE;

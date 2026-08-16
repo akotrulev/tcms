@@ -2,6 +2,7 @@ package com.tcms.repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -42,6 +43,24 @@ public interface SharedStepRepository extends JpaRepository<SharedStep, UUID> {
      *               matches every row since {@code title} is {@code NOT NULL}. Resolved once by
      *               {@link SharedStepQuery} rather than re-decided at each call site.
      */
+    /**
+     * The entry a previous request with this key created, if any (B4, {@code V59}).
+     *
+     * <p>Project-scoped, naming exactly the columns the partial unique index covers — a narrower
+     * lookup lets a key reused across two projects pass here and violate the index one statement
+     * later. {@code SuiteRepository.findByIdempotencyKey} is the same method for the same reason,
+     * including the absence of a liveness filter: a retry whose entry has since been retired is
+     * still a retry.
+     */
+    @Query("""
+            SELECT s FROM SharedStep s
+             WHERE s.projectId = :projectId
+               AND s.createdIdempotencyKey = :idempotencyKey
+            """)
+    Optional<SharedStep> findByIdempotencyKey(
+            @Param("projectId") UUID projectId,
+            @Param("idempotencyKey") String idempotencyKey);
+
     @Query("""
             SELECT s FROM SharedStep s
              WHERE s.projectId = :projectId

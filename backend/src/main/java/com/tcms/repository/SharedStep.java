@@ -71,6 +71,17 @@ public class SharedStep {
     @Column(name = "created_by")
     private UUID createdBy;
 
+    /**
+     * The {@code Idempotency-Key} the create carried, or null (B4, {@code V59}).
+     *
+     * <p>A library entry is a reference target ({@code test_step.shared_step_id}), so two copies of
+     * one entry split which cases point at which — the visible-twin argument that covered this
+     * endpoint until B4 reasons from a person reading the library list, and the caller this defends
+     * has no list in front of it.
+     */
+    @Column(name = "created_idempotency_key", updatable = false)
+    private String createdIdempotencyKey;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -100,7 +111,12 @@ public class SharedStep {
      * module follows.
      */
     static SharedStep create(
-            UUID companyId, UUID projectId, SharedStepEdit edit, UUID authorId, Instant now) {
+            UUID companyId,
+            UUID projectId,
+            SharedStepEdit edit,
+            UUID authorId,
+            String idempotencyKey,
+            Instant now) {
 
         SharedStep created = new SharedStep();
         created.id = UUID.randomUUID();
@@ -110,6 +126,7 @@ public class SharedStep {
         created.body = List.copyOf(edit.body());
         created.createdAt = now;
         created.createdBy = authorId;
+        created.createdIdempotencyKey = idempotencyKey;
         created.updatedAt = now;
         created.updatedBy = authorId;
         return created;
