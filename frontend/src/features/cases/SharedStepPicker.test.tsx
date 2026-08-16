@@ -147,10 +147,14 @@ describe('SharedStepPicker', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add and insert' }))
 
     await waitFor(() =>
-      expect(post).toHaveBeenCalledWith('/projects/p1/shared-steps', {
-        title: 'Reconcile',
-        body: ['One', 'Two'],
-      }),
+      expect(post).toHaveBeenCalledWith(
+        '/projects/p1/shared-steps',
+        {
+          title: 'Reconcile',
+          body: ['One', 'Two'],
+        },
+        { idempotencyKey: expect.any(String) },
+      ),
     )
     // Created AND inserted — a create that leaves the author back at the list has made them do
     // the picking twice for one intent.
