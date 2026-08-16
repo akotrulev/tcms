@@ -73,6 +73,7 @@ export {
   useDiscardCaseDraft,
   useLinkCaseExternally,
   useQuarantineCase,
+  useSetCaseStatus,
   useRelabelCaseExternalLink,
   useUnlinkCaseExternal,
   useSaveCaseDraft,

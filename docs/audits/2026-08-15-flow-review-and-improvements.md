@@ -21,14 +21,20 @@ Status marks used in the tables: **✅ DONE** · **🔨 IN PROGRESS** · **⬜ N
 | A2 | ✅ DONE | §227 phase 1 | `GET …/reports/jobs/{jobId}/model`, `report:view`. `ReportJob.modelUrl` now points at it; the artifact route keeps `report:export` and keeps `downloadUrl`. |
 | A3 | ✅ DONE | §227 phase 1 | `GET …/reports/jobs` (project's jobs, newest first, top 100, `report:view`) **+ the reaper**: `tcms.reporting.stuck-job-timeout` (PT15M), `ReportJobRunner.failStuckJobs`, swept per company per tick. **The separate "per-project artifact listing" was folded in rather than built**: `report_artifact` has no `project_id` and every artifact is reachable through the job that produced it, so the job list *is* that listing. |
 | A5 | ✅ DONE | §227 phase 1 | `useSaveReportDefinition` / `useDeleteReportDefinition` / `useReportJobs`; a "Save these settings as" field on the generate dialog, and per-row **Generate** (regenerate through `definitionId`) and **Delete** on the saved-reports panel. |
-| A1 | ⬜ NOT STARTED | — | Single-case status endpoint + lifecycle/review affordances on `CaseDetailPage`. |
+| A1 | ✅ DONE | §227 phase 2 | `PUT /projects/{projectId}/cases/{caseId}/status` (`CaseStatusService`, the same `LifecycleLadder` the suite uses, per-act audit verbs) + a **Status** menu on `CaseDetailPage`. `ReviewPanel` was **already** mounted there — the audit's "mount `ReviewPanel` affordances" half was already true, and what was missing was the thing that moves the case. `POST /cases/bulk` is unchanged: a row whose edge costs more than the caller holds is *skipped* there and **403** here, and that difference is asserted against itself. |
 | A4 | ⬜ NOT STARTED | — | Writable execution assignment. |
 | A6 | ⬜ NOT STARTED | — | `PATCH /artifacts/{id}` + a delete control. |
-| A7 | ⬜ NOT STARTED | — | A home for suite lifecycle/review. |
+| A7 | ✅ DONE | §227 phase 2 | `SuitePanel` — above the case grid whenever a suite is selected — carrying the suite's key, name, lifecycle chip, membership count, an execution-history link, and **`ReviewPanel` for `SUITE`**, which had never been mounted anywhere. **A rail-side panel rather than a suite detail page**, of the audit's two options: a suite is flat since §98 and every write it has hangs off the rail, so a page of its own would be a header plus this panel reached by navigating away from the list you pick the suite in. Not *in* the rail either — 260px renders assignees, verdicts and a comment thread as a stack of ellipses. |
 | A8 | ⬜ NOT STARTED | — | Cross-navigation between the two link-creation surfaces. |
 | E2 | ⛔ OUT OF SCOPE | — | `Idempotency-Key` on `POST /reports/generate`. Pairs naturally with A3 and was deliberately **not** taken: it is a P2, the authorised scope is A1–A8, and it is a contract change to a write. Cheapest remaining reports work; do it next if the reports area is revisited. |
 
-**Also changed while doing the above, and worth knowing before re-reading those files:**
+**Also changed in phase 2:** `CaseBulkEndpointTest` is renamed in spirit rather than on disk — its
+`@DisplayName` and header now say it covers **both** writers of `test_case.lifecycle_status`,
+because the fixture it already had (a case in each ladder state, the three personas the gate turns
+on) is exactly what the new endpoint needed and a second class would have been a copy of its seeding
+under an instruction to keep it in step. The file name is unchanged so the citations to it resolve.
+
+**Also changed while doing phase 1, and worth knowing before re-reading those files:**
 
 - `ReportJob` gained a required `requestedAt` (the list is ordered by it). Both `schema.d.ts`
   copies regenerated; three frontend fixtures and one `packages/mcp` fixture updated.
@@ -47,7 +53,9 @@ Status marks used in the tables: **✅ DONE** · **🔨 IN PROGRESS** · **⬜ N
 Create (`POST /cases`, always `DRAFT`, v1 written in-transaction) → edit (`PATCH`, "PATCH by verb
 only": absent nullable scalars *clear*, `If-Match` on `lockVersion`) → lifecycle moves **only via
 `POST /cases/bulk`** on the shared `DRAFT → IN_REVIEW → APPROVED / DEPRECATED` ladder
-(`LifecycleLadder`, edge-keyed permissions: `case:edit` vs `case:approve`). Review apparatus
+~~(`LifecycleLadder`, edge-keyed permissions: `case:edit` vs `case:approve`).~~ → **since §227 also
+via `PUT /cases/{caseId}/status`**, the same ladder and the same edge-keyed permissions; the bulk
+endpoint keeps its skip-with-a-reason contract and the single-case one answers 403 (A1). Review apparatus
 (`ReviewService`) is per-project opt-in, off by default; author-cannot-approve and min-peer-LGTM
 bind only on the `→ APPROVED` edge when an open review exists. Steps belong to their case (§94);
 two authoring aids coexist — the shared-step library (`library:manage`, declared vestigial in §94)
@@ -57,7 +65,9 @@ one row per case (not per person); create mode has no buffer.
 ### Suites
 Flat since §98: membership = filed (`test_case.suite_id`) ∪ added (`suite_case`) ∪ tagged
 (`suite_tag_rule`, union semantics). All suite writes hang off the case-list rail
-(`SuiteList.tsx`); the only dedicated route is `/suites/:suiteId/history`. Same lifecycle ladder
+(`SuiteList.tsx`); the only dedicated route is `/suites/:suiteId/history`. ~~A suite's review
+record has no visible surface.~~ → **§227: `SuitePanel` renders lifecycle + `ReviewPanel` above the
+grid whenever a suite is selected** (A7). Same lifecycle ladder
 via `PUT /suites/{id}/status`. Conditions inherit to the **filed arm only**. `suite_version` is
 written once (v1) and never again, yet reviews pin to `currentVersionNo`.
 
@@ -113,13 +123,13 @@ move together.
 
 | # | Status | Improvement | Evidence |
 |---|---|---|---|
-| A1 | ⬜ | **Give a single case a status action.** Add `PUT /cases/{caseId}/status` (the ladder already exists in `LifecycleLadder`; suites and plans have this exact endpoint) and mount lifecycle actions + `ReviewPanel` affordances on `CaseDetailPage`. Today submitting *one* case for review means: leave the detail page, find the row in the list, select it, open the bulk dialog. | No status path under `/cases/{caseId}` in openapi.yaml; `CaseBulkService` is the only `reviews.moved` caller for cases |
+| A1 | ✅ | **Give a single case a status action.** Add `PUT /cases/{caseId}/status` (the ladder already exists in `LifecycleLadder`; suites and plans have this exact endpoint) and mount lifecycle actions + `ReviewPanel` affordances on `CaseDetailPage`. Today submitting *one* case for review means: leave the detail page, find the row in the list, select it, open the bulk dialog. | No status path under `/cases/{caseId}` in openapi.yaml; `CaseBulkService` is the only `reviews.moved` caller for cases |
 | A2 | ✅ | **Fix `report:view` vs the on-screen model.** Serve the report *model* under `report:view` and keep only the downloadable artifact under `report:export`. The §6e persona ("may read, may not carry off") is currently refused the report it watched being generated. | `ReportViewPage.tsx:38-46` documents it as a server-side gap |
 | A3 | ✅ | **Add `GET /reports/jobs` (+ per-project artifact listing).** The job set lives in component state; a reload loses every download link permanently. Pair with **a reaper/retry for jobs stranded in `RUNNING`** — today a worker death after claim leaves a job no client or operator can resolve. | `ReportsPage.tsx:20-31`; `ReportJobRunner` header (no reaper by decision) |
 | A4 | ⬜ | **Make execution assignment writable.** `test_execution.assignee_id` is rendered on the run detail and the queue but the only writer is `POST /runs`'s whole-checklist `assigneeId` — which itself has no control in `RunCreateDialog`. Add a `PATCH` for per-execution assignee and surface `assigneeId` + `configurationId` in the create/clone dialogs. In the shipped UI every execution is permanently unassigned. | `RunCreateDialog.tsx` (documented omissions ~167, 272); `ExecutionResultInput` carries no assignee |
 | A5 | ✅ | **Wire saved report definitions in the SPA.** `POST/DELETE /reports/{definitionId}` are implemented and the panel renders — with no Save button and always `[]`. One hook + one button turns an inert backend feature on. | No `useCreateReportDefinition` in `api/queries/` |
 | A6 | ⬜ | **Give artifacts an edit path and a delete control.** There is no `PATCH /artifacts/{id}` despite `artifact:edit` (a typo can only be fixed by supersede-or-recreate), and `DELETE` — with both 409 guards — has no UI caller. `ArtifactTable.tsx:236` says so itself. | openapi.yaml artifact paths; `ArtifactTable.tsx:236` |
-| A7 | ⬜ | **Give suites a home.** `suite:review`/`suite:approve`/`reviewEnabledSuite` all exist, yet a suite's review record has no visible surface — `ReviewPanel` mounts on cases and plans only, and all suite writes live in the case-list rail. Either a suite detail page or a rail-side panel that shows lifecycle + review standing. | `SuiteList.tsx`; only suite route is `/suites/:id/history` |
+| A7 | ✅ | **Give suites a home.** `suite:review`/`suite:approve`/`reviewEnabledSuite` all exist, yet a suite's review record has no visible surface — `ReviewPanel` mounts on cases and plans only, and all suite writes live in the case-list rail. Either a suite detail page or a rail-side panel that shows lifecycle + review standing. | `SuiteList.tsx`; only suite route is `/suites/:id/history` |
 | A8 | ⬜ | **Cross-navigate the two link-creation surfaces.** A `DOC_BLOCK` link is only creatable from the doc page; the case's Traceability panel writes external targets only. The permission asymmetry is argued and fine — but a user on a case who wants to claim a requirement paragraph gets no path there. Minimum: a "link from documentation" jump that lands on the page with the case pre-selected in `LinkBlockDialog`. | `DocLinksPanel` vs `LinkBlockDialog`; openapi.yaml:2101 rationale |
 
 ### B. Heal the asymmetries (P2)

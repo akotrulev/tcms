@@ -24,6 +24,7 @@ import type {
   ExecutionHistoryEntry,
   ExternalLink,
   ExternalLinkInput,
+  LifecycleStatus,
   LinkRelationship,
   Paged,
   TagUsage,
@@ -530,6 +531,55 @@ export function useQuarantineCase(projectId: string, caseId: string) {
       // The board's quarantine card (§121 phase 3) is derived from this row, and it is on a
       // different screen with a different key — without this a release leaves the card standing
       // until something else happens to invalidate the board.
+      void client.invalidateQueries({ queryKey: keys.workItemRoot });
+    },
+  });
+}
+
+/**
+ * Moving **one** case along §6g's ladder (§227, audit A1).
+ *
+ * ## Why this exists beside `useBulkCases`
+ *
+ * It did not, and moving a single case therefore meant leaving the case, finding its row in the
+ * grid, selecting it and opening the bulk dialog — four steps and a different screen to do the
+ * thing the case's own page is about. Suites and plans have had `useSetSuiteStatus` /
+ * `useSetPlanStatus` since §73/§74.
+ *
+ * ## The refusal is a 403, not a skip, and that is the whole difference
+ *
+ * `POST /cases/bulk` answers 200 with the row in `skipped` when the caller's key does not buy the
+ * edge — right for a selection, which is a filter's output and may hold rows of several statuses.
+ * One case is not a selection: this endpoint answers **403**, which is why `meta: { handled: true }`
+ * is *not* set. A refusal here is about the case on the screen and the global handler's notification
+ * is the right place for it; the dialogs that set `handled` do so because they have a field to land
+ * a message on.
+ *
+ * ## The response is the whole case, so it is written straight into the cache
+ *
+ * The move changes `updatedAt`, `updatedBy` and the case's review standing as well as the status,
+ * and the server sends all of it — so `setQueryData` here is not the `EXCLUDED.*` mistake
+ * `useQuarantineCase` guards against. That hook patches one field because its response *describes*
+ * one row; this one replaces the case because its response **is** the case.
+ *
+ * Reviews are invalidated too: a submit opens a review record and an approval closes it, and
+ * `ReviewPanel` renders that from a different key.
+ */
+export function useSetCaseStatus(projectId: string, caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (status: LifecycleStatus) =>
+      api.put<TestCase>(`${base(projectId)}/cases/${caseId}/status`, { status }),
+    onSuccess: (updated) => {
+      client.setQueryData(keys.case(projectId, caseId), updated);
+      // The grid renders `lifecycleStatus` as a column and as a facet count, so a move made here
+      // must not leave the list behind it saying the old thing.
+      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      void client.invalidateQueries({
+        queryKey: keys.reviews(projectId, 'CASE', caseId),
+      });
+      // The review board's cards are derived from review records, on another screen with another
+      // key — without this a submitted case leaves no card until something else invalidates it.
       void client.invalidateQueries({ queryKey: keys.workItemRoot });
     },
   });

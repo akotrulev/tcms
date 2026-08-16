@@ -4,6 +4,9 @@ import {
   Button,
   Chip,
   Divider,
+  ListItemText,
+  Menu,
+  MenuItem,
   Stack,
   Table,
   TableBody,
@@ -17,16 +20,24 @@ import AddLinkIcon from '@mui/icons-material/AddLinkOutlined';
 import ContentCopyIcon from '@mui/icons-material/ContentCopyOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import EditIcon from '@mui/icons-material/Edit';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HistoryIcon from '@mui/icons-material/History';
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
-import type { CaseConditionRef, DocLink, TestCase, TestStep } from '../../api/types';
+import type {
+  CaseConditionRef,
+  DocLink,
+  LifecycleStatus,
+  TestCase,
+  TestStep,
+} from '../../api/types';
 import {
   useAttachCaseFile,
   useCase,
   useDeleteCaseFile,
   useProject,
   useRelabelCaseExternalLink,
+  useSetCaseStatus,
   useUnlinkCaseExternal,
 } from '../../api/queries';
 import { AttachmentsPanel } from '../../components/AttachmentList';
@@ -55,7 +66,64 @@ import { ScrollX } from '../../components/ScrollX';
  * split is not cosmetic — the steps are what a tester reads top-to-bottom while executing,
  * and the classification and ownership metadata is reference material they consult
  * occasionally. Interleaving them would make the reading path stutter.
+ *
+ * ## The lifecycle menu (§227, audit A1)
+ *
+ * Until it existed, moving this case along §6g's ladder meant leaving this page, finding the row in
+ * the grid, selecting it and opening the bulk dialog — four steps and a different screen to do the
+ * thing this screen is about. `ReviewPanel` was already mounted below and rendered a standing that
+ * nothing here could change.
+ *
+ * The control is a menu rather than a row of buttons because **the moves swap rather than
+ * accumulate**: a case offers only the edges its current status actually has, so the set is one to
+ * three items and a fixed row would either grey two thirds of itself or change width per status.
+ * `SuiteList`'s kebab is the same decision on the same ladder.
  */
+
+/**
+ * §6g's ladder, from each status, with the key each edge costs.
+ *
+ * **The permission column mirrors the server's `LifecycleLadder.permissionFor` and is a disabling
+ * hint, never the gate** — `suiteMoves` in `SuiteList.tsx` and `planMoves` have exactly the same
+ * relationship to the same class. Getting it wrong here shows a control that 403s, which is §31's
+ * failure and not a security one; the server decides, from a status only it holds.
+ *
+ * **The rule in one sentence: `case:approve` buys a sign-off, and it buys moving a case that has
+ * one.** So every approve-keyed row below is an `APPROVED` row or an `APPROVED` target — the
+ * reading a target-decides rule gets wrong is that *leaving* an approval is an approval act
+ * whatever the target is called, which is exactly the defect §75 found on the bulk path.
+ *
+ * A local table rather than a shared one, matching `suiteMoves`: the two ladders are the same
+ * transitions under **different keys**, so a shared table would have to be parameterised by the
+ * key pair and would then be one edit from giving a case a suite's permissions.
+ *
+ * `satisfies Record<LifecycleStatus, …>` so a fifth status is a compile error here rather than a
+ * case with no moves at all.
+ */
+const caseMoves = {
+  DRAFT: [
+    { target: 'IN_REVIEW', label: 'Submit for review', permission: 'case:edit' },
+    { target: 'DEPRECATED', label: 'Deprecate', permission: 'case:edit' },
+  ],
+  IN_REVIEW: [
+    { target: 'APPROVED', label: 'Approve', permission: 'case:approve' },
+    { target: 'DRAFT', label: 'Return to draft', permission: 'case:edit' },
+    { target: 'DEPRECATED', label: 'Deprecate', permission: 'case:edit' },
+  ],
+  APPROVED: [
+    { target: 'DRAFT', label: 'Return to draft', permission: 'case:approve' },
+    { target: 'DEPRECATED', label: 'Deprecate', permission: 'case:approve' },
+  ],
+  // One way back, and it lands on DRAFT: approval attaches to reviewed content by a named person,
+  // so a retired case returning straight to APPROVED would be a sign-off nobody gave (§6g's clone
+  // rule). `case:edit`, symmetric with the retire above it — nothing is unmade coming back, because
+  // the sign-off, if there was one, ended at the retirement.
+  DEPRECATED: [{ target: 'DRAFT', label: 'Restore to draft', permission: 'case:edit' }],
+} as const satisfies Record<
+  LifecycleStatus,
+  readonly { target: LifecycleStatus; label: string; permission: string }[]
+>;
+
 export function CaseDetailPage() {
   const { projectId = '', caseId = '' } = useParams();
   const project = useProject(projectId);
@@ -109,6 +177,7 @@ export function CaseDetailPage() {
                   >
                     Execution history
                   </Button>
+                  <LifecycleMenu projectId={projectId} caseId={caseId} testCase={data} />
                   {/*
                     §129. `case:create` and not `case:edit`: a clone creates a case and changes
                     nothing about this one, which is the key the endpoint charges. Disabled rather
@@ -434,6 +503,86 @@ export function CaseDetailPage() {
         )}
       </DataRegion>
     </Box>
+  );
+}
+
+/**
+ * The lifecycle control — one button, the moves this case's status actually has.
+ *
+ * ## Disabled with a reason, never hidden (§31)
+ *
+ * Each item is gated on the key its own edge costs, so a Test Engineer looking at a case in review
+ * sees **Approve** greyed beside a live **Return to draft** — which is the shape of the rule, made
+ * visible. Hiding the approve item would leave a contributor with no way to learn why they cannot
+ * sign anything off.
+ *
+ * The **button** itself is never gated: a Viewer may read this case, and a control that vanishes
+ * for them teaches nothing, while one that opens onto three greyed items says exactly what the
+ * situation is.
+ *
+ * ## The refusals it does not try to predict
+ *
+ * Two things can still refuse after the click, and neither is worth a second copy of the server's
+ * rules here: the ladder itself (a 409 the menu already avoids by offering only legal edges) and
+ * **§6g's review policy** — author-cannot-approve-own-work and the minimum peer LGTM — which
+ * depends on the review record, the project's settings and who is asking. Predicting that here
+ * would be a third implementation of `ReviewService.refuses`, and it would be wrong on exactly the
+ * cases where it mattered. The refusal is raised by the global handler and read beside
+ * `ReviewPanel`, which is the panel that explains it.
+ */
+function LifecycleMenu({
+  projectId,
+  caseId,
+  testCase,
+}: {
+  projectId: string;
+  caseId: string;
+  testCase: TestCase;
+}) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const setStatus = useSetCaseStatus(projectId, caseId);
+  const moves = caseMoves[testCase.lifecycleStatus];
+
+  return (
+    <>
+      <Button
+        startIcon={<ExpandMoreIcon />}
+        onClick={(event) => setAnchor(event.currentTarget)}
+        disabled={setStatus.isPending}
+        aria-haspopup="menu"
+        data-testid="CaseDetail.StatusButton"
+      >
+        Status
+      </Button>
+      <Menu
+        open={!!anchor}
+        anchorEl={anchor}
+        onClose={() => setAnchor(null)}
+        data-testid="CaseDetail.StatusMenu"
+      >
+        {moves.map((option) => (
+          <PermissionGate
+            key={option.target}
+            projectId={projectId}
+            permission={option.permission}
+            wrapper="block"
+          >
+            {({ allowed }) => (
+              <MenuItem
+                disabled={!allowed || setStatus.isPending}
+                data-testid={`CaseDetail.StatusMenu.${option.target}`}
+                onClick={() => {
+                  setStatus.mutate(option.target);
+                  setAnchor(null);
+                }}
+              >
+                <ListItemText>{option.label}</ListItemText>
+              </MenuItem>
+            )}
+          </PermissionGate>
+        ))}
+      </Menu>
+    </>
   );
 }
 

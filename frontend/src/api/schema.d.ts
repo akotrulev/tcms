@@ -2221,6 +2221,90 @@ export interface paths {
         };
         trace?: never;
     };
+    "/projects/{projectId}/cases/{caseId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Submit, approve, withdraw, deprecate or revive one case
+         * @description The same §6g ladder `PUT …/suites/{suiteId}/status` moves a suite along, evaluated by the
+         *     same class (`LifecycleLadder`) over the same four `LifecycleStatus` values — because §6g
+         *     draws one diagram and then lists what review *means* per artifact, never a different set of
+         *     moves.
+         *
+         *     **Which permission a move needs is decided by the edge, not by the target**, exactly as on
+         *     a suite: `case:edit` carries a case through the states nobody has signed off — submitting a
+         *     draft, withdrawing that submission, retiring an unapproved case, reviving a retired one —
+         *     and `case:approve` is needed to **grant** the sign-off and to move a case that **currently
+         *     has one**, wherever it is going. A target-only rule would let a Test Engineer rescind a
+         *     lead's approval by asking for `DRAFT`.
+         *
+         *     **Why this exists, given `POST /cases/bulk` already moves cases.** It did, and it was the
+         *     *only* way: moving one case meant leaving the case, finding its row in the list, selecting
+         *     it and opening the bulk dialog — four steps and a different screen to do the thing the
+         *     case's own page is about. Suites and plans have had this endpoint since §73/§74; the case,
+         *     which §6g calls the common artifact, did not.
+         *
+         *     **The bulk endpoint is unchanged and is not a special case of this one.** It stays because
+         *     it answers a different question — *move these four hundred* — and its partial-failure
+         *     contract is the reason: a selection is a filter's output and may hold rows of several
+         *     statuses, so a row whose edge costs more than the caller holds is **skipped with a reason**
+         *     there and answered **403** here. One row is not a selection, and a 403 about the one case
+         *     somebody is looking at is exactly the answer they can act on.
+         *
+         *     The audit trail says which of the two moved a case: this endpoint writes `case.submitted`,
+         *     `case.approved`, `case.unapproved`, `case.withdrawn`, `case.revived` and `case.deprecated`
+         *     — the per-act vocabulary the suite and plan endpoints already use — where the bulk path
+         *     writes `case.bulk.*`. Plan §7's audit vocabulary lists the acts by name, and a reader asking
+         *     *"what did we sign off last quarter"* should be able to answer it by filtering the action
+         *     column.
+         *
+         *     Two moves are refused with `409` because the ladder does not have them: `IN_REVIEW` is
+         *     reachable only from `DRAFT`, and `APPROVED` only from `IN_REVIEW` (§6g: *"the state machine
+         *     has exactly one gate"*). A **deprecated** case returns as a `DRAFT` and cannot go straight
+         *     back to review or approval — §6g's clone rule, which makes the same argument about carrying
+         *     a sign-off to content nobody read.
+         *
+         *     §6g's review preconditions — author-cannot-approve-own-work and the minimum peer LGTM —
+         *     apply on the `→ APPROVED` edge when the project has review enabled and a review is open.
+         *     They are evaluated **after** the permission and produce a `409`, so a caller who may not
+         *     approve at all is told that rather than being told they are the author of a review they
+         *     could not have signed off either way.
+         *
+         *     Idempotent: setting the status a case already has answers `200` with the case and writes
+         *     nothing — no timestamp re-stamped, no audit row, and **no review record**, so a repeated
+         *     click cannot bury the change that actually happened.
+         *
+         *     **A status move is not authored content**, so it writes no `test_case_version` row. That is
+         *     the bulk path's rule too, and the reason is `CaseVersions.hash`: a version whose digest is
+         *     unchanged would attribute the *next* person's save to this move.
+         *
+         *     No `If-Match`: the request names an absolute target state rather than a delta against
+         *     something the client read, so there is no lost update to protect. The `PATCH` beside it
+         *     *does* take one, because words typed over a stale copy really do lose the other author's.
+         */
+        put: operations["setCaseStatus"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/cases/{caseId}/quarantine": {
         parameters: {
             query?: never;
@@ -9134,6 +9218,9 @@ export interface components {
              */
             postconditions?: components["schemas"]["CaseConditionInput"][];
         };
+        CaseStatusInput: {
+            status: components["schemas"]["LifecycleStatus"];
+        };
         SuiteStatusInput: {
             status: components["schemas"]["LifecycleStatus"];
         };
@@ -13175,6 +13262,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Suite"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    setCaseStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseStatusInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description The case, whole — the same `TestCase` shape `GET …/cases/{caseId}` serves. A 204 would force the
+             *     screen into a refetch to render the state it just set, and the move changes more than
+             *     the status field: `updatedAt`, `updatedBy` and the case's review standing all move with
+             *     it.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestCase"];
                 };
             };
             400: components["responses"]["BadRequest"];

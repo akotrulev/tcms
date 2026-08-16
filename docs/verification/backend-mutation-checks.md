@@ -2621,6 +2621,21 @@ because what stops it is RLS rather than a branch: company A's provider assertin
 exists in company B must not resolve to B's user. `FederatedIdentityServiceTest`'s header says why
 it is absent there. It is the single most important row in the browser/Keycloak queue.
 
+## §228 — the single-case status endpoint
+
+**The row ids below say `§227` and stay that way** — minted before the section was numbered §228,
+and an id here is never renumbered.
+
+| id | Mutation | Expected red | Why this matters |
+|---|---|---|---|
+| `§227 PM-9` | In `CaseStatusService`, replace `KEYS = BulkOperations.CASE_KEYS` with a fresh `new LifecycleLadder.Keys("case:edit", "case:edit")` | `CaseBulkEndpointTest.SingleCaseStatus.engineerCannotApprove` and `.engineerIsForbiddenWhereBulkWouldSkip` | The gate collapses to the edit key and a Test Engineer approves and un-approves at will. The mutation is exactly the shape §75 found live on the bulk path, arriving on a second endpoint — which is why the constant is read from the neighbour rather than re-spelled. |
+| `§227 PM-10` | In `CaseStatusService.setStatus`, gate on the requested target alone: `RequiredPermission.onProject(requested == APPROVED ? KEYS.approve() : KEYS.edit())` | `CaseBulkEndpointTest.SingleCaseStatus.engineerIsForbiddenWhereBulkWouldSkip` | The target-decides rule. Granting the sign-off is still Lead-only and *rescinding* one drops to the edit key, so a contributor un-approves a lead's case with the permission they use every day. Nine of this class's thirteen tests stay green. |
+| `§227 PM-11` | In `CaseStatusService.apply`, delete the `reviews.refuses(...)` arm and go straight to `move(...)` | **Predicted: zero reds** in this class; possibly `ReviewGateTest`/`ReviewPolicyTest` | The measured number is the deliverable, and a zero is a finding: §6g's author-cannot-approve-own-work and minimum-peer-LGTM would then bind on the bulk path and on suites and plans, and **not** on the endpoint a person actually uses to approve one case. The fixture here has review switched off, so nothing in `CaseBulkEndpointTest` can see it. |
+| `§227 PM-12` | In `CaseStatusService.move`, delete the `reviews.moved(...)` call | **Predicted: zero reds.** No test here reads `review` rows after a single-case move | The measured number is the deliverable. Submitting would move the status and open no review record, so `ReviewPanel` renders "Not in review" on a case whose chip says In review — and approving would close nothing. The bulk path's equivalent call is covered; this one is not, and the gap is exactly the kind a second writer introduces. |
+| `§227 PM-13` | In `CaseStatusService.action`, return `"case.bulk.status_changed"` for every target | `CaseBulkEndpointTest.SingleCaseStatus.perActAuditVerbs` | Plan §7 lists the acts by name so "what did we sign off last quarter" is one query on the action column. Collapsing them also makes the two endpoints indistinguishable in the trail, which is the one thing the trail is for here. |
+| `§227 PM-14` | In `CaseController.setStatus`, answer `Outcome.Refused` with `ResponseEntity.badRequest()` | `CaseBulkEndpointTest.SingleCaseStatus.aDraftCannotBeApprovedDirectly` | 400 says the payload is malformed; the payload is fine and the permission is held — it is the case's state that refuses, which is a different thing to fix and the reason `Conflict` exists. |
+| `§227 PM-15` | In `CaseStatusService.apply`, treat `Decision.Unchanged` as a `Move` | `CaseBulkEndpointTest.SingleCaseStatus.unchangedWritesNothing` | A repeated click writes an audit row and re-stamps `updatedAt`, burying the change that actually happened under one that did nothing. |
+
 ## §227 phase 1 — the report list, the model's own gate, and the reaper
 
 | id | Mutation | Expected red | Why this matters |

@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
@@ -316,5 +317,112 @@ describe('CaseDetailPage — a rule this case turned off', () => {
 
     await screen.findByTestId('CaseDetail.Preconditions')
     expect(screen.queryByTestId('CaseDetail.Preconditions.Declined')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * The lifecycle menu — §227 / audit A1.
+ *
+ * Three things are locked, and each would ship silently without its assertion.
+ *
+ * 1. **The menu offers only the edges the case's current status has.** Offering one the server
+ *    refuses with a 409 is §31's failure inverted — a live control that fails. The pair below is a
+ *    DRAFT (no Approve) and an IN_REVIEW (Approve), so a table that offered everything from
+ *    everywhere fails the first and a table that offered nothing fails the second.
+ * 2. **Each item is gated on the key its own edge costs**, so a Test Engineer sees Approve greyed
+ *    beside a live Return to draft. The enabled half is the barrier: `useCan` is fail-closed while
+ *    pending, so a disabled-only assertion passes against a page with no gate at all (§66) — and it
+ *    passed against every draft of this file that forgot `permissionsResolved`.
+ * 3. **The click sends the target the item names**, to `PUT …/cases/{id}/status` and not through
+ *    the bulk endpoint. Delegating this control to `POST /cases/bulk` would turn its 403 into a
+ *    200-with-a-skip, which is a refusal a person looking at one case cannot act on.
+ */
+describe('CaseDetailPage — the lifecycle menu', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function withStatus(status: TestCase['lifecycleStatus'], keys: string[]) {
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path.startsWith('/me/permissions')) return heldPermissions(keys as never)
+      if (/\/cases\/[^/]+$/.test(path)) {
+        return { ...caseBody(CALLER), lifecycleStatus: status }
+      }
+      if (path.includes('/settings')) return projectSettings({ projectId: PROJECT })
+      if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
+      return []
+    }) as never)
+  }
+
+  async function openMenu() {
+    await userEvent.click(await screen.findByTestId('CaseDetail.StatusButton'))
+    await screen.findByTestId('CaseDetail.StatusMenu')
+  }
+
+  it('offers a draft Submit and Deprecate, and no Approve at all', async () => {
+    withStatus('DRAFT', ['case:read', 'case:edit'])
+    renderPage()
+    await openMenu()
+
+    expect(screen.getByTestId('CaseDetail.StatusMenu.IN_REVIEW')).toBeInTheDocument()
+    expect(screen.getByTestId('CaseDetail.StatusMenu.DEPRECATED')).toBeInTheDocument()
+    // §6g's one gate: APPROVED is reachable only from IN_REVIEW, so the item is not there to be
+    // greyed — a disabled Approve on a draft would say the caller lacks a permission when what
+    // they lack is a review.
+    expect(screen.queryByTestId('CaseDetail.StatusMenu.APPROVED')).not.toBeInTheDocument()
+  })
+
+  it('greys Approve for a contributor and leaves Return to draft live', async () => {
+    withStatus('IN_REVIEW', ['case:read', 'case:edit'])
+    renderPage()
+    await openMenu()
+
+    // The barrier. Until this passes the gate is still pending and every disabled assertion below
+    // is satisfied by the loading state.
+    await waitFor(() =>
+      expect(screen.getByTestId('CaseDetail.StatusMenu.DRAFT')).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    )
+    expect(screen.getByTestId('CaseDetail.StatusMenu.APPROVED')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+  })
+
+  it('lets a lead approve, and sends the target to the single-case status endpoint', async () => {
+    withStatus('IN_REVIEW', ['case:read', 'case:edit', 'case:approve'])
+    const put = vi.spyOn(api, 'put').mockResolvedValue({
+      ...caseBody(CALLER),
+      lifecycleStatus: 'APPROVED',
+    } as never)
+    renderPage()
+    await openMenu()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('CaseDetail.StatusMenu.APPROVED')).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    )
+    await userEvent.click(screen.getByTestId('CaseDetail.StatusMenu.APPROVED'))
+
+    await waitFor(() => expect(put).toHaveBeenCalled())
+    expect(put).toHaveBeenCalledWith(`/projects/${PROJECT}/cases/c1/status`, {
+      status: 'APPROVED',
+    })
+  })
+
+  it('offers a deprecated case exactly one way back, and it lands on DRAFT', async () => {
+    withStatus('DEPRECATED', ['case:read', 'case:edit'])
+    renderPage()
+    await openMenu()
+
+    // Not straight back to APPROVED: approval attaches to reviewed content by a named person, so a
+    // revived case has to pass review again. §6g's clone rule, on this screen.
+    expect(screen.getByTestId('CaseDetail.StatusMenu.DRAFT')).toBeInTheDocument()
+    expect(screen.queryByTestId('CaseDetail.StatusMenu.APPROVED')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('CaseDetail.StatusMenu.IN_REVIEW')).not.toBeInTheDocument()
   })
 })

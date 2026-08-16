@@ -2659,3 +2659,37 @@ reaper. Producing a job stranded in `RUNNING` means killing the process between 
 completion, which no UI can do; `ReportJobPipelineTest.Reaping` writes the state in SQL and is the
 only observer. What a pass *could* do — and is worth one line if the lane has database access — is
 set a live job's `started_at` back an hour and watch the card turn Failed within thirty seconds.
+
+## §228 — the status a case could not be given, and the folder nobody could see reviewed
+
+**The row ids below say `§227` and stay that way.** They were minted before the section was numbered
+§228, and an id in this file is quoted from handoff sections and never renumbered (`§109`'s rule).
+
+**Six rows, none run** (§65). Ids are `§227 LC-*`; `LC` is unused elsewhere in this file — grep
+before minting a prefix (`§154`'s banner).
+
+Lanes: **L2** for the case rows, **L1/L2** for the suite rows. `LC-1`–`LC-4` need a signed-in
+**Test Engineer** and, for `LC-3`, a **Test Lead** as well. `LC-5` and `LC-6` need
+`reviewEnabledSuite` switched **on** in project settings — it is off by default, which is the state
+`LC-6` checks.
+
+**What is easy to get wrong when driving these: a disabled menu item and a menu item that is still
+resolving its permission look identical.** Every item in this menu is disabled while `useCan` is in
+flight. Read the item after the page has settled, and prefer checking the *live* item beside it —
+if Return to draft is live and Approve is grey, the answer has landed.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§227 LC-1` | **L2**, as a **Test Engineer**, on a **DRAFT** case: open the case, press **Status** | Two items — `Submit for review` and `Deprecate` — and **no Approve at all**. Not a greyed Approve: §6g reaches APPROVED only from IN_REVIEW, so a disabled one would blame a permission for what is actually a missing review. |
+| `§227 LC-2` | Same caller, press **Submit for review** | **200, the chip in the header moves to In review**, and the Review panel below appears/updates. The row that proves the *server* endpoint shipped — the menu is a client-side table, so a 403 or 404 here means `CaseStatusService` did not. |
+| `§227 LC-3` | **L2**, as a **Test Engineer**, on the case `LC-2` just submitted: open Status | `Approve` **greyed**, `Return to draft` and `Deprecate` live. Then sign in as a **Test Lead** and press Approve: **200**. The pair is the whole gate — the engineer half alone passes against a page with no gate in it. |
+| `§227 LC-4` | **L2**, as a **Test Engineer**, on the now-**APPROVED** case: open Status | **Both** items greyed (`Return to draft`, `Deprecate`), because leaving an approval is an approval act whatever the target is called. If `LC-3` passes and this one does too, the line is exactly where the server puts it. |
+| `§227 LC-5` | **L1/L2**, with `reviewEnabledSuite` **on**: select a suite in the rail | A panel above the grid naming the suite, its lifecycle chip, its membership count and an Execution history link — **and the Review thread below it**. Before §227 a suite's review record was written, gated by three permissions and rendered nowhere. |
+| `§227 LC-6` | Same, with `reviewEnabledSuite` **off** (the default) | The header panel **stays**; the Review thread **does not appear**, and there is no empty "Review" section. The folder still has a lifecycle; the project has simply not asked anybody to sign off on folders. |
+
+**Not driveable and named so it is not read as an omission:** the 409 from §6g's review policy —
+author-cannot-approve-own-work and the minimum peer LGTM. It needs a project with review enabled,
+an open review, and two accounts, which is `§207 AQ-*`'s two-author requirement plus a settings
+change. The menu deliberately does not predict it (a third implementation of `ReviewService.refuses`
+would be wrong exactly where it mattered), so the refusal arrives as a notification. If the pass has
+two accounts available, driving it is worth one row.

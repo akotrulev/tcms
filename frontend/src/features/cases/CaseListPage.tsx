@@ -13,6 +13,7 @@ import { BulkActionDialog } from './BulkActionDialog';
 import { CaseFilterBar } from './CaseFilterBar';
 import { CaseGrid } from './CaseGrid';
 import { SuiteList } from './SuiteList';
+import { SuitePanel } from './SuitePanel';
 import { useCaseFilters } from './useCaseFilters';
 
 /**
@@ -110,6 +111,18 @@ export function CaseListPage() {
         </Box>
 
         <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
+          {/*
+            The selected suite's own standing — §227/A7. Above the filters rather than below them
+            because it is about the thing the list is scoped TO, not about the narrowing: a reader
+            who has picked a folder is looking at that folder, and its approval state is what the
+            grid beneath is a view of.
+
+            Absent when no suite is selected, which is the ordinary state of this screen. An empty
+            panel saying "no suite selected" would occupy the top of the page permanently to
+            describe the absence of a filter.
+          */}
+          {selectedSuite && <SuitePanel projectId={projectId} suite={selectedSuite} />}
+
           {/* Filters live above the region, so a failed load leaves them usable. */}
           <CaseFilterBar
             state={filterState}

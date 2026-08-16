@@ -543,6 +543,7 @@ class ContractConventionTest {
             Map.entry("SuiteInput", List.of(com.tcms.repository.SuiteWriteRequest.class)),
             Map.entry("SuiteRunSummary",
                     List.of(com.tcms.execution.SuiteHistoryView.EntryView.class)),
+            Map.entry("CaseStatusInput", List.of(com.tcms.repository.CaseStatusRequest.class)),
             Map.entry("SuiteStatusInput", List.of(com.tcms.repository.SuiteStatusRequest.class)),
             Map.entry("TagUsage", List.of(com.tcms.repository.TagUsageView.class)),
             Map.entry("Team", List.of(com.tcms.identity.TeamView.class)),

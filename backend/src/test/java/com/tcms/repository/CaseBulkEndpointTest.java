@@ -39,7 +39,12 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * {@code POST /projects/{projectId}/cases/bulk} — mass edits, previewed before they happen.
+ * {@code POST /projects/{projectId}/cases/bulk} — mass edits, previewed before they happen — and
+ * since §227 {@code PUT /projects/{projectId}/cases/{caseId}/status} beside it, because the two are
+ * <strong>the only two writers of {@code test_case.lifecycle_status}</strong> and the failure worth
+ * catching is them disagreeing. They share {@code LifecycleLadder} and nothing else; the fixture
+ * here already holds a case in each of the ladder's states and the three personas the gate turns on,
+ * so a second class would be a copy of this one's seeding under an instruction to keep it in step.
  *
  * <h2>The failures this class exists to catch</h2>
  *
@@ -68,7 +73,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * happened, green alone and red in the full suite.
  */
 @AutoConfigureMockMvc
-@DisplayName("Case bulk endpoint — preview, commit, and the gate that depends on the argument")
+@DisplayName("Case status — the bulk endpoint, the single-case endpoint, and the ladder they share")
 class CaseBulkEndpointTest extends IntegrationTestBase {
 
     private static final UUID ACME = UUID.fromString("4b000000-0000-4000-8000-00000000000a");
@@ -196,6 +201,192 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
     private void delete(Connection connection, String sql) throws SQLException {
         try (var statement = connection.prepareStatement(sql)) {
             statement.executeUpdate();
+        }
+    }
+
+    // =====================================================================
+    // PUT /cases/{caseId}/status — one case, the same ladder, a different refusal (§227, A1)
+    // =====================================================================
+
+    /**
+     * The single-case status endpoint.
+     *
+     * <p>Its whole reason for existing is that this was previously reachable only through the bulk
+     * dialog: moving <em>one</em> case meant leaving the case, finding its row in the list,
+     * selecting it and opening a modal. What it must NOT do is quietly become a second ladder —
+     * hence the pairs below, each of which asserts this endpoint reaching the same verdict the bulk
+     * class above asserts for the same edge, and the one place they deliberately differ.
+     *
+     * <p><strong>The difference is the refusal.</strong> A row whose edge costs more than the caller
+     * holds is <em>skipped with a reason</em> by the bulk path and <strong>403</strong> here. The
+     * two are asserted against each other in {@link #engineerIsForbiddenWhereBulkWouldSkip}, which
+     * is the assertion that would go green if somebody "unified" the two endpoints by delegating
+     * this one to the other.
+     */
+    @Nested
+    @DisplayName("PUT /cases/{caseId}/status — one case, and the refusal a batch cannot give")
+    class SingleCaseStatus {
+
+        @Test
+        @DisplayName("an engineer submits one draft for review, and gets the whole case back")
+        void engineerSubmitsOneDraft() throws Exception {
+            MvcResult result = setStatusOf(ENGINEER, draft(), "IN_REVIEW");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            JsonNode body = json.readTree(result.getResponse().getContentAsString());
+            // The whole case, not a status echo: the move changes updatedAt and updatedBy too, and a
+            // 204 would send the screen back for a state it just set.
+            assertThat(body.get("lifecycleStatus").asText()).isEqualTo("IN_REVIEW");
+            assertThat(body.get("title").asText()).isNotBlank();
+            assertThat(body.get("key").asText()).isEqualTo("TC-1");
+            assertThat(statusOf(draft())).isEqualTo("IN_REVIEW");
+        }
+
+        @Test
+        @DisplayName("a lead approves a case that is in review")
+        void leadApproves() throws Exception {
+            assertThat(setStatusOf(LEAD, inReview(), "APPROVED").getResponse().getStatus())
+                    .isEqualTo(200);
+            assertThat(statusOf(inReview())).isEqualTo("APPROVED");
+        }
+
+        @Test
+        @DisplayName("an engineer asking to approve is 403, and nothing is written")
+        void engineerCannotApprove() throws Exception {
+            MvcResult result = setStatusOf(ENGINEER, inReview(), "APPROVED");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(403);
+            assertThat(statusOf(inReview())).isEqualTo("IN_REVIEW");
+        }
+
+        @Test
+        @DisplayName("an engineer pulling an APPROVED case back is 403 where the bulk path SKIPS it")
+        void engineerIsForbiddenWhereBulkWouldSkip() throws Exception {
+            // The edge is APPROVED → DRAFT, which permissionFor prices at case:approve because
+            // leaving an approval is an approval act. Same edge, same caller, two endpoints.
+            assertThat(setStatusOf(ENGINEER, approved(), "DRAFT").getResponse().getStatus())
+                    .isEqualTo(403);
+
+            MvcResult batch = commit(ENGINEER, setStatus("DRAFT", approved()));
+            assertThat(batch.getResponse().getStatus()).isEqualTo(200);
+            JsonNode body = json.readTree(batch.getResponse().getContentAsString());
+            assertThat(body.get("skipped")).hasSize(1);
+
+            // Neither wrote. The point is the SHAPE of the two answers, not that one of them let it
+            // through — a delegation of this endpoint to the other would answer 200-with-a-skip
+            // here, which is a refusal a person looking at one case cannot act on.
+            assertThat(statusOf(approved())).isEqualTo("APPROVED");
+        }
+
+        @Test
+        @DisplayName("a draft cannot be approved directly — 409, with the ladder's own sentence")
+        void aDraftCannotBeApprovedDirectly() throws Exception {
+            MvcResult result = setStatusOf(LEAD, draft(), "APPROVED");
+
+            // 409 and not 400: the payload is well-formed and the permission is held. The caller is
+            // a LEAD on purpose — an engineer would be 403 first, and the 409 would be untested.
+            assertThat(result.getResponse().getStatus()).isEqualTo(409);
+            assertThat(result.getResponse().getContentAsString())
+                    .contains("Submit it for review first");
+            assertThat(statusOf(draft())).isEqualTo("DRAFT");
+        }
+
+        @Test
+        @DisplayName("a deprecated case cannot go straight back to review")
+        void aDeprecatedCaseComesBackAsADraft() throws Exception {
+            assertThat(setStatusOf(ENGINEER, draft(), "DEPRECATED").getResponse().getStatus())
+                    .isEqualTo(200);
+
+            MvcResult refused = setStatusOf(LEAD, draft(), "IN_REVIEW");
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(refused.getResponse().getContentAsString()).contains("Return it to draft");
+
+            // And the way out is DRAFT, at the edit key — §6g's clone rule, and §68's bound: a
+            // mis-click must not be unrepairable by the person who made it.
+            assertThat(setStatusOf(ENGINEER, draft(), "DRAFT").getResponse().getStatus())
+                    .isEqualTo(200);
+            assertThat(statusOf(draft())).isEqualTo("DRAFT");
+        }
+
+        @Test
+        @DisplayName("asking for the status a case already has is 200 and writes no audit row")
+        void unchangedWritesNothing() throws Exception {
+            int before = auditRows().size();
+
+            assertThat(setStatusOf(ENGINEER, draft(), "DRAFT").getResponse().getStatus())
+                    .isEqualTo(200);
+
+            // The whole reason Unchanged exists: a repeated click must not bury the change that
+            // actually happened under a row saying nothing happened.
+            assertThat(auditRows()).hasSize(before);
+        }
+
+        @Test
+        @DisplayName("each act gets its own audit verb, and it is not the bulk path's")
+        void perActAuditVerbs() throws Exception {
+            setStatusOf(ENGINEER, draft(), "IN_REVIEW");
+            setStatusOf(LEAD, draft(), "APPROVED");
+            setStatusOf(LEAD, draft(), "DRAFT");
+
+            // Plan §7 lists the acts by name so "what did we sign off last quarter" is one query on
+            // the action column. `case.bulk.*` stays on the other endpoint because a batch is a
+            // different act.
+            assertThat(auditRows().stream().map(AuditRow::action).toList())
+                    .containsExactly("case.submitted", "case.approved", "case.unapproved");
+        }
+
+        @Test
+        @DisplayName("a status this ladder does not have is a 400 on the field, not a 500")
+        void anUnknownStatusIsAFieldError() throws Exception {
+            MvcResult result = setStatusOf(ENGINEER, draft(), "ARCHIVED");
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(result.getResponse().getContentAsString()).contains("status");
+        }
+
+        @Test
+        @DisplayName("a Viewer is 403 — it can read the project, so it is not 404")
+        void viewerIsForbidden() throws Exception {
+            assertThat(setStatusOf(VIEWER, draft(), "IN_REVIEW").getResponse().getStatus())
+                    .isEqualTo(403);
+        }
+
+        @Test
+        @DisplayName("a member with no grant is 404, never 403")
+        void noGrantIsNotFound() throws Exception {
+            assertThat(setStatusOf(NO_GRANT, draft(), "IN_REVIEW").getResponse().getStatus())
+                    .isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("a sibling project's case is 404 through this project's path")
+        void aCaseIsScopedToTheProjectInThePath() throws Exception {
+            // The project gate is not the case gate. LEAD holds BANKING and the case is MOBILE's,
+            // so every permission check passes and only findLiveInProject keeps it out.
+            MvcResult result = mvc.perform(MockMvcRequestBuilders
+                            .put("/api/v1/projects/" + BANKING + "/cases/" + mobileCase()
+                                    + "/status")
+                            .header("Authorization", "Bearer " + tokenFor(LEAD, ACME))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"status\":\"IN_REVIEW\"}"))
+                    .andReturn();
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(404);
+            assertThat(statusOf(mobileCase())).isEqualTo("DRAFT");
+        }
+
+        @Test
+        @DisplayName("a status move writes NO version — lifecycle_status is not authored content")
+        void aStatusMoveWritesNoVersion() throws Exception {
+            int before = versionsOf(draft()).size();
+
+            assertThat(setStatusOf(ENGINEER, draft(), "IN_REVIEW").getResponse().getStatus())
+                    .isEqualTo(200);
+
+            // The bulk class asserts the same thing one nested class down. Written here too because
+            // the failure is invisible and delayed: a version with an unchanged hash makes the NEXT
+            // ordinary save attribute its own content to this move.
+            assertThat(versionsOf(draft())).hasSize(before);
         }
     }
 
@@ -992,6 +1183,16 @@ class CaseBulkEndpointTest extends IntegrationTestBase {
                         .header("Authorization", "Bearer " + tokenFor(userId, ACME))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(edit)))
+                .andReturn();
+    }
+
+    /** {@code PUT /cases/{caseId}/status} in this project, as {@code userId}. */
+    private MvcResult setStatusOf(UUID userId, UUID caseId, String status) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders
+                        .put("/api/v1/projects/" + BANKING + "/cases/" + caseId + "/status")
+                        .header("Authorization", "Bearer " + tokenFor(userId, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"" + status + "\"}"))
                 .andReturn();
     }
 

@@ -73,6 +73,7 @@ public class CaseController {
     private final CaseDeleteService deletion;
     private final CaseBulkService bulk;
     private final CaseQuarantineService quarantine;
+    private final CaseStatusService statuses;
     private final CaseDraftService drafts;
     private final CaseCloneService clones;
 
@@ -86,6 +87,7 @@ public class CaseController {
             CaseDeleteService deletion,
             CaseBulkService bulk,
             CaseQuarantineService quarantine,
+            CaseStatusService statuses,
             CaseDraftService drafts,
             CaseCloneService clones) {
         this.search = search;
@@ -96,6 +98,7 @@ public class CaseController {
         this.deletion = deletion;
         this.bulk = bulk;
         this.quarantine = quarantine;
+        this.statuses = statuses;
         this.drafts = drafts;
         this.clones = clones;
     }
@@ -436,6 +439,52 @@ public class CaseController {
      * cannot quarantine a test to stop its own red results from gating. See
      * {@link CaseQuarantineService}.
      */
+    /**
+     * Moving one case along §6g's ladder.
+     *
+     * <p>The sibling of {@code PUT …/suites/{suiteId}/status} and {@code PUT …/plans/{planId}/status},
+     * and the endpoint the case did not have: until §227 the only writer of
+     * {@code lifecycle_status} outside a create was {@link #bulk}, so submitting <em>one</em> case
+     * for review meant leaving this case, finding its row in the list, selecting it and opening the
+     * bulk dialog.
+     *
+     * <p><strong>The bulk endpoint is not replaced and this is not a one-row version of it.</strong>
+     * {@link CaseStatusService}'s header carries the argument: a row whose edge costs more than the
+     * caller holds is <em>skipped with a reason</em> there and <em>403</em> here, because one case
+     * is not a selection and a "skipped: 1" report about the case on the screen in front of somebody
+     * is a refusal wearing a batch's clothes.
+     *
+     * <p>No {@code If-Match}, unlike the {@code PATCH} above: the request names an absolute target
+     * state rather than a delta against something the client read, so there is no lost update to
+     * protect.
+     */
+    @PutMapping("/{caseId}/status")
+    public ResponseEntity<Object> setStatus(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID caseId,
+            @RequestBody CaseStatusRequest request) {
+
+        CaseStatusService.Outcome outcome = statuses.setStatus(
+                UUID.fromString(jwt.getSubject()), projectId, caseId, request);
+
+        return switch (outcome) {
+            case CaseStatusService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
+            case CaseStatusService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case CaseStatusService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(
+                            "You do not have permission to make this change to test cases in this "
+                                    + "project."));
+            case CaseStatusService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(Problem.validation(invalid.errors()));
+            // 409 rather than 400: the payload is well-formed and the permission is held — it is
+            // the case's current state, or §6g's review policy, that refuses.
+            case CaseStatusService.Outcome.Refused refused ->
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(Problem.conflict(
+                            "Status change refused", refused.message()));
+        };
+    }
+
     @PutMapping("/{caseId}/quarantine")
     public ResponseEntity<Object> quarantine(
             @AuthenticationPrincipal Jwt jwt,
