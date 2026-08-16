@@ -4142,10 +4142,22 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Test plans */
+        /**
+         * Test plans
+         * @description The project's **working list**, newest key first: plans that are not deleted and not
+         *     archived.
+         *
+         *     `archived=true` widens it to include archived plans — it does not narrow it to them.
+         *     Somebody ticking "show archived" is asking which plans exist, and answering with the
+         *     archive alone would make them read two screens to find out. Archived rows carry a
+         *     non-null `archivedAt`, which is how a client marks them.
+         */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description `true` to include archived plans as well as the working ones (`V65`). */
+                    archived?: boolean;
+                };
                 header?: never;
                 path: {
                     projectId: components["parameters"]["ProjectId"];
@@ -4513,6 +4525,56 @@ export interface paths {
          *     makes the same call).
          */
         put: operations["setPlanStatus"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/plans/{planId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                planId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put a plan away, or bring it back
+         * @description `plan:edit`. **A visibility act, and nothing else** (`V65`, audit D2).
+         *
+         *     The same shape as `PUT /projects/{projectId}/archive` one level up, deliberately: one
+         *     endpoint for both directions, naming the target state rather than a verb.
+         *
+         *     `V32` removed `CLOSED` from the plan ladder because it described a plan being *run*,
+         *     which is `test_run`'s business. What went with it was any way for a finished plan to
+         *     leave the list: `DELETE` refuses a plan that runs were executed against — correctly,
+         *     since those runs would be left naming a plan that 404s — so the plan for last
+         *     spring's release stayed `APPROVED` at the top of the working list for ever.
+         *
+         *     What archiving does **not** do is most of it:
+         *
+         *     - it does not touch `status`, because an approved plan is the one you most want to
+         *       archive when the release ships and archiving must not unsay the approval;
+         *     - it does not freeze the plan — an archived plan can still be read, edited, approved,
+         *       cloned, run against and reported on, under every gate that applied before;
+         *     - it does not make `DELETE` succeed. Archiving is what to do *instead of* deleting
+         *       such a plan, and that `409` still names the runs in the way.
+         *
+         *     A flag that also froze the plan would be `CLOSED` under another name. This is charged
+         *     `plan:edit` rather than `plan:delete` for the same reason: it destroys nothing and is
+         *     reversible by the same act that set it.
+         *
+         *     Idempotent: asking for the state the plan is already in answers `200` with the plan
+         *     and writes nothing — no timestamp re-stamped, no audit row. No `If-Match`, for
+         *     `PUT …/status`'s reason: the request names an absolute target rather than a delta
+         *     against something the client read.
+         */
+        put: operations["setPlanArchived"];
         post?: never;
         delete?: never;
         options?: never;
@@ -10738,6 +10800,35 @@ export interface components {
             outOfScopeText: string | null;
             currentVersionNo: number;
             lockVersion: number;
+            /**
+             * @description Whether this plan is out of the working list (`V65`, audit D2).
+             *
+             *     A boolean while the row stores `archived_at` — `Project.archived`'s shape,
+             *     copied from it: *when* it was archived, and by whom, are the audit trail's
+             *     (`plan.archived` / `plan.unarchived`).
+             *
+             *     Orthogonal to `status`, which archiving never touches, and served on the
+             *     detail as well as the list even though the default list cannot contain an
+             *     archived plan: a plan reached by a bookmark or by a link from a run has to be
+             *     able to say so, and one that looks identical to a live plan on the one screen
+             *     showing it in full is how somebody edits a plan they believe is current.
+             */
+            archived: boolean;
+        };
+        /**
+         * @description Put a plan away, or bring it back. One boolean naming the desired state rather than
+         *     two verbs, which is what makes it idempotent and keeps one permission and one audit
+         *     pair for one fact.
+         */
+        PlanArchiveInput: {
+            /**
+             * @description `true` takes the plan out of the working list; `false` puts it back.
+             *
+             *     Required. Absent is a `400` rather than a default, because both defaults are a
+             *     guess at what should happen to a plan and one of them hides a release's plan from
+             *     its team.
+             */
+            archived: boolean;
         };
         TestPlanInput: {
             name: string;
@@ -14473,6 +14564,37 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    setPlanArchived: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                planId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanArchiveInput"];
+            };
+        };
+        responses: {
+            /** @description The plan, as the list renders it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestPlan"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     setRunStatus: {

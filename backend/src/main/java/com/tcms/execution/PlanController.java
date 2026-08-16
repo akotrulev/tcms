@@ -52,7 +52,9 @@ public class PlanController {
     private final PlanStatusService lifecycle;
     private final PlanDeleteService deletes;
     private final PlanCloneService clones;
+    private final PlanArchiveService archives;
 
+    @SuppressWarnings("checkstyle:ParameterNumber")
     public PlanController(
             PlanService plans,
             PlanCreateService creates,
@@ -60,9 +62,11 @@ public class PlanController {
             PlanStatisticsService statistics,
             PlanStatusService lifecycle,
             PlanDeleteService deletes,
-            PlanCloneService clones) {
+            PlanCloneService clones,
+            PlanArchiveService archives) {
 
         this.clones = clones;
+        this.archives = archives;
         this.plans = plans;
         this.creates = creates;
         this.updates = updates;
@@ -72,17 +76,24 @@ public class PlanController {
     }
 
     /**
-     * The project's plans, newest first.
+     * The project's plans, newest first — <strong>the working list unless {@code archived=true}</strong>.
      *
      * <p>{@code []} is a valid answer and means the project has no plans — the state of every
      * freshly provisioned project, since {@code tcms_seed_project_defaults} seeds a configuration
      * and a status vocabulary and deliberately not a plan.
+     *
+     * <p>{@code archived} is a boolean widening rather than a three-way filter, and {@code true}
+     * means "and the archived ones too" rather than "only the archived ones" ({@code V65}, audit
+     * D2). A person ticking "show archived" is asking which plans exist, and answering with the
+     * archive alone would make them read two screens to find out.
      */
     @GetMapping
     public ResponseEntity<List<TestPlanView>> list(
-            @AuthenticationPrincipal Jwt jwt, @PathVariable UUID projectId) {
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @RequestParam(name = "archived", defaultValue = "false") boolean archived) {
 
-        return plans.list(UUID.fromString(jwt.getSubject()), projectId)
+        return plans.list(UUID.fromString(jwt.getSubject()), projectId, archived)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
@@ -278,6 +289,37 @@ public class PlanController {
             case PlanStatusService.Outcome.Refused refused ->
                     ResponseEntity.status(HttpStatus.CONFLICT)
                             .body(refusedProblem(refused.message()));
+        };
+    }
+
+    /**
+     * Puts the plan away, or brings it back ({@code V65}, audit D2).
+     *
+     * <p>Same shape as {@code PUT …/status} beside it, for the same reason: the flag <em>is</em> the
+     * sub-resource being replaced and the request names an absolute target, so it is idempotent and
+     * needs no {@code If-Match}.
+     *
+     * <p>It reuses {@link #editForbiddenProblem} rather than a refusal of its own, because the key
+     * is {@code plan:edit} and a caller refused here is refused for exactly the reason the rename
+     * beside it would refuse them — a separate sentence would imply a separate permission.
+     */
+    @PutMapping("/{planId}/archive")
+    public ResponseEntity<Object> archive(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID planId,
+            @RequestBody PlanArchiveRequest request) {
+
+        PlanArchiveService.Outcome outcome =
+                archives.setArchived(UUID.fromString(jwt.getSubject()), projectId, planId, request);
+
+        return switch (outcome) {
+            case PlanArchiveService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
+            case PlanArchiveService.Outcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case PlanArchiveService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(editForbiddenProblem());
+            case PlanArchiveService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
         };
     }
 

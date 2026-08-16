@@ -2,18 +2,24 @@ import {
   Box,
   Button,
   Chip,
+  FormControlLabel,
+  IconButton,
   Stack,
+  Switch,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from '@mui/material';
+import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
+import UnarchiveOutlinedIcon from '@mui/icons-material/UnarchiveOutlined';
 import { useState } from 'react';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import type { TestPlan } from '../../api/types';
-import { usePlans, useProject } from '../../api/queries';
+import { usePlans, useProject, useSetPlanArchived } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
@@ -32,7 +38,14 @@ import { ScrollX } from '../../components/ScrollX';
 export function PlanListPage() {
   const { projectId = '' } = useParams();
   const project = useProject(projectId);
-  const plans = usePlans(projectId);
+  /*
+    In the URL, not in a `useState` — this repo's rule for filter state, and it earns it here: a
+    lead who has ticked "show archived" to find last spring's plan sends somebody the link, and a
+    component-state toggle sends them a list the plan is not in.
+  */
+  const [params, setParams] = useSearchParams();
+  const showArchived = params.get('archived') === 'true';
+  const plans = usePlans(projectId, showArchived);
   const [creating, setCreating] = useState(false);
 
   return (
@@ -47,24 +60,50 @@ export function PlanListPage() {
         ]}
         subtitle="A plan fixes the scope, configurations and exit criteria for a release. Runs execute against it."
         actions={
-          /*
-            Disabled with a reason rather than hidden (§31): a Viewer seeing a greyed "New plan"
-            learns the capability exists and is worth asking for. `plan:create` is PROJECT scope —
-            unlike "New project", which is the app's one company-scope affordance — so this asks
-            the project question and the gate matches the server's.
-          */
-          <PermissionGate projectId={projectId} permission="plan:create">
-            {({ allowed }) => (
-              <Button
-                variant="contained"
-                disabled={!allowed}
-                onClick={() => setCreating(true)}
-                data-testid="Plans.New"
-              >
-                New plan
-              </Button>
-            )}
-          </PermissionGate>
+          <Stack direction="row" sx={{ gap: 2, alignItems: 'center' }}>
+            {/*
+              Ungated: showing archived plans discloses nothing a plan list does not already, and
+              somebody who cannot archive still has to be able to FIND the plan somebody else did.
+            */}
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={showArchived}
+                  onChange={(event) => {
+                    const next = new URLSearchParams(params);
+                    if (event.target.checked) next.set('archived', 'true');
+                    else next.delete('archived');
+                    setParams(next, { replace: true });
+                  }}
+                  data-testid="Plans.ShowArchived"
+                />
+              }
+              label={
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Show archived
+                </Typography>
+              }
+            />
+            {/*
+              Disabled with a reason rather than hidden (§31): a Viewer seeing a greyed "New plan"
+              learns the capability exists and is worth asking for. `plan:create` is PROJECT scope —
+              unlike "New project", which is the app's one company-scope affordance — so this asks
+              the project question and the gate matches the server's.
+            */}
+            <PermissionGate projectId={projectId} permission="plan:create">
+              {({ allowed }) => (
+                <Button
+                  variant="contained"
+                  disabled={!allowed}
+                  onClick={() => setCreating(true)}
+                  data-testid="Plans.New"
+                >
+                  New plan
+                </Button>
+              )}
+            </PermissionGate>
+          </Stack>
         }
       />
 
@@ -109,6 +148,54 @@ export function PlanListPage() {
   );
 }
 
+/**
+ * Put this plan away, or bring it back (`V65`, audit D2).
+ *
+ * **No confirmation, deliberately.** The other destructive-looking act on a plan — Delete — has a
+ * dialog because it cannot be undone; this is undone by clicking the same control again, and a
+ * confirmation on a reversible act teaches people to dismiss confirmations.
+ *
+ * Its own component so the mutation hook is per row rather than one hook the table threads a plan
+ * id through — the hook keys its cache updates on the plan it was built for.
+ */
+function ArchiveToggle({ projectId, plan }: { projectId: string; plan: TestPlan }) {
+  const setArchived = useSetPlanArchived(projectId, plan.id);
+  const archived = plan.archived;
+
+  return (
+    <PermissionGate projectId={projectId} permission="plan:edit">
+      {({ allowed }) => (
+        <Tooltip
+          title={
+            allowed
+              ? archived
+                ? 'Put this plan back in the working list'
+                : 'Archive: take this plan out of the list. Nothing is deleted, and it can still be run.'
+              : 'You do not have permission to edit test plans in this project'
+          }
+        >
+          {/* A span, because MUI drops the tooltip on a disabled button. */}
+          <span>
+            <IconButton
+              size="small"
+              disabled={!allowed || setArchived.isPending}
+              onClick={() => setArchived.mutate(!archived)}
+              aria-label={archived ? `Restore ${plan.key}` : `Archive ${plan.key}`}
+              data-testid="Plans.Row.ArchiveToggle"
+            >
+              {archived ? (
+                <UnarchiveOutlinedIcon fontSize="small" />
+              ) : (
+                <ArchiveOutlinedIcon fontSize="small" />
+              )}
+            </IconButton>
+          </span>
+        </Tooltip>
+      )}
+    </PermissionGate>
+  );
+}
+
 function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string }) {
   // Deterministic order with a unique tiebreaker: the plans still being written first, then by
   // milestone date, then by key — so the list never reshuffles between loads. §97 (M7) removed
@@ -146,6 +233,7 @@ function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string })
               the table's edge and the count in the middle, which reads as two columns.
             */}
             <TableCell sx={{ color: 'text.secondary', width: 210 }}>Exit criteria</TableCell>
+            <TableCell sx={{ color: 'text.secondary', width: 56 }} align="right" />
           </TableRow>
         </TableHead>
         <TableBody>
@@ -165,6 +253,19 @@ function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string })
                         {plan.name}
                       </Typography>
                     </RouterLink>
+                    {/*
+                      Beside the name rather than in the status column: archiving is orthogonal to
+                      the ladder (`V65`), and putting it in that cell would read as a fourth status
+                      — the exact conflation the column was kept out of the ladder to avoid.
+                    */}
+                    {plan.archived && (
+                      <Chip
+                        size="small"
+                        label="Archived"
+                        variant="outlined"
+                        data-testid="Plans.Row.Archived"
+                      />
+                    )}
                   </Stack>
                 </TableCell>
                 <TableCell>
@@ -204,6 +305,9 @@ function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string })
                 </TableCell>
                 <TableCell>
                   <CriteriaStrip criteria={plan.exitCriteria ?? []} testId="Plans.Row.ExitCriteria" />
+                </TableCell>
+                <TableCell align="right">
+                  <ArchiveToggle projectId={projectId} plan={plan} />
                 </TableCell>
               </TableRow>
             );

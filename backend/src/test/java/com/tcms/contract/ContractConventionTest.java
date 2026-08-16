@@ -516,6 +516,7 @@ class ContractConventionTest {
             Map.entry("PlanSection", List.of(com.tcms.execution.PlanSectionView.class)),
             Map.entry("PlanSectionInput", List.of(com.tcms.execution.PlanSectionInput.class)),
             Map.entry("PlanStatistics", List.of(com.tcms.execution.PlanStatisticsView.class)),
+            Map.entry("PlanArchiveInput", List.of(com.tcms.execution.PlanArchiveRequest.class)),
             Map.entry("PlanStatusInput", List.of(com.tcms.execution.PlanStatusRequest.class)),
             Map.entry("Project", List.of(com.tcms.project.ProjectView.class)),
             Map.entry("ProjectArchiveInput", List.of(com.tcms.project.ProjectArchiveRequest.class)),

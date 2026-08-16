@@ -69,11 +69,18 @@ public class PlanService {
      * <p>An empty <em>list</em> and an empty {@link Optional} mean different things and the
      * controller renders them differently: the first is a reachable project with no plans, which is
      * the state of every freshly provisioned project, and the second is a 404.
+     *
+     * <p><strong>The working list by default</strong> ({@code V65}, audit D2): archived plans are
+     * omitted unless {@code includeArchived}. The default is the narrow one because a plan is
+     * archived precisely to stop it being read, and a caller who has not asked for the archive is
+     * every caller that existed before the column did.
      */
     @Transactional(readOnly = true)
-    public Optional<List<TestPlanView>> list(UUID userId, UUID projectId) {
+    public Optional<List<TestPlanView>> list(UUID userId, UUID projectId, boolean includeArchived) {
         return projects.readVisible(userId, projectId, project -> {
-            List<TestPlan> rows = plans.findLiveInProject(project.getId());
+            List<TestPlan> rows = includeArchived
+                    ? plans.findAllInProject(project.getId())
+                    : plans.findLiveInProject(project.getId());
             List<UUID> planIds = rows.stream().map(TestPlan::getId).toList();
             Map<UUID, Long> caseCounts = cases.caseCountsByPlan(project.getId(), planIds);
             Map<UUID, Map<String, Long>> sectionCounts =
@@ -169,7 +176,8 @@ public class PlanService {
                 plan.getScopeText(),
                 plan.getOutOfScopeText(),
                 plan.getCurrentVersionNo(),
-                plan.getLockVersion());
+                plan.getLockVersion(),
+                plan.isArchived());
     }
 
     /**

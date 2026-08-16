@@ -62,6 +62,7 @@ function planBody(status: PlanStatus): TestPlan {
     outOfScopeText: null,
     currentVersionNo: 1,
     lockVersion: 1,
+    archived: false,
   }
 }
 

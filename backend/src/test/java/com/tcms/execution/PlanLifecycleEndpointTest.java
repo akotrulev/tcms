@@ -515,8 +515,241 @@ class PlanLifecycleEndpointTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // Archiving (V65, audit D2)
+    // =====================================================================
+
+    /**
+     * {@code PUT /plans/{planId}/archive} — <strong>the way out for the plan the delete above is
+     * right to refuse.</strong>
+     *
+     * <p>This lives here rather than in a class of its own for {@code CaseBulkEndpointTest}'s
+     * reason (§227 phase 2): the fixture it needs is exactly the one already seeded above — a
+     * lead, an engineer and a viewer on one project, a sibling project, and a run that makes a plan
+     * undeletable — and a second class would be a copy of that seeding under an instruction to keep
+     * it in step. It also puts the delete's 409 and the act that replaces it in one file.
+     *
+     * <p>What these catch, none of it visible to the compiler:
+     *
+     * <ol>
+     *   <li><strong>An archive that changes the status.</strong> The tempting implementation is a
+     *       fourth {@code PlanStatus}, and the cost is that archiving an approved plan silently
+     *       unsays the approval.</li>
+     *   <li><strong>An archive that is a lock.</strong> {@code CLOSED} under another name. An
+     *       archived plan must still be editable, approvable and runnable.</li>
+     *   <li><strong>A list that hides the plan from the endpoint that has to show it.</strong> The
+     *       detail read, and {@code ?archived=true}, must both still serve it — and the un-archive
+     *       is unreachable if the lookup excludes archived rows.</li>
+     *   <li><strong>An idempotent set that writes anyway</strong>, re-stamping provenance on a
+     *       second click.</li>
+     * </ol>
+     */
+    @Nested
+    @DisplayName("Archiving — a visibility fact, and not a fourth status")
+    class Archiving {
+
+        @Test
+        @DisplayName("an archived plan leaves the list, keeps its status, and comes back on request")
+        void archivingRemovesItFromTheWorkingList() throws Exception {
+            UUID plan = approvedPlan();
+
+            MvcResult archived = setArchived(LEAD, ACME, ACME_BANKING, plan, true);
+
+            assertThat(archived.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(archived).get("archived").asBoolean()).isTrue();
+            assertThat(body(archived).get("status").asText())
+                    .as("archiving says nothing about approval, and must not unsay one")
+                    .isEqualTo("APPROVED");
+            assertThat(statusOf(plan)).isEqualTo("APPROVED");
+
+            assertThat(planKeysIn(LEAD, ACME_BANKING, false))
+                    .as("gone from the working list, which is the whole of what archiving does")
+                    .doesNotContain(keyOf(plan));
+            assertThat(planKeysIn(LEAD, ACME_BANKING, true))
+                    .as("and present when the archive is asked for — a widening, not a filter")
+                    .contains(keyOf(plan));
+        }
+
+        @Test
+        @DisplayName("the DETAIL still serves it, and says it is archived")
+        void theDetailStillServesIt() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            setArchived(LEAD, ACME, ACME_BANKING, plan, true);
+
+            MvcResult read = get(LEAD, ACME, "/projects/" + ACME_BANKING + "/plans/" + plan);
+
+            assertThat(read.getResponse().getStatus())
+                    .as("a bookmark and a link from a run both land here")
+                    .isEqualTo(200);
+            assertThat(body(read).get("archived").asBoolean())
+                    .as("a plan that looks live on the one screen showing it in full is how "
+                            + "somebody edits a plan they believe is current")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("un-archiving puts it back — reachable, which a filtered lookup would not be")
+        void unarchivingPutsItBack() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            setArchived(LEAD, ACME, ACME_BANKING, plan, true);
+
+            MvcResult restored = setArchived(LEAD, ACME, ACME_BANKING, plan, false);
+
+            assertThat(restored.getResponse().getStatus()).isEqualTo(200);
+            assertThat(body(restored).get("archived").asBoolean()).isFalse();
+            assertThat(planKeysIn(LEAD, ACME_BANKING, false)).contains(keyOf(plan));
+        }
+
+        @Test
+        @DisplayName("AN ARCHIVED PLAN IS NOT FROZEN — it still edits and still moves")
+        void archivingIsNotALock() throws Exception {
+            // The point of not making this a status. A flag that also froze the plan would be
+            // CLOSED under another name, and a team that archives a plan and then needs one more
+            // pass against it should get the pass rather than a refusal citing a checkbox.
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            setArchived(LEAD, ACME, ACME_BANKING, plan, true);
+
+            assertThat(setStatus(LEAD, ACME, ACME_BANKING, plan, "IN_REVIEW")
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+            assertThat(statusOf(plan)).isEqualTo("IN_REVIEW");
+        }
+
+        @Test
+        @DisplayName("archiving twice writes nothing the second time")
+        void theSecondArchiveIsANoOp() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            setArchived(LEAD, ACME, ACME_BANKING, plan, true);
+            String stamped = archivedAtOf(plan);
+            String updated = updatedAtOf(plan);
+            clearAudit(ACME);
+
+            assertThat(setArchived(LEAD, ACME, ACME_BANKING, plan, true)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+
+            assertThat(archivedAtOf(plan))
+                    .as("a repeated click must not rewrite provenance nobody meant to change")
+                    .isEqualTo(stamped);
+            assertThat(updatedAtOf(plan)).isEqualTo(updated);
+            assertThat(auditActions(ACME))
+                    .as("nor bury the act that actually happened under a row saying it happened again")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a Viewer is refused, and the refusal names no key")
+        void viewerCannotArchive() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            clearAudit(ACME);
+
+            MvcResult refused = setArchived(VIEWER, ACME, ACME_BANKING, plan, true);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+            assertThat(refused.getResponse().getContentAsString()).doesNotContain("plan:edit");
+            assertThat(archivedAtOf(plan)).isNull();
+            assertThat(auditActions(ACME)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a Test Engineer CAN — it is plan:edit, not plan:delete")
+        void engineerCanArchive() throws Exception {
+            // Charging the delete key would put a reversible tidying act behind the product's most
+            // destructive plan permission. This is the persona that tells the two apart.
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+
+            assertThat(setArchived(ENGINEER, ACME, ACME_BANKING, plan, true)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+            assertThat(archivedAtOf(plan)).isNotNull();
+            assertThat(auditActions(ACME)).containsKey("plan.archived");
+        }
+
+        @Test
+        @DisplayName("archiving does NOT make the refused delete succeed")
+        void archivingIsNotAWayToDelete() throws Exception {
+            // The relationship between the two acts, stated. Archiving is what to do INSTEAD of
+            // deleting a plan runs were executed against — not a way to get that delete through.
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+            run(ACME, ACME_BANKING, plan, "TR-A65", 6501, false);
+            setArchived(LEAD, ACME, ACME_BANKING, plan, true);
+
+            MvcResult refused = delete(LEAD, ACME, ACME_BANKING, plan);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+            assertThat(detailOf(refused)).contains("test run");
+            assertThat(deletedAtOf(plan)).isNull();
+        }
+
+        @Test
+        @DisplayName("an absent `archived` is a 400 on the field, never a default")
+        void theFlagIsRequired() throws Exception {
+            UUID plan = plan(LEAD, ACME_BANKING, "Release 4.3");
+
+            MvcResult refused = mvc.perform(MockMvcRequestBuilders
+                            .put("/api/v1/projects/" + ACME_BANKING + "/plans/" + plan + "/archive")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(LEAD, ACME))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .accept(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andReturn();
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(refused.getResponse().getContentAsString()).contains("archived");
+            assertThat(archivedAtOf(plan)).isNull();
+        }
+
+        @Test
+        @DisplayName("a sibling project's plan is 404 — the path's second predicate")
+        void aSiblingProjectsPlanIs404() throws Exception {
+            UUID theirs = plan(LEAD, ACME_MOBILE, "Mobile 1.0");
+
+            assertThat(setArchived(LEAD, ACME, ACME_BANKING, theirs, true)
+                    .getResponse().getStatus())
+                    .isEqualTo(404);
+            assertThat(archivedAtOf(theirs)).isNull();
+        }
+    }
+
+    // =====================================================================
     // helpers — requests
     // =====================================================================
+
+    private MvcResult setArchived(
+            UUID userId, UUID companyId, UUID projectId, UUID planId, boolean archived)
+            throws Exception {
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("archived", archived);
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .put("/api/v1/projects/" + projectId + "/plans/" + planId + "/archive")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(payload)))
+                .andReturn();
+    }
+
+    /** The keys the plan list serves, with or without the archive. */
+    private List<String> planKeysIn(UUID userId, UUID projectId, boolean includeArchived)
+            throws Exception {
+
+        MvcResult listed = get(userId, ACME,
+                "/projects/" + projectId + "/plans" + (includeArchived ? "?archived=true" : ""));
+        assertThat(listed.getResponse().getStatus()).isEqualTo(200);
+
+        List<String> keys = new java.util.ArrayList<>();
+        body(listed).forEach(plan -> keys.add(plan.get("key").asText()));
+        return keys;
+    }
+
+    private String keyOf(UUID planId) throws SQLException {
+        return planColumn(planId, "key");
+    }
+
+    private String archivedAtOf(UUID planId) throws SQLException {
+        return planColumn(planId, "CAST(archived_at AS text)");
+    }
 
     /** A plan created through the real endpoint, so its shape is never a fixture's opinion. */
     private UUID plan(UUID userId, UUID projectId, String name) throws Exception {

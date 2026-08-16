@@ -53,6 +53,7 @@ function sourcePlan(over: Partial<TestPlan> = {}): TestPlan {
     outOfScopeText: null,
     currentVersionNo: 1,
     lockVersion: 1,
+    archived: false,
     ...over,
   }
 }

@@ -62,5 +62,20 @@ public record TestPlanView(
         String scopeText,
         String outOfScopeText,
         int currentVersionNo,
-        long lockVersion) {
+        long lockVersion,
+        /*
+          Whether this plan is out of the working list (V65, audit D2).
+
+          A boolean while the entity stores `archived_at`, which is ProjectView.archived's shape and
+          copied from it deliberately: PUT /projects/{projectId}/archive has done this one level up
+          since M2. WHEN it happened, and by whom, are the audit row's (plan.archived /
+          plan.unarchived).
+
+          Served on the DETAIL as well as the list, and served even though the default list cannot
+          contain an archived plan: a screen reached by a bookmark, a link from a run, or
+          `?archived=true` has to be able to say so, and a plan that looks identical to a live one
+          on the one screen that shows it in full is how somebody edits a plan they believe is
+          current. Orthogonal to `status`, which archiving never touches.
+        */
+        boolean archived) {
 }

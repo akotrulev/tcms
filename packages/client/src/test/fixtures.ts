@@ -304,6 +304,8 @@ export function plan(overrides: Partial<Schemas['TestPlan']> = {}): Schemas['Tes
     outOfScopeText: null,
     currentVersionNo: 1,
     lockVersion: 1,
+    // In the working list — V65 (audit D2). `archived` is orthogonal to `status`.
+    archived: false,
     ...overrides,
   };
 }

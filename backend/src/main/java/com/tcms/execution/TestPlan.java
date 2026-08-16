@@ -120,6 +120,35 @@ public class TestPlan {
     private java.time.Instant deletedAt;
 
     /**
+     * When this plan was put away — <strong>{@code V65} (audit D2), and orthogonal to
+     * {@link #status} on purpose.</strong>
+     *
+     * <p>{@code V32} removed {@code CLOSED} from the ladder because it described a plan being
+     * <em>run</em>, which is the execution's business. What went with it was any way for a finished
+     * plan to leave the list: {@link PlanDeleteService} refuses to delete one that runs were
+     * executed against — correctly, since those runs would be left naming a plan the API 404s for —
+     * so such a plan stayed {@code APPROVED} in the working list for ever.
+     *
+     * <p>A fourth status would put that conflation back, and would also destroy information every
+     * time it was set: an approved plan is the one you most want to archive when the release ships,
+     * and archiving must not unsay the approval. Two facts, two columns.
+     *
+     * <p><strong>A visibility fact and not a lock.</strong> An archived plan can still be read,
+     * edited, approved, run against, reported on and deleted; the only thing that changes is that
+     * the project's plan list omits it unless asked. {@code V65}'s header says why that restraint is
+     * the design rather than an unfinished half.
+     *
+     * <p>{@code Project.archivedAt}'s shape throughout, deliberately — {@code PUT
+     * /projects/{projectId}/archive} has done this one level up since M2, and a second design for
+     * one act is two answers to one question. So: a timestamp here, a <em>boolean</em> on the wire
+     * ({@link TestPlanView}, as {@code ProjectView} narrows its own), and <strong>no
+     * {@code archived_by}</strong> — who did it is the audit row's business, which is where "who
+     * changed what, when" lives in this product.
+     */
+    @Column(name = "archived_at")
+    private java.time.Instant archivedAt;
+
+    /**
      * Optimistic lock — <strong>{@code @Version} was missing until the edit endpoint needed it, and
      * that is a defect this slice found rather than a field it added</strong>.
      *
@@ -330,6 +359,26 @@ public class TestPlan {
         updatedBy = actorId;
     }
 
+    /**
+     * Puts the plan away, or brings it back — {@link #archivedAt}'s only writer.
+     *
+     * <p>Idempotent in both directions and deliberately so: archiving an archived plan re-stamps
+     * neither the time nor the actor, because the caller asked for a state and that is the state it
+     * is in. Re-stamping would make a second click rewrite provenance nobody meant to change.
+     *
+     * <p>{@link #status} is untouched, which is the whole point of the column existing.
+     * {@code updatedAt}/{@code updatedBy} <em>are</em> stamped: putting a plan away is a change to
+     * the plan somebody made, and a list ordered by last activity that ignored it would be lying.
+     */
+    void applyArchived(boolean archived, UUID actorId, java.time.Instant now) {
+        if (archived == (archivedAt != null)) {
+            return;
+        }
+        archivedAt = archived ? now : null;
+        updatedAt = now;
+        updatedBy = actorId;
+    }
+
     UUID getId() {
         return id;
     }
@@ -388,6 +437,17 @@ public class TestPlan {
 
     java.time.Instant getDeletedAt() {
         return deletedAt;
+    }
+
+    /**
+     * Whether this plan is out of the working list.
+     *
+     * <p>A boolean rather than the instant, because that is the whole of what the wire carries —
+     * {@code Project.isArchived()}'s shape. The timestamp is the column's business and the audit
+     * row's; nothing above this asks it.
+     */
+    boolean isArchived() {
+        return archivedAt != null;
     }
 
     long getLockVersion() {

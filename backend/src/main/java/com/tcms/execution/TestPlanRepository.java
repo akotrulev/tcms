@@ -23,15 +23,31 @@ import org.springframework.transaction.annotation.Transactional;
 public interface TestPlanRepository extends JpaRepository<TestPlan, UUID> {
 
     /**
-     * A project's live plans, newest key first.
+     * A project's live plans, newest key first — <strong>the working list, so archived plans are
+     * not in it</strong> ({@code V65}, audit D2).
      *
      * <p>Ordered by {@code keySeq} descending rather than by name: a plan list is read as a
      * chronology — "what are we working to now" — and the newest plan is the answer far more often
      * than the alphabetically first one.
+     *
+     * <p>Archived plans are excluded <em>here</em> rather than filtered by the caller, so the
+     * default of every reader of this method is the working list. {@link #findAllInProject} is the
+     * explicit opt-in, and having to name it is the point: a screen that wants the archive says so.
+     */
+    @Query("SELECT p FROM TestPlan p WHERE p.projectId = :projectId AND p.deletedAt IS NULL "
+            + "AND p.archivedAt IS NULL ORDER BY p.keySeq DESC")
+    List<TestPlan> findLiveInProject(@Param("projectId") UUID projectId);
+
+    /**
+     * Every live plan, archived ones included — {@code ?archived=true}'s query.
+     *
+     * <p>Not "the archived ones". The list a person asks for when they tick "show archived" is
+     * everything, because the alternative makes them read two screens to answer "which plans exist";
+     * the archived rows carry {@code archivedAt} so a client can mark them.
      */
     @Query("SELECT p FROM TestPlan p WHERE p.projectId = :projectId AND p.deletedAt IS NULL "
             + "ORDER BY p.keySeq DESC")
-    List<TestPlan> findLiveInProject(@Param("projectId") UUID projectId);
+    List<TestPlan> findAllInProject(@Param("projectId") UUID projectId);
 
     /**
      * One live plan that is in this project.

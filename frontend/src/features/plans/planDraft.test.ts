@@ -68,6 +68,7 @@ function planBody(overrides: Partial<TestPlan> = {}): TestPlan {
     outOfScopeText: null,
     currentVersionNo: 1,
     lockVersion: 7,
+    archived: false,
     ...overrides,
   }
 }

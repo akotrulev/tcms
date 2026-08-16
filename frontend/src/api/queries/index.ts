@@ -113,6 +113,7 @@ export {
   usePlan,
   usePlanStatistics,
   usePlans,
+  useSetPlanArchived,
   useSetPlanStatus,
   useUpdatePlan,
   type CriterionInput,

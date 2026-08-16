@@ -11,10 +11,28 @@ import type {
 } from '../types';
 import { base, keys } from './keys';
 
-export function usePlans(projectId: string): UseQueryResult<TestPlan[]> {
+/**
+ * The project's plans — **the working list unless `includeArchived`** (`V65`, audit D2).
+ *
+ * `archived=true` widens rather than filters: it is "and the archived ones too", so one request
+ * still answers "which plans exist". The two live under different query keys because they are
+ * different answers, and both are under the `plans` prefix so every existing invalidation covers
+ * them.
+ */
+export function usePlans(projectId: string, includeArchived = false): UseQueryResult<TestPlan[]> {
   return useQuery({
-    queryKey: keys.plans(projectId),
-    queryFn: ({ signal }) => api.get<TestPlan[]>(`${base(projectId)}/plans`, { signal }),
+    queryKey: includeArchived ? keys.plansWithArchived(projectId) : keys.plans(projectId),
+    /*
+      Through `qs`, not a ternary inside the template. `contractOperations.test.ts` reconstructs
+      every call's URL shape and compares it against openapi.yaml; it understands `qs(...)` and a
+      hand-rolled `?archived=true` in the string makes the path unrecognisable, which takes this
+      call out of that comparison entirely. An omitted parameter is exactly what `qs` drops.
+    */
+    queryFn: ({ signal }) =>
+      api.get<TestPlan[]>(
+        `${base(projectId)}/plans${qs({ archived: includeArchived ? 'true' : undefined })}`,
+        { signal },
+      ),
   });
 }
 
@@ -214,6 +232,27 @@ export function useSetPlanStatus(projectId: string, planId: string) {
       // The run list renders each run's plan key, and a run's own screen links to the plan — both
       // read a plan whose status has just moved.
       void client.invalidateQueries({ queryKey: ['projects', projectId, 'runs'] });
+    },
+  });
+}
+
+/**
+ * Puts a plan away, or brings it back (`V65`, audit D2).
+ *
+ * `plan:edit`, not `plan:delete`: it destroys nothing and the same call reverses it. Not `handled`
+ * — a failure here has no sentence of its own that the caller must read, so the global notifier is
+ * the right reporter, unlike the delete below.
+ */
+export function useSetPlanArchived(projectId: string, planId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (archived: boolean) =>
+      api.put<TestPlan>(`${base(projectId)}/plans/${planId}/archive`, { archived }),
+    onSuccess: (updated) => {
+      client.setQueryData(keys.plan(projectId, planId), updated);
+      // The prefix, so BOTH lists refetch: the row has just moved from one to the other, and a
+      // stale working list would keep rendering a plan that is no longer in it.
+      void client.invalidateQueries({ queryKey: keys.plans(projectId) });
     },
   });
 }

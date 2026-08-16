@@ -78,6 +78,15 @@ export const keys = {
   reviews: (p: string, subjectType: string, subjectId: string) =>
     ['projects', p, 'reviews', subjectType, subjectId] as const,
   plans: (p: string) => ['projects', p, 'plans'] as const,
+  /**
+   * The plan list WITH the archive (`V65`, audit D2).
+   *
+   * A key of its own rather than a parameter on `plans`, because the two are different answers to
+   * different questions and caching them under one key would serve whichever was fetched last. It
+   * is still under the `plans` prefix, so every existing `invalidateQueries(keys.plans(p))` — of
+   * which there are several, on every plan write — refreshes both without being told about this.
+   */
+  plansWithArchived: (p: string) => ['projects', p, 'plans', { archived: true }] as const,
   plan: (p: string, id: string) => ['projects', p, 'plans', id] as const,
   planStats: (p: string, id: string, aggregation: string) =>
     ['projects', p, 'plans', id, 'statistics', aggregation] as const,

@@ -190,6 +190,9 @@ export function aPlan(overrides: Partial<TestPlan> = {}): TestPlan {
     tags: [],
     currentVersionNo: 1,
     lockVersion: 0,
+    // Not archived — the working-list state, which is what every plan fixture wants by default
+    // (V65, audit D2). Pass `archived: true` to build the other one.
+    archived: false,
     ...overrides,
   }
 }
