@@ -111,6 +111,7 @@ public class CaseCreateService {
     private final ConditionService conditionLibrary;
     private final CaseRenderer renderer;
     private final CaseVersions versions;
+    private final SuiteVersions suiteVersions;
     private final DisplayKeys displayKeys;
     private final AuditEventRepository auditEvents;
     private final Clock clock;
@@ -128,6 +129,7 @@ public class CaseCreateService {
             ConditionService conditionLibrary,
             CaseRenderer renderer,
             CaseVersions versions,
+            SuiteVersions suiteVersions,
             DisplayKeys displayKeys,
             AuditEventRepository auditEvents,
             Clock clock) {
@@ -143,6 +145,7 @@ public class CaseCreateService {
         this.conditionLibrary = conditionLibrary;
         this.renderer = renderer;
         this.versions = versions;
+        this.suiteVersions = suiteVersions;
         this.displayKeys = displayKeys;
         this.auditEvents = auditEvents;
         this.clock = clock;
@@ -360,6 +363,13 @@ public class CaseCreateService {
         CaseVersions.Decision decision = versions.initial(edit);
         TestCaseDetailView view = renderer.render(created, liveSuites, vocabularies, companyId);
         versions.write(created, edit, decision, view, userId, now);
+
+        // A new case lands in every suite that files it, and in every suite whose tag rule its tags
+        // match — so its arrival changes those suites' composition and each owes a version (§238).
+        // No holdersBefore reading: the case did not exist a moment ago, so nothing held it and the
+        // empty before-set is the honest input rather than an omission.
+        suiteVersions.reconcileAfterCaseWrite(
+                project.getId(), Set.of(), List.of(created.getId()), userId, now);
 
         auditEvents.save(AuditEvent.record(
                 project.getId(),

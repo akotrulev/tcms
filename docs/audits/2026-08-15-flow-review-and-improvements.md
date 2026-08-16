@@ -39,9 +39,11 @@ shared-step library).** None is started.~~ ~~→ **six of eleven, C3 landed as �
 order: **C5 + C9** (the run-detail pair), **C2** (quarantine consumers), **C1** (suite version
 advancement), **C4** (retire the shared-step library). None is started.~~ ~~→ **eight of eleven,
 C5 + C9 landed as §236.** What remains, in order: **C2** (quarantine consumers), **C1** (suite
-version advancement), **C4** (retire the shared-step library). None is started.~~ → **nine of
+version advancement), **C4** (retire the shared-step library). None is started.~~ ~~→ **nine of
 eleven, C2 landed as §237.** What remains, in order: **C1** (suite version advancement), **C4**
-(retire the shared-step library). Neither is started.
+(retire the shared-step library). Neither is started.~~ → **ten of eleven, C1 landed as §238.**
+What remains: **C4** (retire the shared-step library), which is not started and is independent of
+everything above it.
 
 Status marks used in the tables: **✅ DONE** · **🔨 IN PROGRESS** · **⬜ NOT STARTED** ·
 **⛔ OUT OF SCOPE** (this session).
@@ -203,7 +205,7 @@ eleven.** Each remaining decision (C1, C2, C4) becomes a slice.
 
 | # | Decision (2026-08-16) | Decision to make | Evidence |
 |---|---|---|---|
-| C1 | **Fix the sharp edge only**: make `suite_version` actually advance on membership/status change so review pinning means something; leave the other three resources' versioning as-is. | **Versioning story.** Four resources, four behaviours: cases (full table + panel, no restore/diff), suites (v1 then never), plans (scope-only, no endpoint), doc pages (hash-gated, write-only, `pinned`/`change_comment` never set). Either ship one read+diff(+restore) surface across them, or trim the write paths that nothing reads. The review apparatus pinning `Suite.currentVersionNo` to a number that never moves is the sharpest edge. | `SuiteVersions`, `PageVersions` headers |
+| C1 | ✅ §238 — **Fixed the sharp edge, and refused half the wording.** `suite_version` advances on any act that changes the RESOLVED membership (all three arms), never on a status change: an approval that minted a version would pin a number the transition created, when the pin has to name the composition that WAS approved. The other three resources' versioning is untouched, as decided. Two findings this row did not contain: **v1 was a false statement for every suite created with members** (`writeInitial` hard-coded an empty composition, unnoticed since §98 let a create carry `caseIds`), and `SuiteHistoryEndpointTest`'s synthetic v2 — 20 tests — collided with the real writer. **No backfill**, of either. | **Versioning story.** Four resources, four behaviours: cases (full table + panel, no restore/diff), suites (~~v1 then never~~ → live), plans (scope-only, no endpoint), doc pages (hash-gated, write-only, `pinned`/`change_comment` never set). Either ship one read+diff(+restore) surface across them, or trim the write paths that nothing reads. ~~The review apparatus pinning `Suite.currentVersionNo` to a number that never moves is the sharpest edge.~~ → closed. | `SuiteVersions`, `PageVersions` headers |
 | C2 | **Finish it — reports + runner badge**: exclude quarantined cases from `aggregate_execution` / pass-rate denominators AND badge them in the runner. | **Quarantine.** The flag is recorded (`PUT /cases/{id}/quarantine`, reason required) and nothing downstream reads it — runs, reports, pass rates and flake all include quarantined cases. Decide the consumer (exclude from `aggregate_execution` denominators? badge in the runner?) or it is a note field with ceremony. | Authoring trace friction 16 |
 | C3 | ✅ §235 — **Ship docs search**: a search endpoint over the existing tsvector + a search box in the documentation space. Wider (cases/plans) search is not part of this decision. | **Search.** `doc_page.search_vector` (and `V2`'s triggers) are maintained, GIN-indexed, and no endpoint queries them — while `PlanDocumentPanel` justifies its design on pages being "found by everybody who searches documentation". A docs search endpoint is the cheapest visible win from machinery already paid for. | Doc trace friction 8 |
 | C4 | **Retire it**: migrate `sharedStepId` refs to copied text, remove the picker and library UI; the suggestion corpus stays as the authoring aid. | **Shared-step library.** §94 declared it vestigial next to the suggestion corpus, and the picker's insert writes the entry's *title* as the action while the body lives elsewhere. Either retire it (migrate `sharedStepId` refs to copied text) or make it real (picker inserts the body; suggestions offer "promote to library"). Half-alive is the one wrong state. | §94; `SharedStepPicker.tsx` |
@@ -265,7 +267,12 @@ eleven.** Each remaining decision (C1, C2, C4) becomes a slice.
       `execution` and may not read `case_flake`, so the exclusion could not follow it there. Both
       rates are printed instead. Read live rather than snapshotted (a frozen dimension would be
       inert: a case is quarantined *after* it goes red). Widened to `RunSummaryReport`.
-   6. ⬜ **C1** — suite version advancement (touches the review-pinning seam; last because it is
-      the one most likely to grow).
+   6. ✅ **C1** (§238) — suite version advancement. Landed **partly against its own wording**, like
+      C2 before it: the "membership" half is built and the "status" half is refused, because a bump
+      on the transition would make the review pin name a version the approval itself minted. The
+      bump measures the **resolved** membership rather than the suite's definition — the definition
+      reading would have made `suite_version` a second implementation of "in this suite" — and the
+      slice found two things this ledger did not list: an empty v1 that has been a false statement
+      since §98, and 20 tests hand-inserting a version the product now writes.
    7. ⬜ **C4** — retire the shared-step library (migration + UI removal; independent, can land
       anywhere after 1).

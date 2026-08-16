@@ -212,6 +212,18 @@ public class SuiteStatusService {
         // together — see ReviewService#moved. The version pinned is the suite's current one, which
         // for a suite means its composition (SuiteVersions): approving a folder is a statement about
         // what was in it on the day, and that is exactly the number an auditor needs back.
+        //
+        // ~~That sentence was FALSE for the whole of the product's history up to §238.~~ It says
+        // what the pin is for and it was right about that; what it did not say is that nothing ever
+        // advanced the number. SuiteVersions wrote v1 at create and never again, so every approval
+        // ever taken on every deployment pinned 1 — the same number whether the folder held four
+        // cases or four hundred, and whether they were the same four. C1 in the flow audit is this
+        // comment. SuiteVersions#reconcile is what makes it true, and the sentence is kept above
+        // rather than rewritten because the intent was never the defect.
+        //
+        // It stays true only because Suite#applyStatus declines to bump: the pin has to name the
+        // composition that was approved, which is the version standing BEFORE this transition, not
+        // one this transition minted. See that method for why §238 diverged from C1's wording.
         reviews.moved(
                 projectId,
                 ReviewSubjectType.SUITE,

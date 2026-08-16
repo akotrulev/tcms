@@ -852,6 +852,13 @@ class ExecutionSource {
      * precisely so a reader can tell those apart. Falls back to 1, the column default on every suite
      * row and the honest answer for suites created before {@code SuiteVersions} existed.
      *
+     * <p><strong>This distinction started paying at §238 and needed no change to start.</strong>
+     * Until then {@code suite_version} held at most one row per suite, so the correlated subquery
+     * and the fallback answered 1 either way and the two readings were indistinguishable — a
+     * scheduler tick could have written {@code current_version_no} and nothing would have caught it.
+     * Now that a composition advances, the {@code created_at <= last_executed_at} bound is what
+     * makes an old summary keep the number that was in force when the run happened.
+     *
      * @return rows inserted. Zero on a steady-state tick is ordinary — every run already has its
      *     summary — which is why {@link #correctSuiteRunCounts()} reports its own count separately.
      */

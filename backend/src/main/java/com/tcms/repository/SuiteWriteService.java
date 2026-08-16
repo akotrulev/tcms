@@ -290,7 +290,11 @@ public class SuiteWriteService {
         // Likewise: suite_condition.suite_id references the row that was just flushed.
         conditions.reconcile(
                 created, edit.preconditionIds(), edit.postconditionIds(), companyId);
-        versions.writeInitial(created, userId, now);
+        // The membership the create actually established, not List.of(): a create carries caseIds
+        // and tagRules since §98, so the empty v1 this used to write was a false statement for any
+        // suite created with members. Resolved AFTER both reconciles, through the one union every
+        // screen reads, so v1 says what the tree says.
+        versions.writeInitial(created, project.getId(), userId, now);
 
         audit(project.getId(), userId, "suite.created", created, now);
 
@@ -368,19 +372,29 @@ public class SuiteWriteService {
                 suite.applyStatus(LifecycleStatus.DRAFT, userId, now);
             }
             suites.saveAndFlush(suite);
-            // Membership is not versioned here, and that is worth stating: suite_version holds
+            // ~~Membership is not versioned here, and that is worth stating: suite_version holds
             // composition, so a membership change is exactly what a v2 would be for — and nothing
-            // writes one today (SuiteVersions writes v1 and nothing since, which CaseFacts'
-            // suiteVersionMarkers already records as a property of the writer). Changing that is
-            // the composition-versioning slice, not a line here.
+            // writes one today.~~ → §238: it is versioned, one line down. The old comment was right
+            // about what a v2 is for, which is why it named the slice that arrived.
             membership.reconcile(
                     suite, edit.tagRules(), edit.caseIds(), companyId, userId, now);
             conditions.reconcile(
                     suite, edit.preconditionIds(), edit.postconditionIds(), companyId);
 
-            // No version row: a name is content, and suite_version holds composition. See
-            // SuiteVersions for why bumping here would start the every-edit-bumps-every-ancestor
-            // spiral V1's own schema comment exists to refuse.
+            // Only this suite: the two arms reconciled above are its own, and neither can change
+            // what any OTHER suite holds. A case write is the direction that fans out, and it goes
+            // through reconcileAfterCaseWrite instead.
+            //
+            // Unconditional rather than gated on "did the payload mention membership", because a
+            // rename sends null for both lists and the reconcile leaves them alone — so this
+            // resolves an unchanged composition and decide() writes nothing. Asking the payload
+            // would be a second, weaker answer to a question the hash already answers exactly.
+            versions.reconcile(project.getId(), List.of(suite.getId()), userId, now);
+
+            // No version row for the NAME — a name is content, and suite_version holds composition.
+            // Unchanged by §238, and it is the half of the old rule that was never the debt: see
+            // SuiteVersions for why bumping on a rename would start the
+            // every-edit-bumps-every-ancestor spiral V1's own schema comment exists to refuse.
             audit(project.getId(), userId, "suite.renamed", suite, now);
             if (unApproves) {
                 // Its own verb, for CaseUpdateService's reason: an approval that ended is what

@@ -2954,3 +2954,30 @@ and why**; that is a legitimate outcome and a silent skip is not.
 | `§237 QR-5` | Quarantine a case with **no result in the selection** and regenerate | It **is** listed in the section and the metadata counts stay where they were. The narrative reads *"…of those contributed 0 of…"*. A quarantined test nobody is running is the finding, not a row to drop. |
 | `§237 QR-6` | Generate a **Run summary** report for the run containing the quarantined case | The same pair of rates and the same section, with the scope word **"this run"** rather than "this selection". The per-tester and per-suite tables still count the quarantined rows. |
 | `§237 QR-7` | Quarantine **every** case that has a result in the run, then regenerate the run summary | **Pass rate (excluding quarantined cases)** is an em dash `—`, never `0.0%`. Zero over zero is not zero per cent, and a report claiming total failure for a run whose every result was merely discounted is the one direction a defect must not take. |
+
+## §238 — the marker rail that could finally have two marks (C1)
+
+**Five rows, none run** (§65). Ids are `§238 SV-*`; the prefix was grepped against this file and the
+mutation queue before minting, and against `DK`/`SE` which §236–§237 took.
+
+**Lane.** All five are lane `A3` — runs — because the thing to look at is the **suite history**
+screen, whose entries are runs and whose version-marker rail is the frontend half of this slice.
+**No new fixture is authored and none is needed**: the rail has been wired since §101 and has never
+rendered a mark, so what these rows check is a client that was written blind. The only addition to
+`A3`'s charter is to **change a suite's membership between two of its runs** — file one more case
+into the suite after the first run and before the last — which is an ordinary act on a screen the
+lane already visits.
+
+**The standing risk this lane carries.** Every row below renders a code path that has been
+unreachable in every deployment since it was written. A component that throws on its second marker,
+sorts them backwards, or draws the boundary on the wrong side of an entry would have looked correct
+for the whole of the product's life, and `npm run test:run` is green either way because the SPA's
+tests mock the endpoint. **A finding here is expected rather than surprising.**
+
+| # | Drive | Expect |
+|---|---|---|
+| `§238 SV-1` | Open a suite's **history** for a suite whose membership changed between runs | The version-marker rail draws **more than one mark**, oldest first. This is the first time this element has had anything to draw; the row is worth running even if every other one is skipped. |
+| `§238 SV-2` | Read the entries either side of the mark | The **"the membership changed during this period"** notice fires, and fires **between** the right two entries — the run before the change keeps the old number, the run after it reads the new one. A notice on the wrong side is the same claim inverted, and it is the reading that makes a pass-rate drop look like a regression when it is new coverage. |
+| `§238 SV-3` | Read each mark's author and timestamp | Each names the person who made the composition change and when. **No mark carries a change comment**, and the rail must render that absence cleanly rather than as an empty quote or the word `null` — a composition version has no author's note by decision, so this is the normal state and not an edge case. |
+| `§238 SV-4` | Open the history of a suite created **before** this slice, or one nothing has changed | **One mark, or none, and no notice** — and the page reads as "nothing changed here", never as an error or a gap. Suites predating the writer carry no marks at all and none was invented for them; the screen cannot tell that apart from a stable folder and must not pretend to. |
+| `§238 SV-5` | Compare the pass rates either side of the mark, on a suite that **gained** cases | The suite's rate moves and the screen does **not** invite the comparison across the boundary. §6p calls this the most dangerous screen in the product for exactly this reason, and the mark exists so a reader refuses the comparison rather than making it silently. |

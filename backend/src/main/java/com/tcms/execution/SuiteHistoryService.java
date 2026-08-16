@@ -60,12 +60,24 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <h2>What this page cannot yet show, stated rather than faked</h2>
  *
- * <p><strong>The version-marker rail is structurally empty in every deployment today.</strong>
+ * <p><del><strong>The version-marker rail is structurally empty in every deployment today.</strong>
  * {@code repository.SuiteVersions} writes v1 at creation and nothing since — a rename is content
  * rather than composition, and the moves that would change composition are not built. So every entry
  * resolves to v1, the SPA's "the membership changed during this period" notice never fires, and that
  * is honest: the membership genuinely has not changed. The wiring is here so that the day a case
- * move writes v2, this screen shows it without a backfill.
+ * move writes v2, this screen shows it without a backfill.</del>
+ *
+ * <p><strong>Superseded by §238 — the rail is live, and it took no backfill, which was the claim.</strong>
+ * {@code repository.SuiteVersions#reconcile} advances the composition whenever the resolved
+ * membership changes, so a suite that gained or lost cases between two runs now carries a mark
+ * between them and the notice fires. A rename still writes nothing, so the rail marks composition
+ * and only composition — which is what makes it answer the question this page is built around: a
+ * pass rate that dropped across a mark dropped over a different set of cases.
+ *
+ * <p>What is still honest and worth stating: <strong>suites that predate the writer carry no marks
+ * at all</strong>, and no mark was invented for them. A history with one v1 and nothing else is a
+ * suite nothing has changed, or one whose changes happened before anything was recording — and the
+ * page cannot tell those apart. It does not claim to.
  */
 @Service
 public class SuiteHistoryService {

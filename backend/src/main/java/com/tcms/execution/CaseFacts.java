@@ -1013,12 +1013,13 @@ class CaseFacts {
      * ({@code repository.SuiteVersions} says so). Sharing the query would invite a future filter
      * meant for one to be applied to both.
      *
-     * <p><strong>Expect at most one mark per suite today, and that is a property of the writer, not
-     * of this query.</strong> {@code SuiteVersions} writes v1 at creation and nothing since — a
+     * <p><del><strong>Expect at most one mark per suite today, and that is a property of the writer,
+     * not of this query.</strong> {@code SuiteVersions} writes v1 at creation and nothing since — a
      * rename is content, and the moves that change composition are not built. So the timeline's
-     * version-marker rail is structurally empty until the case-move slice writes a v2. Reading it
-     * anyway is §3 lesson 5: the rows are recorded from M1 precisely so the screen that renders them
-     * needs no backfill.
+     * version-marker rail is structurally empty until the case-move slice writes a v2.</del> → §238
+     * wrote that second writer and this query answers several marks per suite now. <strong>Reading
+     * it anyway was §3 lesson 5, and the bet paid</strong>: the rows were recorded from M1 precisely
+     * so the screen that renders them needed no backfill, and it needed none.
      */
     List<VersionMark> suiteVersionMarkers(UUID suiteId) {
         @SuppressWarnings("unchecked")

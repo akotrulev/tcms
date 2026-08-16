@@ -16,11 +16,12 @@ import org.springframework.stereotype.Component;
  *
  * <p>{@code repository.CaseVersions} and {@code repository.SuiteVersions} are the two siblings; this
  * one sits between them in shape. Like a suite's, the versioned thing is structure rather than prose
- * ({@link PlanSnapshot} says which fields and why). Unlike a suite's, there is a real
+ * ({@link PlanSnapshot} says which fields and why). <del>Unlike a suite's, there is a real
  * {@link #decide} here — a suite's composition could only ever change at creation when
  * {@code SuiteVersions} was written, so a "has it changed" branch there had a path no test could
- * make it take. A plan's scope is edited by the endpoint this class was written for, so both arms
- * are reachable and both are covered.
+ * make it take.</del> → §238 gave {@code SuiteVersions} a {@link #decide} of its own for exactly the
+ * reason this one exists, so the three siblings now agree on shape. A plan's scope is edited by the
+ * endpoint this class was written for, so both arms are reachable and both are covered.
  *
  * <h2>Two writes, and the second one usually writes nothing</h2>
  *

@@ -83,8 +83,11 @@ public class Suite {
      *
      * <p>{@code V1}'s comment on {@code suite_version.snapshot} is explicit about the distinction,
      * and it is why a rename does not bump this: otherwise every case edit would bump every
-     * ancestor suite. {@link SuiteVersions} writes v1 at create and nothing else yet, because
-     * nothing in this slice changes a composition — see its header for what owes the later bumps.
+     * ancestor suite. <del>{@link SuiteVersions} writes v1 at create and nothing else yet, because
+     * nothing in this slice changes a composition — see its header for what owes the later
+     * bumps.</del> → <strong>superseded (§238):</strong> {@link SuiteVersions#reconcile} advances
+     * it whenever the suite's <em>resolved</em> membership changes, by any of the three arms. A
+     * rename still writes nothing, which is the half of the old sentence that was never the debt.
      */
     @Column(name = "current_version_no", nullable = false)
     private int currentVersionNo;
@@ -206,11 +209,37 @@ public class Suite {
      * {@code TestPlan.applyStatus} declined the same bump in §73 for the same reason. A history whose
      * entries all carry byte-identical snapshots is the every-edit-bumps-every-ancestor spiral
      * {@code V1}'s own schema comment refuses.
+     *
+     * <p><strong>§238 kept this and diverged from the audit's wording to do so.</strong> C1 asks for
+     * a bump on "membership/status change"; the status half is refused here. If approving minted a
+     * version, {@link SuiteStatusService} would pin the number the approval itself created — and
+     * what an auditor needs back is the composition that <em>was</em> approved, which is the version
+     * standing before the transition. The pin is meaningful because this method declines, not
+     * despite it.
      */
     void applyStatus(LifecycleStatus target, UUID actorId, Instant now) {
         this.lifecycleStatus = target;
         this.updatedAt = now;
         this.updatedBy = actorId;
+    }
+
+    /**
+     * Records that the composition changed and now carries {@code versionNo} — called only when
+     * {@link SuiteVersions} actually wrote a row, which is {@link TestCase#advanceVersion}'s split
+     * and for the same reason: a reconcile that found nothing changed must not advance the counter.
+     *
+     * <h2>No {@code updatedAt}, no {@code updatedBy}, and that is the decision</h2>
+     *
+     * <p>Every other mutator on this class stamps both, because every other mutator is somebody
+     * editing <em>this row</em>. This one is reached almost entirely from the other direction — a
+     * case being filed, tagged, moved or deleted — and re-stamping here would make a suite that
+     * nobody touched sort to the top of "recently updated" and name, as its last editor, whoever
+     * edited a case that happens to match one of its tag rules. The act is already attributed: the
+     * {@code suite_version} row carries {@code created_by}, which is where "who changed what this
+     * folder holds" belongs.
+     */
+    void applyCompositionVersion(int versionNo) {
+        this.currentVersionNo = versionNo;
     }
 
     /**
@@ -258,9 +287,10 @@ public class Suite {
     /**
      * The composition version a review pins itself to ({@code SuiteVersions}).
      *
-     * <p>Package-private and read by exactly one caller, {@code SuiteStatusService}: it is not on
-     * the wire — {@code SuiteView} serves no version number — and exposing it publicly would invite
-     * a second reading of "which version is current" beside {@code SuiteVersions}' own.
+     * <p>Package-private and read by <del>exactly one caller, {@code SuiteStatusService}</del> two,
+     * {@code SuiteStatusService} and {@link SuiteVersions#decide}: it is not on the wire —
+     * {@code SuiteView} serves no version number — and exposing it publicly would invite a second
+     * reading of "which version is current" beside {@code SuiteVersions}' own.
      */
     int getCurrentVersionNo() {
         return currentVersionNo;

@@ -798,14 +798,11 @@ class ArchitectureRulesTest {
                             + "§188. ReportArtifactRepository declares no method at all. The "
                             + "reader it wants is an artifact list, which is a contract change "
                             + "rather than a wiring fix"),
-            Map.entry("SuiteVersion.contentHash",
-                    "the digest that exists so a LATER version can be compared to an earlier one, "
-                            + "on the one version table that has never written a second row: "
-                            + "SuiteVersions writes v1 at create and nothing since, and its header "
-                            + "says why a decide() sibling would be \"a comparison with exactly "
-                            + "one caller that always answers yes\". PageVersions.recordEdit is "
-                            + "what the reader looks like when it arrives; the exit is the "
-                            + "composition writes SuiteVersions already names as owed"),
+            // SuiteVersion.contentHash was here from §188 until §238, as "the digest that exists so
+            // a LATER version can be compared to an earlier one, on the one version table that has
+            // never written a second row". It named its own exit — "the composition writes
+            // SuiteVersions already names as owed" — and that is the exit it took: SuiteVersions
+            // #decide reads it now. Removed rather than reworded, which is what this map is for.
             Map.entry("TestRun.releaseSortKey",
                     "§151's column, and the sharpest member of this list: written on three tables, "
                             + "indexed on three tables, and there is no WHERE and no ORDER BY over "

@@ -114,6 +114,7 @@ public class CaseBulkService {
     private final TestStepRepository stepRows;
     private final CaseRenderer renderer;
     private final CaseVersions versions;
+    private final SuiteVersions suiteVersions;
     private final ReviewService reviews;
     private final AuditEventRepository auditEvents;
     private final Clock clock;
@@ -133,6 +134,7 @@ public class CaseBulkService {
             TestStepRepository stepRows,
             CaseRenderer renderer,
             CaseVersions versions,
+            SuiteVersions suiteVersions,
             ReviewService reviews,
             AuditEventRepository auditEvents,
             Clock clock) {
@@ -150,6 +152,7 @@ public class CaseBulkService {
         this.stepRows = stepRows;
         this.renderer = renderer;
         this.versions = versions;
+        this.suiteVersions = suiteVersions;
         this.reviews = reviews;
         this.auditEvents = auditEvents;
         this.clock = clock;
@@ -275,6 +278,19 @@ public class CaseBulkService {
         List<UUID> changedIds = new ArrayList<>();
         List<String> declinesEnded = new ArrayList<>();
 
+        // §238, before any mutation: two of this endpoint's commands move a membership arm —
+        // MOVE_TO_SUITE refiles and ADD_TAGS can match a suite's tag rule — and the suites a case
+        // LEAVES are unfindable once it has left. Over the whole selection at once, because the
+        // reconcile is a set: a move of four hundred cases out of one folder and into another
+        // writes two version rows, not eight hundred.
+        //
+        // Skipped entirely on a dry run, which is the one place this could have written on a
+        // preview. Everything else above runs identically by design; this cannot, because it is a
+        // write.
+        Set<UUID> suitesBefore = dryRun
+                ? Set.of()
+                : suiteVersions.holdersBefore(project.getId(), caseIds);
+
         // The caller's order, over the REQUESTED ids rather than the found ones, so an id that
         // resolved to nothing still lands in a bucket. See BulkVerdict — the mock's loop dropped
         // those, and the user was shown an accounting of 42 for a selection of 44.
@@ -313,6 +329,15 @@ public class CaseBulkService {
                     changedIds.add(row.getId());
                 }
             }
+        }
+
+        if (!dryRun && !changedIds.isEmpty()) {
+            // The changed rows, not the requested ones: a case skipped or unchanged is in the same
+            // suites it started in, and naming it here would only add resolves that write nothing.
+            // suitesBefore is still the whole selection, which is deliberate — it was read before
+            // this loop decided which rows would change, and over-declaring is free.
+            suiteVersions.reconcileAfterCaseWrite(
+                    project.getId(), suitesBefore, List.copyOf(changedIds), userId, now);
         }
 
         UUID auditEventId = null;

@@ -109,6 +109,7 @@ public class CaseUpdateService {
     private final ConditionService conditionLibrary;
     private final CaseRenderer renderer;
     private final CaseVersions versions;
+    private final SuiteVersions suiteVersions;
     private final ReviewService reviews;
     private final AuditEventRepository auditEvents;
     private final TestCaseDraftRepository drafts;
@@ -128,6 +129,7 @@ public class CaseUpdateService {
             ConditionService conditionLibrary,
             CaseRenderer renderer,
             CaseVersions versions,
+            SuiteVersions suiteVersions,
             ReviewService reviews,
             AuditEventRepository auditEvents,
             TestCaseDraftRepository drafts,
@@ -146,6 +148,7 @@ public class CaseUpdateService {
         this.conditionLibrary = conditionLibrary;
         this.renderer = renderer;
         this.versions = versions;
+        this.suiteVersions = suiteVersions;
         this.reviews = reviews;
         this.auditEvents = auditEvents;
         this.drafts = drafts;
@@ -335,6 +338,16 @@ public class CaseUpdateService {
                         ? here.all()
                         : conditions.reachingAt(request.suiteId(), liveSuites).all();
 
+        // Which suites hold this case RIGHT NOW, read before anything is written (§238). Two of the
+        // three membership arms move on this path — a save can refile the case and can retag it —
+        // and a suite that LOSES the case by either is unfindable afterwards, so the losers have to
+        // be captured here or they stay pinned to a composition they no longer have. Read even for
+        // a save that turns out to change neither: the reconcile is hash-gated, so an unchanged
+        // suite costs a resolve and writes nothing, and a conditional here would be a second,
+        // weaker answer to a question decide() already answers exactly.
+        Set<UUID> suitesBefore =
+                suiteVersions.holdersBefore(project.getId(), List.of(testCase.getId()));
+
         CaseEdit.Outcome validated = CaseEdit.validate(
                 request,
                 liveSuiteIds,
@@ -433,6 +446,14 @@ public class CaseUpdateService {
 
         TestCaseDetailView view = renderer.render(testCase, liveSuites, vocabularies, companyId);
         versions.write(testCase, edit, decision, view, userId, now);
+
+        // AFTER the render, unlike every reconcile above it, and the difference is not an
+        // inconsistency: those write the case's own rows, so the response would report the case as
+        // it was on the way in. This writes rows on OTHER aggregates and touches nothing the
+        // response carries — TestCaseDetailView serves no suite version — so its only ordering
+        // requirement is that the case's own write has landed, which the flush above is.
+        suiteVersions.reconcileAfterCaseWrite(
+                project.getId(), suitesBefore, List.of(testCase.getId()), userId, now);
 
         // "An explicit save promotes this into test_case + a new test_case_version and CLEARS THE
         // ROW" — V1's own comment on test_case_draft, and the clause that had no code behind it

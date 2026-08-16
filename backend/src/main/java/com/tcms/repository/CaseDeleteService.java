@@ -10,6 +10,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -90,17 +91,20 @@ public class CaseDeleteService {
 
     private final ProjectService projects;
     private final TestCaseRepository cases;
+    private final SuiteVersions suiteVersions;
     private final AuditEventRepository auditEvents;
     private final Clock clock;
 
     public CaseDeleteService(
             ProjectService projects,
             TestCaseRepository cases,
+            SuiteVersions suiteVersions,
             AuditEventRepository auditEvents,
             Clock clock) {
 
         this.projects = projects;
         this.cases = cases;
+        this.suiteVersions = suiteVersions;
         this.auditEvents = auditEvents;
         this.clock = clock;
     }
@@ -163,9 +167,19 @@ public class CaseDeleteService {
             return new Outcome.NotTheAuthor();
         }
 
+        // Read before the delete, and this is the path the two-phase shape exists for (§238): a
+        // soft-deleted case is excluded from all three membership arms, so after the write nothing
+        // relates it to the suites it was in. Every suite here is a loser and none of them is
+        // findable a line later.
+        Set<UUID> suitesBefore =
+                suiteVersions.holdersBefore(project.getId(), List.of(testCase.getId()));
+
         Instant now = clock.instant();
         testCase.softDelete(userId, now);
         cases.saveAndFlush(testCase);
+
+        suiteVersions.reconcileAfterCaseWrite(
+                project.getId(), suitesBefore, List.of(testCase.getId()), userId, now);
 
         auditEvents.save(AuditEvent.record(
                 project.getId(),

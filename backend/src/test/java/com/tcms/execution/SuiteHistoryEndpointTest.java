@@ -230,11 +230,16 @@ class SuiteHistoryEndpointTest extends IntegrationTestBase {
      */
     private void buildTheHistory() throws Exception {
         // The suites were created moments ago and every run below is displaced into the past, so
-        // without this every v1 mark lands AFTER the results it precedes — the same inversion
-        // CaseHistoryEndpointTest.moveVersionInTime exists for, and the shape that would make a
-        // reader think the folder was created after it was executed.
+        // without this every setup-time mark lands AFTER the results it precedes — the same
+        // inversion CaseHistoryEndpointTest.moveVersionInTime exists for, and the shape that would
+        // make a reader think the folder was created after it was executed.
+        //
+        // EVERY version, not v1 alone: since §238 the fixture's own creates and claims each advance
+        // a composition, so a suite leaves setup on v2 or v3 rather than on v1. Moving only v1 would
+        // leave the rest stamped "now", and every run would resolve back to v1 — which is the
+        // reading this class exists to catch, arrived at through the fixture instead of the service.
         for (UUID suiteId : List.of(payments, refunds, login, empty)) {
-            moveSuiteVersionInTime(suiteId, 1, 96);
+            moveAllSuiteVersionsInTime(suiteId, 96);
         }
 
         UUID r1 = createRun("Nightly 1", "4.2", paymentsCase, refundsCase, loginCase);
@@ -248,11 +253,18 @@ class SuiteHistoryEndpointTest extends IntegrationTestBase {
         // refundsCase and loginCase left unrecorded on purpose — the notRun assertions read them.
         moveRunInTime(r2, 2);
 
-        // A second composition of Payments, 36 hours ago: after R2 and before R3. Written by SQL
-        // because nothing writes a v2 yet — SuiteVersions writes v1 at creation and the moves that
-        // would change a composition are not built. The row shape is what the endpoint reads, which
-        // is the same licence CaseHistoryEndpointTest takes for a soft-deleted run.
-        writeSuiteVersion(payments, 2, "Moved the disputed-charge cases in", 36);
+        // A later composition of Payments, 36 hours ago: after R2 and before R3.
+        //
+        // ~~Written by SQL because nothing writes a v2 yet~~ → §238 built the writer, so this is a
+        // real case filed into the folder and the version is the product's own. Only the CLOCK is
+        // still moved by SQL, which is the licence CaseHistoryEndpointTest takes for a soft-deleted
+        // run and the one thing a test cannot ask the product for.
+        //
+        // A case that no run covers, deliberately: the composition has to change without changing
+        // what any entry counts, or this would be two assertions moving at once and the counts
+        // above would be measuring the fixture rather than the endpoint.
+        createCase(ACME_BANKING, "Void an authorization", payments);
+        moveNewestSuiteVersionInTime(payments, 36);
 
         UUID r3 = createRun("Nightly 3", "4.3", paymentsCase, refundsCase, loginCase);
         record(r3, paymentsCase, passedStatus());
@@ -391,40 +403,63 @@ class SuiteHistoryEndpointTest extends IntegrationTestBase {
          * Reading {@code suite.current_version_no} — the tempting shortcut — passes every other
          * assertion in this class and fails this one, which is why it is here.
          */
+        /**
+         * The numbers are 3 and 4 rather than 1 and 2 since §238, and the reason is the point: a
+         * suite reaches the end of this fixture's setup on <strong>v3</strong>, because creating it
+         * is one composition, filing its own case is a second and claiming Refunds' case is a
+         * third. The <em>assertion</em> is unchanged — an old run keeps the number that was in force
+         * — and it is now stated over a timeline the product wrote rather than one the fixture
+         * inserted.
+         */
         @Test
-        @DisplayName("runs before the v2 edit stay on v1; runs after it read v2")
+        @DisplayName("runs before the later composition keep theirs; runs after it read the new one")
         void theVersionIsResolvedAtTheMoment() throws Exception {
             assertThat(entryFor(payments, "Nightly 1").get("suiteVersionNo").asInt())
                     .as("three days ago, before the composition changed")
-                    .isEqualTo(1);
+                    .isEqualTo(3);
             assertThat(entryFor(payments, "Nightly 2").get("suiteVersionNo").asInt())
-                    .isEqualTo(1);
+                    .isEqualTo(3);
             assertThat(entryFor(payments, "Nightly 3").get("suiteVersionNo").asInt())
-                    .as("one day ago, after the v2 authored 36 hours ago — today's number on an "
-                            + "old run puts this year's membership under last year's pass rate")
-                    .isEqualTo(2);
+                    .as("one day ago, after the composition authored 36 hours ago — today's number "
+                            + "on an old run puts this year's membership under last year's pass rate")
+                    .isEqualTo(4);
         }
 
         @Test
-        @DisplayName("the markers name both versions, oldest first, with the comment")
+        @DisplayName("the markers name every composition, oldest first, and none carries a comment")
         void theMarkers() throws Exception {
             JsonNode markers = history(LEAD, payments).get("versionMarkers");
 
-            assertThat(markers).hasSize(2);
-            assertThat(markers.get(0).get("versionNo").asInt()).isEqualTo(1);
-            assertThat(markers.get(1).get("versionNo").asInt()).isEqualTo(2);
-            assertThat(markers.get(1).get("changeComment").asText())
-                    .isEqualTo("Moved the disputed-charge cases in");
+            assertThat(markers)
+                    .as("create, its own case filed, Refunds' case claimed, and the case filed 36 "
+                            + "hours ago — four compositions, all written by the product")
+                    .hasSize(4);
+            for (int i = 0; i < markers.size(); i++) {
+                assertThat(markers.get(i).get("versionNo").asInt()).isEqualTo(i + 1);
+                assertThat(markers.get(i).get("changeComment").isNull())
+                        .as("a composition version has no author's note and SuiteVersion says why: "
+                                + "the act is a write to some OTHER row, so there is no request "
+                                + "field an author would be commenting in. This asserted a "
+                                + "fixture-written comment until §238, on a column production has "
+                                + "never written")
+                        .isTrue();
+            }
             assertThat(markers.get(0).get("author").get("displayName").asText())
                     .as("resolved through the ACTIVE COMPANY's membership (§6u)")
                     .isEqualTo("L. Lead of Acme");
         }
 
+        /**
+         * Refunds is created and gains one filed case, so it settles on v2 and stays there: the
+         * claim Payments makes on its case writes a version on <em>Payments</em> and none here,
+         * which is the same "a claim does not run backwards" rule the membership tests assert about
+         * counts, arriving at the version table.
+         */
         @Test
-        @DisplayName("a suite whose composition never changed reports v1 everywhere")
+        @DisplayName("a suite whose composition stopped changing reports one number everywhere")
         void theUnchangedSuite() throws Exception {
             for (JsonNode entry : history(LEAD, refunds).get("entries")) {
-                assertThat(entry.get("suiteVersionNo").asInt()).isEqualTo(1);
+                assertThat(entry.get("suiteVersionNo").asInt()).isEqualTo(2);
             }
         }
     }
@@ -893,15 +928,29 @@ class SuiteHistoryEndpointTest extends IntegrationTestBase {
     }
 
     /** Backdates an authored suite version, so the marks precede the results they explain. */
-    private void moveSuiteVersionInTime(UUID suiteId, int versionNo, int hours) throws SQLException {
+    /** Backdates every composition this suite has recorded so far. */
+    private void moveAllSuiteVersionsInTime(UUID suiteId, int hours) throws SQLException {
+        moveSuiteVersions(suiteId, hours, "");
+    }
+
+    /** Backdates the newest one alone — the composition change the fixture just made. */
+    private void moveNewestSuiteVersionInTime(UUID suiteId, int hours) throws SQLException {
+        moveSuiteVersions(suiteId, hours,
+                " AND version_no = (SELECT max(v.version_no) FROM suite_version v "
+                        + "WHERE v.suite_id = CAST(? AS uuid))");
+    }
+
+    private void moveSuiteVersions(UUID suiteId, int hours, String extra) throws SQLException {
         try (Connection connection = appConnection(ACME);
              var statement = connection.prepareStatement(
                      "UPDATE suite_version SET created_at = ? "
-                             + "WHERE suite_id = CAST(? AS uuid) AND version_no = ?")) {
+                             + "WHERE suite_id = CAST(? AS uuid)" + extra)) {
             statement.setObject(1, Instant.now().minus(hours, ChronoUnit.HOURS)
                     .atOffset(ZoneOffset.UTC));
             statement.setString(2, suiteId.toString());
-            statement.setInt(3, versionNo);
+            if (!extra.isEmpty()) {
+                statement.setString(3, suiteId.toString());
+            }
             statement.executeUpdate();
         }
     }
@@ -916,34 +965,12 @@ class SuiteHistoryEndpointTest extends IntegrationTestBase {
         }
     }
 
-    /**
-     * Writes a suite version {@code hours} into the past.
-     *
-     * <p>By SQL because nothing writes a v2 yet — {@code SuiteVersions} writes v1 at creation and
-     * the composition-changing moves are not built. Asserting the resolution rule now is what stops
-     * {@code suite.current_version_no} from creeping into the service on the day one is.
-     */
-    private void writeSuiteVersion(UUID suiteId, int versionNo, String comment, int hours)
-            throws SQLException {
-
-        try (Connection connection = appConnection(ACME);
-             var statement = connection.prepareStatement("""
-                     INSERT INTO suite_version
-                         (id, company_id, suite_id, version_no, snapshot, content_hash,
-                          change_comment, created_at, created_by)
-                     VALUES (gen_random_uuid(), CAST(? AS uuid), CAST(? AS uuid), ?,
-                             CAST('{}' AS jsonb), 'sh-fixture', ?, ?, CAST(? AS uuid))
-                     """)) {
-            statement.setString(1, ACME.toString());
-            statement.setString(2, suiteId.toString());
-            statement.setInt(3, versionNo);
-            statement.setString(4, comment);
-            statement.setObject(5, Instant.now().minus(hours, ChronoUnit.HOURS)
-                    .atOffset(ZoneOffset.UTC));
-            statement.setString(6, LEAD.toString());
-            statement.executeUpdate();
-        }
-    }
+    // writeSuiteVersion — an INSERT of a synthetic v2 with a hand-written change_comment — lived
+    // here until §238. It said "by SQL because nothing writes a v2 yet", and asserting the
+    // resolution rule against it was what stopped suite.current_version_no creeping into the
+    // service before there was a second version to tell it apart from. The writer exists now, so
+    // the fixture changes a composition by filing a case and the assertions read the product's own
+    // rows. It went out with the change_comment assertion it was the only source of.
 
     private UUID executionOf(UUID runId, UUID caseId) throws SQLException {
         try (Connection connection = appConnection(ACME);

@@ -25,9 +25,10 @@ import org.hibernate.type.SqlTypes;
  * the rows it is least useful on.
  *
  * <p>The consequence is the one that surprises: <strong>renaming a suite writes no version here.</strong>
- * A name is content. What writes one is a change to the membership or the nesting, and this slice
- * makes exactly one such change — the folder coming into existence. See {@link SuiteVersions} for
- * what owes the rest.
+ * A name is content. What writes one is a change to the membership or the nesting, and <del>this
+ * slice makes exactly one such change — the folder coming into existence</del> → since §238 every act
+ * that changes what the suite <em>resolves to</em> makes one, by any of the three membership arms.
+ * See {@link SuiteVersions} for which acts those are and what the fan-out costs.
  *
  * <p>No mutators, for {@link TestCaseVersion}'s reason: a version is created and then only ever
  * read. {@link #pinned} is mapped and never written here — nothing pins yet, so {@code false} is the
@@ -60,19 +61,19 @@ public class SuiteVersion {
     private String snapshot;
 
     /**
-     * <strong>Written and never read</strong> — in
+     * <del><strong>Written and never read</strong> — in
      * {@code ArchitectureRulesTest.READERLESS_BY_DECISION} since §188, and it is the one member of
      * that list whose absent reader is a direct consequence of a decision argued elsewhere. A
      * content hash exists so a <em>later</em> version can be compared to an earlier one;
      * {@link SuiteVersions} writes v1 at create and has never written a second row, so there is
-     * nothing to compare it against. That class's header states the same fact from the other end:
-     * a {@code decide()} sibling would be "a comparison with exactly one caller that always answers
-     * yes".
+     * nothing to compare it against.</del>
      *
-     * <p>{@code documentation.PageVersions#recordEdit} is what the reader looks like when it
-     * arrives — {@code findLatest(…).getContentHash().equals(hash)}, the thing that makes a no-op
-     * save write nothing. The exit is therefore the composition writes {@link SuiteVersions} already
-     * names as owed, not a query somebody could add here.
+     * <p><strong>Read since §238 by {@link SuiteVersions#decide}</strong>, and it left
+     * {@code READERLESS_BY_DECISION} in the same commit — the exit that entry predicted, arriving by
+     * the route it predicted. It said {@code documentation.PageVersions#recordEdit} was what the
+     * reader would look like when it came, and it is: compare the newest stored hash, write nothing
+     * when it matches. What made the reader possible was giving the table a second writer, not
+     * adding a query here.
      */
     @Column(name = "content_hash", nullable = false, updatable = false)
     private String contentHash;
@@ -80,9 +81,14 @@ public class SuiteVersion {
     /**
      * <strong>Never written.</strong> {@code V1} gives all four version tables this column and only
      * {@code test_case_version} has an endpoint that takes one — {@code CaseUpdateRequest}'s
-     * {@code changeComment}, which the contract declares and describes as optional by design. A
-     * suite version is written at creation and nowhere else ({@link SuiteVersions}), so there is no
-     * save for an author to comment on.
+     * {@code changeComment}, which the contract declares and describes as optional by design.
+     * <del>A suite version is written at creation and nowhere else ({@link SuiteVersions}), so there
+     * is no save for an author to comment on.</del> → §238 gave it more writers and the column is
+     * still never written, for a reason that survived the change: a composition version is a
+     * consequence of an act on some <em>other</em> row — filing a case, tagging one, deleting one —
+     * so there is no field on any of those requests where an author would be writing a note about
+     * this folder's history, and inventing one on five endpoints to feed a column nothing renders is
+     * a contract change rather than a wiring fix.
      *
      * <p>It was assigned {@code null} in {@link #of} until §188, which is worth knowing rather than
      * deleting quietly: an explicit no-op assignment is indistinguishable from a real one to
