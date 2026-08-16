@@ -2714,3 +2714,15 @@ the sibling browser queue's §223 rows carry the two options (an `osixia/openlda
 | `§223 LD-2` | Rename the person's `mail` in the directory and sign in again with the new address | 200, **the same** `user_identity` row, no second `app_user` |
 | `§223 LD-3` | Six wrong passwords in a row | The sixth is refused with no LDAP connection opened — check the directory's own log, not TCMS's |
 | `§223 LD-4` | Point a provider at `ldap://` without StartTLS through the API | 400 with an `issuerUri` field error, and no row written |
+
+## §231 — social login: the single-use claim and the linking race
+
+**These two are live-stack drives** — the suite already pins both behaviours
+(`SocialLoginServiceTest.replayFails`, `SocialIdentityServiceTest.aTakenSubjectRefuses` and the
+`DataIntegrityViolationException` arm in `SocialIdentityService.link`), so what is unrun is the
+same pair against the compose stack with a real provider round-trip.
+
+| id | What to drive | Expected |
+|---|---|---|
+| `§231 SB-1` | Complete one social sign-in, then replay the same callback URL (same `state`, same `code`) | The failure redirect and **nothing written**: `social_login_attempt.consumed_at` unchanged from the first pass, no second session, `user_social_identity.last_login_at` not re-stamped. |
+| `§231 SB-2` | Two concurrent LINK callbacks presenting the same provider subject against two different accounts (two browsers, two `state`s, one upstream identity) | Exactly **one** `user_social_identity` row for that `(provider, subject)` afterwards; the loser sees the one opaque failure marker, not a 500 — `uq_user_social_identity_subject` surfaced as policy. |

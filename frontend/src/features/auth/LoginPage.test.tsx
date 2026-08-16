@@ -6,8 +6,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
 import { theme } from '../../app/theme'
+import type { SocialProvider } from '../../api/types'
 import { AuthContext, type AuthValue } from '../../auth/authContextValue'
-import { aCurrentUser, anAuthResult, anSsoProviderChoice } from '../../test/fixtures'
+import { aCurrentUser, aSocialProviderList, anAuthResult, anSsoProviderChoice } from '../../test/fixtures'
 import { createTestQueryClient } from '../../test/queryClient'
 import { drivingAFailedWrite } from '../../test/renderFailures'
 import { LoginPage } from './LoginPage'
@@ -33,7 +34,19 @@ function renderLogin(
   locationState?: Record<string, unknown>,
   login: AuthValue['login'] = async () => aCurrentUser(),
   adoptSession: AuthValue['adoptSession'] = async () => aCurrentUser(),
+  socialProviders: SocialProvider[] = [],
 ) {
+  /*
+    Every render answers the instance-level social lookup, anchored on the exact path so a
+    future `/auth/social/...` sibling is not swallowed by a prefix arm. Empty by default: most
+    of this file is about company SSO, and scenery must stay scenery.
+  */
+  vi.spyOn(api, 'get').mockImplementation((path) => {
+    if (/^\/auth\/social\/providers$/.test(path)) {
+      return Promise.resolve(aSocialProviderList({ providers: socialProviders }))
+    }
+    throw new Error(`unmocked read: ${path}`)
+  })
   const session: AuthValue = {
     user: null,
     status: 'ready',
@@ -327,5 +340,107 @@ describe('LoginPage — single sign-on', () => {
 
     // A directory chosen for one address must not collect a different address's password.
     await waitFor(() => expect(screen.queryByTestId('Login.DirectoryMode')).not.toBeInTheDocument())
+  })
+})
+
+describe('LoginPage — social sign-in (V58)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    sessionStorage.clear()
+  })
+
+  it('offers one labelled button per configured provider, before any address is typed', async () => {
+    renderLogin(undefined, undefined, undefined, ['GITHUB', 'GITLAB', 'GOOGLE'])
+
+    const section = await screen.findByTestId('Login.SocialProviders')
+    const buttons = screen.getAllByTestId('Login.SocialProvider')
+    expect(section).toBeInTheDocument()
+    expect(buttons).toHaveLength(3)
+    // The brands' own spellings, from the shared catalogue — not GITHUB shouted from the enum.
+    expect(buttons[0]).toHaveTextContent('Continue with GitHub')
+    expect(buttons[1]).toHaveTextContent('Continue with GitLab')
+    expect(buttons[2]).toHaveTextContent('Continue with Google')
+  })
+
+  it('renders no social section at all when nothing is configured', async () => {
+    renderLogin()
+
+    // The query resolves empty; the section, its divider and its heading must all be absent.
+    await waitFor(() => expect(api.get).toHaveBeenCalled())
+    expect(screen.queryByTestId('Login.SocialProviders')).not.toBeInTheDocument()
+  })
+
+  it('navigates to the authorize endpoint and remembers the deep link, like company SSO', async () => {
+    const user = userEvent.setup()
+    const assign = vi.fn()
+    vi.spyOn(window, 'location', 'get').mockReturnValue({
+      ...window.location,
+      assign,
+    } as unknown as Location)
+
+    renderLogin({ from: '/projects/p1/runs/r9' }, undefined, undefined, ['GITHUB'])
+    await user.click(await screen.findByTestId('Login.SocialProvider'))
+
+    expect(assign).toHaveBeenCalledWith('/api/v1/auth/social/GITHUB/authorize')
+    expect(consumeSsoReturnPath()).toBe('/projects/p1/runs/r9')
+  })
+})
+
+describe('LoginPage — where a password sign-in lands', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    sessionStorage.clear()
+  })
+
+  function renderWithDestinations(locationState?: Record<string, unknown>) {
+    vi.spyOn(api, 'get').mockResolvedValue(aSocialProviderList({ providers: [] }))
+    // Discovery fires when the email field blurs on the way to the password; empty is scenery.
+    vi.spyOn(api, 'post').mockResolvedValue({ providers: [] })
+    const session: AuthValue = {
+      user: null,
+      status: 'ready',
+      login: async () => aCurrentUser(),
+      adoptSession: async () => aCurrentUser(),
+      logout: () => {},
+    }
+    return render(
+      <AuthContext value={session}>
+        <ThemeProvider theme={theme}>
+          <QueryClientProvider client={createTestQueryClient()}>
+            <MemoryRouter initialEntries={[{ pathname: '/login', state: locationState ?? null }]}>
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/" element={<div data-testid="Landing.Default" />} />
+                <Route path="/account/security" element={<div data-testid="Landing.Security" />} />
+              </Routes>
+            </MemoryRouter>
+          </QueryClientProvider>
+        </ThemeProvider>
+      </AuthContext>,
+    )
+  }
+
+  async function signIn(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByTestId('Login.EmailField'), 'kim@acme.test')
+    await user.type(screen.getByTestId('Login.PasswordField'), 'correct-horse-battery')
+    await user.click(screen.getByTestId('Login.SubmitButton'))
+  }
+
+  it('lands on the pending destination when one was carried in — the accept fallback leg', async () => {
+    const user = userEvent.setup()
+    renderWithDestinations({ from: '/account/security?welcome=1' })
+
+    await signIn(user)
+
+    expect(await screen.findByTestId('Landing.Security')).toBeInTheDocument()
+  })
+
+  it('lands on the default page without one (regression pin)', async () => {
+    const user = userEvent.setup()
+    renderWithDestinations()
+
+    await signIn(user)
+
+    expect(await screen.findByTestId('Landing.Default')).toBeInTheDocument()
   })
 })

@@ -36,6 +36,7 @@ import type {
   ReviewSubjectType,
   ReviewVerdict,
   RunStatus,
+  SocialProvider,
   StatusKind,
   StepFormat,
   VerdictSource,
@@ -59,6 +60,17 @@ import type {
 export function labelForKey(catalogue: Record<string, string>, key: string): string {
   return catalogue[key] ?? key;
 }
+
+/**
+ * The three social sign-in authorities, spelled the way each brand spells itself. Used by the
+ * sign-in page's buttons and the security page's rows — one catalogue, so the two screens
+ * cannot drift.
+ */
+export const socialProviderLabels = {
+  GITHUB: 'GitHub',
+  GITLAB: 'GitLab',
+  GOOGLE: 'Google',
+} as const satisfies Record<SocialProvider, string>;
 
 export const lifecycleLabels = {
   DRAFT: 'Draft',

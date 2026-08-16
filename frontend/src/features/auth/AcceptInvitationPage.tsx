@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { Link as RouterLink, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
-import { useAcceptInvitation, useInvitationPreview } from '../../api/queries';
+import { useAcceptInvitation, useInvitationPreview, useSocialProviders } from '../../api/queries';
 import { useAuth } from '../../auth/useAuth';
 import { Identifier } from '../../components/Identifier';
 import { offerToSaveCredentials } from '../../lib/credentials';
@@ -25,11 +25,20 @@ import { offerToSaveCredentials } from '../../lib/credentials';
  * is unique instance-wide, so that spans every client). This page must not un-collapse them:
  * there is exactly one "this link no longer works" panel, and it does not speculate about why.
  *
- * ## Accepting does not sign you in
+ * ## Accepting does not sign you in — but this page does, when it can (V58)
  *
- * The API answers 204, not a session. That is deliberate — one token-issuing path — so this
- * page finishes by sending the invitee to `/login` with their address carried in navigation
- * state, where signing in proves the password was stored as intended.
+ * The API still answers 204, not a session — one token-issuing path, untouched. When the
+ * acceptance CREATED the account's credential, though, this page momentarily holds both halves
+ * of a valid one: the invited address from the preview and the password just chosen. So it
+ * follows the 204 with the ordinary `POST /auth/login` itself — through the same `login` seam
+ * the sign-in screen uses, which even preserves the 204's stated rationale, since the login
+ * round-trip is what proves the password was stored as intended — and lands the new session on
+ * the security page's first-run offer when any social provider is configured, or on the app
+ * when none is. A failed auto-login falls back to `/login` carrying the destination, never a
+ * scarier state: the account exists and the acceptance succeeded.
+ *
+ * An existing account joining a second company typed no password here, so there is nothing to
+ * auto-login with — they keep the sign-in hop, address carried in navigation state.
  */
 
 const TestIdPrefix = 'AcceptInvitation';
@@ -163,6 +172,9 @@ interface AcceptFormProps {
 function AcceptForm({ token, email, displayName, passwordRequired }: AcceptFormProps) {
   const navigate = useNavigate();
   const accept = useAcceptInvitation(token);
+  const { login } = useAuth();
+  /** Decides only where the auto-login LANDS — the security page's offer, or the app. */
+  const social = useSocialProviders();
 
   /** Set when the *accept* call 404s — the token was fine at preview and is not any more. */
   const [gone, setGone] = useState(false);
@@ -194,9 +206,34 @@ function AcceptForm({ token, email, displayName, passwordRequired }: AcceptFormP
       */
       if (password !== undefined) {
         void offerToSaveCredentials({ id: email, password, name: displayName });
+
+        /*
+          The page holds both halves of a valid credential — the invited address and the
+          password the server just accepted — so the sign-in hop is removed here, in the SPA,
+          while the accept endpoint keeps answering 204 with no session (see the header).
+        */
+        const destination = (social.data?.providers.length ?? 0) > 0
+          ? '/account/security?welcome=1'
+          : '/';
+        try {
+          await login(email, password, true);
+          navigate(destination, { replace: true });
+        } catch {
+          /*
+            The account exists and the acceptance succeeded — this branch is only the login
+            round-trip failing — so the fallback is the ordinary sign-in screen, carrying the
+            destination in the seam LoginPage already honours (`from`), with no scarier copy.
+          */
+          navigate('/login', {
+            replace: true,
+            state: { acceptedEmail: email, from: destination },
+          });
+        }
+        return true;
       }
-      // 204, not a session. Sign-in is the next step, and the address travels so the invitee
-      // doesn't have to remember which of their addresses was invited.
+      // An existing account joining a second company: no password was typed, so there is
+      // nothing to auto-login with. 204, then sign-in, address carried so the invitee doesn't
+      // have to remember which of their addresses was invited.
       navigate('/login', { replace: true, state: { acceptedEmail: email } });
       return true;
     } catch (error) {

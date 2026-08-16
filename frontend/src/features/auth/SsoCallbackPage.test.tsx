@@ -35,6 +35,11 @@ function Landing() {
   )
 }
 
+function Security() {
+  const state = useLocation().state as { linked?: string } | null
+  return <div data-testid="Landing.Security">{state?.linked ?? 'no-marker'}</div>
+}
+
 function SignIn() {
   const state = useLocation().state as { ssoFailed?: boolean } | null
   return <div data-testid="Landing.SsoFailed">{state?.ssoFailed ? 'sso-failed' : 'no-state'}</div>
@@ -58,6 +63,8 @@ function renderCallback(adoptSession: AuthValue['adoptSession']) {
             <Route path="/login" element={<SignIn />} />
             {/* Sentinel for the stashed deep link — see 'returns to the deep link' below. */}
             <Route path="/projects/p1/runs/r9" element={<div data-testid="Landing.DeepLink" />} />
+            {/* Sentinel for a completed link — the security page has its own tests. */}
+            <Route path="/account/security" element={<Security />} />
           </Routes>
         </MemoryRouter>
       </ThemeProvider>
@@ -162,5 +169,17 @@ describe('SsoCallbackPage', () => {
 
     expect(await screen.findByTestId('Landing.SsoFailed')).toHaveTextContent('sso-failed')
     expect(consumeSsoReturnPath()).toBe('/')
+  })
+
+  it('routes a completed link to the security page without touching the session', async () => {
+    landingOn('#linked=GITHUB')
+    const adopt = vi.fn()
+
+    renderCallback(adopt)
+
+    expect(await screen.findByTestId('Landing.Security')).toHaveTextContent('GITHUB')
+    // A link is made by a signed-in browser; adopting here would replace a live session
+    // with nothing.
+    expect(adopt).not.toHaveBeenCalled()
   })
 })

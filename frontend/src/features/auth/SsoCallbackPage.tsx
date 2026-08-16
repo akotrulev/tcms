@@ -43,7 +43,9 @@ export function SsoCallbackPage() {
     because consuming removes it and a double-invoked render would read it gone.
   */
   const returnTo = useRef('/');
-  const [outcome, setOutcome] = useState<'pending' | 'signed-in' | 'failed'>('pending');
+  /** Which provider a completed LINK named — set only for the `#linked=` landing (V58). */
+  const linkedProvider = useRef<string | null>(null);
+  const [outcome, setOutcome] = useState<'pending' | 'signed-in' | 'linked' | 'failed'>('pending');
 
   useEffect(() => {
     if (started.current) return;
@@ -54,6 +56,18 @@ export function SsoCallbackPage() {
     // Out of the address bar first, and unconditionally: a live session survives a copy-paste, a
     // screen share and the browser's own history until it is gone from here.
     window.history.replaceState(null, '', window.location.pathname);
+
+    /*
+      A completed LINK, not a sign-in: the browser already holds a session — it made the link —
+      so there is nothing to adopt, and the marker's only job is to land the person back on the
+      security page with the row they just linked named.
+    */
+    const linked = fragment.current.get('linked');
+    if (linked) {
+      linkedProvider.current = linked;
+      setOutcome('linked');
+      return;
+    }
 
     const token = fragment.current.get('token');
     if (!token) {
@@ -71,6 +85,12 @@ export function SsoCallbackPage() {
   }, [adoptSession]);
 
   if (outcome === 'signed-in') return <Navigate to={returnTo.current} replace />;
+
+  if (outcome === 'linked') {
+    return (
+      <Navigate to="/account/security" replace state={{ linked: linkedProvider.current }} />
+    );
+  }
 
   if (outcome === 'failed') {
     // `replace`, so the browser's back button does not return to a callback whose `state` the

@@ -128,6 +128,11 @@ class ContractEnumTest {
             // ck_identity_provider_kind and neither is SAML — #40 ruled that out, and a member
             // nothing can create is a state the code must branch on for no reason.
             Map.entry("IdentityProviderKind", List.of("com.tcms.identity.IdentityProviderKind")),
+            // IdentityProviderKind's argument one authority over: the entity lives in
+            // `identity`, `auth` may see it, so the protocol side reads this type rather than
+            // restating it. Deliberately NOT a member of IdentityProviderKind — these are
+            // instance-level authorities for people, not a company's own issuers (V58).
+            Map.entry("SocialProvider", List.of("com.tcms.identity.SocialProviderKey")),
             Map.entry("WorkItemStatus", List.of("com.tcms.work.WorkItemStatus")),
             Map.entry("NotificationChannelKind",
                     List.of("com.tcms.integration.NotificationChannelKind")),

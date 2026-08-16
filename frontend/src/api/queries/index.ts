@@ -33,7 +33,11 @@ export {
   useInvitationPreview,
   useMyCompanyPermissions,
   useMyPermissions,
+  useMySocialIdentities,
+  useSocialProviders,
   useSsoProviders,
+  useStartSocialLink,
+  useUnlinkSocialIdentity,
 } from './identity';
 export {
   useClassification,

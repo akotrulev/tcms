@@ -2785,3 +2785,20 @@ a reload.
 | `§230 LK-4` | On a paragraph of that page, press the block's **Link `TC-…`** button | The dialog opens with the **case already chosen** — its key and title in the picker, Test case selected, Verifies as the relationship — and **Link is enabled without touching anything**. Press it: the block's chips gain the case and its coverage margin recounts. Then open that case: the link is on its Traceability panel (allow the mirror a moment — `§167 DL-1`'s timing arm). |
 | `§230 LK-5` | As a **Viewer**, open a case → Traceability | *Link a specification* is **disabled**, not hidden (§31), and so is *Link code or a URL*. The two ask different keys — `doc:edit` and `case:edit` — and a Viewer holds neither, so this row proves only that it is gated. **The pair that proves it is gated on the right one is `DocLinksPanel.test.tsx`'s**, which needs a caller with `case:edit` and no `doc:edit`; no seeded role is that, so it is not driveable here. Named rather than skipped. |
 | `§230 LK-6` | Back on the documentation space carrying a case, press **Stop linking** | The banner goes, the address bar loses `linkCase`, and each block's button returns to *Link* / *Link a case*. Open one: the picker is **empty** and Link is disabled. The intent has to leave the dialog too, not just the banner that announced it. |
+
+## §231 — social login and account linking
+
+**Seven rows, none run** (§65). Ids are `§231 GH-*`; `GH` is unused elsewhere in this file —
+grep before minting a prefix (§154's banner). Most rows need the stack started with at least one
+`TCMS_SOCIAL_*` pair set (see `.env.example`'s social block); `GH-1`'s second half and `GH-2`'s
+fallback are the exceptions.
+
+| # | Drive | Expect |
+|---|---|---|
+| `§231 GH-1` | **L1**, stack up with all three providers configured: open `/login`. Then restart with none configured and open it again | Three "Continue with GitHub/GitLab/Google" buttons below the company-SSO section; with none, **no social section at all** — no divider, no heading — and a fresh acceptance (GH-1b's flow) lands on the app's default page, not the security page. |
+| `§231 GH-1b` | **L1**, providers configured: provision a company, redeem the invitation link, choose a password, submit | Signed in **immediately** — no manual login — landing on `/account/security?welcome=1` with the intro and a working one-click Skip. Then: an existing user accepting a second-company invitation gets neither the auto-login nor the welcome page (no password was typed). |
+| `§231 GH-1c` | **L1**: arm `tcmsFaults.expire()` (or equivalent one-shot 401 on `/auth/login`) after the accept form loads, then submit | Acceptance still succeeds; the page falls back to the sign-in form with the address prefilled and, after manual sign-in, lands on `/account/security?welcome=1` — the destination survived the fallback. No copy suggesting the acceptance failed. |
+| `§231 GH-2` | **L2**, a real GitHub OAuth app pointing at the stack's callback: link from `/account/security`, sign out, sign back in with the GitHub button | The full round-trip: link lands back on the security page with the inline "GitHub is now linked" acknowledgement; the later sign-in lands on the remembered return path. **Needs an operator-created OAuth app; not creatable by any lane's fixtures** — if absent, record "not driven: no OAuth app" and drive `GH-5` instead. |
+| `§231 GH-3` | **L2**, same stack: link a second provider from `/account/security`; then unlink it | The second row round-trips and flips to Unlink (dated, with the provenance email); unlinking confirms first, then flips back to Link. |
+| `§231 GH-4` | **L2**: a passwordless (company-IdP JIT) account with exactly one linked identity presses Unlink and confirms | Refused — the 409's explanatory message ("only way to sign in… set a password or link another provider first") stays **on the dialog**, not a corner toast. |
+| `§231 GH-5` | **L1**: paste `/api/v1/auth/social/callback?state=garbage&code=x` into the address bar | Lands on the sign-in page with the single SSO failure sentence — the same one a company-SSO failure renders, no cause named. |

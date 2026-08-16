@@ -2,6 +2,7 @@ package com.tcms.auth;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -40,10 +41,15 @@ class SsoLoginAttemptPurge {
     static final Duration GRACE = Duration.ofHours(1);
 
     private final SsoLoginAttemptRepository attempts;
+    private final SocialLoginAttemptRepository socialAttempts;
     private final Clock clock;
 
-    SsoLoginAttemptPurge(SsoLoginAttemptRepository attempts, Clock clock) {
+    SsoLoginAttemptPurge(
+            SsoLoginAttemptRepository attempts,
+            SocialLoginAttemptRepository socialAttempts,
+            Clock clock) {
         this.attempts = attempts;
+        this.socialAttempts = socialAttempts;
         this.clock = clock;
     }
 
@@ -55,9 +61,14 @@ class SsoLoginAttemptPurge {
      */
     @Scheduled(initialDelayString = "PT4M", fixedDelayString = "PT1H")
     void purgeExpired() {
-        int purged = attempts.deleteExpiredBefore(clock.instant().minus(GRACE));
+        Instant cutoff = clock.instant().minus(GRACE);
+        int purged = attempts.deleteExpiredBefore(cutoff);
         if (purged > 0) {
             log.debug("Purged {} expired SSO login attempts", purged);
+        }
+        int purgedSocial = socialAttempts.deleteExpiredBefore(cutoff);
+        if (purgedSocial > 0) {
+            log.debug("Purged {} expired social login attempts", purgedSocial);
         }
     }
 }

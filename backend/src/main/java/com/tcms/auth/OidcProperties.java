@@ -57,4 +57,13 @@ public record OidcProperties(
     public String redirectUri() {
         return apiBaseUrl.toString().replaceAll("/+$", "") + "/api/v1/auth/sso/callback";
     }
+
+    /**
+     * {@link #redirectUri()}'s sibling for the social flow — a different callback because the
+     * two flows resolve their attempts from different tables, and what is registered with a
+     * social provider's OAuth app is exactly this value.
+     */
+    public String socialRedirectUri() {
+        return apiBaseUrl.toString().replaceAll("/+$", "") + "/api/v1/auth/social/callback";
+    }
 }

@@ -65,7 +65,16 @@ class EndpointAccessTest extends IntegrationTestBase {
             // present a session in order to obtain one — and it answers login's own empty 401
             // for every failure, throttled per (provider, identifier) before the directory is
             // ever contacted.
-            "/api/v1/auth/ldap/{providerId}/login");
+            "/api/v1/auth/ldap/{providerId}/login",
+            // The instance-level social flow (V58). Discovery is open because it names
+            // instance configuration only — no company, no account, so §6r's oracle concern
+            // does not reach it. The two browser legs are open for SSO's reason: you cannot
+            // present a session in order to obtain one, and each answers 302 whatever
+            // happens with one opaque marker for every failure. Linking is NOT here — it
+            // lives under /me and requires the session it manages.
+            "/api/v1/auth/social/providers",
+            "/api/v1/auth/social/{provider}/authorize",
+            "/api/v1/auth/social/callback");
 
     @Autowired
     private MockMvc mvc;

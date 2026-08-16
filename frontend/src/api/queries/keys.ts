@@ -14,6 +14,9 @@ import type { CaseFilters } from '../types';
 export const keys = {
   me: ['me'] as const,
   permissions: (p: string) => ['me', 'permissions', p] as const,
+  /** Instance configuration, identical for every caller — cached forever per session. */
+  socialProviders: ['auth', 'social-providers'] as const,
+  mySocialIdentities: ['me', 'social-identities'] as const,
   invitation: (token: string) => ['invitation', token] as const,
   projects: ['projects'] as const,
   project: (id: string) => ['projects', id] as const,

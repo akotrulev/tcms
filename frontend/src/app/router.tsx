@@ -108,6 +108,11 @@ const SsoProvidersPage = lazy(() =>
 const ProjectAccessPage = lazy(() =>
   import('../features/admin/ProjectAccessPage').then((m) => ({ default: m.ProjectAccessPage })),
 );
+const AccountSecurityPage = lazy(() =>
+  import('../features/account/AccountSecurityPage').then((m) => ({
+    default: m.AccountSecurityPage,
+  })),
+);
 const ClassificationSettingsPage = lazy(() =>
   import('../features/settings/ClassificationSettingsPage').then((m) => ({
     default: m.ClassificationSettingsPage,
@@ -198,6 +203,20 @@ function AppRoutes() {
             two routes with one name for two scopes is the IA defect the rail's own Company/Project
             split was made to avoid.
           */}
+          {/*
+            The caller's own sign-in identities (V58) — a session-level screen like `/my-work`:
+            its subject is the account, so any project or company segment in its URL would be an
+            arbitrary one. The accept page's first-run leg lands here with `?welcome=1`.
+          */}
+          <Route
+            path="/account/security"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <AccountSecurityPage />
+              </Suspense>
+            }
+          />
+
           <Route
             path="/my-work"
             element={

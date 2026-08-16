@@ -108,6 +108,17 @@ services:
       SPRING_MAIL_HOST: ${SMTP_HOST:-}
       SPRING_MAIL_PORT: ${SMTP_PORT:-25}
       TCMS_MAIL_FROM: ${TCMS_MAIL_FROM:-tcms@localhost}
+      # Instance-level social sign-in (V58). Optional in the Compose sense too — `:-` is
+      # correct HERE and wrong in application*.yml (§108); the Spring side reads `${VAR:}`.
+      # Absent means the button does not exist; a provider is live exactly when both halves
+      # of its credential are present.
+      TCMS_SOCIAL_GITHUB_CLIENT_ID: ${TCMS_SOCIAL_GITHUB_CLIENT_ID:-}
+      TCMS_SOCIAL_GITHUB_CLIENT_SECRET: ${TCMS_SOCIAL_GITHUB_CLIENT_SECRET:-}
+      TCMS_SOCIAL_GITLAB_CLIENT_ID: ${TCMS_SOCIAL_GITLAB_CLIENT_ID:-}
+      TCMS_SOCIAL_GITLAB_CLIENT_SECRET: ${TCMS_SOCIAL_GITLAB_CLIENT_SECRET:-}
+      TCMS_SOCIAL_GOOGLE_CLIENT_ID: ${TCMS_SOCIAL_GOOGLE_CLIENT_ID:-}
+      TCMS_SOCIAL_GOOGLE_CLIENT_SECRET: ${TCMS_SOCIAL_GOOGLE_CLIENT_SECRET:-}
+      TCMS_SOCIAL_GITLAB_BASE_URL: ${TCMS_SOCIAL_GITLAB_BASE_URL:-}
     volumes:
       # The product's state that is NOT in Postgres: evidence, generated reports, and the
       # verbatim CI uploads. `application.yml` defaults all three roots under this directory.

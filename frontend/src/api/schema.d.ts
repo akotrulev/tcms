@@ -463,6 +463,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/social/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Which social sign-in providers this instance has configured
+         * @description Instance-level configuration, identical for every caller — it names no company and no
+         *     account, so answering it publicly discloses nothing (§6r's oracle rule does not bite).
+         *     GitHub, GitLab and Google are authorities for people, not companies; they are configured
+         *     by the operator, never as `identity_provider` rows.
+         */
+        get: operations["listSocialProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/social/{provider}/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Begin a social sign-in (browser navigation, not an XHR)
+         * @description Records an in-flight attempt and redirects the browser to the provider's authorization
+         *     endpoint. **`302` in every case, success and failure alike** — an unconfigured provider
+         *     and an unreachable issuer both land on the SPA's failure landing with one opaque marker,
+         *     for the reason `GET /auth/sso/{providerId}/authorize` gives.
+         *
+         *     Never creates an account: the callback resolves an already-linked identity or refuses.
+         */
+        get: operations["socialAuthorize"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/social/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Complete a social round-trip (browser navigation, not an XHR)
+         * @description One callback for both intents — signing in and linking — told apart by the attempt row
+         *     the `state` resolves, never by the URL (`GET /auth/sso/callback`'s reasoning, applied to
+         *     intents). The attempt is single-use and claimed before the code is exchanged.
+         *
+         *     `302` in every case. Success carries the outcome in the URL **fragment** (a session for
+         *     a sign-in, a `linked` marker for a completed link); every failure carries the same
+         *     opaque error marker. The provider's own token never reaches the SPA.
+         */
+        get: operations["socialCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -548,6 +622,52 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/social-identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The social identities linked to the calling account
+         * @description Under `/me`, not `/auth`: `/api/v1/auth/**` is public and everything here requires the
+         *     session it manages. No permission key gates any of it — managing your own sign-in
+         *     identities is self-service on your own account, like changing a password.
+         */
+        get: operations["listMySocialIdentities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/social-identities/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begin linking a social identity to the calling account
+         * @description Answers `{ url }` for the SPA to navigate to rather than a `302`: a top-level browser
+         *     navigation cannot carry the Authorization header, so the authenticated leg must be an
+         *     API call that returns the redirect, and the navigation that follows holds only the
+         *     single-use `state`.
+         */
+        post: operations["startSocialLink"];
+        /** Remove a linked social identity from the calling account */
+        delete: operations["unlinkSocialIdentity"];
         options?: never;
         head?: never;
         patch?: never;
@@ -12263,6 +12383,35 @@ export interface components {
             secret: string;
         };
         /**
+         * @description An instance-level social sign-in authority — for people, not companies, which is why
+         *     this is a closed enum and not an `identity_provider` row.
+         * @enum {string}
+         */
+        SocialProvider: "GITHUB" | "GITLAB" | "GOOGLE";
+        /**
+         * @description What `GET /auth/social/providers` answers with. Present means configured by the
+         *     operator; absent means the button does not exist. Often empty; never an error.
+         */
+        SocialProviderList: {
+            providers: components["schemas"]["SocialProvider"][];
+        };
+        SocialRedirect: {
+            /** @description The provider's authorization URL; navigate the browser to it. */
+            url: string;
+        };
+        SocialIdentity: {
+            provider: components["schemas"]["SocialProvider"];
+            /** Format: date-time */
+            linkedAt: string;
+            /** Format: date-time */
+            lastLoginAt?: string | null;
+            /** @description What the provider asserted at link time. Provenance, never a key. */
+            emailAtLink?: string | null;
+        };
+        SocialIdentityList: {
+            identities: components["schemas"]["SocialIdentity"][];
+        };
+        /**
          * @description What `POST /auth/providers` answers with. **Always present, often empty** — an empty list
          *     is the answer for an unclaimed domain, a disabled provider and a malformed address alike,
          *     because a login surface must not be an oracle for which companies exist (§6r).
@@ -13153,6 +13302,7 @@ export interface components {
     };
     parameters: {
         ProjectId: string;
+        SocialProviderKey: components["schemas"]["SocialProvider"];
         /**
          * @description An `attachment` row's id. Scoped by its owner as well as by its id everywhere it is
          *     used — the two-segment gate — so a caller cannot reach another owner's file by
@@ -13208,6 +13358,147 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listSocialProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The configured providers, possibly none. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SocialProviderList"];
+                };
+            };
+        };
+    };
+    socialAuthorize: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: components["parameters"]["SocialProviderKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description To the provider, or to the SPA's failure landing. */
+            302: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    socialCallback: {
+        parameters: {
+            query?: {
+                state?: string;
+                code?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description To the SPA, carrying the outcome in the fragment. */
+            302: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listMySocialIdentities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All linked identities, possibly none. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SocialIdentityList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    startSocialLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: components["parameters"]["SocialProviderKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Where to send the browser. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SocialRedirect"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    unlinkSocialIdentity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: components["parameters"]["SocialProviderKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unlinked (or was never linked — the end state is the same). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /**
+             * @description Refused: this identity is the account's only way to sign in (no password and no
+             *     other linked identity). Set a password or link another provider first.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     setProjectArchived: {
         parameters: {
             query?: never;

@@ -71,7 +71,17 @@ class ContractConventionTest {
             // 4xx here would be declaring a response the endpoint must never send: telling those
             // causes apart is exactly the oracle §6r forbids on a pre-authentication surface.
             "GET /auth/sso/{providerId}/authorize",
-            "GET /auth/sso/callback");
+            "GET /auth/sso/callback",
+            // The social flow's browser legs, V58 — the argument above verbatim: 302 with one
+            // opaque marker in every case, unknown-provider path segments included, which is
+            // why the controller parses {provider} itself instead of letting enum conversion
+            // answer a 400 to a browser that cannot read it.
+            "GET /auth/social/{provider}/authorize",
+            "GET /auth/social/callback",
+            // Instance configuration, identical for every caller: no auth, no parameters, no
+            // body — a 200 with a list (possibly empty) is the only answer it has, exactly
+            // like POST /auth/providers' always-200 rule but without even an email to validate.
+            "GET /auth/social/providers");
 
     @Test
     @DisplayName("every operation declares at least one 4xx response")
@@ -395,6 +405,14 @@ class ContractConventionTest {
             Map.entry("IdentityProvider", List.of(com.tcms.identity.IdentityProviderView.class)),
             Map.entry("IdentityProviderInput",
                     List.of(com.tcms.identity.IdentityProviderInput.class)),
+            Map.entry("SocialProviderList",
+                    List.of(com.tcms.auth.SocialController.SocialProviderList.class)),
+            Map.entry("SocialRedirect",
+                    List.of(com.tcms.auth.SocialController.SocialRedirect.class)),
+            Map.entry("SocialIdentity",
+                    List.of(com.tcms.auth.SocialIdentityController.SocialIdentityView.class)),
+            Map.entry("SocialIdentityList",
+                    List.of(com.tcms.auth.SocialIdentityController.SocialIdentityList.class)),
             Map.entry("SsoProviderChoice",
                     List.of(com.tcms.auth.SsoLoginService.ProviderChoice.class)),
             Map.entry("SsoProviderDiscovery",
