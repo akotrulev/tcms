@@ -2735,19 +2735,19 @@ change. The menu deliberately does not predict it (a third implementation of `Re
 would be wrong exactly where it mattered), so the refusal arrives as a notification. If the pass has
 two accounts available, driving it is worth one row.
 
-## §230 — social login and account linking
+## §231 — social login and account linking
 
-**Seven rows, none run** (§65). Ids are `§230 SL-*`; `SL` is unused elsewhere in this file —
+**Seven rows, none run** (§65). Ids are `§231 GH-*`; `GH` is unused elsewhere in this file —
 grep before minting a prefix (§154's banner). Most rows need the stack started with at least one
-`TCMS_SOCIAL_*` pair set (see `.env.example`'s social block); `SL-1`'s second half and `SL-2`'s
+`TCMS_SOCIAL_*` pair set (see `.env.example`'s social block); `GH-1`'s second half and `GH-2`'s
 fallback are the exceptions.
 
 | # | Drive | Expect |
 |---|---|---|
-| `§230 SL-1` | **L1**, stack up with all three providers configured: open `/login`. Then restart with none configured and open it again | Three "Continue with GitHub/GitLab/Google" buttons below the company-SSO section; with none, **no social section at all** — no divider, no heading — and a fresh acceptance (SL-1b's flow) lands on the app's default page, not the security page. |
-| `§230 SL-1b` | **L1**, providers configured: provision a company, redeem the invitation link, choose a password, submit | Signed in **immediately** — no manual login — landing on `/account/security?welcome=1` with the intro and a working one-click Skip. Then: an existing user accepting a second-company invitation gets neither the auto-login nor the welcome page (no password was typed). |
-| `§230 SL-1c` | **L1**: arm `tcmsFaults.expire()` (or equivalent one-shot 401 on `/auth/login`) after the accept form loads, then submit | Acceptance still succeeds; the page falls back to the sign-in form with the address prefilled and, after manual sign-in, lands on `/account/security?welcome=1` — the destination survived the fallback. No copy suggesting the acceptance failed. |
-| `§230 SL-2` | **L2**, a real GitHub OAuth app pointing at the stack's callback: link from `/account/security`, sign out, sign back in with the GitHub button | The full round-trip: link lands back on the security page with the inline "GitHub is now linked" acknowledgement; the later sign-in lands on the remembered return path. **Needs an operator-created OAuth app; not creatable by any lane's fixtures** — if absent, record "not driven: no OAuth app" and drive `SL-5` instead. |
-| `§230 SL-3` | **L2**, same stack: link a second provider from `/account/security`; then unlink it | The second row round-trips and flips to Unlink (dated, with the provenance email); unlinking confirms first, then flips back to Link. |
-| `§230 SL-4` | **L2**: a passwordless (company-IdP JIT) account with exactly one linked identity presses Unlink and confirms | Refused — the 409's explanatory message ("only way to sign in… set a password or link another provider first") stays **on the dialog**, not a corner toast. |
-| `§230 SL-5` | **L1**: paste `/api/v1/auth/social/callback?state=garbage&code=x` into the address bar | Lands on the sign-in page with the single SSO failure sentence — the same one a company-SSO failure renders, no cause named. |
+| `§231 GH-1` | **L1**, stack up with all three providers configured: open `/login`. Then restart with none configured and open it again | Three "Continue with GitHub/GitLab/Google" buttons below the company-SSO section; with none, **no social section at all** — no divider, no heading — and a fresh acceptance (GH-1b's flow) lands on the app's default page, not the security page. |
+| `§231 GH-1b` | **L1**, providers configured: provision a company, redeem the invitation link, choose a password, submit | Signed in **immediately** — no manual login — landing on `/account/security?welcome=1` with the intro and a working one-click Skip. Then: an existing user accepting a second-company invitation gets neither the auto-login nor the welcome page (no password was typed). |
+| `§231 GH-1c` | **L1**: arm `tcmsFaults.expire()` (or equivalent one-shot 401 on `/auth/login`) after the accept form loads, then submit | Acceptance still succeeds; the page falls back to the sign-in form with the address prefilled and, after manual sign-in, lands on `/account/security?welcome=1` — the destination survived the fallback. No copy suggesting the acceptance failed. |
+| `§231 GH-2` | **L2**, a real GitHub OAuth app pointing at the stack's callback: link from `/account/security`, sign out, sign back in with the GitHub button | The full round-trip: link lands back on the security page with the inline "GitHub is now linked" acknowledgement; the later sign-in lands on the remembered return path. **Needs an operator-created OAuth app; not creatable by any lane's fixtures** — if absent, record "not driven: no OAuth app" and drive `GH-5` instead. |
+| `§231 GH-3` | **L2**, same stack: link a second provider from `/account/security`; then unlink it | The second row round-trips and flips to Unlink (dated, with the provenance email); unlinking confirms first, then flips back to Link. |
+| `§231 GH-4` | **L2**: a passwordless (company-IdP JIT) account with exactly one linked identity presses Unlink and confirms | Refused — the 409's explanatory message ("only way to sign in… set a password or link another provider first") stays **on the dialog**, not a corner toast. |
+| `§231 GH-5` | **L1**: paste `/api/v1/auth/social/callback?state=garbage&code=x` into the address bar | Lands on the sign-in page with the single SSO failure sentence — the same one a company-SSO failure renders, no cause named. |

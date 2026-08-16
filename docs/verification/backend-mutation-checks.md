@@ -2699,7 +2699,7 @@ the sibling browser queue's §223 rows carry the two options (an `osixia/openlda
 | `§223 LD-3` | Six wrong passwords in a row | The sixth is refused with no LDAP connection opened — check the directory's own log, not TCMS's |
 | `§223 LD-4` | Point a provider at `ldap://` without StartTLS through the API | 400 with an `issuerUri` field error, and no row written |
 
-## §230 — social login: the single-use claim and the linking race
+## §231 — social login: the single-use claim and the linking race
 
 **These two are live-stack drives** — the suite already pins both behaviours
 (`SocialLoginServiceTest.replayFails`, `SocialIdentityServiceTest.aTakenSubjectRefuses` and the
@@ -2708,5 +2708,5 @@ same pair against the compose stack with a real provider round-trip.
 
 | id | What to drive | Expected |
 |---|---|---|
-| `§230 SB-1` | Complete one social sign-in, then replay the same callback URL (same `state`, same `code`) | The failure redirect and **nothing written**: `social_login_attempt.consumed_at` unchanged from the first pass, no second session, `user_social_identity.last_login_at` not re-stamped. |
-| `§230 SB-2` | Two concurrent LINK callbacks presenting the same provider subject against two different accounts (two browsers, two `state`s, one upstream identity) | Exactly **one** `user_social_identity` row for that `(provider, subject)` afterwards; the loser sees the one opaque failure marker, not a 500 — `uq_user_social_identity_subject` surfaced as policy. |
+| `§231 SB-1` | Complete one social sign-in, then replay the same callback URL (same `state`, same `code`) | The failure redirect and **nothing written**: `social_login_attempt.consumed_at` unchanged from the first pass, no second session, `user_social_identity.last_login_at` not re-stamped. |
+| `§231 SB-2` | Two concurrent LINK callbacks presenting the same provider subject against two different accounts (two browsers, two `state`s, one upstream identity) | Exactly **one** `user_social_identity` row for that `(provider, subject)` afterwards; the loser sees the one opaque failure marker, not a 500 — `uq_user_social_identity_subject` surfaced as policy. |

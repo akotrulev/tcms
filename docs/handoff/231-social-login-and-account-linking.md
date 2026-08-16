@@ -1,4 +1,4 @@
-# §230 — social login (GitHub · GitLab · Google) and account linking
+# §231 — social login (GitHub · GitLab · Google) and account linking
 
 **Date:** 2026-08-16 · **Plan:** `docs/plans/2026-08-16-social-login-and-account-linking.md`
 (executed task-by-task; every decision below is that plan's §0, restated here with what actually
@@ -109,8 +109,8 @@ its implementation). Frontend **1,491 tests / 111 files**, build + lint 0 warnin
 
 ## Built and unverified (§65 — rows written, nothing run)
 
-Frontend queue `§230 SL-1…SL-7` (lanes named per row; `SL-2` needs a real GitHub OAuth app and
-says what to do when there is none) and backend queue `§230 SB-1…SB-2` (replay writes nothing;
+Frontend queue `§231 GH-1…GH-5` (with `GH-1b`/`GH-1c`) (lanes named per row; `GH-2` needs a real GitHub OAuth app and
+says what to do when there is none) and backend queue `§231 SB-1…SB-2` (replay writes nothing;
 the linking race leaves exactly one row). Until a pass runs them, the browser-level flow is
 **built and unverified** — the suites above drive the same seams over MockMvc/RTL, not a real
 provider round-trip.
