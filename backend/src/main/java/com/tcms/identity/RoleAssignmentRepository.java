@@ -336,6 +336,62 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
         return findInheritedRoleNames(companyId, List.of(userId));
     }
 
+    /**
+     * <strong>COMPANY-scope</strong> role names per person — the org chart's {@code companyRoles}.
+     *
+     * <p>A third projection rather than a widening of either sibling, because it answers a different
+     * question and must not be foldable into a cell. Roles spec §A1.1 property 2: a COMPANY-scope
+     * role is authority over the company, <em>not</em> a default for its projects, and it is never
+     * overridden by a project grant. Smearing "Company Admin" across every column is exactly the
+     * misreading that rule exists to prevent, so the fact lives on the person and this query cannot
+     * produce a project id to hang it on.
+     *
+     * <p>{@code role.assignable} is <strong>not</strong> filtered here and the caller drops the
+     * baseline instead. Assignability is a question about the grant path (whether
+     * {@code RoleGrantService} may create the row), and answering a display question with it is the
+     * conversion {@code V40} §2 and {@code V41} §1 name as the one-line "cleanup" that breaks four
+     * unrelated sites. What the caller actually wants gone is {@code Company Member}, which every
+     * member holds and which would therefore be a badge on every row saying nothing.
+     *
+     * <p>No permission count and so no ranking: these are <em>all</em> the company roles a person
+     * holds, not a winner among them. A person with two is a person with two.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT ra.user_id AS userId,
+                   ra.role_id AS roleId,
+                   r.name     AS roleName
+              FROM role_assignment ra
+              JOIN role r ON r.id = ra.role_id
+             WHERE ra.company_id = :companyId
+               AND ra.project_id IS NULL
+               AND r.scope = 'COMPANY'
+               AND ra.user_id IN (:userIds)
+             UNION ALL
+            SELECT tm.user_id AS userId,
+                   ra.role_id AS roleId,
+                   r.name     AS roleName
+              FROM role_assignment ra
+              JOIN role r ON r.id = ra.role_id
+              JOIN team_membership tm ON tm.team_id = ra.team_id
+                                     AND tm.company_id = :companyId
+             WHERE ra.company_id = :companyId
+               AND ra.project_id IS NULL
+               AND r.scope = 'COMPANY'
+               AND tm.user_id IN (:userIds)
+            """)
+    List<CompanyRoleName> findCompanyRoleNames(
+            @Param("companyId") UUID companyId, @Param("userIds") Collection<UUID> userIds);
+
+    /** One COMPANY-scope role a person holds. */
+    interface CompanyRoleName {
+
+        UUID getUserId();
+
+        UUID getRoleId();
+
+        String getRoleName();
+    }
+
     /** An inherited grant, reduced to what a screen shows plus how to rank it. */
     interface InheritedRoleName {
 

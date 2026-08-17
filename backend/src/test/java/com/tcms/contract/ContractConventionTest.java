@@ -510,6 +510,13 @@ class ContractConventionTest {
             // case end under case:edit, because correcting a link's claim is one act and §173 is
             // the section that paid for letting one act acquire two spellings.
             Map.entry("LinkRelabelInput", List.of(com.tcms.documentation.LinkRelabelInput.class)),
+            Map.entry("OrgChart", List.of(com.tcms.identity.OrgChartView.class)),
+            Map.entry("OrgChartAssignment",
+                    List.of(com.tcms.identity.OrgChartAssignmentView.class)),
+            // Flat, like `User`/`UserView`: the schema is an `allOf` of `UserRef` and that
+            // serializes flat, so a nested record would put `ref.email` on the wire.
+            Map.entry("OrgChartPerson", List.of(com.tcms.identity.OrgChartPersonView.class)),
+            Map.entry("OrgChartProject", List.of(com.tcms.identity.OrgChartProjectView.class)),
             Map.entry("PlanCaseRef", List.of(com.tcms.execution.PlanCaseRefView.class)),
             Map.entry("PlanDocumentLinkInput",
                     List.of(com.tcms.documentation.PlanDocumentLinkInput.class)),

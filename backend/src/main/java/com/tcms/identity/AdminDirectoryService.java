@@ -537,7 +537,17 @@ public class AdminDirectoryService {
                 .toList();
     }
 
-    private static UserStatus statusOf(CompanyMembership membership, AppUser account) {
+    /**
+     * Which of the two statuses a person has is on the wire — see {@link #listUsers}, where the
+     * three arms are argued.
+     *
+     * <p>Package-private rather than private since the org chart, for {@link #peopleById}'s reason:
+     * a second implementation of a rule this specific, in the same module, is the copy nothing
+     * compares. Two people can differ on whether an invitee of this company who is active in
+     * another reads {@code INVITED} or {@code ACTIVE}, and the answer must not depend on which
+     * screen asked.
+     */
+    static UserStatus statusOf(CompanyMembership membership, AppUser account) {
         if (membership.getStatus() == MembershipStatus.INVITED) {
             return UserStatus.INVITED;
         }
