@@ -57,7 +57,7 @@ does not renumber. Read the `Run` column top to bottom.
 | 6 | **T4** | Backend tests | `qa-api-java` | T3 | ☑ `d5b9b89` |
 | 7 | **T7** | `useOrgChart` + invalidations | `fe-react` | T1, T6 | ☑ `c98b49a` |
 | 8 | **T8** | The screen | `fe-react` | T7 | ☑ `bd420eb` |
-| — | **T5** | Query-plan review | `data-architect` | T2 | ☐ **not run** |
+| — | **T5** | Query-plan review | `data-architect` | T2 | ☑ `0b2191e` — plan §6.1; index wanted on `team_membership`, **no** migration written |
 | — | **T9** | Disclosure-boundary security pass | `qa-security` | T4 | ☐ **not run** |
 | — | **T10** | Manual test-case suite | `qa-test-case-designer` | T4, T8 | ☐ **not run** |
 | last | **T11** | The record — handoff, caches, queues | *(last lane)* | T8 | ☑ `64f9814` — handoff §241 |
@@ -74,6 +74,13 @@ why (report-only lanes; T9 needs a provisioned instance over real HTTP). So the 
 runnable, but their findings now need a **follow-up** record — an amendment to §241 or a section of
 their own — because the handoff that would have carried them is already written and index rows are
 never renumbered.
+
+**T5 has since run (`0b2191e`) and is the first debt against that.** §241 says T5 was not run; it now
+has been, it found something the plan had backwards, and **it recommends DDL this slice does not
+carry** — so §241 is stale in a way that matters, and the index is an unlanded recommendation with no
+migration and no reserved version. Whoever picks that up owns both the migration and the handoff
+amendment. **The stale-`V52` claim in the Notes at the foot of this file was wrong too**: T5 confirmed
+the head is **`V66`**, corrected there.
 
 **T6 runs first, ahead of even the decision gate.** It is independent of T0–T5, it is the only task
 that touches a shipped screen, and landing it alone means a regression in `/admin/teams` cannot be
@@ -467,9 +474,15 @@ A slice in an unrun queue is BUILT AND UNVERIFIED and must be described that way
   two plan commits and nothing executed yet), plus `notifications` and `m6-multi-company`. That is
   why every prompt says `git add <paths>` and never `git add -A`, and why T11 re-measures the
   verification lanes rather than trusting the numbers written here.
-- **Flyway head is `V52`** and this slice adds no migration (plan §6). If T5 recommends an index, its
-  version is reserved at integration in landing order — `out-of-order` is unset, and Testcontainers
-  cannot see the failure because it migrates a fresh container every time.
+- ~~**Flyway head is `V52`**~~ → **`V66`** (`V66__report_generation_takes_an_idempotency_key.sql`),
+  measured 2026-08-17 by listing the migration directory and confirmed independently by T5, which
+  migrated all 66 in order. The `V52` figure was already stale when this file was written, and T5's
+  prompt told its agent to *"confirm Flyway head is V52"* — a prompt asking for confirmation of a
+  wrong number is how a stale figure survives being checked.
+  This slice adds no migration (plan §6), **and T5 recommending one does not change that**: the
+  `team_membership` index in §6.1 is DDL in a document, with **no version assigned deliberately**.
+  Its version is reserved at integration in landing order — `out-of-order` is unset, and
+  Testcontainers cannot see the failure because it migrates a fresh container every time.
 - **Citations in these prompts carry line numbers that drift.** Four had already moved between the
   plan being written and this pass (the `openapi.yaml` prose, the `TeamsPage` block, and the
   `packages/client` schema filename, which was wrong rather than stale). Grep for the named symbol;
