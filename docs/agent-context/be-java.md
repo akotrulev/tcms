@@ -4,6 +4,54 @@
 
 **Last verified:** 2026-08-17 (**§241** — **the org chart: `GET /api/v1/org-chart` + `/org-chart`, executed from `docs/plans/2026-08-15-org-chart-tasks.md`. No migration, no permission seeded or moved, catalogue still 55.** **THE RULE TO CARRY: when a rule is about WHO IS ASKING, a test written about who is NAMED passes straight through it.** The plan's own §8.3 agreement test — called "the single most valuable test in this slice" — pins the SUBJECT's `ProjectAccess.canView`, and removing the disclosure filter leaves both its directions GREEN, because a leaked cell still names somebody who legitimately holds that role. The arm that reddens is a third one asking the evaluator about the CALLER. Measured by breaking it and reverting. The invariant the surface rests on: **the people axis is a company fact, the project axis is the reader's own** — person rows complete, matrix columns exactly `AdminReach.visibleProjects`, and a project the caller cannot open contributing no column, no cell and **no count**. **`EffectiveRoleNames` is now the one display implementation of roles spec §A1.1's replace-don't-union override**, so the count of §A1.1 implementations stays at three; turning replace into union reddens twelve arms across three classes, three of them in `ProjectEndpointTest`, which is the evidence it is genuinely shared. **`ProjectAccess` lost its two role-name methods for one `effectiveProjectRoleNames(userId, projectIds)`** — the plan wanted the helper called from `ProjectService` and that does not build: `project`'s declaration is `{api, tenancy}`, its own header forbids widening it, and `com.tcms.api`'s charter refuses shared helpers. **If `project` must share logic with `identity`, the port answers a further question — never a wider list and never `api`.** The two role-name queries take a `Collection<UUID>` and each grant path is its own `UNION ALL` arm, because a team grant's row carries `user_id = NULL` and nothing on it says whose cell it is — **and that same join is what makes `via` and `teamId` answerable at all**. `openapi.yaml`'s `CurrentUser.teams` claimed `GET /teams` is gated on `company:teams`; it is `company:read`, corrected in place, and **`tierClaims.test.ts` has no "gated on `<key>`" shape**, which is an open instrument gap. Gates: backend **3082 / 0 / 0**.)
 
+**Amended 2026-08-17 — `V67`, and the head is `V67`.** ~~"No migration"~~ is still true of the org-chart slice and **no longer true of the feature's record**: the org chart's own T5 query-plan lane ran afterwards and found a seq scan on the **authorization hot path**, which is now `V67__team_membership_answers_which_teams_a_person_is_in.sql`. See §241-A below before adding any index. Gates after `V67`: backend **3082 / 0 / 0**, unchanged — **an index adds no test, and that is the point of the `§241 IX-1` gap row.**
+
+---
+
+## §241-A — `team_membership` HAS A SECOND INDEX, AND `CONCURRENTLY` IS STILL REFUSED
+
+**Read this before adding any index, and before assuming a `user_id` lookup on `team_membership` is cheap.**
+
+**`team_membership_user_idx (company_id, user_id)` exists since `V67`.** The primary key is
+`(team_id, user_id)` — it answers *"who is in this team"* and could not answer *"which teams is this
+person in"* without a scan, and **the second question is the one the permission model asks on every
+check**. `RoleAssignmentRepository`'s three permission projections resolve team grants with
+`team_id IN (SELECT tm.team_id FROM team_membership tm WHERE tm.user_id = ? AND tm.company_id = ?)`;
+so do the org chart's three `UNION ALL` team arms and `TeamMembershipRepository.findByUserId`.
+Measured (plan §6.1, PostgreSQL 17.10, all 66 prior migrations, plans taken **as `tcms_app` with
+`app.current_company` set**, 1,000-company instance): `findProjectScopedHeldPermissions` **3.980 ms /
+696 buffers → 0.251 ms / 14**, `findByUserId` **2.383 ms → 0.008 ms**, and `Project.myRole` — a
+shipped screen, nothing to do with the org chart — **9.006 ms to find one row → 0.291 ms**.
+
+Four things to carry:
+
+- **A plan measured as the owner or the superuser is a DIFFERENT query.** `FORCE ROW LEVEL SECURITY`
+  puts the policy predicate in the plan as a `One-Time Filter` node; as the container superuser that
+  node **disappears entirely**. Measure as `tcms_app` with the GUC set, or you are measuring
+  something the product never runs.
+- **`CONCURRENTLY` is still refused, and `V67` is where the question was actually asked.** Six
+  migrations create an index and none uses no-transaction mode (`V17`, `V42`, `V59`, `V62` say so on
+  the record; `V11`/`V14` made the call unstated). `V17`'s header set the trigger — *"the day one of
+  them is genuinely hot, that is a decision for all four at once"* — and `V67` is the first real
+  candidate and declines it: **an `ACCESS EXCLUSIVE` lock costs its DURATION, duration is a function
+  of TABLE SIZE, and read-frequency only changes how many requests wait out those milliseconds.**
+  `team_membership` is read-hot and physically tiny. Taking `CONCURRENTLY` would make it the repo's
+  first no-transaction migration, buying an `INVALID`-index recovery path and a
+  non-rollback-able failed history (`baseline-on-migrate` is deliberately `false`) — and would not
+  settle `V17`'s question anyway, only half-reverse it. **That decision wants its own slice.**
+- **Two columns, not three.** `(company_id, user_id, team_id)` was measured: an `Index Only Scan`
+  and a noise-identical 6.771 ms, for **4000 kB instead of 2312 kB**. `INCLUDE` has the same problem.
+- **Nothing gates this index's value.** There is no performance lane; a timing assertion would be
+  flaky on shared CI, and Testcontainers seeds tens of rows where the finding needs tens of
+  thousands. Flyway and `SchemaConventionTest.companyIdLeadsCompositeIndexes` gate its *presence* and
+  its column order. **Remove it and no test will tell you** — `§241 IX-1` in the mutation queue is
+  that gap, written down rather than fixed.
+
+**The standing lesson, and it is not about indexes.** §241 shipped saying T5 was skipped because it
+was "off the critical path". It was, and it still found a defect on the authorization hot path that
+had been shipped for months. *Off the critical path describes what blocks the build, not what the
+lane can see.*
+
 ---
 
 ## §241 — THE PROJECT AXIS IS THE READER'S OWN, AND §A1.1 HAS ONE DISPLAY IMPLEMENTATION

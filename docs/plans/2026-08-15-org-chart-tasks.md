@@ -57,7 +57,7 @@ does not renumber. Read the `Run` column top to bottom.
 | 6 | **T4** | Backend tests | `qa-api-java` | T3 | ☑ `d5b9b89` |
 | 7 | **T7** | `useOrgChart` + invalidations | `fe-react` | T1, T6 | ☑ `c98b49a` |
 | 8 | **T8** | The screen | `fe-react` | T7 | ☑ `bd420eb` |
-| — | **T5** | Query-plan review | `data-architect` | T2 | ☑ `0b2191e` — plan §6.1; index wanted on `team_membership`, **no** migration written |
+| — | **T5** | Query-plan review | `data-architect` | T2 | ☑ `0b2191e` — plan §6.1; index wanted on `team_membership`. ~~no migration written~~ → landed as **`V67`**, 2026-08-17 |
 | — | **T9** | Disclosure-boundary security pass | `qa-security` | T4 | ☐ **not run** |
 | — | **T10** | Manual test-case suite | `qa-test-case-designer` | T4, T8 | ☐ **not run** |
 | last | **T11** | The record — handoff, caches, queues | *(last lane)* | T8 | ☑ `64f9814` — handoff §241 |
@@ -76,10 +76,14 @@ their own — because the handoff that would have carried them is already writte
 never renumbered.
 
 **T5 has since run (`0b2191e`) and is the first debt against that.** §241 says T5 was not run; it now
-has been, it found something the plan had backwards, and **it recommends DDL this slice does not
+has been, it found something the plan had backwards, and ~~**it recommends DDL this slice does not
 carry** — so §241 is stale in a way that matters, and the index is an unlanded recommendation with no
 migration and no reserved version. Whoever picks that up owns both the migration and the handoff
-amendment. **The stale-`V52` claim in the Notes at the foot of this file was wrong too**: T5 confirmed
+amendment.~~ → **paid 2026-08-17.** `V67__team_membership_answers_which_teams_a_person_is_in.sql`
+landed the index (plain `CREATE INDEX`, not §6.1's `CONCURRENTLY` — see `V67`'s header and the
+struck-through block in §6.1), handoff §241 is amended in place, and `be-java.md` carries it as
+§241-A. Driven from `docs/plans/2026-08-17-team-membership-index-tasks.md`. **T9 and T10 are still
+the outstanding debt** and are unchanged by this. **The stale-`V52` claim in the Notes at the foot of this file was wrong too**: T5 confirmed
 the head is **`V66`**, corrected there.
 
 **T6 runs first, ahead of even the decision gate.** It is independent of T0–T5, it is the only task
@@ -483,6 +487,9 @@ A slice in an unrun queue is BUILT AND UNVERIFIED and must be described that way
   `team_membership` index in §6.1 is DDL in a document, with **no version assigned deliberately**.
   Its version is reserved at integration in landing order — `out-of-order` is unset, and
   Testcontainers cannot see the failure because it migrates a fresh container every time.
+  → **Integrated 2026-08-17 as `V67`**, in its own slice rather than folded back into this one, so
+  the sentence above stands as written: the org-chart slice adds no migration, and the index is not
+  part of it. Head is now `V67`.
 - **Citations in these prompts carry line numbers that drift.** Four had already moved between the
   plan being written and this pass (the `openapi.yaml` prose, the `TeamsPage` block, and the
   `packages/client` schema filename, which was wrong rather than stale). Grep for the named symbol;

@@ -1,5 +1,15 @@
 # Next slice — landing T5's index, and closing the org chart's record
 
+> **☑ RUN 2026-08-17.** Landed as `V67__team_membership_answers_which_teams_a_person_is_in.sql`
+> (Flyway head was `V66`, confirmed by listing the directory). **The `CONCURRENTLY` question in step 2
+> was resolved the OTHER way**: plain `CREATE INDEX`, with the argument in `V67`'s header and plan
+> §6.1 struck through accordingly, so §6.1's DDL block no longer reads as the recommendation. Handoff
+> §241 amended in place, `be-java.md` gains §241-A, one mutation-queue row (`§241 IX-1`) recorded as a
+> gap. **One correction to step 2's own text:** it names five migrations refusing `CONCURRENTLY` —
+> the count is six, and only four (`V17`, `V42`, `V59`, `V62`) refuse it *on the record*; `V11` and
+> `V14` made the same call without saying so, which `V17`:66-69 notes on their behalf. T9 and T10
+> remain unrun.
+
 **Debt from `docs/plans/2026-08-15-org-chart.md`**, whose T5 lane measured a defect it was not
 looking for and recommended DDL the org-chart slice deliberately did not carry. This file is the
 prompt for the slice that lands it.

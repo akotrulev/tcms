@@ -4,10 +4,40 @@
 Executed from `docs/plans/2026-08-15-org-chart-tasks.md`, T6 → T0 → T1 → T2 → T3 → T4 → T7 → T8 →
 T11 in that order. **No migration, no permission seeded or moved**, catalogue unchanged at 55.
 
-T5 (query-plan review), T9 (disclosure-boundary security pass) and T10 (manual test-case suite) were
-**not run** — they are report-only lanes off the critical path, and T9 in particular needs a
-provisioned instance driven over real HTTP. Their absence is why §11's rows below are the record and
-not a summary of findings.
+~~T5 (query-plan review), T9 (disclosure-boundary security pass) and T10 (manual test-case suite) were
+**not run**~~ → **superseded 2026-08-17: T5 has since run (`0b2191e`), and the sentence above is the
+part of this section that most needs correcting, because T5 did not confirm what the plan expected —
+it found the plan looking at the wrong table.** T9 and T10 remain unrun, for the reason below: they
+are report-only lanes off the critical path, and T9 in particular needs a provisioned instance driven
+over real HTTP. Their absence is why §11's rows below are the record and not a summary of findings.
+
+**What T5 found, and what it cost.** Plan §5's assumption was that the two `role_assignment` indexes
+`V1:288-289` already installed made the matrix queries cheap and no index was wanted. Half right: no
+`role_assignment` index is wanted. But the **team arm** of every one of those queries reaches a
+person through `team_membership.user_id`, and `team_membership` had exactly one index — its primary
+key `(team_id, user_id)`. `user_id` trails it and `company_id` is in no index at all, so those arms
+sequentially scanned the whole *instance's* `team_membership`, discarding other client companies'
+rows to find one tenant's. **And the same predicate is in the authorization hot path**, which was not
+in T5's brief and is why the finding outgrew the org chart: `findProjectScopedHeldPermissions` ran
+3.980 ms / 696 buffers with `Rows Removed by Filter: 60,028`, `TeamMembershipRepository.findByUserId`
+2.383 ms for two rows, and `ProjectService`'s `Project.myRole` — a shipped screen, nothing to do with
+this slice — 9.006 ms to find one row. Plan §6.1 is the measured finding in full.
+
+**So this section's opening claim of "no migration" is now false for the feature's *record*, though
+still true of the slice it describes.** `V67__team_membership_answers_which_teams_a_person_is_in.sql`
+landed the index on 2026-08-17 as its own slice, deliberately not folded back into this one. It took
+the DDL in the **plain** form rather than §6.1's recommended `CREATE INDEX CONCURRENTLY` +
+`flyway:no-transaction`, striking that half of §6.1 through: an `ACCESS EXCLUSIVE` lock costs its
+duration, duration is a function of table size, and `team_membership` is read-hot but physically tiny
+— so `CONCURRENTLY` would have bought the repo's first no-transaction migration, with an
+`INVALID`-index recovery path and a non-rollback-able failed history, to avoid milliseconds inside a
+deploy window. `V67`'s header carries the argument and names the six-migration precedent it declined
+to half-reverse.
+
+**The standing lesson is the shape, not the index.** This section shipped saying a report-only lane
+was skipped because it was off the critical path. The lane was off the critical path and it still
+found a defect on the authorization hot path that had been shipped for months. "Off the critical
+path" describes what blocks the build, not what the lane can see.
 
 ---
 
