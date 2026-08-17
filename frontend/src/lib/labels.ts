@@ -10,6 +10,7 @@
  */
 import type {
   AggregationPolicy,
+  AssignmentVia,
   ArtifactStatus,
   AutomationStatus,
   BlockLink,
@@ -94,6 +95,24 @@ export const docBlockTypeLabel = {
   table: 'Table',
   image: 'Image',
 } as const satisfies Record<DocBlockType, string>;
+
+/**
+ * How a person holds the role an org-chart cell shows.
+ *
+ * The three arms are not a detail: a matrix built the obvious way — the grants that NAME a project
+ * — renders `DIRECT` and `TEAM` identically and omits `INHERITED` entirely, so a chart that did not
+ * say which arm a cell came from would silently under-report exactly the staffing shape an org
+ * chart exists to encourage. A fourth member added to the contract is a compile error here until it
+ * is labelled, which is the whole reason this map is not a switch in the grid.
+ *
+ * There is deliberately no COMPANY arm: a Company Admin produces no cell at all and appears on the
+ * person instead, because authority over the company is not a default for its projects.
+ */
+export const assignmentViaLabels = {
+  DIRECT: 'Direct grant',
+  TEAM: 'Through a team',
+  INHERITED: 'Company-wide default',
+} as const satisfies Record<AssignmentVia, string>;
 
 /**
  * A page's publication state.

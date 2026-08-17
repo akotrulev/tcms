@@ -99,6 +99,9 @@ const TeamBoardPage = lazy(() =>
   import('../features/board/TeamBoardPage').then((m) => ({ default: m.TeamBoardPage })),
 );
 const TeamsPage = lazy(() => import('../features/admin/TeamsPage').then((m) => ({ default: m.TeamsPage })));
+const OrgChartPage = lazy(() =>
+  import('../features/org-chart/OrgChartPage').then((m) => ({ default: m.OrgChartPage })),
+);
 const ApiTokensPage = lazy(() =>
   import('../features/admin/ApiTokensPage').then((m) => ({ default: m.ApiTokensPage })),
 );
@@ -549,6 +552,27 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ArtifactsPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            The org chart (§6k) — **beside `/admin/teams`, not beneath it**, and the third route
+            outside the project segment for the same reason as the second: it is company-wide and
+            does not change when the rail's project switcher does.
+
+            Every affordance on `/admin/teams` is gated on `company:teams`. This screen is gated on
+            NOTHING — any member of the company may read the chart, and §84 found there is no key to
+            gate it on that would not be a 403 nobody could grant their way out of. A screen every
+            member may open, filed under a prefix that reads "administration", teaches the opposite
+            of what is true, and the URL is the part of a screen people quote to each other.
+            `/teams/:teamId/board` is the existing precedent for exactly this placement.
+          */}
+          <Route
+            path="/org-chart"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <OrgChartPage />
               </Suspense>
             }
           />

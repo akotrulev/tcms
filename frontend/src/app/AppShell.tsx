@@ -29,6 +29,7 @@ import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
+import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import InventoryOutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined';
@@ -282,6 +283,16 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
     {
       heading: 'Company',
       items: [
+        /*
+          The org chart (§6k), first under this heading because it is the one screen here every
+          member can actually use — the other three lead to administration.
+
+          **Ungated, like every item in this rail — and for the stronger reason.** The three below
+          are ungated despite leading to screens that refuse a non-administrator, on §31's
+          disable-don't-hide grounds. This one leads to a screen with no gate at all: there is
+          nothing to refuse, so the entry is not a promise the page has to walk back.
+        */
+        { label: 'Org chart', to: '/org-chart', icon: <AccountTreeOutlinedIcon fontSize="small" /> },
         { label: 'Teams & roles', to: '/admin/teams', icon: <GroupsOutlinedIcon fontSize="small" /> },
         /*
           Company, beside Teams & roles, for the same reason that one is here: a token belongs to

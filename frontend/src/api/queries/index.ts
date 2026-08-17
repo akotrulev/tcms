@@ -210,6 +210,7 @@ export {
   useInviteUser,
   useIdentityProviders,
   useIssueApiToken,
+  useOrgChart,
   useRevokeApiToken,
   useSaveEmailDomains,
   useSaveIdentityProvider,
