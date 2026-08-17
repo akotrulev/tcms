@@ -8878,6 +8878,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/org-chart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The company's people, teams and each person's effective project roles
+         * @description One snapshot of three axes — teams, people, and the matrix cells joining them to
+         *     projects. Assembled server-side because **the client cannot compute it, even in
+         *     principle, for the readers this screen is for**: the only company-wide grant list on
+         *     the wire is `GET /role-assignments`, filtered to the grants the caller could *revoke*,
+         *     and a plain member holds `project:members` nowhere and so receives `[]`.
+         *
+         *     **Gated on `company:read`**, which every member of a company holds through the
+         *     non-assignable `Company Member` baseline role. Org structure is not sensitive *within*
+         *     a company and hiding it defeats the purpose (plan §6k); inventing a key for it would be
+         *     a 403 no administrator could grant their way out of (§84).
+         *
+         *     **The people axis is a company fact; the project axis is the reader's own.** Person
+         *     rows are complete — every non-`REMOVED` member, their teams, their lead flags, their
+         *     status, all of which `GET /users` and `GET /teams` already serve to every member. The
+         *     matrix columns are **exactly** the projects this caller holds `project:read` on. Two
+         *     colleagues open this and see the same people and different matrices; that is the
+         *     design, and the screen says so unconditionally rather than rendering a sparser grid in
+         *     silence.
+         *
+         *     A caller who somehow fails the gate gets an **empty document**, not a 403 — the same
+         *     choice the four other identity reads make, and for the same reason: this contract
+         *     declares only `200` on them, and inventing a status a generated client does not know
+         *     about is the costlier divergence.
+         *
+         *     **This is not a write surface.** No grant id appears here and nothing on it says
+         *     whether a grant may be revoked; that invariant belongs to `GET /role-assignments` and
+         *     stays there.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The chart, clipped to what this caller may see */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OrgChart"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/work-items": {
         parameters: {
             query?: never;
@@ -9563,9 +9629,23 @@ export interface components {
             /**
              * @description The caller's teams IN THE ACTIVE COMPANY. Never across companies.
              *
-             *     This is the only way a member who is not a Company Admin learns their own
+             *     This is the app shell's answer for a member's own teams, and the cheaper one:
+             *     the shell needs one person's team names, and `GET /teams` would make it pay for
+             *     the leads, members and per-caller project chips of every team in the company to
+             *     render them.
+             *
+             *     ~~This is the only way a member who is not a Company Admin learns their own
              *     teams: `GET /teams` is gated on `company:teams`, so the org chart is not
-             *     readable to the person in it.
+             *     readable to the person in it.~~ → **false; corrected 2026-08-17.** That read is
+             *     gated on `company:read` — the `listTeams` assembler asks `readsCompany()`, and
+             *     it has since the endpoint shipped — so the org chart has always been readable
+             *     to the person in it, which is the opposite of what this said. Struck rather
+             *     than deleted because it is the sentence most likely to be read by somebody
+             *     deciding what an org chart may show, and it is the class §211/§212 named:
+             *     prose that names a permission is a claim about the seeded catalogue, and
+             *     nothing in this repo checks the "gated on `<key>`" form.
+             *
+             *     The field itself survives the repair — see the paragraph above.
              *
              *     **`isLead` was here until §175 and is not on the wire any more.** It said
              *     whether the caller leads the team, which `team_membership.is_lead` records and
@@ -13102,6 +13182,107 @@ export interface components {
                 projectName: string;
                 roleName: string;
             }[];
+        };
+        OrgChart: {
+            /**
+             * @description The EXISTING `Team` shape, unchanged — so the chart and `/admin/teams` cannot draw
+             *     different trees or different project chips. `Team.projects[]` is already clipped to
+             *     what the caller may see.
+             */
+            teams: components["schemas"]["Team"][];
+            people: components["schemas"]["OrgChartPerson"][];
+            /**
+             * @description The matrix columns: EXACTLY the projects this caller holds `project:read` on, by
+             *     name. A project the caller cannot open contributes no column, no cell and **no
+             *     count** — an unreachable project and a non-existent one are indistinguishable
+             *     (plan §6t), and a count would be a name-free existence claim about the company's
+             *     portfolio.
+             */
+            projects: components["schemas"]["OrgChartProject"][];
+        };
+        OrgChartProject: {
+            /** Format: uuid */
+            id: string;
+            key: string;
+            name: string;
+            archived: boolean;
+        };
+        OrgChartPerson: components["schemas"]["UserRef"] & {
+            /** @enum {string} */
+            status: "ACTIVE" | "INVITED" | "DEACTIVATED";
+            /**
+             * @description Refs, not names — the chart links a person to a team NODE. `User.teams` is
+             *     `string[]` and stays that way; widening a shipped shape for a screen that can
+             *     have its own is a breaking change, and a new schema is not.
+             */
+            teams: components["schemas"]["TeamRef"][];
+            /**
+             * @description The subset of `teams` where `team_membership.is_lead`. **A Team Lead is not the
+             *     Test Lead role** — that column's own comment says so — and the flag confers no
+             *     permission; it names the default reviewer.
+             */
+            leadsTeams: components["schemas"]["TeamRef"][];
+            /**
+             * @description COMPANY-scope role names held (in practice `Company Admin`, or empty). On the
+             *     PERSON, never smeared across every column: a COMPANY-scope role is authority
+             *     over the company rather than a default for its projects, and is never
+             *     overridden by a project grant (roles spec §A1.1 property 2). Filling every
+             *     column with it is the misreading this placement exists to prevent.
+             *
+             *     Visible to every member: a company's administrators are not a secret from its
+             *     members, and omitting the field would render a Company Admin as somebody with
+             *     no assignments at all, which is the opposite of true.
+             *
+             *     **SYSTEM scope is absent from this surface entirely.**
+             *     `instance_role_assignment` has no `company_id` and no RLS, and telling a tenant
+             *     which of its members has instance-wide reach is a different disclosure —
+             *     audited in the client's own trail rather than advertised (roles spec §A7).
+             */
+            companyRoles: string[];
+            /**
+             * @description One entry per project column where this person holds an effective PROJECT-scope
+             *     role. Empty for somebody with no reach into any project the CALLER can see —
+             *     which is not the same claim as "no reach", and the screen must not read it as
+             *     one.
+             */
+            projects: components["schemas"]["OrgChartAssignment"][];
+            /**
+             * Format: date-time
+             * @description **Null for a caller who does not hold `company:members`** — the same rule and
+             *     the same reason as `User.lastLoginAt`. Field-level redaction, not a different
+             *     shape: the field is nullable for everyone.
+             */
+            lastLoginAt?: string | null;
+        };
+        OrgChartAssignment: {
+            /** Format: uuid */
+            projectId: string;
+            /**
+             * @description The person's EFFECTIVE PROJECT-scope role here, after roles spec §A1.1's
+             *     replace-don't-union override: a grant naming the project wins, otherwise the
+             *     company-wide PROJECT-scope role applies. **Display only** — nothing may branch on
+             *     this string; code checks permissions, never role names (plan §6b).
+             *
+             *     Where a person holds two grants on one project (directly and through a team, or
+             *     through two teams), the winner is the role conferring more permissions — derived
+             *     from `role_permission`, never a hard-coded name ordering.
+             */
+            roleName: string;
+            /**
+             * @description How the role is held. `DIRECT` — a grant naming this person and this project.
+             *     `TEAM` — a grant to a team they belong to, naming this project. `INHERITED` — a
+             *     PROJECT-scope role granted company-wide, applying here because no grant names this
+             *     project.
+             *
+             *     A COMPANY-scope reacher (a Company Admin) produces **no assignment row at all**;
+             *     they appear in `companyRoles`. A matrix built from `role_assignment WHERE
+             *     project_id = ?` renders `DIRECT` and `TEAM` identically and omits `INHERITED`
+             *     entirely, which is the completeness bug this enum exists to make visible.
+             * @enum {string}
+             */
+            via: "DIRECT" | "TEAM" | "INHERITED";
+            /** @description Non-null exactly when `via` is `TEAM`. */
+            viaTeam?: components["schemas"]["TeamRef"] | null;
         };
         /**
          * @description The editable half of a `Team` — everything `POST /teams` and `PUT /teams/{teamId}` decide.
