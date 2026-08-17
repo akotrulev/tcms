@@ -25,6 +25,14 @@ export type UserInvitationInput = S['UserInvitationInput'];
 export type Team = S['Team'];
 export type TeamInput = S['TeamInput'];
 export type TeamMemberInput = S['TeamMemberInput'];
+// The org chart's four shapes. New schemas rather than a widened `User`/`Team`: the matrix needs
+// team NODES where `User.teams` is `string[]`, and widening a shipped shape for a screen that can
+// have its own is the breaking change the contract refused.
+export type OrgChart = S['OrgChart'];
+export type OrgChartPerson = S['OrgChartPerson'];
+export type OrgChartProject = S['OrgChartProject'];
+export type OrgChartAssignment = S['OrgChartAssignment'];
+export type AssignmentVia = OrgChartAssignment['via'];
 export type Role = S['Role'];
 export type RoleAssignment = S['RoleAssignment'];
 export type RoleAssignmentInput = S['RoleAssignmentInput'];

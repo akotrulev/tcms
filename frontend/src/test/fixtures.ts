@@ -44,10 +44,19 @@ import type {
   SocialIdentityList,
   SocialProviderList,
   SocialRedirect,
+  OrgChart,
+  OrgChartAssignment,
+  OrgChartPerson,
+  OrgChartProject,
   ResultCounts,
   SsoProviderChoice,
+  Role,
+  RoleAssignment,
   Suite,
   Team,
+  User,
+  UserInvitation,
+  UserRef,
   TestCase,
   TestCaseSummary,
   TestExecution,
@@ -309,6 +318,92 @@ export function aWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
 
 export function aTeam(overrides: Partial<Team> = {}): Team {
   return { id: 't1', name: 'A team', leads: [], members: [], projects: [], ...overrides }
+}
+
+export function aUserRef(overrides: Partial<UserRef> = {}): UserRef {
+  return { id: 'u1', displayName: 'A. Person', email: 'a.person@acme.test', avatarUrl: null, ...overrides }
+}
+
+export function aUser(overrides: Partial<User> = {}): User {
+  return { ...aUserRef(), status: 'ACTIVE', lastLoginAt: null, teams: [], ...overrides }
+}
+
+/**
+ * One role, complete rather than minimal like every factory here — `Role` has seven required
+ * properties and a double serving a subset is a screen one commit away from a TypeError.
+ *
+ * `assignable` defaults to `true`: three seeded rows are non-assignable and none of them is what a
+ * test that says "a role" means, so the default is the one a grant picker would actually offer.
+ */
+export function aRole(overrides: Partial<Role> = {}): Role {
+  return {
+    id: 'r1',
+    name: 'Test Engineer',
+    scope: 'PROJECT',
+    builtIn: true,
+    assignable: true,
+    description: 'Writes and maintains cases.',
+    permissions: ['project:read', 'case:read', 'case:edit'],
+    ...overrides,
+  }
+}
+
+/**
+ * One grant. `user` and `team` are user *xor* team on the wire — the constraint the column carries
+ * — so this defaults to the user arm and a team grant is `aRoleAssignment({ user: null, team })`
+ * rather than an override that sets both.
+ */
+export function aRoleAssignment(overrides: Partial<RoleAssignment> = {}): RoleAssignment {
+  return {
+    id: 'ra1',
+    role: aRole(),
+    user: aUserRef(),
+    team: null,
+    projectId: null,
+    projectName: null,
+    grantedAt: AT,
+    ...overrides,
+  }
+}
+
+export function aUserInvitation(overrides: Partial<UserInvitation> = {}): UserInvitation {
+  return { user: aUser(), issued: true, emailed: false, expiresAt: AT, ...overrides }
+}
+
+export function anOrgChartProject(overrides: Partial<OrgChartProject> = {}): OrgChartProject {
+  return { id: 'p1', key: 'ATL', name: 'Atlas', archived: false, ...overrides }
+}
+
+/**
+ * One matrix cell. `via` defaults to `DIRECT` with a null `viaTeam`, which is the pairing the
+ * contract requires — `viaTeam` is non-null EXACTLY when `via` is `TEAM`, so a test driving the
+ * team arm must set both.
+ */
+export function anOrgChartAssignment(
+  overrides: Partial<OrgChartAssignment> = {},
+): OrgChartAssignment {
+  return { projectId: 'p1', roleName: 'Test Engineer', via: 'DIRECT', viaTeam: null, ...overrides }
+}
+
+/**
+ * One person on the chart. `projects` is empty by default: somebody with no cell in any column the
+ * READER can see is the ordinary row, not an edge case, and it is the row `OrgChartGaps` is about.
+ */
+export function anOrgChartPerson(overrides: Partial<OrgChartPerson> = {}): OrgChartPerson {
+  return {
+    ...aUserRef(),
+    status: 'ACTIVE',
+    teams: [],
+    leadsTeams: [],
+    companyRoles: [],
+    projects: [],
+    lastLoginAt: null,
+    ...overrides,
+  }
+}
+
+export function anOrgChart(overrides: Partial<OrgChart> = {}): OrgChart {
+  return { teams: [], people: [], projects: [], ...overrides }
 }
 
 export function aDocPageSummary(overrides: Partial<DocPageSummary> = {}): DocPageSummary {

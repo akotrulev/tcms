@@ -211,6 +211,19 @@ export const keys = {
     ['projects', p, 'notification-channels', id, 'deliveries'] as const,
   users: ['users'] as const,
   teams: ['teams'] as const,
+  /**
+   * The whole org chart in one entry (§9.5).
+   *
+   * No project segment, because the document is company-wide and its *columns* are already the
+   * caller's own — the server clips them, so there is nothing for a key to narrow. One session, one
+   * caller, one entry.
+   *
+   * **Every staffing write invalidates this**, all nine of them. It is a derived view of `teams`,
+   * `users`, `role-assignments` and `projects` at once, so a write that touches any of those four
+   * can move a cell here; missing one leaves the chart stale in exactly the moment somebody just
+   * restaffed a project, which is the moment they opened it.
+   */
+  orgChart: ['org-chart'] as const,
   roles: ['roles'] as const,
   /**
    * One key, no project segment — and it was a function taking an optional project until §63.

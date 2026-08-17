@@ -14,6 +14,7 @@ import type {
   IdentityProvider,
   IdentityProviderInput,
   IssuedApiToken,
+  OrgChart,
   Role,
   RoleAssignment,
   RoleAssignmentInput,
@@ -42,6 +43,26 @@ export function useTeams(): UseQueryResult<Team[]> {
 }
 
 /**
+ * The org chart — people, teams and the matrix, in one document (§9.5).
+ *
+ * One query rather than three, because the three axes have to come from one snapshot: a grid whose
+ * rows, columns and cells were read at three different moments renders a company that never
+ * existed. It is also the only shape that *can* be assembled — the matrix cells cannot be computed
+ * on the client at all for the readers this screen is for, because the only company-wide grant list
+ * on the wire is filtered to the grants the caller could revoke and a plain member receives `[]`.
+ *
+ * **Gated on nothing.** Every member of a company may read this, so there is no `enabled` term and
+ * no permission check in front of it — unlike `useApiTokens` and `useIdentityProviders`, whose
+ * endpoints refuse rather than narrow.
+ */
+export function useOrgChart(): UseQueryResult<OrgChart> {
+  return useQuery({
+    queryKey: keys.orgChart,
+    queryFn: ({ signal }) => api.get<OrgChart>('/org-chart', { signal }),
+  });
+}
+
+/**
  * Creates a team — **the org chart's first writer**, and the first time `useTeams` has had
  * anything to show on a real instance.
  *
@@ -62,6 +83,7 @@ export function useCreateTeam(): UseMutationResult<Team, Error, TeamInput> {
     meta: { handled: true },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.teams });
+      void client.invalidateQueries({ queryKey: keys.orgChart });
     },
   });
 }
@@ -88,6 +110,7 @@ export function useUpdateTeam(): UseMutationResult<
     meta: { handled: true },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.teams });
+      void client.invalidateQueries({ queryKey: keys.orgChart });
     },
   });
 }
@@ -112,6 +135,7 @@ export function useDeleteTeam(): UseMutationResult<void, Error, string> {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.teams });
       void client.invalidateQueries({ queryKey: keys.roleAssignments });
+      void client.invalidateQueries({ queryKey: keys.orgChart });
     },
   });
 }
@@ -141,6 +165,7 @@ export function usePutTeamMember(): UseMutationResult<
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.teams });
       void client.invalidateQueries({ queryKey: keys.projects });
+      void client.invalidateQueries({ queryKey: keys.orgChart });
     },
   });
 }
@@ -161,6 +186,7 @@ export function useRemoveTeamMember(): UseMutationResult<
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.teams });
       void client.invalidateQueries({ queryKey: keys.projects });
+      void client.invalidateQueries({ queryKey: keys.orgChart });
     },
   });
 }
@@ -225,6 +251,7 @@ export function useInviteUser(): UseMutationResult<UserInvitation, Error, UserIn
     meta: { handled: true },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.users });
+      void client.invalidateQueries({ queryKey: keys.orgChart });
     },
   });
 }
@@ -254,6 +281,7 @@ export function useRemoveUser(): UseMutationResult<void, Error, string> {
       void client.invalidateQueries({ queryKey: keys.users });
       void client.invalidateQueries({ queryKey: keys.roleAssignments });
       void client.invalidateQueries({ queryKey: keys.projects });
+      void client.invalidateQueries({ queryKey: keys.orgChart });
     },
   });
 }
@@ -288,6 +316,7 @@ export function useGrantRole(): UseMutationResult<RoleAssignment, Error, RoleAss
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.roleAssignments });
       void client.invalidateQueries({ queryKey: keys.projects });
+      void client.invalidateQueries({ queryKey: keys.orgChart });
     },
   });
 }
@@ -309,6 +338,7 @@ export function useRevokeRole(): UseMutationResult<void, Error, string> {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.roleAssignments });
       void client.invalidateQueries({ queryKey: keys.projects });
+      void client.invalidateQueries({ queryKey: keys.orgChart });
     },
   });
 }
