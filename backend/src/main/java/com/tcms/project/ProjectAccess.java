@@ -1,7 +1,7 @@
 package com.tcms.project;
 
+import java.util.Collection;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -149,39 +149,34 @@ public interface ProjectAccess {
     boolean canDoInCompany(UUID userId, String permission);
 
     /**
-     * The caller's <strong>PROJECT-scope</strong> role name per project across the whole
-     * company, strongest grant winning — one lookup for the entire list rather than one per
-     * project.
+     * The caller's <strong>effective PROJECT-scope role name</strong> on each of
+     * {@code projectIds}, strongest grant winning and roles spec §A1.1's inheritance override
+     * already applied — one lookup for the entire list rather than one per project.
      *
-     * <p>Projects the caller reaches only through a COMPANY-scope grant are <em>absent</em>,
-     * not present with a placeholder: the contract defines {@code myRole} as null in exactly
-     * that case, so a Company Admin is correctly unlabelled rather than labelled with a claim
-     * about the company.
+     * <p>A project the caller reaches only through a COMPANY-scope grant is <em>absent from the
+     * map</em>, not present with a placeholder: the contract defines {@code myRole} as null in
+     * exactly that case, so a Company Admin is correctly unlabelled rather than labelled with a
+     * claim about the company. So is a project id nobody holds anything on — an absent key is the
+     * only "no name" this returns.
      *
-     * <p>Display only. Nothing may branch on these strings — code checks permissions, never
-     * role names (plan §6b).
+     * <p>Display only. Nothing may branch on these strings — code checks permissions, never role
+     * names (plan §6b).
+     *
+     * <h2>Why the projects come in, and why this is ONE method rather than the two it replaced</h2>
+     *
+     * <p><del>{@code projectRoleNames} and {@code inheritedProjectRoleName} were deliberately not
+     * merged: that map is keyed by project, only the caller knows which projects are being
+     * rendered, and folding a per-project default in would mean the implementation inventing
+     * entries for projects nobody asked about.</del> The objection was right and this signature
+     * answers it — the caller says which projects it is rendering, so nothing is invented.
+     *
+     * <p>What changed is that a <em>second</em> screen now needs the same override. The caller-side
+     * fallback was one line, and a second copy of it is how the two screens come to disagree the
+     * first time somebody edits §A1.1 — a rule whose failure mode is rendering the colleague you
+     * just demoted as still holding the higher role. §A1.1 cannot be resolved in this module (the
+     * module graph is one-way and {@code identity} is deliberately not on this one's allowed list),
+     * so the override moves to the side that owns it and this port asks for the answer rather than
+     * for the ingredients.
      */
-    Map<UUID, String> projectRoleNames(UUID userId);
-
-    /**
-     * The role name the caller <strong>inherits</strong> on every project they hold no grant on, or
-     * empty when they inherit none.
-     *
-     * <p>The display half of the inheritance rule. A PROJECT-scope role granted with no project
-     * applies to every project that has not said otherwise, so on those projects it <em>is</em> the
-     * caller's role and {@code Project.myRole} has to say so — a {@code null} there would report "no
-     * role on this project" to somebody who can demonstrably act on it, which is the same shape as
-     * §47's tile and §49's chip: a field that is accurate about the query behind it and false about
-     * the thing it is labelling.
-     *
-     * <p>Deliberately <strong>not</strong> merged into {@link #projectRoleNames}'s map. That map is
-     * keyed by project and only the caller knows which projects are being rendered; folding a
-     * per-project default into it would mean this method inventing entries for projects nobody
-     * asked about. The caller reads the map first and falls back to this — which is also exactly
-     * the precedence the evaluator applies, so the label and the permissions cannot disagree.
-     *
-     * <p>Company Admin is still absent from both, for {@link #projectRoleNames}'s stated reason:
-     * theirs is a claim about the company, not about any project.
-     */
-    Optional<String> inheritedProjectRoleName(UUID userId);
+    Map<UUID, String> effectiveProjectRoleNames(UUID userId, Collection<UUID> projectIds);
 }

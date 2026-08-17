@@ -98,14 +98,16 @@ public class ProjectService {
 
         Map<UUID, Long> caseCounts =
                 caseCounts(companyId, visible.stream().map(Project::getId).toList());
-        Map<UUID, String> roleNames = access.projectRoleNames(userId);
-        // The label for projects the caller holds no grant on but inherits a company-wide role into.
-        // Read second, exactly as the evaluator reads it second, so the name on the card and the
-        // permissions behind it cannot disagree.
-        String inherited = access.inheritedProjectRoleName(userId).orElse(null);
+        // Effective names — the strongest grant on each project, or the company-wide role
+        // inherited into it, resolved on the side of the boundary that owns roles spec §A1.1 so
+        // this module and the org chart cannot come to disagree about the rule. Projects the
+        // caller reaches only through a COMPANY-scope grant are absent from the map, which is what
+        // `myRole`'s null means.
+        Map<UUID, String> roleNames = access.effectiveProjectRoleNames(
+                userId, visible.stream().map(Project::getId).toList());
 
         return visible.stream()
-                .map(project -> view(project, caseCounts, roleNames, inherited))
+                .map(project -> view(project, caseCounts, roleNames))
                 .toList();
     }
 
@@ -121,8 +123,7 @@ public class ProjectService {
         return visibleProject(userId, projectId).map(project -> view(
                 project,
                 caseCounts(companyId, List.of(project.getId())),
-                access.projectRoleNames(userId),
-                access.inheritedProjectRoleName(userId).orElse(null)));
+                access.effectiveProjectRoleNames(userId, List.of(project.getId()))));
     }
 
     /**
@@ -565,10 +566,7 @@ public class ProjectService {
     }
 
     private ProjectView view(
-            Project project,
-            Map<UUID, Long> caseCounts,
-            Map<UUID, String> roleNames,
-            String inheritedRoleName) {
+            Project project, Map<UUID, Long> caseCounts, Map<UUID, String> roleNames) {
         return new ProjectView(
                 project.getId(),
                 project.getKey(),
@@ -579,11 +577,11 @@ public class ProjectService {
                 // normal path for a new project rather than a fallback for a broken query.
                 caseCounts.getOrDefault(project.getId(), 0L),
                 // null when the caller reaches this project through a COMPANY-scope grant —
-                // the contract's stated meaning of myRole, not a lookup that failed.
-                // A grant naming this project wins; otherwise the inherited role, which IS the
-                // caller's role here. Null only when they reach the project some other way — a
-                // Company Admin, whose role is a claim about the company rather than the project.
-                roleNames.getOrDefault(project.getId(), inheritedRoleName));
+                // the contract's stated meaning of myRole, not a lookup that failed. The §A1.1
+                // precedence that used to be applied here (a grant naming the project wins,
+                // otherwise the inherited role) is resolved in `identity` now, so an absent key is
+                // the only "no name" and this line no longer restates a rule it cannot test.
+                roleNames.get(project.getId()));
     }
 
     /**
@@ -606,8 +604,8 @@ public class ProjectService {
         // not automatically granted a role on it (§34), so a company-wide Test Lead creating one
         // reaches it purely by inheritance — and would otherwise be told they have no role on the
         // project they just made.
-        return view(project, Map.of(), access.projectRoleNames(userId),
-                access.inheritedProjectRoleName(userId).orElse(null));
+        return view(project, Map.of(),
+                access.effectiveProjectRoleNames(userId, List.of(project.getId())));
     }
 
     /**
@@ -628,8 +626,7 @@ public class ProjectService {
         return view(
                 project,
                 caseCounts(CompanyContext.require(), List.of(project.getId())),
-                access.projectRoleNames(userId),
-                access.inheritedProjectRoleName(userId).orElse(null));
+                access.effectiveProjectRoleNames(userId, List.of(project.getId())));
     }
 
     private Map<UUID, Long> caseCounts(UUID companyId, List<UUID> projectIds) {

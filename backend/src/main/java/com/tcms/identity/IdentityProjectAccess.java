@@ -2,10 +2,8 @@ package com.tcms.identity;
 
 import com.tcms.project.ProjectAccess;
 import com.tcms.tenancy.CompanyContext;
-import java.util.Comparator;
-import java.util.HashMap;
+import java.util.Collection;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -170,53 +168,24 @@ public class IdentityProjectAccess implements ProjectAccess {
     /**
      * {@inheritDoc}
      *
-     * <p>"Strongest" is the count of permissions the role confers, read from the same
-     * {@code role_permission} table authorization reads — <strong>derived, not a hard-coded
-     * ranking of role names</strong>, so a role added later sorts correctly without this method
-     * being edited. A name-ordered rank is the same mistake as the {@code '*'} sentinel in
-     * handoff §6 lesson 10: it reads correctly until the set it describes changes.
+     * <p>Two queries and no arithmetic: the ranking and roles spec §A1.1's override both live in
+     * {@link EffectiveRoleNames}, which is also what the org chart resolves its cells through. That
+     * is the whole reason this method replaced the pair it did — the fallback used to be a line in
+     * {@code ProjectService.view}, and a second screen needing the same rule would have made it a
+     * second copy on the far side of a module boundary, where nothing could compare them.
      *
-     * <p>A caller can genuinely hold two grants on one project — directly and through a team,
-     * or through two teams — and the contract has room for one string. Ties break on the name
-     * so the answer is stable between requests rather than dependent on row order; picking
-     * either of two equally-strong roles is defensible, picking a different one each time is not.
+     * <p>The queries are asked with a single-element id list, which is the same statement the chart
+     * runs for a whole company. One query family, so a change to the resolution cannot reach one
+     * caller and miss the other.
      */
     @Override
     @Transactional(readOnly = true)
-    public Map<UUID, String> projectRoleNames(UUID userId) {
+    public Map<UUID, String> effectiveProjectRoleNames(UUID userId, Collection<UUID> projectIds) {
         UUID companyId = CompanyContext.require();
 
-        Comparator<RoleAssignmentRepository.ProjectRoleName> byStrength =
-                Comparator.comparingLong(RoleAssignmentRepository.ProjectRoleName::getPermissionCount)
-                        .thenComparing(RoleAssignmentRepository.ProjectRoleName::getRoleName);
-
-        Map<UUID, RoleAssignmentRepository.ProjectRoleName> strongest = new HashMap<>();
-        for (var row : roleAssignments.findProjectRoleNames(companyId, userId)) {
-            strongest.merge(row.getProjectId(), row,
-                    (existing, candidate) ->
-                            byStrength.compare(candidate, existing) > 0 ? candidate : existing);
-        }
-
-        Map<UUID, String> names = new HashMap<>();
-        strongest.forEach((projectId, row) -> names.put(projectId, row.getRoleName()));
-        return names;
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * <p>Ranked by the same derived strength as {@link #projectRoleNames} — a caller can inherit
-     * two grants (directly and through a team) and the contract has room for one string.
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public Optional<String> inheritedProjectRoleName(UUID userId) {
-        UUID companyId = CompanyContext.require();
-
-        return roleAssignments.findInheritedRoleNames(companyId, userId).stream()
-                .max(Comparator
-                        .comparingLong(RoleAssignmentRepository.InheritedRoleName::getPermissionCount)
-                        .thenComparing(RoleAssignmentRepository.InheritedRoleName::getRoleName))
-                .map(RoleAssignmentRepository.InheritedRoleName::getRoleName);
+        return EffectiveRoleNames.of(
+                        roleAssignments.findProjectRoleNames(companyId, userId),
+                        roleAssignments.findInheritedRoleNames(companyId, userId))
+                .forPerson(userId, projectIds);
     }
 }

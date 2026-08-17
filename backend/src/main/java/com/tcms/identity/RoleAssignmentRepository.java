@@ -1,5 +1,6 @@
 package com.tcms.identity;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -221,24 +222,71 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
      * adds, and handoff §6 lesson 10 is the same mistake in a different costume. The count of
      * permissions the role actually confers is the ordering, and it comes from the same
      * {@code role_permission} table authorization reads.
+     *
+     * <h2>Why it takes a LIST of users, and why the two arms are a UNION rather than an OR</h2>
+     *
+     * <p>The org chart resolves a whole company's matrix — every member against every project the
+     * <em>reader</em> can open. One evaluation per pair is N×M, and neither
+     * {@code AdminDirectoryService.reachOf} nor {@code ProjectMembershipService.membersOf} licenses
+     * that: they accept an N-shaped cost with a stated ceiling, and N×M is not N. An IN-list makes
+     * the whole matrix one query.
+     *
+     * <p>Which forced the shape change. The single-user form could ask
+     * {@code user_id = :userId OR team_id IN (…)} because the person was already known; with a list,
+     * a team grant's row carries {@code user_id = NULL} and nothing on it says <em>whose</em> cell it
+     * is. So the two ways a grant reaches somebody become two arms that each name the person —
+     * {@code ra.user_id} directly, {@code tm.user_id} through the membership join — and that same
+     * join is what makes {@code via} and {@code teamId} answerable at all rather than a second query.
+     *
+     * <p>{@code UNION ALL}, never {@code UNION}: a person holding the same role directly <em>and</em>
+     * through a team is two grants, and deduplicating them here would silently pick one arm's
+     * {@code via} — the ranking below is where two grants become one string, deliberately, because
+     * that is where the rule for choosing is written.
      */
     @Query(nativeQuery = true, value = """
-            SELECT ra.project_id AS projectId,
+            SELECT ra.user_id    AS userId,
+                   ra.project_id AS projectId,
                    r.name        AS roleName,
                    (SELECT COUNT(*) FROM role_permission rp
-                     WHERE rp.role_id = ra.role_id) AS permissionCount
+                     WHERE rp.role_id = ra.role_id) AS permissionCount,
+                   'DIRECT'      AS via,
+                   CAST(NULL AS uuid) AS teamId
               FROM role_assignment ra
               JOIN role r ON r.id = ra.role_id
              WHERE ra.company_id = :companyId
                AND ra.project_id IS NOT NULL
-               AND (ra.user_id = :userId
-                    OR ra.team_id IN (SELECT tm.team_id
-                                        FROM team_membership tm
-                                       WHERE tm.user_id = :userId
-                                         AND tm.company_id = :companyId))
+               AND ra.user_id IN (:userIds)
+             UNION ALL
+            SELECT tm.user_id    AS userId,
+                   ra.project_id AS projectId,
+                   r.name        AS roleName,
+                   (SELECT COUNT(*) FROM role_permission rp
+                     WHERE rp.role_id = ra.role_id) AS permissionCount,
+                   'TEAM'        AS via,
+                   ra.team_id    AS teamId
+              FROM role_assignment ra
+              JOIN role r ON r.id = ra.role_id
+              JOIN team_membership tm ON tm.team_id = ra.team_id
+                                     AND tm.company_id = :companyId
+             WHERE ra.company_id = :companyId
+               AND ra.project_id IS NOT NULL
+               AND tm.user_id IN (:userIds)
             """)
     List<ProjectRoleName> findProjectRoleNames(
-            @Param("companyId") UUID companyId, @Param("userId") UUID userId);
+            @Param("companyId") UUID companyId, @Param("userIds") Collection<UUID> userIds);
+
+    /**
+     * One caller's project-scope role names — {@link #findProjectRoleNames(UUID, Collection)} asked
+     * about a single person.
+     *
+     * <p>A {@code default} method rather than a second {@code @Query}, which is the whole point:
+     * {@code Project.myRole} and the org chart's cells then cannot be resolved by two queries that
+     * drift apart. Spring Data never proxies a default method, so there is exactly one SQL statement
+     * behind both entry points.
+     */
+    default List<ProjectRoleName> findProjectRoleNames(UUID companyId, UUID userId) {
+        return findProjectRoleNames(companyId, List.of(userId));
+    }
 
     /**
      * The caller's <strong>inherited</strong> project-role grants — PROJECT-scope roles held with no
@@ -251,9 +299,13 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
      * <p>Without this, {@code Project.myRole} would read {@code null} on every inherited project
      * while the caller demonstrably has a role there — the contract defines the field as "the
      * caller's role on this project", and an inherited role is their role on it.
+     *
+     * <p>Generalised to an id list alongside its sibling, and split into the same two named arms for
+     * the same reason: with a list, a team grant's row does not say whose inheritance it is.
      */
     @Query(nativeQuery = true, value = """
-            SELECT r.name AS roleName,
+            SELECT ra.user_id AS userId,
+                   r.name     AS roleName,
                    (SELECT COUNT(*) FROM role_permission rp
                      WHERE rp.role_id = ra.role_id) AS permissionCount
               FROM role_assignment ra
@@ -261,17 +313,33 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
              WHERE ra.company_id = :companyId
                AND ra.project_id IS NULL
                AND r.scope = 'PROJECT'
-               AND (ra.user_id = :userId
-                    OR ra.team_id IN (SELECT tm.team_id
-                                        FROM team_membership tm
-                                       WHERE tm.user_id = :userId
-                                         AND tm.company_id = :companyId))
+               AND ra.user_id IN (:userIds)
+             UNION ALL
+            SELECT tm.user_id AS userId,
+                   r.name     AS roleName,
+                   (SELECT COUNT(*) FROM role_permission rp
+                     WHERE rp.role_id = ra.role_id) AS permissionCount
+              FROM role_assignment ra
+              JOIN role r ON r.id = ra.role_id
+              JOIN team_membership tm ON tm.team_id = ra.team_id
+                                     AND tm.company_id = :companyId
+             WHERE ra.company_id = :companyId
+               AND ra.project_id IS NULL
+               AND r.scope = 'PROJECT'
+               AND tm.user_id IN (:userIds)
             """)
     List<InheritedRoleName> findInheritedRoleNames(
-            @Param("companyId") UUID companyId, @Param("userId") UUID userId);
+            @Param("companyId") UUID companyId, @Param("userIds") Collection<UUID> userIds);
+
+    /** One caller's inherited role names — the sibling default, and it exists for the same reason. */
+    default List<InheritedRoleName> findInheritedRoleNames(UUID companyId, UUID userId) {
+        return findInheritedRoleNames(companyId, List.of(userId));
+    }
 
     /** An inherited grant, reduced to what a screen shows plus how to rank it. */
     interface InheritedRoleName {
+
+        UUID getUserId();
 
         String getRoleName();
 
@@ -281,11 +349,25 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
     /** One project-scope grant, reduced to what a screen shows plus how to rank it. */
     interface ProjectRoleName {
 
+        UUID getUserId();
+
         UUID getProjectId();
 
         String getRoleName();
 
         long getPermissionCount();
+
+        /**
+         * {@code DIRECT} or {@code TEAM} — which arm of the union produced this row.
+         *
+         * <p>A string rather than the {@code AssignmentVia} enum because this is a native
+         * projection and the value is a SQL literal; the enum is applied one layer up, where a
+         * value the query cannot produce is a failure rather than a silent default.
+         */
+        String getVia();
+
+        /** The team the grant named, or null on a {@code DIRECT} row. */
+        UUID getTeamId();
     }
 
     /** Company-filtered by the active context; used to list a user's grants for admin screens. */
