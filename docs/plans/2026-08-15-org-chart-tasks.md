@@ -49,18 +49,31 @@ does not renumber. Read the `Run` column top to bottom.
 
 | Run | # | Task | Agent | Deps | State |
 |:--:|---|---|---|---|---|
-| 1 | **T6** | Extract `teamTree.ts` | `fe-react` | — | ☐ |
-| 2 | **T0** | Decision gate — answer Q1–Q3 **and Q5** | *(you)* | — | ☐ |
-| 3 | **T1** | Contract + both generated schema copies | `be-java` | T0 | ☐ |
-| 4 | **T2** | Repository generalisation + §A1.1 helper | `be-java` | T1 | ☐ |
-| 5 | **T3** | `OrgChartService` + controller | `be-java` | T2 | ☐ |
-| 6 | **T4** | Backend tests | `qa-api-java` | T3 | ☐ |
-| 7 | **T7** | `useOrgChart` + invalidations | `fe-react` | T1, T6 | ☐ |
-| 8 | **T8** | The screen | `fe-react` | T7 | ☐ |
-| — | **T5** | Query-plan review | `data-architect` | T2 | ☐ |
-| — | **T9** | Disclosure-boundary security pass | `qa-security` | T4 | ☐ |
-| — | **T10** | Manual test-case suite | `qa-test-case-designer` | T4, T8 | ☐ |
-| last | **T11** | The record — handoff, caches, queues | *(last lane)* | T8 | ☐ |
+| 1 | **T6** | Extract `teamTree.ts` | `fe-react` | — | ☑ `3f100b1` |
+| 2 | **T0** | Decision gate — answer Q1–Q3 **and Q5** | *(you)* | — | ☑ plan §14, all four recommendations taken |
+| 3 | **T1** | Contract + both generated schema copies | `be-java` | T0 | ☑ `2b3546a` (with T0) |
+| 4 | **T2** | Repository generalisation + §A1.1 helper | `be-java` | T1 | ☑ `ba5ed64` |
+| 5 | **T3** | `OrgChartService` + controller | `be-java` | T2 | ☑ `1ecd0db` |
+| 6 | **T4** | Backend tests | `qa-api-java` | T3 | ☑ `d5b9b89` |
+| 7 | **T7** | `useOrgChart` + invalidations | `fe-react` | T1, T6 | ☑ `c98b49a` |
+| 8 | **T8** | The screen | `fe-react` | T7 | ☑ `bd420eb` |
+| — | **T5** | Query-plan review | `data-architect` | T2 | ☐ **not run** |
+| — | **T9** | Disclosure-boundary security pass | `qa-security` | T4 | ☐ **not run** |
+| — | **T10** | Manual test-case suite | `qa-test-case-designer` | T4, T8 | ☐ **not run** |
+| last | **T11** | The record — handoff, caches, queues | *(last lane)* | T8 | ☑ `64f9814` — handoff §241 |
+
+**Executed 2026-08-15/16 — and NOT on `worktree-org-chart-plan`.** All eight code lanes plus T11
+landed **on `master`** (`3f100b1`…`64f9814`, in the `Run` order above); the branch every prompt's
+preamble names is still at `5149e58`, the two plan commits alone. If you are reading a prompt below
+and about to check out that worktree, don't — the work is on `master` and a second implementation
+from that branch would re-add every file.
+
+**T11 ran with T5, T9 and T10 outstanding**, which is exactly what the note below says not to do.
+The handoff section records it rather than hiding it: §241 states *"T5, T9 and T10 were not run"* and
+why (report-only lanes; T9 needs a provisioned instance over real HTTP). So the three are still
+runnable, but their findings now need a **follow-up** record — an amendment to §241 or a section of
+their own — because the handoff that would have carried them is already written and index rows are
+never renumbered.
 
 **T6 runs first, ahead of even the decision gate.** It is independent of T0–T5, it is the only task
 that touches a shipped screen, and landing it alone means a regression in `/admin/teams` cannot be
