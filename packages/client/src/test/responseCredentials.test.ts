@@ -47,6 +47,16 @@ const BY_DECISION: Record<string, string> = {
     'the other so a timeline can say who recorded a result. `tokenPrefix`\'s category: it is chosen ' +
     'by the administrator who wrote it into a CI configuration, and it authenticates nothing. The ' +
     'needle that catches it is `token`, which is kept for `AuthResult.token`.',
+  'AuditEvent.actorTokenId':
+    'The credential\'s PRIMARY KEY, not its secret and not its prefix — the same id `ApiToken.id` ' +
+    'already serves to the same readers. It authenticates nothing, and the audit trail needs it ' +
+    'because a token-driven act names the person AND the credential: dropping it would say a ' +
+    'human typed what a pipeline did. The needle that catches it is `token`.',
+  'AuditEvent.actorTokenName':
+    "The credential's NAME — `ExecutionHistoryEntry.executedByToken`'s category exactly, and " +
+    'resolved the same way, so a trail can say which CI credential acted. Chosen by the ' +
+    'administrator who wrote it into a pipeline configuration, already served on `ApiToken.name`, ' +
+    'and it authenticates nothing.',
   'NotificationChannel.secretHint':
     'Four end-anchored characters of a webhook URL (§218). Enough to answer "is this the right ' +
     'webhook", short enough to be useless as one.',

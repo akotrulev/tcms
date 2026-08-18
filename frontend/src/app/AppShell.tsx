@@ -31,6 +31,7 @@ import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import InventoryOutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined';
 import LoginOutlinedIcon from '@mui/icons-material/LoginOutlined';
@@ -43,6 +44,7 @@ import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
 import { useState, type ReactNode } from 'react';
 import { Link as RouterLink, NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { useProjects } from '../api/queries';
+import { useCan, useCanInCompany } from '../auth/useCan';
 import { useRouteFocus } from '../a11y/useRouteFocus';
 import { Identifier } from '../components/Identifier';
 import { RouteErrorBoundary } from '../components/ErrorBoundaries';
@@ -144,7 +146,33 @@ const ALL_PROJECTS: NavItem = {
   end: true,
 };
 
-function projectNav(projectId: string): { heading: string; items: NavItem[] }[] {
+/**
+ * Which audit trails this reader may open.
+ *
+ * <strong>The two audit entries are the only permission-gated items in this rail, and they are
+ * HIDDEN rather than shown-and-refused — which is the opposite of what every other entry here
+ * does.</strong> That is a deliberate exception taken at the product owner's direction (§242), not
+ * an oversight, and it is worth stating because five separate comments in this file argue the other
+ * way and a later reader will find them first.
+ *
+ * The argument those comments make is that hiding an entry tells a lie about the *product* — "this
+ * instance has no CI credentials" — which is worse than telling the truth about the reader's
+ * *access*. An audit trail is the one place that trade runs the other way: the screen's whole
+ * subject is who did what, so advertising it to somebody who may not read it invites exactly the
+ * request the permission exists to refuse, and the entry itself becomes a standing hint that the
+ * company is being watched in a way this person is not trusted to see.
+ *
+ * If this is ever revisited, revisit it here rather than one entry at a time — the pair must agree.
+ */
+interface AuditReach {
+  project: boolean;
+  company: boolean;
+}
+
+function projectNav(
+  projectId: string,
+  audit: AuditReach,
+): { heading: string; items: NavItem[] }[] {
   const p = `/projects/${projectId}`;
   return [
     {
@@ -262,6 +290,17 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
           to: `${p}/settings/notifications`,
           icon: <NotificationsNoneOutlinedIcon fontSize="small" />,
         },
+        // The project trail (§242). Gated on `project:audit` and HIDDEN without it — see
+        // AuditReach above for why this pair breaks the rail's rule on purpose.
+        ...(audit.project
+          ? [
+              {
+                label: 'Audit trail',
+                to: `${p}/audit`,
+                icon: <HistoryOutlinedIcon fontSize="small" />,
+              },
+            ]
+          : []),
       ],
     },
     /*
@@ -312,6 +351,17 @@ function projectNav(projectId: string): { heading: string; items: NavItem[] }[] 
           everybody. Hiding it would teach a Test Lead this product has no single sign-on at all.
         */
         { label: 'Single sign-on', to: '/admin/sso', icon: <LoginOutlinedIcon fontSize="small" /> },
+        // The company trail (§242). Gated on `audit:view` and HIDDEN without it — the pair to the
+        // project entry above, and the same deliberate exception.
+        ...(audit.company
+          ? [
+              {
+                label: 'Audit trail',
+                to: '/admin/audit',
+                icon: <HistoryOutlinedIcon fontSize="small" />,
+              },
+            ]
+          : []),
       ],
     },
   ];
@@ -458,7 +508,24 @@ function RailContent({
   const projects = useProjects();
 
   const activeProjectId = projectId ?? projects.data?.[0]?.id;
-  const groups = activeProjectId ? projectNav(activeProjectId) : [];
+
+  /*
+    The rail's only permission reads, and the only two entries any verdict here decides — see
+    `AuditReach`. Both gates fail CLOSED while pending, which is `useCan`'s `can()` and the right
+    default for an entry that is hidden rather than disabled: the item appears once the answer
+    arrives, where a wrongly-shown one would flash a link that then vanishes.
+
+    Both hooks read `/me/permissions`, which every screen behind this rail already fetches, so the
+    keys are warm and this costs no extra round trip on navigation.
+  */
+  const projectGate = useCan(activeProjectId);
+  const companyGate = useCanInCompany();
+  const groups = activeProjectId
+    ? projectNav(activeProjectId, {
+        project: projectGate.can('project:audit'),
+        company: companyGate.can('audit:view'),
+      })
+    : [];
 
   return (
     <>

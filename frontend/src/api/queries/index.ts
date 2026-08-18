@@ -224,4 +224,5 @@ export {
   useUpdateTeam,
   useUsers,
 } from './admin';
+export { type AuditPage, useCompanyAuditEvents, useProjectAuditEvents } from './audit';
 export { useCreateWorkItem, useMoveWorkItem, useMyWork, useTeamBoard, useWorkItems } from './workItems';

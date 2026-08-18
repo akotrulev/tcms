@@ -131,6 +131,16 @@ const NotificationSettingsPage = lazy(() =>
     default: m.NotificationSettingsPage,
   })),
 );
+/**
+ * The audit trail (§242) — **one lazy component behind two routes**, project-scoped and
+ * company-scoped, which it tells apart by whether `useParams` yields a `projectId`.
+ *
+ * One chunk rather than two because the two screens are the same twelve columns behind different
+ * gates; splitting them would ship the rendering twice and give the two copies somewhere to drift.
+ */
+const AuditLogPage = lazy(() =>
+  import('../features/audit/AuditLogPage').then((m) => ({ default: m.AuditLogPage })),
+);
 
 /** Route-level fallback, shaped like a page so the shell doesn't jump while a chunk loads. */
 function RouteFallback() {
@@ -612,6 +622,36 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <SsoProvidersPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            The two audit trails (§242). Routed for everybody, like every other route in this file:
+            a caller without the permission gets the page and a sentence saying who to ask, because
+            a route guarded by a permission would be the client deciding an authorization question
+            the server already answers — and would make a pasted link behave differently for two
+            people with no explanation shown to either.
+
+            The project one is under the project segment because what an act was performed *on* is
+            one project, and switching projects genuinely changes what the screen is about. The
+            company one is beside `/admin/tokens` for that entry's reason: `audit:view` is a
+            company-wide key, so a project segment would make the rail's switcher appear to change
+            a list it cannot change.
+          */}
+          <Route
+            path="/projects/:projectId/audit"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <AuditLogPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/admin/audit"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <AuditLogPage />
               </Suspense>
             }
           />

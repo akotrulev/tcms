@@ -26,6 +26,7 @@
  */
 import type {
   Artifact,
+  AuditEvent,
   AuthResult,
   Configuration,
   CurrentUser,
@@ -653,6 +654,34 @@ export function anSsoProviderChoice(
     id: 'f2000000-0000-4000-8000-000000000001',
     displayName: 'Acme Corporate SSO',
     kind: 'OIDC',
+    ...overrides,
+  }
+}
+
+/**
+ * One recorded act (§242) — **a plain session act by default**: a person, no credential, one
+ * target.
+ *
+ * The three shapes that matter are reached by overriding rather than by three factories, because
+ * the distinctions are which fields are null and a factory per shape hides exactly that. A
+ * token-driven act sets `actorTokenId`/`actorTokenName` **beside** the person, never instead of
+ * them; an unattended job nulls both actor ids; a vanished membership nulls `actorUserName` while
+ * `actorUserId` stays.
+ */
+export function anAuditEvent(overrides: Partial<AuditEvent> = {}): AuditEvent {
+  return {
+    id: 'ae-1',
+    projectId: 'p1',
+    actorUserId: 'user-1',
+    actorUserName: 'A. Actor',
+    actorTokenId: null,
+    actorTokenName: null,
+    action: 'case.updated',
+    targetType: 'test_case',
+    targetIds: ['c1'],
+    changes: null,
+    bulkOperationId: null,
+    occurredAt: AT,
     ...overrides,
   }
 }

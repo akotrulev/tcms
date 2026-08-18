@@ -50,6 +50,18 @@ export type ApiTokenInput = S['ApiTokenInput'];
  * from serving a plaintext token. Nothing that renders a list may name this type.
  */
 export type IssuedApiToken = S['IssuedApiToken'];
+/**
+ * One recorded act (§242).
+ *
+ * **Both actor halves are independently nullable and are normally set together** — a token-driven
+ * act names the person answerable for the credential *and* the credential. Rendering one and
+ * hiding the other loses half of who did it, which is what this screen exists to show.
+ *
+ * `action` and `targetType` are bare `string`s on the wire on purpose: the set grows with every
+ * slice that records something, so pinning it as an enum would make adding an act a contract
+ * change. That is why the labels go through `labelForKey` rather than a `satisfies Record<…>` map.
+ */
+export type AuditEvent = S['AuditEvent'];
 
 // project
 export type Project = S['Project'];
@@ -485,6 +497,23 @@ export interface Paged<T> {
   size: number;
   total: number;
   facets?: Facet[];
+}
+
+/**
+ * Audit trail filter state (§242). Mirrored into the URL like every other filter set here.
+ *
+ * `projectId` is a *filter* on the company trail and is absent from the project trail, where the
+ * project comes from the path and is a scope — the server ignores it there, and sending it would
+ * suggest a caller could read one project's rows through another project's gate.
+ */
+export interface AuditFilters {
+  projectId?: string;
+  actorUserId?: string;
+  action?: string;
+  occurredAfter?: string;
+  occurredBefore?: string;
+  page?: number;
+  size?: number;
 }
 
 /** Case list filter state. Mirrored into the URL so views are shareable (plan §6o/§6q). */

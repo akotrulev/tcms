@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { api } from '../api/client'
 import type { Project } from '../api/types'
+import { heldPermissions } from '../test/permissions'
 import { createTestQueryClient } from '../test/queryClient'
 import { TestProviders } from '../test/TestProviders'
 import { AppShell } from './AppShell'
@@ -51,6 +52,11 @@ const PROJECTS = [project(OLB, 'OLB', 'Online Banking'), project(MOB, 'MOB', 'Mo
 function renderShell(route: string) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path === '/projects') return PROJECTS
+    // The rail reads permissions since §242, to decide whether the two audit entries exist at all.
+    // Answered with the real shape rather than by the `[]` fallback below, which is an array where
+    // the contract declares an object — the contract double catches it, and the failure reads as a
+    // navigation defect rather than as a missing arm.
+    if (path.startsWith('/me/permissions')) return heldPermissions([])
     return []
   }) as typeof api.get)
 

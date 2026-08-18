@@ -9,7 +9,7 @@
  * Centralized so an invalidation can target a subtree (`['cases', projectId]`) without every
  * call site re-deriving the shape and getting it subtly wrong.
  */
-import type { CaseFilters } from '../types';
+import type { AuditFilters, CaseFilters } from '../types';
 
 export const keys = {
   me: ['me'] as const,
@@ -244,6 +244,23 @@ export const keys = {
    * entry for the whole company and nothing to key it by.
    */
   apiTokens: ['api-tokens'] as const,
+  /**
+   * One project's audit trail (§242).
+   *
+   * Under the project segment, so switching projects cannot serve the previous project's rows
+   * while the new request is in flight — the property `cases` carries the whole filter object for.
+   */
+  projectAuditEvents: (p: string, filters: AuditFilters) =>
+    ['projects', p, 'audit-events', filters] as const,
+  /**
+   * The company's audit trail (§242).
+   *
+   * **No project segment even though `filters.projectId` may narrow it**, because the *scope* is
+   * the company: the gate is `audit:view`, held company-wide, and keying this under
+   * `['projects', id]` would have an invalidation of one project's caches drop rows from a list
+   * that is not that project's. The filter travels in the object, where every other filter does.
+   */
+  companyAuditEvents: (filters: AuditFilters) => ['audit-events', filters] as const,
   /**
    * The company's identity providers (§222). Company-scoped like {@link apiTokens} and for the same
    * reason: a provider belongs to the company, and no project segment narrows it. Refused rather

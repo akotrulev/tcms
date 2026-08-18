@@ -778,3 +778,115 @@ export function humanize(value: string): string {
     .toLowerCase()
     .replace(/^./, (c) => c.toUpperCase());
 }
+
+/**
+ * Audit actions, in the product's own words (§242).
+ *
+ * **A partial map with a computed fallback, not a `satisfies Record<Union, string>` one**, and the
+ * difference is the contract's: `AuditEvent.action` is a bare `string` because the set grows with
+ * every slice that records something, so there is no union for a total map to be total against.
+ * Pinning one would make adding an act a contract change, which is the trade `openapi.yaml` refuses
+ * at the schema.
+ *
+ * `notificationEventLabel` one screen over is the same shape for the same reason, and this follows
+ * it deliberately rather than inventing a second arrangement. What is here is the set the product
+ * writes today, spelled the way a person would say it; anything else falls through to
+ * {@link auditActionLabel}'s fallback and renders legibly rather than blank.
+ */
+export const auditActionLabels: Record<string, string> = {
+  'case.created': 'Case created',
+  'case.updated': 'Case updated',
+  'case.deleted': 'Case deleted',
+  'case.cloned': 'Case cloned',
+  'case.submitted': 'Case submitted for review',
+  'case.approved': 'Case approved',
+  'case.unapproved': 'Case approval withdrawn',
+  'case.withdrawn': 'Case review withdrawn',
+  'case.deprecated': 'Case deprecated',
+  'case.revived': 'Case revived',
+  'case.quarantined': 'Case quarantined',
+  'case.quarantine_released': 'Case released from quarantine',
+  'case.re_review_required': 'Case sent back for re-review',
+  'case.attachment.add': 'Attachment added to case',
+  'case.attachment.remove': 'Attachment removed from case',
+  'suite.created': 'Suite created',
+  'suite.renamed': 'Suite renamed',
+  'suite.deleted': 'Suite deleted',
+  'suite.submitted': 'Suite submitted for review',
+  'suite.approved': 'Suite approved',
+  'plan.created': 'Plan created',
+  'plan.updated': 'Plan updated',
+  'plan.approved': 'Plan approved',
+  'plan.archived': 'Plan archived',
+  'plan.deleted': 'Plan deleted',
+  'run.created': 'Run created',
+  'run.started': 'Run started',
+  'run.closed': 'Run closed',
+  'run.reopened': 'Run reopened',
+  'run.aborted': 'Run aborted',
+  'execution.recorded': 'Result recorded',
+  'execution.amended': 'Result amended',
+  'execution.assigned': 'Execution assigned',
+  'execution.unassigned': 'Execution unassigned',
+  'project.created': 'Project created',
+  'project.archived': 'Project archived',
+  'project.unarchived': 'Project unarchived',
+  'team.created': 'Team created',
+  'team.updated': 'Team updated',
+  'team.deleted': 'Team deleted',
+  'ingestion.completed': 'CI results ingested',
+};
+
+/**
+ * One act, in words — the label if this build knows the verb, a readable rendering of the verb
+ * itself otherwise.
+ *
+ * **Never blank and never the raw dotted key on its own.** An audit trail written by a newer
+ * server than the SPA it is being read in is the ordinary case during a rollout, and an unlabelled
+ * row must still say what happened: `suite.condition_attached` renders as "Suite condition
+ * attached", which is a legible bug report where an empty cell is a rendering fault nobody can
+ * describe. `notificationEventLabel`'s argument exactly, on a surface where it matters more.
+ */
+export function auditActionLabel(action: string): string {
+  return auditActionLabels[action] ?? humanize(action.replace(/\./g, ' '));
+}
+
+/**
+ * What kind of thing an act was performed on.
+ *
+ * The writers spell these inconsistently — `test_case` and `case`, `ARTIFACT` in caps, `test_run`
+ * beside `TEST_EXECUTION` — because forty-two call sites each chose their own. The map normalizes
+ * the ones that exist onto one vocabulary rather than the SPA rendering the inconsistency; the
+ * fallback keeps an unmapped one legible. **Do not "fix" this by editing the writers**: the column
+ * is append-only, so historical rows keep whatever they were written with, and a client that only
+ * understood the new spelling would blank every row older than the change.
+ */
+export const auditTargetTypeLabels: Record<string, string> = {
+  case: 'Test case',
+  test_case: 'Test case',
+  suite: 'Suite',
+  test_plan: 'Test plan',
+  test_run: 'Test run',
+  TEST_EXECUTION: 'Execution',
+  ARTIFACT: 'Artifact',
+  project: 'Project',
+  team: 'Team',
+  team_membership: 'Team membership',
+  company_membership: 'Member',
+  company_email_domain: 'Email domain',
+  role_assignment: 'Role grant',
+  api_token: 'API token',
+  identity_provider: 'Identity provider',
+  condition: 'Condition',
+  classification_value: 'Classification value',
+  doc_page: 'Document page',
+  doc_link: 'Document link',
+  ai_proposal: 'Generated case',
+  ingestion_job: 'CI ingestion',
+  automation_key_mapping: 'Automation mapping',
+};
+
+/** {@link auditActionLabel}'s rule, for the subject rather than the verb. */
+export function auditTargetTypeLabel(targetType: string): string {
+  return auditTargetTypeLabels[targetType] ?? humanize(targetType);
+}
