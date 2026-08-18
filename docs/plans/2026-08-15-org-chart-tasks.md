@@ -58,7 +58,7 @@ does not renumber. Read the `Run` column top to bottom.
 | 7 | **T7** | `useOrgChart` + invalidations | `fe-react` | T1, T6 | ☑ `c98b49a` |
 | 8 | **T8** | The screen | `fe-react` | T7 | ☑ `bd420eb` |
 | — | **T5** | Query-plan review | `data-architect` | T2 | ☑ `0b2191e` — plan §6.1; index wanted on `team_membership`. ~~no migration written~~ → landed as **`V67`**, 2026-08-17 |
-| — | **T9** | Disclosure-boundary security pass | `qa-security` | T4 | ☐ **not run** |
+| — | **T9** | Disclosure-boundary security pass | `qa-security` | T4 | ☑ **run 2026-08-18** — `docs/audits/2026-08-18-org-chart-disclosure-boundary.md`; **no finding**, 69 assertions + 45 probes, §241 amended in place |
 | — | **T10** | Manual test-case suite | `qa-test-case-designer` | T4, T8 | ☐ **not run** |
 | last | **T11** | The record — handoff, caches, queues | *(last lane)* | T8 | ☑ `64f9814` — handoff §241 |
 
@@ -82,8 +82,10 @@ migration and no reserved version. Whoever picks that up owns both the migration
 amendment.~~ → **paid 2026-08-17.** `V67__team_membership_answers_which_teams_a_person_is_in.sql`
 landed the index (plain `CREATE INDEX`, not §6.1's `CONCURRENTLY` — see `V67`'s header and the
 struck-through block in §6.1), handoff §241 is amended in place, and `be-java.md` carries it as
-§241-A. Driven from `docs/plans/2026-08-17-team-membership-index-tasks.md`. **T9 and T10 are still
-the outstanding debt** and are unchanged by this. **The stale-`V52` claim in the Notes at the foot of this file was wrong too**: T5 confirmed
+§241-A. Driven from `docs/plans/2026-08-17-team-membership-index-tasks.md`. ~~**T9 and T10 are still
+the outstanding debt** and are unchanged by this.~~ → **superseded 2026-08-18: T9 has run and found
+nothing** (`docs/audits/2026-08-18-org-chart-disclosure-boundary.md`), so **T10 alone is the
+outstanding debt**. **The stale-`V52` claim in the Notes at the foot of this file was wrong too**: T5 confirmed
 the head is **`V66`**, corrected there.
 
 **T6 runs first, ahead of even the decision gate.** It is independent of T0–T5, it is the only task

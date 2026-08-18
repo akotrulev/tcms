@@ -22,7 +22,7 @@ catch.
 | Handoff §241, index row, both caches, both queues | ☑ T11 `64f9814` |
 | T5 query-plan review | ☑ `0b2191e` — the finding is plan §6.1 |
 | T5's index | ☑ `V67` `5da8a3b` — plain `CREATE INDEX`, §6.1's `CONCURRENTLY` half struck through |
-| **T9 disclosure-boundary pass** | ☐ **this slice** |
+| **T9 disclosure-boundary pass** | ☑ **run 2026-08-18** — `docs/audits/2026-08-18-org-chart-disclosure-boundary.md`; **no finding**, so §241 is amended in place and no new section was written |
 | T10 manual test-case suite | ☐ not run — the natural follow-on, and document-only |
 
 **No code is expected to change.** T9 reports; it does not fix. If it finds something real, the fix

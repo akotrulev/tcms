@@ -7,9 +7,17 @@ T11 in that order. **No migration, no permission seeded or moved**, catalogue un
 ~~T5 (query-plan review), T9 (disclosure-boundary security pass) and T10 (manual test-case suite) were
 **not run**~~ → **superseded 2026-08-17: T5 has since run (`0b2191e`), and the sentence above is the
 part of this section that most needs correcting, because T5 did not confirm what the plan expected —
-it found the plan looking at the wrong table.** T9 and T10 remain unrun, for the reason below: they
-are report-only lanes off the critical path, and T9 in particular needs a provisioned instance driven
-over real HTTP. Their absence is why §11's rows below are the record and not a summary of findings.
+it found the plan looking at the wrong table.** ~~T9 and T10 remain unrun~~ → **superseded
+2026-08-18: T9 has since run, and it found nothing** — `docs/audits/2026-08-18-org-chart-disclosure-boundary.md`
+is the evidence: 69 assertions over §4.4 row by row and 45 tamper probes, against the response body
+of a two-company, four-project instance provisioned for the pass, every principal signing in as
+itself. **The instrument was controlled rather than trusted** — replayed against the Company Admin's
+document, which is byte-for-byte what a dropped `reach.maySee` would have sent that member, it goes
+13 red. One check did *not*, and it is the §241 trap at the HTTP layer: "every cell's `projectId` is
+a served column" stays green on a uniformly over-disclosed document, because the columns leaked too.
+A consistency assertion cannot see uniform over-disclosure. **T10 remains unrun**, for the reason
+below: it is a report-only lane off the critical path. Its absence is why §11's rows below are the
+record and not a summary of findings.
 
 **What T5 found, and what it cost.** Plan §5's assumption was that the two `role_assignment` indexes
 `V1:288-289` already installed made the matrix queries cheap and no index was wanted. Half right: no
@@ -256,6 +264,9 @@ gaps rather than as passes** — `OC-3` (RLS independently scopes the table), `O
 override is indistinguishable from the shared one *today*) and `OC-8` (both spellings drop the
 baseline).
 
-T9 would have been the row that matters most: **assert on the response body, not the UI.** A field
-the server sends and the client merely declines to render is invisible to any UI-level test, and
-`L1-23` says so in its own text for whoever drives it.
+~~T9 would have been the row that matters most~~ → **superseded 2026-08-18: T9 ran and the boundary
+held.** Its rule stands and is the reason it found anything worth writing down: **assert on the
+response body, not the UI.** A field the server sends and the client merely declines to render is
+invisible to any UI-level test, and `L1-23` says so in its own text for whoever drives it. T9 does
+**not** discharge a single row of either queue — it is a different observer asking a different
+question, and `OC-1` in particular is this boundary's *mutation* form and was deliberately not run.
