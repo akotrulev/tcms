@@ -2,9 +2,142 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-17 (**§241** — **the org chart: `GET /api/v1/org-chart` + `/org-chart`, executed from `docs/plans/2026-08-15-org-chart-tasks.md`. No migration, no permission seeded or moved, catalogue still 55.** **THE RULE TO CARRY: when a rule is about WHO IS ASKING, a test written about who is NAMED passes straight through it.** The plan's own §8.3 agreement test — called "the single most valuable test in this slice" — pins the SUBJECT's `ProjectAccess.canView`, and removing the disclosure filter leaves both its directions GREEN, because a leaked cell still names somebody who legitimately holds that role. The arm that reddens is a third one asking the evaluator about the CALLER. Measured by breaking it and reverting. The invariant the surface rests on: **the people axis is a company fact, the project axis is the reader's own** — person rows complete, matrix columns exactly `AdminReach.visibleProjects`, and a project the caller cannot open contributing no column, no cell and **no count**. **`EffectiveRoleNames` is now the one display implementation of roles spec §A1.1's replace-don't-union override**, so the count of §A1.1 implementations stays at three; turning replace into union reddens twelve arms across three classes, three of them in `ProjectEndpointTest`, which is the evidence it is genuinely shared. **`ProjectAccess` lost its two role-name methods for one `effectiveProjectRoleNames(userId, projectIds)`** — the plan wanted the helper called from `ProjectService` and that does not build: `project`'s declaration is `{api, tenancy}`, its own header forbids widening it, and `com.tcms.api`'s charter refuses shared helpers. **If `project` must share logic with `identity`, the port answers a further question — never a wider list and never `api`.** The two role-name queries take a `Collection<UUID>` and each grant path is its own `UNION ALL` arm, because a team grant's row carries `user_id = NULL` and nothing on it says whose cell it is — **and that same join is what makes `via` and `teamId` answerable at all**. `openapi.yaml`'s `CurrentUser.teams` claimed `GET /teams` is gated on `company:teams`; it is `company:read`, corrected in place, and **`tierClaims.test.ts` has no "gated on `<key>`" shape**, which is an open instrument gap. Gates: backend **3082 / 0 / 0**.)
+**Last verified:** 2026-08-18 (**§242** — **the audit log reader: `GET /projects/{projectId}/audit-events` + `GET /audit-events`, slice 1 of `docs/plans/2026-08-18-unplanned-gaps.md`. No migration, no permission seeded or moved, catalogue still 55.** **THE FINDING THAT COST FOURTEEN OF FIFTEEN ARMS: `(:instant IS NULL OR col >= :instant)` DOES NOT WORK IN HQL.** Hibernate infers a parameter's type from where it is used; in the `IS NULL` position there is nothing to infer from, and for `UUID`/`String` the second occurrence settles it — for an `Instant` it does not, and the parameter binds as `bytea` (`could not determine data type of parameter`, then `cannot cast type bytea to timestamp with time zone` once a `CAST` is added, because the cast applies to an already-mis-bound value). **Use `coalesce(:after, e.occurredAt)`** — typed context, and a null yields `occurredAt >= occurredAt`, true on a `NOT NULL` column. `TestRunRepository.findLiveInProject` is the precedent that misled: it was real and its scope was narrower than it looked. **THE RULE TO CARRY: a cross-cutting table's WRITE side belongs in the foundation module and its READ side cannot.** `tenancy` declares `allowedDependencies = {}`, which is why everything can write an `audit_event` and why nothing there can read one — a reader needs the evaluator, `readGranted` and the §6u name rule, all of which live above it. The reader is in `identity` (`OrgChartService`'s precedent); the entity and its repository stay in `tenancy`. **Both actor columns are set TOGETHER on the ordinary token-driven act** — the person answerable for the credential *and* the credential — so the plan's "exactly one is set" was wrong in the direction that loses information. **Offboarding does NOT null the actor's name** (`peopleById` does not filter on membership status), so the *contract text was corrected to match the code*: a trail that forgets who did it the day they leave has lost the one question it exists to answer. **A refusal is 403 with a body, never an empty page** — `AdminDirectoryService`'s empty-list answer is right for a directory and wrong here, because an empty audit trail reads as "nothing happened" and the reader cannot detect the difference. Sort `(occurredAt DESC, id DESC)` with explicit `countQuery`s; optional filters are `(:v IS NULL OR col = :v)`, not the plan's `CAST`. **Two `READERLESS_BY_DECISION` exemptions left with the reader that ended them and `bulkOperationId` stayed writerless** — the pair moving apart is the fact neither map can report alone. Owed: an index for `(company_id, project_id, occurred_at DESC)`, **no Flyway version taken because `V68`/`V69` are reserved**. Gates: backend **3097 / 0 / 0** (`shanks` was down for most of the session and came back before the end, so everything was actually run).)
+
+**Superseded header below — §241's, kept because §242 verified none of it.** (**§241** — **the org chart: `GET /api/v1/org-chart` + `/org-chart`, executed from `docs/plans/2026-08-15-org-chart-tasks.md`. No migration, no permission seeded or moved, catalogue still 55.** **THE RULE TO CARRY: when a rule is about WHO IS ASKING, a test written about who is NAMED passes straight through it.** The plan's own §8.3 agreement test — called "the single most valuable test in this slice" — pins the SUBJECT's `ProjectAccess.canView`, and removing the disclosure filter leaves both its directions GREEN, because a leaked cell still names somebody who legitimately holds that role. The arm that reddens is a third one asking the evaluator about the CALLER. Measured by breaking it and reverting. The invariant the surface rests on: **the people axis is a company fact, the project axis is the reader's own** — person rows complete, matrix columns exactly `AdminReach.visibleProjects`, and a project the caller cannot open contributing no column, no cell and **no count**. **`EffectiveRoleNames` is now the one display implementation of roles spec §A1.1's replace-don't-union override**, so the count of §A1.1 implementations stays at three; turning replace into union reddens twelve arms across three classes, three of them in `ProjectEndpointTest`, which is the evidence it is genuinely shared. **`ProjectAccess` lost its two role-name methods for one `effectiveProjectRoleNames(userId, projectIds)`** — the plan wanted the helper called from `ProjectService` and that does not build: `project`'s declaration is `{api, tenancy}`, its own header forbids widening it, and `com.tcms.api`'s charter refuses shared helpers. **If `project` must share logic with `identity`, the port answers a further question — never a wider list and never `api`.** The two role-name queries take a `Collection<UUID>` and each grant path is its own `UNION ALL` arm, because a team grant's row carries `user_id = NULL` and nothing on it says whose cell it is — **and that same join is what makes `via` and `teamId` answerable at all**. `openapi.yaml`'s `CurrentUser.teams` claimed `GET /teams` is gated on `company:teams`; it is `company:read`, corrected in place, and **`tierClaims.test.ts` has no "gated on `<key>`" shape**, which is an open instrument gap. Gates: backend **3082 / 0 / 0**.)
 
 **Amended 2026-08-17 — `V67`, and the head is `V67`.** ~~"No migration"~~ is still true of the org-chart slice and **no longer true of the feature's record**: the org chart's own T5 query-plan lane ran afterwards and found a seq scan on the **authorization hot path**, which is now `V67__team_membership_answers_which_teams_a_person_is_in.sql`. See §241-A below before adding any index. Gates after `V67`: backend **3082 / 0 / 0**, unchanged — **an index adds no test, and that is the point of the `§241 IX-1` gap row.**
+
+---
+
+## §242 — THE AUDIT TRAIL HAS A READER, AND THE MODULE IT LIVES IN IS NOT THE ENTITY'S
+
+**Read this before touching `identity/AuditLog*`, `tenancy/AuditEvent*`, or either
+`READERLESS_BY_DECISION` / `WRITERLESS_BY_DECISION` map.**
+
+> **Gated.** `./gradlew build` — **3097 tests, BUILD SUCCESSFUL**. `shanks` was unreachable for most
+> of §242 and came back before the slice finished.
+
+### The entity stays in `tenancy`; the reader cannot
+
+`tenancy/package-info.java` declares `allowedDependencies = {}`. That is why every module can write
+an audit row, and it is exactly why **nothing in `tenancy` can read one usefully**: a reader needs
+`PermissionEvaluator`, `ProjectService.readGranted` and the §6u display-name rule, all of which are
+above it. The plan for this slice said "create `tenancy/AuditLogService`" and that does not build.
+
+**`identity` is `{api, tenancy, project}` and reaches all three** — the same shape §241 used for
+`OrgChartService`. So: `AuditLogQuery`, `AuditEventView`, `AuditEventPageView`, `AuditLogService`
+and `AuditLogController` are in `com.tcms.identity`; `AuditEvent` and `AuditEventRepository` stay in
+`com.tcms.tenancy`. **The generalisable rule: a cross-cutting table's WRITE side belongs in the
+foundation module and its READ side does not.** The write needs nothing; the read needs
+authorization, which by construction lives above.
+
+### Both actor columns are set together, and the plan said otherwise
+
+`AuditEvent.record` fills `actorTokenId` from `TokenContext` **beside** `actorUserId`, never instead
+— the caller identity on a token-authenticated request is the token's *owner*. So the three real
+shapes are: a person (session), a person **and** a credential (a CI runner acting for them), and
+neither (an unattended job, which **no write path in the product currently produces**).
+
+A view that treats the pair as an either/or reports the second as the first and loses which
+credential was used. `openapi.yaml` says so at the schema; `AuditEventView` says so at the record.
+
+### Offboarding does not null the actor's name — the CONTRACT was corrected, not the code
+
+`AdminDirectoryService.peopleById` reads `memberships.findByCompanyId` with **no status filter**,
+and `remove()` sets `REMOVED` rather than deleting the row. So a departed colleague still resolves.
+`ApiTokenRepository.findAllByIdIn` includes **revoked** tokens for the same reason.
+
+The plan and Phase A's contract text both claimed the opposite. **The contract was changed to match
+the code**, because a trail that forgets who did it the day they leave has lost the one question it
+exists to answer. A name is null only when its id is null or names a row that no longer exists at
+all. **A null name is never evidence about the id — read the id.**
+
+### THE OPTIONAL-FILTER IDIOM HAS A TYPE PRECONDITION NOBODY HAD WRITTEN DOWN
+
+`(:value IS NULL OR column = :value)` is this codebase's idiom for an optional filter and it is
+**wrong for a temporal parameter**. Hibernate infers a parameter's type from its usage; the
+`IS NULL` position offers nothing to infer from, and for `UUID` and `String` the second occurrence
+settles it. For an `Instant` it does not — Hibernate binds the parameter as `bytea`, and Postgres
+answers `could not determine data type of parameter $7`. **Adding `CAST(:after AS Instant)` makes it
+`cannot cast type bytea to timestamp with time zone`**, because the cast is applied to a value that
+is already bound as the wrong type.
+
+**The fix is `coalesce(:after, e.occurredAt)`.** The parameter sits in a typed context, so it binds
+as a timestamp; a null makes the predicate `occurredAt >= occurredAt`, true for every row because
+the column is `NOT NULL`. Both audit queries use `IS NULL` for their `UUID`/`String` filters and
+`coalesce` for their two dates, which looks inconsistent and is not — the reason is at the
+repository.
+
+**Fourteen of this slice's fifteen arms failed on it**, identically, and the plan had proposed a
+`CAST` that was dropped on the strength of `TestRunRepository.findLiveInProject`. That precedent was
+real; its scope was `UUID` and `String`. **Reading two green call sites is not the same as checking
+whether the third shares their preconditions.**
+
+### `audit_event.actor_user_id` is a FOREIGN KEY to `app_user`
+
+So an "actor who no longer exists" cannot be an invented id — the insert fails. The account always
+exists; what may be missing is the **membership**, which is what carries the §6u display name. Two
+tables, two scopes, and the distinction is what makes a null `actorUserName` precise rather than
+vague.
+
+### `(occurredAt DESC, id DESC)`, and why the second key is not decoration
+
+Every writer stamps a transaction's rows from one `Instant`, so a bulk act produces rows sharing
+`occurred_at` to the microsecond. Without the tiebreaker Postgres may order them differently between
+page 1's `LIMIT/OFFSET` and page 2's, and a row is served twice or not at all. Both queries carry an
+**explicit `countQuery`** rather than relying on derivation.
+
+The optional filters are `(:value IS NULL OR column = :value)` — `TestRunRepository.findLiveInProject`'s
+idiom, and **not** the plan's `CAST(:after AS timestamp)`: the parameter's type is inferable from
+its second occurrence in the comparison, which is how every other optional filter in this repository
+is written.
+
+### A refusal is 403 with a body, never an empty page
+
+`AdminDirectoryService` answers an empty list rather than a 403 and is right to, because its
+contract declares only 200. **That argument does not transfer to an audit trail.** An empty
+directory reads as "nobody is here"; an empty audit trail reads as "nothing happened", which is a
+false statement about the past the reader cannot detect. Both operations declare 403 and both
+service methods return `GateResult.Denied`.
+
+The project trail goes through `ProjectService.readGranted`, so **visibility answers 404 first** and
+only the permission answers 403 (§6t). The company trail asks
+`permissions.evaluateCompanyWide(userId).has("audit:view")` directly — the shape
+`AdminDirectoryService.reachOf` uses — and **no term was added to `AdminReach`**: reach is about
+which projects a caller can see and staff, and folding a company key into it would make every
+consumer re-derive N project evaluations to answer a question with no project in it. Its
+`GateResult` never yields `Unreachable`; the type is shared so the controller has one renderer.
+
+### Two exemptions left `READERLESS_BY_DECISION`, and that is the point of the pair
+
+`AuditEvent.actorTokenId` and `AuditEvent.bulkOperationId` both named the same exit — *"the audit
+trail has no screen"* — and both took it. `AuditEventView` serves all twelve columns, so
+`isReadInJava` answers true for each (a getter counts once it has a caller outside the entity).
+`containsExactlyInAnyOrderElementsOf` means a stale exemption **fails the build** (§162), so
+removing them was part of this slice rather than a later tidy-up.
+
+**`bulkOperationId` stays in `WRITERLESS_BY_DECISION`**, entry rewritten: the reader arrived without
+the writer, every bulk service still records one row per act rather than one per target, and slice 4
+of the gaps plan is what deletes it. **The pair moving apart is the fact neither map can report
+alone** — which is the argument for running both.
+
+### `ContractConventionTest` needs three entries for two operations
+
+`RESPONSE_RECORDS` gains `AuditEvent → identity.AuditEventView` (a record whose *name* matches a
+schema must be paired or explained, or the schema is compared to nothing in either direction).
+`INLINE_RECORDS` gains **both** `GET …/audit-events (200)` locations, pointing at the **same**
+`AuditEventPageView` — the trails differ in their gate and in nothing else. `BRANCH_ONLY_SCHEMAS`'
+`PageMeta` prose went from "the two list responses that page" to four.
+
+### What is owed
+
+`V1` indexes `audit_event` on `(company_id, target_type, occurred_at DESC)` and
+`(company_id, actor_user_id, occurred_at DESC)`. **The project trail's predicate is
+`(company_id, project_id, occurred_at DESC)` and has no index.** No Flyway version was taken: the
+gaps plan reserves `V68` for slice 3 and `V69` for slice 5, and renumbering is refused. Recorded as
+`§242 LG-M14`, with §241-A's rule attached — nothing here asserts on a query plan, so if this
+becomes slow no test will say so.
 
 ---
 

@@ -2811,7 +2811,7 @@ fallback are the exceptions.
 
 ## §232 — the asymmetries (audit section B)
 
-**Ten rows, none run** (§65). Ids are `§232 SC-*`; `SC` is unused elsewhere in this file — grepped
+**Ten rows, none run** (§65). The automated gates behind them are green (frontend **1602 / 120**). Ids are `§232 SC-*`; `SC` is unused elsewhere in this file — grepped
 before minting (`§154`'s banner).
 
 Lanes: **A1** for the case and suite rows, **A2** for the plan ones, **A3** for the run rows,
@@ -3075,3 +3075,34 @@ because a report is generated over a run.
 | `§240 RF-2` | ⚠️ **The whole of E1, and it needs two documents.** Generate an **aggregate execution** report over the same project and open it beside `RF-1`'s | This one reads **"As of … — computed from the execution fact projection, which was refreshed at that instant, immediately before this report was produced."** Read the two side by side: before this slice they were indistinguishable on the page, which is why a single report proves nothing here. |
 | `§240 RF-3` | Record a result in a run, then **immediately** generate an aggregate report | The freshness instant is **within seconds of now**, not up to fifteen minutes old, and the new result is in the numbers. The refresh runs inside the job — this row is what tells a reader that the sentence is about *this* report rather than about the schedule. |
 | `§240 RF-4` | ⚠️ **Requires `curl` or the MCP client — the SPA deliberately sends no key.** `POST …/reports/generate` twice with the same `Idempotency-Key` | The first answers **202** with a new job; the second answers **200** with **the same `jobId`** and the same `Location`. Then open the reports page: **one** row, not two. The status is the only thing that tells a caller their retry queued nothing, and a build that answered 202 twice looks identical until the list is read. |
+
+## §242 — the audit trail, on the two screens that finally read it
+
+**Ten rows, none run** (§65). The automated gates behind them are green (frontend **1602 / 120**). Ids are `§242 LG-*`; `LG` was grepped against this file and the
+mutation queue before minting (`LC`, `LD`, `LK`, `LP`, `LR`, `LV` are all in use).
+
+**Lane `A3` — administration.** Both screens are administrative and the personas this needs (a
+Company Admin, a Test Lead, a Test Engineer) are the ones `A3` already has signed in. It also has
+to run **after** `A1` and `A2`: an audit trail is a record of acts, so the rows these checks read
+are the ones the authoring and plan lanes wrote earlier in the same pass. A trail driven first is
+an empty trail, and `LG-9` is the only row that wants it that way.
+
+> **The fixture this lane must NOT author.** Two rows need a **token-driven** act and one needs an
+> **unattended** one, and neither can be produced by clicking. `LG-4` is reachable through `A3-24`'s
+> `Agent` token plus a CLI or MCP write; `LG-5` (`actorUserId` null) has **no producer in the
+> product at all** today — every write path carries a caller — so it is recorded as **not
+> drivable**, with what it would take written into the row. A silent skip is what §65 exists to
+> prevent; "not driven, and here is why" is a legitimate outcome.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§242 LG-1` | As a **Test Lead**, open a project whose cases `A1` edited → **Audit trail** in the Project group of the rail | The rail entry **is there** (this is the one gated pair in the rail — see `LG-7`), and the trail lists that lane's acts **newest first**. Every row names a person, an act in words (*"Case updated"*, not `case.updated`), what it was on, and an age with the exact instant on hover. |
+| `§242 LG-2` | Type `case.updated` into **Action** and read the URL | The URL gains `?action=case.updated`, the grid narrows, **and the paging resets to page 1**. Copy the URL into a second tab: the same narrowed trail. This is the row that makes a filtered trail a thing somebody can paste into a ticket, which is the whole reason the filter is not component state. |
+| `§242 LG-3` | Set **From** and **To** to the same day, one that `A1` worked on, then to a day nothing happened | First: rows, all within that day. Second: the **"No acts match"** empty state with a **Clear filters** control — *not* "Nothing recorded yet". The two empty states say different things and only one of them is about the filter. |
+| `§242 LG-4` | ⚠️ **Needs a CLI or MCP write under the `Agent` token from `A3-24`.** Record a result through `tcms result record`, then open the run's project audit trail | The newest row names **the token's owner as the person AND carries the robot marker**, whose tooltip names the token. **Both halves, not either** — this is the one behaviour the plan for this slice got wrong, and a build that renders only the person says a human typed what a pipeline did. |
+| `§242 LG-5` | ⚠️ **NOT DRIVABLE — recorded rather than skipped.** An act with `actorUserId` null renders as **"Automatic"** with no person and no token | **No producer exists.** Every write path in the product carries a caller, so the only way to reach this row today is to insert an `audit_event` by hand, which proves nothing about what the product records. It becomes drivable when slice 5's scheduled runs land — a poller firing a run is the first act nobody requested. Until then the shape is covered by `AuditLogReadTest.anUnattendedJobHasNoPerson` alone. |
+| `§242 LG-6` | As a **Company Admin**, open **Administration → Audit trail** | The company trail lists acts from **every** project plus the ones belonging to none — a member invited, a role granted. Confirm at least one row has an **empty project context**: those are the rows a project trail structurally cannot show, and they are why this second screen exists. |
+| `§242 LG-7` | ⚠️ **The gating pair, and it breaks this rail's own rule on purpose.** Sign in as a **Test Engineer** and read the rail, then as a **Test Lead**, then as a **Company Admin** | Engineer: **neither** audit entry. Lead: the **project** entry only. Admin: **both**. These are the only permission-gated items in the rail and they are **hidden, not disabled** — the opposite of §31 everywhere else, taken deliberately (see `AppShell.AuditReach`). If a later pass finds them disabled-with-a-tooltip instead, that is a regression toward the general rule, not a fix. |
+| `§242 LG-8` | As that **Test Engineer**, paste `/projects/<id>/audit` into the address bar | The page loads and says, in a sentence, that reading the trail is part of administering the project and who to ask. **Not a 404, not a redirect, and not an empty grid.** Then check the network tab: **no `audit-events` request was made at all** — the screen knows the answer and does not ask the server to refuse it. |
+| `§242 LG-9` | On a **freshly provisioned project nobody has touched**, open its audit trail | **"Nothing recorded yet"** with no Clear-filters control. The row that matters here is the contrast with `LG-8`: an empty trail and a refused trail must never look the same, because an empty audit trail reads as *"nothing happened"* and a reader has no way to tell that apart from *"you were not allowed to look"*. |
+| `§242 LG-10` | With more than one page of acts, walk to page 2 and back, then change the page size | No row appears on both pages and none is missing between them, and the pager's total is the **count of the filter** rather than the page length. The sort key is `(occurredAt DESC, id DESC)` and the secondary half is what this row is about — acts written in one transaction share a timestamp to the microsecond, which `A1`'s bulk operations produce for free. |

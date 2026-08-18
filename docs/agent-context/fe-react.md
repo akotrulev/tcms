@@ -2,7 +2,119 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-17 (**§241** — **the org chart screen: `/org-chart`, `useOrgChart`, and the tree flattening that became shared.** **THE RULE TO CARRY: a notice that appears only when something is hidden IS the disclosure it was meant to avoid.** The matrix columns are clipped to the reader's own `project:read`, so somebody missing six of eight projects gets a grid **that looks complete** — and the standing line *"Only projects you can open are shown here."* therefore renders **unconditionally**, for a Company Admin who sees everything too. Its test drives exactly that reader, which is the case a conditional implementation would pass. **`/org-chart` sits BESIDE `/admin/teams`, not beneath it**: every affordance there answers to `company:teams` and this screen has no gate at all — no `PermissionGate`, no `enabled`, no `lib/permissions.ts`. **`flattenTeamTree` (`features/admin/teamTree.ts`) is the one tree flattening**, extracted from `TeamsPage` in its own commit and called by `OrgChartTeams`; orphans and cycle members surface at the ROOT. **`keys.orgChart` is invalidated by all nine staffing writes, and a tenth is caught by a rule rather than by the list** — the last arm of `orgChartInvalidation.test.tsx` reads `admin.ts` through `import.meta.glob` and fails any `onSuccess` touching `teams`/`users`/`roleAssignments`/`projects` without it. **`OrgChartMatrix` is a `Table` and NOT `DataGrid`, which is load-bearing: DataGrid does not render in jsdom** (its virtualization measures through a `ResizeObserver` the test shim never fires, so the scroller is 0×0 with no rows) — measured, six arms failed on the DataGrid version, and `CaseListPage` is the repo's only DataGrid screen and has no component test at all. Whole-screen bundle cost **+7,054 B of dist JS (+0.37 %)**. Nine new fixtures including the four org-chart factories. Gates: **1582 / 119**.)
+**Last verified:** 2026-08-18 (**§242** — **the audit trail: one lazy `AuditLogPage` behind `/projects/:projectId/audit` AND `/admin/audit`.** **A LOCAL `tsc --noEmit` PASSED CLEAN WHILE THREE OF THIS SCREEN'S TESTS FAILED** — the working agreement's warning arriving on schedule, and worth carrying because it was tempting to treat the typecheck as coverage while `shanks` was down. **THE RULE TO CARRY: the rail's disable-don't-hide rule has exactly one exception now, and it is written at the type rather than left for the next reader to discover.** `AppShell.AuditReach` gates the two audit entries on `project:audit` / `audit:view` and **HIDES** them — the opposite of §31 and of the five separate comments in that file arguing that hiding lies about the *product*. Taken at the owner's direction: an audit screen's subject is who did what, so advertising it to somebody who may not read it invites the request the permission exists to refuse. It fails closed while pending. **One component for two routes**, branching on whether `useParams` yields a `projectId`; two components would be two renderings of the same twelve columns with nothing keeping them identical. **`Table`, NOT `DataGrid` — and §241 already measured why**: DataGrid does not render in jsdom, so the twelve component arms are only possible on a `Table`. **Action labels go through a curated map + computed fallback (`auditActionLabel`), NOT `satisfies Record<Union, string>`** — `AuditEvent.action` is a bare `string` in the contract because the verb set grows with every slice, so there is no union to be total against; `notificationEventLabel` is the same shape for the same reason. A refusal renders as a sentence **and makes no request at all**. Filters live in the URL (`useAuditFilters`, `useCaseFilters`'s arrangement). Gates: **1602 / 120**, build and lint clean.)
+
+**Superseded header below — §241's, kept because §242 verified none of it.** (**§241** — **the org chart screen: `/org-chart`, `useOrgChart`, and the tree flattening that became shared.** **THE RULE TO CARRY: a notice that appears only when something is hidden IS the disclosure it was meant to avoid.** The matrix columns are clipped to the reader's own `project:read`, so somebody missing six of eight projects gets a grid **that looks complete** — and the standing line *"Only projects you can open are shown here."* therefore renders **unconditionally**, for a Company Admin who sees everything too. Its test drives exactly that reader, which is the case a conditional implementation would pass. **`/org-chart` sits BESIDE `/admin/teams`, not beneath it**: every affordance there answers to `company:teams` and this screen has no gate at all — no `PermissionGate`, no `enabled`, no `lib/permissions.ts`. **`flattenTeamTree` (`features/admin/teamTree.ts`) is the one tree flattening**, extracted from `TeamsPage` in its own commit and called by `OrgChartTeams`; orphans and cycle members surface at the ROOT. **`keys.orgChart` is invalidated by all nine staffing writes, and a tenth is caught by a rule rather than by the list** — the last arm of `orgChartInvalidation.test.tsx` reads `admin.ts` through `import.meta.glob` and fails any `onSuccess` touching `teams`/`users`/`roleAssignments`/`projects` without it. **`OrgChartMatrix` is a `Table` and NOT `DataGrid`, which is load-bearing: DataGrid does not render in jsdom** (its virtualization measures through a `ResizeObserver` the test shim never fires, so the scroller is 0×0 with no rows) — measured, six arms failed on the DataGrid version, and `CaseListPage` is the repo's only DataGrid screen and has no component test at all. Whole-screen bundle cost **+7,054 B of dist JS (+0.37 %)**. Nine new fixtures including the four org-chart factories. Gates: **1582 / 119**.)
+
+## §242 — THE ONE GATED PAIR IN THE RAIL, AND THE LABELS THAT CANNOT BE TOTAL
+
+**Read this before touching `features/audit/`, `app/AppShell.tsx`'s nav, or `lib/labels.ts`'s
+audit maps.**
+
+> **Gated.** `npm run test:run` **1602 / 120 files**, `npm run build` clean, `npm run lint` **0
+> warnings**. A local `tsc --noEmit` had passed clean while three of these tests failed — see the
+> header.
+
+### `AppShell` now has a permission gate, and it hides
+
+`AuditReach` is **the only permission-gated pair of items in the rail**, and it **hides** rather
+than disabling — which contradicts §31 and the five comments in `AppShell.tsx` that argue rail
+items are never gated. That was taken deliberately, at the owner's direction, and the argument is
+written at the `AuditReach` type so the next reader does not find the contrary comments first and
+"repair" it.
+
+The general rule stands everywhere else and its reasoning is good: hiding an entry lies about the
+*product* ("this instance has no CI credentials"), which is worse than telling the truth about the
+reader's *access*. **The audit trail is where that trade runs the other way** — the screen's whole
+subject is who did what, so an entry visible to somebody who may not read it is a standing hint
+that the company is watched in a way they are not trusted to see.
+
+Mechanics: `useCan(activeProjectId)` and `useCanInCompany()` in the rail, verdicts passed into
+`projectNav(projectId, audit)`, items spread in conditionally. Both **fail closed while pending**,
+which is `useCan`'s `can()` and the right default for a hidden item — an item that appeared and
+then vanished would be worse than one that arrives a beat late. Both read `/me/permissions`, which
+every screen behind the rail already fetches, so the keys are warm.
+
+### One component, two routes
+
+`AuditLogPage` reads `useParams()` and branches on `projectId`: present → project trail,
+`project:audit`, `/projects/{id}/audit-events`; absent → company trail, `audit:view`,
+`/audit-events`. **Both hooks are called unconditionally** — that is the rule about hooks — and
+`enabled` is what makes exactly one of them fetch.
+
+`DocsPage` is the precedent for one component under two paths. Two components here would have been
+two renderings of the same twelve columns with nothing keeping them identical, which is the
+shared-layer rule at page altitude.
+
+### `Table`, not `DataGrid` — §241 measured this and it is not a preference
+
+**DataGrid does not render in jsdom**: its virtualization measures through a `ResizeObserver` the
+test shim never fires, so the scroller is 0×0 with no rows. Six arms of the org chart's suite failed
+on the DataGrid version before it was rewritten. `CaseListPage` is the repo's only DataGrid screen
+**and has no component test at all**, which is the same fact from the other side.
+
+So `AuditLogPage` is `Table` + `ScrollX` + `TablePagination`, and the twelve arms in
+`AuditLogPage.test.tsx` are only possible because of it. **The plan for this slice assumed DataGrid**
+and lazy-loaded the route on that basis; the route stays lazy anyway.
+
+### The labels cannot be total, and pretending otherwise would be worse
+
+`lib/labels.ts`'s house idiom is `as const satisfies Record<Union, string>`, so a new enum member is
+a compile error. **`AuditEvent.action` and `.targetType` are bare `string`s on the wire**, because
+the verb set grows with every slice that records something and pinning it as an enum would make
+adding an act a contract change. There is no union to be total against.
+
+So `auditActionLabel` / `auditTargetTypeLabel` are a **curated map plus a computed fallback** —
+`notificationEventLabel`'s shape, one screen over, for the same reason. The fallback matters during
+a rollout: a server recording a verb this build has no label for must still render
+*"Suite condition attached"*, because a blank cell is a rendering fault nobody can describe while a
+humanised verb is a legible bug report. `humanize` handles the dots.
+
+**Do not "fix" the writers to spell `targetType` consistently.** The column is append-only, so
+historical rows keep whatever they were written with (`test_case` beside `case`, `ARTIFACT` in caps),
+and a client that only understood a new spelling would blank every older row.
+
+### Where things went, against what the plan said
+
+| Plan said | Actually |
+|---|---|
+| `features/audit/auditLabels.ts` | `lib/labels.ts` — CLAUDE.md's shared-layer rule |
+| `packages/client/src/schema.d.ts` | the client copy is **`schema.ts`** |
+| `frontend/src/api/queries/` a read hook per endpoint | `queries/` is a **directory**; new file `audit.ts` + one line in `index.ts`, `keys` stays the single factory |
+| nav gated with `useCan`, **disable** don't hide | **hide**, at the owner's direction — see above |
+| DataGrid | `Table`, for the jsdom reason §241 measured |
+
+### THREE THINGS THE GATES CAUGHT THAT A TYPECHECK CANNOT
+
+- **`contractParameters.test.ts` reads the `qs({…})` argument STATICALLY.** `qs({ ...filters,
+  projectId: undefined })` counts as *sending* `projectId`, and the project operation does not
+  declare it — the test fails naming the operation. **Both hooks list their keys explicitly**; do
+  not "tidy" them back into a spread. The same walker is why a query string must never be
+  interpolated into the path.
+- **Gating the rail broke `AppShell.test.tsx` — five arms.** Its double answers `[]` to everything
+  but `/projects`, and the shell now reads `/me/permissions`, where an array is not the object the
+  contract declares; `contractDoubles` catches it and the failure reads as a navigation defect.
+  **Any future read added to the shell has that cost**, because that file's double is a fallback
+  rather than a set of arms.
+- **Two test-side races specific to this screen.** `findByTestId` on the refusal panel resolves
+  immediately against the **pending** copy ("Checking your permissions…"), so assert with
+  `findByText` on the settled sentence. And **`window.location.search` is empty under
+  `TestProviders`** — it renders a `MemoryRouter` — so a URL round trip is proved by *rendering a
+  pre-narrowed route* and asserting the control and the request come up narrowed, which is the
+  stronger claim anyway: component state could not produce it.
+
+### The refusal makes no request
+
+A caller without the permission gets a sentence naming who to ask, and the `enabled` gate means
+**no `audit-events` request is issued at all** — the screen knows the answer and does not ask the
+server to refuse it. `meta: { handled: true }` on both hooks, because the screen renders its own
+refusal and a global toast would report it twice.
+
+The two empty states are different and must stay different: **"No acts match"** with a Clear-filters
+control when filters are active, **"Nothing recorded yet"** otherwise. An empty trail and a refused
+trail must never look alike.
+
+---
 
 ## §241 — THE ORG CHART, AND THE STANDING LINE THAT IS NOT CONDITIONAL
 
