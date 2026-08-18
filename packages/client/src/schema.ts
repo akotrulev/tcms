@@ -1247,6 +1247,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * This project's audit trail, newest first
+         * @description **Costs `project:audit`** — Lead-only, per roles spec §A3, where the trail sits beside
+         *     `project:members` and `project:settings` as *administering* the project rather than
+         *     working in it. Every act in the product has written a row here since M0; this is the
+         *     first thing that reads one.
+         *
+         *     **A company-scope act carries no `projectId` and is NOT returned here.** Widening the
+         *     filter to "this project or none" would fold a member invitation and a vocabulary change
+         *     into every project's log. Ask `GET /audit-events` for those.
+         *
+         *     **Both actor columns may be set on one row, and that is the normal token-driven shape** —
+         *     not an either/or. The caller identity on a token-authenticated request is the token's
+         *     *owner*, so an act from a CI runner names the person answerable for the credential
+         *     (`actorUserId`) **and** the credential (`actorTokenId`). `actorUserId` is null only for an
+         *     unattended job that no person requested. A client that renders one and hides the other
+         *     loses half of who did it.
+         *
+         *     **Refuses with 403, not an empty page.** An empty page reads as "nothing happened", which
+         *     about an audit trail is a lie a reader cannot detect. Project *visibility* still answers
+         *     404 (§6t) — the permission is a second question asked of a caller already looking at the
+         *     project, which is `readGranted`'s shape.
+         *
+         *     Newest first, and the sort key is `(occurredAt DESC, id DESC)`. The secondary key is not
+         *     decoration: acts written in one transaction share a timestamp to the microsecond, and an
+         *     unstable sort makes page 2 repeat or skip rows.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    page?: components["parameters"]["Page"];
+                    size?: components["parameters"]["Size"];
+                    /** @description Acts by one person. Matches `actorUserId`, so it also finds their token's acts. */
+                    actorUserId?: string;
+                    /**
+                     * @description One exact dotted verb, e.g. `case.updated`. Matched exactly and never as a prefix:
+                     *     `case.` is not a family in this table, it is a naming convention, and a prefix match
+                     *     would quietly promote it to one.
+                     */
+                    action?: string;
+                    /** @description Inclusive lower bound on `occurredAt`. */
+                    occurredAfter?: string;
+                    /** @description Inclusive upper bound on `occurredAt`. */
+                    occurredBefore?: string;
+                };
+                header?: never;
+                path: {
+                    projectId: components["parameters"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The page of audit events. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PageMeta"] & {
+                            items: components["schemas"]["AuditEvent"][];
+                        };
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/reviews": {
         parameters: {
             query?: never;
@@ -8944,6 +9030,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The company's audit trail, newest first
+         * @description **Costs `audit:view`, at COMPANY scope** — Company Admin and Instance Admin only, per
+         *     roles spec §A3. Returns acts across the whole company, project-scoped rows included, so
+         *     this is a superset of every project log the caller could read.
+         *
+         *     **It is not narrowed to the caller's project grants, and that is the decision.**
+         *     `audit:view` is a company-wide administrative key held by exactly the two roles who
+         *     already staff every project; narrowing the trail to the holder's own grants would make
+         *     the company log unable to answer the question it exists for — *what happened here* —
+         *     while a project they cannot open still shows in `GET /projects` to them anyway. The
+         *     project-scoped log is the surface for readers who hold only a project grant.
+         *
+         *     `projectId` filters this list; it does not gate it. Pass it to read one project's slice
+         *     with the same permission, and note the answer differs from
+         *     `GET /projects/{projectId}/audit-events` in nothing but the gate.
+         *
+         *     The actor, sort-key and 403-not-empty-page rules are the project log's; see there.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    page?: components["parameters"]["Page"];
+                    size?: components["parameters"]["Size"];
+                    /**
+                     * @description One project's acts. **A filter, not a scope** — an id naming no project in this
+                     *     company matches nothing rather than 404ing, exactly as an unknown `id` does on the
+                     *     case list: refusing it would make this endpoint an oracle for which project ids exist.
+                     */
+                    projectId?: string;
+                    /** @description Acts by one person. Matches `actorUserId`, so it also finds their token's acts. */
+                    actorUserId?: string;
+                    /** @description One exact dotted verb, e.g. `case.updated`. Matched exactly, never as a prefix. */
+                    action?: string;
+                    /** @description Inclusive lower bound on `occurredAt`. */
+                    occurredAfter?: string;
+                    /** @description Inclusive upper bound on `occurredAt`. */
+                    occurredBefore?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The page of audit events. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PageMeta"] & {
+                            items: components["schemas"]["AuditEvent"][];
+                        };
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/work-items": {
         parameters: {
             query?: never;
@@ -9228,6 +9389,92 @@ export interface components {
             page: number;
             size: number;
             total: number;
+        };
+        /**
+         * @description One recorded act inside this company. Append-only: nothing in this product edits or
+         *     deletes a row, so a value read here is what was written at the time.
+         */
+        AuditEvent: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Null for a company-scope act — a member invited, a vocabulary changed.
+             */
+            projectId: string | null;
+            /**
+             * Format: uuid
+             * @description The person answerable for the act. Null only for an unattended job that no person
+             *     requested. **Set alongside `actorTokenId` on a token-driven act, not instead of it.**
+             */
+            actorUserId: string | null;
+            /**
+             * @description The actor's display name in this company (§6u — the membership's name, not the
+             *     account's canonical one).
+             *
+             *     **Offboarding does not take it away.** Removing someone sets their membership to
+             *     `REMOVED`; it does not delete the row, and the resolver reads memberships without
+             *     filtering on status, so a departed colleague's acts still render under their name.
+             *     That is the behaviour an audit trail wants — "who did this" must not become
+             *     unanswerable the day the person leaves — and it is why the row is served whole rather
+             *     than anonymised.
+             *
+             *     Null in exactly two cases: `actorUserId` is null, or it names a membership that no
+             *     longer exists at all (an operator-level deletion, not an offboarding). A null name is
+             *     therefore never evidence about the id — **read `actorUserId`, not this** — and a
+             *     client that treats a null name as a missing row deletes history on the screen.
+             */
+            actorUserName: string | null;
+            /**
+             * Format: uuid
+             * @description The API token the act arrived on, when a CI runner made it rather than a person at a
+             *     keyboard. Null for an ordinary session.
+             */
+            actorTokenId: string | null;
+            /**
+             * @description The token's label. **Revocation does not take it away either** — the resolver includes
+             *     revoked tokens deliberately, because an act performed by a credential that has since
+             *     been withdrawn is precisely the row somebody is reading this screen to explain. Null
+             *     when `actorTokenId` is null, or when the token row is gone entirely.
+             */
+            actorTokenName: string | null;
+            /**
+             * @description A stable dotted verb, e.g. `case.updated`. **Never a display string** — the server
+             *     sends the key and the client owns the copy, which is the same split the dashboard
+             *     makes with its tiles. There is no enum here on purpose: the set grows with every
+             *     slice that records something, and pinning it in the contract would make adding an
+             *     act a contract change.
+             * @example case.updated
+             */
+            action: string;
+            /**
+             * @description What kind of thing was acted on, e.g. `TestCase`.
+             * @example TestCase
+             */
+            targetType: string;
+            /**
+             * @description The things acted on — **an array because one act may cover many**. A bulk operation
+             *     over 143 cases is one row reading "attached 2 conditions to 143 cases" rather than
+             *     143 lines (plan §6f). A single-target act sends a list of one.
+             */
+            targetIds: string[];
+            /**
+             * @description A JSON document of what changed, as recorded, or null. **Opaque to the client** — it
+             *     is written per act by whichever service recorded it and has no schema across acts.
+             *     It never contains a credential, a token or a password: this table is readable by the
+             *     client's own administrators.
+             */
+            changes: string | null;
+            /**
+             * Format: uuid
+             * @description Set when this row is one of many from a single bulk act, so a client can group them.
+             *     **Nothing writes it yet** — the column is `V1`'s and the bulk services record one row
+             *     per act rather than one per target. It is on the wire so the grouping does not become
+             *     a contract change the day one does.
+             */
+            bulkOperationId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
         };
         /** @description Returned alongside results so filter counts render without a second request. */
         Facet: {
