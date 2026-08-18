@@ -398,6 +398,7 @@ class ContractConventionTest {
             Map.entry("AiProposalSummary",
                     List.of(com.tcms.repository.AiProposalSummaryView.class)),
             Map.entry("ApiToken", List.of(com.tcms.identity.ApiTokenView.class)),
+            Map.entry("AuditEvent", List.of(com.tcms.identity.AuditEventView.class)),
             Map.entry("ApiTokenInput", List.of(com.tcms.identity.ApiTokenIssueRequest.class)),
             Map.entry("EmailDomains",
                     List.of(com.tcms.identity.IdentityProviderController.EmailDomainsRequest.class,
@@ -705,10 +706,11 @@ class ContractConventionTest {
      */
     private static final Map<String, String> BRANCH_ONLY_SCHEMAS = Map.of(
             "PageMeta",
-            "the three paging fields, $ref'd only as the first allOf branch of the two list "
-                    + "responses that page (cases, ai-proposals). CasePageView and "
-                    + "AiProposalPageView each carry all three AND the branch beside them, so they "
-                    + "serve the composition — which §170 phase 2 compares at the inline location",
+            "the three paging fields, $ref'd only as the first allOf branch of the four list "
+                    + "responses that page (cases, ai-proposals, and both audit trails since "
+                    + "§242). CasePageView, AiProposalPageView and AuditEventPageView each carry "
+                    + "all three AND the branch beside them, so they serve the composition — which "
+                    + "§170 phase 2 compares at the inline location",
             "TestPlanSummary",
             "$ref'd only as TestPlan's first allOf branch since §100, which widened the plan list "
                     + "from the summary to the full plan and left the schema in place as the half "
@@ -1185,6 +1187,13 @@ class ContractConventionTest {
                     List.of(com.tcms.repository.CasePageView.class)),
             Map.entry("GET /projects/{projectId}/ai-proposals (200)",
                     List.of(com.tcms.repository.AiProposalPageView.class)),
+            // Both audit trails, one record — they differ in their gate and in nothing else, so a
+            // second record would be a shape nothing could tell apart from the first and a second
+            // place the paging fields can be renamed by half.
+            Map.entry("GET /projects/{projectId}/audit-events (200)",
+                    List.of(com.tcms.identity.AuditEventPageView.class)),
+            Map.entry("GET /audit-events (200)",
+                    List.of(com.tcms.identity.AuditEventPageView.class)),
             Map.entry("GET /projects/{projectId}/cases/{caseId}/history (200)",
                     List.of(com.tcms.execution.CaseHistoryView.class)));
 

@@ -631,7 +631,8 @@ class ArchitectureRulesTest {
      * giving one of these a reader without deleting its entry. The argument for each is written at
      * the field itself; what is here is the one-line reason and the shape it is an instance of.
      *
-     * <p><strong><del>Twelve since §160</del> <del>Eleven since §181</del> EIGHTEEN since §188</strong>,
+     * <p><strong><del>Twelve since §160</del> <del>Eleven since §181</del> <del>Eighteen since
+     * §188</del> SIXTEEN since §242</strong>,
      * which is the first time this count has gone up and the reason is the corpus rather than the
      * code: {@code src/test} came out of it, so seven columns whose only reader was a fixture are
      * findings now. The seven are argued at their fields and in the entries below, and one of them
@@ -639,7 +640,9 @@ class ArchitectureRulesTest {
      * the absence of a reader as finding 3 and deliberately did not act on it. Two more,
      * {@code AuditEvent.actorTokenId} and {@code ReportArtifact.generatedAt}, arrive by an argument
      * that used to be the argument against them: each was cited, at the field and in this rule's own
-     * comment, as the example of a column whose test SELECT counted.
+     * comment, as the example of a column whose test SELECT counted. <strong>{@code
+     * AuditEvent.actorTokenId} has since left, with {@code AuditEvent.bulkOperationId} beside it
+     * (§242)</strong> — the audit screen both entries named as their exit was built.
      *
      * <p>{@code rawStorageKey} left by getting both halves at
      * once, which is the first exit from this rule in either direction and the second time a member
@@ -761,21 +764,14 @@ class ArchitectureRulesTest {
             Map.entry("ReportDefinition.sharedWithTeamId",
                     "writerless AND readerless, scheduleCron's shape and the same factory's "
                             + "decision: sharing a saved report with a team is not built"),
-            Map.entry("AuditEvent.bulkOperationId",
-                    "writerless AND readerless — the field, its mapping and its getter are the "
-                            + "only three mentions of it in main and test alike, so its javadoc's "
-                            + "\"set when this event is one of many\" describes a state that has "
-                            + "never occurred. The audit trail has no screen, which §152 recorded "
-                            + "from the other side when AuditEventRepository's only reader turned "
-                            + "out to be a test"),
-            Map.entry("AuditEvent.actorTokenId",
-                    "bulkOperationId's neighbour and the opposite half: §132 spent a slice giving "
-                            + "it a writer, and the audit trail still has no screen. It was this "
-                            + "rule's own worked example for counting a test as a reader — "
-                            + "IngestionEndpointTest selects the column — until §188 narrowed the "
-                            + "corpus to src/main, so it arrives here by the argument it used to "
-                            + "be the argument against. The reader it wants is the audit screen "
-                            + "§152 named, which is a contract change"),
+            // AuditEvent.bulkOperationId and AuditEvent.actorTokenId were both here until §242, and
+            // both entries named the same exit: "the audit trail has no screen". §242 built it.
+            // AuditEventView serves all twelve columns, so AuditLogService calls both getters and
+            // isReadInJava now answers true for each. bulkOperationId keeps its WRITERLESS entry
+            // below — the reader arrived first, and slice 4 of the gaps plan is what gives it a
+            // writer. Left as a comment rather than deleted because the pair is this rule's
+            // longest-running worked example and the two halves moved independently, which is the
+            // property the two maps exist to be able to report.
             Map.entry("ClassificationDimension.controlled",
                     "mapped and not on the wire, argued at the field since it was written: the "
                             + "contract's ClassificationDimension does not carry it and inventing "
@@ -866,8 +862,12 @@ class ArchitectureRulesTest {
         // THE COST IS PAID IN ONE PLACE AND IT IS NAMED THERE. AuditEvent.actorTokenId was the
         // instance §132 cited for the old corpus — a slice spent giving it a writer, no product
         // code reading it, and IngestionEndpointTest's "SELECT actor_token_id FROM audit_event"
-        // standing in as the reader. It is in READERLESS_BY_DECISION now, with the same argument
-        // bulkOperationId has carried since §152: the audit trail has no screen.
+        // standing in as the reader. It was in READERLESS_BY_DECISION from §188 to §242, with the
+        // same argument bulkOperationId had carried since §152 — the audit trail has no screen —
+        // and both left when §242 built one. The example is kept because it is still what the
+        // narrowed corpus does: a test SELECT is not a reader, and the thing that ended the
+        // exemption was a product surface consulting the value, which is the only event that can
+        // make a wrong one matter.
         //
         // TWO THINGS ARE STRIPPED FIRST, and both were measured. A mapping annotation is not a
         // read — without stripping it, every entity declaring its own created_at marks every other
@@ -1056,9 +1056,12 @@ class ArchitectureRulesTest {
      */
     private static final Map<String, String> WRITERLESS_BY_DECISION = Map.ofEntries(
             Map.entry("AuditEvent.bulkOperationId",
-                    "writerless AND readerless — argued at the field and in "
-                            + "READERLESS_BY_DECISION; the field, its mapping and its getter are "
-                            + "the only three mentions of it anywhere"),
+                    "writerless, and READ since §242: AuditEventView serves it and the contract "
+                            + "declares it, so the grouping a bulk act needs is on the wire before "
+                            + "anything writes one. Every bulk service still records ONE row per "
+                            + "act rather than one per target, which is why there is no writer — "
+                            + "slice 4 of the gaps plan is the one that changes that, and this "
+                            + "entry is what it must delete"),
             Map.entry("DocBlock.anchorSlug",
                     "writerless AND readerless — argued at the field: a link targets "
                             + "(page_id, block_id), never an anchor derived from content"),

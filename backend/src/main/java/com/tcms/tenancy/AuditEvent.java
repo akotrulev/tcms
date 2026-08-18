@@ -78,13 +78,18 @@ public class AuditEvent {
      * sentence stopped being true two slices before anything wrote here. {@code #record} fills it
      * from {@link TokenContext}.
      *
-     * <p><strong>Written and never read — in {@code ArchitectureRulesTest.READERLESS_BY_DECISION}
+     * <p>~~<strong>Written and never read — in {@code ArchitectureRulesTest.READERLESS_BY_DECISION}
      * since §188</strong>, and it spent thirty-two sections as that rule's worked example for the
      * opposite position. Its corpus included {@code src/test}, so {@code IngestionEndpointTest}'s
      * {@code SELECT actor_token_id FROM audit_event} counted as the reader; §188 narrowed the corpus
      * to the product, on the ground that a fixture selecting a column proves the write happened and
      * not that anything consults the value. Nothing does. {@link #bulkOperationId}'s argument is the
-     * same one and the exit is the same screen: the audit trail has none.</p>
+     * same one and the exit is the same screen: the audit trail has none.~~ → <strong>superseded
+     * 2026-08-18 (§242).</strong> The exit that paragraph named is built: {@code
+     * identity.AuditEventView} serves this column and {@code identity.AuditLogService} resolves it
+     * to the token's name, so the exemption is gone from both maps. What survives is the reason it
+     * was there — a test SELECT is not a reader — and that is now recorded in the rule rather than
+     * here.</p>
      */
     @Column(name = "actor_token_id", updatable = false)
     private UUID actorTokenId;
@@ -113,12 +118,16 @@ public class AuditEvent {
     /**
      * Set when this event is one of many from a single bulk operation.
      *
-     * <p>~~Set~~ — <strong>it never is.</strong> The field, its mapping and its getter are the only
-     * three mentions of it in {@code src/main} and {@code src/test} alike (§154,
-     * {@code ArchitectureRulesTest.READERLESS_BY_DECISION}), so the sentence above describes a
-     * condition the database has never been in. Kept because it is {@code V1}'s and because the
-     * thing that would read it does not exist: the audit trail has no screen, which §152 recorded
-     * from the other side when {@code AuditEventRepository}'s only reader turned out to be a test.
+     * <p>~~Set~~ — <strong>it never is.</strong> The sentence above still describes a condition the
+     * database has never been in: every bulk service records ONE row per act rather than one per
+     * target, so nothing writes this. It stays in {@code
+     * ArchitectureRulesTest.WRITERLESS_BY_DECISION}.
+     *
+     * <p><strong>It is READ since §242, and the two halves moved apart.</strong> The entry's old
+     * exit — "the audit trail has no screen" — was taken by the reader alone: {@code
+     * identity.AuditEventView} serves this column and the contract declares it, so a client can
+     * group a bulk act's rows the day one is written without that being a contract change. The
+     * writer is slice 4 of {@code docs/plans/2026-08-18-unplanned-gaps.md}, whose traps say so.
      */
     @Column(name = "bulk_operation_id", updatable = false)
     private UUID bulkOperationId;
@@ -215,12 +224,6 @@ public class AuditEvent {
         return actorUserId;
     }
 
-    /**
-     * No product surface reads this yet — the audit screen is M6 (open question #54, where
-     * {@code audit:view} and {@code project:audit} still have zero consumers). It exists so the
-     * writer above is assertable, which is the difference between a column that is filled and a
-     * column somebody believes is filled.
-     */
     public UUID getActorTokenId() {
         return actorTokenId;
     }
