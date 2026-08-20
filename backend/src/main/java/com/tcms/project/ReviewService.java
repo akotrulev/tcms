@@ -3,6 +3,8 @@ package com.tcms.project;
 import com.tcms.api.TeamRef;
 import com.tcms.api.UserRef;
 import com.tcms.tenancy.CompanyContext;
+import com.tcms.tenancy.Outbox;
+import com.tcms.tenancy.OutboxEvents;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -61,6 +63,23 @@ import org.springframework.transaction.annotation.Transactional;
  * and it is the better one — a subject with no open review has nothing to close, whatever its
  * previous status suggested, and two adjacent same-typed enum parameters are a swap the compiler
  * cannot see ({@code LifecycleLadder.Keys}' reason).
+ *
+ * <h2>This class records outbox occurrences, and it is the first foundation module to</h2>
+ *
+ * <p>Four names — {@code review.requested}, {@code review.endorsed},
+ * {@code review.changes_requested} and {@code review.approved} — each recorded inside the
+ * transaction that wrote the row it is about, so the fact and the notice of it commit together.
+ * {@code com.tcms.integration} consumes them; this module may not name it and does not need to.
+ *
+ * <p><strong>Nothing is recorded where no review exists.</strong> §6g's opt-in means a project with
+ * review switched off for an artifact type opens no review, so {@link #moved} returns early and
+ * there is nothing to be asked about, to judge or to sign off. A notification vocabulary that fired
+ * anyway would be announcing reviews that did not happen.
+ *
+ * <p><strong>{@link #moved} records one occurrence per artifact, including inside a bulk
+ * operation.</strong> {@code repository.CaseBulkService} calls it up to 500 times in one
+ * transaction and each call names a different subject; see {@code OutboxEvents#REVIEW_APPROVED} for
+ * why they are not coalesced and what the honest fix is.
  */
 @Service
 public class ReviewService {
@@ -85,6 +104,14 @@ public class ReviewService {
      */
     private final ProjectAccess access;
     private final Clock clock;
+    /**
+     * The only way this class tells anybody anything.
+     *
+     * <p>A notification is a POST to a third party and every write below runs inside a ladder's or
+     * an endpoint's transaction — {@code V1}'s comment on {@code outbox} is what forbids the direct
+     * call, and {@code integration} may not be reached from this module in any case.
+     */
+    private final Outbox outbox;
 
     public ReviewService(
             ProjectService projects,
@@ -96,7 +123,8 @@ public class ReviewService {
             PeopleDirectory people,
             TeamDirectory teams,
             ProjectAccess access,
-            Clock clock) {
+            Clock clock,
+            Outbox outbox) {
 
         this.projects = projects;
         this.settings = settings;
@@ -108,6 +136,7 @@ public class ReviewService {
         this.teams = teams;
         this.access = access;
         this.clock = clock;
+        this.outbox = outbox;
     }
 
     /** What a peer's verdict did. Sealed, so the controller's switch is exhaustive. */
@@ -222,6 +251,22 @@ public class ReviewService {
                     ReviewParticipation.Verdict.APPROVED,
                     null,
                     at));
+            // The sign-off, for all three subject types, from the one method the three ladders
+            // converge on. Only this arm: a rejection and a withdrawal are not approvals, and the
+            // early return above means a project with review switched off records nothing at all.
+            outbox.record(
+                    ReviewApprovedEvent.AGGREGATE,
+                    review.getId(),
+                    OutboxEvents.REVIEW_APPROVED,
+                    new ReviewApprovedEvent(
+                            UUID.randomUUID(),
+                            review.getId(),
+                            projectId,
+                            subjectType,
+                            subjectId,
+                            review.getSubjectVersionNo(),
+                            actorId,
+                            review.getCreatedBy()));
         } else {
             // Written out rather than left to equals(), because TWO absences are in play: a review
             // whose submitter no longer resolves, and — in no path today, but the compiler does not
@@ -524,6 +569,31 @@ public class ReviewService {
                 comment == null || comment.isBlank() ? null : comment.trim(),
                 now));
 
+        // The event NAME carries the verdict, so a subscriber picks the one it wants at the
+        // subscription and never filters. The two binding verdicts cannot arrive here —
+        // parseVerdict refuses them as field errors, because approving is the ladder's act — so
+        // the switch says so rather than defaulting into a name that would be a lie.
+        String eventType = switch (verdict) {
+            case LGTM -> OutboxEvents.REVIEW_ENDORSED;
+            case CHANGES_REQUESTED -> OutboxEvents.REVIEW_CHANGES_REQUESTED;
+            case APPROVED, REJECTED -> throw new IllegalStateException(
+                    "A binding verdict reached the participation endpoint: " + verdict
+                            + " — parseVerdict is what refuses these, and it did not");
+        };
+        outbox.record(
+                ReviewVerdictEvent.AGGREGATE,
+                review.getId(),
+                eventType,
+                new ReviewVerdictEvent(
+                        UUID.randomUUID(),
+                        review.getId(),
+                        review.getProjectId(),
+                        review.getSubjectType(),
+                        review.getSubjectId(),
+                        userId,
+                        review.getCreatedBy(),
+                        comment == null || comment.isBlank() ? null : comment.trim()));
+
         return new Outcome.Recorded(render(companyId, List.of(review)).getFirst());
     }
 
@@ -753,7 +823,25 @@ public class ReviewService {
         return switch (ReviewAssigneeEdit.validate(request, review, reaches, team)) {
             case ReviewAssigneeEdit.Outcome.Invalid invalid -> new Outcome.Invalid(invalid.errors());
             case ReviewAssigneeEdit.Outcome.Valid valid -> {
-                store(companyId, actorId, review.getId(), valid.edit());
+                if (store(companyId, actorId, review.getId(), valid.edit())) {
+                    // Inside the write's own transaction: the request and the notice of it commit
+                    // together or neither does. Outbox#record throws when called outside one rather
+                    // than trusting this comment. Nothing at all on the idempotent re-ask, which is
+                    // why store() answers rather than returning void.
+                    outbox.record(
+                            ReviewRequestedEvent.AGGREGATE,
+                            review.getId(),
+                            OutboxEvents.REVIEW_REQUESTED,
+                            new ReviewRequestedEvent(
+                                    UUID.randomUUID(),
+                                    review.getId(),
+                                    review.getProjectId(),
+                                    review.getSubjectType(),
+                                    review.getSubjectId(),
+                                    valid.edit().userId(),
+                                    valid.edit().teamId(),
+                                    actorId));
+                }
                 yield new Outcome.Recorded(render(companyId, List.of(review)).getFirst());
             }
         };
@@ -766,24 +854,29 @@ public class ReviewService {
      * rule). Two people asking the same colleague at the same instant is a real race and the loser
      * hits the index — which is the one case this method cannot make idempotent, and it surfaces as
      * the constraint violation it is rather than as a silent second row.
+     *
+     * @return whether a row was written. The caller records {@code review.requested} on true and
+     *         nothing on false: re-asking somebody already asked is idempotent, and an event there
+     *         would announce a second time that a colleague had been asked once
      */
-    private void store(UUID companyId, UUID actorId, UUID reviewId, ReviewAssigneeEdit edit) {
+    private boolean store(UUID companyId, UUID actorId, UUID reviewId, ReviewAssigneeEdit edit) {
         Instant now = clock.instant();
 
         if (edit.userId() != null) {
             if (assignments.findForUser(reviewId, edit.userId()).isPresent()) {
-                return;
+                return false;
             }
             assignments.saveAndFlush(
                     ReviewAssignment.ofUser(companyId, reviewId, edit.userId(), actorId, now));
-            return;
+            return true;
         }
 
         if (assignments.findForTeam(reviewId, edit.teamId()).isPresent()) {
-            return;
+            return false;
         }
         assignments.saveAndFlush(
                 ReviewAssignment.ofTeam(companyId, reviewId, edit.teamId(), actorId, now));
+        return true;
     }
 
     /**

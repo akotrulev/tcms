@@ -911,6 +911,39 @@ class ReviewEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("re-asking the same reviewer records no second occurrence")
+        void reAskingAnnouncesNothing() throws Exception {
+            UUID review = openPlanReview();
+
+            assign(LEAD, review, ENGINEER, null);
+            assign(ENGINEER, review, ENGINEER, null);
+
+            assertThat(occurrenceCount(review, "review.requested"))
+                    .as("""
+                            The second call writes no assignment row, so it records nothing: an \
+                            event there would announce a second time that a colleague had been \
+                            asked once, and at-least-once delivery means the channel would see \
+                            both.""")
+                    .isOne();
+        }
+
+        @Test
+        @DisplayName("asking a team is an occurrence too, naming the team and not its members")
+        void askingATeamIsAnOccurrence() throws Exception {
+            UUID review = openPlanReview();
+
+            assign(LEAD, review, null, ACME_QA_TEAM);
+
+            assertThat(occurrenceCount(review, "review.requested")).isOne();
+            assertThat(occurrencePayload(review, "review.requested"))
+                    .as("the payload's two assignee arms are exactly one id — the handler picks, "
+                            + "and a team's members are resolved by nobody because §6g says any "
+                            + "member may action it")
+                    .contains("\"assigneeTeamId\": \"" + ACME_QA_TEAM + "\"")
+                    .contains("\"assigneeUserId\": null");
+        }
+
+        @Test
         @DisplayName("naming neither a person nor a team is a field error, and writes nothing")
         void neitherIsAFieldError() throws Exception {
             UUID review = openPlanReview();
@@ -2183,6 +2216,34 @@ class ReviewEndpointTest extends IntegrationTestBase {
         return count(
                 "SELECT count(*) FROM review_participation WHERE review_id = CAST(? AS uuid)",
                 reviewId.toString());
+    }
+
+    /**
+     * How many occurrences of one event type this review recorded.
+     *
+     * <p>Scoped by {@code aggregate_id} rather than counting the whole table, so it says something
+     * about this review whatever else the suite has left behind.
+     */
+    private int occurrenceCount(UUID reviewId, String eventType) throws SQLException {
+        return count(
+                "SELECT count(*) FROM outbox WHERE aggregate_id = CAST(? AS uuid) "
+                        + "AND event_type = ?",
+                reviewId.toString(), eventType);
+    }
+
+    /** The document itself — JSONB, so Postgres renders it back with its own spacing. */
+    private String occurrencePayload(UUID reviewId, String eventType) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "SELECT payload::text FROM outbox WHERE aggregate_id = CAST(? AS uuid) "
+                             + "AND event_type = ?")) {
+            statement.setString(1, reviewId.toString());
+            statement.setString(2, eventType);
+            try (ResultSet rows = statement.executeQuery()) {
+                assertThat(rows.next()).as("no %s occurrence was recorded", eventType).isTrue();
+                return rows.getString(1);
+            }
+        }
     }
 
     private int count(String sql, String... arguments) throws SQLException {
