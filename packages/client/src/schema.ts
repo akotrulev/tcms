@@ -14021,15 +14021,36 @@ export interface components {
          */
         NotificationDeliveryStatus: "SENT" | "FAILED";
         /**
-         * @description What a channel may subscribe to. Both are past-tense **occurrences carrying a payload**,
-         *     which is what makes them deliverable at all: a coalesced event stands for every change
-         *     since the last delivery, so a notification whose entire content is the payload cannot be
-         *     sent from one.
+         * @description What a channel may subscribe to. Every member is a past-tense **occurrence carrying a
+         *     payload**, which is what makes it deliverable at all: a coalesced event stands for every
+         *     change since the last delivery, so a notification whose entire content is the payload
+         *     cannot be sent from one.
          *
          *     `execution.run_completed` carries the run, its final status and its pass/fail/blocked
          *     counts — which is what `NotificationSubscription.minFailures` filters on.
-         *     `work.item_assigned` carries the item and both assignees, and has no counts, so a
-         *     threshold set against it is inert rather than silencing.
+         *     `work.item_assigned` carries the item and its assignee, and has no counts, so a threshold
+         *     set against it is inert rather than silencing. The same is true of all four `review.*`
+         *     members.
+         *
+         *     **The four `review.*` members are facts about a review, and a project with the review
+         *     workflow switched off for an artifact type sends none of them.** Review is opt-in per
+         *     project and per artifact type (`ProjectSettings`); with it off, submitting and approving
+         *     write no review row, so there is nothing to have been asked about, to have a verdict on,
+         *     or to sign off. A channel subscribed to them in such a project is silent, and that is the
+         *     setting rather than a fault.
+         *
+         *     - `review.requested` — somebody was asked to look at an artifact. Only a request that was
+         *       actually written: re-asking the same person is idempotent and sends nothing.
+         *     - `review.endorsed` — a peer said it looks good (`LGTM`). **Advisory, and deliberately not
+         *       called an approval**: recording a peer verdict costs `*:review`, signing off costs
+         *       `*:approve`, and one name for both would put a cheaper door to a sign-off on the wire.
+         *     - `review.changes_requested` — a peer asked for changes. Its own member rather than a
+         *       field on one "a peer spoke" event, because the two are opposite requests to act and a
+         *       single name would make every subscriber re-derive which one it wanted.
+         *     - `review.approved` — the sign-off, for a case, a suite or a plan alike; the payload says
+         *       which. **A bulk approval sends one per artifact** — up to 500, the bulk cap — because
+         *       each names a different subject and a single event could name only one of them honestly.
+         *       A channel that does not want per-artifact sign-off notices does not subscribe to this.
          *
          *     **A "run failed" event is deliberately absent**: it is not an event, it is a predicate on
          *     `execution.run_completed`, and modelling it as one keeps the producing module from having
@@ -14040,7 +14061,7 @@ export interface components {
          *     be a subscription somebody configured that can never fire.
          * @enum {string}
          */
-        NotificationEventType: "execution.run_completed" | "work.item_assigned";
+        NotificationEventType: "execution.run_completed" | "work.item_assigned" | "review.requested" | "review.endorsed" | "review.changes_requested" | "review.approved";
     };
     responses: {
         /**

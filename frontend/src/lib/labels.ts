@@ -728,6 +728,10 @@ export const notificationDeliveryStatusLabels = {
 export const notificationEventTypeLabels = {
   'execution.run_completed': 'Run completed',
   'work.item_assigned': 'Work assigned to somebody',
+  'review.requested': 'Review requested',
+  'review.endorsed': 'Peer said it looks good',
+  'review.changes_requested': 'Peer asked for changes',
+  'review.approved': 'Review approved',
 } as const satisfies Record<NotificationEventType, string>;
 
 /** The live vocabulary, derived from the map — `NOTIFICATION_CHANNEL_KINDS`' reasoning. */
@@ -749,6 +753,14 @@ export const notificationEventTypeHelp = {
     'Sent when a run reaches Completed — not when one is aborted or reopened. Carries the run’s final status and its pass/fail/blocked counts, which is what the failure threshold reads.',
   'work.item_assigned':
     'Sent when a task is created with somebody on it. Carries no result counts, so a failure threshold set here is inert rather than silencing.',
+  'review.requested':
+    'Sent when somebody is asked to review a case, a suite or a plan. Asking the same person twice sends nothing. Needs the review workflow switched on for that artifact type in project settings — with it off, no review exists and nothing is sent.',
+  'review.endorsed':
+    'Sent when a reviewer records LGTM. This is a peer’s opinion and not the sign-off — approving is a separate act with its own permission, and it sends “Review approved”.',
+  'review.changes_requested':
+    'Sent when a reviewer asks for changes. Advisory: it does not move the artifact out of In review.',
+  'review.approved':
+    'Sent when a review is signed off, for a case, a suite or a plan alike. A bulk approval sends one message per artifact — up to 500 — so leave this off for a channel that only wants headlines.',
 } as const satisfies Record<NotificationEventType, string>;
 
 /**

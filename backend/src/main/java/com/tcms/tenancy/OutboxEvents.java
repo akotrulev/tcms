@@ -48,7 +48,8 @@ package com.tcms.tenancy;
  * moved is the one that has to answer {@link Outbox#record}'s standing debt — a consumer-side test
  * pinning the payload shape, because the compiler cannot see across that boundary.</del>
  *
- * <h2>FOUR NAMES, AND THE PAST-TENSE HALF IS POPULATED — the paragraphs above are answered</h2>
+ * <h2>EIGHT NAMES, AND THE PAST-TENSE HALF IS NOW THE MAJORITY — the paragraphs above are
+ * answered</h2>
  *
  * <p>{@link #RUN_COMPLETED} and {@link #ITEM_ASSIGNED} are occurrences: each is its own event,
  * each carries a payload, and both are recorded through {@link Outbox#record}, which until this
@@ -67,6 +68,15 @@ package com.tcms.tenancy;
  * {@code com.tcms.integration}: a producer-side test and a consumer-side test pin each payload,
  * because the two modules may not share a class and a test on each side is what replaces the
  * compiler. See that package's own comment.
+ *
+ * <p><strong>Four more since the review-notifications slice</strong>, all occurrences and all
+ * produced by {@code project.ReviewService}: {@link #REVIEW_REQUESTED}, {@link #REVIEW_ENDORSED},
+ * {@link #REVIEW_CHANGES_REQUESTED} and {@link #REVIEW_APPROVED}. They are the first entries
+ * produced by a <em>foundation</em> module, which is worth noting before a fifth: the rule that
+ * this module holds names and not meanings is untouched, but a foundation module recording an
+ * occurrence means the producer is a module every other module may call, so "who could have written
+ * this row" is no longer answerable by module layer alone. It is still answerable by grep, which is
+ * the property {@link OutboxHandler#eventType()} asks for.
  */
 public final class OutboxEvents {
 
@@ -124,6 +134,63 @@ public final class OutboxEvents {
      * second producer here, not a second name.
      */
     public static final String ITEM_ASSIGNED = "work.item_assigned";
+
+    /**
+     * Somebody was asked to review an artifact — recorded by {@code project.ReviewService} inside
+     * the transaction that wrote the {@code review_assignment} row.
+     *
+     * <p>An occurrence with a payload, for {@link #RUN_COMPLETED}'s reason. <strong>Only a request
+     * that was actually written.</strong> Re-asking somebody already asked is idempotent and
+     * records nothing: {@code ReviewService#store} returns early, and an event there would announce
+     * a second time that a colleague had been asked once.
+     *
+     * <p>The four {@code review.*} names are all facts about a <em>review</em>, so none of them
+     * fires in a project with §6g's review workflow switched off for that artifact type — there is
+     * no review, nobody was asked, and there is nothing to have a verdict on.
+     */
+    public static final String REVIEW_REQUESTED = "review.requested";
+
+    /**
+     * A peer said the artifact looks good — {@code project.ReviewService}'s {@code LGTM} verdict.
+     *
+     * <p><strong>Not an approval, and the name is the whole reason this constant is
+     * separate.</strong> {@code ReviewService#record}'s header refuses to write an
+     * {@code APPROVAL} participation from the verdict endpoint, because that would be a second,
+     * cheaper door to a sign-off gated on {@code *:approve}. A name that called it
+     * {@code review.approved} would put that conflation on the wire, where a subscriber acts on it.
+     * The sign-off is {@link #REVIEW_APPROVED}.
+     */
+    public static final String REVIEW_ENDORSED = "review.endorsed";
+
+    /**
+     * A peer asked for changes — {@code project.ReviewService}'s {@code CHANGES_REQUESTED} verdict.
+     *
+     * <p>Its own name rather than a verdict field on one "a peer spoke" event, for
+     * {@link #RUN_COMPLETED}'s reason: one name would make every subscriber re-derive which
+     * verdicts it cared about, and the two are opposite requests to act.
+     *
+     * <p>Advisory — it does not move the artifact off {@code IN_REVIEW}
+     * ({@code ReviewParticipation.Verdict}).
+     */
+    public static final String REVIEW_CHANGES_REQUESTED = "review.changes_requested";
+
+    /**
+     * A review was signed off — recorded by {@code project.ReviewService#moved} on the arm that
+     * closes an open review as {@code APPROVED} and writes the {@code APPROVAL} participation.
+     *
+     * <p><strong>One name for all three subject types.</strong> The three ladders — a case's, a
+     * suite's, a plan's — converge on that one method, and approving a suite is the same act to a
+     * subscriber as approving a case; the payload says which. A name per artifact would be three
+     * constants, three payloads and three handlers for one fact.
+     *
+     * <p><strong>A bulk approval records one of these per artifact.</strong>
+     * {@code CaseBulkService} moves up to 500 cases in one operation and calls {@code moved} for
+     * each, so one act can produce 500 occurrences and, per subscribed channel, 500 messages. Each
+     * is true and names a different subject, so coalescing them would be untruthful in exactly the
+     * way {@link Outbox#recordCoalesced} describes; a digest belongs on the subscriber's side and
+     * does not exist yet.
+     */
+    public static final String REVIEW_APPROVED = "review.approved";
 
     private OutboxEvents() {
     }

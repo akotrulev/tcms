@@ -62,7 +62,13 @@ class NotificationEventTypeTest {
     @Test
     @DisplayName("every declared member is a name the outbox actually records")
     void everyMemberIsAnOutboxName() {
-        Set<String> recorded = Set.of(OutboxEvents.RUN_COMPLETED, OutboxEvents.ITEM_ASSIGNED);
+        Set<String> recorded = Set.of(
+                OutboxEvents.RUN_COMPLETED,
+                OutboxEvents.ITEM_ASSIGNED,
+                OutboxEvents.REVIEW_REQUESTED,
+                OutboxEvents.REVIEW_ENDORSED,
+                OutboxEvents.REVIEW_CHANGES_REQUESTED,
+                OutboxEvents.REVIEW_APPROVED);
 
         assertThat(new TreeSet<>(OpenApiContract.load().enumSchemas().get(SCHEMA)))
                 .as("""

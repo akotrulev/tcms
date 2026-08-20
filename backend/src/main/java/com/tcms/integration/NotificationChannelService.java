@@ -74,8 +74,13 @@ public class NotificationChannelService {
      * foundation module rather than a type, and this set is what stands in for the type it has
      * no reason to be.
      */
-    static final Set<String> DELIVERABLE_EVENTS =
-            Set.of(OutboxEvents.RUN_COMPLETED, OutboxEvents.ITEM_ASSIGNED);
+    static final Set<String> DELIVERABLE_EVENTS = Set.of(
+            OutboxEvents.RUN_COMPLETED,
+            OutboxEvents.ITEM_ASSIGNED,
+            OutboxEvents.REVIEW_REQUESTED,
+            OutboxEvents.REVIEW_ENDORSED,
+            OutboxEvents.REVIEW_CHANGES_REQUESTED,
+            OutboxEvents.REVIEW_APPROVED);
 
     private final ProjectService projects;
     private final NotificationChannelRepository channels;
