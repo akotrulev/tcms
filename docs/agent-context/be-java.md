@@ -2,11 +2,144 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-18 (**§242** — **the audit log reader: `GET /projects/{projectId}/audit-events` + `GET /audit-events`, slice 1 of `docs/plans/2026-08-18-unplanned-gaps.md`. No migration, no permission seeded or moved, catalogue still 55.** **THE FINDING THAT COST FOURTEEN OF FIFTEEN ARMS: `(:instant IS NULL OR col >= :instant)` DOES NOT WORK IN HQL.** Hibernate infers a parameter's type from where it is used; in the `IS NULL` position there is nothing to infer from, and for `UUID`/`String` the second occurrence settles it — for an `Instant` it does not, and the parameter binds as `bytea` (`could not determine data type of parameter`, then `cannot cast type bytea to timestamp with time zone` once a `CAST` is added, because the cast applies to an already-mis-bound value). **Use `coalesce(:after, e.occurredAt)`** — typed context, and a null yields `occurredAt >= occurredAt`, true on a `NOT NULL` column. `TestRunRepository.findLiveInProject` is the precedent that misled: it was real and its scope was narrower than it looked. **THE RULE TO CARRY: a cross-cutting table's WRITE side belongs in the foundation module and its READ side cannot.** `tenancy` declares `allowedDependencies = {}`, which is why everything can write an `audit_event` and why nothing there can read one — a reader needs the evaluator, `readGranted` and the §6u name rule, all of which live above it. The reader is in `identity` (`OrgChartService`'s precedent); the entity and its repository stay in `tenancy`. **Both actor columns are set TOGETHER on the ordinary token-driven act** — the person answerable for the credential *and* the credential — so the plan's "exactly one is set" was wrong in the direction that loses information. **Offboarding does NOT null the actor's name** (`peopleById` does not filter on membership status), so the *contract text was corrected to match the code*: a trail that forgets who did it the day they leave has lost the one question it exists to answer. **A refusal is 403 with a body, never an empty page** — `AdminDirectoryService`'s empty-list answer is right for a directory and wrong here, because an empty audit trail reads as "nothing happened" and the reader cannot detect the difference. Sort `(occurredAt DESC, id DESC)` with explicit `countQuery`s; optional filters are `(:v IS NULL OR col = :v)`, not the plan's `CAST`. **Two `READERLESS_BY_DECISION` exemptions left with the reader that ended them and `bulkOperationId` stayed writerless** — the pair moving apart is the fact neither map can report alone. Owed: an index for `(company_id, project_id, occurred_at DESC)`, **no Flyway version taken because `V68`/`V69` are reserved**. Gates: backend **3097 / 0 / 0** (`shanks` was down for most of the session and came back before the end, so everything was actually run).)
+**Last verified:** 2026-08-21 (**§243** — **review-workflow notifications: four `review.*` event names, one port, three payload pairs, four handlers, slice 2 of `docs/plans/2026-08-18-unplanned-gaps.md`. No migration, no permission seeded or moved, catalogue still 55. The head is still `V67`.**) **THE FINDING THAT COST A GREEN MUTATION: A CHECK WRITTEN ABOUT THE TOTAL PASSES STRAIGHT THROUGH A DEFECT IN *WHICH ONE IT WAS*.** `ReviewNotificationTest.theVerdictsAreSeparatelySubscribable` subscribed one channel to `review.changes_requested`, recorded an LGTM and asserted no `review.endorsed` delivery — and **swapping the two arms of the switch in `ReviewService.apply` left it green**, because under the swap the LGTM lands on that very subscription and the delivery totals come out identical with the mapping inverted. What reddens is asserting the **occurrence** in both directions (`occurrences(ENDORSED) == 1` AND `occurrences(CHANGES_REQUESTED) == 0`) before looking at any delivery. §241's rule, one module over. **THE RULE TO CARRY: when neither the producer nor the consumer may read a table, the answer is a port whose implementations live in the modules that own it, indexed by the caller — never a wider `allowedDependencies`.** `project` is `{api, tenancy}` and `integration` is `{api, tenancy, project}`, so a review's `(subjectType, subjectId)` is unresolvable from both ends; `ReviewSubjectDirectory` (interface in `project`, one `@Component` per subject type in `repository`/`execution`, indexed in `integration.ReviewSubjects`) is `PeopleDirectory`'s shape for a fourth question, and `project/package-info.java` prescribes exactly this. **The index is compared against `EnumSet.allOf(ReviewSubjectType.class)`**, so a fourth member added by somebody who cannot see the three implementations reddens at the moment it is added. **`review.endorsed` is NOT `review.approved`** — recording a peer verdict costs `*:review`, signing off costs `*:approve`, and `ReviewService.record` already refuses to write an `APPROVAL` participation; a name that conflated them would put that second, cheaper door on the wire. **`review.approved` covers case, suite AND plan**, because all four ladder call sites converge on `ReviewService.moved`. **All four names are silent where §6g's review workflow is off** — `moved` returns early, so there is nothing to have been asked about. **`ReviewService` is the FIRST FOUNDATION MODULE to record an outbox occurrence**: "who could have written this row" is no longer answerable by module layer, only by grep. **The bulk fan-out ships knowingly**: `CaseBulkService` calls `moved` up to 500 times, so one act produces 500 occurrences and 500 attempts per channel — each true and naming a different subject, so coalescing would be untruthful; **no `bulkOperationId`**, because `moved` is told about none and the field would be writerless. **A THIRD TEST CLASS WAS NEEDED FOR THE WIRING NONE OF THE OTHER THREE SEES**: the payload pin sees the parse, the rendering test *hands the subject in*, and the end-to-end test's webhook is unreachable by design — so a notifier putting a **team** id through the **people** directory, or ignoring the port entirely, was green in all three. `ReviewNotifierTest` (Mockito, no context) captures what reaches `NotificationDispatchService`. **No test in this repository has ever read a rendered notification off the wire** — every delivery posts to `127.0.0.1:1`. Gates: backend **3128 / 0 / 0**.)
+
+**Superseded header below — §242's, kept because §243 verified only the `integration` and `project` halves of it.** (**§242** — **the audit log reader: `GET /projects/{projectId}/audit-events` + `GET /audit-events`, slice 1 of `docs/plans/2026-08-18-unplanned-gaps.md`. No migration, no permission seeded or moved, catalogue still 55.** **THE FINDING THAT COST FOURTEEN OF FIFTEEN ARMS: `(:instant IS NULL OR col >= :instant)` DOES NOT WORK IN HQL.** Hibernate infers a parameter's type from where it is used; in the `IS NULL` position there is nothing to infer from, and for `UUID`/`String` the second occurrence settles it — for an `Instant` it does not, and the parameter binds as `bytea` (`could not determine data type of parameter`, then `cannot cast type bytea to timestamp with time zone` once a `CAST` is added, because the cast applies to an already-mis-bound value). **Use `coalesce(:after, e.occurredAt)`** — typed context, and a null yields `occurredAt >= occurredAt`, true on a `NOT NULL` column. `TestRunRepository.findLiveInProject` is the precedent that misled: it was real and its scope was narrower than it looked. **THE RULE TO CARRY: a cross-cutting table's WRITE side belongs in the foundation module and its READ side cannot.** `tenancy` declares `allowedDependencies = {}`, which is why everything can write an `audit_event` and why nothing there can read one — a reader needs the evaluator, `readGranted` and the §6u name rule, all of which live above it. The reader is in `identity` (`OrgChartService`'s precedent); the entity and its repository stay in `tenancy`. **Both actor columns are set TOGETHER on the ordinary token-driven act** — the person answerable for the credential *and* the credential — so the plan's "exactly one is set" was wrong in the direction that loses information. **Offboarding does NOT null the actor's name** (`peopleById` does not filter on membership status), so the *contract text was corrected to match the code*: a trail that forgets who did it the day they leave has lost the one question it exists to answer. **A refusal is 403 with a body, never an empty page** — `AdminDirectoryService`'s empty-list answer is right for a directory and wrong here, because an empty audit trail reads as "nothing happened" and the reader cannot detect the difference. Sort `(occurredAt DESC, id DESC)` with explicit `countQuery`s; optional filters are `(:v IS NULL OR col = :v)`, not the plan's `CAST`. **Two `READERLESS_BY_DECISION` exemptions left with the reader that ended them and `bulkOperationId` stayed writerless** — the pair moving apart is the fact neither map can report alone. Owed: an index for `(company_id, project_id, occurred_at DESC)`, **no Flyway version taken because `V68`/`V69` are reserved**. Gates: backend **3097 / 0 / 0** (`shanks` was down for most of the session and came back before the end, so everything was actually run).)
 
 **Superseded header below — §241's, kept because §242 verified none of it.** (**§241** — **the org chart: `GET /api/v1/org-chart` + `/org-chart`, executed from `docs/plans/2026-08-15-org-chart-tasks.md`. No migration, no permission seeded or moved, catalogue still 55.** **THE RULE TO CARRY: when a rule is about WHO IS ASKING, a test written about who is NAMED passes straight through it.** The plan's own §8.3 agreement test — called "the single most valuable test in this slice" — pins the SUBJECT's `ProjectAccess.canView`, and removing the disclosure filter leaves both its directions GREEN, because a leaked cell still names somebody who legitimately holds that role. The arm that reddens is a third one asking the evaluator about the CALLER. Measured by breaking it and reverting. The invariant the surface rests on: **the people axis is a company fact, the project axis is the reader's own** — person rows complete, matrix columns exactly `AdminReach.visibleProjects`, and a project the caller cannot open contributing no column, no cell and **no count**. **`EffectiveRoleNames` is now the one display implementation of roles spec §A1.1's replace-don't-union override**, so the count of §A1.1 implementations stays at three; turning replace into union reddens twelve arms across three classes, three of them in `ProjectEndpointTest`, which is the evidence it is genuinely shared. **`ProjectAccess` lost its two role-name methods for one `effectiveProjectRoleNames(userId, projectIds)`** — the plan wanted the helper called from `ProjectService` and that does not build: `project`'s declaration is `{api, tenancy}`, its own header forbids widening it, and `com.tcms.api`'s charter refuses shared helpers. **If `project` must share logic with `identity`, the port answers a further question — never a wider list and never `api`.** The two role-name queries take a `Collection<UUID>` and each grant path is its own `UNION ALL` arm, because a team grant's row carries `user_id = NULL` and nothing on it says whose cell it is — **and that same join is what makes `via` and `teamId` answerable at all**. `openapi.yaml`'s `CurrentUser.teams` claimed `GET /teams` is gated on `company:teams`; it is `company:read`, corrected in place, and **`tierClaims.test.ts` has no "gated on `<key>`" shape**, which is an open instrument gap. Gates: backend **3082 / 0 / 0**.)
 
 **Amended 2026-08-17 — `V67`, and the head is `V67`.** ~~"No migration"~~ is still true of the org-chart slice and **no longer true of the feature's record**: the org chart's own T5 query-plan lane ran afterwards and found a seq scan on the **authorization hot path**, which is now `V67__team_membership_answers_which_teams_a_person_is_in.sql`. See §241-A below before adding any index. Gates after `V67`: backend **3082 / 0 / 0**, unchanged — **an index adds no test, and that is the point of the `§241 IX-1` gap row.**
+
+---
+
+## §243 — THE REVIEW WORKFLOW NOTIFIES, AND THE SUBJECT IT NAMES NEEDED A FOURTH PORT
+
+**Read this before adding an outbox event name, before touching `com.tcms.project.Review*`, and
+before writing a test that counts anything.**
+
+> **Gated.** `./gradlew build` — **3128 tests, BUILD SUCCESSFUL** on `shanks`.
+
+### Eight event names now, and four of them come from a foundation module
+
+`OutboxEvents` carries `review.requested`, `review.endorsed`, `review.changes_requested` and
+`review.approved` beside the four that existed. All four are recorded by
+`project.ReviewService`, inside the transaction that writes the row each is about.
+
+**That is the first time a foundation module has recorded an occurrence**, and it costs one
+property: "who could have written this row" was previously answerable by module layer, because only
+a feature module produced. It is now answerable only by grep — which is the property
+`OutboxHandler#eventType()` asks for and the reason the names are constants, so nothing is broken.
+Note it before a fifth.
+
+| Name | Site | Fires when |
+|---|---|---|
+| `review.requested` | `ReviewService.addAssignee` | `store()` returned **true** — a re-ask writes no row and records nothing |
+| `review.endorsed` | `ReviewService.apply` | verdict is `LGTM` |
+| `review.changes_requested` | `ReviewService.apply` | verdict is `CHANGES_REQUESTED` |
+| `review.approved` | `ReviewService.moved` | the `APPROVED` arm only, and only when a review was open |
+
+**None of them fires in a project with §6g's review workflow off**, because no review is opened and
+`moved` returns early. That is the design, not a gap: every one of the four is a fact about a
+*review*.
+
+### `review.endorsed` is not `review.approved`, and the distinction is a permission
+
+Recording a peer verdict costs `*:review`; signing off costs `*:approve`. `ReviewService.record`'s
+header already refuses to write an `APPROVAL` participation from the verdict endpoint for exactly
+that reason. **A single name for both would put that second, cheaper door on the wire**, where a
+subscriber acts on it. `ReviewRenderingTest.theEndorsementIsNotASignOff` asserts the rendered title
+contains no form of "approv".
+
+Conversely `review.approved` is **one name for all three subject types**: `CaseStatusService`,
+`SuiteStatusService`, `CaseBulkService` and `PlanStatusService` all converge on `moved`, and the
+payload says which artifact it was.
+
+### THE FOURTH PORT, AND THE RULE THAT PRODUCED IT
+
+A `Review` names its subject as `(subjectType, subjectId)`. `ReviewView`'s header is right that the
+**API** should not resolve that — the client already has the artifact open. A **notification**
+reverses the reasoning exactly: its reader is in a chat room with nothing open, and a message that
+cannot lead to the artifact has no content.
+
+`project` declares `{api, tenancy}` and `integration` declares `{api, tenancy, project}`, so
+`test_case`, `suite` and `test_plan` are out of reach from **both** ends.
+
+> **The generalisable rule: when neither the producer nor the consumer may read the table, the
+> answer is a port whose implementations live in the modules that own it, indexed by the caller —
+> never a wider `allowedDependencies`.**
+
+- `project.ReviewSubjectDirectory` — `subjectType()`, `describe(projectId, subjectId)`, and a
+  nested `Subject(key, title)`.
+- `repository.CaseReviewSubjects`, `repository.SuiteReviewSubjects`, `execution.PlanReviewSubjects`
+  — one `@Component` each, `@Transactional(readOnly = true)` because the caller is the dispatcher's
+  thread, resolving through each module's `findLiveInProject` so a deleted artifact yields empty.
+- `integration.ReviewSubjects` — builds an `EnumMap` at construction and throws there on a clash,
+  which is `NotificationDispatchService#index`'s arrangement.
+
+**`ReviewSubjectDirectoryTest.theIndexIsTotal` compares the claimed types against
+`EnumSet.allOf(ReviewSubjectType.class)`.** A fourth member is added in `project`, which cannot see
+any of the three implementations; nothing about that edit fails to compile. This is what reddens.
+Verified by making `PlanReviewSubjects` claim `CASE` — both arms red.
+
+All three subject tables have a `key` (`updatable = false`) and their own words, so `Subject` is
+never partial. **`TestPlan.getKey()`/`getName()` are package-private**, which is why
+`PlanReviewSubjects` lives in `execution` rather than anywhere more convenient.
+
+### THE TEST FINDING: COUNTING DELIVERIES CANNOT SEE WHICH VERDICT IT WAS
+
+`ReviewNotificationTest.theVerdictsAreSeparatelySubscribable` subscribed one channel to
+`review.changes_requested`, recorded an LGTM, asserted no `review.endorsed` delivery, then recorded
+a changes-requested and asserted one delivery of it.
+
+**Swapping the two arms of the switch in `ReviewService.apply` left that green.** Under the swap the
+LGTM records `changes_requested` — the very name the channel subscribed to — so one delivery lands,
+the first assertion is true for the wrong reason, and the second finds a delivery from the wrong
+verdict. Identical totals, inverted mapping.
+
+The arms that redden assert the **occurrence**, in both directions, before any delivery is
+considered. §241's rule in a new place: **a check written about the total passes straight through a
+defect in which one it was.**
+
+### THREE TESTS PER EVENT PAIR IS STILL NOT ENOUGH — THE FOURTH IS THE WIRING
+
+| Class | Sees | Blind to |
+|---|---|---|
+| `project.ReviewEventPayloadTest` | what the producer serializes | whether anybody reads it |
+| `integration.ReviewPayloadTest` | what the consumer requires | whether anybody produces it |
+| `integration.ReviewNotificationTest` | real rows, real dispatcher | **the rendered message** — its webhook is `127.0.0.1:1` by design |
+| `integration.ReviewRenderingTest` | the copy | it **hands the subject in** |
+
+So a notifier that resolved a **team** id through the **people** directory, or ignored
+`ReviewSubjects` and rendered a null subject, was green in all four. `ReviewNotifierTest` (Mockito,
+no Spring context) captures what reaches `NotificationDispatchService`; both mutations redden it.
+
+**Still open: no test in this repository has ever read a rendered notification off the wire.**
+Every delivery in the suite posts to a refusing port. Row `§243 RN-3` in the browser queue records
+what it would take.
+
+### The bulk fan-out is shipped knowingly and is not a defect to "fix" quietly
+
+`CaseBulkService` moves up to 500 cases per operation and calls `moved` for each, so one act
+produces up to 500 `review.approved` occurrences and 500 attempts per subscribed channel. Each is
+true and names a different subject, so coalescing would be untruthful in exactly the way
+`Outbox#recordCoalesced` describes. Subscription is opt-in and the SPA's help text states the
+number. **The answer is a subscriber-side digest and it is not built.**
+
+**Do not add a `bulkOperationId` to the payload to "prepare" for it** — `moved` is given one by none
+of its four call sites, so it would be null on every row the product can produce.
+
+### Smaller facts
+
+- **`store()` returns `boolean`** so the idempotent re-ask records nothing. §79's rule about
+  `assignedBy` is what makes the re-ask a no-op in the first place.
+- **`ReviewVerdictEvent` is one record for two event names and carries no verdict field.** The name
+  is the verdict; a field beside it is the same fact twice and the payload's copy is the one that
+  can disagree.
+- **`ReviewSubjectType` crosses as an enum on both halves of the pair.** Plan §3 forbids sharing the
+  *payload* class; a vocabulary `integration` already declares a dependency on is not that, and it
+  is the key the index is built on.
+- **`ProjectSettings`' mutators are package-private to `project`**, so a test outside it configures
+  review through `ProjectSettingsService` — the administrator's own path.
 
 ---
 

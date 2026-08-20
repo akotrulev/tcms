@@ -3106,3 +3106,28 @@ an empty trail, and `LG-9` is the only row that wants it that way.
 | `§242 LG-8` | As that **Test Engineer**, paste `/projects/<id>/audit` into the address bar | The page loads and says, in a sentence, that reading the trail is part of administering the project and who to ask. **Not a 404, not a redirect, and not an empty grid.** Then check the network tab: **no `audit-events` request was made at all** — the screen knows the answer and does not ask the server to refuse it. |
 | `§242 LG-9` | On a **freshly provisioned project nobody has touched**, open its audit trail | **"Nothing recorded yet"** with no Clear-filters control. The row that matters here is the contrast with `LG-8`: an empty trail and a refused trail must never look the same, because an empty audit trail reads as *"nothing happened"* and a reader has no way to tell that apart from *"you were not allowed to look"*. |
 | `§242 LG-10` | With more than one page of acts, walk to page 2 and back, then change the page size | No row appears on both pages and none is missing between them, and the pager's total is the **count of the filter** rather than the page length. The sort key is `(occurredAt DESC, id DESC)` and the secondary half is what this row is about — acts written in one transaction share a timestamp to the microsecond, which `A1`'s bulk operations produce for free. |
+
+---
+
+## §243 amendment (2026-08-21) — review-workflow notifications
+
+**None run** (§65). This slice's frontend surface is **two label maps and nothing else** — the
+channel dialog's checkbox list is derived from `notificationEventTypeLabels`
+(`NOTIFICATION_EVENT_TYPES`, `frontend/src/lib/labels.ts`), so four new members rendered four new
+checkboxes with no component change. That is the thing worth confirming with eyes: a derived list
+is only as good as the derivation.
+
+> **The fixture this lane must author.** Every row below needs a project with §6g's **review
+> workflow switched on** for at least one artifact type (Project settings → Review), which no
+> existing lane creates. `RN-3` additionally needs a **reachable webhook** — an operator-run
+> receiver on the lab host — and is marked as **not drivable with the current fixture** rather than
+> skipped, because a Slack workspace is not something this pass can conjure.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§243 RN-1` | Open **Project settings → Notifications**, add a channel, and read the event list | **Six** checkboxes, not two: Run completed, Work assigned to somebody, Review requested, Peer said it looks good, Peer asked for changes, Review approved. Each carries its own help text under it. The list is derived, so a missing entry here means a label map was edited and the contract was not — or the reverse. |
+| `§243 RN-2` | Read the help text under **Review approved**, and under **Peer said it looks good** | The first warns that a bulk approval sends **one message per artifact, up to 500**. The second says explicitly that LGTM **is not the sign-off**. Both sentences are the product's only warning about behaviour a subscriber cannot discover before it happens to them; if either has gone, that is a regression in the copy and not a cosmetic one. |
+| `§243 RN-3` | ⚠️ **NOT DRIVABLE with the current fixture — recorded rather than skipped.** Subscribe a channel to `review.requested`, ask a colleague for a review, and read the message that arrives | **Needs a reachable receiver.** Every automated test in this slice posts to `127.0.0.1:1`, which refuses instantly, so **no test has ever read a rendered review message end to end** — the renderings are asserted as objects and the deliveries as rows. What to look for when a receiver exists: the artifact named as `PLAN-3 — Release 2.4`, never a UUID, and the reviewer named in the title. |
+| `§243 RN-4` | Subscribe a channel to `review.approved`, then set a **failure threshold** on it | The threshold control is **shown and inert**, as it is for `work.item_assigned`. Serving it per event type is deliberate (`NotificationSubscription.minFailures`) — hiding it would put a rule the server owns into the client. Confirm the help text says so rather than leaving a control that looks broken. |
+| `§243 RN-5` | Save a channel subscribed to all four `review.*` events, reload the page, and reopen it | All four come back checked. The round-trip is what proves the generated union and the server's `DELIVERABLE_EVENTS` agree in the one place a user can reach — `NotificationEventTypeTest` asserts that against the documents on disk, which is not the same as against a running server. |
+| `§243 RN-6` | Open the **delivery log** for a channel that has fired | Review deliveries render with their event in words. `notificationEventLabel` has a fallback, so a name the vocabulary later drops still reads — check that a `review.*` row does **not** fall back to the humanized wire name, which would mean the label map and the log disagree. |
