@@ -3,8 +3,9 @@
  *
  * ## The population, and why it is a guard rather than a repair
  *
- * `CLAUDE.md` and `README.md` each print §A3's matrix, and each says in its own words that the spec
- * is authoritative and the copy is the bug. Nothing compared either of them to anything —
+ * `docs/specs/permission-matrix-summary.md` and `README.md` each print §A3's matrix, and each says
+ * in its own words that the spec is authoritative and the copy is the bug. Nothing compared either
+ * of them to anything —
  * §214 said so in the file it was closing, and named this as the nearest standing candidate.
  * Measured first: **the population is zero.** Both copies agree with the spec on all
  * 55 keys and every cell, qualifier text included. So this is a guard in §201's and
@@ -13,7 +14,7 @@
  *
  * What the emptiness does not mean is that the copies are cheap to keep right. Three migrations
  * have moved grants since the copies were written (`V40`, `V51`, `V52`), each of them edited both
- * copies by hand, and `CLAUDE.md`'s own header calls a moved grant *"the one this table gets wrong
+ * copies by hand, and the matrix file's own header calls a moved grant *"the one this table gets wrong
  * most easily"*. A copy that survives three edits by luck is still unchecked.
  *
  * ## Why here and not in `SeedDataTest`
@@ -27,7 +28,7 @@
  * spec, beside `packages/client/src/test/tierClaims.test.ts` and the MCP surface `agentKeys()`
  * derives, in the job that runs on every push.
  *
- * `CLAUDE.md` and `README.md` are not in `corpus.ts`'s `CORPUS` and are deliberately not added. That
+ * The matrix file and `README.md` are not in `corpus.ts`'s `CORPUS` and are deliberately not added. That
  * list is the *prose* four rules sweep; this reads two named documents for one table each, and a
  * rule that walked every markdown file looking for a permission matrix would find the handoff
  * narrative's quotations of one.
@@ -43,7 +44,7 @@
  * The copies are laid out differently from the spec and from each other, and none of that is
  * compared. §A3 groups by subject area under `#### ` headings with abbreviated columns
  * (`IA`/`CA`/…); the copies group by how widely a permission is held, spell the roles out, and
- * print them in the opposite order; `CLAUDE.md` packs several keys into one row with `·` and
+ * print them in the opposite order; the matrix file packs several keys into one row with `·` and
  * writes the `SYSTEM` scope as a sentence rather than a table. All three are the same claim in
  * different shapes, and the shape is the copy's business — what it may not do is disagree.
  */
@@ -69,10 +70,10 @@ const COPY_COLUMNS: Record<string, SpecRole> = {
 /**
  * A row a copy writes as a sentence instead of a table.
  *
- * One instance: `CLAUDE.md` prints `SYSTEM` scope as a single line, because seven keys held by one
- * role is a list and a three-column table of ✓ would be worse to read. It is still a copy of the
- * table §A3 prints, and leaving it out would leave seven of the 55 keys uncompared in the corpus
- * an agent meets first — so the sentence is declared here rather than excused.
+ * One instance: the matrix file prints `SYSTEM` scope as a single line, because seven keys held by
+ * one role is a list and a three-column table of ✓ would be worse to read. It is still a copy of
+ * the table §A3 prints, and leaving it out would leave seven of the 55 keys uncompared — so the
+ * sentence is declared here rather than excused.
  */
 interface ProseRow {
   find: RegExp;
@@ -88,8 +89,8 @@ interface Copy {
 
 const COPIES: Copy[] = [
   {
-    path: 'CLAUDE.md',
-    heading: /^(#{1,6}) The permission matrix\s*$/,
+    path: 'docs/specs/permission-matrix-summary.md',
+    heading: /^(#{1,6}) Permission matrix — convenience copy\s*$/,
     prose: [{ find: /`SYSTEM` scope, Instance Admin only:([^.]*)\./, roles: ['IA'] }],
   },
   {
