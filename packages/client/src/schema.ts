@@ -5653,6 +5653,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/run-schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The project's run schedules
+         * @description **Standing requests for a run** (`V68`). A schedule stores what a run should be *asked*
+         *     for — the same `{planId, caseIds, suiteIds, tags}` document `TestRun.scopeRequest`
+         *     records — plus when to ask, and a poller re-asks it.
+         *
+         *     Ordered by name. Visible to **anybody who can see the project**, the same gate the run
+         *     list uses; the three writes below cost `run:create`, because a schedule is delegated run
+         *     creation and a caller who may create a run now may create one every Monday. **No new
+         *     permission was added for this** and the catalogue is unchanged at 55 keys.
+         *
+         *     **The runs a schedule creates are ordinary runs.** They carry `source: SCHEDULED`, a
+         *     **null `createdBy`**, and an audit row with no actor at all — because at 03:00 nobody
+         *     performed the act. The schedule's owner is the *authority* the create is gated as,
+         *     re-checked on every fire, which is a different question with a different column.
+         */
+        get: operations["listRunSchedules"];
+        put?: never;
+        /**
+         * Create a run schedule
+         * @description `run:create` — see the list above for why no key was invented for this.
+         *
+         *     **The cron expression and the zone are parsed here**, so an expression this server
+         *     cannot read is a `400` on the field rather than a stored schedule that silently never
+         *     fires. That is the failure this whole operation is shaped around: a schedule which does
+         *     nothing looks exactly like a schedule whose slot has not come round yet.
+         *
+         *     **A `caseId`, `suiteId` or `planId` naming nothing live is deliberately NOT a field
+         *     error here**, which is the one place this diverges from `POST /runs`. A schedule is
+         *     evaluated over months and a suite it names may be deleted next quarter; refusing the
+         *     *edit* then would make the schedule uneditable because of something the editor did not
+         *     do. What is refused is a scope with **no arm at all**, since that could only ever create
+         *     empty runs. An arm that resolves to nothing on a given night is recorded as
+         *     `lastFireError` instead, which is the field that exists for exactly this.
+         */
+        post: operations["createRunSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/run-schedules/{scheduleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                scheduleId: string;
+            };
+            cookie?: never;
+        };
+        /** One run schedule */
+        get: operations["getRunSchedule"];
+        /**
+         * Replace a run schedule
+         * @description `run:create`. A **total statement** of the schedule rather than a patch of it — an
+         *     omitted `assigneeId` or `configurationId` **clears** it, on the same terms as the rest
+         *     of this API's writes.
+         *
+         *     `nextFireAt` is recomputed from the saved expression and zone, so correcting a cadence
+         *     takes effect on the next tick rather than at the old schedule's next slot.
+         *
+         *     The `409` is a genuine write race: `run_schedule` carries a real `@Version`, unlike
+         *     `test_run`, because a schedule **is** edited from a form somebody read — two people
+         *     moving a cadence from screens opened minutes apart is a discarded edit, which is the
+         *     case a counter exists for.
+         */
+        put: operations["updateRunSchedule"];
+        post?: never;
+        /**
+         * Delete a run schedule
+         * @description `run:create`. Deletes the standing request **only**. The runs it created are ordinary
+         *     runs and are untouched — a schedule records no work, so there is nothing here to
+         *     preserve and no soft delete to keep it in. The audit trail keeps the act.
+         */
+        delete: operations["deleteRunSchedule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/doc-pages": {
         parameters: {
             query?: never;
@@ -11644,6 +11735,127 @@ export interface components {
             suiteIds: string[];
             tags: string[];
         };
+        /**
+         * @description A standing request for a run — what to ask for, and when (`V68`).
+         *
+         *     A **total statement** on both verbs: `POST` creates it and `PUT` replaces it, and on the
+         *     `PUT` an omitted nullable field clears it rather than leaving it alone.
+         */
+        RunScheduleInput: {
+            /**
+             * @description The schedule's label, and the **prefix of every run it creates** — a run is named
+             *     `"<name> — <date>"` in the schedule's own zone, so a year of them sorts and reads as
+             *     one series. One field rather than two, because a separate run-name template is a
+             *     second thing to keep in step with the first for no question it answers.
+             */
+            name: string;
+            /**
+             * @description A **six-field Spring cron expression** — `second minute hour day-of-month month
+             *     day-of-week`, e.g. `0 0 7 * * MON-FRI`. Five fields is the other dialect and is
+             *     refused, because accepting it would shift every field by one and fire at a time
+             *     nobody asked for.
+             *
+             *     Parsed and validated on write: an expression this server cannot read is a `400`,
+             *     never a stored schedule that silently never fires.
+             */
+            cronExpression: string;
+            /**
+             * @description An IANA zone id, e.g. `Europe/Sofia`. Required rather than defaulted, because
+             *     "every weekday at 07:00" is not a time without one — the arithmetic is done in this
+             *     zone, so a run lands at 07:00 local across a DST boundary rather than drifting an
+             *     hour for half the year with nothing on screen to explain it.
+             */
+            zoneId: string;
+            /**
+             * @description What to ask for, in exactly the four arms `POST /runs` takes and
+             *     `TestRun.scopeRequest` records — **the same document, not a second encoding of it**,
+             *     written by the same code and read by the same code.
+             *
+             *     **It is re-resolved on every fire.** A `tags` arm means the cases carrying that tag
+             *     *that night*, which is the point of a schedule. Each run it creates is still
+             *     materialised once and pinned to the case versions live at its own creation, so
+             *     materialisation-once is untouched — it is a property of each run.
+             *
+             *     At least one arm must be present. A schedule that asked for nothing could only ever
+             *     create empty runs, and an empty run renders as though it had finished.
+             */
+            scope: components["schemas"]["RunScopeRequest"];
+            /**
+             * Format: uuid
+             * @description Omitted means the project's default, exactly as on `POST /runs`.
+             */
+            configurationId: string | null;
+            /**
+             * Format: uuid
+             * @description Everybody on the created run's checklist. Optional, and a schedule with nobody on it
+             *     is accepted — but a nightly run nobody is assigned to is a run nobody looks at, which
+             *     is what `POST /runs/{runId}/executions/bulk` is for afterwards.
+             */
+            assigneeId: string | null;
+            /**
+             * @description A disabled schedule keeps its next fire time and is simply not asked. Pausing a
+             *     cadence and deleting it are different acts, and only one of them is recoverable.
+             */
+            enabled: boolean;
+        };
+        RunSchedule: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            name: string;
+            cronExpression: string;
+            zoneId: string;
+            scope: components["schemas"]["RunScopeRequest"];
+            /** Format: uuid */
+            configurationId: string | null;
+            /** Format: uuid */
+            assigneeId: string | null;
+            assigneeName: string | null;
+            enabled: boolean;
+            /**
+             * Format: date-time
+             * @description When the poller will next ask. **`null` means the expression yields nothing
+             *     further** — a real answer rather than an error, and the screen says "will not fire
+             *     again" rather than leaving the cell blank, which reads as "loading" or "soon".
+             *
+             *     Recomputed **from the moment of firing**, never from a missed slot: there is no
+             *     catch-up, by decision. A deployment down for a day does not produce a day of
+             *     backdated regression runs on restart, each materialised against today's case
+             *     versions and none of them meaning what its timestamp says.
+             */
+            nextFireAt: string | null;
+            /**
+             * Format: date-time
+             * @description When a fire last produced a run. The honest record of a gap: with no catch-up, this
+             *     is what a reader compares against the cadence to see what did not happen.
+             */
+            lastFiredAt: string | null;
+            /** Format: uuid */
+            lastRunId: string | null;
+            lastRunKey: string | null;
+            /**
+             * @description Why the last attempt produced no run — the owner no longer holds `run:create`, the
+             *     project was archived, the resolved scope was empty, the approval gate refused.
+             *     `null` after an attempt that made a run.
+             *
+             *     **This field is the feature's honesty.** A schedule that stops silently is the
+             *     failure mode of scheduling anything, and there is no other place a reader could find
+             *     out.
+             */
+            lastFireError: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: uuid
+             * @description The **authority**, not the actor. Every fire re-evaluates this person's `run:create`
+             *     grant, so a schedule outlives neither the grant nor the account — and the run it
+             *     creates carries a **null `createdBy`** and an audit row with no actor, because
+             *     nobody performed the act.
+             */
+            createdBy: string;
+            createdByName: string | null;
+        };
         TestRun: {
             /** Format: uuid */
             id: string;
@@ -11675,8 +11887,15 @@ export interface components {
              * @example release/4.3
              */
             branch: string | null;
-            /** @enum {string} */
-            source: "MANUAL" | "INGESTED";
+            /**
+             * @description The **door** the request came through, never the caller's role. `MANUAL` — a person,
+             *     or an Automation Service token through the public endpoint. `INGESTED` — a posted
+             *     report. `SCHEDULED` — a `run_schedule` fired (`V68`), which is the one value whose
+             *     run has **no `createdBy` and a null actor on its audit row**, because nobody
+             *     performed the act.
+             * @enum {string}
+             */
+            source: "MANUAL" | "INGESTED" | "SCHEDULED";
             /** Format: date-time */
             startedAt: string | null;
             /** Format: date-time */
@@ -12217,8 +12436,15 @@ export interface components {
             configuration: string;
             executedBy: components["schemas"]["UserRef"] | null;
             executedByToken?: string | null;
-            /** @enum {string} */
-            source: "MANUAL" | "INGESTED";
+            /**
+             * @description The **door** the request came through, never the caller's role. `MANUAL` — a person,
+             *     or an Automation Service token through the public endpoint. `INGESTED` — a posted
+             *     report. `SCHEDULED` — a `run_schedule` fired (`V68`), which is the one value whose
+             *     run has **no `createdBy` and a null actor on its audit row**, because nobody
+             *     performed the act.
+             * @enum {string}
+             */
+            source: "MANUAL" | "INGESTED" | "SCHEDULED";
             /** Format: date-time */
             executedAt: string;
             durationMs?: number | null;
@@ -15542,6 +15768,164 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    listRunSchedules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The schedules, by name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSchedule"][];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createRunSchedule: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                 *     already succeeded answers **200** with the resource that intent created, instead of creating
+                 *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                 *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
+                 *
+                 *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                 *     it across retries. A key generated per attempt is the mistake that makes the header look
+                 *     right and do nothing.
+                 *
+                 *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                 *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunScheduleInput"];
+            };
+        };
+        responses: {
+            /** @description Replayed — this Idempotency-Key already created a schedule. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSchedule"];
+                };
+            };
+            /** @description Created. */
+            201: {
+                headers: {
+                    /** @description The new schedule's canonical URL. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSchedule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getRunSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                scheduleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The schedule. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSchedule"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateRunSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                scheduleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunScheduleInput"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSchedule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteRunSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                scheduleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     attachDocPageFile: {
