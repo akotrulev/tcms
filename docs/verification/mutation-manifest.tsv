@@ -536,14 +536,14 @@ CE-M3	§161	?	-	-		queued
 §200 PR-5	§200	?	-	-		queued
 §207 DQ-1	§207	CaseDeleteEndpointTest	-	-		queued
 §207 DQ-2	§207	EngineerToTest	-	-		queued
-§207 DQ-3	§207	CaseDeleteEndpointTest	W1	-		queued
+§207 DQ-3	§207	com.tcms.schema.SeedDataTest,com.tcms.repository.CaseDeleteEndpointTest	W1	-	backend/src/main/resources/db/migration/V68__runs_can_be_scheduled.sql	RUN:MORE
 §208 DM-1	§208	CaseBulkEndpointTest	-	-		queued
-§208 DM-2	§208	SuiteWriteEndpointTest	W1	-		queued
+§208 DM-2	§208	com.tcms.repository.LifecycleLadderTest,com.tcms.repository.SuiteWriteEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/LifecycleLadder.java	RUN:MORE
 §208 DM-3	§208	CaseBulkEndpointTest	-	-		queued
 §208 DM-4	§208	CaseBulkEndpointTest	-	-		queued
-§209 AM-1	§209	?	W1	-		queued
+§209 AM-1	§209	com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/ArtifactWriteService.java	RUN:MATCH
 §209 AM-2	§209	?	-	-		queued
-§209 AM-3	§209	ArtifactCirculationTest	W1	-		queued
+§209 AM-3	§209	com.tcms.documentation.ArtifactCirculationTest,com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/Artifact.java	RUN:MORE
 §209 AM-4	§209	ArtifactCirculationTest	-	-		queued
 §209 AM-5	§209	?	-	-		queued
 §210 DQ-1	§209	SeedDataTest	-	-		queued
@@ -552,18 +552,18 @@ CE-M3	§161	?	-	-		queued
 §210 DQ-4	§209	SeedDataTest	-	-		queued
 §210 DQ-5	§209	?	-	-		queued
 §210 DQ-6	§209	PermissionEvaluatorTest	-	-		queued
-§217 FD-1	§217	RlsIsolationTest	W1	-		queued
+§217 FD-1	§217	com.tcms.auth.SsoFlowIntegrationTest	W1	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:MORE
 §217 FD-2	§217	SchemaConventionTest	-	-		queued
 §217 FD-3	§217	SchemaConventionTest	-	-		queued
 §217 FD-4	§217	SchemaConventionTest	-	-		queued
 §217 FD-5	§217	SchemaConventionTest	-	-		queued
 §217 FD-6	§217	SchemaConventionTest	-	-		queued
-§218 NC-1	§218 phase 2	NotificationChannelTest	W1	-		queued
+§218 NC-1	§218 phase 2	com.tcms.integration.NotificationChannelTest	W1	-	backend/src/main/java/com/tcms/integration/NotificationChannelService.java	RUN:MORE
 §218 NC-2	§218 phase 2	?	-	-		queued
 §218 NC-3	§218 phase 2	NotificationChannelTest	-	-		queued
 §218 NC-4	§218 phase 2	NotificationChannelTest	-	-		queued
 §218 NC-6	§218 phase 2	?	-	-		queued
-§218 NC-7	§218 phase 2	NotificationDeliveryTest	W1	-		queued
+§218 NC-7	§218 phase 2	com.tcms.integration.NotificationDeliveryTest	W1	-	backend/src/main/java/com/tcms/integration/NotificationLedger.java	RUN:ZERO-UNEXPECTED
 §218 NC-8	§218 phase 2	NotificationRenderingTest	-	-		queued
 §218 NC-9	§218 phase 2	NotificationDeliveryTest	-	-		queued
 §218 NC-10	§218 phase 2	NotificationDeliveryTest	-	-		queued
