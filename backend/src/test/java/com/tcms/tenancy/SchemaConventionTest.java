@@ -300,7 +300,12 @@ class SchemaConventionTest extends IntegrationTestBase {
                 // twelfth entry on ERD §0.1's exception list, and instanceLevelTablesAreNotRlsProtected
                 // below asserts it from the other side. V53's sso_login_attempt is the thirteenth
                 // and is absent for the same reason.
-                .isEqualTo(70);
+                //
+                // 71 since V68 (§247) — run_schedule. A standing request for a run is company-owned
+                // like every other row a project holds, so it is NOT a fourteenth exception: it
+                // takes company_id NOT NULL, FORCE ROW LEVEL SECURITY and the predicate above, and
+                // this number moving one is what says so.
+                .isEqualTo(71);
     }
 
     @Test
