@@ -3034,8 +3034,11 @@ area A took `§244`.
 
 ⚠️ **Unrun, and the code behind them is completely ungated.** Area C was built under the batch-3
 no-gates directive: no `./gradlew build`, no `./gradlew test`, and not one targeted class.
-`CronScheduleTest` (8 arms), `RunScheduleEndpointTest` (25) and `RunScheduleFiringTest` (14) exist
-and **have never executed**, and neither have the two arms added to `AsyncCompanyContextTest`. A row
+`CronScheduleTest` (7 arms), `RunScheduleEndpointTest` (26) and `RunScheduleFiringTest` (15) exist
+and **have never executed**, and neither have the two arms added to `AsyncCompanyContextTest`.
+The counts are `grep -c '@Test'` against the files rather than a tally kept by hand, which is the
+one thing this repository has got wrong three times inside the check written to end hand-kept
+tallies. A row
 below saying "Red — arm X" is a claim about what that arm *asserts*, not a measurement of it
 failing.
 

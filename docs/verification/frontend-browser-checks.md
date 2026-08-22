@@ -3201,8 +3201,8 @@ different account. **No new fixture is asked for**, with one exception named in 
 
 ⚠️ **Unrun, and the code behind them is completely ungated.** Area C was built under the batch-3
 no-gates directive: no `npm run test:run`, no `npm run build`, no `npm run lint`, and no backend
-gate either. The eleven `RunSchedulePage.test.tsx` arms exist and **have never executed**. Read
-every row below as resting on nothing but the code.
+gate either. The eleven `RunSchedulePage.test.tsx` arms exist and **have never executed** — eleven
+counted off the file, not off memory. Read every row below as resting on nothing but the code.
 
 Ids are `§247 SK-*`; `SK` was grepped against every row id in this file and in
 `backend-mutation-checks.md` before minting. **This section also supersedes `§242 LG-5` in place**
