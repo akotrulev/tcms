@@ -209,14 +209,22 @@ public class TestExecution {
      * an amendment by a person must not leave the credential that posted the original result
      * standing beside the new author's name, which would read as a verdict two actors made
      * together.
+     *
+     * <p>{@code durationMs} is assigned <em>unconditionally</em>, and that is the whole reason it
+     * travels through here rather than through a setter of its own. It is part of the verdict, so
+     * an amendment that does not carry one has stated that this recording was not timed — a
+     * duration left standing from an earlier attempt would describe a different run of the test,
+     * exactly as a stale {@link #comment} would. A null-guard here would make the field
+     * un-clearable; a truthiness guard would additionally lose a genuine zero.
      */
-    void record(UUID statusId, UUID actorUserId, String comment, Instant now) {
+    void record(UUID statusId, UUID actorUserId, String comment, Long durationMs, Instant now) {
         this.statusId = statusId;
         this.executedBy = actorUserId;
         var token = com.tcms.tenancy.TokenContext.currentOrNull();
         this.executedByToken = token == null ? null : token.tokenId();
         this.executedAt = now;
         this.comment = comment;
+        this.durationMs = durationMs;
         this.updatedAt = now;
     }
 

@@ -322,7 +322,7 @@ public class ExecutionService {
                 ? null
                 : vocabulary.get(execution.getStatusId());
 
-        execution.record(request.statusId(), userId, request.comment(), now);
+        execution.record(request.statusId(), userId, request.comment(), request.durationMs(), now);
         // saveAndFlush, not save: @Version is bumped at flush, and the response carries lockVersion
         // for the client to send back as the next If-Match. Deferring the flush to the end of the
         // transaction would answer with the version the caller already had — so their very next save
@@ -414,6 +414,11 @@ public class ExecutionService {
         List<StepFault> faults = stepFaults(request, vocabulary, pin);
         if (!faults.isEmpty()) {
             errors.put("stepResults", faults.stream().map(StepFault::message).toList());
+        }
+        // After the step faults rather than instead of them: a bad duration is one more thing this
+        // payload got wrong, and reporting it alone would send a tester back for a second round.
+        if (request.durationMs() != null && request.durationMs() < 0) {
+            errors.put("durationMs", List.of("A duration cannot be negative."));
         }
         return errors;
     }

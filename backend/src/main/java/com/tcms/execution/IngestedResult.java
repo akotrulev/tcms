@@ -20,11 +20,16 @@ import java.util.Locale;
  *                   and the parsers drop such entries rather than carry them to a lookup that
  *                   cannot succeed.
  * @param outcome    what the runner said, as one of four values (see {@link IngestedOutcome}).
- * @param durationMs how long it took, or null when the dialect did not say. <strong>Not written
- *                   anywhere yet</strong> — {@code test_execution} has no duration column and adding
- *                   one is a schema decision with a reporting consumer behind it, not a side effect
- *                   of a parser. Carried because the parse is the only place it is available, and a
- *                   second pass over the report to recover it later is worse than an unused field.
+ * @param durationMs how long it took, or null when the dialect did not say. <del>Not written
+ *                   anywhere yet — {@code test_execution} has no duration column and adding one is
+ *                   a schema decision with a reporting consumer behind it, not a side effect of a
+ *                   parser.</del> → <strong>superseded 2026-08-22 (§244).</strong> The premise was
+ *                   wrong on its first clause and right on its second: {@code duration_ms} was
+ *                   there all along ({@code V1__initial_schema.sql}), read in five places and
+ *                   summed into the run summary — and no writer ever filled it, so every one of
+ *                   those reads answered null. {@code IngestionService#write} now passes this
+ *                   value to {@code TestExecution#record}. Carrying it unused was the right call:
+ *                   the parse is the only place it is available.
  * @param message    the failure text, stack trace or skip reason, or null. Becomes the execution's
  *                   comment, which is the one place an ingested result can say <em>why</em>.
  */

@@ -274,6 +274,26 @@ class IngestionEndpointTest extends IntegrationTestBase {
             assertThat(runCount()).isZero();
         }
 
+        /**
+         * The duration the parser has always recovered, now on the row.
+         *
+         * <p>Until §244 {@code test_execution.duration_ms} had <strong>no writer at all</strong> —
+         * the column shipped in {@code V1}, five readers project it and the run summary sums it,
+         * and this value went into the ingestion job's payload JSON instead. So the number the
+         * report card calls "recorded duration" was structurally zero for every run in the
+         * product.
+         */
+        @Test
+        @DisplayName("the duration the report carried lands on the execution")
+        void theReportedDurationIsRecorded() throws Exception {
+            ingest(ROBOT, junit(
+                    testCase("com.acme.RefundTest", "refundsInFull", null)), "ik-duration");
+
+            assertThat(durationOf(keyedCase))
+                    .as("time=\"0.1\" is 100ms; a null here is the writerless column again")
+                    .isEqualTo(100L);
+        }
+
         @Test
         @DisplayName("an unmatched test does not sweep an unrelated case into the run")
         void onlyMatchedCasesAreMaterialised() throws Exception {
@@ -1377,6 +1397,12 @@ class IngestionEndpointTest extends IntegrationTestBase {
                 SELECT s.kind FROM test_execution e
                 JOIN case_status s ON s.id = e.status_id
                 WHERE e.case_id = CAST('""" + caseId + "' AS uuid)");
+    }
+
+    private Long durationOf(UUID caseId) throws SQLException {
+        String value = string("SELECT duration_ms FROM test_execution WHERE case_id = CAST('"
+                + caseId + "' AS uuid)");
+        return value == null ? null : Long.valueOf(value);
     }
 
     private String commentOf(UUID caseId) throws SQLException {

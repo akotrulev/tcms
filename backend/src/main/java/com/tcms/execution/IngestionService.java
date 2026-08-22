@@ -534,6 +534,12 @@ public class IngestionService {
                     // honest: nothing about that request identifies who ran the suite.
                     null,
                     result.message(),
+                    // The duration the report carried, which until §244 had nowhere to go: the
+                    // column existed and nothing wrote it, so `payload` below stashing it in the
+                    // job's JSON was the only record of a number every dialect reports. It is
+                    // still stashed there — that JSON is the raw account of what the runner said,
+                    // and this is the execution's own fact.
+                    result.durationMs(),
                     now);
             written.add(execution);
             recorded.add(entry.getKey());
