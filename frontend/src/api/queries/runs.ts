@@ -6,6 +6,8 @@ import type {
   Configuration,
   DefectLink,
   Evidence,
+  ExecutionBulkOperation,
+  ExecutionBulkResult,
   TestExecution,
   TestRun,
   TestRunCloneInput,
@@ -413,6 +415,40 @@ export function useAssignExecution(projectId: string, runId: string, executionId
     meta: { handled: true },
     onSuccess: (updated) => {
       client.setQueryData(keys.execution(projectId, runId, executionId), updated);
+      void client.invalidateQueries({ queryKey: keys.run(projectId, runId) });
+    },
+  });
+}
+
+/**
+ * Assigns many rows of a run's checklist in one act — one person, or spread across several.
+ *
+ * **Two calls per act, and the first one writes nothing.** `dryRun` defaults to true on the server,
+ * so the dialog previews, shows the split, and only then commits. Sending the commit without the
+ * preview is possible and is exactly what the preview exists to prevent (plan §6f).
+ *
+ * **No `If-Match` and no `Idempotency-Key`.** The first for `useAssignExecution`'s reason — a
+ * reassignment refused over a verdict somebody recorded in between is a conflict about a field
+ * neither call touches. The second because there is nothing to key: the operation creates no
+ * resource, and its split is a pure function of the run's row order and the assignee order, so a
+ * retry lands every row where it already is and reports them all as `unchanged`.
+ *
+ * The run is invalidated rather than patched: `TestRunDetail` carries every row's assignee, the
+ * response carries changes rather than executions, and up to 500 rows moved — a hand-merged cache
+ * here is the stale-claim class §42 found on the other end of this screen.
+ */
+export function useBulkAssignExecutions(projectId: string, runId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ExecutionBulkOperation) =>
+      api.post<ExecutionBulkResult>(`${base(projectId)}/runs/${runId}/executions/bulk`, body),
+    // The dialog lands 400s on their own controls and renders the 409 in place, the same call
+    // `useAssignExecution` makes about its own refusals.
+    meta: { handled: true },
+    onSuccess: (result) => {
+      // A preview changed nothing, so invalidating would refetch the run for no reason and flash
+      // the grid under an open dialog.
+      if (result.dryRun) return;
       void client.invalidateQueries({ queryKey: keys.run(projectId, runId) });
     },
   });

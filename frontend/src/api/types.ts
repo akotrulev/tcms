@@ -206,6 +206,25 @@ export type RunStatus = NonNullable<TestRun['status']>;
  */
 export type PlanStatus = NonNullable<TestPlanSummary['status']>;
 export type TestExecution = S['TestExecution'];
+/**
+ * The body of `POST …/runs/{runId}/executions/bulk` (§244) — one action over a selection.
+ *
+ * `ASSIGN` puts every named row on one person, or on nobody with a null `assigneeId`;
+ * `DISTRIBUTE` round-robins them across a list. There is no `UNASSIGN` and no `Idempotency-Key`:
+ * the single-row `PUT` already spells "nobody" as a null assignee, and nothing is created here for
+ * a replay to be answered with — see `useBulkAssignExecutions`.
+ */
+export type ExecutionBulkOperation = S['ExecutionBulkOperation'];
+export type ExecutionBulkPayload = S['ExecutionBulkPayload'];
+export type ExecutionBulkResult = S['ExecutionBulkResult'];
+/**
+ * One row of a preview — what moves, and **where to**.
+ *
+ * Named so the dialog's per-person tally can be typed. The case result reports `changed` as bare
+ * keys, which says *that* something moved and not where; for a distribute, where is the entire
+ * question the preview exists to answer.
+ */
+export type ExecutionAssignmentChange = ExecutionBulkResult['changed'][number];
 export type TestExecutionSummary = S['TestExecutionSummary'];
 export type StepResult = S['StepResult'];
 export type Evidence = S['Evidence'];

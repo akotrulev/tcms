@@ -1,6 +1,7 @@
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
   Stack,
   Table,
@@ -15,6 +16,7 @@ import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import type { RunStatus, TestRunDetail } from '../../api/types';
 import { useProject, useRun, useSetRunStatus } from '../../api/queries';
+import { useSnackbar } from 'notistack';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
@@ -29,6 +31,8 @@ import { ScrollX } from '../../components/ScrollX';
 import { CaseKeyLink, ExecuteCaseLink } from './ExecutionRowLinks';
 import { FailureSummary } from './FailureSummary';
 import { RunCloneDialog } from './RunCloneDialog';
+import { AssignExecutionsDialog } from './AssignExecutionsDialog';
+import { selectAll, toggleSelected } from './executionSelection';
 
 /** The row's static locator — never interpolated with an execution id (`test-ids` rule 6). */
 const RowTestId = 'RunDetail.Executions.Row';
@@ -296,7 +300,11 @@ function ScopeProvenance({ scopeRequest }: { scopeRequest: TestRunDetail['scopeR
 
 function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: string; runId: string }) {
   const [filter, setFilter] = useState<Filter>('ALL');
+  const [selection, setSelection] = useState<string[]>([]);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const { enqueueSnackbar } = useSnackbar();
   const executions = data.executions ?? [];
+  const frozen = isRunClosed(data.status);
 
   const filtered = executions.filter((execution) => {
     if (filter === 'TODO') return !execution.status;
@@ -393,7 +401,12 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
                 key={option.value}
                 size="small"
                 label={option.label}
-                onClick={() => setFilter(option.value)}
+                onClick={() => {
+                  // The chips swap which rows are in view, and a selection holding ids that are
+                  // no longer on screen is a bulk act over rows the person cannot see.
+                  setFilter(option.value);
+                  setSelection([]);
+                }}
                 variant={filter === option.value ? 'filled' : 'outlined'}
                 color={filter === option.value ? 'primary' : 'default'}
                 aria-pressed={filter === option.value}
@@ -404,6 +417,67 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
           </Stack>
         }
       >
+        {selection.length > 0 && (
+          <Stack
+            direction="row"
+            sx={{
+              alignItems: 'center',
+              gap: 1.5,
+              mb: 1,
+              px: 1.5,
+              py: 1,
+              border: '1px solid',
+              borderColor: 'primary.main',
+              borderRadius: 1,
+              bgcolor: 'action.selected',
+            }}
+            data-testid="RunDetail.SelectionBar"
+          >
+            <Typography variant="body2" sx={{ fontWeight: 600 }} data-testid="RunDetail.SelectionCount">
+              {formatCount(selection.length)} selected
+            </Typography>
+            <PermissionGate projectId={projectId} permission="run:execute">
+              {({ allowed, reason }) => (
+                <Tooltip
+                  title={
+                    frozen
+                      ? 'This run has ended, so its checklist can no longer be reorganised. Reopen the run to make changes.'
+                      : allowed
+                        ? ''
+                        : (reason ?? '')
+                  }
+                >
+                  {/* A disabled button fires no events, so the tooltip needs a wrapper that can —
+                      §31's disable-don't-hide, and the same span RunActions uses. */}
+                  <Box component="span">
+                    <Button
+                      size="small"
+                      variant="contained"
+                      disabled={!allowed || frozen}
+                      onClick={() => setAssignOpen(true)}
+                      data-testid="RunDetail.AssignButton"
+                    >
+                      Assign…
+                    </Button>
+                  </Box>
+                </Tooltip>
+              )}
+            </PermissionGate>
+            <Button size="small" onClick={() => setSelection([])} data-testid="RunDetail.ClearSelection">
+              Clear selection
+            </Button>
+            {/*
+              NOT "the rows on this page" — this screen is not paged, it renders the whole
+              checklist narrowed by the chip. And not "every row in the run" either: `Not run` is
+              exactly the filter a coordinator uses before distributing, so telling them the act
+              covers rows the chip hid is the misstatement this caption exists to prevent.
+            */}
+            <Typography variant="caption" sx={{ color: 'text.secondary', ml: 'auto' }}>
+              Selection covers the rows this filter shows.
+            </Typography>
+          </Stack>
+        )}
+
         {sorted.length === 0 ? (
           <Box sx={{ p: 3 }}>
             <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid="RunDetail.Executions.Empty">
@@ -425,6 +499,16 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
                     so the column had no data to show. The row→detail affordance moved onto the
                     case title below, which is what a tester actually recognises.
                   */}
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      size="small"
+                      checked={selection.length > 0 && selection.length === sorted.length}
+                      indeterminate={selection.length > 0 && selection.length < sorted.length}
+                      onChange={(event) => setSelection(event.target.checked ? selectAll(sorted) : [])}
+                      inputProps={{ 'aria-label': 'Select every row this filter shows' }}
+                      data-testid="RunDetail.Executions.SelectAll"
+                    />
+                  </TableCell>
                   <TableCell sx={{ color: 'text.secondary' }}>Case</TableCell>
                   <TableCell sx={{ color: 'text.secondary', width: 116 }}>Result</TableCell>
                   <TableCell sx={{ color: 'text.secondary', width: 130 }}>Defects</TableCell>
@@ -437,6 +521,20 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
               <TableBody>
                 {sorted.map((execution) => (
                   <TableRow key={execution.id} data-testid={RowTestId} hover>
+                    {/*
+                      Row-click selection is deliberately NOT added: the row's targets are two
+                      links already, and a click that both navigates and selects is the ambiguity
+                      the case grid settled with `disableRowSelectionOnClick`.
+                    */}
+                    <TableCell padding="checkbox">
+                      <Checkbox
+                        size="small"
+                        checked={selection.includes(execution.id)}
+                        onChange={() => setSelection(toggleSelected(selection, execution.id))}
+                        inputProps={{ 'aria-label': `Select ${execution.caseKey}` }}
+                        data-testid={`${RowTestId}.Select`}
+                      />
+                    </TableCell>
                     <TableCell>
                       <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}>
                         {/*
@@ -525,6 +623,27 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
           </ScrollX>
         )}
       </Panel>
+
+      <AssignExecutionsDialog
+        open={assignOpen}
+        onClose={() => setAssignOpen(false)}
+        projectId={projectId}
+        runId={runId}
+        selectedIds={selection}
+        onCommitted={(result) => {
+          // Per outcome, never a blanket success — CaseListPage's call, and the reason `BulkResult`
+          // reports lists: the coordinator needs to know that 2 of their 300 did not go through.
+          const parts = [`${formatCount(result.changed.length)} assigned`];
+          if (result.unchanged.length) {
+            parts.push(`${formatCount(result.unchanged.length)} already assigned`);
+          }
+          if (result.skipped.length) parts.push(`${formatCount(result.skipped.length)} skipped`);
+          enqueueSnackbar(parts.join(' · '), {
+            variant: result.skipped.length ? 'warning' : 'success',
+          });
+          setSelection([]);
+        }}
+      />
     </Stack>
   );
 }

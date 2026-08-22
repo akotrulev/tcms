@@ -125,6 +125,7 @@ export {
   executionQueryOptions,
   useAssignExecution,
   useAttachEvidence,
+  useBulkAssignExecutions,
   useCloneRun,
   useConfigurations,
   useCreateRun,

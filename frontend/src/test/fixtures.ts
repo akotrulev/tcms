@@ -32,6 +32,8 @@ import type {
   CurrentUser,
   DocPageSearchHit,
   DocPageSummary,
+  ExecutionAssignmentChange,
+  ExecutionBulkResult,
   ExternalLink,
   IdentityProvider,
   InvitationPreview,
@@ -668,6 +670,40 @@ export function anSsoProviderChoice(
  * them; an unattended job nulls both actor ids; a vanished membership nulls `actorUserName` while
  * `actorUserId` stays.
  */
+/**
+ * The result of a bulk assignment — §244's preview and its commit share one shape.
+ *
+ * The least interesting one the contract admits: a preview of nothing. `bulkOperationId` is null,
+ * which is what a dry run and a commit that moved nothing both answer, and a test about either
+ * overrides away from it.
+ */
+export function aBulkAssignResult(
+  overrides: Partial<ExecutionBulkResult> = {},
+): ExecutionBulkResult {
+  return {
+    dryRun: true,
+    total: 0,
+    changed: [],
+    unchanged: [],
+    skipped: [],
+    bulkOperationId: null,
+    ...overrides,
+  }
+}
+
+/** One row of a preview — where a case lands, and who it lands on. */
+export function anAssignmentChange(
+  overrides: Partial<ExecutionAssignmentChange> = {},
+): ExecutionAssignmentChange {
+  return {
+    executionId: 'ex1',
+    caseKey: 'TC-1',
+    assigneeId: 'user-2',
+    assigneeName: 'A. Ana',
+    ...overrides,
+  }
+}
+
 export function anAuditEvent(overrides: Partial<AuditEvent> = {}): AuditEvent {
   return {
     id: 'ae-1',
