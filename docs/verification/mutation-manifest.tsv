@@ -392,7 +392,7 @@ RK-4	§151	ReleaseSortKeyBackfillTest	-	-		queued
 SC-3	§152	ArchitectureRulesTest	-	-		queued
 SC-4	§152	ArchitectureRulesTest	-	-		queued
 UX-2	§153	ArchitectureRulesTest	-	-		queued
-UX-3	§153	ArchitectureRulesTest	W1	-		queued
+UX-3	§153	com.tcms.architecture.ArchitectureRulesTest	W1	-	backend/src/main/java/com/tcms/tenancy/OutboxScheduler.java	RUN:ZERO-UNEXPECTED
 UX-4	§153	OperatorCommandsTest	-	-		queued
 §154 RL-3	§154	IngestionEndpointTest	-	-		queued
 §154 RL-4	§154	ArchitectureRulesTest	-	-		queued
@@ -401,25 +401,25 @@ UX-4	§153	OperatorCommandsTest	-	-		queued
 §154 RL-7	§154	ArchitectureRulesTest	-	-		queued
 LV-3	§155	ArchitectureRulesTest	-	-		queued
 LV-4	§155	PlanUpdateEndpointTest	-	-		queued
-LV-5	§155	ArchitectureRulesTest	W1	-		queued
+LV-5	§155	com.tcms.execution.ExecutionEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/ExecutionService.java	RUN:MATCH
 LV-6	§155	ArchitectureRulesTest	-	-		queued
 WL-1	§156	ArchitectureRulesTest	-	-		queued
 WL-2	§156	ArchitectureRulesTest	-	-		queued
 WL-3	§156	DocPageEndpointTest	-	-		queued
 WL-4	§156	ArchitectureRulesTest	-	-		queued
-WL-5	§156	ArchitectureRulesTest	W1	-		queued
+WL-5	§156	com.tcms.architecture.ArchitectureRulesTest	W1	-	backend/src/test/java/com/tcms/architecture/ArchitectureRulesTest.java	RUN:MATCH
 WL-6	§156	ArchitectureRulesTest	-	-		queued
 WL-7	§156	ArchitectureRulesTest	-	-		queued
 SA-2	§157	CaseHealthRecomputeTest	-	-		queued
 SA-3	§157	CaseHealthRecomputeTest	-	-		queued
 SA-4	§157	CaseHealthRecomputeTest	-	-		queued
-SA-5	§157	CaseHealthRecomputeTest	W1	-		queued
+SA-5	§157	com.tcms.repository.CaseHealthRecomputeTest	W1	-	backend/src/main/java/com/tcms/repository/ApprovalFacts.java	RUN:MORE
 SA-6	§157	CaseHealthRecomputeTest	-	-		queued
 §158 CD-4	§158	CaseHealthRecomputeTest	-	-		queued
-§158 CD-5	§158	CaseHealthRecomputeTest	W1	-		queued
+§158 CD-5	§158	com.tcms.repository.CaseHealthRecomputeTest	W1	-	backend/src/main/java/com/tcms/repository/ConditionDrift.java	RUN:MATCH
 §158 CD-6	§158	CaseHealthRecomputeTest	-	-		queued
 §158 CD-7	§158	CaseHealthRecomputeTest	-	-		queued
-AR-M1	§159	ProjectEndpointTest	W1	-		queued
+AR-M1	§159	com.tcms.project.ProjectEndpointTest	W1	-	backend/src/main/java/com/tcms/project/ProjectArchiveService.java	RUN:MATCH
 AR-M2	§159	ProjectEndpointTest	-	-		queued
 AR-M3	§159	ProjectEndpointTest	-	-		queued
 AR-M4	§159	ProjectEndpointTest	-	-		queued
