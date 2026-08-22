@@ -2,7 +2,9 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-22 (**§245** — **bulk execution assignment: `POST /projects/{projectId}/runs/{runId}/executions/bulk`, area B of `docs/plans/2026-08-18-unplanned-gaps.md`, executed against `docs/plans/2026-08-18-gap-b-bulk-execution-assignment.md`. NO MIGRATION, no permission seeded or moved, catalogue still 55, head still `V67`.**) ⚠️ **GATES NOT RUN, AND NOTHING HERE HAS EVER EXECUTED — the third entry in this file that cannot quote a build, and the most complete failure of the three.** §244 at least had two targeted classes run before the no-tests directive arrived; this area ran entirely under it. No `./gradlew build`, no `./gradlew test`, no targeted class. `ExecutionBulkAssignTest`'s fourteen arms exist and have never run. It ran **concurrently with area E**, at the user's explicit permission; the two lanes share no source file. **THE RULE THAT OUTLIVES THE AREA: "does this column have a writer" is a question the exemption maps answer about the columns somebody listed, and the moment you give one a writer the exemption becomes a FALSE CLAIM that fails the build in the other direction.** `AuditEvent.bulkOperationId` had sat in `WRITERLESS_BY_DECISION` since §152 with an entry naming the slice that would delete it; this is that slice, so `everyMappedColumnHasAWriter` computes a writer, the exemption stops matching, and `containsExactlyInAnyOrderElementsOf` reddens (§162, both directions). **T7 and T8 were therefore landed adjacently on purpose** — under a no-gates directive nobody would have observed that red, so splitting them would have shipped a red gate invisibly. **The column has now been in one map or the other since §152 and is in NEITHER**, having moved between them three times without changing at all: §242 gave it a reader, §245 a writer. That pair's longest worked example. **AND THE TALLY INSIDE THE TALLY-CHECKING FILE WAS STALE AGAIN** — `everyMappedColumnHasAWriter`'s javadoc said "four of the nine" while the map held **eight**; it holds seven now, recounted against the map in both places. **ONE `audit_event` ROW PER TARGET SHARING ONE `bulkOperationId` — a deliberate departure from every other bulk service here**, which writes ONE row with a 143-id `target_ids` array. That shape cannot state a `DISTRIBUTE`: one row carries one `changes` document and this act moves twelve rows to five different people. So `AuditEvent.record` has an **eight-argument overload** rather than an eighth parameter on the form with 42 call sites, and `ExecutionAssignmentAudit` is the **one speller of both verbs and the document, with both writers of `assignee_id` going through it** — the verbs are the EXISTING `execution.assigned` / `execution.unassigned`, because an `execution.bulk_assigned` would split every "who took this off Ana" query in two. **THERE IS NO `Idempotency-Key` AND THAT IS NOT AN OMISSION**: `POST /cases/bulk` declares no parameters at all, and what this repo calls idempotency is a unique `idempotency_key` column on a **created row** — a bulk assign creates nothing, so there is no row to key. Determinism replaces it: the mapping is a pure function of `(the RUN's row order, the CALLER's assignee order)` and an unchanged row writes no audit row, so a replay reports everything `unchanged` and writes nothing. **`RunController` takes the mapping — there is NO new controller**, correcting the master plan: it already maps the prefix and owns the three problem builders this answers with verbatim, and a second controller on one prefix is the shape §72 extracted `ExecutionTargets` to end. **The caller who lacks `run:execute` is a VIEWER, not a Test Engineer** — Test Engineer holds that key (roles spec §A3, `V3`), so the plan's fixture proved nothing and a comment claiming otherwise would additionally redden `tierClaims.test.ts`. **A stale execution id is a SKIP with a reason, never a 404** over the other 299 rows; a bad assignee refuses the whole act, and one `@Transactional` is what makes "nothing was written" true. Cap 500 — one transaction *and* up to 500 audit rows. Fixture prefix **`88`**. Gates: **NOT RUN**.)
+**Last verified:** 2026-08-22 (**§247** — **scheduled runs: `run_schedule`, `V68`, and a per-company poller. Area C of `docs/plans/2026-08-18-unplanned-gaps.md`, executed against `docs/plans/2026-08-18-gap-c-scheduled-runs.md`. THE MASTER PLAN'S ONLY MIGRATION; contract changed; no permission seeded or moved, catalogue still 55; head is now `V68`.**) ⚠️ **GATES NOT RUN, AND NOTHING WAS EVEN COMPILED — the fourth entry in this file that cannot quote a build, and the first that cannot quote a `compileJava` either.** No `./gradlew build`, no `./gradlew test`, no targeted class, no `compileJava`, no npm suite, no `build`, no `lint`, locally or on `shanks`. **61 arms have never executed** (7 `CronScheduleTest` / 26 `RunScheduleEndpointTest` / 15 `RunScheduleFiringTest` / 11 `RunSchedulePage.test.tsx`, plus two added to `AsyncCompanyContextTest`), counted with `grep -c` rather than by hand. It ran **concurrently with area F (§248)** at the user's explicit permission; the two lanes share no source file, and F closed first. **THE RULE THAT OUTLIVES THE AREA: a job's AUTHORITY and a job's ACTOR are different columns, and a poller has only the first.** `run_schedule.created_by` is the authority — that person's `run:create` grant is re-evaluated through `ProjectService.writeGranted` on **every fire**, so a schedule outlives neither the grant nor the account — and the actor on the run row and on the audit row is **null**, because at 03:00 nobody performed the act. It is one line in `RunCreateService.apply` (`UUID actor = source == RunSource.SCHEDULED ? null : userId`) reaching exactly two call sites, and the **gate keeps `userId`**: changing it would make a scheduled run ungated, which is the opposite of the decision (`§247 SK-M2`). **THIS IS THE PRODUCT'S FIRST ACTORLESS WRITER**, which is why `AuditEvent#record`'s “null only for an unattended job” had no producer for eighty sections and why browser row `§242 LG-5` was recorded NOT DRIVABLE until now — rewritten in place, id unchanged, lane preamble corrected, and its expectation is the scheduled row **beside a hand-created one**, because “Automatic” alone is also what a build that had stopped recording actors renders. **THE ARCHIVED REFUSAL LIVES IN `RunScheduleFiringService` AND NOT IN `RunCreateService`**: archiving blocks no other write in this product (`isArchived()` is read by the toggle and two view projections and nothing else), so it is a rule about *schedules*; putting it in the create would add a sealed `Outcome` arm that `RunController`'s exhaustive switch must handle and the HTTP path can never produce — a dead arm on a shipped endpoint — and the cost, one extra permission evaluation per **fire**, is largely absorbed by §225's per-transaction memo. **RUN CREATION IS NOT REIMPLEMENTED**: `createScheduled` is a third package-private door beside `createIngested`, so the version pin, the display-key allocation, §6g's approval gate, the checklist and the audit row stay in the one class that has ever written a run — and the approval-gate **override is unreachable from it**, because §6g's whole word is *documented* and a schedule cannot decide in advance for every night to come. **NO CATCH-UP**: `next_fire_at` is recomputed from the **moment of firing**, never from the missed slot, and `recomputeNextFire` runs in **every branch including every failure** — a schedule that fails once and never advances is re-fired on every tick for ever. The double-fire guard is the **existing** `Idempotency-Key`, `schedule:<scheduleId>:<slot>`, keyed on the **slot** and never on `now`; a `Replayed` is not an error. **THE `Idempotency-Key` WAS REMOVED FROM THE CREATE, REVERSING THE STEPPED PLAN'S OWN RECOMMENDATION** — `V68` declares no idempotency column, so the header would be one nothing honours (§205, arriving from the same side), and `POST /conditions` and the notification-channel create decline it on those terms. **`V61`'s scope document is REUSED and `RunScopeDocument` is the extraction that makes that a property of the code** rather than of two methods currently agreeing; `RunScopeRequestView` now serves **three** contract positions. `RunScheduleScheduler` follows **`CaseHealthScheduler`, not `OutboxScheduler`** (one at-most-once domain write versus an at-least-once lease-based queue drain), including the per-company catch and `continue`. **THE TENANCY ARM HAD TO SPLIT ACROSS TWO CLASSES** because `RunScheduleRepository` is package-private in `execution` and `AsyncCompanyContextTest` is in `tenancy`. **WHAT THE PLAN MISSED: `SchemaConventionTest`'s policy count is a LITERAL, 70 → 71** — and under a no-gates directive nobody would have observed that red. **`everyMappedColumnHasAWriter` needed NO exemption**, relied on via its first disjunct only; `WRITERLESS_BY_DECISION` still holds seven. `@Version` **is** mapped here where `TestRun` refuses it. Fixture prefix **`3d`**. Gates: **NOT RUN**.)
+
+**Superseded header below — §245's, kept because §247 verified only the `execution` module's create path, the scope document and the schema conventions; it touched no bulk service and neither exemption map.** (**§245** — **bulk execution assignment: `POST /projects/{projectId}/runs/{runId}/executions/bulk`, area B of `docs/plans/2026-08-18-unplanned-gaps.md`, executed against `docs/plans/2026-08-18-gap-b-bulk-execution-assignment.md`. NO MIGRATION, no permission seeded or moved, catalogue still 55, head still `V67`.**) ⚠️ **GATES NOT RUN, AND NOTHING HERE HAS EVER EXECUTED — the third entry in this file that cannot quote a build, and the most complete failure of the three.** §244 at least had two targeted classes run before the no-tests directive arrived; this area ran entirely under it. No `./gradlew build`, no `./gradlew test`, no targeted class. `ExecutionBulkAssignTest`'s fourteen arms exist and have never run. It ran **concurrently with area E**, at the user's explicit permission; the two lanes share no source file. **THE RULE THAT OUTLIVES THE AREA: "does this column have a writer" is a question the exemption maps answer about the columns somebody listed, and the moment you give one a writer the exemption becomes a FALSE CLAIM that fails the build in the other direction.** `AuditEvent.bulkOperationId` had sat in `WRITERLESS_BY_DECISION` since §152 with an entry naming the slice that would delete it; this is that slice, so `everyMappedColumnHasAWriter` computes a writer, the exemption stops matching, and `containsExactlyInAnyOrderElementsOf` reddens (§162, both directions). **T7 and T8 were therefore landed adjacently on purpose** — under a no-gates directive nobody would have observed that red, so splitting them would have shipped a red gate invisibly. **The column has now been in one map or the other since §152 and is in NEITHER**, having moved between them three times without changing at all: §242 gave it a reader, §245 a writer. That pair's longest worked example. **AND THE TALLY INSIDE THE TALLY-CHECKING FILE WAS STALE AGAIN** — `everyMappedColumnHasAWriter`'s javadoc said "four of the nine" while the map held **eight**; it holds seven now, recounted against the map in both places. **ONE `audit_event` ROW PER TARGET SHARING ONE `bulkOperationId` — a deliberate departure from every other bulk service here**, which writes ONE row with a 143-id `target_ids` array. That shape cannot state a `DISTRIBUTE`: one row carries one `changes` document and this act moves twelve rows to five different people. So `AuditEvent.record` has an **eight-argument overload** rather than an eighth parameter on the form with 42 call sites, and `ExecutionAssignmentAudit` is the **one speller of both verbs and the document, with both writers of `assignee_id` going through it** — the verbs are the EXISTING `execution.assigned` / `execution.unassigned`, because an `execution.bulk_assigned` would split every "who took this off Ana" query in two. **THERE IS NO `Idempotency-Key` AND THAT IS NOT AN OMISSION**: `POST /cases/bulk` declares no parameters at all, and what this repo calls idempotency is a unique `idempotency_key` column on a **created row** — a bulk assign creates nothing, so there is no row to key. Determinism replaces it: the mapping is a pure function of `(the RUN's row order, the CALLER's assignee order)` and an unchanged row writes no audit row, so a replay reports everything `unchanged` and writes nothing. **`RunController` takes the mapping — there is NO new controller**, correcting the master plan: it already maps the prefix and owns the three problem builders this answers with verbatim, and a second controller on one prefix is the shape §72 extracted `ExecutionTargets` to end. **The caller who lacks `run:execute` is a VIEWER, not a Test Engineer** — Test Engineer holds that key (roles spec §A3, `V3`), so the plan's fixture proved nothing and a comment claiming otherwise would additionally redden `tierClaims.test.ts`. **A stale execution id is a SKIP with a reason, never a 404** over the other 299 rows; a bad assignee refuses the whole act, and one `@Transactional` is what makes "nothing was written" true. Cap 500 — one transaction *and* up to 500 audit rows. Fixture prefix **`88`**. Gates: **NOT RUN**.)
 
 **Superseded header below — §246's, kept because §245 verified only the `execution` and `tenancy` halves.** (2026-08-22: **§246** — **the company data export: `export-company`, a fourth operator CLI verb, area E of `docs/plans/2026-08-18-unplanned-gaps.md`. NO MIGRATION, no contract change, no permission seeded or moved, catalogue still 55, head still `V67`.**) ⚠️ **GATES NOT RUN — the second entry in this file that cannot quote a build.** Area E ran under the same batch-2 no-tests directive as §244; `./gradlew build` was not run and no targeted class was run, so **every claim below is read off the code, not off a green suite**. It also ran **concurrently with area B**, at the user's explicit permission — the two lanes share no file. **THE RULE THAT OUTLIVES THE AREA: a company-scoped operation opens `CompanyContext` OUTSIDE the `@Transactional` boundary.** `CompanyAwareTransactionManager` issues `set_config('app.current_company', …)` in `doBegin`, reading whatever `CompanyContext` holds *at that moment* — so a `CompanyContext.open()` written inside the transactional method runs AFTER the transaction decided there was no company, the GUC stays unset for its whole life, every policy evaluates `company_id = NULL` (never true), and the walk reads **zero rows from every company-owned table without raising anything**. The archive opens, parses and is empty. **`export-company` is the FIRST operator command that runs inside a company context at all** — its three siblings run instance-level with none open, which is why it could not be modelled on `CompanyProvisioningService`'s transaction handling. **THE SECOND PATTERN: `ExportTables` and `ExportRedactions` are the third and fourth members of the family `SchemaConventionTest` started — a schema-wide or catalogue-wide invariant is COMPUTED, never read.** The table list comes from `pg_policies` / `information_schema` at run time and an unclassified table **throws at export time**, so area C's `run_schedule` exports itself the day `V68` lands with no edit here; the redaction sweep fails for a credential-shaped column **that does not exist yet**. **`storage` has a FOURTH port, `BlobInventory`**, and it is a fourth *type* rather than a fifth method because `AttachmentStore`'s header refuses a listing method on the ports request paths hold. **`provisioning` declares `storage`** — its fourth allowed dependency, and `storage` is a foundation module. **The settled open question: `company.logo_storage_key` has NO WRITER ANYWHERE** — the `V1:35` DDL and `ReportHeader.java:55`'s javadoc are the only two hits and the column is not mapped on `Company`, so no root can be named without guessing and the manifest says so out loud. Gates: **NOT RUN**.)
 
@@ -16,6 +18,176 @@
 
 **Amended 2026-08-17 — `V67`, and the head is `V67`.** ~~"No migration"~~ is still true of the org-chart slice and **no longer true of the feature's record**: the org chart's own T5 query-plan lane ran afterwards and found a seq scan on the **authorization hot path**, which is now `V67__team_membership_answers_which_teams_a_person_is_in.sql`. See §241-A below before adding any index. Gates after `V67`: backend **3082 / 0 / 0**, unchanged — **an index adds no test, and that is the point of the `§241 IX-1` gap row.**
 
+---
+
+## §247 — A JOB'S AUTHORITY IS NOT A JOB'S ACTOR, AND RUN CREATION HAS A THIRD DOOR
+
+**Read this before touching anything in `com.tcms.execution` named `RunSchedule*`, before adding a
+fourth `RunSource`, before writing any unattended writer, and before adding a company-owned table.**
+
+> ⚠️ **UNGATED, AND NOTHING WAS COMPILED.** No `./gradlew build`, no `./gradlew test`, no targeted
+> class, **no `compileJava`**. The 48 backend arms below exist and have never executed. Read every
+> claim as read off the code.
+
+### The seam list
+
+| New in `execution` | What it is | The defect it prevents |
+|---|---|---|
+| `RunSchedule` (`V68`) | The standing request — what to ask for, when, and whose authority it runs under. `@Version` mapped. | A schedule editable from two forms at once losing one edit silently (`ApiToken`'s rubric, answered the opposite way from `TestRun`). |
+| `RunScheduleRepository` | `findInProject` ×2 and `findDue`. `@Transactional(readOnly = true)` **on the interface**. | Without the annotation every declared query runs with no company context and RLS answers **zero rows, silently** — `RepositoryTransactionTest` is the gate. |
+| `CronSchedule` | The **one** place an expression and a zone become a time. Spring's six-field `CronExpression`; `parse` / `isExpression` / `isZone` / `nextAfter`. | A validator and a poller reading one expression differently — whose symptom is not an error but *a schedule that never fires and never says why*. Also UTC arithmetic, which is right for half the year. |
+| `RunScopeDocument` | The **one writer** of `V61`'s `{planId, caseIds, suiteIds, tags}` document, extracted out of `RunCreateService#scopeRequestOf`. | Two methods that agree today writing the "same" document. `RunScopeRequestView.parse` was already the one reader. |
+| `RunScheduleEdit` / `RunScheduleWriteRequest` | Collected field errors; the request record binds the contract's nested `scope` **as `RunScopeRequestView` itself**. | A second wire shape for the document whose whole point is that there is one — and a member mismatch in `ContractConventionTest`. |
+| `RunScheduleService` / `RunScheduleView` / `RunScheduleController` | CRUD on `run:create`, reads on visibility alone; three lookups per **list**, never per row. | An N+1 that looks harmless because each query is fast (`ExecutionPeople`'s header). |
+| `RunScheduleFiringService` | One schedule, one fire, one transaction. Every refusal **recorded**, never thrown. | A schedule that stops silently — the failure mode of scheduling anything. |
+| `RunScheduleScheduler` | The company loop, `CaseHealthScheduler`'s shape. | One query for every due row in the instance: **zero rows, and a successful tick that fired nothing.** |
+
+Modified: **`RunSource`** gains `SCHEDULED`; **`RunCreateService`** gains `createScheduled` and the
+actor split, and `CREATE_RUN` is **package-private** now so `RunScheduleService` reads it rather than
+spelling `"run:create"` again (§228's shape). **`IntegrationTestBase`** switches the poller off —
+the fourth scheduler disabled there and the most destructive if left on, because this one *creates
+runs* and, unlike case health, **nothing repairs it**.
+
+### The rule, stated once so it outlives the area
+
+> **A job's AUTHORITY is the grant it runs under; a job's ACTOR is who did it. They are different
+> columns, and a poller has only the first. Conflating them writes a lie that reads correct.**
+
+`run_schedule.created_by` is `NOT NULL` and is re-evaluated through `ProjectService.writeGranted` on
+**every fire**. The actor is `null` on both the `test_run` row and the `audit_event` row.
+
+```java
+UUID actor = source == RunSource.SCHEDULED ? null : userId;   // RunCreateService.apply
+```
+
+It reaches exactly two places — `TestRun.create`'s creator and `AuditEvent.record`'s. **The gate keeps
+`userId`** (`projects.writeGranted` in `create`, `gate(userId, …)` for §6g); routing either through
+`actor` makes a scheduled run *ungated*. Stamping the owner instead produces *"Ana created TR-91"*
+about a night Ana did nothing — the attribution `AuditEvent#actorTokenId`'s header refuses, one layer
+over and without even a credential to blame.
+
+**This is the first unattended writer the product has ever had**, which is why `§242 LG-5` sat in the
+browser queue as NOT DRIVABLE for two sections. Its row is rewritten **in place**, id unchanged.
+
+### The third door, and why there is no fourth path
+
+`RunCreateService#createScheduled` sits beside `#createIngested`, package-private, one caller.
+`#createIngested`'s argument is reproduced because it is unchanged: materialising a run resolves a
+case set, resolves each case's **current version**, allocates a display key, applies §6g's gate,
+writes an execution per case and audits it as one transaction — **a copy of that in a poller is a
+second implementation of the pin.**
+
+`source` is never a request field: **three doors, each naming its own.** `SCHEDULED` is an enum member
+rather than a string precisely so an exhaustive `switch` is a compile error under `-Werror` until it
+handles the new door.
+
+**The approval-gate override is unreachable from this door and that is the design.**
+`RunWriteRequest#overrideApprovalGate` is *"a statement about this request"* and §6g's whole word is
+**documented** — a lead deciding in the moment. A schedule cannot decide in advance for every night to
+come, so the firing service builds its request with the field null and a gated project's refusal
+becomes `last_fire_error`.
+
+### The archived refusal is a rule about SCHEDULES
+
+`grep -rn "isArchived()" backend/src/main/java` finds the toggle and two view projections. **Archiving
+blocks no other write in this product**, so *"do not fire into an archived project"* belongs to
+schedules. In `RunCreateService` it would be a sealed `Outcome` arm `RunController`'s exhaustive switch
+must handle **and the HTTP path can never produce** — a dead arm on a shipped endpoint. The cost of
+keeping it in the firing lambda is one extra permission evaluation per **fire** (the nested
+`createScheduled` re-gates), and §225's per-transaction memo absorbs most of it.
+
+### No catch-up, and every branch advances
+
+`next_fire_at` is recomputed **from the moment of firing**, never from the missed slot: a deployment
+down for a day must not produce seven identical runs at once, each materialised against *today's* case
+versions and none meaning what its timestamp says. `last_fired_at` is the honest record of the gap and
+is therefore **not** moved by a failed fire.
+
+**`recomputeNextFire` runs in every branch, including every failure.** Put it inside the success arm —
+the natural implementation — and a schedule that fails once is re-fired on every tick for ever.
+`CronExpression.next` being **exclusive** closes the same loop from the other side.
+
+### At-most-once, on the guard that already existed
+
+`schedule:<scheduleId>:<slot>` — keyed on the **slot**, never on `now`, or two instances a millisecond
+apart mint two keys and the run is created twice. **A `Replayed` is not an error**: another instance
+won the tick, the run exists, and putting a red sentence on a schedule that worked destroys the one
+column the feature's honesty rests on.
+
+**There is no `Idempotency-Key` on `POST /run-schedules` and that is deliberate**, reversing the
+stepped plan's own open question 2: `V68` declares no idempotency column, so the header would be one
+nothing honours — §205's finding, arriving from the same side it did last time — and
+`POST /projects/{projectId}/conditions` and the notification-channel create already decline it on
+those terms.
+
+### Two things a later reader will otherwise re-derive
+
+- **A dead scope arm is NOT a field error here, and it is the one deliberate divergence from
+  `RunEdit`.** A schedule is evaluated over months; refusing the edit because a suite was deleted last
+  quarter makes the schedule uneditable **including by the edit that would remove the dead arm**. The
+  emptiness lands at fire time as `last_fire_error`. What *is* refused is a scope with **no arm at
+  all**. `§247 SK-M8` is the mutation, and it is the one a reader is most likely to make because it
+  looks like a missing check.
+- **`isActiveMember`, never `resolve`**, for the assignee. `app_user` is instance-level (ERD §0.1's
+  exception list), so "the account exists" accepts a user id from another client entirely — and here
+  that hands a client's testing to a stranger *nightly*.
+
+### The tenancy arm is split, and the module boundary is why
+
+`RunScheduleRepository` is package-private in `execution`; `AsyncCompanyContextTest` is in `tenancy`
+and **cannot call `findDue`**. So the boundary is asserted there with the poller's own predicate in
+**raw SQL** (`aFireInOneCompanyCannotSeeAnothersSchedules`, `theDueQueryWithNoCompanyOpenReturnsNothing`)
+and the repository method is driven next door
+(`RunScheduleFiringTest.theDueQueryIsCompanyScoped`), each saying why at the site.
+
+> **Generalise it: when the family that owns a boundary cannot reach the method, assert the boundary
+> there and the method next door, and write the reason at both.** One arm in either place alone covers
+> the query or the policy — never both.
+
+### `SchemaConventionTest`'s policy count is a LITERAL, and the plan missed it
+
+`everyPolicyHasTheExactIsolationPredicate` asserts `checked == 70`, and that number is what makes the
+predicate check non-vacuous — a company-owned table added without its policy would otherwise pass by
+**not being looked at**. `run_schedule` makes it **71**, moved in the migration's own commit. The
+stepped plan named four `SchemaConventionTest` rules `V68` had to satisfy and never mentioned this
+literal. §218's merge is the precedent: two branches both wrote `67` on a base of 64, git merged the
+line with no conflict, and only the comment beside it was marked. **Recount against the schema, never
+against the previous sentence.**
+
+### `everyMappedColumnHasAWriter` — no exemption, and the rule was read before it was trusted
+
+That rule decides "written" as `isWrittenInJava(field) || namedIn(writeText, null, columnOf(field)) ||
+namedIn(writeText, null, field.getName())`. The last two are a **name-text match** that has already
+produced a false negative here (§244: `node.put("durationMs", …)` satisfied the sweep for a column with
+no writer at all for a year). **Every column of `run_schedule` rests on the first disjunct only** — a
+genuine bytecode `SET` from a method with `src/main` callers: `create`, `replace`, `applyNextFire`
+(the one writer of `next_fire_at`), `recordFire` and `recordFireFailure`. `lock_version` is `@Version`
+and skipped by construction. **`WRITERLESS_BY_DECISION` is untouched and still holds seven.**
+
+`updatedAt`, `updatedBy` and `lockVersion` have no Java *reader*; they pass the mirror rule on §154's
+documented text over-match, which is load-bearing here rather than lucky.
+
+### What has no observer — and a green queue row means no observer, not a pass
+
+- **`§247 SK-M6`: nothing drives `RunScheduleScheduler.fireDueForAllCompanies` at all.** It is disabled
+  in `IntegrationTestBase` (it creates runs), the boundary is covered without the bean, and the firing
+  service is driven directly. **So the loop's per-company `continue` is unobserved** — one company
+  throwing must not cost every company after it, and nothing here says it does not. The one gap that
+  could lose a customer's scheduled runs silently.
+- **`§247 SK-M5`'s run-count half is expected green**: one `fire` call still creates one run, so the
+  no-catch-up decision is pinned at the *arithmetic* and not at the *outcome*. The loop that would
+  produce a week of backdated runs is the poller's — which is `SK-M6` again.
+- **`§247 SK-M20`**: nothing in this repository compares two permission literals across two services.
+  The same instrument gap `CaseStatusService.KEYS` records.
+- **The inline `source` enum is compared to nothing.** `ContractEnumTest.OWNERS` covers **named** enum
+  schemas; `source` is declared inline at two sites, so adding `SCHEDULED` was checked by no rule in
+  either direction. Pre-existing, widened by one member, written down rather than fixed.
+
+### Fixture prefix
+
+`RunScheduleEndpointTest` and `RunScheduleFiringTest` take **`3d…`**, verified unused across
+`backend/src`, `frontend/src` and `packages/*/src` on 2026-08-22. The stepped plan proposed `e7`; the
+batch assigned `3d`, and `3d` is what is in the code. `CronScheduleTest` touches no row and takes none.
 ---
 
 ## §245 — THE FIRST WRITER OF `bulk_operation_id`, AND THE EXEMPTION IT HAD TO DELETE
