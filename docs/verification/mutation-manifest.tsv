@@ -137,7 +137,7 @@ GA-10	§122	com.tcms.provisioning.GrantInstanceAdminServiceTest	W1	-	backend/src
 §124 AG-1	§124	AggregateExecutionPolicyTest	S	-		queued
 §124 AG-2	§124	PlanStatisticsEndpointTest	-	-		queued
 §124 AG-3	§124	PlanStatisticsEndpointTest	S	-		queued
-RX-2	§124	com.tcms.execution.ExecutionEndpointTest	S	-		queued
+RX-2	§124	com.tcms.execution.ExecutionEndpointTest	S	-	backend/src/main/java/com/tcms/execution/ExecutionService.java	RUN:MORE
 RX-3	§124	com.tcms.execution.IngestionEndpointTest	S	-	backend/src/main/java/com/tcms/execution/IngestionService.java	RUN:MATCH
 RX-4	§124	PlanStatisticsEndpointTest	-	-		queued
 AD-2	§124	com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/ArtifactWriteService.java	RUN:MATCH
@@ -559,7 +559,7 @@ CE-M3	§161	?	S	-		queued
 §210 DQ-2	§209	SeedDataTest	S	-		queued
 §210 DQ-3	§209	IsTest	S	-		queued
 §210 DQ-4	§209	SeedDataTest	S	-		queued
-§210 DQ-5	§209	?	S	-		queued
+§210 DQ-5	§209	com.tcms.repository.SuiteWriteEndpointTest,com.tcms.documentation.DocPageEndpointTest,com.tcms.execution.ExecutionEndpointTest,com.tcms.documentation.ArtifactEndpointTest,com.tcms.documentation.ArtifactFileEndpointTest	S	-	backend/src/main/java/com/tcms/repository/SuiteWriteService.java + DocPageWriteService + RunStatusService + ExecutionService + ArtifactWriteService	RUN:ZERO-AS-PREDICTED
 §210 DQ-6	§209	PermissionEvaluatorTest	-	-		queued
 §217 FD-1	§217	com.tcms.auth.SsoFlowIntegrationTest	W1	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:MORE
 §217 FD-2	§217	SchemaConventionTest	S	-		queued
@@ -588,8 +588,8 @@ CE-M3	§161	?	S	-		queued
 §229 PM-20	§229 phase 2	com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/Artifact.java	RUN:ZERO-AS-PREDICTED
 §229 PM-21	§229 phase 2	ArtifactEndpointTest	-	-		queued
 §229 PM-22	§229 phase 2	ErrorBodyPolicyTest	-	-		queued
-§229 PM-1	§229 phase 1	ExecutionEndpointTest	S	-		queued
-§229 PM-2	§229 phase 1	ExecutionEndpointTest	S	-		queued
+§229 PM-1	§229 phase 1	com.tcms.execution.ExecutionEndpointTest	S	-	backend/src/main/java/com/tcms/execution/ExecutionAssignmentService.java	RUN:MATCH
+§229 PM-2	§229 phase 1	com.tcms.execution.ExecutionEndpointTest	S	-	backend/src/main/java/com/tcms/execution/ExecutionAssignmentService.java	RUN:MATCH
 §229 PM-3	§229 phase 1	ExecutionEndpointTest	-	-		queued
 §229 PM-4	§229 phase 1	ExecutionEndpointTest	-	-		queued
 §229 PM-5	§229 phase 1	ExecutionEndpointTest	-	-		queued
@@ -608,8 +608,8 @@ CE-M3	§161	?	S	-		queued
 §227 PM-13	§228	CaseBulkEndpointTest	-	-		queued
 §227 PM-14	§228	CaseBulkEndpointTest	-	-		queued
 §227 PM-15	§228	CaseBulkEndpointTest	-	-		queued
-§227 PM-1	§227 phase 1	ReportEndpointTest	S	-		queued
-§227 PM-2	§227 phase 1	ReportEndpointTest	S	-		queued
+§227 PM-1	§227 phase 1	com.tcms.reporting.ReportEndpointTest	S	-	backend/src/main/java/com/tcms/reporting/ReportReadService.java	RUN:MATCH
+§227 PM-2	§227 phase 1	com.tcms.reporting.ReportEndpointTest	S	-	backend/src/main/java/com/tcms/reporting/ReportReadService.java	RUN:MATCH
 §227 PM-3	§227 phase 1	?	-	-		queued
 §227 PM-4	§227 phase 1	ReportEndpointTest	-	-		queued
 §227 PM-5	§227 phase 1	ReportJobPipelineTest	-	-		queued
@@ -645,7 +645,7 @@ CE-M3	§161	?	S	-		queued
 §236 DK-3	§236	ExecutionEndpointTest	-	-		queued
 §236 DK-4	§236	com.tcms.execution.ExecutionEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/DefectLinkService.java	RUN:ZERO-UNEXPECTED
 §236 DK-5	§236	ExecutionEndpointTest	-	-		queued
-§236 DK-6	§236	ExecutionEndpointTest	S	-		queued
+§236 DK-6	§236	com.tcms.execution.ExecutionEndpointTest	S	-	backend/src/main/java/com/tcms/execution/DefectLinkService.java	RUN:MATCH
 §236 DK-7	§236	ExecutionEndpointTest	-	-		queued
 §236 SE-1	§236	ExecutionEndpointTest	-	-		queued
 §237 QR-1	§237	RunSummaryReportTest	-	-		queued
@@ -678,7 +678,7 @@ CE-M3	§161	?	S	-		queued
 §240 AR-M1	§240	?	-	-		queued
 §240 AR-M2	§240	?	-	-		queued
 §240 AR-M3	§240	?	-	-		queued
-§240 AR-M4	§240	?	S	-		queued
+§240 AR-M4	§240	com.tcms.execution.PlanLifecycleEndpointTest	S	-	backend/src/main/java/com/tcms/execution/PlanArchiveService.java	RUN:ZERO-UNEXPECTED
 §240 RF-M1	§240	?	-	-		queued
 §240 RF-M2	§240	?	-	-		queued
 §240 RF-M3	§240	?	-	-		queued
@@ -697,7 +697,7 @@ CE-M3	§161	?	S	-		queued
 §242 LG-M2	§242 amendment (2026-08-18)	?	-	-		queued
 §242 LG-M3	§242 amendment (2026-08-18)	com.tcms.identity.AuditLogReadTest	W1	-	backend/src/main/java/com/tcms/identity/AuditLogService.java	RUN:MORE
 §242 LG-M4	§242 amendment (2026-08-18)	?	-	-		queued
-§242 LG-M5	§242 amendment (2026-08-18)	?	S	-		queued
+§242 LG-M5	§242 amendment (2026-08-18)	com.tcms.identity.AuditLogReadTest	S	-	backend/src/main/java/com/tcms/identity/AuditLogService.java	RUN:ZERO-UNEXPECTED
 §242 LG-M6	§242 amendment (2026-08-18)	?	-	-		queued
 §242 LG-M7	§242 amendment (2026-08-18)	?	-	-		queued
 §242 LG-M8	§242 amendment (2026-08-18)	ContractConventionTest	-	-		queued
@@ -772,7 +772,7 @@ CE-M3	§161	?	S	-		queued
 §247 SK-M17	§247	SchemaConventionTest	S	-		queued
 §247 SK-M18	§247	SchemaConventionTest	S	-		queued
 §247 SK-M19	§247	CronScheduleTest	S	-		queued
-§247 SK-M20	§247	CronScheduleTest	S	-		queued
+§247 SK-M20	§247	com.tcms.execution.RunScheduleEndpointTest	S	-	backend/src/main/java/com/tcms/execution/RunScheduleService.java	RUN:ZERO-AS-PREDICTED
 §247 SK-M21	§247	CronScheduleTest	-	-		queued
 §247 SK-M22	§247	CronScheduleTest	-	-		queued
 §249 CS-M1	§249	CaseSearchTest	-	-		queued
