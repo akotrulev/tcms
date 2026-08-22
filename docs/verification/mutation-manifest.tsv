@@ -498,17 +498,17 @@ CE-M3	§161	?	-	-		queued
 §186 SQ-3	§186	?	-	-		queued
 §186 SQ-4	§186	?	-	-		queued
 §186 SQ-5	§186	com.tcms.repository.SuiteWriteEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/SuiteWriteService.java	RUN:ZERO-AS-PREDICTED
-§187 DC-1	§187	ConditionWriteEndpointTest	W1	-		queued
+§187 DC-1	§187	com.tcms.repository.ConditionWriteEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseConditions.java	RUN:ZERO-AS-PREDICTED
 §187 DC-2	§187	ConditionWriteEndpointTest	-	-		queued
-§187 DC-3	§187	ConditionWriteEndpointTest	W1	-		queued
+§187 DC-3	§187	com.tcms.repository.ConditionWriteEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseEdit.java	RUN:ZERO-AS-PREDICTED
 §187 DC-4	§187	ConditionWriteEndpointTest	-	-		queued
 §187 DC-5	§187	CaseBulkEndpointTest	-	-		queued
-§187 DC-6	§187	ArchitectureRulesTest	W1	-		queued
+§187 DC-6	§187	com.tcms.architecture.ArchitectureRulesTest	W1	-	backend/src/main/java/com/tcms/repository/CaseConditions.java	RUN:MORE
 §188 NR-1	§188	ArchitectureRulesTest	-	-		queued
-§188 NR-2	§188	?	W1	-		queued
+§188 NR-2	§188	com.tcms.architecture.ArchitectureRulesTest	W1	-	backend/src/main/java/com/tcms/repository/SuiteVersion.java	RUN:MATCH
 §188 NR-3	§188	?	-	-		queued
 §188 NR-4	§188	?	-	-		queued
-§188 NR-5	§188	SeedDataTest	W1	-		queued
+§188 NR-5	§188	com.tcms.schema.SeedDataTest	W1	-	backend/src/test/java/com/tcms/schema/SeedDataTest.java	RUN:ZERO-AS-PREDICTED
 §189 CN-1	§189	?	W1	-		moved:packages-and-frontend-mutation-checks.md
 §189 CN-2	§189	?	-	-		moved:packages-and-frontend-mutation-checks.md
 §189 CN-3	§189	?	W1	-		moved:packages-and-frontend-mutation-checks.md
@@ -519,13 +519,13 @@ CE-M3	§161	?	-	-		queued
 §190 SM-4	§190	SchemaCommentTest	-	-		queued
 §190 SM-5	§190	SchemaCommentTest	-	-		queued
 §190 SM-6	§190	SchemaCommentTest	-	-		queued
-§192 DF-1	§192	IntegrationTest	W1	-		queued
+§192 DF-1	§192	com.tcms.repository.ConditionWriteEndpointTest,com.tcms.repository.CaseBulkEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseConditions.java	RUN:FEWER
 §192 DF-2	§192	IntegrationTest	-	-		queued
-§192 DF-3	§192	IntegrationTest	W1	-		queued
-§192 DF-4	§192	IntegrationTest	W1	-		queued
+§192 DF-3	§192	com.tcms.repository.ConditionWriteEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseEdit.java	RUN:ZERO-UNEXPECTED
+§192 DF-4	§192	com.tcms.repository.CaseBulkEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseBulkService.java	RUN:ZERO-UNEXPECTED
 §192 DF-5	§192	IntegrationTest	-	-		queued
 §192 DF-6	§192	IntegrationTest	-	-		queued
-§192 DF-7	§192	IntegrationTest	W1	-		queued
+§192 DF-7	§192	hand-built database	W1	-	-	LANE:MANUAL
 §193 LD-1	§193	?	-	-		queued
 §193 LD-2	§193	?	-	-		queued
 §193 LD-3	§193	?	-	-		queued
