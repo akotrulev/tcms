@@ -19,6 +19,7 @@ public final class OperatorCommands {
     static final String PROVISION_COMPANY = "provision-company";
     static final String ISSUE_INVITATION = "issue-invitation";
     static final String GRANT_INSTANCE_ADMIN = "grant-instance-admin";
+    static final String EXPORT_COMPANY = "export-company";
 
     /**
      * Package-private rather than private so {@code OperatorCommandsTest} can derive its cases
@@ -26,7 +27,7 @@ public final class OperatorCommands {
      * that is silent about the fourth one — which is the same defect the set replaced.
      */
     static final Set<String> ALL =
-            Set.of(PROVISION_COMPANY, ISSUE_INVITATION, GRANT_INSTANCE_ADMIN);
+            Set.of(PROVISION_COMPANY, ISSUE_INVITATION, GRANT_INSTANCE_ADMIN, EXPORT_COMPANY);
 
     private OperatorCommands() {
     }
