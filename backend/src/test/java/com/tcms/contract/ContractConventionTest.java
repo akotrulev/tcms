@@ -410,6 +410,8 @@ class ContractConventionTest {
                     List.of(com.tcms.repository.AiProposalSummaryView.class)),
             Map.entry("ApiToken", List.of(com.tcms.identity.ApiTokenView.class)),
             Map.entry("AuditEvent", List.of(com.tcms.identity.AuditEventView.class)),
+            Map.entry("CaseSearchHit",
+                    List.of(com.tcms.repository.CaseSearchHitView.class)),
             Map.entry("ApiTokenInput", List.of(com.tcms.identity.ApiTokenIssueRequest.class)),
             Map.entry("EmailDomains",
                     List.of(com.tcms.identity.IdentityProviderController.EmailDomainsRequest.class,
@@ -1219,6 +1221,11 @@ class ContractConventionTest {
                     List.of(com.tcms.auth.LdapController.DirectoryLoginRequest.class)),
             Map.entry("GET /projects/{projectId}/cases (200)",
                     List.of(com.tcms.repository.CasePageView.class)),
+            // §249's cross-project search. A separate record from CasePageView rather than a reuse:
+            // its items are CaseSearchHit, which is a waypoint and deliberately not
+            // TestCaseSummary, so the two envelopes agree on the paging fields and on nothing else.
+            Map.entry("GET /cases/search (200)",
+                    List.of(com.tcms.repository.CaseSearchPageView.class)),
             Map.entry("GET /projects/{projectId}/ai-proposals (200)",
                     List.of(com.tcms.repository.AiProposalPageView.class)),
             // Both audit trails, one record — they differ in their gate and in nothing else, so a

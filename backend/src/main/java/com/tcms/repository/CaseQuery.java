@@ -158,6 +158,20 @@ public record CaseQuery(
      * the right answer — a key that cannot exist should return no rows, not a 500.
      */
     Long keySeq() {
+        return keySeqOf(q);
+    }
+
+    /**
+     * {@link #keySeq()} over any string — the static half, so {@code TC-n} is parsed in exactly one
+     * place.
+     *
+     * <p>Extracted for §249's {@code CrossProjectSearchQuery}, which needs the same answer about
+     * its own {@code q} before it has a {@link CaseQuery} to ask: a key is exempt from the
+     * two-character minimum, because {@code TC-4} is a whole identifier rather than a substring.
+     * Copying the regex there would be two spellings of the one thing this method exists to spell
+     * once.
+     */
+    static Long keySeqOf(String q) {
         if (q == null) {
             return null;
         }

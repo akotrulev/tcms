@@ -57,27 +57,39 @@ final class CaseSpecifications {
 
         List<Predicate> all = new ArrayList<>();
 
-        // Removing this line is a mutation that SURVIVES, and it survives structurally rather than
-        // for want of a test. The suite scope below is already the project's own live tree, and a
-        // suite id is a UUID primary key — so a case in another project hangs off a suite that is
-        // never in the set, and no fixture can make the difference observable. Recorded rather
-        // than quietly left as a passing predicate nobody can account for; §22's documented
-        // survivor on RoleAssignmentRepository is the same family. (SuiteRepository's
-        // countLiveCasesBySuite documented it too, until §152 deleted it as callerless.)
+        // ~~Removing this line is a mutation that SURVIVES, and it survives structurally rather
+        // than for want of a test.~~ → TRUE OF THE PROJECT-SCOPED READ ONLY, AND FALSE SINCE THE
+        // CROSS-PROJECT SEARCH (§249).
         //
-        // It stays for two reasons that are not "in case the join key changes". It is what makes
-        // the query reachable through test_case_lifecycle_idx (company_id, project_id,
-        // lifecycle_status), and it states the bound directly instead of leaving it implied by a
-        // set of ids assembled elsewhere. The intent it states is the one RLS and the suite scope
-        // enforce, and the three agreeing is what makes a future mismatch return nothing rather
-        // than something.
-        all.add(cb.equal(root.get("projectId"), scope.projectId()));
+        // The old argument, kept because it was right and is still right on the grid: on
+        // GET /projects/{id}/cases the suite scope below is the project's own live tree, so a case
+        // in another project hangs off a suite never in the set and no fixture could make the
+        // difference observable. §22's documented survivor on RoleAssignmentRepository is the same
+        // family. (SuiteRepository's countLiveCasesBySuite documented it too, until §152 deleted it
+        // as callerless.)
+        //
+        // On GET /cases/search there IS no suite scope — the projects are many and their trees are
+        // not enumerated, which is what CaseScope.boundByTree says — so THIS LINE IS THE WHOLE
+        // PROJECT BOUNDARY, and RLS is not behind it: the policy predicate is the COMPANY, and
+        // every project the caller is not granted is in the caller's own company and therefore
+        // RLS-visible to this very session.
+        //
+        // The ids are the ones ProjectService handed back (readVisible / readAllVisible), never
+        // ones the request supplied. Because the predicate is HERE rather than in Java after the
+        // read, the total and the paging are computed over exactly the rows the caller may see —
+        // which is what CaseSearchTest.theTotalIsNarrowedToo and .thePageCannotHideTheCount assert,
+        // and what a page-only assertion cannot.
+        //
+        // It also still does what it always did: it is what makes the query reachable through
+        // test_case_lifecycle_idx (company_id, project_id, lifecycle_status), and it states the
+        // bound directly instead of leaving it implied by a set of ids assembled elsewhere.
+        all.add(root.get("projectId").in(scope.projectIds()));
 
         // Soft-deleted cases are gone from every read: past executions still reference them and
         // pin the version they ran, which is why the row survives at all.
         all.add(cb.isNull(root.get("deletedAt")));
 
-        all.add(suiteScope(scope, root, cb));
+        suiteScope(scope, root, cb).ifPresent(all::add);
 
         // B8 — the by-ids read, and it is a FILTER like any other rather than a mode. Placed
         // after the two bounds above and before everything else so the reading is unambiguous:
@@ -152,23 +164,39 @@ final class CaseSpecifications {
      * rather than bound to nothing: an empty {@code IN ()} is a syntax error, and a project with no
      * suites at all — the state of every freshly provisioned one — can now hold cases.
      */
-    private static Predicate suiteScope(CaseScope scope, Root<TestCase> root, CriteriaBuilder cb) {
+    /**
+     * The suite bound, or none.
+     *
+     * <p><strong>{@code Optional.empty()} is "no suite predicate" and is NOT the same as any
+     * combination of the fields below.</strong> In particular it is not an empty
+     * {@code liveSuiteIds} with {@code includeUnfiled}, which is the "unfiled only" filter and
+     * reads as {@code suite_id IS NULL} — a cross-project search spelled that way would answer the
+     * few cases filed nowhere and silently drop every filed case in the company. That is why
+     * {@link CaseScope#boundByTree} is a field: the state had to be sayable.
+     */
+    private static Optional<Predicate> suiteScope(
+            CaseScope scope, Root<TestCase> root, CriteriaBuilder cb) {
+
+        if (!scope.boundByTree()) {
+            return Optional.empty();
+        }
+
         // §98: a named suite is already resolved to the cases it holds — filed ∪ added ∪ tagged —
         // so the predicate is on the case's own id and the three arms are not re-derived here.
         // It matched `suite_id IN (subtree)` until then, which is the FILED arm alone, so a suite
         // defined by a tag rule listed nothing under a count of twelve.
         if (scope.memberCaseIds() != null) {
-            return root.get("id").in(scope.memberCaseIds());
+            return Optional.of(root.get("id").in(scope.memberCaseIds()));
         }
 
         Path<UUID> suiteId = root.get("suiteId");
         if (!scope.includeUnfiled()) {
-            return suiteId.in(scope.liveSuiteIds());
+            return Optional.of(suiteId.in(scope.liveSuiteIds()));
         }
         if (scope.liveSuiteIds().isEmpty()) {
-            return cb.isNull(suiteId);
+            return Optional.of(cb.isNull(suiteId));
         }
-        return cb.or(suiteId.in(scope.liveSuiteIds()), cb.isNull(suiteId));
+        return Optional.of(cb.or(suiteId.in(scope.liveSuiteIds()), cb.isNull(suiteId)));
     }
 
     /**

@@ -139,12 +139,17 @@ public class CaseService {
         }
 
         CaseScope scope = new CaseScope(
-                projectId,
+                // A one-element set: this read is bounded to the project the path named and the
+                // gate handed back. The collection exists for §249's cross-project search, which
+                // passes the caller's whole visible set through the same predicate.
+                List.of(projectId),
                 memberCaseIds,
                 // Only the unfiled ones when the caller asked for those: the filter is a narrowing,
                 // so it drops the filed arm rather than adding to it.
                 unfiledOnly ? List.of() : liveSuites.stream().map(Suite::getId).toList(),
                 includeUnfiled,
+                // Bounded by this project's tree, which is every read on this path.
+                true,
                 subtreeOf(request.featureId(), DimensionKeys.FEATURE, vocabularies),
                 subtreeOf(request.testTypeId(), DimensionKeys.TEST_TYPE, vocabularies),
                 subtreeOf(request.testLevelId(), DimensionKeys.TEST_LEVEL, vocabularies));

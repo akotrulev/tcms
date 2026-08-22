@@ -122,7 +122,9 @@ public class DashboardService {
 
         CaseQuery unfiltered = CaseQuery.unfiltered();
         CaseScope scope = new CaseScope(
-                projectId,
+                // One project — the dashboard is this project's. A set since §249, whose
+                // cross-project search passes the caller's whole visible set to the same predicate.
+                List.of(projectId),
                 // No suite filter here — the dashboard is the whole project — so no resolved
                 // membership to bound it with (§98).
                 null,
@@ -132,6 +134,8 @@ public class DashboardService {
                 // cases now — all of them unfiled — so returning zeros for one would be a dashboard
                 // that says a project is empty while its grid lists forty cases. CaseScope tolerates
                 // an empty suite set exactly when this flag is on, which is the same condition.
+                true,
+                // Bounded by this project's tree.
                 true,
                 null,
                 null,
