@@ -454,13 +454,13 @@ CE-M3	§161	?	-	-		queued
 §169 XL-5	§169	?	-	-		queued
 §169 XL-6	§169	?	W1	GAP		queued
 §170 PR-4	§170	?	-	-		queued
-§174 RL-1	§174	ExternalLinkEndpointTest	W1	-		queued
-§174 RL-2	§174	PlanDocumentEndpointTest	W1	-		queued
+§174 RL-1	§174	com.tcms.documentation.ExternalLinkEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/DocLink.java	RUN:MATCH
+§174 RL-2	§174	com.tcms.documentation.ExternalLinkEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/DocLink.java	RUN:MATCH
 §174 RL-3	§174	PlanDocumentEndpointTest	-	-		queued
 §177 GT-M1	§177	RunCreateEndpointTest	-	-		queued
-§177 GT-M2	§177	?	W1	-		queued
+§177 GT-M2	§177	com.tcms.execution.RunCreateEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/RunService.java	RUN:MATCH
 §177 GT-M3	§177	IngestionEndpointTest	-	-		queued
-§177 GT-M4	§177	RunCloneEndpointTest	W1	-		queued
+§177 GT-M4	§177	com.tcms.execution.RunCloneEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/RunCloneService.java	RUN:MATCH
 §177 GT-M5	§177	GitObjectNameRuleTest	-	-		queued
 §178 SL-M1	§178	CaseHealthRecomputeTest	-	-		queued
 §178 SL-M2	§178	CaseHealthRecomputeTest	-	-		queued
@@ -479,25 +479,25 @@ CE-M3	§161	?	-	-		queued
 §180 TL-M4	§179	CaseBulkEndpointTest	-	-		queued
 §181 OS-M1	§181	?	-	-		queued
 §181 OS-M2	§181	?	-	-		queued
-§181 OS-M3	§181	?	W1	-		queued
+§181 OS-M3	§181	com.tcms.repository.CaseHealthRecomputeTest	W1	-	backend/src/main/java/com/tcms/repository/OwnerStanding.java	RUN:MATCH
 §181 OS-M4	§181	?	-	-		queued
 §181 OS-M5	§181	?	-	-		queued
 §181 OS-M6	§181	CaseHealthRecomputeTest	-	-		queued
 §182 CC-M1	§182	?	-	-		queued
 §182 CC-M2	§182	?	-	-		queued
 §182 CC-M3	§182	?	-	-		queued
-§182 CC-M4	§182	?	W1	-		queued
+§182 CC-M4	§182	com.tcms.repository.CaseHealthRecomputeTest	W1	-	backend/src/main/java/com/tcms/repository/CaseCompleteness.java	RUN:MORE
 §182 CC-M5	§182	?	-	-		queued
-§182 CC-M6	§182	CaseHealthRecomputeTest	W1	-		queued
+§182 CC-M6	§182	com.tcms.repository.CaseHealthRecomputeTest	W1	-	backend/src/test/java/com/tcms/repository/CaseHealthRecomputeTest.java	RUN:MATCH
 §185 SR-1	§185	?	-	-		queued
 §185 SR-2	§185	?	-	-		queued
-§185 SR-3	§185	?	W1	-		queued
-§185 SR-4	§185	IdempotencyKeyCapTest	W1	-		queued
-§186 SQ-1	§186	?	W1	-		queued
+§185 SR-3	§185	com.tcms.config.ConfigConventionTest	W1	-	backend/src/main/resources/application.yml	RUN:MATCH
+§185 SR-4	§185	com.tcms.config.ConfigConventionTest	W1	-	backend/build.gradle.kts + backend/Dockerfile	RUN:MATCH
+§186 SQ-1	§186	com.tcms.repository.SuiteWriteEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/SuiteConditions.java	RUN:MATCH
 §186 SQ-2	§186	?	-	-		queued
 §186 SQ-3	§186	?	-	-		queued
 §186 SQ-4	§186	?	-	-		queued
-§186 SQ-5	§186	CaseUpdateEndpointTest	W1	-		queued
+§186 SQ-5	§186	com.tcms.repository.SuiteWriteEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/SuiteWriteService.java	RUN:ZERO-AS-PREDICTED
 §187 DC-1	§187	ConditionWriteEndpointTest	W1	-		queued
 §187 DC-2	§187	ConditionWriteEndpointTest	-	-		queued
 §187 DC-3	§187	ConditionWriteEndpointTest	W1	-		queued
