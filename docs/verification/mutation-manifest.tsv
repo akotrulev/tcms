@@ -28,7 +28,7 @@ id	section	scope	wave	gap	file	status
 13h	13. §101's M2 rollups	?	-	-		queued
 13i	13. §101's M2 rollups	PlanSnapshotRefreshTest	W1	-		RUN:MATCH
 13j	13. §101's M2 rollups	RollupAgreementTest	-	-		queued
-13k	13. §101's M2 rollups	?	W1	-		queued
+13k	13. §101's M2 rollups	com.tcms.execution.RollupAgreementTest	W1	-	backend/src/main/java/com/tcms/execution/SuiteHistoryService.java backend/src/main/java/com/tcms/execution/PlanStatisticsService.java	RUN:ZERO-AS-PREDICTED
 R6-2	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	-	-		queued
 R6-3	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	-	-		queued
 R6-4	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	-	-		queued
@@ -51,7 +51,7 @@ R8-4	18. R8's version divergence	AggregateVersionDivergenceTest	-	-		queued
 R8-5	18. R8's version divergence	AggregateVersionDivergenceTest	-	-		queued
 R8-6	18. R8's version divergence	AggregateVersionDivergenceTest	-	-		queued
 R8-7	18. R8's version divergence	AggregateVersionDivergenceTest	W1	GAP		queued
-~~14a~~	14. §106's board drag	?	W1	-		queued
+~~14a~~	14. §106's board drag	?	W1	-	-	RUN:STALE-VOID
 14b	14. §106's board drag	WorkItemEndpointTest	-	-		queued
 V20	Needs the Hetzner box	?	-	-		queued
 V21	Needs the Hetzner box	?	-	-		queued
@@ -80,12 +80,12 @@ IN-9	§117	IngestionEndpointTest	-	-		queued
 IN-10	§117	IngestionEndpointTest	-	-		queued
 IN-11	§117	IngestionEndpointTest	-	-		queued
 IN-12	§117	IngestionEndpointTest	-	-		queued
-IH-1	§119	IngestionEndpointTest	W1	-		queued
+IH-1	§119	com.tcms.execution.IngestionEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/IngestionJobRepository.java	RUN:MATCH
 IH-2	§119	IngestionEndpointTest	-	-		queued
 IH-3	§119	UnmatchedTest	-	-		queued
 IH-4	§119	IngestionEndpointTest	-	-		queued
 IH-5	§119	IngestionEndpointTest	-	-		queued
-IH-6	§119	IngestionEndpointTest	W1	-		queued
+IH-6	§119	com.tcms.execution.IngestionEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/IngestionJobRepository.java	RUN:ZERO-AS-PREDICTED
 IH-7	§119	IngestionEndpointTest	-	-		queued
 IH-8	§119	UnmatchedTest	-	-		queued
 DR-3	§120	CaseHealthRecomputeTest	-	-		queued
@@ -94,7 +94,7 @@ DR-5	§120	CaseHealthRecomputeTest	-	-		queued
 DR-6	§120	CaseHealthRecomputeTest	-	-		queued
 DR-7	§120	CaseHealthAttributesTest	-	-		queued
 DR-8	§120	CaseHealthRecomputeTest	-	GAP		queued
-DR-9	§120	CaseHealthRecomputeTest	W1	-		queued
+DR-9	§120	com.tcms.repository.CaseHealthRecomputeTest	W1	-	backend/src/main/java/com/tcms/repository/CaseHealthProperties.java backend/src/main/resources/application.yml	RUN:MORE
 FQ-4	§121	FlakeScoreTest	-	-		queued
 FQ-5	§121	FlakeScoreTest	-	-		queued
 FQ-6	§121	FlakeScoreTest	-	-		queued
@@ -124,19 +124,19 @@ GA-6	§122	GrantInstanceAdminServiceTest	-	GAP		queued
 GA-7	§122	GrantInstanceAdminServiceTest	-	-		queued
 GA-8	§122	GrantInstanceAdminServiceTest	-	-		queued
 GA-9	§122	GrantInstanceAdminServiceTest	-	-		queued
-GA-10	§122	GrantInstanceAdminServiceTest	W1	-		queued
+GA-10	§122	com.tcms.provisioning.GrantInstanceAdminServiceTest	W1	-	backend/src/main/java/com/tcms/provisioning/GrantInstanceAdminService.java	RUN:ZERO-AS-PREDICTED
 §124 AG-1	§124	AggregateExecutionPolicyTest	-	-		queued
 §124 AG-2	§124	PlanStatisticsEndpointTest	-	-		queued
 §124 AG-3	§124	PlanStatisticsEndpointTest	-	-		queued
 RX-2	§124	PlanStatisticsEndpointTest	-	-		queued
 RX-3	§124	IngestionEndpointTest	-	-		queued
 RX-4	§124	PlanStatisticsEndpointTest	-	-		queued
-AD-2	§124	PlanStatisticsEndpointTest	W1	-		queued
+AD-2	§124	com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/ArtifactWriteService.java	RUN:MATCH
 AD-3	§124	PlanStatisticsEndpointTest	-	-		queued
 AD-4	§124	PlanStatisticsEndpointTest	-	-		queued
 AD-5	§124	PlanStatisticsEndpointTest	-	-		queued
-AD-6	§124	PlanStatisticsEndpointTest	W1	-		queued
-AD-7	§124	PlanStatisticsEndpointTest	W1	-		queued
+AD-6	§124	com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/ArtifactWriteService.java	RUN:MATCH
+AD-7	§124	com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/ArtifactWriteService.java	RUN:MORE
 ST-1	§125	ArchitectureRulesTest	-	-		queued
 ST-2	§125	ArchitectureRulesTest	W1	GAP		queued
 ST-3	§125	ModuleStructureTest	-	-		queued
