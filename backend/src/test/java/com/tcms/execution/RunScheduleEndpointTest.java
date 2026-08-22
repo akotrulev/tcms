@@ -127,13 +127,20 @@ class RunScheduleEndpointTest extends IntegrationTestBase {
         Instant now = Instant.now();
 
         tx.executeWithoutResult(status -> {
-            company(ACME, "rs-acme", "Acme", now);
-            company(UMBRA, "rs-umbra", "Umbra", now);
+            // The slug is a SECOND uniqueness namespace beside the fixture's UUID prefix, and it
+            // is a GLOBAL one: `company` is deliberately not under RLS (V1's comment says why) and
+            // `uq_company_slug` therefore spans the whole instance. `rs-acme` had been
+            // RunSummaryReportTest's since §188, so the initials this class first reached for made
+            // both classes pass alone and fail together — §19's first defect, one namespace over,
+            // and the reason the parallel-work rules' pre-assigned UUID prefix is not sufficient
+            // on its own.
+            company(ACME, "rsched-acme", "Acme", now);
+            company(UMBRA, "rsched-umbra", "Umbra", now);
 
-            activeUser(LEAD, "lead@rs-acme.test", "L. Lead", now);
-            activeUser(ENGINEER, "eng@rs-acme.test", "E. Engineer", now);
-            activeUser(VIEWER, "viewer@rs-acme.test", "V. Viewer", now);
-            activeUser(OUTSIDER, "out@rs-umbra.test", "O. Outsider", now);
+            activeUser(LEAD, "lead@rsched-acme.test", "L. Lead", now);
+            activeUser(ENGINEER, "eng@rsched-acme.test", "E. Engineer", now);
+            activeUser(VIEWER, "viewer@rsched-acme.test", "V. Viewer", now);
+            activeUser(OUTSIDER, "out@rsched-umbra.test", "O. Outsider", now);
         });
 
         inCompany(ACME, () -> tx.executeWithoutResult(status -> {
@@ -485,8 +492,12 @@ class RunScheduleEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("an expression with nothing left answers a NULL nextFireAt, not an error")
         void anExhaustedExpressionAnswersNull() throws Exception {
+            // The 30th of February, not a year that has passed: a six-field cron has no year
+            // field at all, so "0 0 3 1 1 2020" is SEVEN fields and the server refuses it with a
+            // 400 — correctly. An impossible day-of-month is the only way to express a cadence
+            // with nothing left, and CronScheduleTest asserts the same thing one layer down.
             MvcResult created = post(LEAD, ACME, ACME_BANKING,
-                    payload("Once, long ago", "0 0 3 1 1 2020", "UTC",
+                    payload("Never again", "0 0 3 30 2 *", "UTC",
                             scope(List.of(SMOKE_SUITE))));
 
             assertThat(created.getResponse().getStatus())

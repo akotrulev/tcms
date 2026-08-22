@@ -33,8 +33,9 @@ import org.springframework.scheduling.support.CronExpression;
  *
  * <h2>{@link #nextAfter} may answer empty, and that is an answer rather than a failure</h2>
  *
- * <p>An expression pinned to a date that has passed yields nothing further; {@link CronExpression}
- * says so by returning null. {@code run_schedule.next_fire_at} is nullable for it and the screen
+ * <p>An expression naming a date that never arrives — the 30th of February — yields nothing at
+ * all; {@link CronExpression} says so by returning null. (Not "a date that has passed": a
+ * six-field cron carries no year, so every calendar expression recurs.) {@code run_schedule.next_fire_at} is nullable for it and the screen
  * says "will not fire again" rather than rendering a blank cell, which reads as "loading" or
  * "soon" — both false.
  */

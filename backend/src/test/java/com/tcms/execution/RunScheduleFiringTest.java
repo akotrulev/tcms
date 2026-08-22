@@ -26,6 +26,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -131,9 +132,11 @@ class RunScheduleFiringTest extends IntegrationTestBase {
         Instant now = Instant.now();
 
         tx.executeWithoutResult(status -> {
-            company(ACME, "rf-acme", "Acme", now);
-            activeUser(OWNER, "owner@rf-acme.test", "O. Owner", now);
-            activeUser(AUDITOR, "auditor@rf-acme.test", "A. Auditor", now);
+            // `rf-acme` was ExecutionFactRefreshTest's. See RunScheduleEndpointTest's note: the
+            // slug is a global uniqueness namespace that no prefix assignment covers.
+            company(ACME, "rsfire-acme", "Acme", now);
+            activeUser(OWNER, "owner@rsfire-acme.test", "O. Owner", now);
+            activeUser(AUDITOR, "auditor@rsfire-acme.test", "A. Auditor", now);
         });
 
         inCompany(ACME, () -> tx.executeWithoutResult(status -> {
@@ -317,7 +320,7 @@ class RunScheduleFiringTest extends IntegrationTestBase {
                 .as("seven identical runs appearing at once, each materialised against today's "
                         + "case versions, is what this decision refuses")
                 .isEqualTo(1);
-        assertThat(Instant.parse(scheduleColumn(scheduleId, "next_fire_at")))
+        assertThat(scheduleInstant(scheduleId, "next_fire_at"))
                 .as("recomputed FROM THE MOMENT OF FIRING, never from the missed slot")
                 .isAfter(now);
     }
@@ -357,7 +360,7 @@ class RunScheduleFiringTest extends IntegrationTestBase {
         assertThat(scheduleColumn(scheduleId, "last_fire_error"))
                 .as("a schedule that stops SILENTLY is the failure mode of scheduling anything")
                 .contains("archived");
-        assertThat(Instant.parse(scheduleColumn(scheduleId, "next_fire_at")))
+        assertThat(scheduleInstant(scheduleId, "next_fire_at"))
                 .as("still advanced — a refusal is not a reason to re-fire on every tick")
                 .isAfter(now);
     }
@@ -394,12 +397,12 @@ class RunScheduleFiringTest extends IntegrationTestBase {
 
         makeDue(scheduleId, minutesAgo(10));
         fire(scheduleId, Instant.now());
-        Instant afterFirst = Instant.parse(scheduleColumn(scheduleId, "next_fire_at"));
+        Instant afterFirst = scheduleInstant(scheduleId, "next_fire_at");
 
         makeDue(scheduleId, minutesAgo(1));
         Instant now = Instant.now();
         fire(scheduleId, now);
-        Instant afterSecond = Instant.parse(scheduleColumn(scheduleId, "next_fire_at"));
+        Instant afterSecond = scheduleInstant(scheduleId, "next_fire_at");
 
         assertThat(afterFirst).isAfter(minutesAgo(10));
         assertThat(afterSecond)
@@ -427,7 +430,7 @@ class RunScheduleFiringTest extends IntegrationTestBase {
                         + "and never started")
                 .isZero();
         assertThat(scheduleColumn(scheduleId, "last_fire_error")).isNotNull();
-        assertThat(Instant.parse(scheduleColumn(scheduleId, "next_fire_at"))).isAfter(now);
+        assertThat(scheduleInstant(scheduleId, "next_fire_at")).isAfter(now);
     }
 
     /** A schedule that failed and then worked must not keep the red sentence beside a fresh run. */
@@ -598,6 +601,29 @@ class RunScheduleFiringTest extends IntegrationTestBase {
             statement.setBoolean(1, enabled);
             statement.setString(2, scheduleId.toString());
             statement.executeUpdate();
+        }
+    }
+
+    /**
+     * One timestamptz column, as an {@link Instant}.
+     *
+     * <p>Separate from {@link #scheduleColumn} because {@code getString} on a {@code timestamptz}
+     * hands back PostgreSQL's own rendering — {@code 2026-08-23 03:00:00+00}, a space and no
+     * {@code Z} — which {@code Instant.parse} refuses at index 10. Reading it as an
+     * {@link OffsetDateTime} lets the driver do the conversion instead of asserting through a
+     * text format neither side promised.
+     */
+    private Instant scheduleInstant(UUID scheduleId, String column) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "SELECT " + column + " FROM run_schedule WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, scheduleId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                assertThat(rows.next()).as("the schedule row must still be there").isTrue();
+                OffsetDateTime value = rows.getObject(1, OffsetDateTime.class);
+                assertThat(value).as("%s must not be null here", column).isNotNull();
+                return value.toInstant();
+            }
         }
     }
 

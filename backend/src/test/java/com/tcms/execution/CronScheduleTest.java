@@ -124,10 +124,14 @@ class CronScheduleTest {
     @Test
     @DisplayName("an expression with no future occurrence answers empty")
     void anExpressionWithNoFutureOccurrenceAnswersEmpty() {
-        // Pinned to a date that has passed: 03:00 on 1 January 2020.
-        CronSchedule pinned = parsed("0 0 3 1 1 *", "UTC");
+        // 03:00 on the 30th of FEBRUARY — a date that never arrives. There is no way to express
+        // "a date that has passed" here: a six-field cron has no year, so `0 0 3 1 1 *` is 1
+        // January of EVERY year and legitimately answers the next one. An impossible day-of-month
+        // is the only expression that genuinely has no future occurrence, which is why
+        // CronExpression#next documents returning null rather than throwing.
+        CronSchedule impossible = parsed("0 0 3 30 2 *", "UTC");
 
-        Optional<Instant> next = pinned.nextAfter(Instant.parse("2200-01-02T00:00:00Z"));
+        Optional<Instant> next = impossible.nextAfter(Instant.parse("2026-01-02T00:00:00Z"));
 
         assertThat(next)
                 .as("CronExpression legitimately answers null past its own bound; that is a "
