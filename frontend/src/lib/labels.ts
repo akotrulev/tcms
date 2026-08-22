@@ -36,6 +36,7 @@ import type {
   ReviewState,
   ReviewSubjectType,
   ReviewVerdict,
+  RunSource,
   RunStatus,
   SocialProvider,
   StatusKind,
@@ -222,6 +223,25 @@ export const runStatusLabels = {
   COMPLETED: 'Completed',
   ABORTED: 'Aborted',
 } as const satisfies Record<RunStatus, string>;
+
+/**
+ * Where a run came from, in the reader's words.
+ *
+ * <em>The reason this is a map and not a ternary.</em> `RunListPage` rendered
+ * `run.source === 'INGESTED' ? 'from CI' : 'manual'` until §247, which was correct while there
+ * were exactly two doors. `SCHEDULED` made the else-branch a lie: every run a poller created would
+ * have been labelled **"manual"** beside a `createdBy` of nobody — precisely the false attribution
+ * the whole authority-versus-actor split on the server exists to avoid — and it would have
+ * typechecked, linted and passed every test.
+ *
+ * The `satisfies` is the point: the next member is a compile error until it is labelled. That is
+ * the guarantee this file's header asks for and the ternary never had.
+ */
+export const runSourceLabels = {
+  MANUAL: 'manual',
+  INGESTED: 'from CI',
+  SCHEDULED: 'scheduled',
+} as const satisfies Record<RunSource, string>;
 
 /**
  * The four CI dialects, spelled the way their own projects spell them.

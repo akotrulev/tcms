@@ -63,6 +63,7 @@ import type {
   TestCase,
   TestCaseSummary,
   TestExecution,
+  RunSchedule,
   TestPlan,
   TestPlanSummary,
   TestRun,
@@ -718,6 +719,38 @@ export function anAuditEvent(overrides: Partial<AuditEvent> = {}): AuditEvent {
     changes: null,
     bulkOperationId: null,
     occurredAt: AT,
+    ...overrides,
+  }
+}
+
+/**
+ * A run schedule (§247) — complete and typed to the contract, never cast.
+ *
+ * Every nullable field is spelled out rather than omitted, for `projectSettings`' reason one file
+ * up: an omitted key reads as `undefined`, which is falsy and indistinguishable from a decision
+ * until a test wants the other branch. Here that matters most for `lastFireError` and `nextFireAt`
+ * — the two fields whose *absence* is what the screen renders differently.
+ */
+export function aRunSchedule(overrides: Partial<RunSchedule> = {}): RunSchedule {
+  return {
+    id: 'rs-1',
+    projectId: 'p1',
+    name: 'Nightly smoke',
+    cronExpression: '0 0 3 * * MON-FRI',
+    zoneId: 'Europe/Sofia',
+    scope: { planId: null, caseIds: [], suiteIds: [], tags: ['smoke'] },
+    configurationId: null,
+    assigneeId: null,
+    assigneeName: null,
+    enabled: true,
+    nextFireAt: AT,
+    lastFiredAt: null,
+    lastRunId: null,
+    lastRunKey: null,
+    lastFireError: null,
+    createdAt: AT,
+    createdBy: 'user-1',
+    createdByName: 'O. Owner',
     ...overrides,
   }
 }

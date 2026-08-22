@@ -65,6 +65,9 @@ const RunListPage = lazy(() =>
 const RunDetailPage = lazy(() =>
   import('../features/runs/RunDetailPage').then((m) => ({ default: m.RunDetailPage })),
 );
+const RunSchedulePage = lazy(() =>
+  import('../features/runs/RunSchedulePage').then((m) => ({ default: m.RunSchedulePage })),
+);
 const ExecutionPage = lazy(() =>
   import('../features/runs/ExecutionPage').then((m) => ({ default: m.ExecutionPage })),
 );
@@ -348,6 +351,20 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <RunListPage />
+              </Suspense>
+            }
+          />
+          {/*
+            `/run-schedules`, NOT `/runs/schedules`. A schedule is not a run and is not nested under
+            one — it outlives every run it makes, and the runs outlive it. The path is kept beside
+            the run routes so the family reads together and the nested spelling cannot be added
+            without seeing this one.
+          */}
+          <Route
+            path="/projects/:projectId/run-schedules"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <RunSchedulePage />
               </Suspense>
             }
           />

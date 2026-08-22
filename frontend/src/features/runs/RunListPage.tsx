@@ -23,7 +23,7 @@ import { ResultBar } from '../../components/ResultBar';
 import { RunCreateDialog } from './RunCreateDialog';
 import { executedCount, passRate } from '../../lib/results';
 import { formatAge, formatCount, formatDateTime, formatDuration, formatPercent } from '../../lib/format';
-import { runStatusColors, runStatusLabels } from '../../lib/labels';
+import { runSourceLabels, runStatusColors, runStatusLabels } from '../../lib/labels';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -158,7 +158,7 @@ function RunTable({ rows, projectId }: { rows: TestRun[]; projectId: string }) {
                     {/* Where the results came from changes how much a reader trusts them and
                         who to ask about a failure, so it's shown rather than implied. */}
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      {run.source === 'INGESTED' ? 'from CI' : 'manual'}
+                      {runSourceLabels[run.source]}
                     </Typography>
                   </Stack>
                 </TableCell>

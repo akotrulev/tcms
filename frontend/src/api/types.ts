@@ -193,11 +193,31 @@ export type TestRunInput = S['TestRunInput'];
  */
 export type TestRunCloneInput = S['TestRunCloneInput'];
 /**
+ * A standing request for a run — what to ask for and when (§247, `V68`).
+ *
+ * `scope` is the SAME `RunScopeRequest` a run records, not a second encoding of it: one document,
+ * one writer on the server and one reader, which is what makes "why is this case in this run"
+ * answerable for a run nobody asked for.
+ */
+export type RunSchedule = S['RunSchedule'];
+export type RunScheduleInput = S['RunScheduleInput'];
+/**
  * The run lifecycle. Read off `TestRun` rather than a named component because the contract
  * declares it inline — and named here so `lib/labels.ts` can `satisfies Record<RunStatus, string>`
  * over it, which is what turns a missing or invented value into a compile error.
  */
 export type RunStatus = NonNullable<TestRun['status']>;
+/**
+ * Which **door** a run came through, never who asked for it — `MANUAL`, `INGESTED`, or `SCHEDULED`
+ * since §247.
+ *
+ * Read off `TestRun` for `RunStatus`' reason (the contract declares it inline) and named here for
+ * the same one: `runSourceLabels` is `satisfies Record<RunSource, string>` over it, so the day a
+ * fourth door is added the label map is a **compile error** rather than a screen quietly saying the
+ * wrong word. The ternary this replaced would have labelled every scheduled run "manual" and
+ * typechecked while doing it.
+ */
+export type RunSource = NonNullable<TestRun['source']>;
 /**
  * The plan lifecycle, read off `TestPlanSummary` for `RunStatus`' reason — and named in §73 after
  * finding `PlanListPage`'s colour map had drifted the same way the run list's had: typed

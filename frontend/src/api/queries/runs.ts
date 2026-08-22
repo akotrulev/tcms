@@ -8,6 +8,8 @@ import type {
   Evidence,
   ExecutionBulkOperation,
   ExecutionBulkResult,
+  RunSchedule,
+  RunScheduleInput,
   TestExecution,
   TestRun,
   TestRunCloneInput,
@@ -476,6 +478,105 @@ export function useSubmitResult(projectId: string, runId: string, executionId: s
       // The run's counts move with the result, so the run view must not keep the old ones.
       void client.invalidateQueries({ queryKey: keys.run(projectId, runId) });
       void client.invalidateQueries({ queryKey: ['projects', projectId, 'plans'] });
+    },
+  });
+}
+
+/**
+ * The project's run schedules — `GET /run-schedules` (§247).
+ *
+ * <em>What a schedule is:</em> a standing request for a run. It stores the same
+ * `{planId, caseIds, suiteIds, tags}` document a run records, plus a cadence, and a poller re-asks
+ * it. The runs it makes are ordinary runs.
+ *
+ * **Readable by anybody who can see the project**, like the run list — the three writes below cost
+ * `run:create`, because a schedule is delegated run creation. There is no new permission key.
+ *
+ * No `staleTime`: a schedule's `nextFireAt`, `lastFiredAt` and `lastFireError` all move without
+ * anybody in this browser doing anything, which is the opposite of `useConfigurations` above and
+ * the reason its five minutes are not copied here.
+ */
+export function useRunSchedules(projectId: string): UseQueryResult<RunSchedule[]> {
+  return useQuery({
+    queryKey: keys.runSchedules(projectId),
+    queryFn: ({ signal }) =>
+      api.get<RunSchedule[]>(`${base(projectId)}/run-schedules`, { signal }),
+    enabled: !!projectId,
+  });
+}
+
+export function useRunSchedule(
+  projectId: string,
+  scheduleId: string | undefined,
+): UseQueryResult<RunSchedule> {
+  return useQuery({
+    queryKey: keys.runSchedule(projectId, scheduleId ?? ''),
+    queryFn: ({ signal }) =>
+      api.get<RunSchedule>(`${base(projectId)}/run-schedules/${scheduleId}`, { signal }),
+    enabled: !!projectId && !!scheduleId,
+  });
+}
+
+/**
+ * Creates a schedule.
+ *
+ * **No `Idempotency-Key`, and it is not an omission** — the operation declares none. What this API
+ * calls idempotency is a unique key column on a *created row*, and `V68` has none; a header the
+ * server does not read is the defect §205 found arriving from this side. The cost of a duplicate is
+ * also not a run's: a second schedule is visible in this list and deletable, where a second
+ * checklist splits one tester's results across two runs.
+ *
+ * `meta: { handled: true }` because the form lands 400s on its own controls.
+ */
+export function useCreateRunSchedule(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RunScheduleInput) =>
+      api.post<RunSchedule>(`${base(projectId)}/run-schedules`, input),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.runSchedules(projectId) });
+    },
+  });
+}
+
+/**
+ * Replaces a schedule — a **total** statement, not a patch.
+ *
+ * An omitted `assigneeId` or `configurationId` clears it, which is the same rule every other write
+ * in this API follows and the reason the form must send every control it renders.
+ *
+ * No `If-Match`: the operation declares none. The 409 it can answer is a genuine interleaving the
+ * server detects at flush, which a precondition could not have anticipated — see the operation's
+ * own description.
+ */
+export function useUpdateRunSchedule(projectId: string, scheduleId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RunScheduleInput) =>
+      api.put<RunSchedule>(`${base(projectId)}/run-schedules/${scheduleId}`, input),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.runSchedules(projectId) });
+      void client.invalidateQueries({ queryKey: keys.runSchedule(projectId, scheduleId) });
+    },
+  });
+}
+
+/**
+ * Deletes a schedule.
+ *
+ * The runs it created are untouched — a schedule records no work — so nothing in the run cache
+ * needs invalidating here, and invalidating it would refetch a list that cannot have changed.
+ */
+export function useDeleteRunSchedule(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (scheduleId: string) =>
+      api.del<void>(`${base(projectId)}/run-schedules/${scheduleId}`),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.runSchedules(projectId) });
     },
   });
 }

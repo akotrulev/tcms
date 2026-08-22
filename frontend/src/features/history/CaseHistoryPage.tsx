@@ -285,6 +285,9 @@ function VersionRow({ marker, last }: { marker: VersionMarker; last: boolean }) 
  * fallback on an INGESTED row and not a bug.
  */
 function authorLine(entry: ExecutionHistoryEntry): string {
+  // A boolean about INGESTION, not a label — which is why §247 left it alone while replacing the
+  // run list's ternary with `runSourceLabels`. A `SCHEDULED` result reads correctly here: it was
+  // not ingested, and whoever recorded the verdict is a person the run's origin says nothing about.
   const ingested = entry.source === 'INGESTED';
   if (entry.executedByToken) {
     return `${ingested ? 'ingested by' : 'recorded by'} ${entry.executedByToken}`;

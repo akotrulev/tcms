@@ -95,6 +95,20 @@ export const keys = {
   execution: (p: string, runId: string, id: string) =>
     ['projects', p, 'runs', runId, 'executions', id] as const,
   /**
+   * The project's run schedules (§247).
+   *
+   * Deliberately NOT under the `runs` prefix, even though a schedule is delegated run creation:
+   * `['projects', p, 'runs']` is invalidated by every result recorded and every run created, and a
+   * standing request does not move when a run does. Sharing the prefix would refetch this list on
+   * every verdict a tester enters.
+   *
+   * One key for the list and the item, because there is no second read shape — `GET /{scheduleId}`
+   * serves exactly the schema the list serves, so an item read out of the list's cache is the same
+   * document rather than a partial one (`keys.ingestions`' distinction, answering the other way).
+   */
+  runSchedules: (p: string) => ['projects', p, 'run-schedules'] as const,
+  runSchedule: (p: string, id: string) => ['projects', p, 'run-schedules', id] as const,
+  /**
    * The ingestion history, and one job.
    *
    * Two keys rather than one with a `find` over the list, because the two endpoints serve
