@@ -302,4 +302,43 @@ describe('ExecutionPage keyboard', () => {
     // The note travels with the verdict — Escape leaves the box, it does not discard what is in it.
     expect(sent[0]).toMatchObject({ statusId: 'st-passed', comment: 'it passed on the third try' })
   })
+
+  it('announces the verdict it recorded', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    mockSubmit()
+    await renderScreen()
+
+    await user.keyboard('p')
+
+    // The announcer clears and re-sets in a microtask, so this waits rather than reads once.
+    await waitFor(() =>
+      expect(screen.getByTestId('Announcer')).toHaveTextContent('Recording Passed for TC-2.'),
+    )
+  })
+
+  it('announces a refusal, so a dead key and a working one are not the same experience', async () => {
+    const user = userEvent.setup()
+    mockReads({ runStatus: 'COMPLETED' })
+    mockSubmit()
+    await renderScreen()
+    await screen.findByTestId('Execution.RunClosed')
+
+    await user.keyboard('p')
+
+    await waitFor(() => expect(screen.getByTestId('Announcer')).toHaveTextContent('This run has ended'))
+  })
+
+  it('announces where a move landed, including which case and how far through', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    mockSubmit()
+    await renderScreen()
+
+    await user.keyboard('j')
+
+    await waitFor(() =>
+      expect(screen.getByTestId('Announcer')).toHaveTextContent('Case 3 of 3. TC-3, The TC-3 case.'),
+    )
+  })
 })
