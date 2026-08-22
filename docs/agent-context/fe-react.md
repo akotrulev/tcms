@@ -2,7 +2,9 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-22 (**§245** — **bulk execution assignment, and the frontend half is A SELECTION MODEL, A PREVIEW DIALOG, AND AN AUDIT TRAIL THAT STOPS FLOODING.** ⚠️ **GATES NOT RUN AND NOTHING HAS EVER EXECUTED — no `npm run test:run`, no `npm run build`, no `npm run lint`**, under the batch-2 no-gates directive; the six `AssignExecutionsDialog.test.tsx` arms and the five new `AuditLogPage.test.tsx` arms exist and have never run. The suite count stays quoted at §243's **1602 / 120** and is stale twice over now. **THE RULE TO CARRY: a caption on a bulk bar is a CLAIM ABOUT WHAT THE BUTTON WILL DO, and copying the neighbouring screen's wording makes it a false one.** `CaseListPage`'s bar says *"Selection covers the rows on this page"*, which is true there because the case grid is server-paged. The run detail is **not paged** — it renders the whole checklist narrowed by a filter chip — so the caption is *"Selection covers the rows this filter shows"*, and **the selection is cleared when the chip changes**, because a selection holding rows the chip has hidden is a bulk act over rows the person cannot see. **THE SPREAD ORDER IS RENDERED BECAUSE IT DECIDES**: the i-th row goes to the i-th person wrapping, so the people at the top take the remainder — a multi-select that hid its order would be a control that lies about the outcome, and the chosen people are therefore a numbered chip list with a caption saying what the numbers mean. **`tallyByAssignee` IS SEEDED FROM THE CHOSEN LIST, NOT DERIVED FROM THE RESULT** — a `groupBy` over `changed` silently drops the person who received nothing, which is the row a coordinator most needs to see. **`executionSelection.ts` is the display-logic module** (`toggleSelected`, `selectAll`, `tallyByAssignee`); the page holds state and not arithmetic. **The audit trail groups on `bulkOperationId` by folding a RUN of consecutive rows, not by scanning the page** — every writer stamps a transaction's rows from one `Instant` and the sort is `(occurredAt DESC, id DESC)`, so one act's rows are adjacent; a null id is always its own group of one, which is every row written before §245, so the ungrouped rendering did not move. **A group straddling a page boundary renders as TWO and says "n of one operation shown here"** rather than claiming a total the page cannot see, and **the pager's count stays `page.total`, the server's ROW count** — deriving a count of operations would make the pager disagree with itself on every page. Mixed-action groups get a neutral label, because a distribute that also unassigns writes both verbs in one act. **The mock arm is NOT in `fixtures.ts`** — that file holds body factories only (`aBulkAssignResult`, `anAssignmentChange` were added there); the doubles are `vi.spyOn(api, …)` wrapped once by `test/contractDoubles.ts`, so every body is compared to `openapi.yaml` without a test opting in. **`RunDetailPage.tsx` still has NO component test** and none was invented. Gates: **NOT RUN**.)
+**Last verified:** 2026-08-22 (**§248** — **keyboard-driven execution, and the frontend half is ONE KEY MAP, A GUARD, AND A LIVE REGION.** ⚠️ **GATES NOT RUN AND NOTHING HAS EVER EXECUTED — no `npm run test:run`, no `npm run build`, no `npm run lint`**, under the batch-3 no-gates directive; the **32 new test arms** (15 in `executionKeys.test.ts`, 17 in `ExecutionPage.test.tsx`) exist and have never run. The suite count stays quoted at §243's **1602 / 120** and is stale three times over now. **THE RULE TO CARRY: a single-key shortcut on a screen with a text box is a defect until the focus guard exists, and the guard is written BEFORE the handler.** Type "problem" into the notes box and a naive build marks the case Passed, then Blocked. `matchShortcut` therefore **refuses before it matches** — `isTypingTarget` first, and only then a lookup — and the arm that proves it loops over *every* screen binding against a `textarea` and an `input` rather than naming three keys by hand. **ONE MAP, `features/runs/executionKeys.ts`, READ BY BOTH THE HANDLER AND THE OVERLAY**: two sources of truth here fail silently in exactly one direction, a documented shortcut that does nothing, so `ShortcutOverlay.tsx` renders the array and a grep proves the renderer contains no key literal. **THE MAP HAS TWO SCOPES AND `Escape` IS THE SECOND ONE** — `n` puts the caret in the notes box where every screen shortcut is correctly dead, so without a documented way out `n` is a trap; `matchNotesShortcut` deliberately does **not** apply the focus guard, because firing while a text field has focus is its entire job, and it is handled by the field rather than by the screen listener so the guard keeps no exceptions. **`b` OPENS THE CHECKLIST AND DOES NOT WRITE** — the rule `executionMode.ts`, `ExecutionGrid.tsx` and `ExecutionPage.tsx` all defend, and a keyboard would have been its first exception. **THE `useEffect` HAS NO DEPENDENCY ARRAY, DELIBERATELY**: the handler closes over `frozen`, the gate, the duration parse and the queue position, so a dependency list would be a hand-maintained list of exactly the values whose staleness is invisible. **THE KEYBOARD ASKS THE SAME PER-ROW PERMISSION THE BUTTONS ASK** (`result:submit` vs `result:amend`) — a shortcut that 403s is worse than a disabled button, because nothing on screen ever said no — and **every refusal is ANNOUNCED**, because a refused keypress and a working one are the same experience for anyone not watching the verdict panel. **A MOVE IS REFUSED WHILE THERE IS UNSAVED WORK**: `j` is one keystroke and this form holds four buffers whose loss means running the test again; `§248 KB-9` asks the live pass whether that is too strict. **`ExecutionPage.test.tsx` NOW EXISTS** — created here, the repo's first, and the first thing in `frontend/src` to drive `useSubmitResult` at all. `ExecutionQueue.test.tsx` and `executionSelection.test.ts` were deliberately **not** created. Gates: **NOT RUN**.)
+
+**Superseded header below — §245's, kept because §248 verified only the execution detail screen.** (**§245** — **bulk execution assignment, and the frontend half is A SELECTION MODEL, A PREVIEW DIALOG, AND AN AUDIT TRAIL THAT STOPS FLOODING.** ⚠️ **GATES NOT RUN AND NOTHING HAS EVER EXECUTED — no `npm run test:run`, no `npm run build`, no `npm run lint`**, under the batch-2 no-gates directive; the six `AssignExecutionsDialog.test.tsx` arms and the five new `AuditLogPage.test.tsx` arms exist and have never run. The suite count stays quoted at §243's **1602 / 120** and is stale twice over now. **THE RULE TO CARRY: a caption on a bulk bar is a CLAIM ABOUT WHAT THE BUTTON WILL DO, and copying the neighbouring screen's wording makes it a false one.** `CaseListPage`'s bar says *"Selection covers the rows on this page"*, which is true there because the case grid is server-paged. The run detail is **not paged** — it renders the whole checklist narrowed by a filter chip — so the caption is *"Selection covers the rows this filter shows"*, and **the selection is cleared when the chip changes**, because a selection holding rows the chip has hidden is a bulk act over rows the person cannot see. **THE SPREAD ORDER IS RENDERED BECAUSE IT DECIDES**: the i-th row goes to the i-th person wrapping, so the people at the top take the remainder — a multi-select that hid its order would be a control that lies about the outcome, and the chosen people are therefore a numbered chip list with a caption saying what the numbers mean. **`tallyByAssignee` IS SEEDED FROM THE CHOSEN LIST, NOT DERIVED FROM THE RESULT** — a `groupBy` over `changed` silently drops the person who received nothing, which is the row a coordinator most needs to see. **`executionSelection.ts` is the display-logic module** (`toggleSelected`, `selectAll`, `tallyByAssignee`); the page holds state and not arithmetic. **The audit trail groups on `bulkOperationId` by folding a RUN of consecutive rows, not by scanning the page** — every writer stamps a transaction's rows from one `Instant` and the sort is `(occurredAt DESC, id DESC)`, so one act's rows are adjacent; a null id is always its own group of one, which is every row written before §245, so the ungrouped rendering did not move. **A group straddling a page boundary renders as TWO and says "n of one operation shown here"** rather than claiming a total the page cannot see, and **the pager's count stays `page.total`, the server's ROW count** — deriving a count of operations would make the pager disagree with itself on every page. Mixed-action groups get a neutral label, because a distribute that also unassigns writes both verbs in one act. **The mock arm is NOT in `fixtures.ts`** — that file holds body factories only (`aBulkAssignResult`, `anAssignmentChange` were added there); the doubles are `vi.spyOn(api, …)` wrapped once by `test/contractDoubles.ts`, so every body is compared to `openapi.yaml` without a test opting in. **`RunDetailPage.tsx` still has NO component test** and none was invented. Gates: **NOT RUN**.)
 
 **Superseded header below — §244's, kept because §245 verified only the run detail, the dialog and the audit screen.** (2026-08-22: **§244** — **execution duration, and the frontend half is ONE CONTROL AND TWO SCREENS THAT MUST CARRY A FIELD THEY DO NOT SHOW.** ⚠️ **GATES NOT RUN — no `npm run test:run`, no `npm run build`, no `npm run lint` was run against this work**, under the no-gates directive of 2026-08-22; the suite count therefore stays quoted at §243's **1602 / 120** and is a *stale* figure, not a measured one. **THE RULE TO CARRY: when a write body states TOTAL STATE, every call site must send every field — including the ones its own screen has no control for.** `ExecutionGrid`'s row verdict and the grid-mode Blocked dialog both record a result and neither shows a duration, so omitting `durationMs` there would CLEAR a number the tester entered in Focus mode, from a screen that never displayed it. Both already sent `comment` back for exactly this reason and the precedent was written in their comments — **the field was added by re-reading those comments, not by a test**, and `ED-M9` records that there is still no automated observer for either. **The unit boundary is `lib/format.ts` and nowhere else** — `parseDurationSeconds` / `durationSecondsField`, seconds on screen because a tester does not think in milliseconds, milliseconds on the wire because that is what a JUnit/TestNG/Cucumber report reports. The CLI deliberately names its flag `--duration-ms` rather than converting, so the conversion has one implementation and not three. **`parseDurationSeconds` returns THREE things and the third is the point**: `null` for an empty box ("I did not time this"), a number for a value, and `undefined` for unreadable text — which disables the verdict buttons rather than saving. A two-state parse would have made garbage in the box a **silent clear**, which is worse than a refusal because the tester never asked for it. **Zero is a duration**, so nothing on this path may use a falsy check. **`ExecutionPage.tsx` has NO component test in this repository** and none was invented; `format.test.ts` covers the parse and the browser queue's `§244 ED-1..ED-6` covers the screen. Gates: **NOT RUN**.)
 
@@ -11,6 +13,108 @@
 **Superseded header below — §242's, kept because §244 verified none of it.** (**§242** — **the audit trail: one lazy `AuditLogPage` behind `/projects/:projectId/audit` AND `/admin/audit`.** **A LOCAL `tsc --noEmit` PASSED CLEAN WHILE THREE OF THIS SCREEN'S TESTS FAILED** — the working agreement's warning arriving on schedule, and worth carrying because it was tempting to treat the typecheck as coverage while `shanks` was down. **THE RULE TO CARRY: the rail's disable-don't-hide rule has exactly one exception now, and it is written at the type rather than left for the next reader to discover.** `AppShell.AuditReach` gates the two audit entries on `project:audit` / `audit:view` and **HIDES** them — the opposite of §31 and of the five separate comments in that file arguing that hiding lies about the *product*. Taken at the owner's direction: an audit screen's subject is who did what, so advertising it to somebody who may not read it invites the request the permission exists to refuse. It fails closed while pending. **One component for two routes**, branching on whether `useParams` yields a `projectId`; two components would be two renderings of the same twelve columns with nothing keeping them identical. **`Table`, NOT `DataGrid` — and §241 already measured why**: DataGrid does not render in jsdom, so the twelve component arms are only possible on a `Table`. **Action labels go through a curated map + computed fallback (`auditActionLabel`), NOT `satisfies Record<Union, string>`** — `AuditEvent.action` is a bare `string` in the contract because the verb set grows with every slice, so there is no union to be total against; `notificationEventLabel` is the same shape for the same reason. A refusal renders as a sentence **and makes no request at all**. Filters live in the URL (`useAuditFilters`, `useCaseFilters`'s arrangement). Gates: **1602 / 120**, build and lint clean.)
 
 **Superseded header below — §241's, kept because §242 verified none of it.** (**§241** — **the org chart screen: `/org-chart`, `useOrgChart`, and the tree flattening that became shared.** **THE RULE TO CARRY: a notice that appears only when something is hidden IS the disclosure it was meant to avoid.** The matrix columns are clipped to the reader's own `project:read`, so somebody missing six of eight projects gets a grid **that looks complete** — and the standing line *"Only projects you can open are shown here."* therefore renders **unconditionally**, for a Company Admin who sees everything too. Its test drives exactly that reader, which is the case a conditional implementation would pass. **`/org-chart` sits BESIDE `/admin/teams`, not beneath it**: every affordance there answers to `company:teams` and this screen has no gate at all — no `PermissionGate`, no `enabled`, no `lib/permissions.ts`. **`flattenTeamTree` (`features/admin/teamTree.ts`) is the one tree flattening**, extracted from `TeamsPage` in its own commit and called by `OrgChartTeams`; orphans and cycle members surface at the ROOT. **`keys.orgChart` is invalidated by all nine staffing writes, and a tenth is caught by a rule rather than by the list** — the last arm of `orgChartInvalidation.test.tsx` reads `admin.ts` through `import.meta.glob` and fails any `onSuccess` touching `teams`/`users`/`roleAssignments`/`projects` without it. **`OrgChartMatrix` is a `Table` and NOT `DataGrid`, which is load-bearing: DataGrid does not render in jsdom** (its virtualization measures through a `ResizeObserver` the test shim never fires, so the scroller is 0×0 with no rows) — measured, six arms failed on the DataGrid version, and `CaseListPage` is the repo's only DataGrid screen and has no component test at all. Whole-screen bundle cost **+7,054 B of dist JS (+0.37 %)**. Nine new fixtures including the four org-chart factories. Gates: **1582 / 119**.)
+
+## §248 — THE GUARD IS THE FEATURE, AND THE MAP IS WHY THE HELP CANNOT LIE
+
+**Read this before touching `features/runs/executionKeys.ts`, `ShortcutOverlay.tsx` or
+`ExecutionPage.tsx`'s `ExecutionForm` — and before adding any keyboard shortcut anywhere in this
+app.**
+
+> ⚠️ **UNGATED, AND NOTHING RAN.** No `npm run test:run`, `npm run build` or `npm run lint`. The
+> 32 new arms exist and have never executed. The **1602 / 120** figure is §243's.
+
+### The defect this feature ships broken everywhere
+
+A single-key verdict on a screen that has a notes box, a per-step comment box and a duration box
+means typing the word *"problem"* marks the case Passed, then Blocked. So `matchShortcut`
+**refuses before it matches**:
+
+```
+modifier held?  -> null   (Cmd-P is print, Cmd-F is find; shift is NOT a modifier — `?` needs it)
+typing target?  -> null   (input / textarea / select / inside [contenteditable])
+                -> lookup
+```
+
+`isTypingTarget` answers **false** for a *disabled* or *read-only* field — nothing is being typed
+into one, and treating it as a typing surface would silently kill the shortcuts on a frozen run,
+which is a different refusal with a different sentence. It uses `closest('[contenteditable]')`
+rather than an attribute read, because the caret in a rich-text host sits in whatever inline node
+it is in and the event target is routinely a `span` three levels down.
+
+**The arm loops over the map, not over three keys named by hand** — the schema-wide-invariant rule
+applied to a catalogue small enough that reading it looks sufficient, and is not.
+
+### One map, or the help lies
+
+`executionKeys.ts` is the only place a key appears. `ShortcutOverlay.tsx` renders the array, and a
+grep for key literals in the renderer is part of the task — two sources of truth here fail in
+exactly one direction and it is silent: a documented shortcut that does nothing.
+
+| Key | Does | Scope |
+|---|---|---|
+| `p` `f` `s` | Record that verdict | screen |
+| `b` | **Opens the precondition checklist** — never a direct write | screen |
+| `j` / `k` | Next / previous case, in `queueOrder`'s order | screen |
+| `n` | Focus the notes box | screen |
+| `?` | The overlay | screen |
+| `Escape` | Leave the notes box | **notes** |
+
+**`j`/`k` because `p` and `n` were taken.** Every letter that reads as "next" or "previous" is
+already a verdict or the notes key, so the pair comes from the one convention with no collision
+left — and the overlay is what makes that discoverable, which is why the overlay is part of the
+feature rather than a follow-up.
+
+**`Escape` is a second scope, not an exception in the first.** Once `n` puts the caret in the box
+every screen shortcut is correctly dead, so without a way out `n` is a trap. `matchNotesShortcut`
+deliberately does **not** apply the focus guard — firing inside a text field is its whole job — and
+it is handled by the field's own `onKeyDown` (with `stopPropagation`, so it does not also close a
+dialog above the form). Asking the screen listener to make an exception would have been a hole in
+the guard the whole feature is about.
+
+### Bound at the screen, and the missing dependency array is deliberate
+
+The listener is added in a `useEffect` inside `ExecutionForm` and removed on unmount, so the
+bindings die with the screen. **Grid mode never mounts that component** (`Workspace` renders the
+grid *instead of* its children), so Grid has no shortcuts — deliberate: a single-key verdict there
+would have to mean "the row I am on", and Grid has no such thing.
+
+**No dependency array.** The handler closes over `frozen`, the `useCan` gate, the duration parse,
+the pending mutation and the queue position. A dependency list would be a hand-maintained list of
+exactly the values whose staleness is invisible — a stale closure refuses a verdict on a run that
+has since loaded, or allows one on a run that has since closed. Re-registering one listener per
+render is cheap and cannot be wrong.
+
+### The keyboard is not a way past a gate
+
+It asks the **same per-row permission the buttons ask** — `result:submit` for a first result,
+`result:amend` to change one — and it honours the freeze and §244's unreadable-duration refusal.
+A shortcut that 403s is worse than a disabled button, because nothing on screen ever said no.
+
+**Every refusal is announced.** `useAnnounce()` (the app's single polite live region) carries the
+verdict, the move and the refusal, because a keypress that worked and one that was refused are the
+same experience for anybody not watching the verdict panel, and for *everybody* using a screen
+reader. Every shortcut also has a visible focusable equivalent: the four verdict buttons, the new
+**Previous case** / **Next case** pair (Focus has no rail, and Split drops it below `lg`, so
+without them "next case" would be keyboard-only on the narrowest screen), the notes field itself,
+and the new **Keyboard shortcuts (?)** button — help reachable only by a shortcut is circular help.
+
+### A move is refused while there is unsaved work
+
+`j` is one keystroke and this form holds four unsaved buffers whose loss means running the test
+again. There is no shared confirm dialog in this repo, so the move is **refused** with the reason
+in the buttons' tooltips (§31) and in the live region. `§248 KB-9` asks the live pass whether that
+is too strict; it is a judgement no file can settle.
+
+### `ExecutionPage.test.tsx` exists now, and what it does not cover
+
+Created here — the repo's first, and **the first thing in `frontend/src` to drive `useSubmitResult`
+at all** (§244 `ED-M8`). It is scoped to the keyboard: durations, preconditions, step marks,
+evidence, defects, the 409 panel and the suggested verdict remain uncovered by automation, exactly
+where §244 left them. `ExecutionQueue.test.tsx` and `executionSelection.test.ts` were deliberately
+**not** created — the rail is §100's (and `queueOrder.test.ts` already covers its order) and
+`executionSelection.ts` is §245's, on a screen this area never touches.
+
+---
 
 ## §245 — A SELECTION IS NOT A PAGE, AND THE ORDER IN A MULTI-SELECT DECIDES SOMETHING
 
@@ -2302,6 +2406,17 @@ directly above the switcher) and the wordmark links there too.
 > slice's shape. `docs/handoff/00-plugin-skills-are-mandatory.md` step 0 now states the protocol.
 
 ## Seams to reuse
+
+**New seams §248 created:**
+- `features/runs/executionKeys.ts` — `EXECUTION_SHORTCUTS`, `isTypingTarget`, `matchShortcut`,
+  `matchNotesShortcut`. **The one place a key literal may appear.** Reusable for any future
+  keyboard surface: the focus guard and the modifier guard are not screen-specific.
+- `features/runs/ShortcutOverlay.tsx` — renders the map, holds no key of its own. Test ids
+  `Execution.Shortcuts.Overlay` / `.Row` / `.Open`.
+- `ExecutionPage.tsx::runShortcutAction` — the dispatcher, and the shape to copy: refusals
+  announced, the same permission the buttons ask, `Escape` handled by the field not the screen.
+- `features/runs/ExecutionPage.test.tsx` — the harness for this screen (four reads, one recorded
+  write, a `Where` location probe, `AnnouncerProvider` mounted so the live region is assertable).
 
 **New seams §245 created:**
 - `features/runs/executionSelection.ts` — `toggleSelected`, `selectAll`, `tallyByAssignee`. The
