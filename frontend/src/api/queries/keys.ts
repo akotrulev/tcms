@@ -9,6 +9,7 @@
  * Centralized so an invalidation can target a subtree (`['cases', projectId]`) without every
  * call site re-deriving the shape and getting it subtly wrong.
  */
+import type { QueryClient } from '@tanstack/react-query';
 import type { AuditFilters, CaseFilters } from '../types';
 
 export const keys = {
@@ -355,6 +356,52 @@ export const keys = {
    * shown under a wider filter while the new request is in flight.
    */
   caseSearch: (filters: Record<string, unknown>) => ['case-search', filters] as const,
+
+  /*
+    The prefix roots (§250).
+
+    Every key above that takes a filter object or an id carries it INSIDE the array, so an
+    invalidation meant for "all of this project's cases" cannot go through `keys.cases` — it needs
+    the prefix on its own. Twenty-nine call sites across seven modules were therefore spelling one
+    of these six prefixes by hand, and such a literal is the one thing in this file with no compiler
+    behind it: rename a segment here and every hand-built copy still typechecks, still runs, and
+    silently invalidates a subtree nothing is stored under. The failure has no error and no empty
+    screen — just data that stops refreshing, which is the hardest defect on this list to attribute
+    later.
+
+    `workItemRoot` already made this argument for `['work-items']`. These are the same helper for
+    the six subtrees writes actually target.
+  */
+  casesRoot: (p: string) => ['projects', p, 'cases'] as const,
+  conditionsRoot: (p: string) => ['projects', p, 'conditions'] as const,
+  artifactsRoot: (p: string) => ['projects', p, 'artifacts'] as const,
+  plansRoot: (p: string) => ['projects', p, 'plans'] as const,
+  runsRoot: (p: string) => ['projects', p, 'runs'] as const,
+  aiProposalsRoot: (p: string) => ['projects', p, 'ai-proposals'] as const,
+
+  /**
+   * The cross-project search, as a prefix — the companion to `caseSearch`'s exclusion from
+   * `['projects', …]`.
+   *
+   * That exclusion is deliberate and stays: a write in one project must not drop a search spanning
+   * eleven. But it left the search reachable by NO invalidation at all, so a case renamed, retired
+   * or deleted stayed in a held result until something else happened to refetch it. The answer to
+   * "a project write must not reach this" is a targeted root, not an unreachable key.
+   */
+  caseSearchRoot: ['case-search'] as const,
 };
+
+/**
+ * Invalidates every list that renders a case, in both of the two places cases are listed.
+ *
+ * The cross-project search is a SECOND list of the same rows under a key that no project prefix
+ * reaches (`caseSearchRoot`), so any write invalidating `casesRoot` must invalidate it too — and
+ * saying that in one function is the point: the pair would otherwise be spelled out at eleven call
+ * sites across four modules, which is how one of them ends up updated and the other does not.
+ */
+export function invalidateCaseLists(client: QueryClient, projectId: string) {
+  void client.invalidateQueries({ queryKey: keys.casesRoot(projectId) });
+  void client.invalidateQueries({ queryKey: keys.caseSearchRoot });
+}
 
 export const base = (projectId: string) => `/projects/${projectId}`;

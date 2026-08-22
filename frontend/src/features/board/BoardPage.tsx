@@ -512,9 +512,9 @@ function WorkCard({
 
   const priorityColor =
     item.priority === 'CRITICAL'
-      ? 'var(--color-failed)'
+      ? 'var(--color-danger)'
       : item.priority === 'HIGH'
-        ? 'var(--color-blocked)'
+        ? 'var(--color-warning)'
         : 'var(--color-border-strong)';
 
   const movable = item.allowedTransitions.length > 0;
@@ -597,9 +597,9 @@ function WorkCard({
             label="overdue"
             data-testid="Board.Card.Overdue"
             sx={{
-              bgcolor: 'color-mix(in srgb, var(--color-failed) 12%, transparent)',
-              color: 'var(--color-failed)',
-              border: '1px solid color-mix(in srgb, var(--color-failed) 40%, transparent)',
+              bgcolor: 'color-mix(in srgb, var(--color-danger) 12%, transparent)',
+              color: 'var(--color-danger)',
+              border: '1px solid color-mix(in srgb, var(--color-danger) 40%, transparent)',
             }}
           />
         )}
@@ -651,7 +651,7 @@ function WorkCard({
           </Typography>
         )}
         {item.dueDate && (
-          <Typography variant="caption" sx={{ color: item.overdue ? 'var(--color-failed)' : 'text.secondary' }}>
+          <Typography variant="caption" sx={{ color: item.overdue ? 'var(--color-danger)' : 'text.secondary' }}>
             · due <Identifier variant="muted">{item.dueDate}</Identifier>
           </Typography>
         )}

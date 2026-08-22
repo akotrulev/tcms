@@ -270,9 +270,9 @@ export function TeamsPage() {
                               sx={{
                                 bgcolor: 'transparent',
                                 color:
-                                  user.status === 'ACTIVE' ? 'var(--color-passed)' : 'var(--color-deprecated)',
+                                  user.status === 'ACTIVE' ? 'var(--color-success)' : 'var(--color-text-faint)',
                                 border: `1px solid color-mix(in srgb, ${
-                                  user.status === 'ACTIVE' ? 'var(--color-passed)' : 'var(--color-deprecated)'
+                                  user.status === 'ACTIVE' ? 'var(--color-success)' : 'var(--color-text-faint)'
                                 } 45%, transparent)`,
                               }}
                             />

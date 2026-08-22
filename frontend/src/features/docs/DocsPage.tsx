@@ -628,9 +628,9 @@ function PageView({
                 data-testid="Docs.Content.CoverageSummary"
                 sx={{
                   bgcolor: 'transparent',
-                  color: uncovered.length === 0 ? 'var(--color-passed)' : 'var(--color-blocked)',
+                  color: uncovered.length === 0 ? 'var(--color-success)' : 'var(--color-warning)',
                   border: `1px solid color-mix(in srgb, ${
-                    uncovered.length === 0 ? 'var(--color-passed)' : 'var(--color-blocked)'
+                    uncovered.length === 0 ? 'var(--color-success)' : 'var(--color-warning)'
                   } 45%, transparent)`,
                 }}
               />
@@ -1059,8 +1059,8 @@ function CoverageMarker({
             data-testid="Docs.Block.Coverage.Untested"
             sx={{
               bgcolor: 'transparent',
-              color: 'var(--color-blocked)',
-              border: '1px solid color-mix(in srgb, var(--color-blocked) 45%, transparent)',
+              color: 'var(--color-warning)',
+              border: '1px solid color-mix(in srgb, var(--color-warning) 45%, transparent)',
             }}
           />
         </Box>

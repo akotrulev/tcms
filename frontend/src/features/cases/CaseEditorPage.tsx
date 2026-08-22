@@ -36,7 +36,7 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { useSnackbar } from 'notistack';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import { Controller, useFieldArray, useForm, type Control } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -67,6 +67,7 @@ import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { NEW_CASE_DEFAULTS } from '../../lib/caseDefaults';
 import { formatAge, plural } from '../../lib/format';
+import { useDebouncedValue } from '../../lib/useDebouncedValue';
 import { automationLabels, priorityLabels, stepFormatLabels } from '../../lib/labels';
 import { selectTestId } from '../../lib/muiTestIds';
 import type { CaseConditionRef, Condition, StepSuggestion, TestCase } from '../../api/types';
@@ -189,7 +190,6 @@ function StepActionField({
   onPick: (suggestion: StepSuggestion) => void;
 }) {
   const [typed, setTyped] = useState('');
-  const [fragment, setFragment] = useState('');
 
   /*
     The debounce. A request per keystroke would be one per character of every step in the case,
@@ -199,11 +199,7 @@ function StepActionField({
     250ms rather than the filter bar's 300ms: this popup opens under the caret and a third of a
     second there reads as the field being slow, where the case grid is refilling below the fold.
   */
-  useEffect(() => {
-    if (typed === fragment) return;
-    const id = setTimeout(() => setFragment(typed), 250);
-    return () => clearTimeout(id);
-  }, [typed, fragment]);
+  const fragment = useDebouncedValue(typed, 250);
 
   const suggestions = useStepSuggestions(projectId, fragment);
   /*

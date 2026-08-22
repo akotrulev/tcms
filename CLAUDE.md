@@ -125,7 +125,7 @@ npm install
 npm run dev          # http://localhost:5173 — proxies /api to localhost:8080
 npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
-npm run test:run     # Vitest + RTL, 1679 tests (measured on shanks 2026-08-22) — also a gate
+npm run test:run     # Vitest + RTL, 1705+ tests across 128 files (1705/127 measured on shanks 2026-08-22; re-measure pending after §250's last arms) — also a gate
 npm run gen:api      # regenerate src/api/schema.d.ts after ANY openapi.yaml change
                      # — AND packages/client's copy; the two are byte-identical and a test compares them
 ```
@@ -261,7 +261,7 @@ Java compiles with `-Werror`; the suppressed lints in `build.gradle.kts` each ha
 
 ### Frontend
 
-Vite 8 + React 19 + TypeScript strict + MUI v7 (with X DataGrid/TreeView). **No Next.js, no RSC** —
+Vite 8 + React 19 + TypeScript strict + MUI v9 (with X DataGrid/TreeView). **No Next.js, no RSC** —
 so no `'use client'` boundary exists and the skills' RSC lane does not apply. React Router 7,
 project-scoped routes under `/projects/:projectId/*`.
 

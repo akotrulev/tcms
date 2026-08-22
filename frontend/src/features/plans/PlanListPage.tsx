@@ -25,15 +25,22 @@ import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { CriteriaStrip } from '../../components/CriteriaStrip';
-import { formatCount, formatRatio } from '../../lib/format';
+import { formatCount, formatPercent } from '../../lib/format';
 import { planStatusColors, planStatusLabels } from '../../lib/labels';
 import { PlanCreateDialog } from './PlanCreateDialog';
 import { ScrollX } from '../../components/ScrollX';
+import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
 
 /**
  * Test plans. Deliberately a compact table rather than a card grid: a lead comparing four
  * plans wants the pass rate and coverage columns to line up so the eye can scan down them,
  * which cards make impossible.
+ *
+ * Both of those columns are an em dash on every row today: the server sets `passRate` and
+ * `coverage` to null unconditionally (`TestPlanView`), so the comparison this shape exists
+ * for is not yet one the screen can offer. The columns stay because the table is built for
+ * the day they are served, and `openapi.yaml` now declares both as a percentage 0-100 so
+ * that day does not arrive with the unit in doubt.
  */
 export function PlanListPage() {
   const { projectId = '' } = useParams();
@@ -46,6 +53,10 @@ export function PlanListPage() {
   const [params, setParams] = useSearchParams();
   const showArchived = params.get('archived') === 'true';
   const plans = usePlans(projectId, showArchived);
+  useAnnouncedResults(
+    plans,
+    `${formatCount(plans.data?.length ?? 0)} ${(plans.data?.length ?? 0) === 1 ? 'plan' : 'plans'} shown`,
+  );
   const [creating, setCreating] = useState(false);
 
   return (
@@ -114,17 +125,17 @@ export function PlanListPage() {
           open
           onClose={() => setCreating(false)}
           /*
-            Stays on the list, and that is the live browser pass talking rather than a preference.
-            `/plans/:planId` is the plan STATISTICS route, and that endpoint is deliberately
-            unimplemented server-side (§38: `bySuite` needs the live suite tree, `coveragePercent`
-            a repository-wide denominator, `trend` a `reporting` module that does not exist). So
-            navigating there on success showed the user a red "Something didn't load" toast and a
-            "Not found" panel one second after their plan was created successfully — the create
-            worked and the app said it had not.
+            Stays on the list. ~~Because `/plans/:planId` is the plan STATISTICS route and that
+            endpoint is deliberately unimplemented server-side (§38), so navigating there on
+            success showed a red "Something didn't load" toast one second after the plan was
+            created — the create worked and the app said it had not.~~ → superseded: the endpoint
+            is served (`PlanStatisticsService`) and `PlanStatisticsPage` renders it, which is
+            where this row's own link goes.
 
-            The list is the honest destination until statistics exists: the new plan is the first
-            row, with the case count its scope expands to. Point this back at the plan the day
-            that endpoint is served.
+            The destination did not move, for a second reason that outlived the first: a plan
+            created a second ago has been executed zero times, so its statistics screen is
+            every empty state at once. The list answers the question the creator actually has
+            — did it save, and what scope did it pick up — with the new plan as the first row.
           */
           onCreated={() => setCreating(false)}
         />
@@ -298,10 +309,10 @@ function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string })
                   <Identifier>{formatCount(plan.caseCount)}</Identifier>
                 </TableCell>
                 <TableCell align="right">
-                  <Identifier>{formatRatio(plan.passRate)}</Identifier>
+                  <Identifier>{formatPercent(plan.passRate)}</Identifier>
                 </TableCell>
                 <TableCell align="right">
-                  <Identifier>{formatRatio(plan.coverage)}</Identifier>
+                  <Identifier>{formatPercent(plan.coverage)}</Identifier>
                 </TableCell>
                 <TableCell>
                   <CriteriaStrip criteria={plan.exitCriteria ?? []} testId="Plans.Row.ExitCriteria" />

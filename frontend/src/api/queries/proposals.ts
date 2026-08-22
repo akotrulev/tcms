@@ -32,7 +32,7 @@ import type {
   ProposalStatus,
   TestCase,
 } from '../types';
-import { base, keys } from './keys';
+import { base, invalidateCaseLists, keys } from './keys';
 
 /** What the queue endpoint answers — `PageMeta` plus the rows. */
 interface ProposalPage {
@@ -103,8 +103,8 @@ export function useAcceptProposal(
     // says exactly what is wrong.
     meta: { handled: true },
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'ai-proposals'] });
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      void client.invalidateQueries({ queryKey: keys.aiProposalsRoot(projectId) });
+      invalidateCaseLists(client, projectId);
     },
   });
 }
@@ -119,7 +119,7 @@ export function useRejectProposal(
       api.post<AiProposal>(`${base(projectId)}/ai-proposals/${proposalId}/reject`, { note }),
     meta: { handled: true },
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'ai-proposals'] });
+      void client.invalidateQueries({ queryKey: keys.aiProposalsRoot(projectId) });
     },
   });
 }

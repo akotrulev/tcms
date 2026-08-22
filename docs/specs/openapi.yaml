@@ -10341,8 +10341,16 @@ components:
         milestoneName: { type: string, nullable: true }
         milestoneDate: { type: string, format: date, nullable: true }
         caseCount: { type: integer }
-        passRate: { type: number, nullable: true }
-        coverage: { type: number, nullable: true }
+        # Percentage, 0-100 — NOT a 0-1 ratio. Stated because it is the one thing a bare
+        # `type: number` cannot say, and the cost of guessing is a figure rendered 100x wrong
+        # rather than a visibly broken screen. Every percentage this API serves is 0-100
+        # (`PlanStatistics.trend[].passRate` is computed that way server-side); a ratio appears
+        # only on flakiness scores, which say so on their own fields.
+        #
+        # Both are null on every response in this slice — see TestPlanView. Declaring the unit
+        # now is what stops the day they gain a writer from being the day the plan list lies.
+        passRate: { type: number, nullable: true, description: 'Percentage 0-100. Null until a writer exists.' }
+        coverage: { type: number, nullable: true, description: 'Percentage 0-100. Null until a writer exists.' }
 
     TestPlan:
       allOf:
@@ -12073,7 +12081,7 @@ components:
             properties:
               runKey: { type: string }
               executedAt: { type: string, format: date-time }
-              passRate: { type: number }
+              passRate: { type: number, description: 'Percentage 0-100, one decimal — round(passed*1000/executed)/10 server-side.' }
 
     PlanCaseRef:
       type: object

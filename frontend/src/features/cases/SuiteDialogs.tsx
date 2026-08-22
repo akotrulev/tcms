@@ -580,13 +580,14 @@ export function DeleteSuiteDialog({
   onDeleted: () => void;
 }) {
   const remove = useDeleteSuite(projectId);
+  // The bound `reset`, not the mutation object: the object is a fresh literal on every render,
+  // so depending on it would clear the refusal the dialog is displaying.
+  const { reset } = remove;
 
   // Reopening on another folder must not show the previous refusal.
   useEffect(() => {
-    if (open) remove.reset();
-    // `remove` is a stable mutation object; depending on it would reset on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, suite.id]);
+    if (open) reset();
+  }, [open, suite.id, reset]);
 
   return (
     <Dialog

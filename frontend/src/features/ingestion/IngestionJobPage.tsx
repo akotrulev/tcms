@@ -243,7 +243,7 @@ function Outcome({ outcome }: { outcome: UnmatchedTest['outcome'] }) {
     <Typography
       component="span"
       variant="body2"
-      sx={{ color: bad ? 'var(--color-failed)' : 'text.secondary', fontWeight: bad ? 600 : 400 }}
+      sx={{ color: bad ? 'var(--color-danger)' : 'text.secondary', fontWeight: bad ? 600 : 400 }}
     >
       {ingestedOutcomeLabels[outcome]}
     </Typography>

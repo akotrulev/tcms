@@ -78,9 +78,7 @@ export function UnlinkDialog({
   // list mounts one dialog per row and the reader may withdraw a second link after a failure.
   useEffect(() => {
     if (open) reset();
-    // `reset` is stable on a mutation object; depending on it would fire on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, target]);
+  }, [open, target, reset]);
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs" data-testid={testId}>

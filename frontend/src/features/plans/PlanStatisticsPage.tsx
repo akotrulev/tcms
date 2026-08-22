@@ -704,7 +704,7 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
         </PermissionGate>
       </Stack>
       {error && (
-        <Typography variant="caption" sx={{ color: 'var(--color-failed)' }} data-testid="PlanStats.StatusError">
+        <Typography variant="caption" sx={{ color: 'var(--color-danger)' }} data-testid="PlanStats.StatusError">
           {error}
         </Typography>
       )}
@@ -794,7 +794,7 @@ function StatisticsBody({
                 */
                 <Typography
                   variant="caption"
-                  sx={{ color: data.stale ? 'var(--color-blocked)' : 'text.secondary' }}
+                  sx={{ color: data.stale ? 'var(--color-warning)' : 'text.secondary' }}
                   data-testid="PlanStats.Freshness"
                 >
                   Latest result {formatDateTime(data.latestExecutionAt)}
@@ -914,9 +914,9 @@ function ExitCriteria({ criteria }: { criteria: Criterion[] }) {
             data-testid="PlanStats.ExitCriteria.Summary"
             sx={{
               bgcolor: 'transparent',
-              color: unmet.length === 0 ? 'var(--color-passed)' : 'var(--color-failed)',
+              color: unmet.length === 0 ? 'var(--color-success)' : 'var(--color-danger)',
               border: `1px solid color-mix(in srgb, ${
-                unmet.length === 0 ? 'var(--color-passed)' : 'var(--color-failed)'
+                unmet.length === 0 ? 'var(--color-success)' : 'var(--color-danger)'
               } 45%, transparent)`,
             }}
           />
@@ -1139,7 +1139,7 @@ function TrendChart({ trend }: { trend: NonNullable<PlanStatistics['trend']> }) 
           </Typography>
           <Typography
             variant="caption"
-            sx={{ color: delta >= 0 ? 'var(--color-passed)' : 'var(--color-failed)' }}
+            sx={{ color: delta >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}
           >
             {delta >= 0 ? '+' : ''}
             {formatPercent(delta)} vs {previous.runKey}
@@ -1213,7 +1213,7 @@ function Blockers({
                   </TableCell>
                   <TableCell>
                     {blocker.defects.length === 0 ? (
-                      <Typography variant="caption" sx={{ color: 'var(--color-blocked)' }}>
+                      <Typography variant="caption" sx={{ color: 'var(--color-warning)' }}>
                         No defect linked
                       </Typography>
                     ) : (

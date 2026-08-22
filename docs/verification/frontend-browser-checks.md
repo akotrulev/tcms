@@ -3313,3 +3313,27 @@ a search driven first searches nothing.
 | `§249 CS-5` | Clear the search box | The list empties, the prompt returns, and **no request is made** — check the network panel. The server 400s an unbounded search and the screen must not ask it to. Then type a single character: still no request. |
 | `§249 CS-6` | Copy the URL mid-search into a new tab | The same search, the same page, the same results. Filter state is in the URL; a search nobody can share is half a feature, and this is the one screen whose whole output gets pasted to a colleague. |
 | `§249 CS-7` | Open a hit, then press Back | The result set and the page are still there, and the hit opened **in its own project** — check the breadcrumb names the project the row named, not the last project you were in. |
+
+---
+
+## §250 — the audit remediation (`001-frontend-audit-r1`)
+
+**Lane `A1` — authoring**, for the case-search rows; **lane `A0`** for the admin ones. These are the
+browser half of fixes whose automated half is already green: the build, the lint and the component
+suites prove the code compiles and the units are right, and **none of them can see a request that
+was never made, a live region nobody hears, or a colour whose meaning changed.** That is the whole
+population below.
+
+No row here needs a fixture the pass does not already author, with one exception noted on `AR-3`.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§250 AR-1` | On `/search`, open the network panel and type `payment gateway` at an ordinary typing speed | **One** request, not one per keystroke — the box is debounced 300 ms while the URL still updates as you type. Before §250 this screen issued ~14 requests against the widest read in the app. Then type into the case grid's filter and the step-suggestion popup and confirm both still behave as they did: all three now share `useDebouncedValue`. |
+| `§250 AR-2` | With the network panel throttled hard, start a search and watch the request | It gives up at **3 s**, not 10 — the typeahead budget. The failed state renders; it does not spin. |
+| `§250 AR-3` | Sign in as a member with **no project grants**, then make `GET /projects` fail (dev tools → block the request, or `tcmsFaults.only('/projects')` then `tcmsFaults.status(503, 30)`) and search anything | **"Nothing came back for that search"** — the third emptiness. Not *"No case matches"*, which is what shipped before §250 whenever the disambiguating read failed, and which tells a grantless member the product is empty. This is the one row needing a fault armed after load. |
+| `§250 AR-4` | On `/search`, narrow by Status, Automation and Priority, then copy the URL into a new tab | The three filters apply, the table's own columns agree with them, and the URL carries every selected value. Filter parity: before §250 the screen rendered three columns nothing could filter on. |
+| `§250 AR-5` | With a screen reader running (VoiceOver ⌘F5), type into the filter on the case list, the cross-project search, the plan list, the run list and the audit trail | Each one **announces its result count** when the list settles — politely, without stealing focus, and **not** on first load. Before §250 every filtered list in the app refilled in silence; errors were announced and results were not. Confirm it announces even when the count is unchanged between two different filters. |
+| `§250 AR-6` | Open the reports screen | The panel reads **"My saved reports"** with no **Owner** column, and the empty copy says saved reports are yours alone. The endpoint returns the caller's rows only; the old title made a colleague's invisible report look like data loss. |
+| `§250 AR-7` | Compare, in **both** light and dark themes: a user's ACTIVE/inactive dot (Teams), an overdue card and a CRITICAL/HIGH priority stripe (Board), a stale-figures caption and a trend delta (Plan statistics), a live API token, the automation share bar (Dashboard), and requirement coverage (Docs) | All read as *semantic* colour — success / warning / danger — and none of them borrows the **test-result** palette (`--color-passed` / `--color-failed` / `--color-blocked`), which now means a test outcome and nothing else. Check the run screens still look exactly as they did: those legitimately keep the result palette and must not have moved. |
+| `§250 AR-8` | Delete a plan, a case, a suite and a user; each time reopen the same dialog after a **refused** attempt | The previous refusal is gone every time. The ten dialogs' reset effects were rewritten in §250 to depend on the mutation's bound `reset` rather than suppress a lint rule that never ran; this row is what proves the rewrite kept the behaviour. |
+| `§250 AR-9` | Rename a case, then open `/search` and search for its **old** title, then its new one | The stale hit is gone. `keys.caseSearch` sits outside `['projects', …]` on purpose and consequently had **no** invalidation at all before §250 — a renamed, retired or deleted case stayed in a held result indefinitely. |

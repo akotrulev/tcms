@@ -73,9 +73,9 @@ export function RoleReference({
               label={`every permission (${allPermissions.length})`}
               data-testid={`${testId}.AllPermissions`}
               sx={{
-                bgcolor: 'color-mix(in srgb, var(--color-failed) 12%, transparent)',
-                color: 'var(--color-failed)',
-                border: '1px solid color-mix(in srgb, var(--color-failed) 40%, transparent)',
+                bgcolor: 'color-mix(in srgb, var(--color-danger) 12%, transparent)',
+                color: 'var(--color-danger)',
+                border: '1px solid color-mix(in srgb, var(--color-danger) 40%, transparent)',
               }}
             />
           ) : (

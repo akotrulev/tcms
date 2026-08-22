@@ -92,6 +92,9 @@ export function LinkBlockDialog({
   intendedCase?: TestCaseSummary | null;
 }) {
   const write = useLinkBlock(projectId, pageId);
+  // The bound `reset`, not the mutation object: the object is a fresh literal on every render,
+  // so depending on it would clear the refusal the dialog is displaying.
+  const { reset } = write;
   const [sourceType, setSourceType] = useState<SourceType>('TEST_CASE');
   const [relationship, setRelationship] = useState<LinkRelationship>('VERIFIES');
   const [query, setQuery] = useState(intendedCase ? caseLabel(intendedCase) : '');
@@ -109,7 +112,7 @@ export function LinkBlockDialog({
   // `ExternalLinkDialog` two features over makes the same call.
   useEffect(() => {
     if (open) {
-      write.reset();
+      reset();
       setSourceType('TEST_CASE');
       setRelationship('VERIFIES');
       // Back to the *intent*, not to empty: reopening on another block while a case is being
@@ -118,9 +121,13 @@ export function LinkBlockDialog({
       setPickedCase(intendedCase);
       setPickedSuite('');
     }
-    // `write` is a stable mutation object; depending on it would reset on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, block.id, intendedCase?.id]);
+    /*
+      `intendedCase?.id` is deliberately narrower than `intendedCase`: a parent that rebuilds the
+      object each render would re-run this effect and discard the picker selection the reader just
+      made, and the id is what actually decides whether a different case is being carried in.
+    */
+    // oxlint-disable-next-line react/exhaustive-deps
+  }, [open, block.id, intendedCase?.id, reset]);
 
   const fieldError = (field: string) =>
     write.error instanceof ApiError ? write.error.fieldErrors?.[field]?.join(' ') : undefined;

@@ -51,7 +51,7 @@
  * endpoint's resolution the paragraph above refuses for a smaller list, and it would be built out
  * of a bound (the suite list omits retired entries) that is not the one retention uses.
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   DndContext,
   KeyboardSensor,
@@ -91,6 +91,7 @@ import {
 import { useConditions } from '../../api/queries';
 import type { CaseConditionRef, Condition } from '../../api/types';
 import { impactSummary } from '../../lib/conditions';
+import { useDebouncedValue } from '../../lib/useDebouncedValue';
 import { resolveStepMove } from './stepReorder';
 
 export type ConditionKind = 'PRE' | 'POST';
@@ -204,18 +205,12 @@ export function ConditionsPanel({
   disabled?: boolean;
 }) {
   const [query, setQuery] = useState('');
-  const [debounced, setDebounced] = useState('');
 
   /*
-    The same 250ms debounce `StepActionField` uses, inlined for the same reason it is there: this
-    project has no shared debounce hook, and extracting one would move §94's code in a slice that
-    is not about it. A request per keystroke against the project's library is what it prevents.
+    250ms, `StepActionField`'s figure: a popup under the caret reads as slow at 300. What it
+    prevents is a request per keystroke against the project's whole condition library.
   */
-  useEffect(() => {
-    if (query === debounced) return;
-    const id = setTimeout(() => setDebounced(query), 250);
-    return () => clearTimeout(id);
-  }, [query, debounced]);
+  const debounced = useDebouncedValue(query, 250);
 
   // `type` narrows to the position being filled — and a BOTH entry matches both, because BOTH
   // means "usable in either position" rather than a third role. Narrowing client-side instead

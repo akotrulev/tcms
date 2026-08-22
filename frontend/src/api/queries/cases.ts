@@ -34,7 +34,7 @@ import type {
   TestCaseSummary,
   VersionMarker,
 } from '../types';
-import { base, keys } from './keys';
+import { base, invalidateCaseLists, keys } from './keys';
 
 export function useCases(
   projectId: string,
@@ -127,7 +127,11 @@ export function useCaseSearch(
     queryFn: ({ signal }) =>
       api.get<Paged<CaseSearchHit>>(`/cases/search${qs({ ...filters })}`, {
         signal,
-        timeoutMs: TIMEOUTS.interactive,
+        // `typeahead`, not `interactive`: this is search-as-you-type, and the budget's own
+        // comment is the reason — a typeahead that waits 10s is broken. The caller debounces
+        // (`useDebouncedValue`), so a request that is still in flight at 3s is one whose answer
+        // the typist stopped waiting for.
+        timeoutMs: TIMEOUTS.typeahead,
       }),
     // The server 400s an unbounded search, so an empty box must not ask for one.
     enabled: isSearchable(filters),
@@ -306,7 +310,7 @@ export function useCreateCase(projectId: string) {
     meta: { handled: true },
     onSuccess: (created) => {
       client.setQueryData(keys.case(projectId, created.id), created);
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      invalidateCaseLists(client, projectId);
       void client.invalidateQueries({ queryKey: keys.suites(projectId) });
     },
   });
@@ -343,7 +347,7 @@ export function useCloneCase(projectId: string, caseId: string) {
     meta: { handled: true },
     onSuccess: (created) => {
       client.setQueryData(keys.case(projectId, created.id), created);
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      invalidateCaseLists(client, projectId);
       void client.invalidateQueries({ queryKey: keys.suites(projectId) });
       void client.invalidateQueries({ queryKey: keys.project(projectId), exact: true });
     },
@@ -375,7 +379,7 @@ export function useUpdateCase(projectId: string, caseId: string) {
     meta: { handled: true },
     onSuccess: (updated) => {
       client.setQueryData(keys.case(projectId, caseId), updated);
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      invalidateCaseLists(client, projectId);
       void client.invalidateQueries({ queryKey: keys.caseVersions(projectId, caseId) });
     },
   });
@@ -401,7 +405,7 @@ export function useDeleteCase(projectId: string) {
     meta: { handled: true },
     onSuccess: (_result, caseId) => {
       client.removeQueries({ queryKey: keys.case(projectId, caseId) });
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      invalidateCaseLists(client, projectId);
       // The tree renders per-suite case counts, so a delete changes it even though no suite row
       // was touched.
       void client.invalidateQueries({ queryKey: keys.suites(projectId) });
@@ -642,7 +646,7 @@ export function useSetCaseStatus(projectId: string, caseId: string) {
       client.setQueryData(keys.case(projectId, caseId), updated);
       // The grid renders `lifecycleStatus` as a column and as a facet count, so a move made here
       // must not leave the list behind it saying the old thing.
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      invalidateCaseLists(client, projectId);
       void client.invalidateQueries({
         queryKey: keys.reviews(projectId, 'CASE', caseId),
       });
@@ -685,7 +689,7 @@ export function useBulkCases(projectId: string): UseMutationResult<BulkResult, E
     meta: { handled: true },
     onSuccess: (result) => {
       if (!result.dryRun) {
-        void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+        invalidateCaseLists(client, projectId);
       }
     },
   });
@@ -798,7 +802,7 @@ export function useCreatePlanCase(projectId: string) {
     meta: { handled: true },
     onSuccess: (created) => {
       client.setQueryData(keys.case(projectId, created.id), created);
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      invalidateCaseLists(client, projectId);
       void client.invalidateQueries({ queryKey: keys.suites(projectId) });
     },
   });

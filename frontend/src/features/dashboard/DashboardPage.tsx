@@ -497,7 +497,7 @@ function AutomationCoverage({
                 sx={{
                   width: `${(row.count / Math.max(total, 1)) * 100}%`,
                   height: '100%',
-                  bgcolor: row.key === 'AUTOMATED' ? 'var(--color-passed)' : 'var(--color-skipped)',
+                  bgcolor: row.key === 'AUTOMATED' ? 'var(--color-success)' : 'var(--color-skipped)',
                 }}
               />
             </Box>

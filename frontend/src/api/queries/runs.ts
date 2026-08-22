@@ -108,8 +108,8 @@ export function useCreateRun(projectId: string) {
       api.post<TestRun>(`${base(projectId)}/runs`, input, { idempotencyKey: intentKey.current }),
     meta: { handled: true },
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'runs'] });
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'plans'] });
+      void client.invalidateQueries({ queryKey: keys.runsRoot(projectId) });
+      void client.invalidateQueries({ queryKey: keys.plansRoot(projectId) });
     },
   });
 }
@@ -138,8 +138,8 @@ export function useCloneRun(projectId: string, runId: string) {
       }),
     meta: { handled: true },
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'runs'] });
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'plans'] });
+      void client.invalidateQueries({ queryKey: keys.runsRoot(projectId) });
+      void client.invalidateQueries({ queryKey: keys.plansRoot(projectId) });
     },
   });
 }
@@ -164,8 +164,8 @@ export function useSetRunStatus(projectId: string, runId: string) {
     meta: { handled: true },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.run(projectId, runId) });
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'runs'] });
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'plans'] });
+      void client.invalidateQueries({ queryKey: keys.runsRoot(projectId) });
+      void client.invalidateQueries({ queryKey: keys.plansRoot(projectId) });
     },
   });
 }
@@ -477,7 +477,7 @@ export function useSubmitResult(projectId: string, runId: string, executionId: s
       client.setQueryData(keys.execution(projectId, runId, executionId), updated);
       // The run's counts move with the result, so the run view must not keep the old ones.
       void client.invalidateQueries({ queryKey: keys.run(projectId, runId) });
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'plans'] });
+      void client.invalidateQueries({ queryKey: keys.plansRoot(projectId) });
     },
   });
 }

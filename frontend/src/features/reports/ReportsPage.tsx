@@ -162,15 +162,23 @@ export function ReportsPage() {
         </DataRegion>
       </Panel>
 
-      <Panel testId="Reports.DefinitionsPanel" title="Saved reports" dense>
+      {/*
+        "My saved reports", not "Saved reports". `GET /reports/definitions` answers with the
+        CALLER's rows and nobody else's — the contract says so in as many words, and warns that a
+        list quietly meaning "mine" is indistinguishable from one meaning "everyone's". A lead who
+        knows a colleague saved a report, and cannot find it here, reads an unqualified title as
+        data loss. The `Owner` column was removed for the same reason rather than kept: it could
+        only ever print the reader's own name, so it answered a question it appeared to ask.
+      */}
+      <Panel testId="Reports.DefinitionsPanel" title="My saved reports" dense>
         <DataRegion
           testId="Reports.Definitions"
           state={{ ...definitions, refetch: () => void definitions.refetch() }}
           isEmpty={(rows) => rows.length === 0}
           empty={{
             kind: 'no-records',
-            title: 'No saved reports',
-            body: 'A saved report keeps its settings so the same one can be regenerated next release. Name one under “Save these settings as” when you generate.',
+            title: 'You have not saved any reports',
+            body: 'A saved report keeps its settings so the same one can be regenerated next release. Name one under “Save these settings as” when you generate. Saved reports are yours alone — a colleague’s will not appear here.',
           }}
         >
           {(rows) => (
@@ -232,9 +240,7 @@ function DeleteDefinitionDialog({
 }) {
   useEffect(() => {
     reset();
-    // `reset` is stable on a mutation object; depending on it would fire on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [definition.id]);
+  }, [definition.id, reset]);
 
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="xs" data-testid="Reports.Definitions.Confirm">
@@ -295,7 +301,6 @@ function DefinitionTable({
           <TableRow>
             <TableCell sx={{ color: 'text.secondary' }}>Report</TableCell>
             <TableCell sx={{ color: 'text.secondary', width: 200 }}>Kind</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 200 }}>Owner</TableCell>
             <TableCell sx={{ color: 'text.secondary', width: 110 }} align="right">
               Actions
             </TableCell>
@@ -311,9 +316,6 @@ function DefinitionTable({
               </TableCell>
               <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
                 {humanize(definition.type)}
-              </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                {definition.owner.displayName}
               </TableCell>
               <TableCell align="right">
                 {/*

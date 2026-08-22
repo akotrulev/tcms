@@ -231,7 +231,7 @@ export function useSetPlanStatus(projectId: string, planId: string) {
       void client.invalidateQueries({ queryKey: keys.plans(projectId) });
       // The run list renders each run's plan key, and a run's own screen links to the plan — both
       // read a plan whose status has just moved.
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'runs'] });
+      void client.invalidateQueries({ queryKey: keys.runsRoot(projectId) });
     },
   });
 }

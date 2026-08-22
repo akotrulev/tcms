@@ -59,6 +59,9 @@ export function ExternalLinkDialog({
   caseId: string;
 }) {
   const write = useLinkCaseExternally(projectId, caseId);
+  // The bound `reset`, not the mutation object: the object is a fresh literal on every render,
+  // so depending on it would clear the refusal the dialog is displaying.
+  const { reset } = write;
   const [kind, setKind] = useState<Kind>('EXTERNAL_GIT');
   const [relationship, setRelationship] = useState<LinkRelationship>('VERIFIES');
   const [repo, setRepo] = useState('');
@@ -71,7 +74,7 @@ export function ExternalLinkDialog({
   // Reopening after a refusal must not show the previous one — `QuarantineDialog`'s rule.
   useEffect(() => {
     if (open) {
-      write.reset();
+      reset();
       setKind('EXTERNAL_GIT');
       setRelationship('VERIFIES');
       setRepo('');
@@ -81,9 +84,7 @@ export function ExternalLinkDialog({
       setCommitSha('');
       setUrl('');
     }
-    // `write` is a stable mutation object; depending on it would reset on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, caseId]);
+  }, [open, caseId, reset]);
 
   const fieldError = (field: string) =>
     write.error instanceof ApiError ? write.error.fieldErrors?.[field]?.join(' ') : undefined;

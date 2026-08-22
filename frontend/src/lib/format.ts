@@ -128,9 +128,11 @@ export function formatPercent(value: number | null | undefined, decimals = 1): s
 }
 
 /**
- * Takes a 0–1 ratio (as the API models pass rate and coverage) and renders a percentage.
- * Kept separate from `formatPercent` so the unit is explicit at the call site — mixing
- * 0.89 and 89 into one helper is how a report ends up showing "0.9%".
+ * Takes a 0–1 ratio — flakiness scores, which is the only unit this API serves that way —
+ * and renders a percentage. Kept separate from `formatPercent` so the unit is explicit at
+ * the call site: mixing 0.89 and 89 into one helper is how a report ends up showing "0.9%".
+ * Pass rate and coverage are NOT ratios and must not come through here; `openapi.yaml`
+ * declares both as a percentage 0-100.
  */
 export function formatRatio(ratio: number | null | undefined, decimals = 1): string {
   if (ratio === null || ratio === undefined || Number.isNaN(ratio)) return EM_DASH;

@@ -15,6 +15,7 @@ import { CaseGrid } from './CaseGrid';
 import { SuiteList } from './SuiteList';
 import { SuitePanel } from './SuitePanel';
 import { useCaseFilters } from './useCaseFilters';
+import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
 
 /**
  * The repository screen: suite tree beside a filtered case grid.
@@ -39,6 +40,10 @@ export function CaseListPage() {
   const suites = useSuites(projectId);
   const dimensions = useClassification(projectId);
   const cases = useCases(projectId, filters, sort);
+  useAnnouncedResults(
+    cases,
+    `${formatCount(cases.data?.total ?? 0)} ${(cases.data?.total ?? 0) === 1 ? 'case' : 'cases'} match the current filters`,
+  );
   const gate = useCan(projectId);
 
   const [selection, setSelection] = useState<string[]>([]);

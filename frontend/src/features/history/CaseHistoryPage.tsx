@@ -7,7 +7,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { StatusChip } from '../../components/StatusChip';
-import { formatCount, formatDateTime, formatDuration, formatPercent, percentOf } from '../../lib/format';
+import { formatCount, formatDateTime, formatDuration, formatPercent, formatRatio, percentOf } from '../../lib/format';
 
 /**
  * Execution history for one case (plan §6p).
@@ -115,7 +115,7 @@ function HistoryBody({
           <Metric value={formatCount(summary.failed)} label="failed" />
           {summary.flakinessScore !== null && summary.flakinessScore !== undefined && (
             <Metric
-              value={formatPercent(summary.flakinessScore * 100, 0)}
+              value={formatRatio(summary.flakinessScore, 0)}
               label="flakiness"
               help="How often the result changed between consecutive runs on the same version. High means the test is unreliable, not that the feature is."
             />

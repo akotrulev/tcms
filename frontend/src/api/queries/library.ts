@@ -18,7 +18,7 @@ import {
 } from '@tanstack/react-query';
 import { TIMEOUTS, api, qs } from '../client';
 import type { Condition, ConditionInput, StepSuggestion } from '../types';
-import { base, keys } from './keys';
+import { base, invalidateCaseLists, keys } from './keys';
 
 /**
  * The project's condition library.
@@ -101,7 +101,7 @@ export function useCreateCondition(projectId: string) {
     mutationFn: (input: ConditionInput) =>
       api.post<Condition>(`${base(projectId)}/conditions`, input),
     meta: { handled: true },
-    onSuccess: () => client.invalidateQueries({ queryKey: ['projects', projectId, 'conditions'] }),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.conditionsRoot(projectId) }),
   });
 }
 
@@ -143,8 +143,8 @@ export function useUpdateCondition(projectId: string) {
       }),
     meta: { handled: true },
     onSuccess: () => {
-      client.invalidateQueries({ queryKey: ['projects', projectId, 'conditions'] });
-      client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      client.invalidateQueries({ queryKey: keys.conditionsRoot(projectId) });
+      invalidateCaseLists(client, projectId);
     },
   });
 }

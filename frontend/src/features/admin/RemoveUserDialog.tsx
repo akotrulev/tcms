@@ -49,13 +49,14 @@ export function RemoveUserDialog({
   user: User;
 }) {
   const remove = useRemoveUser();
+  // The bound `reset`, not the mutation object: the object is a fresh literal on every render,
+  // so depending on it would clear the refusal the dialog is displaying.
+  const { reset } = remove;
 
   // Reopening after a refusal must not show the previous one.
   useEffect(() => {
-    if (open) remove.reset();
-    // `remove` is a stable mutation object; depending on it would reset on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, user.id]);
+    if (open) reset();
+  }, [open, user.id, reset]);
 
   const refusal = remove.isError
     ? remove.error instanceof ApiError && remove.error.fieldErrors?.userId

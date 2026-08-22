@@ -43,7 +43,7 @@ export const tokenStateLabels = {
  * budget in `index.css` is spent on test outcomes, and a token's state is not one.
  */
 export const tokenStateColors = {
-  LIVE: 'var(--color-passed)',
+  LIVE: 'var(--color-success)',
   EXPIRED: 'var(--color-deprecated)',
   REVOKED: 'var(--color-skipped)',
 } as const satisfies Record<ApiTokenState, string>;

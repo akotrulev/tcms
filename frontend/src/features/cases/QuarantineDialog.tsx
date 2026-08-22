@@ -69,6 +69,9 @@ export function QuarantineDialog({
   quarantining: boolean;
 }) {
   const write = useQuarantineCase(projectId, testCase.id);
+  // The bound `reset`, not the mutation object: the object is a fresh literal on every render,
+  // so depending on it would clear the refusal the dialog is displaying.
+  const { reset } = write;
   const [reason, setReason] = useState('');
   const [touched, setTouched] = useState(false);
 
@@ -76,13 +79,11 @@ export function QuarantineDialog({
   // must not carry the reason typed for the first. `CaseDeleteDialog`'s rule, plus the field.
   useEffect(() => {
     if (open) {
-      write.reset();
+      reset();
       setReason('');
       setTouched(false);
     }
-    // `write` is a stable mutation object; depending on it would reset on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, testCase.id, quarantining]);
+  }, [open, testCase.id, quarantining, reset]);
 
   const blank = reason.trim().length === 0;
   const serverError =

@@ -286,7 +286,7 @@ export function useCreateArtifact(projectId: string) {
     // second, vaguer copy of a message already on screen.
     meta: { handled: true },
     onSuccess: () =>
-      client.invalidateQueries({ queryKey: ['projects', projectId, 'artifacts'] }),
+      client.invalidateQueries({ queryKey: keys.artifactsRoot(projectId) }),
   });
 }
 
@@ -343,7 +343,7 @@ export function useRegisterArtifactFile(projectId: string) {
     },
     meta: { handled: true },
     onSuccess: () =>
-      client.invalidateQueries({ queryKey: ['projects', projectId, 'artifacts'] }),
+      client.invalidateQueries({ queryKey: keys.artifactsRoot(projectId) }),
   });
 }
 
@@ -387,7 +387,7 @@ export function useUpdateArtifact(projectId: string) {
       api.patch<Artifact>(`${base(projectId)}/artifacts/${artifactId}`, input),
     meta: { handled: true },
     onSuccess: () =>
-      client.invalidateQueries({ queryKey: ['projects', projectId, 'artifacts'] }),
+      client.invalidateQueries({ queryKey: keys.artifactsRoot(projectId) }),
   });
 }
 
@@ -409,7 +409,7 @@ export function useDeleteArtifact(projectId: string) {
       api.del<void>(`${base(projectId)}/artifacts/${artifactId}`),
     meta: { handled: true },
     onSuccess: () =>
-      client.invalidateQueries({ queryKey: ['projects', projectId, 'artifacts'] }),
+      client.invalidateQueries({ queryKey: keys.artifactsRoot(projectId) }),
   });
 }
 
@@ -419,7 +419,7 @@ export function useSetArtifactStatus(projectId: string) {
     mutationFn: ({ artifactId, status }: { artifactId: string; status: ArtifactCirculation }) =>
       api.put<Artifact>(`${base(projectId)}/artifacts/${artifactId}/status`, { status }),
     onSuccess: () =>
-      client.invalidateQueries({ queryKey: ['projects', projectId, 'artifacts'] }),
+      client.invalidateQueries({ queryKey: keys.artifactsRoot(projectId) }),
   });
 }
 
@@ -592,5 +592,5 @@ function invalidatePageEverywhere(
   pageId: string,
 ) {
   void client.invalidateQueries({ queryKey: keys.docPage(projectId, pageId) });
-  void client.invalidateQueries({ queryKey: ['projects', projectId, 'plans'] });
+  void client.invalidateQueries({ queryKey: keys.plansRoot(projectId) });
 }

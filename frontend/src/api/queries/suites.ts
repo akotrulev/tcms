@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { api } from '../client';
 import type { LifecycleStatus, Suite, SuiteHistoryResponse, SuiteInput } from '../types';
-import { base, keys } from './keys';
+import { base, invalidateCaseLists, keys } from './keys';
 
 export function useSuites(projectId: string): UseQueryResult<Suite[]> {
   return useQuery({
@@ -71,7 +71,7 @@ export function useDeleteSuite(projectId: string) {
       void client.invalidateQueries({ queryKey: keys.suites(projectId) });
       // The case list is scoped by suite, so a deleted folder must not stay selectable in a
       // filter chip that now matches nothing.
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      invalidateCaseLists(client, projectId);
     },
   });
 }
@@ -100,7 +100,7 @@ export function useSetSuiteStatus(projectId: string) {
       void client.invalidateQueries({ queryKey: keys.suites(projectId) });
       // A case's own screen renders the folder it sits in, and the case list's suite filter reads
       // the list — both show a status that has just moved.
-      void client.invalidateQueries({ queryKey: ['projects', projectId, 'cases'] });
+      invalidateCaseLists(client, projectId);
     },
   });
 }

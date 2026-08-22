@@ -41,13 +41,14 @@ export function PlanDeleteDialog({
   onDeleted: () => void;
 }) {
   const remove = useDeletePlan(projectId);
+  // The bound `reset`, not the mutation object: the object is a fresh literal on every render,
+  // so depending on it would clear the refusal the dialog is displaying.
+  const { reset } = remove;
 
   // Reopening after a refusal must not show the previous one.
   useEffect(() => {
-    if (open) remove.reset();
-    // `remove` is a stable mutation object; depending on it would reset on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, planId]);
+    if (open) reset();
+  }, [open, planId, reset]);
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs" data-testid="PlanStats.DeleteDialog">

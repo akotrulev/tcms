@@ -256,9 +256,7 @@ function UnlinkIdentityDialog({
   // Reopening after a refusal must not show the previous one — the house dialog rule.
   useEffect(() => {
     if (open) reset();
-    // `reset` is stable on a mutation object; depending on it would fire on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, provider]);
+  }, [open, provider, reset]);
 
   return (
     <Dialog

@@ -26,7 +26,8 @@ import { DataRegion, GridSkeleton } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { ScrollX } from '../../components/ScrollX';
-import { formatAge, formatDateTime } from '../../lib/format';
+import { formatAge, formatCount, formatDateTime } from '../../lib/format';
+import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
 import { auditActionLabel, auditTargetTypeLabel } from '../../lib/labels';
 import { useAuditFilters } from './useAuditFilters';
 
@@ -87,6 +88,10 @@ export function AuditLogPage() {
   );
   const companyTrail = useCompanyAuditEvents(filters, scope === 'company' && allowed);
   const trail = scope === 'project' ? projectTrail : companyTrail;
+  useAnnouncedResults(
+    trail,
+    `${formatCount(trail.data?.total ?? 0)} audit ${(trail.data?.total ?? 0) === 1 ? 'event' : 'events'} match the current filters`,
+  );
 
   const title = scope === 'project' ? 'Project audit trail' : 'Company audit trail';
 

@@ -11430,7 +11430,9 @@ export interface components {
             /** Format: date */
             milestoneDate: string | null;
             caseCount: number;
+            /** @description Percentage 0-100. Null until a writer exists. */
             passRate: number | null;
+            /** @description Percentage 0-100. Null until a writer exists. */
             coverage: number | null;
         };
         TestPlan: components["schemas"]["TestPlanSummary"] & {
@@ -12794,6 +12796,7 @@ export interface components {
                 runKey: string;
                 /** Format: date-time */
                 executedAt: string;
+                /** @description Percentage 0-100, one decimal — round(passed*1000/executed)/10 server-side. */
                 passRate: number;
             }[];
         };

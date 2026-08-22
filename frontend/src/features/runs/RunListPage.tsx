@@ -25,6 +25,7 @@ import { executedCount, passRate } from '../../lib/results';
 import { formatAge, formatCount, formatDateTime, formatDuration, formatPercent } from '../../lib/format';
 import { runSourceLabels, runStatusColors, runStatusLabels } from '../../lib/labels';
 import { ScrollX } from '../../components/ScrollX';
+import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
 
 /**
  * Test runs. A run is one execution pass of a plan on one configuration, and the two facts a
@@ -40,6 +41,10 @@ export function RunListPage() {
   const navigate = useNavigate();
   const project = useProject(projectId);
   const runs = useRuns(projectId);
+  useAnnouncedResults(
+    runs,
+    `${formatCount(runs.data?.length ?? 0)} ${(runs.data?.length ?? 0) === 1 ? 'run' : 'runs'} shown`,
+  );
   const [creating, setCreating] = useState(false);
 
   return (
