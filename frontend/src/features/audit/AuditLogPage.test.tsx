@@ -46,6 +46,23 @@ const AUTOMATIC_ACT = anAuditEvent({
   occurredAt: '2026-08-18T09:00:00Z',
 })
 
+/**
+ * Three rows of one bulk assignment (§244) — adjacent, sharing an id, stamped from one instant.
+ *
+ * That adjacency is a property of the writer and of the `(occurredAt DESC, id DESC)` sort, not a
+ * convenience of this fixture: every row of one transaction is written from one `Instant`.
+ */
+const BULK_ACT = ['ae-b1', 'ae-b2', 'ae-b3'].map((id, index) =>
+  anAuditEvent({
+    id,
+    action: 'execution.assigned',
+    targetType: 'TEST_EXECUTION',
+    targetIds: [`ex-${index}`],
+    bulkOperationId: 'bulk-1',
+    occurredAt: '2026-08-22T10:00:00Z',
+  }),
+)
+
 function page(items: AuditEvent[], total = items.length) {
   return { items, page: 0, size: 50, total }
 }
@@ -240,6 +257,74 @@ describe('AuditLogPage', () => {
 
     const empty = await screen.findByTestId('Audit.List.Empty')
     expect(empty).toHaveTextContent(/no acts match/i)
+  })
+
+  it('folds one bulk act into a single collapsible row', async () => {
+    mockApi({ rows: BULK_ACT })
+    renderProjectTrail()
+
+    const group = await screen.findByTestId('Audit.Group')
+    // Twelve lines for one act is what floods the trail, and it is the reason §242 left this as
+    // area B's job rather than shipping the reader alone.
+    expect(screen.queryAllByTestId('Audit.Row')).toHaveLength(0)
+    expect(within(group).getByTestId('Audit.Group.Action')).toHaveTextContent('Execution assigned')
+    expect(within(group).getByTestId('Audit.Group.Action')).toHaveTextContent('3 of one operation')
+    expect(within(group).getByTestId('Audit.Group.Targets')).toHaveTextContent('3 items')
+  })
+
+  it('shows every row of the act when the group is expanded', async () => {
+    mockApi({ rows: BULK_ACT })
+    renderProjectTrail()
+
+    const group = await screen.findByTestId('Audit.Group')
+    await userEvent.click(within(group).getByTestId('Audit.Group.Toggle'))
+
+    const rows = await screen.findAllByTestId('Audit.Row')
+    expect(rows).toHaveLength(3)
+    expect(within(rows[0]).getByTestId('Audit.Row.Target')).toHaveTextContent('ex-0')
+  })
+
+  it('leaves a row with no bulk operation as a plain row', async () => {
+    // Every row written before §244 carries a null id, which is every row in every deployment
+    // until then — so the ungrouped rendering is the one that must not move.
+    mockApi({ rows: [SESSION_ACT, ...BULK_ACT] })
+    renderProjectTrail()
+
+    await screen.findByTestId('Audit.Group')
+    const plain = screen.getAllByTestId('Audit.Row')
+    expect(plain).toHaveLength(1)
+    expect(within(plain[0]).getByTestId('Audit.Row.Action')).toHaveTextContent('Case updated')
+  })
+
+  it('keeps two adjacent operations apart', async () => {
+    const second = BULK_ACT.map((row, index) =>
+      anAuditEvent({ ...row, id: `ae-c${index}`, bulkOperationId: 'bulk-2' }),
+    )
+    mockApi({ rows: [...BULK_ACT, ...second] })
+    renderProjectTrail()
+
+    const groups = await screen.findAllByTestId('Audit.Group')
+    // A scan over the whole page keyed by id would merge these two if they ever shared one; a run
+    // cannot, which is the property the grouping is written on.
+    expect(groups).toHaveLength(2)
+  })
+
+  it('labels a mixed-action group neutrally rather than picking one of them', async () => {
+    // A distribute that also takes rows off somebody writes both verbs in one act, so this is
+    // reachable in ordinary use rather than hypothetical.
+    mockApi({
+      rows: [
+        BULK_ACT[0],
+        anAuditEvent({ ...BULK_ACT[1], action: 'execution.unassigned' }),
+        BULK_ACT[2],
+      ],
+    })
+    renderProjectTrail()
+
+    const group = await screen.findByTestId('Audit.Group')
+    expect(within(group).getByTestId('Audit.Group.Action')).toHaveTextContent(
+      '3 changes in one operation',
+    )
   })
 
   it('pages on the total rather than on the page length', async () => {

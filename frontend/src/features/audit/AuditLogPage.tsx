@@ -1,5 +1,7 @@
 import {
   Box,
+  Collapse,
+  IconButton,
   Stack,
   Table,
   TableBody,
@@ -12,6 +14,9 @@ import {
   Typography,
 } from '@mui/material';
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useCompanyAuditEvents, useProject, useProjectAuditEvents } from '../../api/queries';
 import type { AuditEvent } from '../../api/types';
@@ -211,41 +216,23 @@ export function AuditLogPage() {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {page.items.map((row) => (
-                          <TableRow key={row.id} data-testid="Audit.Row" hover>
-                            <TableCell>
-                              {/*
-                                The age reads at a glance and the exact instant is a hover away —
-                                CaseGrid's pairing. Seconds are shown because two acts a second
-                                apart are a different story from two acts a minute apart, and this
-                                is the screen where that difference is the question.
-                              */}
-                              <Tooltip title={formatDateTime(row.occurredAt, true)}>
-                                <Box
-                                  sx={{ color: 'text.secondary' }}
-                                  data-testid="Audit.Row.When"
-                                >
-                                  {formatAge(row.occurredAt)}
-                                </Box>
-                              </Tooltip>
-                            </TableCell>
-                            <TableCell>
-                              <Actor row={row} />
-                            </TableCell>
-                            <TableCell data-testid="Audit.Row.Action">
-                              {auditActionLabel(row.action)}
-                            </TableCell>
-                            <TableCell data-testid="Audit.Row.TargetType">
-                              {auditTargetTypeLabel(row.targetType)}
-                            </TableCell>
-                            <TableCell>
-                              <Targets ids={row.targetIds} />
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {groupByBulkOperation(page.items).map((group) =>
+                          group.rows.length === 1 ? (
+                            <PlainRow key={group.key} row={group.rows[0]} />
+                          ) : (
+                            <GroupRow key={group.key} group={group} />
+                          ),
+                        )}
                       </TableBody>
                     </Table>
                   </ScrollX>
+                  {/*
+                    The count stays the SERVER's row count. Deriving a count of operations here
+                    would make the pager disagree with itself on every page — the server pages
+                    rows, and a page holding one 12-row group would report a total of one while
+                    the next page started at offset 25. This is the second-most likely
+                    "improvement" somebody will make here, after grouping across a page boundary.
+                  */}
                   <TablePagination
                     component="div"
                     count={page.total}
@@ -263,6 +250,141 @@ export function AuditLogPage() {
         </>
       )}
     </Box>
+  );
+}
+
+/** Consecutive rows of one bulk act — one summary row, expandable to the rows it covers. */
+export type AuditGroup = { key: string; bulkOperationId: string | null; rows: AuditEvent[] };
+
+/**
+ * Consecutive rows of one bulk act, folded into one group.
+ *
+ * **A run rather than a scan, and that is load-bearing.** Every writer stamps a transaction's rows
+ * from one `Instant` and the sort is `(occurredAt DESC, id DESC)`, so one act's rows are adjacent.
+ * Grouping by scanning the whole page would additionally merge two acts that happen to share an id
+ * across a boundary — which cannot happen — while costing the property that makes this cheap.
+ *
+ * **A group that straddles a page boundary renders as two groups, and that is honest.** The page is
+ * server-paged and this screen sees 25–100 rows; a 300-row act spans several. Claiming a total the
+ * page cannot see would be the false statement about the past this screen exists not to make. The
+ * summary therefore counts *what is here*, in those words.
+ *
+ * A null `bulkOperationId` is always its own group of one, so every row written before §244 — which
+ * is every row in every deployment until then — renders exactly as it did.
+ */
+export function groupByBulkOperation(rows: AuditEvent[]): AuditGroup[] {
+  const groups: AuditGroup[] = [];
+  for (const row of rows) {
+    const previous = groups[groups.length - 1];
+    if (row.bulkOperationId && previous?.bulkOperationId === row.bulkOperationId) {
+      previous.rows.push(row);
+      continue;
+    }
+    groups.push({ key: row.id, bulkOperationId: row.bulkOperationId ?? null, rows: [row] });
+  }
+  return groups;
+}
+
+/**
+ * One bulk act, as one line that can be opened.
+ *
+ * The act label is the shared one where every row agrees and a neutral count where they do not: a
+ * distribute that also takes rows off somebody writes both `execution.assigned` and
+ * `execution.unassigned` in one act, so picking either would be wrong about half the group. The
+ * count is worded as *shown here* because a group straddling a page boundary is real.
+ */
+function GroupRow({ group }: { group: AuditGroup }) {
+  const [open, setOpen] = useState(false);
+  const first = group.rows[0];
+  const actions = new Set(group.rows.map((row) => row.action));
+  const label =
+    actions.size === 1
+      ? auditActionLabel(first.action)
+      : `${group.rows.length} changes in one operation`;
+  const targets = group.rows.reduce((total, row) => total + row.targetIds.length, 0);
+
+  return (
+    <>
+      <TableRow data-testid="Audit.Group" hover>
+        <TableCell>
+          <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
+            <IconButton
+              size="small"
+              onClick={() => setOpen(!open)}
+              aria-expanded={open}
+              aria-label={open ? 'Hide the rows of this operation' : 'Show the rows of this operation'}
+              data-testid="Audit.Group.Toggle"
+            >
+              {open ? <KeyboardArrowDownIcon fontSize="small" /> : <KeyboardArrowRightIcon fontSize="small" />}
+            </IconButton>
+            <Tooltip title={formatDateTime(first.occurredAt, true)}>
+              <Box sx={{ color: 'text.secondary' }} data-testid="Audit.Group.When">
+                {formatAge(first.occurredAt)}
+              </Box>
+            </Tooltip>
+          </Stack>
+        </TableCell>
+        <TableCell>
+          {/* Every row of one act has one actor, so the group's is the first row's. */}
+          <Actor row={first} />
+        </TableCell>
+        <TableCell data-testid="Audit.Group.Action">
+          {label} — {group.rows.length} of one operation shown here
+        </TableCell>
+        <TableCell data-testid="Audit.Group.TargetType">
+          {auditTargetTypeLabel(first.targetType)}
+        </TableCell>
+        <TableCell>
+          <Typography variant="body2" data-testid="Audit.Group.Targets">
+            {targets} items
+          </Typography>
+        </TableCell>
+      </TableRow>
+      <TableRow>
+        {/* One cell spanning the table, so the collapse does not disturb the column widths. */}
+        <TableCell colSpan={5} sx={{ py: 0, border: 0 }}>
+          <Collapse in={open} unmountOnExit>
+            <Table size="small" data-testid="Audit.Group.Rows">
+              <TableBody>
+                {group.rows.map((row) => (
+                  <PlainRow key={row.id} row={row} inset />
+                ))}
+              </TableBody>
+            </Table>
+          </Collapse>
+        </TableCell>
+      </TableRow>
+    </>
+  );
+}
+
+/** One act, one line — the rendering every row had before §244, unchanged. */
+function PlainRow({ row, inset = false }: { row: AuditEvent; inset?: boolean }) {
+  return (
+    <TableRow data-testid="Audit.Row" hover>
+      <TableCell sx={inset ? { pl: 5, width: 180 } : { width: 180 }}>
+        {/*
+          The age reads at a glance and the exact instant is a hover away — CaseGrid's pairing.
+          Seconds are shown because two acts a second apart are a different story from two acts a
+          minute apart, and this is the screen where that difference is the question.
+        */}
+        <Tooltip title={formatDateTime(row.occurredAt, true)}>
+          <Box sx={{ color: 'text.secondary' }} data-testid="Audit.Row.When">
+            {formatAge(row.occurredAt)}
+          </Box>
+        </Tooltip>
+      </TableCell>
+      <TableCell sx={{ width: 240 }}>
+        <Actor row={row} />
+      </TableCell>
+      <TableCell data-testid="Audit.Row.Action">{auditActionLabel(row.action)}</TableCell>
+      <TableCell sx={{ width: 160 }} data-testid="Audit.Row.TargetType">
+        {auditTargetTypeLabel(row.targetType)}
+      </TableCell>
+      <TableCell sx={{ width: 220 }}>
+        <Targets ids={row.targetIds} />
+      </TableCell>
+    </TableRow>
   );
 }
 
