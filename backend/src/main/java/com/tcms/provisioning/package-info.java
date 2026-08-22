@@ -33,5 +33,13 @@
  * made before the context exists.
  */
 @org.springframework.modulith.ApplicationModule(
-        allowedDependencies = {"tenancy", "identity", "project"})
+        // `storage` is the fourth entry, added for `export-company` (§NN). It is one of
+        // ArchitectureRules.FOUNDATION_MODULES — the five every module may depend on — and
+        // `documentation`, `execution`, `reporting` and `repository` already declare it. The
+        // export has to put the BYTES its rows name into the archive, and the three blob ports
+        // are the only way to reach them; the alternative is this module learning the filesystem
+        // layout, which is exactly what the ports exist to stop. Note what this is NOT: a widened
+        // list standing in for a port. `project`'s header warns against that, and the warning is
+        // about reaching sideways into a peer — `storage` is beneath everything by construction.
+        allowedDependencies = {"tenancy", "identity", "project", "storage"})
 package com.tcms.provisioning;

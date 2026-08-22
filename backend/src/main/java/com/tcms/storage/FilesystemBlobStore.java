@@ -6,7 +6,9 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 /**
  * Bytes under a directory on the box — the body both filesystem adapters are, held once.
@@ -156,6 +158,42 @@ final class FilesystemBlobStore {
 
     boolean exists(String key) {
         return Files.isRegularFile(resolve(key));
+    }
+
+    /**
+     * Every key under {@code prefix}, sorted — {@link BlobInventory}'s body.
+     *
+     * <p>Relative to the root and always with {@code /} separators, so a key that comes back out of
+     * here is the same string that went in through {@link #put}. {@link java.nio.file.Path#toString}
+     * would spell it with the platform separator and quietly stop matching on Windows.
+     *
+     * <p>An absent or non-directory prefix yields an empty list rather than an exception: a company
+     * that has uploaded nothing is a normal company, and this is a reconciliation call — its whole
+     * job is to report what is there.
+     */
+    List<String> list(String prefix) {
+        Path base = resolve(prefix);
+        if (!Files.isDirectory(base)) {
+            return List.of();
+        }
+        try (Stream<Path> files = Files.walk(base)) {
+            return files.filter(Files::isRegularFile)
+                    .map(file -> {
+                        StringBuilder key = new StringBuilder();
+                        for (Path segment : root.relativize(file)) {
+                            if (!key.isEmpty()) {
+                                key.append('/');
+                            }
+                            key.append(segment);
+                        }
+                        return key.toString();
+                    })
+                    .sorted()
+                    .toList();
+        } catch (IOException failure) {
+            throw new UncheckedIOException(
+                    "Could not list " + kind + " bytes under " + prefix, failure);
+        }
     }
 
     /**
