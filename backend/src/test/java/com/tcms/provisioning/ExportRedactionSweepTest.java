@@ -108,13 +108,27 @@ class ExportRedactionSweepTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("the six known secrets are on the dropped list, by name")
-    void theSixKnownSecretsAreOnTheDroppedList() {
+    @DisplayName("the five known secrets are on the dropped list, by name")
+    void theKnownSecretsAreOnTheDroppedList() {
         // Asserted literally, and this is the arm that fails if somebody "simplifies"
         // DROPPED_COLUMNS while the sweep above still passes because the table got excluded
-        // instead — which would take api_token's name, prefix and revocation date with it.
+        // instead — which would take a table's non-secret columns with it.
+        //
+        // FIVE, not six: this list named `api_token.token_hash` until the sweep above was first
+        // executed and failed on it. `V36__api_token_lookup.sql:75` dropped that column and moved
+        // the digest to `api_token_lookup`, which is excluded WHOLESALE as CREDENTIAL_ONLY — so
+        // api_token has no secret to drop, and the arm below is the one that proves the digest's
+        // real home is still covered. That exclusion is deliberate here rather than the
+        // over-exclusion this arm guards against: the table holds a digest and a foreign key and
+        // nothing a client could want.
+        assertThat(ExportTables.EXCLUDED)
+                .as("the digest's actual table since V36 — excluded, not column-redacted")
+                .containsEntry("api_token_lookup", ExportTables.Exclusion.CREDENTIAL_ONLY);
+        assertThat(ExportRedactions.droppedFrom("api_token"))
+                .as("nothing to drop: the policed row holds no credential since V36")
+                .isEmpty();
+
         assertThat(ExportRedactions.droppedFrom("app_user")).contains("password_hash");
-        assertThat(ExportRedactions.droppedFrom("api_token")).contains("token_hash");
         assertThat(ExportRedactions.droppedFrom("membership_invitation")).contains("token_hash");
         assertThat(ExportRedactions.droppedFrom("notification_channel")).contains("secret");
         assertThat(ExportRedactions.droppedFrom("identity_provider"))

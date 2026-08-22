@@ -172,8 +172,10 @@ class ExportCompanyTest extends IntegrationTestBase {
                     "SELECT u.password_hash FROM app_user u "
                             + "JOIN company_membership m ON m.user_id = u.id WHERE m.company_id = ?",
                     alphaId));
+            // From api_token_lookup, which is where the digest lives since V36 — and which the
+            // export excludes as a whole table rather than by dropping a column.
             secrets.add(scalar(connection,
-                    "SELECT token_hash FROM api_token WHERE id = ?", TOKEN_ALPHA));
+                    "SELECT token_hash FROM api_token_lookup WHERE token_id = ?", TOKEN_ALPHA));
             secrets.add(scalar(connection,
                     "SELECT token_hash FROM membership_invitation WHERE company_id = ?", alphaId));
             secrets.add(scalar(connection,
@@ -219,7 +221,9 @@ class ExportCompanyTest extends IntegrationTestBase {
         assertThat(manifest).contains("\"formatVersion\" : 1");
         assertThat(manifest).contains("\"complete\" : true");
         assertThat(manifest).contains("\"slug\" : \"exp-alpha\"");
-        assertThat(manifest).contains("\"token_hash\"");            // api_token's redaction, named
+        // membership_invitation's redaction. api_token's entry is GONE — the column it named was
+        // dropped in V36 and the digest's table is excluded outright instead.
+        assertThat(manifest).contains("\"token_hash\"");
         assertThat(manifest).contains("\"password_hash\"");         // app_user's, named
         assertThat(manifest).contains("CREDENTIAL_ONLY");           // an exclusion reason
         assertThat(manifest).contains("\"logoBlob\" : \"no writer in this build\"");
@@ -467,8 +471,15 @@ class ExportCompanyTest extends IntegrationTestBase {
      */
     private String seedEvidence(UUID companyId, UUID attachmentId, boolean writeBytes)
             throws SQLException {
-        UUID ownerId = UUID.randomUUID();
-        String key = companyId + "/" + ownerId + "/" + UUID.randomUUID();
+        // Derived from the attachment id rather than random, and inserted ON CONFLICT DO NOTHING,
+        // because @BeforeEach runs once per test and the ids are class constants: a random key made
+        // the second method's insert a duplicate-primary-key failure that took all thirteen down.
+        // The two must change together — DO NOTHING on a row whose key was re-randomized would
+        // leave the database holding the FIRST key while this method returned the second, and the
+        // archive assertions are all by entry name.
+        UUID ownerId = UUID.nameUUIDFromBytes(("export-owner:" + attachmentId).getBytes());
+        String key = companyId + "/" + ownerId + "/"
+                + UUID.nameUUIDFromBytes(("export-blob:" + attachmentId).getBytes());
         if (writeBytes) {
             attachments.put(key, EVIDENCE_BYTES);
         }
@@ -478,6 +489,7 @@ class ExportCompanyTest extends IntegrationTestBase {
                        (id, company_id, owner_type, owner_id, storage_key, filename,
                         content_type, size_bytes, created_at)
                      VALUES (?, ?, 'EXECUTION', ?, ?, 'screenshot.png', 'image/png', ?, now())
+                     ON CONFLICT (id) DO NOTHING
                      """)) {
             statement.setObject(1, attachmentId);
             statement.setObject(2, companyId);
@@ -502,23 +514,48 @@ class ExportCompanyTest extends IntegrationTestBase {
         }
     }
 
+    /** The seeded digest — derived, so the value the assertions search for is reproducible. */
+    private static String tokenDigest(UUID tokenId) {
+        return HexFormat.of().formatHex(
+                ("7c-token-digest-" + tokenId).getBytes(StandardCharsets.UTF_8));
+    }
+
     private void seedApiToken(UUID companyId, UUID tokenId) throws SQLException {
         try (Connection connection = appConnection(companyId)) {
             UUID ownerId = firstMember(connection, companyId);
             UUID roleId = anyRole(connection);
+            // ~~api_token carries the digest.~~ → NOT SINCE `V36__api_token_lookup.sql:75`, which
+            // DROPPED `api_token.token_hash` and moved the digest to its own table. This fixture
+            // was written against V1's DDL and never ran, so it seeded a column that has not
+            // existed for thirty-two migrations — every arm in the class died on it.
+            //
+            // The policed row now holds no secret at all, so the credential this class hunts for is
+            // seeded where it actually lives. That is a STRONGER test than the original: the digest
+            // is absent from the archive because `api_token_lookup` is excluded WHOLESALE
+            // (CREDENTIAL_ONLY), which is a different mechanism from a dropped column and was
+            // previously asserted by nothing.
             try (PreparedStatement statement = connection.prepareStatement("""
                     INSERT INTO api_token
-                      (id, company_id, name, token_hash, token_prefix, owner_id, role_id, created_at)
-                    VALUES (?, ?, 'CI', ?, 'tcms_7c00', ?, ?, now())
+                      (id, company_id, name, token_prefix, owner_id, role_id, created_at)
+                    VALUES (?, ?, 'CI', 'tcms_7c00', ?, ?, now())
+                    ON CONFLICT (id) DO NOTHING
                     """)) {
                 statement.setObject(1, tokenId);
                 statement.setObject(2, companyId);
+                statement.setObject(3, ownerId);
+                statement.setObject(4, roleId);
+                statement.executeUpdate();
+            }
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    INSERT INTO api_token_lookup (token_hash, token_id, company_id)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT (token_hash) DO NOTHING
+                    """)) {
                 // A digest-shaped value, distinctive enough that finding it in the archive is
                 // unambiguous — which is what the redaction arm searches for.
-                statement.setString(3, HexFormat.of().formatHex(
-                        ("7c-token-digest-" + tokenId).getBytes(StandardCharsets.UTF_8)));
-                statement.setObject(4, ownerId);
-                statement.setObject(5, roleId);
+                statement.setString(1, tokenDigest(tokenId));
+                statement.setObject(2, tokenId);
+                statement.setObject(3, companyId);
                 statement.executeUpdate();
             }
         }

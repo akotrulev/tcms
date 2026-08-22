@@ -26,10 +26,17 @@ final class ExportRedactions {
     static final Map<String, Set<String>> DROPPED_COLUMNS = Map.of(
             // A bcrypt digest of a password people reuse. V1:81.
             "app_user", Set.of("password_hash"),
-            // The digest an API token is checked against. V1:337. `name`, `token_prefix`,
-            // `expires_at` and `revoked_at` are KEPT — the client must be able to see which
-            // integrations existed and when they were revoked.
-            "api_token", Set.of("token_hash"),
+            // ~~The digest an API token is checked against. V1:337.~~ → THE COLUMN IS GONE.
+            // `V36__api_token_lookup.sql:75` DROPPED `api_token.token_hash` and moved the digest
+            // to `api_token_lookup.token_hash`, which `ExportTables` excludes WHOLESALE as
+            // CREDENTIAL_ONLY — so the secret is not exported and never was. What this entry was,
+            // by the time it was written, is a redaction of a column that does not exist: it made
+            // the list look complete while naming nothing, which is the exact failure
+            // `ExportRedactionSweepTest.nothingIsKeptOrDroppedForAColumnThatIsGone` exists to
+            // catch, and it caught it on this list's first execution. `api_token`'s remaining
+            // columns are all KEPT — the client must be able to see which integrations existed and
+            // when they were revoked, and `token_prefix` is a deliberate partial disclosure with
+            // its own KEPT_COLUMNS entry.
             // An unconsumed invitation digest is a live admission to the company. V6:70.
             "membership_invitation", Set.of("token_hash"),
             // AES-GCM ciphertext of a webhook URL, and a webhook URL IS the authentication for the
