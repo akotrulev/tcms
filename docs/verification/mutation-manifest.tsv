@@ -563,9 +563,9 @@ CE-M3	§161	?	S	-		queued
 §210 DQ-6	§209	PermissionEvaluatorTest	-	-		queued
 §217 FD-1	§217	com.tcms.auth.SsoFlowIntegrationTest	W1	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:MORE
 §217 FD-2	§217	SchemaConventionTest	S	-		queued
-§217 FD-3	§217	SchemaConventionTest	S	-		queued
-§217 FD-4	§217	SchemaConventionTest	S	-		queued
-§217 FD-5	§217	SchemaConventionTest	S	-		queued
+§217 FD-3	§217	com.tcms.tenancy.SchemaConventionTest,com.tcms.auth.SsoFlowIntegrationTest	S	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:ZERO-AS-PREDICTED
+§217 FD-4	§217	com.tcms.tenancy.SchemaConventionTest	S	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:MATCH
+§217 FD-5	§217	com.tcms.tenancy.SchemaConventionTest	S	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:MATCH
 §217 FD-6	§217	SchemaConventionTest	-	-		queued
 §218 NC-1	§218 phase 2	com.tcms.integration.NotificationChannelTest	W1	-	backend/src/main/java/com/tcms/integration/NotificationChannelService.java	RUN:MORE
 §218 NC-2	§218 phase 2	?	-	-		queued
@@ -618,7 +618,7 @@ CE-M3	§161	?	S	-		queued
 §227 PM-8	§227 phase 1	?	-	-		queued
 §225 PM-1	§225	RoleGrantEndpointTest	-	-		queued
 §225 PM-2	§225	?	-	-		queued
-§225 PM-3	§225	RoleScopeShapeTest	S	-		queued
+§225 PM-3	§225	com.tcms.schema.RoleScopeShapeTest	S	-	backend/src/main/resources/db/migration/V56__role_scope_agrees_with_the_grant_shape.sql	RUN:MATCH
 §224 SP-2	§224	com.tcms.auth.SsoLoginAttemptPurgeTest	W1	-	backend/src/main/java/com/tcms/auth/SsoLoginAttemptPurge.java	RUN:ZERO-AS-PREDICTED
 §223 LD-1	§223	LdapDirectoryTest	-	-		queued
 §223 LD-2	§223	LdapDirectoryTest	-	-		queued
@@ -670,7 +670,7 @@ CE-M3	§161	?	S	-		queued
 §238 SV-10	§237	?	-	-		queued
 §239 RT-M1	§239	IdempotencyKeyCapTest	S	-		queued
 §239 RT-M2	§239	-	W1	-	-	CONFIRMED-BY-READING
-§239 RT-M3	§239	SearchVectorTest	S	-		queued
+§239 RT-M3	§239	com.tcms.schema.SearchVectorTest,com.tcms.schema.SchemaCommentTest	S	-	backend/src/main/resources/db/migration/V63__shared_step_library_is_retired.sql	RUN:MORE
 §239 RT-M4	§239	?	-	-		queued
 §240 DR-M1	§240	com.tcms.repository.CaseDraftEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/TestCaseDraftRepository.java	RUN:MATCH
 §240 DR-M2	§240	?	-	-		queued
@@ -692,7 +692,7 @@ CE-M3	§161	?	S	-		queued
 §241 OC-6	§240	?	-	-		queued
 §241 OC-7	§240	?	-	-		queued
 §241 OC-8	§240	?	-	-		queued
-§241 IX-1	§241 amendment (2026-08-17)	SchemaConventionTest	S	-		queued
+§241 IX-1	§241 amendment (2026-08-17)	com.tcms.tenancy.SchemaConventionTest,com.tcms.schema.SchemaCommentTest,com.tcms.identity.OrgChartEndpointTest,com.tcms.identity.PermissionEvaluatorTest	S	-	backend/src/main/resources/db/migration/V67__team_membership_answers_which_teams_a_person_is_in.sql	RUN:ZERO-AS-PREDICTED
 §242 LG-M1	§242 amendment (2026-08-18)	?	-	-		queued
 §242 LG-M2	§242 amendment (2026-08-18)	?	-	-		queued
 §242 LG-M3	§242 amendment (2026-08-18)	com.tcms.identity.AuditLogReadTest	W1	-	backend/src/main/java/com/tcms/identity/AuditLogService.java	RUN:MORE
@@ -769,9 +769,9 @@ CE-M3	§161	?	S	-		queued
 §247 SK-M14	§247	CronScheduleTest	-	-		queued
 §247 SK-M15	§247	CronScheduleTest	-	-		queued
 §247 SK-M16	§247	CronScheduleTest	-	-		queued
-§247 SK-M17	§247	SchemaConventionTest	S	-		queued
-§247 SK-M18	§247	SchemaConventionTest	S	-		queued
-§247 SK-M19	§247	CronScheduleTest	S	-		queued
+§247 SK-M17	§247	com.tcms.tenancy.SchemaConventionTest,com.tcms.tenancy.AsyncCompanyContextTest	S	-	backend/src/main/resources/db/migration/V68__runs_can_be_scheduled.sql	RUN:FEWER
+§247 SK-M18	§247	com.tcms.tenancy.SchemaConventionTest	S	-	backend/src/main/resources/db/migration/V68__runs_can_be_scheduled.sql	RUN:MATCH
+§247 SK-M19	§247	com.tcms.execution.RunScheduleFiringTest	S	-	backend/src/main/resources/db/migration/V68__runs_can_be_scheduled.sql	RUN:MATCH
 §247 SK-M20	§247	com.tcms.execution.RunScheduleEndpointTest	S	-	backend/src/main/java/com/tcms/execution/RunScheduleService.java	RUN:ZERO-AS-PREDICTED
 §247 SK-M21	§247	CronScheduleTest	-	-		queued
 §247 SK-M22	§247	CronScheduleTest	-	-		queued
