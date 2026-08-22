@@ -237,6 +237,38 @@ public class RunCreateService {
         return create(userId, projectId, request, idempotencyKey, RunSource.INGESTED);
     }
 
+    /**
+     * The same create, for the run a schedule fires — {@code RunScheduleFiringService}'s only way
+     * to make one (§247).
+     *
+     * <p><strong>This exists so that scheduling does not grow a second run-creation path</strong>,
+     * which is {@link #createIngested}'s argument and it is unchanged: materialising a run resolves
+     * a case set, resolves each case's current version, allocates a display key, applies §6g's
+     * approval gate, writes an execution per case and audits the whole thing as one transaction. A
+     * copy of that in a poller would be a second implementation of the pin.
+     *
+     * <p>{@code ownerId} is the schedule's {@code created_by} and it is an <strong>authority, not
+     * an actor</strong>. It is what {@code run:create} is asked of — so a schedule outlives neither
+     * the grant nor the account — and it is deliberately <em>not</em> what gets stamped on the run
+     * or on the audit row. The split is in {@link #apply}, one method down.
+     *
+     * <p><strong>The approval-gate override is unreachable from this door and that is the
+     * design.</strong> {@code RunWriteRequest#overrideApprovalGate}'s own header calls it <em>"a
+     * statement about this request"</em>, and §6g's whole word is <em>documented</em> — a lead
+     * deciding, in the moment, to run unapproved cases. A schedule cannot make that decision in
+     * advance for every night to come, so {@code RunScheduleFiringService} builds its request with
+     * the field null and a refusal is recorded as {@code last_fire_error} rather than overridden.
+     *
+     * <p>Package-private, and {@code source} is not a parameter a caller chooses from a request
+     * field: there are exactly three doors and each names its own. See {@link TestRun#create}.
+     */
+    @Transactional
+    Outcome createScheduled(
+            UUID ownerId, UUID projectId, RunWriteRequest request, String idempotencyKey) {
+
+        return create(ownerId, projectId, request, idempotencyKey, RunSource.SCHEDULED);
+    }
+
     private Outcome create(
             UUID userId,
             UUID projectId,
@@ -287,6 +319,23 @@ public class RunCreateService {
             RunSource source) {
 
         UUID companyId = CompanyContext.require();
+
+        // AUTHORITY vs ATTRIBUTION, and they are the same value on two of the three doors (§247).
+        //
+        // `userId` is who the request is GATED as — for a SCHEDULED run that is the schedule's
+        // owner, re-asked on every fire so a schedule cannot outlive the grant that created it.
+        //
+        // `actor` is who DID it, and for a SCHEDULED run that is nobody: at 03:00 no person acted.
+        // Stamping the owner would put "Ana created TR-91" on a night Ana did nothing, which is the
+        // attribution AuditEvent#actorTokenId's header refuses one layer over — and AuditEvent#record
+        // says the same from the other side: "the authenticated caller; null only for an unattended
+        // job". THIS IS THAT JOB, AND IT IS THE PRODUCT'S FIRST ONE, which is why browser-check row
+        // §242 LG-5 was recorded as NOT DRIVABLE until V68.
+        //
+        // The GATE keeps `userId` — projects.writeGranted in create(), and gate() for §6g. Changing
+        // either to `actor` would make a scheduled run ungated, which is the opposite of the
+        // decision this line implements.
+        UUID actor = source == RunSource.SCHEDULED ? null : userId;
 
         // FIRST — CaseCreateService's rule, and the stakes are higher here than anywhere else it has
         // been applied: a replay that fell through would not merely make a second row, it would make
@@ -384,7 +433,9 @@ public class RunCreateService {
                 // header: an Automation Service token creating a run through the public endpoint
                 // has created a MANUAL run, and only a posted report creates an INGESTED one.
                 source,
-                userId,
+                // `actor`, NOT `userId` — see the split at the top of this method. A SCHEDULED run
+                // has no creator, and TestRun.create's parameter is the creator.
+                actor,
                 idempotencyKey,
                 // B7 — what was ASKED for, beside what it materialised. Written from the REQUEST
                 // and not from `edit.caseIds()`: the resolved list is the checklist, and the whole
@@ -413,7 +464,9 @@ public class RunCreateService {
 
         auditEvents.save(AuditEvent.record(
                 project.getId(),
-                userId,
+                // The second of the two places the split lands. AuditEvent#record's own @param
+                // says "null only for an unattended job" and this is the only one there is.
+                actor,
                 AUDIT_ACTION,
                 AUDIT_TARGET,
                 List.of(created.getId()),

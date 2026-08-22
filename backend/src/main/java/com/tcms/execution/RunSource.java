@@ -10,5 +10,20 @@ package com.tcms.execution;
 public enum RunSource {
 
     MANUAL,
-    INGESTED
+    INGESTED,
+
+    /**
+     * A {@code run_schedule} fired — {@code V68}, §247.
+     *
+     * <p>The third door, and the one whose runs have <strong>no creator</strong>:
+     * {@code test_run.created_by} is null and so is the actor on the {@code run.created} audit row,
+     * because nobody performed the act at 03:00. The schedule's owner is the <em>authority</em> the
+     * create ran under — re-checked on every fire, so a schedule outlives neither the grant nor the
+     * account — and that is a different question with a different column.
+     *
+     * <p>Adding a member here rather than treating the value as a string is what makes an
+     * exhaustive {@code switch} over this enum a compile error until it handles the new door,
+     * under {@code -Werror}.
+     */
+    SCHEDULED
 }

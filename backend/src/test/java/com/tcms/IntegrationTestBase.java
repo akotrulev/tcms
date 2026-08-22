@@ -168,6 +168,18 @@ public abstract class IntegrationTestBase {
         // is how a scheduled job's logic should be tested anyway.
         registry.add("tcms.outbox.enabled", () -> false);
 
+        // Off for the fourth time (§247), and this one is the most destructive of the four if it
+        // is left on: RunScheduleScheduler CREATES RUNS. A tick landing three minutes into a suite
+        // run would materialise a checklist against whichever fixtures had seeded by then, in
+        // every company in the container — so a class asserting a run count, an audit trail or a
+        // key sequence would fail somewhere unrelated to what it was testing, at a different point
+        // each run. Unlike case health, nothing repairs it: the runs and their executions stay.
+        //
+        // RunScheduleFiringTest drives the firing service directly, which is how a scheduled job's
+        // logic should be tested anyway — the poller's own contribution is the company loop, and
+        // AsyncCompanyContextTest is what covers that.
+        registry.add("tcms.run-schedule.enabled", () -> false);
+
         // Evidence bytes land in a directory, not in Postgres — the one piece of product state
         // Testcontainers does not throw away for us. The production default is /var/lib/tcms,
         // which is not writable on a developer's machine, so the suite gets its own path under
