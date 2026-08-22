@@ -2993,6 +2993,119 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  # -------------------------------------------------- cross-project search ----
+  /cases/search:
+    get:
+      tags: [repository]
+      summary: Find cases across every project you can see
+      description: |
+        **Company-scoped.** Every other case read in this API is scoped to one project and gated by
+        that project's grant; this one returns rows from many. The bound is the **caller's own**
+        project visibility (`project:read`, per project) — never the company's project list. Two
+        colleagues searching the same word legitimately receive different results and different
+        totals; that is the design, and it is the same rule `/work-items`' team board states.
+
+        **A project you hold no grant on contributes no hit and no count.** The `total` is computed
+        over the same narrowed set as the page, so it can never report the size of a result set you
+        cannot page to. A count is a name-free existence claim about the client's portfolio and §6t
+        does not permit one.
+
+        **A member with no project grants at all gets `200` with `total: 0`** — not a 403. There is
+        nothing here that could fail to resolve, and a distinguishable refusal would answer the
+        question the empty answer exists to withhold.
+
+        **At least one of `q`, `ownerId` or `tag` is required** — see the 400. There is no search
+        that is every case in every project, for `/work-items`' reason: it is a company-sized
+        response no screen can work from.
+
+        A `q` matching the case-key pattern (`TC-412`) short-circuits to an exact lookup, as on the
+        project grid. Keys are allocated from a **company** counter and are therefore unique across
+        a company's projects (§6t) — which is exactly the situation this endpoint exists for: you
+        were handed a key and do not know which project it belongs to.
+
+        **The live-tree bound does not apply here** and that is a deliberate difference from
+        `GET /projects/{projectId}/cases`: a case filed in a soft-deleted suite IS findable by
+        search. A search is for finding a case you know exists, and a case hidden behind a deleted
+        folder is precisely the one somebody cannot find.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Size' }
+        - name: q
+          in: query
+          description: |
+            Free text over title and description, or a case key (`TC-412`), which short-circuits to
+            an exact lookup. **At least two characters** after trimming; one character is refused
+            rather than clamped, because a single-character substring over a whole company is the
+            unbounded read wearing a filter.
+          schema: { type: string, minLength: 2 }
+        - name: projectId
+          in: query
+          description: |
+            **Narrows within what you can already see — it never widens it.** Repeat to name
+            several. The grant list is applied first and this is intersected with it, so an id
+            naming a project you hold no grant on, or one that does not exist, simply matches
+            nothing: no 400, no 404, and no way to tell those two apart (§6t).
+          schema:
+            type: array
+            items: { type: string, format: uuid }
+        - name: ownerId
+          in: query
+          description: Cases owned by one person, across every project you can see.
+          schema: { type: string, format: uuid }
+        - name: tag
+          in: query
+          description: |
+            Cases carrying **every** tag listed — AND, not OR, exactly as on the project grid.
+          schema:
+            type: array
+            items: { type: string }
+        - name: lifecycleStatus
+          in: query
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/LifecycleStatus' }
+        - name: automationStatus
+          in: query
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/AutomationStatus' }
+        - name: priority
+          in: query
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/Priority' }
+        - name: sort
+          in: query
+          description: |
+            `field,dir`. Every ordering ends in the case key, which is allocated per company and is
+            therefore a total order across projects — so paging cannot repeat or skip a row.
+          schema: { type: string, example: 'keySeq,asc' }
+      responses:
+        '200':
+          description: |
+            The page of hits, and the total **over the projects you can see**. An empty `items` with
+            `total: 0` is a reachable search with nothing in it — including for a member who holds
+            no project grants at all.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    # `required` does not descend through allOf — the PageMeta branch declares its
+                    # own and this one needs the same.
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/CaseSearchHit' }
+        '400':
+          # A refusal to GUESS, not a validation failure: no q, no ownerId and no tag is the request
+          # "every case in every project I can see", which is company-sized. Not a 404 — nothing
+          # failed to resolve, and the caller may make any of the requests the message names.
+          $ref: '#/components/responses/BadRequest'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   # ----------------------------------------------------------- execution ----
   /projects/{projectId}/plans:
     parameters: [{ $ref: '#/components/parameters/ProjectId' }]
@@ -8878,6 +8991,36 @@ components:
         # the kind of rule that does not survive being written down twice. `PlanStatusInput` says
         # the same thing about the same shape.
         status: { $ref: '#/components/schemas/LifecycleStatus' }
+
+    CaseSearchHit:
+      description: |
+        One cross-project search result — a **waypoint**, not a grid row.
+
+        Deliberately *not* `TestCaseSummary`: that shape carries the owner, the tags, the
+        classifications, the health signals and the last result, each of which costs a per-page
+        query, and two of its fields (`suiteId`, `suiteName`) name a folder that only exists inside
+        one project. A hit carries what is needed to recognise a case and navigate to it, and the
+        project it belongs to — because the caller, by construction, does not know.
+      type: object
+      required:
+        [id, key, keySeq, title, projectId, projectKey, projectName,
+         lifecycleStatus, automationStatus, priority, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string, example: TC-412 }
+        keySeq: { type: integer, description: Sort by this — text keys do not order correctly. }
+        title: { type: string }
+        # The project a hit belongs to. Every one of these three is already served in full by
+        # GET /projects for exactly this set of projects — the set is `project:read`, which is the
+        # gate this endpoint applies — so naming them here discloses nothing new. The NAME is the
+        # one that would be a disclosure if the narrowing were ever widened; see AdminReach.
+        projectId: { type: string, format: uuid }
+        projectKey: { type: string }
+        projectName: { type: string }
+        lifecycleStatus: { $ref: '#/components/schemas/LifecycleStatus' }
+        automationStatus: { $ref: '#/components/schemas/AutomationStatus' }
+        priority: { $ref: '#/components/schemas/Priority' }
+        updatedAt: { type: string, format: date-time }
 
     TestCaseSummary:
       type: object

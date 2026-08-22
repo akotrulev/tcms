@@ -4219,6 +4219,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cases/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find cases across every project you can see
+         * @description **Company-scoped.** Every other case read in this API is scoped to one project and gated by
+         *     that project's grant; this one returns rows from many. The bound is the **caller's own**
+         *     project visibility (`project:read`, per project) — never the company's project list. Two
+         *     colleagues searching the same word legitimately receive different results and different
+         *     totals; that is the design, and it is the same rule `/work-items`' team board states.
+         *
+         *     **A project you hold no grant on contributes no hit and no count.** The `total` is computed
+         *     over the same narrowed set as the page, so it can never report the size of a result set you
+         *     cannot page to. A count is a name-free existence claim about the client's portfolio and §6t
+         *     does not permit one.
+         *
+         *     **A member with no project grants at all gets `200` with `total: 0`** — not a 403. There is
+         *     nothing here that could fail to resolve, and a distinguishable refusal would answer the
+         *     question the empty answer exists to withhold.
+         *
+         *     **At least one of `q`, `ownerId` or `tag` is required** — see the 400. There is no search
+         *     that is every case in every project, for `/work-items`' reason: it is a company-sized
+         *     response no screen can work from.
+         *
+         *     A `q` matching the case-key pattern (`TC-412`) short-circuits to an exact lookup, as on the
+         *     project grid. Keys are allocated from a **company** counter and are therefore unique across
+         *     a company's projects (§6t) — which is exactly the situation this endpoint exists for: you
+         *     were handed a key and do not know which project it belongs to.
+         *
+         *     **The live-tree bound does not apply here** and that is a deliberate difference from
+         *     `GET /projects/{projectId}/cases`: a case filed in a soft-deleted suite IS findable by
+         *     search. A search is for finding a case you know exists, and a case hidden behind a deleted
+         *     folder is precisely the one somebody cannot find.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    page?: components["parameters"]["Page"];
+                    size?: components["parameters"]["Size"];
+                    /**
+                     * @description Free text over title and description, or a case key (`TC-412`), which short-circuits to
+                     *     an exact lookup. **At least two characters** after trimming; one character is refused
+                     *     rather than clamped, because a single-character substring over a whole company is the
+                     *     unbounded read wearing a filter.
+                     */
+                    q?: string;
+                    /**
+                     * @description **Narrows within what you can already see — it never widens it.** Repeat to name
+                     *     several. The grant list is applied first and this is intersected with it, so an id
+                     *     naming a project you hold no grant on, or one that does not exist, simply matches
+                     *     nothing: no 400, no 404, and no way to tell those two apart (§6t).
+                     */
+                    projectId?: string[];
+                    /** @description Cases owned by one person, across every project you can see. */
+                    ownerId?: string;
+                    /** @description Cases carrying **every** tag listed — AND, not OR, exactly as on the project grid. */
+                    tag?: string[];
+                    lifecycleStatus?: components["schemas"]["LifecycleStatus"][];
+                    automationStatus?: components["schemas"]["AutomationStatus"][];
+                    priority?: components["schemas"]["Priority"][];
+                    /**
+                     * @description `field,dir`. Every ordering ends in the case key, which is allocated per company and is
+                     *     therefore a total order across projects — so paging cannot repeat or skip a row.
+                     */
+                    sort?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /**
+                 * @description The page of hits, and the total **over the projects you can see**. An empty `items` with
+                 *     `total: 0` is a reachable search with nothing in it — including for a member who holds
+                 *     no project grants at all.
+                 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PageMeta"] & {
+                            items: components["schemas"]["CaseSearchHit"][];
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/plans": {
         parameters: {
             query?: never;
@@ -5696,6 +5799,14 @@ export interface paths {
          *     do. What is refused is a scope with **no arm at all**, since that could only ever create
          *     empty runs. An arm that resolves to nothing on a given night is recorded as
          *     `lastFireError` instead, which is the field that exists for exactly this.
+         *
+         *     **There is no `Idempotency-Key` here and none is missing.** What this repository calls
+         *     idempotency is a unique `idempotency_key` column on a *created row*, and `V68` declares
+         *     none — so a header here would be a header nothing honours, which is exactly the defect
+         *     §205 found arriving from the client side. `POST /projects/{projectId}/conditions` and
+         *     the notification-channel create decline it on the same terms. The cost of a duplicate is
+         *     also not the same as a run's: a second schedule is visible in this list and deletable,
+         *     where a second checklist splits one tester's results across two runs.
          */
         post: operations["createRunSchedule"];
         delete?: never;
@@ -10320,6 +10431,33 @@ export interface components {
         };
         SuiteStatusInput: {
             status: components["schemas"]["LifecycleStatus"];
+        };
+        /**
+         * @description One cross-project search result — a **waypoint**, not a grid row.
+         *
+         *     Deliberately *not* `TestCaseSummary`: that shape carries the owner, the tags, the
+         *     classifications, the health signals and the last result, each of which costs a per-page
+         *     query, and two of its fields (`suiteId`, `suiteName`) name a folder that only exists inside
+         *     one project. A hit carries what is needed to recognise a case and navigate to it, and the
+         *     project it belongs to — because the caller, by construction, does not know.
+         */
+        CaseSearchHit: {
+            /** Format: uuid */
+            id: string;
+            /** @example TC-412 */
+            key: string;
+            /** @description Sort by this — text keys do not order correctly. */
+            keySeq: number;
+            title: string;
+            /** Format: uuid */
+            projectId: string;
+            projectKey: string;
+            projectName: string;
+            lifecycleStatus: components["schemas"]["LifecycleStatus"];
+            automationStatus: components["schemas"]["AutomationStatus"];
+            priority: components["schemas"]["Priority"];
+            /** Format: date-time */
+            updatedAt: string;
         };
         TestCaseSummary: {
             /** Format: uuid */
@@ -15797,22 +15935,7 @@ export interface operations {
     createRunSchedule: {
         parameters: {
             query?: never;
-            header?: {
-                /**
-                 * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
-                 *     already succeeded answers **200** with the resource that intent created, instead of creating
-                 *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                 *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
-                 *
-                 *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
-                 *     it across retries. A key generated per attempt is the mistake that makes the header look
-                 *     right and do nothing.
-                 *
-                 *     Scoped to the project the request is addressed to, which is the scope the uniqueness
-                 *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
-                 */
-                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
-            };
+            header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
             };
@@ -15824,15 +15947,6 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Replayed — this Idempotency-Key already created a schedule. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunSchedule"];
-                };
-            };
             /** @description Created. */
             201: {
                 headers: {
