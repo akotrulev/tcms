@@ -44,6 +44,7 @@ public class RunController {
     private final RunStatusService lifecycle;
     private final RunCloneService clones;
     private final ExecutionAssignmentService assignments;
+    private final ExecutionBulkAssignService bulkAssignments;
 
     public RunController(
             RunService runs,
@@ -51,7 +52,8 @@ public class RunController {
             RunCreateService creates,
             RunStatusService lifecycle,
             RunCloneService clones,
-            ExecutionAssignmentService assignments) {
+            ExecutionAssignmentService assignments,
+            ExecutionBulkAssignService bulkAssignments) {
 
         this.runs = runs;
         this.executions = executions;
@@ -59,6 +61,7 @@ public class RunController {
         this.lifecycle = lifecycle;
         this.clones = clones;
         this.assignments = assignments;
+        this.bulkAssignments = bulkAssignments;
     }
 
     /**
@@ -388,6 +391,51 @@ public class RunController {
             case ExecutionAssignmentService.Outcome.Invalid invalid ->
                     ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
             case ExecutionAssignmentService.Outcome.RunClosed ignored ->
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(assignmentFrozenProblem());
+        };
+    }
+
+    /**
+     * Hands many rows of the checklist out at once.
+     *
+     * <p>{@code POST} to a {@code /bulk} sub-resource, mirroring {@code POST …/cases/bulk} rather
+     * than inventing a second spelling of "operate on a selection". Preview-then-commit, so the
+     * ordinary sequence is two requests and the first one writes nothing.
+     *
+     * <p><strong>Here rather than in a controller of its own</strong>, which the area's own plan
+     * corrected: this class already maps the prefix and already owns the three problem builders
+     * this operation answers with <em>verbatim</em>. A second controller on one path prefix would
+     * be a second copy of them, which is the shape §72 extracted {@link ExecutionTargets} to end.
+     *
+     * <p>The four refusals are the single-row endpoint's, unchanged and answered with its own
+     * sentences — one key, one freeze, one 404 for every way of being unreachable. What is new is
+     * that a bad ROW does not refuse the act: it comes back in {@code skipped} with a reason, which
+     * is {@code BulkOperation}'s rule and the reason a stale selection is survivable.
+     *
+     * <p><strong>No {@code Idempotency-Key}</strong>, and no header is missing. That mechanism
+     * answers a replayed <em>create</em> with the resource the first attempt created; nothing is
+     * created here. {@link ExecutionBulkAssignService} carries the argument that replaces it.
+     */
+    @PostMapping("/{runId}/executions/bulk")
+    public ResponseEntity<Object> bulkAssign(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID runId,
+            @RequestBody ExecutionBulkAssignRequest request) {
+
+        ExecutionBulkAssignService.Outcome outcome = bulkAssignments.assign(
+                UUID.fromString(jwt.getSubject()), projectId, runId, request);
+
+        return switch (outcome) {
+            case ExecutionBulkAssignService.Outcome.Applied applied ->
+                    ResponseEntity.ok(applied.result());
+            case ExecutionBulkAssignService.Outcome.NotFound ignored ->
+                    ResponseEntity.notFound().build();
+            case ExecutionBulkAssignService.Outcome.Forbidden ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(assignForbiddenProblem());
+            case ExecutionBulkAssignService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+            case ExecutionBulkAssignService.Outcome.RunClosed ignored ->
                     ResponseEntity.status(HttpStatus.CONFLICT).body(assignmentFrozenProblem());
         };
     }

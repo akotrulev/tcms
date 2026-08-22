@@ -491,6 +491,16 @@ class ContractConventionTest {
                     List.of(com.tcms.execution.CaseHistoryView.EntryView.class)),
             Map.entry("ExecutionAssigneeInput",
                     List.of(com.tcms.execution.ExecutionAssigneeRequest.class)),
+            // Three names that deliberately do not match their schemas, so the name-matching pass
+            // would compare all three to nothing in either direction — the hole §170 closed and
+            // §242 hit again with AuditEvent. ApiTokenInput → ApiTokenIssueRequest above is the
+            // precedent for an explicit entry.
+            Map.entry("ExecutionBulkOperation",
+                    List.of(com.tcms.execution.ExecutionBulkAssignRequest.class)),
+            Map.entry("ExecutionBulkPayload",
+                    List.of(com.tcms.execution.ExecutionBulkAssignPayload.class)),
+            Map.entry("ExecutionBulkResult",
+                    List.of(com.tcms.execution.ExecutionBulkAssignResult.class)),
             Map.entry("ExecutionResultInput",
                     List.of(com.tcms.execution.ExecutionResultRequest.class)),
             // §169. The third record over doc_link, and the second write shape: BlockLink is the
@@ -1161,6 +1171,10 @@ class ContractConventionTest {
                     List.of(com.tcms.documentation.BlockCoverageView.class)),
             Map.entry("ExecutionResultInput.stepResults[]",
                     List.of(com.tcms.execution.ExecutionResultRequest.StepResultRequest.class)),
+            Map.entry("ExecutionBulkResult.changed[]",
+                    List.of(com.tcms.execution.ExecutionBulkAssignResult.AssignmentChange.class)),
+            Map.entry("ExecutionBulkResult.skipped[]",
+                    List.of(com.tcms.execution.ExecutionBulkAssignResult.SkippedRow.class)),
             Map.entry("Facet.values[]", List.of(com.tcms.repository.FacetView.Value.class)),
             Map.entry("PlanStatistics.byConfiguration[]",
                     List.of(com.tcms.execution.PlanStatisticsView.ConfigurationCountsView.class)),

@@ -678,7 +678,12 @@ class ArchitectureRulesTest {
      * ever asked for, free to be wrong for as long as nobody looks, which is exactly how
      * {@code release_sort_key} sorted a release below its own release candidate from M0 to §151
      * with 2389 tests green. <strong>Writerless as well</strong> — {@code anchorSlug},
-     * {@code scheduleCron}, {@code sharedWithTeamId}, {@code bulkOperationId}, <del>and since §156's
+     * {@code scheduleCron}, {@code sharedWithTeamId}, <del>{@code bulkOperationId}</del> —
+     * <strong>which left in §244</strong>, the first bulk act in the product to write one row per
+     * target rather than one row per act. The column had been in one map or the other since §152
+     * and is now in neither, having moved between them without the column changing at all: §242
+     * gave it a reader, §244 a writer. That is this pair's longest worked example and the plainest
+     * argument there is for running both rules. <del>And since §156's
      * correction {@code incomplete}</del> — is §116's cheaper
      * one: a column nobody fills is a column nobody is misled by, and its whole cost is that six
      * javadocs describe a state the database has never been in.
@@ -1001,13 +1006,16 @@ class ArchitectureRulesTest {
      * ({@code DocPageVersion.changeComment}) and what it bought is that a column whose only writer
      * is a test fixture is now a finding here, which is the question §187 could only ask one
      * granularity up.
-     * <strong>Eight</strong> members have now left by being <em>written</em>
+     * <del>Eight</del> <strong>NINE</strong> members have now left by being <em>written</em>
      * rather than deleted — {@code CaseHealth.staleApproval} (§157), {@code CaseHealth.conditionDrift}
      * (§158), {@code Project.archivedAt} (§159), {@code IngestionJob.rawStorageKey} (§160),
      * {@code CaseHealth.outdatedSpecChanged} + {@code CaseHealth.unlinked} (§178, the first slice to
      * take <em>two</em> out at once, because both are read off one statement over one table),
      * {@code CaseHealth.orphaned} (§181, the last of the five) and {@code CaseHealth.incomplete}
      * (§182, which was never one of the five — it was not a signal, and the derivation made it one)
+     * and {@code AuditEvent.bulkOperationId} (§244, the only one of the nine whose entry had
+     * <em>named the slice that would delete it</em>, and the one that took three sections to move
+     * between the two maps)
      * — <strong>so no {@code case_health} column is in this map at all</strong>, and
      * the rule itself has not moved for any of them, which is what makes "an entry here is a
      * decision to leave a column empty, not a permit to keep it that way" a description rather than
@@ -1034,8 +1042,10 @@ class ArchitectureRulesTest {
      * argued for the other half's absence, so writing one alone would have been the two-states-at-once
      * shape {@code IngestionJob}'s own field javadoc warned about.
      *
-     * <p><del>Five of the eight</del> <del>Four of the seven</del> <del>Four of the six</del> Four
-     * of the nine are already in
+     * <p><del>Five of the eight</del> <del>Four of the seven</del> <del>Four of the six</del>
+     * <del>Four of the nine</del> — <strong>which was itself stale: the map held EIGHT when that
+     * sentence claimed nine, and §244's deletion of {@code AuditEvent.bulkOperationId} makes it
+     * seven.</strong> THREE OF SEVEN are already in
      * {@link #READERLESS_BY_DECISION} — the
      * four §154 called
      * "writerless as well". <del>Plus {@code CaseHealth.incomplete},
@@ -1055,13 +1065,12 @@ class ArchitectureRulesTest {
      * produces.
      */
     private static final Map<String, String> WRITERLESS_BY_DECISION = Map.ofEntries(
-            Map.entry("AuditEvent.bulkOperationId",
-                    "writerless, and READ since §242: AuditEventView serves it and the contract "
-                            + "declares it, so the grouping a bulk act needs is on the wire before "
-                            + "anything writes one. Every bulk service still records ONE row per "
-                            + "act rather than one per target, which is why there is no writer — "
-                            + "slice 4 of the gaps plan is the one that changes that, and this "
-                            + "entry is what it must delete"),
+            // ~~AuditEvent.bulkOperationId — writerless, and READ since §242.~~ → GONE in §244,
+            // which is the writer the entry itself named: ExecutionBulkAssignService records one
+            // row per target sharing one id, through AuditEvent.record's bulk overload. The column
+            // had been in one map or the other since §152 and is now in neither, having moved
+            // between them without the column changing at all — §242 gave it a reader, §244 a
+            // writer. That is this pair's longest worked example.
             Map.entry("DocBlock.anchorSlug",
                     "writerless AND readerless — argued at the field: a link targets "
                             + "(page_id, block_id), never an anchor derived from content"),
@@ -1107,9 +1116,13 @@ class ArchitectureRulesTest {
         // question. §116's phrasing — "three V1 tables had never had a writer" — is this rule at
         // table granularity, answered by a person who happened to be looking.
         //
-        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. Four of these nine are in
+        // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. ~~Four of these nine~~ ->
+        // THREE OF THESE SEVEN are in
         // READERLESS_BY_DECISION too, which is the harmless half: a column nobody fills and nobody
-        // consults costs a javadoc describing a state the database has never been in. The FIVE
+        // consults costs a javadoc describing a state the database has never been in. (The old
+        // tally was wrong in both halves and in the file whose subject is hand-kept tallies: the
+        // map held eight, not nine, before §244 deleted AuditEvent.bulkOperationId. Recounted
+        // against the map rather than against the previous sentence.) The FOUR
         // this rule sees alone are the expensive half, and they are invisible to §154 by
         // construction — a column with a reader passes that rule no matter what fills it. Something
         // downstream is drawing a conclusion from a value nothing produces: five HealthSignal
