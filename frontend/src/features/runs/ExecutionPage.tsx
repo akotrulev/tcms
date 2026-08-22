@@ -824,7 +824,11 @@ function ExecutionForm({
                   runShortcutAction(shortcut.action);
                 }}
                 helperText="Anything the next reader needs — an error message, the data you used, what you tried."
-                slotProps={{ htmlInput: { 'data-testid': 'Execution.CommentField', ref: commentRef } }}
+                // `inputRef`, not a `ref` smuggled through `slotProps.htmlInput`: this field is
+                // `multiline`, so the node `n` must focus is the textarea MUI renders inside, and
+                // `inputRef` is the documented handle on exactly that element.
+                inputRef={commentRef}
+                slotProps={{ htmlInput: { 'data-testid': 'Execution.CommentField' } }}
               />
               {/* Seconds here, milliseconds on the wire — `lib/format.ts` owns the conversion.
                   Beside the note rather than beside the verdict buttons: how long it took is part
