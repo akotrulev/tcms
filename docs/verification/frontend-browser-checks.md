@@ -3279,3 +3279,37 @@ be a second copy of an existing one.
 | `§248 KB-8` | Type `abc` into **How long it took (seconds)**, click out of the box, then press `p` | **Nothing is recorded** and the refusal is announced. The verdict buttons already disable here (`§244 ED-3`) because the body states total state and would silently clear the duration — the keyboard must refuse for the same reason and not route around it. |
 | `§248 KB-9` | ⚠️ **A judgement this plan could not settle — report an opinion, not just a pass/fail.** Mark two steps, then press `j` | The move is **refused** with *"Record or clear this result first…"*, and **Previous case** / **Next case** are disabled with that reason in their tooltips. The marks survive. **Then say whether the refusal is right**: the alternative is a confirm dialog, which this repo has no shared component for. One keystroke discarding a run's marks is the failure it prevents; being unable to skip a case without clearing it is the cost. |
 | `§248 KB-10` | ⚠️ **Needs a screen reader** (VoiceOver, ⌘F5). With it on, press `p`, then `j`, then `p` on a completed run | Each act is **spoken**: the verdict being recorded, the case moved to and how far through the run it is, and the refusal. Nothing is spoken twice, and nothing interrupts — the region is `polite`. Without this row the a11y half of the feature is a claim rather than an observation. |
+
+---
+
+## §249 amendment — cross-project case search (`/search`)
+
+**Lane `A1` — authoring.** The rows need cases in more than one project and a signed-in person
+granted only some of them, which is `A1`'s own state: it is the lane that authors cases, and it is
+the only lane that exists before any run or trail. It must run **after** `A1`'s cases are written —
+a search driven first searches nothing.
+
+> **The fixture this lane must author, and no existing lane creates it.** Three projects in one
+> company; the signed-in person granted **exactly one** of them; and cases whose titles share one
+> word across **all three**. Without the ungranted two the only row that matters (`CS-1`) cannot
+> fail, because a leak needs somewhere to leak from — every other row on this screen would pass
+> against a build with no narrowing at all.
+>
+> Two ways to get there, and the pass should say which it used:
+>
+> **(a) two accounts** — sign in as a Company Admin, create the three projects and their cases, then
+> sign in as a Test Lead granted one project. Proves the narrowing against a real second session.
+>
+> **(b) one account, grant revoked** — create everything as the Admin, then remove two of the three
+> project grants from the account you then use. Faster, and proves slightly less: a stale cached
+> permission would be indistinguishable from a working narrowing until a reload.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§249 CS-1` | ⚠️ **The one row on this screen that is a security check rather than a UI check — do it first.** As a person granted **one of three** projects, search a word that matches cases in all three | Hits from the granted project only — **and read the result count above the table.** It must be the number of *granted* matches, not the company's. This is the browser half of `theTotalIsNarrowedToo`: a build that filtered in Java shows the right rows beside a count that discloses how many cases exist in projects this person was never granted. If the count is higher than the rows can account for, stop and report it. |
+| `§249 CS-2` | Same search, set the page size to 25 and walk to the last page | No row repeats, none is missing, and the last page is not empty. The tie-break is the company-allocated case key, so the order is total across projects rather than only within one. |
+| `§249 CS-3` | As a member with **no project grants at all**, search anything | A sentence saying you can open no projects and to ask an administrator — **not** "no case matches". The two are the same HTTP response and must not be the same screen; getting this wrong makes a permissions problem look like an empty product. |
+| `§249 CS-4` | Search `TC-<n>` for a case in a project you are **not** granted (take a real key from the Admin session) | Empty, with the ordinary "no case matches" copy. Not a 404, not an error, and **no hint that the key exists** — a key lookup is gated exactly like a search, which is the arm most likely to be forgotten because it looks like an id lookup. |
+| `§249 CS-5` | Clear the search box | The list empties, the prompt returns, and **no request is made** — check the network panel. The server 400s an unbounded search and the screen must not ask it to. Then type a single character: still no request. |
+| `§249 CS-6` | Copy the URL mid-search into a new tab | The same search, the same page, the same results. Filter state is in the URL; a search nobody can share is half a feature, and this is the one screen whose whole output gets pasted to a colleague. |
+| `§249 CS-7` | Open a hit, then press Back | The result set and the page are still there, and the hit opened **in its own project** — check the breadcrumb names the project the row named, not the last project you were in. |
