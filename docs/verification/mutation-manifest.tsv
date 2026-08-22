@@ -284,7 +284,7 @@ TA-1	§132 phase 1	IngestionEndpointTest	-	-		queued
 TA-2	§132 phase 1	IngestionEndpointTest	-	-		queued
 TA-3	§132 phase 1	IngestionEndpointTest	-	-		queued
 TA-4	§132 phase 1	IngestionEndpointTest	-	-		queued
-TA-5	§132 phase 1	IngestionEndpointTest	W1	-		queued
+TA-5	§132 phase 1	com.tcms.execution.IngestionEndpointTest	W1	-	-	RETIRED:NOT-A-MEASUREMENT
 TA-6	§132 phase 1	IngestionEndpointTest	-	-		queued
 TA-7	§132 phase 2	IngestionEndpointTest	-	-		queued
 TA-8	§132 phase 2	IngestionEndpointTest	-	-		queued
@@ -305,7 +305,7 @@ TA-15	§132 phase 3	ApiTokenAuthenticationTest	-	-		queued
 §133 AG-8	§133	SeedDataTest	-	-		queued
 §133 AG-9	§133	IngestionEndpointTest	-	-		queued
 AS-1	§134	SeedDataTest	-	-		queued
-AS-2	§134	SeedDataTest	W1	-		queued
+AS-2	§134	com.tcms.identity.RoleGrantEndpointTest	W1	-	backend/src/main/java/com/tcms/identity/RoleGrantService.java	RUN:MATCH
 AS-3	§134	SeedDataTest	-	-		queued
 AS-4	§134	SeedDataTest	-	-		queued
 AS-5	§134	SeedDataTest	-	-		queued
@@ -314,7 +314,7 @@ IK-2	§136	SuiteWriteEndpointTest	-	-		queued
 IK-3	§136	SuiteWriteEndpointTest	-	-		queued
 IK-4	§136	SuiteWriteEndpointTest	-	-		queued
 IK-5	§136	SuiteWriteEndpointTest	-	-		queued
-IK-6	§136	IdempotencyKeyCapTest	W1	-		queued
+IK-6	§136	com.tcms.config.IdempotencyKeyCapTest	W1	-	backend/src/main/java/com/tcms/repository/SuiteWriteService.java	RUN:FEWER
 IK-7	§136	SuiteWriteEndpointTest	-	-		queued
 TS-1	§137	?	W1	-		moved:packages-and-frontend-mutation-checks.md
 TS-2	§137	?	-	-		moved:packages-and-frontend-mutation-checks.md
@@ -337,7 +337,7 @@ AP-9	§138	AiProposalEndpointTest	-	-		queued
 AP-10	§138	AiProposalEndpointTest	-	-		queued
 AP-11	§138	AiProposalEndpointTest	-	-		queued
 AP-12	§138	AiProposalEndpointTest	-	-		queued
-AP-13	§138	AiProposalEndpointTest	W1	-		queued
+AP-13	§138	AiProposalEndpointTest	W1	-	-	moved:packages-and-frontend-mutation-checks.md
 AP-14	§138	AiProposalEndpointTest	-	-		queued
 CW-1	§139	?	-	-		moved:packages-and-frontend-mutation-checks.md
 CW-2	§139	?	-	-		moved:packages-and-frontend-mutation-checks.md
@@ -361,7 +361,7 @@ MS-7	§140	?	-	-		moved:packages-and-frontend-mutation-checks.md
 MS-8	§140	?	-	-		moved:packages-and-frontend-mutation-checks.md
 MS-9	§140	?	W1	-		moved:packages-and-frontend-mutation-checks.md
 MS-10	§140	?	-	-		moved:packages-and-frontend-mutation-checks.md
-§141 RL-1	§141	TokenRateLimiterTest	W1	-		queued
+§141 RL-1	§141	com.tcms.auth.TokenRateLimiterTest	W1	-	backend/src/main/java/com/tcms/auth/TokenRateLimiter.java	RUN:MATCH
 §141 RL-2	§141	TokenRateLimiterTest	-	-		queued
 §141 RL-3	§141	TokenRateLimiterTest	-	-		queued
 §141 RL-4	§141	TokenRateLimiterTest	-	-		queued
@@ -369,7 +369,7 @@ MS-10	§140	?	-	-		moved:packages-and-frontend-mutation-checks.md
 §141 RL-6	§141	RateLimitTest	-	-		queued
 §141 RL-7	§141	TokenRateLimiterTest	-	-		queued
 §141 RL-8	§141	TokenRateLimiterTest	-	-		queued
-DP-1	§142	?	W1	-		queued
+DP-1	§142	docker build + compose	W1	-	packages/mcp/Dockerfile	LANE:INFRA
 DP-2	§142	?	-	-		queued
 DP-3	§142	?	-	-		queued
 DP-4	§142	?	-	-		queued
@@ -379,11 +379,11 @@ DP-7	§142	?	-	-		queued
 DP-8	§142	?	-	-		queued
 CR-1	§144	ContractConventionTest	-	-		queued
 CR-2	§144	ContractConventionTest	-	-		queued
-CR-3	§144	ContractConventionTest	W1	-		queued
-SD-2	§145	ContractParameterBindingTest	W1	-		queued
-SD-3	§145	ContractParameterBindingTest	W1	-		queued
+CR-3	§144	com.tcms.repository.CaseUpdateEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseEdit.java	RUN:MATCH
+SD-2	§145	com.tcms.contract.ContractParameterBindingTest	W1	-	docs/specs/openapi.yaml	RUN:MATCH
+SD-3	§145	com.tcms.repository.SuiteEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/SuiteService.java	RUN:MATCH
 SD-4	§145	ContractParameterBindingTest	-	-		queued
-PR-2	§146	ErrorDispatchStatusTest	W1	-		queued
+PR-2	§146	com.tcms.auth.ErrorDispatchStatusTest	W1	-	backend/src/main/java/com/tcms/api/ProblemErrorAttributes.java	RUN:MATCH
 PR-3	§146	ArchitectureRulesTest	-	-		queued
 EV-3	§149	ErrorBodyPolicyTest	-	-		queued
 EV-4	§149	ErrorBodyPolicyTest	-	-		queued
