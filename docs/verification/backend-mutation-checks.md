@@ -24,6 +24,12 @@ cd backend
 git checkout -- <the mutated file>          # revert by EXACT PATH, before the next row
 ```
 
+**Two sections govern what is owed before you start.** `DOCUMENTED GAPS` at the foot of this file
+holds the 44 rows retired from the run on 2026-08-22 (each keeping its id and naming what would
+close it), and the run plan is
+`docs/plans/2026-08-22-backend-mutation-backlog-run-plan.md`. Measured results land in
+`mutation-results.tsv`; the per-row manifest is `mutation-manifest.tsv`.
+
 **A mutation that reddens MORE than the listed tests is as much a finding as one that reddens
 fewer.** Too few means the test does not cover the behaviour it claims; too many means the tests are
 coupled to something other than what they name, and the extra failures are the ones worth reading.
@@ -178,7 +184,7 @@ compiling. Each row names the mutation and what it should redden; **none was run
 
 | # | Mutation | What must redden |
 |---|---|---|
-| 11a | `CaseSpecifications.suiteScope` — delete the `scope.memberCaseIds() != null` branch, so a named suite falls through to `suite_id IN (…)` | **This is the slice's own defect, re-armed.** It reverts the grid to the filed arm while `caseCount` stays the union. `CaseListEndpointTest` must fail on a **tag-defined** suite. If it goes green, the fixture has no suite whose membership differs from its filing — which is exactly why the defect survived §96 and §97 unseen, and the row to fix first |
+| 11a | `CaseSpecifications.suiteScope` — delete the `scope.memberCaseIds() != null` branch, so a named suite falls through to `suite_id IN (…)` | **This is the slice's own defect, re-armed.** It reverts the grid to the filed arm while `caseCount` stays the union. `CaseListEndpointTest` must fail on a **tag-defined** suite. If it goes green, the fixture has no suite whose membership differs from its filing — which is exactly why the defect survived §96 and §97 unseen, and the row to fix first ✅ **RUN 2026-08-22 — RED, 5.** MORE than the 1 predicted, and the row's own worry is answered: *"suiteId selects the suite's RESOLVED MEMBERSHIP, not just what is filed in it"* fell, so `CaseListEndpointTest`'s fixture **does** hold a suite whose membership differs from its filing. The other four — facets over the filtered set, filters AND-ing, `unfiled` beside a `suiteId`, the by-ids intersection — all read the same predicate, so the width is coherence, not coupling. |
 | 11b | `SuiteRepository.countLiveCasesFiledIn` — widen to the resolved membership | `SuiteWriteEndpointTest`'s delete-a-claiming-suite case must fail. The two readings are *deliberately* different and nothing but a test distinguishes them; if this reddens nothing, deleting a tag-defined suite could start 409ing on cases it does not hold |
 | 11c | `CaseConditions.ancestry` — return `List.of()` unconditionally | A case must lose the conditions of the suite it is filed in. Suspected **weak**: the method now returns at most one suite, so the mutation is close to the whole feature, and the fixture attaches a condition to exactly one suite (`Refunds`) |
 | 11d | `ExecutionSource` — change `('s' || s.key_seq)::ltree` to `NULL` | Suite-grouped report sections must move their rows into the `(not filed)` bucket. If nothing reddens, no report test covers a suite-grouped section over a **freshly projected** fact row, and the column's contents are unasserted for every row written after §98 |
@@ -197,7 +203,7 @@ itself and in what the *validator* stops refusing. **None was run**, per §65.
 
 | # | Mutation | What must redden |
 |---|---|---|
-| 12a | `CaseFacts.caseIdsInRunScope` — replace the suite arm with `c.suite_id IN (:suiteIds)` | **The slice's own defect, armed.** `RunCreateEndpointTest.Scope.aSuiteArmResolvesMembership` must fail, because PAYMENTS claims `caseA` by tag and files nothing. `paymentsFilesNothing` is the guard on that property; if 12a goes green, run *that* test first — a fixture where the two readings agree makes every row below vacuous |
+| 12a | `CaseFacts.caseIdsInRunScope` — replace the suite arm with `c.suite_id IN (:suiteIds)` | **The slice's own defect, armed.** `RunCreateEndpointTest.Scope.aSuiteArmResolvesMembership` must fail, because PAYMENTS claims `caseA` by tag and files nothing. `paymentsFilesNothing` is the guard on that property; if 12a goes green, run *that* test first — a fixture where the two readings agree makes every row below vacuous ✅ **RUN 2026-08-22 — RED, 2.** `aSuiteArmResolvesMembership` fell as predicted, and with it *"a run scoped by a TAG or a SUITE is gated too — §99's arms are not doors"*. The extra is the right extra: §6g's gate reads the **resolved** set, so a broken resolution breaks the gate's own fixture. `paymentsFilesNothing` holds — the fixture discriminates, so the rows below it are not vacuous. |
 | 12b | Same method — drop `AND c.deleted_at IS NULL` | `aDeletedCaseIsNotReachedByItsTag`. `case_tag` rows outlive a soft delete, so this is the one arm where the omission is reachable through data rather than through a missing join |
 | 12c | Same method — drop `AND s.project_id = c.project_id` from the suite arm | Suspected **weak**: `aSiblingProjectsSuiteIsRefused` is refused by `RunEdit`'s `liveSuiteIds` check one step earlier, so the query's own bound may never be reached. If nothing reddens, the second gate is untested and the honest repair is a test that bypasses the validator, not a claim of coverage |
 | 12d | `RunCreateService` — pass only `requestedCases` to the resolution, dropping the other two arms | `theArmsUnionAndDedupe` and both single-arm tests. Expected to redden broadly; recorded because a narrow red would mean the arms are covered by one test each and not by the union |
@@ -223,15 +229,15 @@ that must not be skipped: each is one of the slice's own findings, armed.
 
 | # | Mutation | What must redden |
 |---|---|---|
-| 13a | `ExecutionSource.correctSuiteRunCounts` — join `test_execution` on the suite's **current** membership instead of on the row's `membership_snapshot` | **Finding 1, armed.** `SuiteRunSummaryRefreshTest.Freeze.aLaterTagDoesNotRewriteAPastRun`. Nothing else should move: `anAmendedVerdictIsCorrected` must stay green, and if it also reddens the mutation broke the correcting statement rather than the freeze, which is a different (and less interesting) result |
-| 13b | `RollupRefreshService.refresh` — delete the `source.prunePlanSnapshot()` call | **Finding 2, armed.** `PlanSnapshotRefreshTest.Prune.prunesACaseThatLeftTheScope` **and** `prunesASoftDeletedCase`. Both, or the prune is pinned only in the direction that some other filter also covers. `theSiblingIsNotPruned` must stay green — it asserts the asymmetry, not the prune |
-| 13c | `PlanStatisticsService.compute` — make `fromRollup` depend on `servedFromRollup(policy)` alone, dropping the `snapshotIsComplete` conjunct | **Finding 3, armed — the defect the oracle test caught before it shipped.** `RollupAgreementTest.anEmptyRollupDoesNotReportEveryCaseAsNotRun` and `aSnapshotMissingOneCaseFallsBackToLive`. A green run here means the repair is described and not asserted, and the behaviour it restores is a plan that has been executed reporting that nothing has been executed |
+| 13a | `ExecutionSource.correctSuiteRunCounts` — join `test_execution` on the suite's **current** membership instead of on the row's `membership_snapshot` | **Finding 1, armed.** `SuiteRunSummaryRefreshTest.Freeze.aLaterTagDoesNotRewriteAPastRun`. Nothing else should move: `anAmendedVerdictIsCorrected` must stay green, and if it also reddens the mutation broke the correcting statement rather than the freeze, which is a different (and less interesting) result ✅ **RUN 2026-08-22 — RED, exactly 1: `aLaterTagDoesNotRewriteAPastRun`.** MATCH. `anAmendedVerdictIsCorrected` stayed green, which is the half that distinguishes a broken freeze from a broken correcting statement — the row asked for exactly that and got it. |
+| 13b | `RollupRefreshService.refresh` — delete the `source.prunePlanSnapshot()` call | **Finding 2, armed.** `PlanSnapshotRefreshTest.Prune.prunesACaseThatLeftTheScope` **and** `prunesASoftDeletedCase`. Both, or the prune is pinned only in the direction that some other filter also covers. `theSiblingIsNotPruned` must stay green — it asserts the asymmetry, not the prune ✅ **RUN 2026-08-22 — RED, 2: `prunesACaseThatLeftTheScope` AND `prunesASoftDeletedCase`.** MATCH. `theSiblingIsNotPruned` stayed green. |
+| 13c | `PlanStatisticsService.compute` — make `fromRollup` depend on `servedFromRollup(policy)` alone, dropping the `snapshotIsComplete` conjunct | **Finding 3, armed — the defect the oracle test caught before it shipped.** `RollupAgreementTest.anEmptyRollupDoesNotReportEveryCaseAsNotRun` and `aSnapshotMissingOneCaseFallsBackToLive`. A green run here means the repair is described and not asserted, and the behaviour it restores is a plan that has been executed reporting that nothing has been executed ✅ **RUN 2026-08-22 — RED, 5.** MORE than the 2 predicted. Both named tests fell (*"a cold rollup falls back to live rather than reporting the plan as un-executed"*, *"a PARTIALLY cold rollup falls back too"*) plus the three agreement assertions — LATEST, per-configuration, and the `execution_fact` trend. Coherent rather than coupled: the `snapshotIsComplete` conjunct is what makes the two paths agree at all, so breaking it breaks agreement. **The repair is asserted, not merely described.** |
 | 13d | `ExecutionSource.insertNewSuiteRunSummaries` — replace the three-arm predicate with `c.suite_id = s.id` | `SuiteRunSummaryRefreshTest.summarisesATagDefinedSuite`, `Agreement.theSnapshotAgreesWithTheRepositorysUnion`, and `RollupAgreementTest.suiteHistoryAgrees`. `aTagDefinedSuiteFilesNothing` is the guard on the property — **if 13d goes green, run that first**, because a fixture where the two readings agree makes every row here vacuous |
 | 13e | Same statement — change the `LEFT JOIN case_status` to an inner join | `anUnrecordedExecutionIsNotRunRatherThanMissing`. This is the one place the rollup deliberately differs from `execution_fact`, whose header says coverage denominators can never come from it; the inner spelling makes `total` exclude the un-run cases and a run of 3 of 47 read as 100% |
 | 13f | `ExecutionSource.correctSuiteRunCounts` — drop the trailing `IS DISTINCT FROM` guard | `updatedAtDoesNotMoveWhenNothingChanges`. Predicted to redden exactly one test; recorded because the consequence is not a wrong count but a `computedAt` that always says "just now", which is a freshness field that says nothing |
 | 13g | `ExecutionSource.refreshPlanSnapshot` — reverse the tiebreak to `e.executed_at ASC` | `PlanSnapshotRefreshTest.keepsTheLatestExecutionPerCasePerConfiguration` and `RollupAgreementTest.planStatisticsAgreeUnderLatest`. The fixture's `CASE_TWICE` is what makes this observable — with one execution per case it reddens nothing |
 | 13h | Same statement — drop `AND r.deleted_at IS NULL` from the `test_run` join | Suspected **weak**: no fixture here soft-deletes a run of a plan. If nothing reddens, that is the finding and the repair is a fixture row, not a claim of coverage. The behaviour matters — counting a withdrawn run restores a result somebody meant to retract |
-| 13i | `ExecutionSource.prunePlanSnapshot` — drop the `c.deleted_at IS NULL` conjunct | `prunesASoftDeletedCase` alone. If `prunesACaseThatLeftTheScope` also reddens, the two predicates are not independent and the row's split is wrong |
+| 13i | `ExecutionSource.prunePlanSnapshot` — drop the `c.deleted_at IS NULL` conjunct | `prunesASoftDeletedCase` alone. If `prunesACaseThatLeftTheScope` also reddens, the two predicates are not independent and the row's split is wrong ✅ **RUN 2026-08-22 — RED, exactly 1: `prunesASoftDeletedCase`.** MATCH, and it answers the row's own question: `prunesACaseThatLeftTheScope` did **not** redden, so the two predicates are independent and the split between 13b and 13i is right. |
 | 13j | `RollupFacts.runsWithoutSummary` — return `List.of()` unconditionally | `RollupAgreementTest.aRunNewerThanTheRollupIsStillInTheHistory`. The mutation is exactly "serve the suite history from the rollup alone", and what it produces is an **absent** run rather than a stale one |
 | 13k | `SuiteHistoryService.computedAt` / `PlanStatisticsService.computedAt` — take the newest `updated_at` instead of the oldest | Predicted to redden **nothing**, and that is the row rather than a shortfall: no fixture here has two rollup rows written at measurably different instants. The decision is argued in both javadocs and the honest repair is a test that writes two rows a second apart, listed under **Tests to write** below |
 
@@ -1223,128 +1229,11 @@ other four creates have had since `V11`/`V14`/`V17`. Assertions live in
 | IK-6 | `MAX_IDEMPOTENCY_KEY` is changed to 500 in **one** of the seven services | The drift the copies invite: one key format works against part of the API and 400s against the rest. Should redden `IdempotencyKeyCapTest.everyCapAgrees` and `theContractAgreesWithTheCode`. **This is the row that justifies not extracting a shared constant** — if it does not redden, the argument in `SuiteWriteService`'s field comment is wrong and the symbol should be extracted. | ⬜ NOT RUN |
 | IK-7 | `DocPageWriteService.writeSubjectPage` passes a key instead of null | A plan-document create starts consuming keys from a header it never receives — harmless today (the parameter is null at the only call site) but it would make `uq_doc_page_subject` and this index two answers to one question. Reddens nothing. **Known gap**, recorded because the null is a decision and not an omission. | ⬜ NOT RUN |
 
-### §137 — the TypeScript client and the CLI (`TS-1` … `TS-9`)
+### §137 · §139 · §140 — the TypeScript client, the CLI and the MCP server
 
-**A new stack, and the queue's first rows that are not `./gradlew`.** These mutate
-`packages/client` and `packages/cli` and are verified with `cd packages && npm run test:run
---workspaces` — the scope column names the file, since the suite is ~0.5s whole and there is no
-container to boot. Assertions live in `http.test.ts` (21), `client.test.ts` (10),
-`schemaFreshness.test.ts` (4), `core/core.test.ts` (33) and `cli/src/main.test.ts` (14).
-
-> **NONE RUN.** **`TS-4` first** — it is the only row whose failure is a security finding rather
-> than a defect, and `TS-2` second, because its failure mode is a *silent* data loss on somebody
-> else's edit.
-
-| # | Mutation | Expected | Result |
-|---|---|---|---|
-| TS-1 | `http.ts` sends the outgoing request as `new Request(request, { headers, signal: deadline })` instead of a URL and an init | The shape the first draft had. The deadline fires and the copy's signal never does, so every request hangs until the peer gives up — the failure the budget exists to prevent, arriving through the budget. Should redden `becomes a TcmsTimeoutError that says the write may have landed`. **The row that pins the finding**; if it does not redden, the workaround is unnecessary and the comment in `http.ts` is wrong. | ⬜ NOT RUN |
-| TS-2 | `concurrency.ts`'s `versionOf` returns `{ none: 'state-preconditioned' }` instead of throwing when the resource carries no `lockVersion` | Every edit whose read lacked a version silently becomes last-write-wins, overwriting a colleague's concurrent change with no error anywhere — the single worst thing this surface can do. Should redden `refuses to write when the read carried no version`. | ⬜ NOT RUN |
-| TS-3 | `http.ts` drops the `if (perRequest.ifMatch !== undefined)` guard for a truthiness check | `lockVersion: 0` — a resource nobody has edited yet — stops sending `If-Match` while every other version keeps working, so the defect is invisible on any fixture that has been saved once. Should redden `sends If-Match for lockVersion 0, which a truthiness check would drop`. | ⬜ NOT RUN |
-| TS-4 | `refusal.ts`'s 404 branch returns the 403 branch's message | The enumeration oracle §6t exists to prevent: a caller in another company learns that a row exists from a message naming the permission they lack. Should redden `says nothing about permissions or roles on a 404` and the CLI's `says nothing about permissions on a 404`. **Failure here is a security finding, not a defect.** | ⬜ NOT RUN |
-| TS-5 | `identifiers.ts` adds `SU` to `KEY_PATTERN`, as the surface spec's §4.4 example implies | `TS-7` and `SU-7` both parse; the second resolves nothing and reports "not found" for a key the user believed in. Should redden `parses the five seeded prefixes and nothing else`. | ⬜ NOT RUN |
-| TS-6 | `identifiers.ts`'s `classify` drops the `expected` mismatch check | `tcms case show TS-7` looks up a suite key in the case index and reports "no such case" — a typo with a plausible-looking answer. Should redden `refuses a key of the wrong kind rather than looking it up` and the CLI's `refuses a key of the wrong kind without making a request`. | ⬜ NOT RUN |
-| TS-7 | `paging.ts`'s `eachItem` drops the `result.items.length === 0` exit | A server answering an empty page while claiming a larger total spins forever against an instance the client cannot fix. Should redden `stops on an empty page even when total claims more`. | ⬜ NOT RUN |
-| TS-8 | `main.ts` returns `EXIT.failed` for a `UsageError` | A mistyped flag and a refused request become indistinguishable to a script, so a pipeline retries the one that will never succeed. Should redden `exits 2 when a show command is given no argument` and `exits 2 for a bad --timeout, not 1`. | ⬜ NOT RUN |
-| TS-9 | Two concurrent invocations of a write carrying one `Idempotency-Key` | **Not a mutation — a missing test**, and the same gap `IK-1` records on the backend side, now with a client that can actually produce the race. Nothing in either stack drives two concurrent creates under one key. **Known gap.** | ⬜ NOT RUN |
-
-**Not in this queue, deliberately:** the CLI's read commands against a live instance. That is
-neither a mutation nor a browser lane, and the WIP plan's §9 puts rows here for *the agent-token
-path and every write arm* — which is phase 7, not this slice. What it means in the meantime is
-stated plainly in the handoff: **no command in `@tcms/cli` has been run against a real TCMS.**
-Every test above drives a stubbed `fetch`, so the contract is enforced by the types and the
-behaviour by the stubs, and the one thing neither can observe is the server disagreeing with its
-own `openapi.yaml`.
-
-### §138 — `ai_proposal`, the review boundary (`AP-1` … `AP-8`)
-
-**The queue's first rows whose subject is a boundary rather than a field.** Scope is
-`./gradlew test --tests 'com.tcms.repository.AiProposalEndpointTest'` unless a row says otherwise;
-assertions live in that class's five nested groups.
-
-> **NONE RUN.** **`AP-1` first** — it is the only row whose failure is a product-integrity finding
-> rather than a defect: it is what stops any caller minting verified coverage.
-
-| # | Mutation | Expected | Result |
-|---|---|---|---|
-| AP-1 | `AiProposalInput` gains a `verdictSource` field and `AiProposal.file` uses it | Any MCP client can send `verdictSource: TCMS_VERIFIED` and have TCMS report its own critic checked a case nothing checked — §6w.1a's whole argument, defeated by one field added "for symmetry". Should redden `a claimed source is ignored and derived instead`. **If it does not redden, the second barrier (`V43`'s CHECK) is carrying the rule alone and the test is not testing what it says.** | ⬜ NOT RUN |
-| AP-2 | `V43`'s `verdict_source` CHECK gains `'TCMS_VERIFIED'` | Reddens nothing on its own — the second barrier is invisible while the first holds, which is why both exist. **Known gap made visible**: run it together with `AP-1` and the pair should still redden, because the derivation is what the test observes. | ⬜ NOT RUN |
-| AP-3 | The file endpoint is gated on `case:read` instead of `case:create` | The client's read-only stakeholder can fill the reviewer's queue, and every read in this module would pass the same gate. Should redden `a Viewer is refused — proposing is creating, not reading`. | ⬜ NOT RUN |
-| AP-4 | `suite_id` gets its foreign key back (`REFERENCES suite(id)`) | A proposal naming a suite id that does not exist becomes a **500 at file time** instead of a stored proposal a reviewer can reject — so a generation agent that hallucinated one id loses the batch. Should redden `A SUITE THAT NO LONGER EXISTS IS STILL FILED`. **This row is the record of a constraint that was written, failed this test, and was removed deliberately.** | ⬜ NOT RUN |
-| AP-5 | `AiProposalService.store` validates the payload through `CaseEdit.validate` before storing | Two answers to "is this a legal case", given a week apart, and the file-time one refuses proposals the accept-time one would have taken. Reddens `A SUITE THAT NO LONGER EXISTS IS STILL FILED` and probably nothing else — **the rest of the cost is invisible to the suite**, which is why the decision is written in the service header rather than only here. | ⬜ NOT RUN |
-| AP-6 | The replay lookup moves **after** `validate` | A retry whose payload drifted gets a 400 about fields on a proposal that already exists, sending a program to fix something it cannot see. Should redden `a retry whose payload drifted still replays rather than 400ing`. | ⬜ NOT RUN |
-| AP-7 | `findByIdempotencyKey` drops its `projectId` predicate | A key reused across two projects of one company passes the lookup and then violates the index — a validated request that 500s. **No test covers this yet on this table**; the shape is `IK-4`'s and the same gap. **Known gap.** | ⬜ NOT RUN |
-| AP-8 | `filedByAgent` is computed as `createdBy != null` rather than `createdTokenId != null` | Every proposal reads as agent-filed, including the ones a person typed — so the flag that changes how a reviewer reads a proposal says the same thing about all of them. Should redden `a proposal filed in a browser session is not filed by an agent`. | ⬜ NOT RUN |
-| AP-9 | `AiProposalDecisionService.decide` drops the `TokenContext.currentOrNull() != null` branch | **The whole boundary.** An agent token files a proposal and accepts it in two calls, so the review surface is defeated by the thing it exists to review — and nothing in the permission model notices, because `Agent` holds `case:create` on purpose. Should redden `AN AGENT TOKEN CANNOT ACCEPT ITS OWN PROPOSAL` and the reject half of `a Viewer can decide nothing` stays green throughout, which is the point: **no permission test can see this.** | ⬜ NOT RUN |
-| AP-10 | The credential branch moves **after** the proposal lookup | An agent learns which proposal ids exist from the 404-versus-403 difference — §6t's enumeration oracle arriving through the one endpoint that refuses it for an unrelated reason. **Reddens nothing**; the suite has no assertion that an agent gets the same answer for a real id and an invented one. **Known gap**, and the reason the ordering is written in the method's javadoc. | ⬜ NOT RUN |
-| AP-11 | `acceptOne` inserts the case itself instead of calling `CaseCreateService` | A second definition of a legal case, a display key allocated outside `DisplayKeys`, no v1 version row, and a status a payload field could set — every §6w.6 guarantee that currently holds *by construction*. Should redden `a person accepts, and the case arrives through the ordinary create path` on the key, the status, or the owner. | ⬜ NOT RUN |
-| AP-12 | The synthetic `Idempotency-Key` passed to the create path is replaced with `null` | Two reviewers accepting at the same moment create **two cases from one proposal**. Reddens nothing single-threaded — `accepting twice answers with the case` passes on the status check alone — so this is the same race gap as `IK-1`, one level up. **Known gap.** | ⬜ NOT RUN |
-| AP-13 | `rejectOne` overwrites the note when the proposal is already `REJECTED` | A second click erases the reason the decision was actually made for, which is the one thing keeping the row was for. Should redden `rejecting twice keeps the FIRST note`. | ⬜ NOT RUN |
-| AP-14 | The accept path stops writing `ai_proposal.accepted`, relying on `case.created` alone | The audit trail records that a case was created and never that it came from a model — so "which cases did an agent propose" is unanswerable a month later, and `verdict_source` is nowhere in the log. Should redden `both decisions are audited, and the accept records the provenance`. | ⬜ NOT RUN |
-
-### §139 — the CLI's write arms (`CW-1` … `CW-12`)
-
-**The second batch of rows that are not `./gradlew`**, on `TS-*`'s terms: mutate `packages/`, run
-`cd packages && npm run test:run --workspaces`, and name the file in the scope column since the
-whole suite is under a second. Assertions live in `cli/src/writes.test.ts` (48 across five groups)
-and `client/src/core/core.test.ts`'s `mutation intents` (5).
-
-> **NONE RUN.** **`CW-1` first** — it is the row that pins this slice's whole finding, and its
-> failure mode is a *silent* loss of somebody else's work. `CW-5` second, for the same reason one
-> noun over.
-
-| # | Mutation | Expected | Result |
-|---|---|---|---|
-| CW-1 | `writes.ts`'s `versionFor` drops the `fromFile` branch and always reads a fresh version | The finding, defeated. A `--file` edit built from a read at version 3 sends `If-Match: 5`, the server accepts, and whoever saved at 4 loses their words — last-write-wins arriving **through** the header that prevents it, with a green build and a 200. Should redden `refuses a --file edit that names no --lock-version` and `refuses a whole-body edit that names no version, and says why`. **If it does not redden, the rule is a comment and not a behaviour.** | ⬜ NOT RUN |
-| CW-2 | `context.ts`'s `strictNumber` returns `undefined` for an unparseable value instead of throwing | `--lock-version latest` falls through to a *fresh read* — the typo silently selects the unsafe path, which is `CW-1` reached by accident rather than by design. Should redden `refuses a --lock-version that is not a number, rather than falling back to a fresh read`. | ⬜ NOT RUN |
-| CW-3 | `main.ts` restores `strict: false` and stops merging `command.options` | §137's live defect, restored. Every string flag on every command parses as `true` and its argument becomes a positional, so `case list --q login` answers the unfiltered list and `case edit --title x` sends `{}`. Should redden `sends the filter values, rather than parsing them as booleans`, `exits 2 rather than sending an empty body`, and most of `writes.test.ts`. **The row that pins a defect that shipped and was invisible for two slices.** | ⬜ NOT RUN |
-| CW-4 | `context.ts`'s `requireSomethingToDo` returns the body instead of throwing | A `PATCH` of `{}` is legal by the contract, so a command whose flags were all wrong answers 200 and reports a save. Should redden `exits 2 rather than sending an empty body that reports success`. | ⬜ NOT RUN |
-| CW-5 | `docEdit` sends `blocks: page.blocks` alongside the title, "so the page round-trips" | The contract's rule is that `blocks` is the whole page and an **omitted block is deleted** — the helpful round-trip is one stale read away from replacing somebody's specification with an older copy of it. Should redden `retitles without sending blocks, which would empty the page`. **The one mutation in this queue that destroys authored content rather than a field.** | ⬜ NOT RUN |
-| CW-6 | `present()` keeps `undefined` values instead of dropping them | Every unnamed field is sent as `null`, so `case edit --title x` clears the description, the objective, the owner and the automation key. `PATCH`'s absent-versus-null split is the whole protection and this removes it. Should redden most of `case edit` and `suite writes`. | ⬜ NOT RUN |
-| CW-7 | `nullableText` maps `''` to `undefined` rather than `null` | The clearing form stops clearing: `--description ''` becomes "leave it alone", silently, and a user who cannot empty a field has no other spelling to reach for. Should redden `leaves unnamed fields alone, clears an empty one, and files by suite key`. | ⬜ NOT RUN |
-| CW-8 | `caseProposal` defaults `verdict` to `UNVERIFIED` when none was given | Absent and `UNVERIFIED` are different claims — nobody asserted anything, against an agent asserting it had not checked — and they differ in `verdictSource`, which §6w.1a is built on. Every silent proposal becomes a claim. Should redden `sends no verdict when none was given`. | ⬜ NOT RUN |
-| CW-9 | `suiteStatus` filters the target state against a client-side ladder | A second copy of §6g's ladder, in a client versioned independently of the instance it points at — so a Test Lead's token is refused a move the server would have allowed, by the tool rather than by the rule. Should redden `does not filter the ladder client-side`. | ⬜ NOT RUN |
-| CW-10 | `planEdit` stops threading the plan's current name through a name-less edit | `TestPlanUpdateInput` requires `name`, so `--description`-only becomes a 400 about a field the user never mentioned. Should redden `carries the plan's current name through an edit that does not mention it`. | ⬜ NOT RUN |
-| CW-11 | `resultRecord` takes the `lockVersion` off the run detail's execution summary instead of the execution's own detail | `TestExecutionSummary` carries no `lockVersion` at all, so this is `versionOf` throwing — a loud failure, which is the right one. Should redden `finds the execution by case key and the status by name`. **Predicted to redden; the row exists because the summary/detail split is easy to miss and the cheap read is the wrong one.** | ⬜ NOT RUN |
-| CW-12 | `reviewComment` picks `reviews[0]` instead of the first `IN_REVIEW` one | A comment aimed at a closed review earns a 409 the user cannot act on — and re-submitting opens a *new* record, so the row it aimed at will never accept one. Should redden `refuses a closed review here, rather than earning a 409 from the server`. | ⬜ NOT RUN |
-
-**The gap §137 recorded is now wider and is still the most important thing in this section:**
-**no `@tcms/cli` command has been run against a real TCMS**, and there are sixteen write commands
-in that state. Every row above mutates code observed only by a stubbed `fetch`. The live pass this
-needs is one setup — `docker compose up`, `provision-company`, issue an `Agent` token, `TCMS_URL`
-and `TCMS_TOKEN` — after which every read command from §137 and every write command here is one
-invocation. It is not a browser lane and not a mutation, so neither queue owns it; it is named in
-the handoff as its own outstanding item.
-
-### §140 — the MCP server (`MS-1` … `MS-10`)
-
-**The third batch that is not `./gradlew`**, on `TS-*`'s and `CW-*`'s terms: mutate `packages/`, run
-`cd packages && npm run test:run --workspaces`, and name the file in the scope column since the
-whole suite is under a second. Assertions live in `mcp/src/session.test.ts` (15),
-`mcp/src/reads.test.ts` (11), `mcp/src/writes.test.ts` (27) and `mcp/src/server.test.ts` +
-`mcp/src/http.test.ts` (20).
-
-> **NONE RUN.** **`MS-1` first** — it is the row that pins this slice's whole finding, and its
-> failure mode is one company's session shape disclosed to another through a field that reads like
-> documentation. **`MS-4` second**, because its failure is §6t's enumeration oracle.
-
-| # | Mutation | Expected | Result |
-|---|---|---|---|
-| MS-1 | `http.ts` hoists `buildServer(session)` out of the request handler into a module-level singleton built from the first session | The finding, defeated. `instructions` is a constructor argument sent once during `initialize`, so every later caller receives the **first** caller's capability summary — their name, email, project key and reach — and a filtered tool list computed from somebody else's permissions. Should redden `gives each caller their own server, with their own capability summary` in `http.test.ts`. **Nothing else would fail: every tool still works and the protocol is still correct.** | ⬜ NOT RUN |
-| MS-2 | `session.ts`'s `probe` sends `projectId` to `GET /me/permissions` even when no project resolved | A token that can see three projects reports the PROJECT terms of whichever one it happened to pick, so `tools/list` offers write tools for a project the session is not bound to and every call 404s. The contract is explicit that the two answers are different sets rather than one filtered. Should redden `does not choose between several projects, and says how to bind one`. | ⬜ NOT RUN |
-| MS-3 | `session.ts` drops `qualifiers` and keeps only the keys | §65's SPA defect, one client over: a tool held at `OWN` or `PLAN_SCOPE` lists with a description claiming the whole scope, and the model offers an operation the server refuses per row — the refuse-and-retry loop the filtering exists to prevent. Should redden `keeps the qualifier, not only the key` and `lists a narrowly-held tool and says what it is narrowed to`. | ⬜ NOT RUN |
-| MS-4 | `server.ts`'s `CallTool` handler answers an unlisted tool with the tool's gate permission instead of "no tool named X" | A hidden tool confirms its own existence, and the permission it names tells the caller what the instance's model looks like — the enumeration §6w.3's hiding removes, restored through the refusal. Should redden `refuses a hidden tool without confirming that it exists`. | ⬜ NOT RUN |
-| MS-5 | `result.ts`'s `failed` returns the raw `error.detail` for every status instead of routing through `describeRefusal` | The 404 branch stops being the silent one. The server's own 404 detail can name the thing that was not found, which is the difference between "no such case, or it is not visible" and confirming the row exists to a caller in another company. Should redden `names nothing on the 404 branch` — **the one row here whose failure is a security finding rather than a defect.** | ⬜ NOT RUN |
-| MS-6 | `server.ts`'s dispatcher passes `tool.gate.permissions[0]` instead of the resolved arm's permission | A refused edit on `tcms_write_case` reports `case:create`, so the user asks an administrator for a permission they already hold and the grant that would fix it is never requested. Should redden `names the permission of the ARM that ran, not the tool's first gate key`. | ⬜ NOT RUN |
-| MS-7 | `writes.ts` replaces `requireExplicitVersion` on the `blocks` arm with the ordinary `versionFor` | §139's finding at the one place it bites here. A `blocks` array is the whole page and its content came from an earlier read, so a fresh version asserts a state that body was never based on: the server accepts, and whoever saved in between loses their paragraphs. Should redden `demands the caller's own lockVersion when replacing blocks`. **The only mutation in this section that destroys authored content.** | ⬜ NOT RUN |
-| MS-8 | `writes.ts`'s `recordResult` adds `evidence:attach` to its gate "for symmetry with the spec" | A caller holding `run:execute` and `result:submit` without `evidence:attach` loses the tool entirely — hidden by a permission it never exercises, which is §2's failure arriving through the declaration rather than the merge. Should redden `does not declare evidence:attach, because it cannot attach evidence`. | ⬜ NOT RUN |
-| MS-9 | `writes.ts`'s `openReview` picks `reviews[0]` instead of the first `IN_REVIEW` one | `CW-12` one surface over: a verdict aimed at a closed review earns a 409 the caller cannot act on, and re-submitting opens a *new* record, so the row it aimed at will never accept one. Should redden `acts on the OPEN review, not the newest one` and `explains that a closed review cannot be joined`. | ⬜ NOT RUN |
-| MS-10 | `instructions.ts`'s `fit` truncates the joined string at `INSTRUCTIONS_BUDGET` instead of dropping whole sections | The summary ends mid-permission-key, and a half-written key is what a model hands the user as the thing to ask an administrator for. Reddens **nothing** — no assertion reads the tail of a truncated summary, only its byte length. **Known gap**, and the reason the section-dropping order is written out in the function's own comment. | ⬜ NOT RUN |
-
-**The gap is three packages wide now.** `MS-*`, `CW-*` and `TS-*` all mutate code observed only by a
-stubbed `fetch`. One live setup closes all three — `docker compose up`, `provision-company`, an
-`Agent` token, `TCMS_URL`/`TCMS_TOKEN`, then the CLI's commands and an MCP host pointed at
-`tcms-mcp --http`. It is neither a browser lane nor a mutation, so neither queue owns it; it is
-named in the handoff as its own outstanding item.
+**MOVED 2026-08-22 to `packages-and-frontend-mutation-checks.md`.** `TS-1`…`TS-9`, `CW-1`…`CW-12`
+and `MS-1`…`MS-10` mutate `packages/` and run under `npm run test:run`, not `./gradlew test`.
+Ids are unchanged.
 
 ### §141 — rate limiting (`RL-1` … `RL-8`)
 
@@ -2337,40 +2226,8 @@ is the intended end state of that row rather than a failure of it.
 
 ## §189 — the two ids neither machine surface could name
 
-**Seven rows, none run** — §65. Ids are `§189 CN-*`; `CN` is unused across both queue files and
-every handoff section (grepped before minting it, per the §154 banner — `AG`, `CD` and `RL` all
-collided because two lanes independently reached for the obvious initials).
-
-**Every row here mutates `packages/` and runs as `cd packages && npm run test:run --workspaces`**,
-so this block joins `§141 RL-7`/`RL-8`, `MS-*`, `CW-*` and `TS-*` in being observed only by a
-stubbed `fetch`. What that costs is stated in `§141`'s block and holds unchanged here: a stub
-answers 200 to whatever arrives, so **not one of these rows can tell a wrong id from a right one**.
-The server is where an attachment id is validated against the attachments that reach a case, and
-`CN-3` is the row that says so.
-
-**`CN-1` is the row this block exists for.** The two ids look interchangeable — both UUIDs, one
-column apart in the two tables this slice prints — and the whole of the slice's care is keeping
-them apart at four call sites and two schemas. Swapping them is the edit a reader makes while
-"tidying", it types, and the failure it produces is a field error at a terminal rather than
-anything a build sees.
-
-| Row | Mutate | Must redden | What a green build would mean |
-|---|---|---|---|
-| `§189 CN-1` | In `cli/src/reads.ts`, print `entry.row.conditionId` in `case show`'s CONDITION column (the library id in the attachment's place) | `prints each condition with its attachment id, and says which are declined` | **The row the block is named for.** The column would print an id that is real, resolves to a real row, and is refused by `--decline` — or, worse, is *accepted* by `suite edit --precondition`, where it means something else entirely. A green build means the read half of this slice is asserted by shape rather than by value. |
-| `§189 CN-2` | In `cli/src/writes.ts`, make `conditionsFrom` return the bare ids (`completeSet(value)`) instead of wrapping them | `attaches conditions by library id, wrapped as the input the write takes` | The wire shape stops being `CaseConditionInput`. The server answers a field error naming a shape no CLI flag mentions, and the flag has never once worked — §143's defect exactly, in a client whose type assertion (`as SuiteInput`) is on the merged body and therefore cannot see it. |
-| `§189 CN-3` | In `mcp/src/writes.ts`, read `strings(input, 'declinedConditions')` into `preconditions` instead of `declinedConditionIds` | *nothing* — a **hole**, and stated as one | The two fields take the same JSON type and the stub accepts either, so declining a condition would *attach* it — the exact inversion of the caller's intent — and every test here would stay green. Only the server can refuse it: `CaseConditionInput` requires an object, so this is a 400 on the first live call. **This is the row that says what a stubbed surface cannot check**, and it is the reason the live-pass row below exists. |
-| `§189 CN-4` | In `cli/src/writes.ts`, have `completeSet` keep the empty strings rather than filtering them | `re-imposes every declined condition on --decline ""` and `detaches every condition on --precondition ""` | `--decline ''` would send `['']`, which is a field error rather than the clearing form — so the one spelling a shell has for "empty this list" would be the one spelling that fails, on all four complete-set flags at once. |
-| `§189 CN-5` | In `client/src/core/rewrite.ts`, add `declinedConditionIds: [...current.declinedPreconditions, ...current.declinedPostconditions].map((ref) => ref.id)` to `caseInputFrom` | `carries every field of TestCaseInput a round-trip may send, and no other`, and `says nothing about declines when no flag named them, on a case that has one` | The reversal §189 considered and refused. Every `--title` edit would state the complete set of an author's opt-outs as though the caller had named them; harmless while the read's ids are exactly the declinable ones, and a claim nobody made either way. The `excluded` list in `core.test.ts` is what makes it a decision rather than a default. |
-| `§189 CN-6` | In `cli/src/reads.ts`, merge the declined arrays into the live ones in `case show` (one list, no STATE column) | *nothing* — the **second hole** | The two assertions are `toMatch(/sc-2.*declined/)` and `/sc-1.*in force/`, which a merged list with a marker column still satisfies. What the mutation destroys is the *reading*: a declined condition is not part of what the case does, and a single list is one careless glance from saying it is. Recorded rather than faked — the alternative is asserting on a table's layout, which is how a test starts refusing a better one. |
-| `§189 CN-7` | In `mcp/src/writes.ts`, drop the `preconditions`/`postconditions` properties from `tcms_write_suite`'s `inputSchema` while leaving the `run` body reading them | *nothing* | `additionalProperties: false` is declared and the SDK validates against it — but these tests call the tool's `run` directly, so the schema is never applied. The arm keeps working here and is refused at the boundary in the field: a tool whose schema and body disagree is invisible to every test in this package. **The same gap `MS-*` records, at a new door.** |
-
-**The live-pass row this slice leaves.** `CN-3`'s hole is not closeable here: the check it wants is
-one real `tcms_write_case` `action: edit` carrying `declinedConditions`, against an instance where
-the case actually inherits a suite condition — the fixture `§186 A1-2` authors on the browser side,
-which is the same state. It belongs to the next `packages/` live pass
-(`docs/verification/2026-08-09-packages-live-pass-round-2.md` is the most recent), alongside one
-`tcms suite edit --precondition` against a real library id. Both are **NOT RUN**, and neither has
-ever been executed by anything: these two arms have existed for one commit.
+**MOVED 2026-08-22 to `packages-and-frontend-mutation-checks.md`.** `§189 CN-1`…`CN-7` mutate
+`packages/cli`, `packages/mcp` and `packages/client`. Ids are unchanged.
 
 ## §190 — the comments nothing validates
 
@@ -3092,3 +2949,76 @@ Two rows are **expected green and recorded as gaps** rather than as passes.
 | `§249 CS-M7` | In `CrossProjectSearchService.hit`, resolve `projectKey`/`projectName` from a fresh `ProjectRepository.findById` instead of the gated map | **Expected GREEN** ⚠️ — **a gap, and it is the one worth closing.** Nothing asserts the project fields came from the *gated* set, so the mutation is the shape that would serve an ungranted project's NAME the day the gate and the lookup diverge — and a name is a disclosure where an id is not (`AdminReach`). One arm closes it: seed a same-company ungranted project whose name differs, and assert the hit's `projectName` for a granted row. Kept as a gap because closing it properly needs the lookup to be *able* to diverge, which today it cannot. |
 | `§249 CS-M8` | Change `CrossProjectSearchQuery.isBounded()` to `return true` | **Red** — `anUnboundedSearchIsRefused` and `anEnumFilterAloneIsNotABound`. The endpoint becomes "every case in every project you can see", which is the response `/work-items` refuses to serve for the same reason. |
 | `§249 CS-M9` | Remove the trailing `cb.asc(root.get("keySeq"))` from `CaseSort.orderBy` | **Red** — `pagingIsStableAcrossProjects`, **if the fixture is large enough to page**. ⚠️ Postgres may return a stable order anyway on a seven-row heap; the fixture pages at `size=3` across three pages specifically so it can, but if this comes back green the fixture is too small and **that is the finding** — the row is then a request for a larger one, not a pass. |
+
+---
+
+# DOCUMENTED GAPS — rows retired from the run, 2026-08-22
+
+**Decided by the user on 2026-08-22**, as part of the run plan in
+`docs/plans/2026-08-22-backend-mutation-backlog-run-plan.md`. A row lands here when it says, in its
+own text, that it **cannot produce a measurement** — the state is unreachable behind a `CHECK`, the
+test class hand-builds its subject, a single-threaded test cannot arrange the interleaving, the
+fixture points every root at one temp directory. Running such a row buys a confirmed zero the row
+has already derived.
+
+**This is a stated deviation from this file's own rule** — *"a row predicting zero is not a row to
+skip, the measured number is the deliverable"* — and it is deliberately narrow:
+
+- A row that **predicts** zero and derives it structurally → retired here.
+- A row that says *"if this reddens nothing, that is the finding"* → **runs.** The conditional is the
+  opposite of a prediction: the row expects a red and is saying what a zero would prove. The first
+  count of this register was **95 rows** because a grep swept the conditionals in with the
+  predictions; classified per row it is **44**. Recorded because the wrong number is what the
+  decision was taken against.
+- A row that says *"may redden nothing, and that would be the finding"* → **runs.** The zero is
+  undetermined and the measurement settles it: `FQ-10`, `FQ-14`, `FQ-24`, `AD-5`, `GA-1`, `DR-6`.
+
+**Retiring is not filing away.** Every row below keeps its id — ids are quoted from handoff sections
+and are never renumbered — and every one names what would close it. Three of them are not gaps at
+all but work, and they are separated out below rather than buried, because that is where the value
+of this register actually is.
+
+## A. Nothing to run and nothing cheap to write — the true gaps
+
+| Row | Why no measurement is available | What would close it |
+|---|---|---|
+| `13k` | No fixture writes two rollup rows at measurably different instants, so oldest-vs-newest `computedAt` is unobservable | The same-instant/two-instant fixture (wave 2) |
+| `AT-3` | Automation Service's keys are unqualified in the seeded catalogue, so key-vs-qualifier cannot be told apart | One token carrying Test Engineer, whose `case:delete` is `OWN` |
+| `CM-8` (first half) · `CM-9` | `doc_block` has no unique `(page_id, position)`; the fixture has no dangling `doc_link` | A tied-position pair; one `doc_link` naming a `gen_random_uuid()` |
+| `CA-6` · `CA-15` · `CA-18` · `CA-20` · `DA-11` (ordering half) · `DA-14` · `FA-4` · `FA-7` · `FA-9` | Single-threaded tests cannot arrange a failure between two writes; no test in this repository counts queries; every storage root is one temp directory in `IntegrationTestBase` | A fault-injecting store; a query counter; a second root in the harness |
+| `ST-2` · `ST-12` · `ST-13` | Structural — the cost is a Spring startup failure or a compile error, not a red test | Nothing; the row is the record that ST-1 is the only observer |
+| `ST-11` | No interleaving to arrange | A concurrent writer |
+| `RR-M3` · `RR-M5` | Same two shapes at the raw-report root: one temp directory, and an ordering that only matters on rollback | Browser row `RR-7`; a rollback-injecting test |
+| `§128 CD-13` | The assertion is ASCII, so a `String.length()` ceiling and a UTF-8 one agree | A multi-byte fixture string |
+| `§166 LR-1` | `TestExecution.record()` sets status and `executed_at` together, so no fixture may legitimately build the row the predicate guards against | Nothing in-suite; the predicate is load-bearing and unobservable |
+| `§167 DL-4` | No test asserts outbox latency directly | A browser row, not a unit test |
+| `§168 CV-4` | A null kind and an absent row are collapsed by the caller on purpose, so both spellings agree today | A fourth count in the contract |
+| `DR-8` · `GA-6` · `FQ-13` | A second transaction, a concurrent caller, a second writer — none exists | Each is a slice of its own |
+| `IH-5` | The defect is a `JSONB` blob pulled per row; no assertion changes | A query log over a 5,000-test history |
+| `TS-9` | Two concurrent invocations; the Vitest lane cannot express it | The live pass |
+| `§247 SK-M6` | The poller is disabled in `IntegrationTestBase` because it **creates runs** | A direct test of the company loop's `continue` |
+
+## B. Not gaps — tests worth writing, named here so they are not lost
+
+| Row | What it actually is |
+|---|---|
+| `§133 AG-9` | **The highest-value row in its section.** Not a mutation: the `Agent` design rests on `evaluate(ownerId) ∩ permissionsOf(Agent)` and **nothing drives it**. Issue an `Agent` token owned by a Viewer, `POST` a case, expect 403. §132 already recorded that `IngestionEndpointTest.Attribution` is the only place in the suite where a write is authenticated by a real `api_token` at all. |
+| `DR-9` | `CaseHealthProperties`' positive-duration check has **no test on either half**, and with `P0D` the stale/clean pair *inverts* rather than over-fires. |
+| `GA-10` | No test asserts on logging, for the widest grant in the product. |
+
+## C. Not gaps — rows that belong to the manual / live lane
+
+`§242 LG-M14` (the project trail has **no index** for `(company_id, project_id, occurred_at DESC)` —
+read the plan against a large `audit_event`), `§243 RN-M7` (200 approvals → 200 deliveries; run it to
+get the real number), `§244 ED-M6` (nothing in this repository asserts that a hand-recorded duration
+reaches the Run Summary report). Each needs the compose stack, not `./gradlew test`.
+
+## Corrections made while writing this register
+
+- `§232 PB-9` was swept in by the phrase *"not a mutation of new code so much as a re-introduction of
+  the defect B9 uncovered"*. It **predicts exactly one red** and runs.
+- `§169 XL-6` predicts no red but explicitly asks to be run, because its expected outcome is a
+  **loudly aborted recompute** (NULL into a `NOT NULL boolean`) rather than a silent wrong value, and
+  those are very different things to inherit. It runs.
+- `R6-3` and `R6-5` appear as zero-predictions in their original table and were **already re-run RED
+  after R6 phase 4**. They are stale rows, not gaps; the phase-4 table is the live one.
