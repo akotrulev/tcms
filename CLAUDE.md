@@ -125,7 +125,7 @@ npm install
 npm run dev          # http://localhost:5173 — proxies /api to localhost:8080
 npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
-npm run test:run     # Vitest + RTL, 1705+ tests across 128 files (1705/127 measured on shanks 2026-08-22; re-measure pending after §250's last arms) — also a gate
+npm run test:run     # Vitest + RTL, 1710 tests across 128 files (measured on shanks 2026-08-22) — also a gate
 npm run gen:api      # regenerate src/api/schema.d.ts after ANY openapi.yaml change
                      # — AND packages/client's copy; the two are byte-identical and a test compares them
 ```

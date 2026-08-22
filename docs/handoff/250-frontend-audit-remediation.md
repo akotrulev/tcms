@@ -179,9 +179,8 @@ comments that all said the same reassuring thing.
 
 ## Gates
 
-**Green on `shanks`, all three stacks.** Frontend **1705 / 1705** across 127 files measured (from 1692/125 — `useDebouncedValue`'s 5
-arms and `ConditionsPanel`'s 8). `useAnnouncedResults`' 5 arms landed after that run and are
-locally green; the re-measure is pending, `npm run build` clean,
+**Green on `shanks`, all three stacks.** Frontend **1710 / 1710** across 128 files (from 1692/125 — the 18 new arms are
+`useDebouncedValue`'s 5, `useAnnouncedResults`' 5 and `ConditionsPanel`'s 8), `npm run build` clean,
 `npm run lint` **0 warnings across 354 files with 104 rules**. That rule count is the evidence worth
 quoting: it was 103, and the extra one is `react/exhaustive-deps`. Packages **341** (130 client /
 82 cli / 129 mcp) and build clean, because `openapi.yaml` changed and both `schema.d.ts` copies were
