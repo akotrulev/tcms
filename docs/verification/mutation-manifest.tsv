@@ -396,8 +396,8 @@ PR-2	§146	com.tcms.auth.ErrorDispatchStatusTest	W1	-	backend/src/main/java/com/
 PR-3	§146	ArchitectureRulesTest	-	-		queued
 EV-3	§149	ErrorBodyPolicyTest	-	-		queued
 EV-4	§149	ErrorBodyPolicyTest	-	-		queued
-RK-3	§151	ReleaseSortKeyBackfillTest	S	-		queued
-RK-4	§151	ReleaseSortKeyBackfillTest	S	-		queued
+RK-3	§151	com.tcms.execution.ReleaseSortKeyBackfillTest	S	-	backend/src/main/resources/db/migration/V44__release_sort_key_precedence_flag.sql	RUN:MATCH
+RK-4	§151	com.tcms.execution.ReleaseSortKeyBackfillTest,com.tcms.schema.SchemaConventionTest	S	-	backend/src/main/resources/db/migration/V68__runs_can_be_scheduled.sql (proxy)	RUN:MATCH
 SC-3	§152	ArchitectureRulesTest	-	-		queued
 SC-4	§152	ArchitectureRulesTest	-	-		queued
 UX-2	§153	ArchitectureRulesTest	S	-		queued
@@ -543,8 +543,8 @@ CE-M3	§161	?	S	-		queued
 §200 PR-2	§200	?	-	-		queued
 §200 PR-4	§200	?	-	-		queued
 §200 PR-5	§200	?	-	-		queued
-§207 DQ-1	§207	CaseDeleteEndpointTest	S	-		queued
-§207 DQ-2	§207	EngineerToTest	S	-		queued
+§207 DQ-1	§207	com.tcms.schema.SeedDataTest,com.tcms.repository.CaseDeleteEndpointTest	S	-	backend/src/main/resources/db/migration/V51__crud_is_not_authorship_scoped.sql	RUN:MORE
+§207 DQ-2	§207	com.tcms.schema.SeedDataTest,com.tcms.identity.PermissionEvaluatorTest	S	-	backend/src/main/resources/db/migration/V51__crud_is_not_authorship_scoped.sql	RUN:MORE
 §207 DQ-3	§207	com.tcms.schema.SeedDataTest,com.tcms.repository.CaseDeleteEndpointTest	W1	-	backend/src/main/resources/db/migration/V68__runs_can_be_scheduled.sql	RUN:MORE
 §208 DM-1	§208	CaseBulkEndpointTest	-	-		queued
 §208 DM-2	§208	com.tcms.repository.LifecycleLadderTest,com.tcms.repository.SuiteWriteEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/LifecycleLadder.java	RUN:MORE
@@ -555,10 +555,10 @@ CE-M3	§161	?	S	-		queued
 §209 AM-3	§209	com.tcms.documentation.ArtifactCirculationTest,com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/Artifact.java	RUN:MORE
 §209 AM-4	§209	ArtifactCirculationTest	-	-		queued
 §209 AM-5	§209	?	-	-		queued
-§210 DQ-1	§209	SeedDataTest	S	-		queued
-§210 DQ-2	§209	SeedDataTest	S	-		queued
-§210 DQ-3	§209	IsTest	S	-		queued
-§210 DQ-4	§209	SeedDataTest	S	-		queued
+§210 DQ-1	§209	com.tcms.schema.SeedDataTest,com.tcms.documentation.ArtifactEndpointTest	S	-	backend/src/main/resources/db/migration/V52__the_tier_line_is_approvals_and_configuration.sql	RUN:MORE
+§210 DQ-2	§209	com.tcms.schema.SeedDataTest	S	-	backend/src/main/resources/db/migration/V52__the_tier_line_is_approvals_and_configuration.sql	RUN:MORE
+§210 DQ-3	§209	com.tcms.schema.SeedDataTest	S	-	backend/src/main/resources/db/migration/V52__the_tier_line_is_approvals_and_configuration.sql	RUN:ZERO-AS-PREDICTED
+§210 DQ-4	§209	com.tcms.schema.SeedDataTest,com.tcms.identity.PermissionEvaluatorTest	S	-	backend/src/main/resources/db/migration/V68__runs_can_be_scheduled.sql (proxy)	RUN:MORE
 §210 DQ-5	§209	com.tcms.repository.SuiteWriteEndpointTest,com.tcms.documentation.DocPageEndpointTest,com.tcms.execution.ExecutionEndpointTest,com.tcms.documentation.ArtifactEndpointTest,com.tcms.documentation.ArtifactFileEndpointTest	S	-	backend/src/main/java/com/tcms/repository/SuiteWriteService.java + DocPageWriteService + RunStatusService + ExecutionService + ArtifactWriteService	RUN:ZERO-AS-PREDICTED
 §210 DQ-6	§209	PermissionEvaluatorTest	-	-		queued
 §217 FD-1	§217	com.tcms.auth.SsoFlowIntegrationTest	W1	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:MORE
