@@ -3089,10 +3089,13 @@ an empty trail, and `LG-9` is the only row that wants it that way.
 
 > **The fixture this lane must NOT author.** Two rows need a **token-driven** act and one needs an
 > **unattended** one, and neither can be produced by clicking. `LG-4` is reachable through `A3-24`'s
-> `Agent` token plus a CLI or MCP write; `LG-5` (`actorUserId` null) has **no producer in the
+> `Agent` token plus a CLI or MCP write. ~~`LG-5` (`actorUserId` null) has **no producer in the
 > product at all** today — every write path carries a caller — so it is recorded as **not
-> drivable**, with what it would take written into the row. A silent skip is what §65 exists to
-> prevent; "not driven, and here is why" is a legitimate outcome.
+> drivable**~~ → **superseded 2026-08-22 by area C (§247)**: a `run_schedule` firing is the
+> product's first actorless writer, so `LG-5` is now driven from the schedule this pass creates in
+> `§247 SK-1`. That is why the row moved from "not drivable" to a **Before you start**. A silent
+> skip is what §65 exists to prevent; "not driven, and here is why" is a legitimate outcome, and so
+> is a row that stops needing it.
 
 | Row | Drive | Expect |
 |---|---|---|
@@ -3100,7 +3103,7 @@ an empty trail, and `LG-9` is the only row that wants it that way.
 | `§242 LG-2` | Type `case.updated` into **Action** and read the URL | The URL gains `?action=case.updated`, the grid narrows, **and the paging resets to page 1**. Copy the URL into a second tab: the same narrowed trail. This is the row that makes a filtered trail a thing somebody can paste into a ticket, which is the whole reason the filter is not component state. |
 | `§242 LG-3` | Set **From** and **To** to the same day, one that `A1` worked on, then to a day nothing happened | First: rows, all within that day. Second: the **"No acts match"** empty state with a **Clear filters** control — *not* "Nothing recorded yet". The two empty states say different things and only one of them is about the filter. |
 | `§242 LG-4` | ⚠️ **Needs a CLI or MCP write under the `Agent` token from `A3-24`.** Record a result through `tcms result record`, then open the run's project audit trail | The newest row names **the token's owner as the person AND carries the robot marker**, whose tooltip names the token. **Both halves, not either** — this is the one behaviour the plan for this slice got wrong, and a build that renders only the person says a human typed what a pipeline did. |
-| `§242 LG-5` | ⚠️ **NOT DRIVABLE — recorded rather than skipped.** An act with `actorUserId` null renders as **"Automatic"** with no person and no token | **No producer exists.** Every write path in the product carries a caller, so the only way to reach this row today is to insert an `audit_event` by hand, which proves nothing about what the product records. It becomes drivable when slice 5's scheduled runs land — a poller firing a run is the first act nobody requested. Until then the shape is covered by `AuditLogReadTest.anUnattendedJobHasNoPerson` alone. |
+| `§242 LG-5` | An act with `actorUserId` null renders as **"Automatic"** with no person and no token. **Before you start:** the `Nightly smoke` schedule this lane creates in `SK-1` must have fired at least once — see `SK-3` for the two ways to make that happen inside a pass. Open the project audit trail, filter **Action** to `run.created`, and read the scheduled run's row **beside a hand-created run's row** | The scheduled row shows **"Automatic"**, with no person and no robot marker; the hand-created row beside it shows a name. ~~**NOT DRIVABLE.** No producer exists — every write path in the product carries a caller… it becomes drivable when scheduled runs land.~~ → **superseded 2026-08-22 by area C (§247).** `V68`'s poller is the product's **first actorless writer**: a fire creates a run with a null `created_by` and an audit row with both actor columns null, because at 03:00 nobody performed the act. The id is unchanged and is quoted from `docs/handoff/242`. Both rows in one screenshot is the whole check — "Automatic" alone would also be what a build that had simply stopped recording actors renders. |
 | `§242 LG-6` | As a **Company Admin**, open **Administration → Audit trail** | The company trail lists acts from **every** project plus the ones belonging to none — a member invited, a role granted. Confirm at least one row has an **empty project context**: those are the rows a project trail structurally cannot show, and they are why this second screen exists. |
 | `§242 LG-7` | ⚠️ **The gating pair, and it breaks this rail's own rule on purpose.** Sign in as a **Test Engineer** and read the rail, then as a **Test Lead**, then as a **Company Admin** | Engineer: **neither** audit entry. Lead: the **project** entry only. Admin: **both**. These are the only permission-gated items in the rail and they are **hidden, not disabled** — the opposite of §31 everywhere else, taken deliberately (see `AppShell.AuditReach`). If a later pass finds them disabled-with-a-tooltip instead, that is a regression toward the general rule, not a fix. |
 | `§242 LG-8` | As that **Test Engineer**, paste `/projects/<id>/audit` into the address bar | The page loads and says, in a sentence, that reading the trail is part of administering the project and who to ask. **Not a 404, not a redirect, and not an empty grid.** Then check the network tab: **no `audit-events` request was made at all** — the screen knows the answer and does not ask the server to refuse it. |
@@ -3191,6 +3194,57 @@ different account. **No new fixture is asked for**, with one exception named in 
 | `§245 BA-7` | Page through a trail where one bulk act straddles a page boundary (assign 12 rows with the pager at 25 rows and enough other acts around it) | **Two groups, one per page**, each counting only what is on its page — the honest reading, since the page cannot see the rest. And **no row appears twice or goes missing**, which is §242's `(occurredAt DESC, id DESC)` still doing its job under the new rendering. |
 | `§245 BA-8` | As `viewer` (an account holding no `run:execute`), select rows on a live run | The **Assign…** control is **present and disabled with a reason** — §31, and the opposite of the audit rail's deliberate exception. ⚠️ **Note the correction**: the stepped plan said "a Test Engineer", and a Test Engineer **holds** `run:execute` (roles spec §A3, `V3`) — so this row must use a Viewer or it proves nothing. |
 | `§245 BA-9` | In one-person mode, choose **Nobody (unassign)** over rows currently assigned, preview and commit | Every row's destination reads **nobody**, and the audit rows say **Execution unassigned**. `null` is a value here and not an omission; a picker that could not say "nobody" would make "take these off everybody's plate" inexpressible. |
+
+---
+
+## §247 — scheduled runs (area C of the gaps plan)
+
+⚠️ **Unrun, and the code behind them is completely ungated.** Area C was built under the batch-3
+no-gates directive: no `npm run test:run`, no `npm run build`, no `npm run lint`, and no backend
+gate either. The eleven `RunSchedulePage.test.tsx` arms exist and **have never executed**. Read
+every row below as resting on nothing but the code.
+
+Ids are `§247 SK-*`; `SK` was grepped against every row id in this file and in
+`backend-mutation-checks.md` before minting. **This section also supersedes `§242 LG-5` in place**
+— see that row and its lane preamble above; the id is quoted from `docs/handoff/242` and is
+**never renumbered**.
+
+**Lane `A3` — execution.** It already has a project, suites, cases, tags and the three personas
+these rows need (a Test Lead, a Test Engineer, a Viewer). The new screen is at
+**`/projects/<id>/run-schedules`**; nothing in the rail links to it yet, so reach it by URL.
+
+> **The fixture this lane must author.** One schedule, named **`Nightly smoke`**, cadence
+> `0 0 3 * * *`, zone `Europe/Sofia`, tags `smoke` — created by the **Test Lead** through the New
+> schedule dialog in `SK-1`. `A3`'s cases must include at least one carrying the `smoke` tag, which
+> the lane's own charter already authors.
+>
+> ⚠️ **And the thing this lane cannot wait for.** A real fire on a three-a.m. cron cannot be
+> observed inside a browser pass, and the poller ticks once a minute after a three-minute grace. The
+> row that needs an actual run is `SK-3`, and there are exactly two honest ways to get one:
+>
+> **(a) a second schedule on a one-minute cron** — create `Minute smoke` with `0 * * * * *`, wait
+> for two ticks, then delete it. Costs nothing but time, uses only the product's own controls, and
+> is the option to prefer.
+>
+> **(b) drive the slot from `psql`** — `UPDATE run_schedule SET next_fire_at = now() WHERE name =
+> 'Nightly smoke';` and wait one tick. Faster, and it proves slightly less: the cadence itself is
+> not exercised, only the fire.
+>
+> **State which one was used in the pass notes.** Neither is a skip; choosing without saying is.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§247 SK-1` | As a **Test Lead**, open `/projects/<id>/run-schedules` and use **New schedule** to create `Nightly smoke` — `0 0 3 * * *`, `Europe/Sofia`, tags `smoke` | A row appears with the cadence and the zone shown as separate lines, a **Next run** in the future, and **Owner** naming the lead. ⚠️ **Read the Owner column heading**: it says *Owner*, not *Created by*, and the distinction is the whole area — this person is the **authority** each fire is gated as, not the author of the runs. |
+| `§247 SK-2` | Type `every monday please` into **Cadence** and save. Then fix the cadence and type `Europe/Sofiaa`-shaped nonsense into the zone — or note that the zone is a **select** and say whether a free-text zone would have been better | The cron failure is a message **under the Cadence field**, not a corner toast, and **nothing is stored** (the list is unchanged behind the dialog). The zone control is a picker precisely because a mistyped zone is a 400 nobody can diagnose; confirm the picker offers `UTC` and the schedule's own current value. |
+| `§247 SK-3` | ⚠️ **The row the fixture note above is about.** Make `Nightly smoke` fire, by (a) or (b), then reload the list | **Last run** shows a run key (`TR-n`), **Next run** has moved forward, and **no error banner** is on the row. Open that run: its source reads **"scheduled"** — not *"manual"* — and it has a checklist with one execution per `smoke` case. ⚠️ **If it reads "manual", stop and report it**: that is the exact defect `runSourceLabels` replaced a ternary to prevent, and it typechecks. |
+| `§247 SK-4` | ⚠️ **The feature's honesty, and the most valuable row here.** Archive the project (**Project settings → Archive**), make the schedule fire again, then reload the list | The row carries a **warning banner** naming the archive, **Next run has still advanced**, and **no new run was made**. Then unarchive and fire again: the banner **disappears**. A schedule that stopped silently is the failure mode of scheduling anything, and this string is the only place a reader could ever find out. |
+| `§247 SK-5` | Demote the schedule's owner to **Viewer** on this project (a second account is easier than demoting yourself), fire again, and read the row | The banner names the **grant** — "no longer has permission to create runs" — and no run was made. This is the row that proves a schedule is not a standing, unrevokable right to create runs in somebody's project. Restore the grant afterwards. |
+| `§247 SK-6` | Edit `Nightly smoke` to a cadence with nothing left in it — `0 0 3 1 1 2020` — and save | **Next run** reads **"Will not fire again"**. ⚠️ **Not a blank cell**: null is a real answer here, and an empty cell reads as *"loading"* or *"soon"*, both false. Then restore the cadence. |
+| `§247 SK-7` | Turn the schedule off with the **Active** switch, then use the **Only active schedules** toggle above the list, and copy the URL into a second tab | The row shows a **Paused** chip; the toggle puts `?enabled=true` in the **URL** and hides it; the pasted URL opens the same narrowed list. Filter state in the URL is what makes "here are the paused ones" a link somebody can send. |
+| `§247 SK-8` | Sign in as a **Viewer** and open the same URL | The **whole list is visible** and **New schedule**, **Edit** and **Delete** are **present, disabled, and explained on hover**. §31's disable-don't-hide — reading a schedule costs project visibility alone, and writing one costs `run:create`. ⚠️ **If they are hidden instead, that is a regression toward §242's deliberate audit-rail exception**, which was argued for a screen whose subject is who did what. This one's subject is a cadence. |
+| `§247 SK-9` | With the schedule holding a **Last run**, delete it, then open the run list | The schedule is gone and **the run it created is still there**. A schedule records no work — the runs it made are ordinary runs and outlive it — which is why there is no soft delete and no confirmation about losing history. |
+| `§247 SK-10` | Open the project **audit trail** and filter **Action** to `run_schedule.created` / `run_schedule.deleted` | Both acts are there, named in words, with the lead as the actor. ⚠️ **The contrast with `§242 LG-5` is the point of doing these two rows together**: an act on the *schedule* names a person, and the run the *schedule* makes names nobody. Two rows in one trail, and the difference is the whole design. |
+| `§247 SK-11` | ⚠️ **A judgement this plan could not settle — report an opinion, not just a pass/fail.** Look at the dialog's scope control: it offers **tags only**, and preserves any plan, case and suite ids the schedule already holds without showing them | Say whether that is acceptable. The server accepts all four arms and the `PUT` states the whole schedule, so the ids **are** sent back — but a schedule created through the run dialog's four arms and then edited here shows a scope that looks smaller than it is. The alternatives are a full scope picker (the run create dialog's, reused) or a read-only summary line beside the tags box. Neither is built. |
 
 ---
 

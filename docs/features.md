@@ -419,6 +419,12 @@ implementation plan at `docs/plans/2026-08-18-unplanned-gaps.md`.*
   product and every result costs a pointer round-trip.
 - **No internationalisation layer.** No translation infrastructure of any kind; a retrofit is far
   more expensive than the groundwork.
-- **No scheduled runs.** Internal jobs are scheduled, but a regression cycle cannot be.
+- ~~**No scheduled runs.** Internal jobs are scheduled, but a regression cycle cannot be.~~ →
+  **closed 2026-08-22 by §247** (area C of `docs/plans/2026-08-18-unplanned-gaps.md`, stepped into
+  `docs/plans/2026-08-18-gap-c-scheduled-runs.md`). `V68`'s `run_schedule` is a standing request —
+  what to ask for and when — and a per-company poller re-asks it, entering `RunCreateService`
+  through a third door so nothing about run creation is reimplemented. **Built and unverified**: the
+  batch it landed in ran no gates at all, and `docs/verification/backend-mutation-checks.md` §247
+  and `docs/verification/frontend-browser-checks.md` §247 are both unrun.
 - **No company data export.** Companies are provisioned by script with no offboarding path —
   relevant both to GDPR and to a client leaving.
