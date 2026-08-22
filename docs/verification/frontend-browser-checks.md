@@ -3162,3 +3162,32 @@ already produce.
 | `§244 ED-4` | Type `0` and record | Saves as **0**, and reopening shows `0` rather than an empty box. "It was instant" and "I did not time this" are different statements and every falsy check between the form and the column would collapse them. |
 | `§244 ED-5` | ⚠️ **The regression this slice is most likely to cause.** Record a duration in **Focus** mode, then switch to **Grid** mode and mark that same row **Passed** from the row's own buttons. Reopen the execution | The duration is **still there**. Grid mode has no duration control, and the body is total state — so a row verdict that omitted the field would clear a number the tester recorded on another screen, from a screen that never showed it to them. Repeat with the grid's **Blocked** dialog, which is the second such site. |
 | `§244 ED-6` | ⚠️ **Needs a CLI or MCP write**, under `A3-24`'s `Agent` token. `tcms result record TR-n TC-n --status Passed --duration-ms 4500`, then open that execution in the browser | The screen shows **4.5** seconds. Then run the same command with `--duration-ms ''` and confirm the screen shows an empty box. The unit boundary lives in one place (`frontend/src/lib/format.ts`) and the CLI names milliseconds in its own flag rather than converting — this row is what proves the two ends agree about which unit they are in. |
+
+---
+
+## §245 — bulk execution assignment (area B of the gaps plan)
+
+⚠️ **These rows are unrun AND the code behind them is ungated.** Area B was built under the same
+no-tests directive as area A: no `./gradlew build`, no `npm run test:run`, no `npm run build`, no
+`npm run lint`, and no targeted class either. Read every row below as resting on nothing but the
+code. The suite counts quoted anywhere near this area are §243's and are stale.
+
+Ids are `§245 BA-*`; `BA` was grepped against this file and the mutation queue before minting, and
+**the section number is `§245`, not the `§244` the stepped plan wrote** — area A took `§244` first.
+
+**Lane `A3` — execution.** Every row is the run detail's checklist, which `A3` already builds:
+`TR-1` with results recorded into it. Two rows need people the pass already has — `A0`'s six
+accounts — and `BA-4` needs an administrator to offboard one of them, which `L1` already does to a
+different account. **No new fixture is asked for**, with one exception named in its own row.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§245 BA-1` | On the run detail, tick three rows and read the bar. Then click a different filter chip | The bar names the count, **Assign…** is enabled for a Test Lead, and the caption reads *"Selection covers the rows this filter shows."* — not "on this page", because this screen is not paged. Switching the chip **clears the selection**: a selection holding rows the chip has hidden is a bulk act over rows the person cannot see. |
+| `§245 BA-2` | Select ~12 rows, choose **Spread them across several**, pick five people in order, **Preview changes**, then commit | The split is **3/3/2/2/2** and the **first two** people in the list hold the extra one. The chosen people render as a numbered list. The per-row list names each case's destination. The snackbar reports **per outcome** (`n assigned · n already assigned · n skipped`), never a blanket success. |
+| `§245 BA-3` | ⚠️ **The row that stands in for an idempotency key.** Send the identical distribute a second time — same rows, same five people in the same order | Every row comes back as **already assigned**, `changed` is empty, the **Assign** button stays disabled over that preview, and the project audit trail gains **no second group**. If this row fails, the determinism argument in the contract is false and the endpoint needs a different answer — not a patched expectation. |
+| `§245 BA-4` | Open the dialog and choose somebody, then have an administrator **offboard that person** in another tab, then commit | A **400 landing on the people control** — not in the corner and not a toast — and **nothing assigned**: not a partial act. One transaction is what makes that true. |
+| `§245 BA-5` | Complete the run, then select rows on it. Then force the request from devtools | The **Assign…** button is **disabled with the freeze explained in its tooltip** — §31, said before the server has to. The forced request answers **409** and the dialog renders it in place. |
+| `§245 BA-6` | Open the project audit trail after `BA-2` | **One** collapsible row reading *"Execution assigned — 12 of one operation shown here"* and *"12 items"*, not twelve lines. Expand it: twelve rows, each naming its own execution. This is the debt `§242` left for this area in as many words. |
+| `§245 BA-7` | Page through a trail where one bulk act straddles a page boundary (assign 12 rows with the pager at 25 rows and enough other acts around it) | **Two groups, one per page**, each counting only what is on its page — the honest reading, since the page cannot see the rest. And **no row appears twice or goes missing**, which is §242's `(occurredAt DESC, id DESC)` still doing its job under the new rendering. |
+| `§245 BA-8` | As `viewer` (an account holding no `run:execute`), select rows on a live run | The **Assign…** control is **present and disabled with a reason** — §31, and the opposite of the audit rail's deliberate exception. ⚠️ **Note the correction**: the stepped plan said "a Test Engineer", and a Test Engineer **holds** `run:execute` (roles spec §A3, `V3`) — so this row must use a Viewer or it proves nothing. |
+| `§245 BA-9` | In one-person mode, choose **Nobody (unassign)** over rows currently assigned, preview and commit | Every row's destination reads **nobody**, and the audit rows say **Execution unassigned**. `null` is a value here and not an omission; a picker that could not say "nobody" would make "take these off everybody's plate" inexpressible. |
