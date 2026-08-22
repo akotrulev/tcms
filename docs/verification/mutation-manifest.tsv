@@ -146,17 +146,17 @@ ST-6	§125	ExecutionEndpointTest	-	-		queued
 ST-7	§125	ArchitectureRulesTest	-	-		queued
 ST-8	§125	ArchitectureRulesTest	-	-		queued
 ST-9	§125	ArchitectureRulesTest	-	-		queued
-ST-10	§125	ArchitectureRulesTest	W1	-		queued
+ST-10	§125	com.tcms.storage.FilesystemBlobStoreTest	W1	-	backend/src/main/java/com/tcms/storage/FilesystemBlobStore.java	RUN:MATCH
 ST-11	§125	ArchitectureRulesTest	-	-		queued
 ST-12	§125	ArchitectureRulesTest	-	GAP		queued
 ST-13	§125	ArchitectureRulesTest	-	GAP		queued
-CA-1	§126 phase 1	CaseAttachmentEndpointTest	W1	-		queued
+CA-1	§126 phase 1	com.tcms.repository.CaseAttachmentEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseAttachmentService.java	RUN:ZERO-UNEXPECTED
 CA-2	§126 phase 1	CaseAttachmentEndpointTest	-	-		queued
 CA-3	§126 phase 1	CaseAttachmentEndpointTest	-	-		queued
-CA-4	§126 phase 1	CaseAttachmentEndpointTest	W1	-		queued
+CA-4	§126 phase 1	com.tcms.repository.CaseAttachmentEndpointTest	W1	-	backend/src/main/java/com/tcms/storage/AttachmentRepository.java	RUN:MATCH
 CA-5	§126 phase 1	CaseAttachmentEndpointTest	-	-		queued
 CA-6	§126 phase 1	CaseAttachmentEndpointTest	W1	GAP		queued
-CA-7	§126 phase 1	CaseAttachmentEndpointTest	W1	-		queued
+CA-7	§126 phase 1	com.tcms.repository.CaseAttachmentEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseAttachmentService.java	RUN:MORE
 CA-8	§126 phase 1	CaseAttachmentEndpointTest	-	-		queued
 CA-9	§126 phase 1	CaseAttachmentEndpointTest	-	-		queued
 CA-10	§126 phase 1	CaseAttachmentEndpointTest	-	-		queued
@@ -168,7 +168,7 @@ CA-15	§126 phase 1	CaseAttachmentEndpointTest	-	GAP		queued
 CA-16	§126 phase 1	CaseAttachmentEndpointTest	-	-		queued
 CA-17	§126 phase 1	CaseAttachmentEndpointTest	-	-		queued
 CA-18	§126 phase 1	CaseAttachmentEndpointTest	-	GAP		queued
-CA-19	§126 phase 1	CaseAttachmentEndpointTest	W1	-		queued
+CA-19	§126 phase 1	com.tcms.repository.CaseAttachmentEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseAttachmentService.java	RUN:MATCH
 CA-20	§126 phase 1	CaseAttachmentEndpointTest	-	GAP		queued
 DA-1	§126 phase 2	DocPageAttachmentEndpointTest	W1	-		RUN:ZERO-UNEXPECTED
 DA-2	§126 phase 2	DocPageAttachmentEndpointTest	-	-		queued
@@ -181,10 +181,10 @@ DA-8	§126 phase 2	DocPageAttachmentEndpointTest	-	-		queued
 DA-9	§126 phase 2	DocPageAttachmentEndpointTest	-	-		queued
 DA-10	§126 phase 2	DocPageAttachmentEndpointTest	-	-		queued
 DA-11	§126 phase 2	DocPageAttachmentEndpointTest	W1	GAP		queued
-DA-12	§126 phase 2	DocPageAttachmentEndpointTest	W1	-		queued
-DA-13	§126 phase 2	DocPageAttachmentEndpointTest	W1	-		queued
+DA-12	§126 phase 2	com.tcms.documentation.DocPageAttachmentEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/DocPageAttachmentService.java	RUN:MATCH
+DA-13	§126 phase 2	com.tcms.documentation.DocPageAttachmentEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/DocPageAttachmentService.java	RUN:ZERO-UNEXPECTED
 DA-14	§126 phase 2	ArchitectureRulesTest	-	GAP		queued
-FA-1	§126 phase 3	ArtifactFileEndpointTest	W1	-		queued
+FA-1	§126 phase 3	com.tcms.documentation.ArtifactFileEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/ArtifactWriteService.java	RUN:STALE
 FA-2	§126 phase 3	ArtifactFileEndpointTest	-	-		queued
 FA-3	§126 phase 3	ArtifactFileEndpointTest	-	-		queued
 FA-4	§126 phase 3	ArtifactFileEndpointTest	W1	GAP		queued
