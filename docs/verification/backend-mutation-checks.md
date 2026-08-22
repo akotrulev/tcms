@@ -2969,6 +2969,13 @@ skip, the measured number is the deliverable"* — and it is deliberately narrow
   count of this register was **95 rows** because a grep swept the conditionals in with the
   predictions; classified per row it is **44**. Recorded because the wrong number is what the
   decision was taken against.
+  **And a second correction, found by deriving the set twice:** 44 was itself hand-built, and a
+  re-derivation over `mutation-manifest.tsv` disagreed with it in both directions — it had missed
+  `CM-6`, `R7-6`, `R8-7`, `§166 LR-5`, `§167 DL-3` and `§168 CV-3`, all zero-predictions in the
+  project-predicate family, and had counted ids the prose merely *mentions*. **The authority is the
+  manifest's `gap` column**, not this list; the tables below are the reasoned subset, kept because
+  the reasoning is the deliverable. Two hand-kept tallies of one set disagreeing is the shape
+  §152–§156 replaced four times, arriving inside a register about that very problem.
 - A row that says *"may redden nothing, and that would be the finding"* → **runs.** The zero is
   undetermined and the measurement settles it: `FQ-10`, `FQ-14`, `FQ-24`, `AD-5`, `GA-1`, `DR-6`.
 
