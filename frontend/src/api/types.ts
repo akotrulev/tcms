@@ -85,6 +85,7 @@ export type Suite = S['Suite'];
 export type SuiteInput = S['SuiteInput'];
 export type TestCase = S['TestCase'];
 export type TestCaseSummary = S['TestCaseSummary'];
+export type CaseSearchHit = S['CaseSearchHit'];
 /**
  * A case's flake evidence and quarantine decision (§121). `TestCase['flake']` is this **or null**,
  * and the null is a third state — see `lib/flake.ts`, which is the only thing that should read the

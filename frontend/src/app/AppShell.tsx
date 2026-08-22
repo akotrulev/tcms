@@ -15,6 +15,7 @@ import {
   useColorScheme,
 } from '@mui/material';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
+import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import AssignmentIndOutlinedIcon from '@mui/icons-material/AssignmentIndOutlined';
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
@@ -113,6 +114,25 @@ const MY_WORK: NavItem = {
   label: 'My work',
   to: '/my-work',
   icon: <AssignmentIndOutlinedIcon fontSize="small" />,
+  end: true,
+};
+
+/**
+ * §249's cross-project case search — beside My work, and ungated.
+ *
+ * **No permission gate at all**, which is the same call `MY_WORK` makes: every company member may
+ * open it, and a member holding no project grants gets an honest empty result rather than a
+ * refusal. Gating it would need a key, and a key invented for this would be seeded to nobody —
+ * `BoardService.teamBoard`'s argument, and §67/§79/§80's.
+ *
+ * It renders before `useProjects` answers, for `MY_WORK`'s reason: the search's own bound is the
+ * caller's project visibility, computed server-side per request, so the rail does not need to know
+ * it to offer the screen.
+ */
+const CASE_SEARCH: NavItem = {
+  label: 'Search cases',
+  to: '/search',
+  icon: <SearchOutlinedIcon fontSize="small" />,
   end: true,
 };
 
@@ -568,6 +588,7 @@ function RailContent({
       <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, py: 1 }}>
         <li>
           <RailLink item={MY_WORK} onNavigate={onNavigate} collapsed={collapsed} />
+          <RailLink item={CASE_SEARCH} onNavigate={onNavigate} collapsed={collapsed} />
         </li>
         <li>
           <RailLink item={ALL_PROJECTS} onNavigate={onNavigate} collapsed={collapsed} />

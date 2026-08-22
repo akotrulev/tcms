@@ -343,6 +343,18 @@ export const keys = {
    * its route params resolve read the company answer and cache it as that project's.
    */
   companyPermissions: ['me', 'permissions', 'company'] as const,
+  /**
+   * The cross-project case search (§249) — deliberately NOT under `['projects', …]`.
+   *
+   * This list belongs to no project, so an invalidation targeting one project's subtree must not
+   * reach it: every write on a case invalidates `['projects', p, …]`, and a search spanning eleven
+   * projects sitting under one of them would be dropped by a write in that one and kept stale by a
+   * write in the other ten. `myWork` and `teamBoard` are outside that root for the same reason.
+   *
+   * It carries the whole filter object for `cases`' reason: a stale narrower result must not be
+   * shown under a wider filter while the new request is in flight.
+   */
+  caseSearch: (filters: Record<string, unknown>) => ['case-search', filters] as const,
 };
 
 export const base = (projectId: string) => `/projects/${projectId}`;

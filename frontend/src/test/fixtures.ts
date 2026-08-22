@@ -61,6 +61,7 @@ import type {
   UserInvitation,
   UserRef,
   TestCase,
+  CaseSearchHit,
   TestCaseSummary,
   TestExecution,
   RunSchedule,
@@ -124,6 +125,24 @@ export function aCaseSummary(overrides: Partial<TestCaseSummary> = {}): TestCase
     tags: [],
     healthSignals: [],
     lastResult: null,
+    updatedAt: AT,
+    ...overrides,
+  }
+}
+
+/** One cross-project search hit (§249) — a waypoint, so deliberately fewer fields than a summary. */
+export function aCaseSearchHit(overrides: Partial<CaseSearchHit> = {}): CaseSearchHit {
+  return {
+    id: 'c1',
+    key: 'TC-1',
+    keySeq: 1,
+    title: 'A case',
+    projectId: 'p1',
+    projectKey: 'PRJ',
+    projectName: 'A project',
+    lifecycleStatus: 'DRAFT',
+    automationStatus: 'MANUAL',
+    priority: 'MEDIUM',
     updatedAt: AT,
     ...overrides,
   }

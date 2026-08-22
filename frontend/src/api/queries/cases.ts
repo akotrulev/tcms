@@ -30,6 +30,7 @@ import type {
   TagUsage,
   TestCase,
   TestCaseCloneInput,
+  CaseSearchHit,
   TestCaseSummary,
   VersionMarker,
 } from '../types';
@@ -67,6 +68,71 @@ export function useCases(
      * is `pending`, which is the correct line — rows for the filter you replaced, presented as
      * the answer to the filter you typed, would be a lie the staleness marker cannot fix.
      */
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * The filters {@link useCaseSearch} sends — the cross-project subset (§249).
+ *
+ * A type of its own rather than `CaseFilters`, because that shape carries `suiteId`, `unfiled` and
+ * `releaseVersion`, none of which has a referent across projects: the server's
+ * `CrossProjectSearchQuery` refuses the same three for the same reason, and a client type that
+ * offered them would let a screen build a request the contract does not describe.
+ */
+export type CaseSearchFilters = {
+  q?: string;
+  projectId?: string[];
+  ownerId?: string;
+  tag?: string[];
+  lifecycleStatus?: string[];
+  automationStatus?: string[];
+  priority?: string[];
+  page?: number;
+  size?: number;
+};
+
+/**
+ * Whether this search is one the server will answer at all.
+ *
+ * At least one of `q`, `ownerId` or `tag`, and a present `q` of two characters or more — which is
+ * the endpoint's 400, mirrored here so the screen does not ask for a refusal. `ui-rules` §4:
+ * rendering a control and then rejecting what it produced is worse than not firing.
+ *
+ * Exported because the page needs the same answer to decide between "type something" and "nothing
+ * matched", and a second copy of this predicate is how the two drift.
+ */
+export function isSearchable(filters: CaseSearchFilters): boolean {
+  const q = filters.q?.trim() ?? '';
+  const bounded = q.length > 0 || !!filters.ownerId || (filters.tag?.length ?? 0) > 0;
+  // A case key is a whole identifier and is exempt from the minimum, exactly as the server's
+  // CrossProjectSearchQuery.queryTooShort is.
+  const longEnough = q.length === 0 || q.length >= 2 || /^TC[_-]?\d+$/i.test(q);
+  return bounded && longEnough;
+}
+
+/**
+ * Cases across every project the caller can see (§249).
+ *
+ * The `total` is the server's, computed over the same narrowed set as the page — so the pager is
+ * driven by it rather than by a client-side count. That is the whole point of the endpoint: a
+ * client that re-derived the count would throw away the one number the area exists to make
+ * trustworthy.
+ */
+export function useCaseSearch(
+  filters: CaseSearchFilters,
+): UseQueryResult<Paged<CaseSearchHit>> {
+  return useQuery({
+    queryKey: keys.caseSearch(filters),
+    queryFn: ({ signal }) =>
+      api.get<Paged<CaseSearchHit>>(`/cases/search${qs({ ...filters })}`, {
+        signal,
+        timeoutMs: TIMEOUTS.interactive,
+      }),
+    // The server 400s an unbounded search, so an empty box must not ask for one.
+    enabled: isSearchable(filters),
+    // `useCases`' reason, and it matters more here: the filters live in the URL, so every
+    // keystroke is a new key, and without this the list empties and refills as you type.
     placeholderData: keepPreviousData,
   });
 }

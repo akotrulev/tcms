@@ -38,6 +38,9 @@ import { ProjectsPage } from '../features/projects/ProjectsPage';
 const CaseListPage = lazy(() =>
   import('../features/cases/CaseListPage').then((m) => ({ default: m.CaseListPage })),
 );
+const CaseSearchPage = lazy(() =>
+  import('../features/cases/CaseSearchPage').then((m) => ({ default: m.CaseSearchPage })),
+);
 const CaseDetailPage = lazy(() =>
   import('../features/cases/CaseDetailPage').then((m) => ({ default: m.CaseDetailPage })),
 );
@@ -238,6 +241,28 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <MyWorkPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            §249's cross-project case search — the third route outside the project segment, for
+            `/my-work`'s reason stated once more because it is the same reason: with no `projectId`
+            its rows span every project the reader can open, so a project in the URL would be an
+            arbitrary one, and the rail's project switcher would appear to change a result set it
+            cannot change. Here the argument is stronger than on either board: not knowing which
+            project holds the case is the entire premise of the screen.
+
+            `/search` and not `/cases/search`: there is no top-level `/cases` in this SPA — a case
+            is reached through its project — so a `/cases` prefix would imply a projectless case
+            frame that does not exist. The API path is `/cases/search` because it is scoped by the
+            resource it returns; a route is scoped by the frame it renders in.
+          */}
+          <Route
+            path="/search"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <CaseSearchPage />
               </Suspense>
             }
           />
