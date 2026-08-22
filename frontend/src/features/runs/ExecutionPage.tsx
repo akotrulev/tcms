@@ -956,6 +956,53 @@ function ExecutionForm({
                 );
               })}
 
+              {/*
+                The visible half of `j` and `k`. Every shortcut on this screen has one — an
+                accelerator is a second route to something, never the only route to it — and this
+                pair matters most: Focus mode has no queue rail at all, and Split drops the rail
+                below `lg`. Without these two buttons, "next case" would be keyboard-only on the
+                narrowest screen, which is the one most likely to be a tablet on a test bench.
+
+                The `Box` inside each `Tooltip` is not decoration: MUI puts `pointer-events: none`
+                on a disabled button, so a tooltip wrapped directly around one greys out and
+                explains nothing — the trap `PermissionGate.tsx` documents and solves the same way.
+              */}
+              <Stack direction="row" sx={{ gap: 1, mt: 1 }}>
+                <Tooltip title={moveRefusal ?? (position <= 0 ? 'This is the first case in the run.' : 'Previous case (K)')}>
+                  <Box sx={{ flex: 1 }}>
+                    <Button
+                      fullWidth
+                      size="small"
+                      disabled={position <= 0 || !!moveRefusal}
+                      onClick={() => moveBy(-1)}
+                      data-testid="Execution.Nav.Previous"
+                    >
+                      Previous case
+                    </Button>
+                  </Box>
+                </Tooltip>
+                <Tooltip
+                  title={
+                    moveRefusal ??
+                    (position < 0 || position >= queue.length - 1
+                      ? 'This is the last case in the run.'
+                      : 'Next case (J)')
+                  }
+                >
+                  <Box sx={{ flex: 1 }}>
+                    <Button
+                      fullWidth
+                      size="small"
+                      disabled={position < 0 || position >= queue.length - 1 || !!moveRefusal}
+                      onClick={() => moveBy(1)}
+                      data-testid="Execution.Nav.Next"
+                    >
+                      Next case
+                    </Button>
+                  </Box>
+                </Tooltip>
+              </Stack>
+
               <Button
                 onClick={() => navigate(`/projects/${projectId}/runs/${runId}`)}
                 data-testid="Execution.Cancel"

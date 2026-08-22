@@ -219,4 +219,57 @@ describe('ExecutionPage keyboard', () => {
 
     expect(sent).toHaveLength(0)
   })
+
+  it("`j` and `k` walk the run in the rail's order", async () => {
+    const user = userEvent.setup()
+    mockReads()
+    mockSubmit()
+    await renderScreen()
+
+    await user.keyboard('j')
+    await waitFor(() => expect(screen.getByTestId('Where')).toHaveTextContent(`/executions/${EX_3}`))
+
+    await user.keyboard('k')
+    await waitFor(() => expect(screen.getByTestId('Where')).toHaveTextContent(`/executions/${EX_2}`))
+  })
+
+  it('does not move past the end of the run', async () => {
+    const user = userEvent.setup()
+    mockReads({ execution: anExecution({ id: EX_3, caseKey: 'TC-3', caseTitle: 'The TC-3 case', lockVersion: 1 }) })
+    mockSubmit()
+    await renderScreen(`/projects/p1/runs/r1/executions/${EX_3}`)
+
+    await user.keyboard('j')
+
+    expect(screen.getByTestId('Where')).toHaveTextContent(`/executions/${EX_3}`)
+    expect(screen.getByTestId('Execution.Nav.Next')).toBeDisabled()
+  })
+
+  it('refuses to move while there is unsaved work, rather than discarding it', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    mockSubmit()
+    await renderScreen()
+
+    await user.click(screen.getByTestId('Execution.CommentField'))
+    await user.keyboard('staging was down')
+    // Out of the box first, or the shortcut is correctly guarded and the arm proves nothing.
+    await user.keyboard('{Escape}')
+    await user.keyboard('j')
+
+    expect(screen.getByTestId('Where')).toHaveTextContent(`/executions/${EX_2}`)
+    expect(screen.getByTestId('Execution.Nav.Next')).toBeDisabled()
+    expect(screen.getByTestId('Execution.CommentField')).toHaveValue('staging was down')
+  })
+
+  it('offers the move as buttons too — the keys are an accelerator, not the only route', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    mockSubmit()
+    await renderScreen()
+
+    await user.click(screen.getByTestId('Execution.Nav.Next'))
+
+    await waitFor(() => expect(screen.getByTestId('Where')).toHaveTextContent(`/executions/${EX_3}`))
+  })
 })
