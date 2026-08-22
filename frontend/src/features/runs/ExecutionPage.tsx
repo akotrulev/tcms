@@ -1026,6 +1026,20 @@ function ExecutionForm({
               >
                 Back to the run
               </Button>
+
+              {/*
+                The visible route to the help, and it is not optional: an overlay reachable only by
+                a keyboard shortcut is circular help for precisely the people who do not yet know
+                the shortcuts.
+              */}
+              <Button
+                size="small"
+                onClick={() => setShortcutsOpen(true)}
+                data-testid="Execution.Shortcuts.Open"
+                sx={{ mt: 0.5 }}
+              >
+                Keyboard shortcuts (?)
+              </Button>
             </Stack>
           </Panel>
 

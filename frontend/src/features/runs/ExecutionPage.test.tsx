@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Route, Routes, useLocation } from 'react-router-dom'
@@ -10,6 +10,7 @@ import { anExecution, aProject, aRun } from '../../test/fixtures'
 import { heldPermissions } from '../../test/permissions'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TestProviders } from '../../test/TestProviders'
+import { EXECUTION_SHORTCUTS } from './executionKeys'
 import { ExecutionPage } from './ExecutionPage'
 
 /**
@@ -340,5 +341,35 @@ describe('ExecutionPage keyboard', () => {
     await waitFor(() =>
       expect(screen.getByTestId('Announcer')).toHaveTextContent('Case 3 of 3. TC-3, The TC-3 case.'),
     )
+  })
+
+  it('`?` opens the overlay, and it lists every binding in the map', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    mockSubmit()
+    await renderScreen()
+
+    await user.keyboard('?')
+
+    const overlay = await screen.findByTestId('Execution.Shortcuts.Overlay')
+    // Derived from the map, not a literal count: adding a binding must update the help for free,
+    // and an assertion on `9` would pass a build where the overlay silently dropped one.
+    expect(within(overlay).getAllByTestId('Execution.Shortcuts.Row')).toHaveLength(
+      EXECUTION_SHORTCUTS.length,
+    )
+    for (const shortcut of EXECUTION_SHORTCUTS) {
+      expect(within(overlay).getByText(shortcut.description)).toBeInTheDocument()
+    }
+  })
+
+  it('opens the overlay from a button too', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    mockSubmit()
+    await renderScreen()
+
+    await user.click(screen.getByTestId('Execution.Shortcuts.Open'))
+
+    expect(await screen.findByTestId('Execution.Shortcuts.Overlay')).toBeInTheDocument()
   })
 })
