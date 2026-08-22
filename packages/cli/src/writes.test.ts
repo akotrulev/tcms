@@ -858,6 +858,62 @@ describe('result record', () => {
     )).toBe(EXIT.usage);
     expect(out.stderr).toContain('is not in');
   });
+
+  it('sends --duration-ms as given, and omits the field when the flag is absent', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /executions/e-1': { status: 200, body: EXECUTION } });
+
+    expect(await mainWith(
+      ['result', 'record', 'TR-5', 'TC-42', '--status', 'passed', '--duration-ms', '4500'],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/executions/e-1').body ?? '{}'))
+      .toEqual({ statusId: 'st-1', durationMs: 4500 });
+  });
+
+  it("clears the duration with --duration-ms '', the shape every nullable flag here uses", async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /executions/e-1': { status: 200, body: EXECUTION } });
+
+    expect(await mainWith(
+      ['result', 'record', 'TR-5', 'TC-42', '--status', 'passed', '--duration-ms', ''],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.ok);
+
+    // null, not an absent key: a shell cannot type `null`, and absent means "leave it alone".
+    expect(JSON.parse(stub.write('/executions/e-1').body ?? '{}'))
+      .toEqual({ statusId: 'st-1', durationMs: null });
+  });
+
+  it('refuses a duration that is not a whole number of milliseconds', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(
+      ['result', 'record', 'TR-5', 'TC-42', '--status', 'passed', '--duration-ms', '-1'],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.usage);
+    expect(out.stderr).toContain('--duration-ms');
+  });
+
+  it('sends a zero duration rather than dropping it as falsy', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /executions/e-1': { status: 200, body: EXECUTION } });
+
+    expect(await mainWith(
+      ['result', 'record', 'TR-5', 'TC-42', '--status', 'passed', '--duration-ms', '0'],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.ok);
+
+    // `present()` drops undefined and must not drop 0 — "it was instant" is not "not timed".
+    expect(JSON.parse(stub.write('/executions/e-1').body ?? '{}'))
+      .toEqual({ statusId: 'st-1', durationMs: 0 });
+  });
 });
 
 describe('review comment', () => {

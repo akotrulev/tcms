@@ -516,6 +516,42 @@ describe('tcms_record_result', () => {
       .rejects.toThrow(/It offers: Passed/);
   });
 
+  it('passes durationMs through, and tells null apart from absent', async () => {
+    const routes = {
+      '/runs': { status: 200, body: [RUN] },
+      'GET /runs/r-1': {
+        status: 200,
+        body: runDetail({ ...RUN, executions: [executionSummary({ id: 'e-1' })] }),
+      },
+      '/statuses': { status: 200, body: [PASSED] },
+      'GET /executions/e-1': { status: 200, body: execution({ id: 'e-1', lockVersion: 3 }) },
+      'PATCH /executions/e-1': { status: 200, body: execution({ id: 'e-1', lockVersion: 4, status: PASSED }) },
+    };
+
+    const set = api(agentRoutes(routes));
+    await run(set, 'tcms_record_result', {
+      run: 'TR-1', case: 'TC-42', status: 'passed', durationMs: 4500,
+    });
+    expect(JSON.parse(set.write('/executions/e-1').body ?? '{}'))
+      .toEqual({ statusId: 'st-1', durationMs: 4500 });
+
+    // An explicit null is a CLEAR and must survive `present()`, which drops only undefined.
+    const cleared = api(agentRoutes(routes));
+    await run(cleared, 'tcms_record_result', {
+      run: 'TR-1', case: 'TC-42', status: 'passed', durationMs: null,
+    });
+    expect(JSON.parse(cleared.write('/executions/e-1').body ?? '{}'))
+      .toEqual({ statusId: 'st-1', durationMs: null });
+
+    // Zero is a duration. A falsy check anywhere on this path turns "instant" into "not timed".
+    const zero = api(agentRoutes(routes));
+    await run(zero, 'tcms_record_result', {
+      run: 'TR-1', case: 'TC-42', status: 'passed', durationMs: 0,
+    });
+    expect(JSON.parse(zero.write('/executions/e-1').body ?? '{}'))
+      .toEqual({ statusId: 'st-1', durationMs: 0 });
+  });
+
   it('does not declare evidence:attach, because it cannot attach evidence', () => {
     // The endpoint is multipart/form-data only and a tool call carries JSON. Declaring the
     // permission would hide the tool from a caller who can record results and cannot attach.

@@ -283,6 +283,12 @@ export function useExecution(
 export interface ExecutionResultInput {
   statusId?: string;
   comment?: string | null;
+  /**
+   * Milliseconds, and sent on **every** save — the same total-state rule `comment` carries. Omitting
+   * it when the tester left the box empty would make the field un-clearable from the UI at all,
+   * which is the one state the server explicitly supports.
+   */
+  durationMs?: number | null;
   stepResults?: { stepId?: string; statusId?: string; comment?: string | null }[];
 }
 

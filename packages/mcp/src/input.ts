@@ -68,6 +68,25 @@ export function nullableStr(
   return value;
 }
 
+/**
+ * {@link nullableStr}'s shape for a nullable number — the absent / null / value split, kept.
+ *
+ * Collapsing null into absent here would make a field the contract lets a caller CLEAR reachable
+ * only for setting, which is the same divergence `present` exists to avoid on the other side.
+ */
+export function nullableNum(
+  input: Record<string, unknown>,
+  name: string,
+): number | null | undefined {
+  if (!(name in input)) return undefined;
+  const value = input[name];
+  if (value === null) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new InputError(`'${name}' must be a number or null.`);
+  }
+  return value;
+}
+
 /** Drops the keys nobody named, so a `PATCH` asks for exactly what was sent. */
 export function present<T extends object>(body: T): Record<string, unknown> {
   return Object.fromEntries(Object.entries(body).filter(([, value]) => value !== undefined));

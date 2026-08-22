@@ -163,6 +163,33 @@ export function formatSeconds(seconds: number | null | undefined): string {
   return seconds === null || seconds === undefined ? EM_DASH : formatDuration(seconds * 1000);
 }
 
+/**
+ * The stopwatch boundary: seconds on screen, milliseconds on the wire.
+ *
+ * The column is milliseconds because that is what a JUnit/TestNG/Cucumber report reports, and a
+ * tester timing their own run does not think in milliseconds. Both halves live here rather than on
+ * the one screen that needs them today, because the second implementation of a unit conversion is
+ * how two screens come to disagree about the same number.
+ *
+ * **An empty box is `null` and a typed `0` is zero** — the two are different statements ("I did not
+ * time this" against "it was instant"), and a falsy check collapses them. `parseDurationSeconds`
+ * answers `undefined` for text that is not a duration at all, which is the caller's cue to refuse
+ * the save rather than silently clear a value.
+ */
+export function parseDurationSeconds(text: string): number | null | undefined {
+  const trimmed = text.trim();
+  if (trimmed === '') return null;
+  const seconds = Number(trimmed);
+  if (!Number.isFinite(seconds) || seconds < 0) return undefined;
+  return Math.round(seconds * 1000);
+}
+
+/** The inverse, for seeding the control from what the row already carries. */
+export function durationSecondsField(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined) return '';
+  return String(Math.round(ms / 100) / 10);
+}
+
 /** `842 kB`. Decimal units, matching what operating systems show for downloads. */
 export function formatBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) return EM_DASH;

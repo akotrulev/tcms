@@ -113,6 +113,7 @@ import {
   InputError,
   bool,
   idProperty,
+  nullableNum,
   nullableStr,
   num,
   present,
@@ -1019,6 +1020,14 @@ const recordResult: ToolDefinition = {
       case: idProperty('case whose execution to record', 'TC-42'),
       status: { type: 'string', description: 'A status NAME from tcms_orient, e.g. "Passed".' },
       comment: { type: ['string', 'null'] },
+      durationMs: {
+        type: ['integer', 'null'],
+        minimum: 0,
+        description:
+          'How long the test took, in MILLISECONDS. Optional. null CLEARS it, and so does '
+          + 'omitting it — this body states the whole result rather than patching it, the same '
+          + 'rule comment carries.',
+      },
       lockVersion: LOCK_VERSION_PROPERTY,
     },
   },
@@ -1073,6 +1082,7 @@ const recordResult: ToolDefinition = {
       body: present({
         statusId: status.id,
         comment: nullableStr(input, 'comment'),
+        durationMs: nullableNum(input, 'durationMs'),
       }) as components['schemas']['ExecutionResultInput'],
       tcms: { ...tcms, ...editIntent(version, 'record this result') },
     });

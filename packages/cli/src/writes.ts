@@ -82,6 +82,28 @@ function text(value: string | boolean | (string | boolean)[] | undefined): strin
   return first(value);
 }
 
+/**
+ * {@link nullableText}'s shape for a nullable number, with the same empty-string clearing form.
+ *
+ * The unit stays whatever the contract's unit is — `--duration-ms` says milliseconds in its own
+ * name rather than converting from seconds here. The SPA converts because a tester types seconds;
+ * a second conversion in a second client is how two callers come to disagree about one column,
+ * which is the argument `frontend/src/lib/format.ts` carries at length.
+ */
+function nullableNumber(
+  value: string | boolean | (string | boolean)[] | undefined,
+  flag: string,
+): number | null | undefined {
+  const raw = first(value);
+  if (raw === undefined) return undefined;
+  if (raw === '') return null;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new UsageError(`${flag} takes a whole number of milliseconds, not '${raw}'.`);
+  }
+  return parsed;
+}
+
 /** Drops the keys nobody named, so a `PATCH` asks for exactly what the flags said. */
 function present<T extends object>(body: T): Record<string, unknown> {
   return Object.fromEntries(
@@ -1010,10 +1032,13 @@ const runStatus: Command = {
 const resultRecord: Command = {
   name: 'result record',
   summary: 'Record a verdict against one case in a run',
-  usage: 'tcms result record TR-1 TC-42 --status Passed [--comment TEXT]',
+  usage: 'tcms result record TR-1 TC-42 --status Passed [--comment TEXT] [--duration-ms N]',
   options: {
     status: { type: 'string' },
     comment: { type: 'string' },
+    // Milliseconds, and named so. Absent leaves the duration alone; `--duration-ms ''` clears it,
+    // the same two-flags-in-one shape every nullable field on this CLI uses.
+    'duration-ms': { type: 'string' },
     'lock-version': { type: 'string' },
   },
   write: { kind: 'edit', permission: 'result:submit' },
@@ -1079,6 +1104,7 @@ const resultRecord: Command = {
       body: present({
         statusId: status.id,
         comment: nullableText(options['comment']),
+        durationMs: nullableNumber(options['duration-ms'], '--duration-ms'),
       }) as components['schemas']['ExecutionResultInput'],
       tcms: { ...request, ...editIntent(version, 'record this result') },
     });
@@ -1086,6 +1112,7 @@ const resultRecord: Command = {
     reportWrite(out, json, recorded, [
       ['Recorded', `${show(recorded.caseKey)} — ${show(recorded.status?.name)}`],
       ['Run', show(detail.key)],
+      ['Duration', show(recorded.durationMs)],
       ['Lock version', show(recorded.lockVersion)],
     ]);
   },

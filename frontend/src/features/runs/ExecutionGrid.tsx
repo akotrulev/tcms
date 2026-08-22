@@ -175,6 +175,10 @@ function GridRow({
         // The existing comment, sent back deliberately — see rule 4. `stepResults` is omitted so
         // whatever was marked step-by-step in Focus mode survives a verdict recorded here.
         comment: detail.comment,
+        // Same rule, same read. A row-level verdict must not clear a duration recorded in Focus
+        // mode: the total-state body means an omitted field is a clear, and this grid has no
+        // duration control to have cleared it from.
+        durationMs: detail.durationMs ?? null,
         lockVersion: detail.lockVersion,
       });
     } catch (failure) {

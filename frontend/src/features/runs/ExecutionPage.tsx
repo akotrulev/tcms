@@ -32,7 +32,7 @@ import { EvidencePanel } from './EvidencePanel';
 import { ExecutionAssignee } from './ExecutionAssignee';
 import { ExecutionGrid } from './ExecutionGrid';
 import { ExecutionQueue } from './ExecutionQueue';
-import { formatDateTime } from '../../lib/format';
+import { durationSecondsField, formatDateTime, parseDurationSeconds } from '../../lib/format';
 import { isRunClosed, statusLabels } from '../../lib/labels';
 import {
   EXECUTION_MODES,
@@ -259,6 +259,10 @@ function GridBlockedDialog({
         // The existing comment is kept and the reason appended — the same composition the
         // detail screen does, because a PATCH overwrites `comment` with whatever it is sent.
         comment: [detail.data.comment, reason].filter(Boolean).join('\n\n'),
+        // Carried for the same reason the comment is, and it is easier to miss: this dialog has
+        // no duration control, so an omitted field here would CLEAR a duration the tester
+        // recorded on the detail screen, from a dialog that never showed it to them.
+        durationMs: detail.data.durationMs ?? null,
         lockVersion: detail.data.lockVersion,
       });
       enqueueSnackbar(`Recorded Blocked for ${execution.caseKey}`, { variant: 'warning' });
@@ -386,6 +390,9 @@ function ExecutionForm({
   );
   const [stepComments, setStepComments] = useState<Record<string, string>>({});
   const [comment, setComment] = useState(execution.comment ?? '');
+  const [durationSeconds, setDurationSeconds] = useState(
+    durationSecondsField(execution.durationMs),
+  );
   const [metPreconditions, setMetPreconditions] = useState<Record<string, boolean>>(() =>
     Object.fromEntries((execution.preconditions ?? []).map((c) => [c.id, true])),
   );
@@ -415,6 +422,7 @@ function ExecutionForm({
   );
   const typedSomething =
     comment !== (execution.comment ?? '') ||
+    durationSeconds !== durationSecondsField(execution.durationMs) ||
     Object.values(stepComments).some((value) => value.trim() !== '');
   const untickedAPrecondition = (execution.preconditions ?? []).some((c) => !metPreconditions[c.id]);
 
@@ -426,12 +434,19 @@ function ExecutionForm({
   const byKind = (kind: string) => statuses.find((s) => s.kind === kind);
   const unmetPreconditions = (execution.preconditions ?? []).filter((c) => !metPreconditions[c.id]);
 
+  const duration = parseDurationSeconds(durationSeconds);
+  const durationIsNonsense = duration === undefined;
+
   const record = async (statusId: string | undefined, overrides?: Partial<Record<string, unknown>>) => {
     setConflict(null);
     try {
       const updated = await submit.mutateAsync({
         statusId,
         comment: comment || null,
+        // Sent on EVERY save, and `?? null` rather than a falsy check: an empty box is "I did not
+        // time this" and a typed 0 is "it was instant". Collapsing the two is how the one state the
+        // server supports — clearing a duration somebody recorded by mistake — becomes unreachable.
+        durationMs: duration ?? null,
         // The version we read travels as `If-Match` (the hook puts it there), so a second
         // tester recording against the same execution is rejected rather than silently
         // overwritten. This run may legitimately have two people on it — that's why the check is
@@ -629,16 +644,38 @@ function ExecutionForm({
           </Panel>
 
           <Panel title="Notes" testId="Execution.Notes">
-            <TextField
-              label="What happened"
-              fullWidth
-              multiline
-              minRows={3}
-              value={comment}
-              onChange={(event) => setComment(event.target.value)}
-              helperText="Anything the next reader needs — an error message, the data you used, what you tried."
-              slotProps={{ htmlInput: { 'data-testid': 'Execution.CommentField' } }}
-            />
+            <Stack spacing={2}>
+              <TextField
+                label="What happened"
+                fullWidth
+                multiline
+                minRows={3}
+                value={comment}
+                onChange={(event) => setComment(event.target.value)}
+                helperText="Anything the next reader needs — an error message, the data you used, what you tried."
+                slotProps={{ htmlInput: { 'data-testid': 'Execution.CommentField' } }}
+              />
+              {/* Seconds here, milliseconds on the wire — `lib/format.ts` owns the conversion.
+                  Beside the note rather than beside the verdict buttons: how long it took is part
+                  of describing the run, and a control on the verdict row would read as something
+                  the tester must fill in before they may record anything. */}
+              <TextField
+                label="How long it took (seconds)"
+                type="number"
+                sx={{ maxWidth: 260 }}
+                value={durationSeconds}
+                onChange={(event) => setDurationSeconds(event.target.value)}
+                error={durationIsNonsense}
+                helperText={
+                  durationIsNonsense
+                    ? 'Give a number of seconds, or leave it empty.'
+                    : 'Optional. Leave it empty if you did not time this run — an empty box clears a duration that was there.'
+                }
+                slotProps={{
+                  htmlInput: { min: 0, step: 'any', 'data-testid': 'Execution.DurationField' },
+                }}
+              />
+            </Stack>
           </Panel>
 
           {/* Below Notes rather than beside the result buttons: attaching a screenshot is part of
@@ -723,7 +760,10 @@ function ExecutionForm({
                       <Button
                         variant={kind === 'PASSED' ? 'contained' : 'outlined'}
                         fullWidth
-                        disabled={!allowed || submit.isPending || frozen}
+                        // `durationIsNonsense` joins the three: the duration is sent on every
+                        // save, so recording with unreadable text in that box would quietly
+                        // clear it rather than refuse. The field carries the sentence saying so.
+                        disabled={!allowed || submit.isPending || frozen || durationIsNonsense}
                         onClick={() => (isBlocked ? setBlockedDialog(true) : void record(status.id))}
                         data-testid={`Execution.Action.${kind}`}
                         sx={{

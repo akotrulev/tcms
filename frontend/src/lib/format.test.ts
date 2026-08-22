@@ -10,6 +10,8 @@ import {
   formatRatio,
   formatSeconds,
   formatTimeOfDay,
+  durationSecondsField,
+  parseDurationSeconds,
   percentOf,
 } from './format'
 
@@ -159,6 +161,43 @@ describe('formatDuration and formatSeconds', () => {
     // "260ms" — a four-minute case that looks instant.
     expect(formatSeconds(260)).toBe('4m 20s')
     expect(formatDuration(260)).toBe('260ms')
+  })
+})
+
+describe('the stopwatch boundary — seconds on screen, milliseconds on the wire', () => {
+  it.each([
+    ['4.5', 4_500],
+    ['0.1', 100],
+    ['120', 120_000],
+    ['  90  ', 90_000],
+  ])('reads %s seconds as %ims', (text, expected) => {
+    expect(parseDurationSeconds(text)).toBe(expected)
+  })
+
+  it('reads an empty box as null — "I did not time this"', () => {
+    expect(parseDurationSeconds('')).toBeNull()
+    expect(parseDurationSeconds('   ')).toBeNull()
+  })
+
+  it('reads a typed zero as zero, not as an empty box', () => {
+    // The two are different statements, and every falsy check between the tester and the column
+    // would collapse them. A run of sub-second automated checks recorded by hand is the case.
+    expect(parseDurationSeconds('0')).toBe(0)
+    expect(parseDurationSeconds('0')).not.toBeNull()
+  })
+
+  it.each(['abc', '-1', '1.2.3', 'NaN'])('refuses %s rather than clearing the field', (text) => {
+    // undefined, not null: null would SAVE, and saving a clear is what the tester did not ask
+    // for. The caller disables the verdict buttons on this answer.
+    expect(parseDurationSeconds(text)).toBeUndefined()
+  })
+
+  it('round-trips what the row already carries', () => {
+    expect(durationSecondsField(4_500)).toBe('4.5')
+    expect(durationSecondsField(0)).toBe('0')
+    expect(durationSecondsField(null)).toBe('')
+    expect(durationSecondsField(undefined)).toBe('')
+    expect(parseDurationSeconds(durationSecondsField(4_500))).toBe(4_500)
   })
 })
 
