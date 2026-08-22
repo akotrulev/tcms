@@ -6,6 +6,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -118,16 +119,18 @@ public class AuditEvent {
     /**
      * Set when this event is one of many from a single bulk operation.
      *
-     * <p>~~Set~~ — <strong>it never is.</strong> The sentence above still describes a condition the
-     * database has never been in: every bulk service records ONE row per act rather than one per
-     * target, so nothing writes this. It stays in {@code
-     * ArchitectureRulesTest.WRITERLESS_BY_DECISION}.
+     * <p><del><strong>It never is</strong> — every bulk service records ONE row per act rather than
+     * one per target.</del> → <strong>superseded 2026-08-22 (§244).</strong> {@code
+     * execution.ExecutionBulkAssignService} writes one row per target sharing one id, and it is the
+     * first thing in the product to do so. The older shape is still right where it applies: one act
+     * doing one thing to many rows is one row with a {@code target_ids} array, and the audit screen
+     * renders it as "143 items". What forced this column open is an act that does a
+     * <strong>different</strong> thing to each row — a distribute puts twelve cases on five people,
+     * and one {@code changes} document cannot say that truthfully.
      *
-     * <p><strong>It is READ since §242, and the two halves moved apart.</strong> The entry's old
-     * exit — "the audit trail has no screen" — was taken by the reader alone: {@code
-     * identity.AuditEventView} serves this column and the contract declares it, so a client can
-     * group a bulk act's rows the day one is written without that being a contract change. The
-     * writer is slice 4 of {@code docs/plans/2026-08-18-unplanned-gaps.md}, whose traps say so.
+     * <p>Read since §242 ({@code identity.AuditEventView}), written since §244. Both halves of the
+     * pair are now live and its entries are gone from both maps in {@code ArchitectureRulesTest} —
+     * which took three sections and is that rule's longest worked example.
      */
     @Column(name = "bulk_operation_id", updatable = false)
     private UUID bulkOperationId;
@@ -174,6 +177,41 @@ public class AuditEvent {
         event.targetIds = targetIds.toArray(UUID[]::new);
         event.changes = changes;
         event.occurredAt = now;
+        return event;
+    }
+
+    /**
+     * The same, for <strong>one target of a bulk act</strong> — every row of which carries the same
+     * {@code bulkOperationId}.
+     *
+     * <p>Its own overload rather than an eighth parameter on the form above, because that form has
+     * 42 call sites and none of them is inside a bulk act: adding a parameter would be 42 edits
+     * passing {@code null} to say "not a bulk", which is noise at every site that is not this one.
+     *
+     * <p><strong>This is {@code bulk_operation_id}'s first writer</strong>, eighty-odd sections
+     * after {@code V1} created the column. Until §244 every bulk service in this codebase recorded
+     * ONE row per act with a {@code target_ids} array, which is why the column stood empty and why
+     * it sat in {@code ArchitectureRulesTest.WRITERLESS_BY_DECISION}. That shape is still right for
+     * an act that does one thing to many rows; it cannot state an act that does a <em>different</em>
+     * thing to each row, because one row carries one {@code changes} document.
+     *
+     * @param bulkOperationId one id per act, shared by every row it writes. Never null here — a
+     *                        caller with nothing to group calls the seven-argument form.
+     */
+    public static AuditEvent record(
+            UUID projectId,
+            UUID actorUserId,
+            String action,
+            String targetType,
+            List<UUID> targetIds,
+            String changes,
+            Instant now,
+            UUID bulkOperationId) {
+
+        AuditEvent event =
+                record(projectId, actorUserId, action, targetType, targetIds, changes, now);
+        event.bulkOperationId =
+                Objects.requireNonNull(bulkOperationId, "a bulk row needs its act's id");
         return event;
     }
 

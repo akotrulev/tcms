@@ -2,7 +2,6 @@ package com.tcms.execution;
 
 import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
-import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.CompanyContext;
 import java.time.Clock;
@@ -214,18 +213,11 @@ public class ExecutionAssignmentService {
         // for the client to send back as its next If-Match on the verdict.
         executions.saveAndFlush(execution);
 
-        auditEvents.save(AuditEvent.record(
-                execution.getProjectId(),
-                userId,
-                assigneeId == null ? "execution.unassigned" : "execution.assigned",
-                "TEST_EXECUTION",
-                List.of(execution.getId()),
-                // Both ends, because the question an auditor asks is about a MOVE: "who took this
-                // off Ana" is unanswerable from a row that only names where it landed.
-                "{\"from\":" + (previous == null ? "null" : "\"" + previous + "\"")
-                        + ",\"to\":" + (assigneeId == null ? "null" : "\"" + assigneeId + "\"")
-                        + "}",
-                now));
+        // The action name and the changes document are ExecutionAssignmentAudit's since §244 —
+        // the bulk endpoint writes the same fact about a row and the two must read identically in
+        // the trail, which a second concatenation here could not guarantee.
+        auditEvents.save(ExecutionAssignmentAudit.row(
+                execution.getProjectId(), userId, execution.getId(), previous, assigneeId, now));
 
         return new Outcome.Assigned(rendering.detail(companyId, execution));
     }

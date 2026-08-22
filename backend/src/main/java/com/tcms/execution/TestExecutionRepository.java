@@ -28,6 +28,28 @@ public interface TestExecutionRepository extends JpaRepository<TestExecution, UU
             @Param("projectId") UUID projectId, @Param("runId") UUID runId);
 
     /**
+     * The named executions of one run.
+     *
+     * <p>One query for a whole selection, never one per id: a bulk act names up to 500 rows and a
+     * lookup per row is the N+1 that looks harmless because each query is fast — {@link
+     * ExecutionPeople}'s own rule, one file over.
+     *
+     * <p>Ordered by {@code caseId} for {@link #findForRun}'s reason: the row order a database
+     * happens to return is not an order, and a bulk assignment's split must not depend on it. The
+     * caller re-orders by the pinned display-key sequence afterwards, exactly as {@code RunService}
+     * does — but a total order here is what makes that re-order stable when two keys collide.
+     *
+     * <p>An id that names no execution in this run simply does not come back, which is what lets
+     * {@code ExecutionBulkAssignService} report it as skipped rather than refusing the whole act.
+     */
+    @Query("SELECT e FROM TestExecution e WHERE e.projectId = :projectId AND e.runId = :runId "
+            + "AND e.id IN :ids ORDER BY e.caseId")
+    List<TestExecution> findAllInRun(
+            @Param("projectId") UUID projectId,
+            @Param("runId") UUID runId,
+            @Param("ids") Collection<UUID> ids);
+
+    /**
      * One execution, checked against <strong>both</strong> the project and the run in the path.
      *
      * <p>The run predicate is the third gate and it is not redundant: an execution id belonging to
