@@ -42,18 +42,28 @@ export type AssigneeTally = {
  *
  * An unassignment contributes to no tally: `changed` rows landing on nobody have a null
  * `assigneeId`, and "nobody" is not a person with a share.
+ *
+ * **`order` carries the NAMES and not just the ids, and that is what makes the zero row legible.**
+ * Seeding the counts from ids alone put the zero-share person in the list with no name to render —
+ * their name existed only on a `changed` row they have none of — so the row a coordinator most
+ * needs to see rendered blank. The chooser above already holds the name it displayed; it is passed
+ * down rather than looked up again. A name from the server still wins where there is one, because
+ * that is the §6u membership display name rather than whatever the picker had.
  */
 export function tallyByAssignee(
   changed: ExecutionAssignmentChange[],
-  order: string[],
+  order: { id: string; displayName?: string | null }[],
 ): AssigneeTally[] {
   const names = new Map<string, string | null>()
   const counts = new Map<string, number>()
-  for (const id of order) counts.set(id, 0)
+  for (const person of order) {
+    counts.set(person.id, 0)
+    names.set(person.id, person.displayName ?? null)
+  }
 
   for (const change of changed) {
     if (!change.assigneeId) continue
-    names.set(change.assigneeId, change.assigneeName ?? null)
+    names.set(change.assigneeId, change.assigneeName ?? names.get(change.assigneeId) ?? null)
     counts.set(change.assigneeId, (counts.get(change.assigneeId) ?? 0) + 1)
   }
 

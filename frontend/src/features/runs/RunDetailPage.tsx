@@ -27,6 +27,7 @@ import { describeError } from '../../lib/describeError';
 import { compareCaseKeys, formatCount, formatDateTime, formatDuration } from '../../lib/format';
 import { isRunClosed, runStatusColors, runStatusLabels, statusLabels } from '../../lib/labels';
 import { describeRunCode } from '../../lib/links';
+import { inputTestId } from '../../lib/muiTestIds';
 import { ScrollX } from '../../components/ScrollX';
 import { CaseKeyLink, ExecuteCaseLink } from './ExecutionRowLinks';
 import { FailureSummary } from './FailureSummary';
@@ -505,8 +506,15 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
                       checked={selection.length > 0 && selection.length === sorted.length}
                       indeterminate={selection.length > 0 && selection.length < sorted.length}
                       onChange={(event) => setSelection(event.target.checked ? selectAll(sorted) : [])}
-                      inputProps={{ 'aria-label': 'Select every row this filter shows' }}
-                      data-testid="RunDetail.Executions.SelectAll"
+                      // `slotProps`, not `inputProps` — MUI v7's spelling, and this is the trap's
+                      // FIFTH firing (§71, §74 twice, ReviewSettingsPage). `inputTestId` owns the
+                      // shape and carries the label, and it puts both on the INPUT: a bare
+                      // `data-testid` on a MUI Checkbox lands on the wrapper span, where the
+                      // checked state is unreadable, so a test can click it and assert nothing.
+                      slotProps={inputTestId(
+                        'RunDetail.Executions.SelectAll',
+                        'Select every row this filter shows',
+                      )}
                     />
                   </TableCell>
                   <TableCell sx={{ color: 'text.secondary' }}>Case</TableCell>
@@ -531,8 +539,10 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
                         size="small"
                         checked={selection.includes(execution.id)}
                         onChange={() => setSelection(toggleSelected(selection, execution.id))}
-                        inputProps={{ 'aria-label': `Select ${execution.caseKey}` }}
-                        data-testid={`${RowTestId}.Select`}
+                        slotProps={inputTestId(
+                          `${RowTestId}.Select`,
+                          `Select ${execution.caseKey}`,
+                        )}
                       />
                     </TableCell>
                     <TableCell>

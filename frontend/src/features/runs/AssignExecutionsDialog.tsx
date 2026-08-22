@@ -230,7 +230,16 @@ export function AssignExecutionsDialog({
                     {...params}
                     id="assign-people"
                     placeholder="Choose people"
-                    slotProps={{ htmlInput: { ...params.inputProps, 'data-testid': `${TestIdPrefix}.People` } }}
+                    // `params.slotProps.htmlInput`, not `params.inputProps` — MUI v7's spelling,
+                    // and `params.slotProps` is spread back in so overriding one slot does not
+                    // drop the ref and adornments Autocomplete puts on the others.
+                    slotProps={{
+                      ...params.slotProps,
+                      htmlInput: {
+                        ...params.slotProps.htmlInput,
+                        'data-testid': `${TestIdPrefix}.People`,
+                      },
+                    }}
                   />
                 )}
               />
@@ -270,7 +279,7 @@ export function AssignExecutionsDialog({
           )}
 
           {preview && (
-            <AssignPreview result={preview} order={assignees.map((person) => person.id)} />
+            <AssignPreview result={preview} order={assignees} />
           )}
         </Stack>
       </DialogContent>
@@ -335,7 +344,7 @@ function Field({
  * The per-row list is the answer a list of counts cannot give, and it is served in the run's own
  * order so it reads like the checklist behind the dialog.
  */
-function AssignPreview({ result, order }: { result: ExecutionBulkResult; order: string[] }) {
+function AssignPreview({ result, order }: { result: ExecutionBulkResult; order: UserRef[] }) {
   const tally = tallyByAssignee(result.changed, order)
 
   return (
