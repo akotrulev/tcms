@@ -167,4 +167,56 @@ describe('ExecutionPage keyboard', () => {
       'problem: staging kept failing, skipped for now',
     )
   })
+
+  it('`b` opens the precondition checklist and writes nothing', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    const sent = mockSubmit()
+    await renderScreen()
+
+    await user.keyboard('b')
+
+    // Blocked is the one verdict that is never one keystroke, in every mode — the rule
+    // executionMode.ts and ExecutionGrid.tsx both defend, and a keyboard would be the first thing
+    // to break it.
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    expect(sent).toHaveLength(0)
+  })
+
+  it('records nothing on a run that has ended', async () => {
+    const user = userEvent.setup()
+    mockReads({ runStatus: 'COMPLETED' })
+    const sent = mockSubmit()
+    await renderScreen()
+    await screen.findByTestId('Execution.RunClosed')
+
+    await user.keyboard('p')
+
+    expect(sent).toHaveLength(0)
+  })
+
+  it('records nothing for a caller who holds neither result key', async () => {
+    const user = userEvent.setup()
+    mockReads({ permissions: ['run:execute'] })
+    const sent = mockSubmit()
+    await renderScreen()
+    await waitFor(() => expect(screen.getByTestId('Execution.Action.PASSED')).toBeDisabled())
+
+    await user.keyboard('p')
+
+    expect(sent).toHaveLength(0)
+  })
+
+  it("unbinds when the screen unmounts — the keys are this screen's, not the app's", async () => {
+    const user = userEvent.setup()
+    mockReads()
+    const sent = mockSubmit()
+    const { unmount } = render(tree(ROUTE))
+    await screen.findByTestId('Execution.Actions')
+
+    unmount()
+    await user.keyboard('p')
+
+    expect(sent).toHaveLength(0)
+  })
 })

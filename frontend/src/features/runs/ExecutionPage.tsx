@@ -14,9 +14,11 @@ import CenterFocusStrongOutlinedIcon from '@mui/icons-material/CenterFocusStrong
 import TableRowsOutlinedIcon from '@mui/icons-material/TableRowsOutlined';
 import VerticalSplitOutlinedIcon from '@mui/icons-material/VerticalSplitOutlined';
 import { useSnackbar } from 'notistack';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
+import { useAnnounce } from '../../a11y/useAnnounce';
+import { useCan } from '../../auth/useCan';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import type { CaseStatus, StepResult, TestExecution, TestExecutionSummary } from '../../api/types';
 import { useExecution, useProject, useRun, useStatuses, useSubmitResult } from '../../api/queries';
@@ -40,6 +42,9 @@ import {
   parseExecutionMode,
   type ExecutionMode,
 } from './executionMode';
+import { matchShortcut, type ExecutionAction } from './executionKeys';
+import { orderedQueue } from './queueOrder';
+import { ShortcutOverlay } from './ShortcutOverlay';
 import { suggestedVerdict } from './suggestedVerdict';
 
 /**
@@ -141,6 +146,7 @@ export function ExecutionPage() {
               projectId={projectId}
               runId={runId}
               executionId={executionId}
+              modeParam={modeParam}
             />
           )}
         </DataRegion>
@@ -361,12 +367,15 @@ function ExecutionForm({
   projectId,
   runId,
   executionId,
+  modeParam,
 }: {
   execution: TestExecution;
   statuses: CaseStatus[];
   projectId: string;
   runId: string;
   executionId: string;
+  /** The `?mode=` to carry across a keyboard move, or null when the mode is the default. */
+  modeParam: string | null;
 }) {
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
@@ -398,6 +407,12 @@ function ExecutionForm({
   );
   const [blockedDialog, setBlockedDialog] = useState(false);
   const [conflict, setConflict] = useState<string | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  /* The notes box, so `n` can put the caret in it and `Escape` can take it back out. A ref rather
+     than an id lookup: two executions can be mounted at once during a route transition, and
+     `getElementById` would find whichever rendered first. */
+  const commentRef = useRef<HTMLTextAreaElement>(null);
 
   /*
     The residual §41 lists, and the screen that most deserves it.
@@ -500,6 +515,146 @@ function ExecutionForm({
       return statuses.find((s) => s.id === statusId)?.kind ?? null;
     }),
   );
+
+  /*
+    The keyboard (§248). Everything below is an accelerator for a control that is also on screen —
+    the verdict buttons, the Previous/Next pair, the notes field, the shortcuts button — because a
+    shortcut that is the ONLY route to something is not a shortcut.
+  */
+  const announce = useAnnounce();
+  const gate = useCan(projectId);
+
+  /*
+    The permission a verdict needs depends on the row, exactly as the four buttons decide it: a
+    first result is `result:submit`, amending one that is already there is `result:amend`. Asking
+    the same question here rather than a simpler one is what stops the keyboard being a way past a
+    gate the buttons enforce — a shortcut that 403s is worse than a disabled button, because
+    nothing on screen ever said no.
+  */
+  const verdictPermission = execution.status ? 'result:amend' : 'result:submit';
+
+  /* Where this case sits in the run, in the rail's order — `queueOrder.ts` owns that order and
+     this reads it rather than deriving a second one, so the keyboard and the rail cannot disagree
+     about what "next" means. */
+  const queue = orderedQueue(run.data?.executions ?? []);
+  const position = queue.findIndex((candidate) => candidate.id === executionId);
+
+  /*
+    `j` is one keystroke and this form holds unsaved work in four buffers. The `useUnsavedWork`
+    header above says what losing it costs: the marks on this screen are the only record of what
+    happened, so losing them means running the test again.
+
+    So a move is REFUSED while there is unsaved work rather than confirmed — this repo has no
+    shared confirm dialog, and inventing one here would be new machinery guarding one control. The
+    buttons carry the reason in a tooltip (§31, disable-don't-hide) and the keyboard announces the
+    same sentence. `§248 KB-9` asks the live pass whether that is too strict; it is a judgement no
+    file can settle.
+  */
+  const unsavedWork = markedSomeStep || typedSomething || untickedAPrecondition;
+  const moveRefusal = unsavedWork
+    ? 'Record or clear this result first — moving on would discard what you have marked here.'
+    : undefined;
+
+  const moveBy = (direction: -1 | 1) => {
+    if (position < 0) return;
+    if (moveRefusal) {
+      announce(moveRefusal);
+      return;
+    }
+    const target = queue[position + direction];
+    if (!target) {
+      announce(direction === 1 ? 'This is the last case in the run.' : 'This is the first case in the run.');
+      return;
+    }
+    const suffix = modeParam ? `?mode=${modeParam}` : '';
+    navigate(`/projects/${projectId}/runs/${runId}/executions/${target.id}${suffix}`);
+    announce(`Case ${position + 1 + direction} of ${queue.length}. ${target.caseKey}, ${target.caseTitle}.`);
+  };
+
+  /**
+   * What a screen shortcut does, and every reason it may do nothing.
+   *
+   * The refusals are announced rather than silent. A keypress that worked and a keypress that was
+   * refused look identical to somebody not watching the verdict panel, and identical to
+   * *everybody* using a screen reader — which is the whole argument for the live region this
+   * calls into.
+   */
+  const runShortcutAction = (action: ExecutionAction) => {
+    if (action.kind === 'toggleHelp') {
+      setShortcutsOpen((open) => !open);
+      return;
+    }
+    if (action.kind === 'focusNotes') {
+      commentRef.current?.focus();
+      announce('Notes. Press Escape to leave the box.');
+      return;
+    }
+    if (action.kind === 'leaveNotes') {
+      commentRef.current?.blur();
+      announce('Left the notes box. The result keys work again.');
+      return;
+    }
+    if (action.kind === 'move') {
+      moveBy(action.direction);
+      return;
+    }
+
+    // A verdict, and the four gates the buttons already carry, in the same order.
+    if (frozen) {
+      announce('This run has ended, so its results can no longer change.');
+      return;
+    }
+    if (!gate.can(verdictPermission)) {
+      announce(gate.reason(verdictPermission) ?? 'You cannot record a result here.');
+      return;
+    }
+    if (durationIsNonsense) {
+      announce('Give a number of seconds in “How long it took”, or leave it empty.');
+      return;
+    }
+    if (submit.isPending) return;
+
+    if (action.verdict === 'BLOCKED') {
+      // Blocked is never one keystroke — it opens the checklist, in every mode. See
+      // `executionKeys.ts` and this file's own header for the rule.
+      setBlockedDialog(true);
+      announce('Blocked. Say which precondition did not hold.');
+      return;
+    }
+    const status = byKind(action.verdict);
+    if (!status) return;
+    announce(`Recording ${statusLabels[action.verdict]} for ${execution.caseKey}.`);
+    void record(status.id);
+  };
+
+  /*
+    Bound at the screen, not globally: added when this form mounts and removed when it unmounts, so
+    the bindings die with the screen they belong to. `document` rather than a wrapper div because
+    the tester's focus is legitimately all over this page — a step's verdict button, the evidence
+    list, nothing at all — and a container listener would answer only some of those.
+
+    Grid mode never mounts this component (`Workspace` renders the grid INSTEAD of its children),
+    so Grid has no shortcuts. Deliberate, not an omission: a single-key verdict there would have to
+    mean "the row I am on", and Grid has no such thing.
+
+    **No dependency array.** The handler closes over `frozen`, the gate, the duration parse, the
+    pending mutation and the queue position — all of which change between renders. A dependency
+    list here would be a hand-maintained list of exactly the values whose staleness is invisible: a
+    stale closure would refuse a verdict on a run that has since loaded, or allow one on a run that
+    has since closed. Re-registering one listener per render is cheap and cannot be wrong.
+  */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const shortcut = matchShortcut(event);
+      if (!shortcut) return;
+      // Only after a match: an unbound key, or one typed into a box, must reach the page
+      // untouched. Preventing first would swallow the tester's own text.
+      event.preventDefault();
+      runShortcutAction(shortcut.action);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  });
 
   return (
     <Stack sx={{ gap: 3 }}>
@@ -653,7 +808,7 @@ function ExecutionForm({
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
                 helperText="Anything the next reader needs — an error message, the data you used, what you tried."
-                slotProps={{ htmlInput: { 'data-testid': 'Execution.CommentField' } }}
+                slotProps={{ htmlInput: { 'data-testid': 'Execution.CommentField', ref: commentRef } }}
               />
               {/* Seconds here, milliseconds on the wire — `lib/format.ts` owns the conversion.
                   Beside the note rather than beside the verdict buttons: how long it took is part
@@ -829,6 +984,8 @@ function ExecutionForm({
           </Box>
         </Box>
       </Stack>
+
+      <ShortcutOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
       <BlockedDialog
         open={blockedDialog}
