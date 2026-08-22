@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.tcms.IntegrationTestBase;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectRepository;
+import java.sql.Connection;
+import java.sql.ResultSet;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -375,6 +377,115 @@ class AsyncCompanyContextTest extends IntegrationTestBase {
         assertThat(ReflectionTestUtils.getField(taskScheduler, "taskDecorator"))
                 .as("the scheduler must decorate its tasks")
                 .isSameAs(decorator);
+    }
+
+    // ------------------------------------------------- surface 5: the run-schedule poller (§247)
+
+    /**
+     * {@code V68}'s poller, at the boundary it depends on.
+     *
+     * <p>{@code RunScheduleScheduler} iterates companies and opens each in turn, exactly as
+     * {@code RetentionPurge} does above, and its correctness rests entirely on one property: a due
+     * schedule in company A must be invisible while company B is open. Asserted with the poller's
+     * <strong>own predicate</strong> — {@code enabled AND next_fire_at &lt;= now} — because that is
+     * what {@code RunScheduleRepository#findDue} compiles to plus the isolation policy, and it is
+     * the policy half that is invisible when it is wrong.
+     *
+     * <p>Raw SQL rather than the repository, because {@code RunScheduleRepository} is
+     * package-private in {@code com.tcms.execution} and this class is the family that owns the
+     * boundary. {@code RunScheduleFiringTest.theDueQueryIsCompanyScoped} drives the repository
+     * method itself from that package; the two halves are deliberate and each says so.
+     */
+    @Test
+    @DisplayName("a fire in one company cannot see another's schedules")
+    void aFireInOneCompanyCannotSeeAnothersSchedules() throws Exception {
+        seedDueSchedule(ACME, "acme-nightly");
+        seedDueSchedule(GLOBEX, "globex-nightly");
+
+        assertThat(dueScheduleNames(ACME))
+                .as("the poller's loop opens one company at a time; a schedule from the other "
+                        + "company appearing here would be a run created in the wrong client")
+                .containsExactly("acme-nightly");
+        assertThat(dueScheduleNames(GLOBEX)).containsExactly("globex-nightly");
+    }
+
+    /**
+     * The invisible failure, made visible.
+     *
+     * <p>The tempting shape for the poller is one query for every due row in the instance. It
+     * <strong>returns zero rows and logs a successful tick having fired nothing</strong> —
+     * {@code V4}'s {@code nullif(current_setting(…), '')} makes an unset context match nothing
+     * rather than everything, which is the right failure and a completely silent one. This is the
+     * arm that would have caught that shape, and it is the only thing that could: nothing else in
+     * the suite fails when a scheduled job quietly does nothing.
+     */
+    @Test
+    @DisplayName("the due query with NO company open returns nothing, not everything")
+    void theDueQueryWithNoCompanyOpenReturnsNothing() throws Exception {
+        seedDueSchedule(ACME, "acme-nightly");
+        seedDueSchedule(GLOBEX, "globex-nightly");
+
+        try (Connection connection = appConnection()) {
+            assertThat(dueScheduleNames(connection))
+                    .as("fails CLOSED — and a poller that read this as \"there was nothing to "
+                            + "do\" would be silently inert in every deployment")
+                    .isEmpty();
+        }
+    }
+
+    /** A schedule already due, in the given company's own ASYNC project. */
+    private void seedDueSchedule(UUID companyId, String name) throws Exception {
+        try (Connection connection = appConnection(companyId)) {
+            UUID projectId;
+            try (var lookup = connection.prepareStatement(
+                    "SELECT id FROM project WHERE key = 'ASYNC'");
+                 ResultSet rows = lookup.executeQuery()) {
+                assertThat(rows.next()).as("seedProject must have run for %s", companyId).isTrue();
+                projectId = UUID.fromString(rows.getString(1));
+            }
+            try (var delete = connection.prepareStatement(
+                    "DELETE FROM run_schedule WHERE name = ?")) {
+                delete.setString(1, name);
+                delete.executeUpdate();
+            }
+            try (var insert = connection.prepareStatement("""
+                    INSERT INTO run_schedule
+                        (id, company_id, project_id, name, cron_expression, zone_id,
+                         scope_request, enabled, next_fire_at, created_by)
+                    VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?,
+                            '0 0 3 * * *', 'UTC', CAST(? AS jsonb), TRUE,
+                            now() - INTERVAL '1 minute', CAST(? AS uuid))
+                    """)) {
+                insert.setString(1, UUID.randomUUID().toString());
+                insert.setString(2, companyId.toString());
+                insert.setString(3, projectId.toString());
+                insert.setString(4, name);
+                insert.setString(5, "{\"caseIds\":[],\"suiteIds\":[],\"tags\":[\"smoke\"]}");
+                // No app_user row is needed: created_by has no foreign key, because it is an
+                // AUTHORITY re-evaluated at fire time rather than a reference the schema enforces.
+                insert.setString(6, UUID.randomUUID().toString());
+                insert.executeUpdate();
+            }
+        }
+    }
+
+    private List<String> dueScheduleNames(UUID companyId) throws Exception {
+        try (Connection connection = appConnection(companyId)) {
+            return dueScheduleNames(connection);
+        }
+    }
+
+    private static List<String> dueScheduleNames(Connection connection) throws Exception {
+        List<String> names = new ArrayList<>();
+        try (var statement = connection.prepareStatement(
+                "SELECT name FROM run_schedule WHERE enabled AND next_fire_at <= now() "
+                        + "ORDER BY name");
+             ResultSet rows = statement.executeQuery()) {
+            while (rows.next()) {
+                names.add(rows.getString(1));
+            }
+        }
+        return names;
     }
 
     private static ThreadPoolTaskExecutor singleThreadPool() {
