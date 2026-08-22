@@ -81,6 +81,24 @@ export function ExecutionPage() {
   const mode = parseExecutionMode(searchParams.get('mode'));
   const modeParam = executionModeParam(mode);
 
+  /*
+    What arriving here announces — which case, and how far through the run. Raised from the header
+    on ARRIVAL rather than from `moveBy` on the keypress (§248), because the keypress's own
+    announcement was overwritten by the header's generic "page loaded" a moment later, every single
+    time: the sentence was written, shipped, and never heard. Announcing it here also covers
+    arriving from the rail or from a link, which the keyboard's version never did.
+
+    Undefined until both reads land, so the header falls back to its own sentence rather than
+    announcing a position computed from an empty queue.
+  */
+  const arrivalQueue = orderedQueue(run.data?.executions ?? []);
+  const arrivalAt = arrivalQueue.findIndex((candidate) => candidate.id === executionId);
+  const arrival =
+    execution.data && arrivalAt >= 0
+      ? `Case ${arrivalAt + 1} of ${arrivalQueue.length}. `
+        + `${execution.data.caseKey}, ${execution.data.caseTitle}.`
+      : undefined;
+
   const setMode = (next: ExecutionMode) => {
     const params = new URLSearchParams(searchParams);
     const value = executionModeParam(next);
@@ -95,6 +113,7 @@ export function ExecutionPage() {
     <Box>
       <PageHeader
         testId="Execution.Header"
+        announcement={arrival}
         title={execution.data?.caseTitle ?? 'Execution'}
         documentTitle={execution.data ? `${execution.data.caseKey} in this run` : 'Execution'}
         crumbs={[
@@ -567,8 +586,10 @@ function ExecutionForm({
       return;
     }
     const suffix = modeParam ? `?mode=${modeParam}` : '';
+    // The arrival announcement belongs to the destination and is raised by PageHeader — see
+    // `arrival` above. Announcing here as well was the defect: this sentence was replaced by the
+    // header's a moment later, so the progress it carries never reached anybody.
     navigate(`/projects/${projectId}/runs/${runId}/executions/${target.id}${suffix}`);
-    announce(`Case ${position + 1 + direction} of ${queue.length}. ${target.caseKey}, ${target.caseTitle}.`);
   };
 
   /**

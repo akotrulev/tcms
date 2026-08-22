@@ -29,6 +29,7 @@ export function PageHeader({
   crumbs,
   actions,
   meta,
+  announcement,
   testId,
 }: {
   title: ReactNode;
@@ -39,6 +40,17 @@ export function PageHeader({
   actions?: ReactNode;
   /** Identifiers and counts that belong with the heading rather than in the body. */
   meta?: ReactNode;
+  /**
+   * What to announce on arrival, instead of "<title> page loaded".
+   *
+   * For a screen where the generic sentence is the *less* useful of two truths. The execution
+   * screen is the case: arriving there by `j`/`k` or from the rail, what a screen-reader user
+   * needs is which case and how far through the run it is — and §248 announced exactly that from
+   * its move handler, where it was overwritten a moment later by this component's own line, every
+   * time. One announcement per arrival, raised from the one place that knows the page has
+   * rendered, is the shape that cannot race with itself.
+   */
+  announcement?: string;
   testId: string;
 }) {
   const tabTitle = documentTitle ?? (typeof title === 'string' ? title : undefined);
@@ -53,8 +65,9 @@ export function PageHeader({
    */
   const announce = useAnnounce();
   useEffect(() => {
-    if (tabTitle) announce(`${tabTitle} page loaded`);
-  }, [tabTitle, announce]);
+    const sentence = announcement ?? (tabTitle ? `${tabTitle} page loaded` : undefined);
+    if (sentence) announce(sentence);
+  }, [announcement, tabTitle, announce]);
 
   return (
     <Box component="header" data-testid={testId} sx={{ mb: 3 }}>

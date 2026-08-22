@@ -6,8 +6,9 @@ import { api } from '../../api/client'
 import type { ExecutionResultInput } from '../../api/queries'
 import type { CaseStatus, RunStatus, TestExecution, TestExecutionSummary } from '../../api/types'
 import { AnnouncerProvider } from '../../a11y/AnnouncerProvider'
-import { anExecution, aProject, aRun } from '../../test/fixtures'
+import { anExecution, aProject, aRun, aUserRef } from '../../test/fixtures'
 import { heldPermissions } from '../../test/permissions'
+import { SessionRecoveryProvider } from '../../auth/SessionRecoveryProvider'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TestProviders } from '../../test/TestProviders'
 import { EXECUTION_SHORTCUTS } from './executionKeys'
@@ -88,7 +89,24 @@ function mockReads({
         ],
       }
     }
-    if (/^\/projects\/[^/]+\/runs\/[^/]+\/executions\/[^/]+$/.test(path)) return execution
+    // Keyed on the id in the path, not one execution for every id. `j` and `k` navigate, so an
+    // arm that moves then reads is asking about the DESTINATION — and a double that answered the
+    // starting row for every id made the move look like it had not happened, which is how the
+    // announcement arm came to expect TC-3 and be told about TC-2. The `execution` override still
+    // serves the row the arms start on; the neighbours are derived from the same keys the run's
+    // summaries use, so the rail and the detail cannot disagree.
+    const executionMatch = /^\/projects\/[^/]+\/runs\/[^/]+\/executions\/([^/]+)$/.exec(path)
+    if (executionMatch) {
+      const id = executionMatch[1]
+      if (id === execution.id) return execution
+      const key = { [EX_1]: 'TC-1', [EX_3]: 'TC-3' }[id]
+      if (!key) throw new Error(`unmocked execution: ${id}`)
+      return anExecution({ id, caseKey: key, caseTitle: `The ${key} case`, lockVersion: 1 })
+    }
+    // The assignee control reads the project's members. Not varied by any arm — the keyboard
+    // never assigns — but a missing arm is a failed read, and a failed read on this screen took
+    // every arm in the file down before a key was pressed.
+    if (/^\/projects\/[^/]+\/members$/.test(path)) return [aUserRef()]
     throw new Error(`unmocked read: ${path}`)
   }) as never)
 }
@@ -115,6 +133,15 @@ function Where() {
 function tree(route: string) {
   return (
     <TestProviders client={createTestQueryClient()} userId="user-1" route={route}>
+      {/*
+        SessionRecoveryProvider is mounted here, not in TestProviders: that helper deliberately
+        carries the smallest tree a unit test can need, and §248 gave ExecutionForm a
+        `useUnsavedWork` registration — which is `useSessionRecovery`, which THROWS outside its
+        provider. Without it every arm in this file died in the region boundary before a key was
+        pressed. AuthContext is an ancestor already (TestProviders wraps the whole tree in it),
+        which is what this provider needs to construct.
+      */}
+      <SessionRecoveryProvider>
       <AnnouncerProvider>
         <Routes>
           <Route
@@ -125,6 +152,7 @@ function tree(route: string) {
         </Routes>
         <Where />
       </AnnouncerProvider>
+      </SessionRecoveryProvider>
     </TestProviders>
   )
 }
