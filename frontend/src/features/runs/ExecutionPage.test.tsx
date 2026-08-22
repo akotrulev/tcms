@@ -272,4 +272,34 @@ describe('ExecutionPage keyboard', () => {
 
     await waitFor(() => expect(screen.getByTestId('Where')).toHaveTextContent(`/executions/${EX_3}`))
   })
+
+  it('`n` puts the caret in the notes box', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    mockSubmit()
+    await renderScreen()
+
+    await user.keyboard('n')
+
+    expect(screen.getByTestId('Execution.CommentField')).toHaveFocus()
+  })
+
+  it('`Escape` leaves the notes box, and the verdict keys work again after it', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    const sent = mockSubmit()
+    await renderScreen()
+
+    await user.keyboard('n')
+    await user.keyboard('it passed on the third try')
+    expect(sent).toHaveLength(0)
+
+    await user.keyboard('{Escape}')
+    expect(screen.getByTestId('Execution.CommentField')).not.toHaveFocus()
+
+    await user.keyboard('p')
+    await waitFor(() => expect(sent).toHaveLength(1))
+    // The note travels with the verdict — Escape leaves the box, it does not discard what is in it.
+    expect(sent[0]).toMatchObject({ statusId: 'st-passed', comment: 'it passed on the third try' })
+  })
 })

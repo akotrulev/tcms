@@ -42,7 +42,7 @@ import {
   parseExecutionMode,
   type ExecutionMode,
 } from './executionMode';
-import { matchShortcut, type ExecutionAction } from './executionKeys';
+import { matchNotesShortcut, matchShortcut, type ExecutionAction } from './executionKeys';
 import { orderedQueue } from './queueOrder';
 import { ShortcutOverlay } from './ShortcutOverlay';
 import { suggestedVerdict } from './suggestedVerdict';
@@ -807,6 +807,22 @@ function ExecutionForm({
                 minRows={3}
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
+                /*
+                  The one binding that must fire while a text field has focus, which is why it has
+                  its own scope in the map and its own matcher. Handled here rather than in the
+                  screen listener because that listener refuses typing targets on purpose — asking
+                  it to make an exception would be a hole in the guard this whole feature is about.
+
+                  `stopPropagation`, so Escape here does not also close a dialog open above the
+                  form.
+                */
+                onKeyDown={(event) => {
+                  const shortcut = matchNotesShortcut(event);
+                  if (!shortcut) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  runShortcutAction(shortcut.action);
+                }}
                 helperText="Anything the next reader needs — an error message, the data you used, what you tried."
                 slotProps={{ htmlInput: { 'data-testid': 'Execution.CommentField', ref: commentRef } }}
               />
