@@ -10947,6 +10947,35 @@ components:
             Required: this endpoint records a verdict. A status outside the project's own
             vocabulary is a 400 on this field.
         comment: { type: string, nullable: true }
+        durationMs:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 0
+          description: |
+            How long the test took, in milliseconds.
+
+            **Optional, and it must stay optional.** `tcms_record_result` (MCP) and `result record`
+            (CLI) both write this operation; a required field here breaks both, and
+            `writeConformance.test.ts` in each package drives every write arm.
+
+            `null` means **clear it**, on the same terms as `comment` — this body states the desired
+            state rather than a patch of it. A tester who reopens a result and saves without touching
+            the stopwatch field clears a duration that was there, which is the same rule the comment
+            has carried since Phase 1.
+
+            The column is not new. `test_execution.duration_ms` has existed since `V1`, is served on
+            `TestExecution`, `TestExecutionSummary` and `CaseHistoryEntry`, is copied into
+            `execution_fact` and is summed into the run summary report's "recorded duration".
+            **What did not exist was any writer at all** — the ingestion parsers read a duration out
+            of a JUnit/TestNG/Cucumber report and put it in the ingestion job's payload JSON, never
+            in the column — so every consumer above has answered null since the schema's first day.
+            This field is that column's first writer.
+
+            **Milliseconds on the wire, seconds on screen.** The unit is milliseconds because the
+            report dialects report milliseconds; the SPA's control is in seconds because a tester
+            does not think in milliseconds. The conversion is `frontend/src/lib/format.ts`, one
+            implementation, at the boundary.
         stepResults:
           type: array
           description: |
