@@ -3131,3 +3131,34 @@ is only as good as the derivation.
 | `§243 RN-4` | Subscribe a channel to `review.approved`, then set a **failure threshold** on it | The threshold control is **shown and inert**, as it is for `work.item_assigned`. Serving it per event type is deliberate (`NotificationSubscription.minFailures`) — hiding it would put a rule the server owns into the client. Confirm the help text says so rather than leaving a control that looks broken. |
 | `§243 RN-5` | Save a channel subscribed to all four `review.*` events, reload the page, and reopen it | All four come back checked. The round-trip is what proves the generated union and the server's `DELIVERABLE_EVENTS` agree in the one place a user can reach — `NotificationEventTypeTest` asserts that against the documents on disk, which is not the same as against a running server. |
 | `§243 RN-6` | Open the **delivery log** for a channel that has fired | Review deliveries render with their event in words. `notificationEventLabel` has a fallback, so a name the vocabulary later drops still reads — check that a `review.*` row does **not** fall back to the humanized wire name, which would mean the label map and the log disagree. |
+
+---
+
+## §244 — the stopwatch on the result form, and the two screens that must not clear it
+
+**Six rows, none run** (§65). ⚠️ **And this slice is unverified in a second sense the others were
+not: NO AUTOMATED GATE WAS RUN AGAINST IT EITHER.** Area A was built under a directive to run no
+tests at all — no `./gradlew build`, no `npm run test:run`, no `npm run build`, no `npm run lint` —
+so the usual "the suite behind these rows is green" sentence **cannot be written here**. Two
+targeted backend classes were run before that directive arrived (`ExecutionDurationTest` and
+`IngestionEndpointTest`, BUILD SUCCESSFUL); everything else is unrun. Read every row below as
+resting on nothing but the code.
+
+Ids are `§244 ED-*`; `ED` was grepped against this file and the mutation queue before minting.
+
+**Lane `A3` — execution.** Every row is the result form or the run's checklist, which is what `A3`
+already drives. No new fixture: `A3` records results already, and the control is on the screen it
+records them from. `ED-5` wants a run that `A3` has recorded into **twice**, which its amend rows
+already produce.
+
+> **The one row that needs another surface.** `ED-6` drives the CLI or MCP, the same shape
+> `§242 LG-4` established, and reuses `A3-24`'s `Agent` token rather than minting one.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§244 ED-1` | Open a case in a run (**Focus** mode), scroll to **Notes**, type `4.5` into **How long it took (seconds)** and record **Passed** | The result saves. Reopen the execution: the box reads **4.5** again. This is the whole slice in one row — before it, the field a person could set did not exist and `duration_ms` had no writer at all. |
+| `§244 ED-2` | Reopen that execution, **clear the box**, and record again | The duration is **gone**, not preserved. The body states the whole result, so an empty box is a clear — the same rule the comment has carried since Phase 1, and the reason the helper text says so out loud. A build that keeps the old number here has made the field un-clearable from the UI. |
+| `§244 ED-3` | Type `abc` (or `-1`) into the box | The field goes **red** with *"Give a number of seconds, or leave it empty."* and **all four verdict buttons disable**. ⚠️ **Check the disabling specifically** — without it, recording with unreadable text would send `null` and *silently clear* a duration the tester never meant to touch, which is worse than the refusal. |
+| `§244 ED-4` | Type `0` and record | Saves as **0**, and reopening shows `0` rather than an empty box. "It was instant" and "I did not time this" are different statements and every falsy check between the form and the column would collapse them. |
+| `§244 ED-5` | ⚠️ **The regression this slice is most likely to cause.** Record a duration in **Focus** mode, then switch to **Grid** mode and mark that same row **Passed** from the row's own buttons. Reopen the execution | The duration is **still there**. Grid mode has no duration control, and the body is total state — so a row verdict that omitted the field would clear a number the tester recorded on another screen, from a screen that never showed it to them. Repeat with the grid's **Blocked** dialog, which is the second such site. |
+| `§244 ED-6` | ⚠️ **Needs a CLI or MCP write**, under `A3-24`'s `Agent` token. `tcms result record TR-n TC-n --status Passed --duration-ms 4500`, then open that execution in the browser | The screen shows **4.5** seconds. Then run the same command with `--duration-ms ''` and confirm the screen shows an empty box. The unit boundary lives in one place (`frontend/src/lib/format.ts`) and the CLI names milliseconds in its own flag rather than converting — this row is what proves the two ends agree about which unit they are in. |

@@ -2,11 +2,73 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-21 (**§243** — **review-workflow notifications, and the frontend half is TWO LABEL MAPS.** The notification event vocabulary went from two members to six (`review.requested`, `review.endorsed`, `review.changes_requested`, `review.approved`) and **not one component changed**: the channel dialog's checkbox list is derived from `NOTIFICATION_EVENT_TYPES`, which is `Object.keys(notificationEventTypeLabels)`. **The `satisfies Record<NotificationEventType, string>` on `notificationEventTypeLabels` AND `notificationEventTypeHelp` is what turned a regenerated `schema.d.ts` into seven compile errors** — in `labels.ts`, `NotificationChannelDialog.tsx` and `NotificationSettingsPage.tsx` — instead of four blank labels and four checkboxes with no help text. That is the whole argument for the `satisfies` pattern, observed rather than asserted: run `npm run build` **before** adding the labels and read the failure. Frontend suite unchanged at **1602 / 120** — no test needed extending, because `NotificationSettingsPage.test.tsx` targets checkboxes by test id rather than counting them, which is the reason a vocabulary change was free here and would not have been under a count assertion. Gates: build clean, lint **0 warnings**, **1602 / 120**.)
+**Last verified:** 2026-08-22 (**§244** — **execution duration, and the frontend half is ONE CONTROL AND TWO SCREENS THAT MUST CARRY A FIELD THEY DO NOT SHOW.** ⚠️ **GATES NOT RUN — no `npm run test:run`, no `npm run build`, no `npm run lint` was run against this work**, under the no-gates directive of 2026-08-22; the suite count therefore stays quoted at §243's **1602 / 120** and is a *stale* figure, not a measured one. **THE RULE TO CARRY: when a write body states TOTAL STATE, every call site must send every field — including the ones its own screen has no control for.** `ExecutionGrid`'s row verdict and the grid-mode Blocked dialog both record a result and neither shows a duration, so omitting `durationMs` there would CLEAR a number the tester entered in Focus mode, from a screen that never displayed it. Both already sent `comment` back for exactly this reason and the precedent was written in their comments — **the field was added by re-reading those comments, not by a test**, and `ED-M9` records that there is still no automated observer for either. **The unit boundary is `lib/format.ts` and nowhere else** — `parseDurationSeconds` / `durationSecondsField`, seconds on screen because a tester does not think in milliseconds, milliseconds on the wire because that is what a JUnit/TestNG/Cucumber report reports. The CLI deliberately names its flag `--duration-ms` rather than converting, so the conversion has one implementation and not three. **`parseDurationSeconds` returns THREE things and the third is the point**: `null` for an empty box ("I did not time this"), a number for a value, and `undefined` for unreadable text — which disables the verdict buttons rather than saving. A two-state parse would have made garbage in the box a **silent clear**, which is worse than a refusal because the tester never asked for it. **Zero is a duration**, so nothing on this path may use a falsy check. **`ExecutionPage.tsx` has NO component test in this repository** and none was invented; `format.test.ts` covers the parse and the browser queue's `§244 ED-1..ED-6` covers the screen. Gates: **NOT RUN**.)
 
-**Superseded header below — §242's, kept because §243 verified none of it.** (**§242** — **the audit trail: one lazy `AuditLogPage` behind `/projects/:projectId/audit` AND `/admin/audit`.** **A LOCAL `tsc --noEmit` PASSED CLEAN WHILE THREE OF THIS SCREEN'S TESTS FAILED** — the working agreement's warning arriving on schedule, and worth carrying because it was tempting to treat the typecheck as coverage while `shanks` was down. **THE RULE TO CARRY: the rail's disable-don't-hide rule has exactly one exception now, and it is written at the type rather than left for the next reader to discover.** `AppShell.AuditReach` gates the two audit entries on `project:audit` / `audit:view` and **HIDES** them — the opposite of §31 and of the five separate comments in that file arguing that hiding lies about the *product*. Taken at the owner's direction: an audit screen's subject is who did what, so advertising it to somebody who may not read it invites the request the permission exists to refuse. It fails closed while pending. **One component for two routes**, branching on whether `useParams` yields a `projectId`; two components would be two renderings of the same twelve columns with nothing keeping them identical. **`Table`, NOT `DataGrid` — and §241 already measured why**: DataGrid does not render in jsdom, so the twelve component arms are only possible on a `Table`. **Action labels go through a curated map + computed fallback (`auditActionLabel`), NOT `satisfies Record<Union, string>`** — `AuditEvent.action` is a bare `string` in the contract because the verb set grows with every slice, so there is no union to be total against; `notificationEventLabel` is the same shape for the same reason. A refusal renders as a sentence **and makes no request at all**. Filters live in the URL (`useAuditFilters`, `useCaseFilters`'s arrangement). Gates: **1602 / 120**, build and lint clean.)
+**Superseded header below — §243's, kept because §244 verified only the execution screen.** (2026-08-21: **§243** — **review-workflow notifications, and the frontend half is TWO LABEL MAPS.** The notification event vocabulary went from two members to six (`review.requested`, `review.endorsed`, `review.changes_requested`, `review.approved`) and **not one component changed**: the channel dialog's checkbox list is derived from `NOTIFICATION_EVENT_TYPES`, which is `Object.keys(notificationEventTypeLabels)`. **The `satisfies Record<NotificationEventType, string>` on `notificationEventTypeLabels` AND `notificationEventTypeHelp` is what turned a regenerated `schema.d.ts` into seven compile errors** — in `labels.ts`, `NotificationChannelDialog.tsx` and `NotificationSettingsPage.tsx` — instead of four blank labels and four checkboxes with no help text. That is the whole argument for the `satisfies` pattern, observed rather than asserted: run `npm run build` **before** adding the labels and read the failure. Frontend suite unchanged at **1602 / 120** — no test needed extending, because `NotificationSettingsPage.test.tsx` targets checkboxes by test id rather than counting them, which is the reason a vocabulary change was free here and would not have been under a count assertion. Gates: build clean, lint **0 warnings**, **1602 / 120**.)
+
+**Superseded header below — §242's, kept because §244 verified none of it.** (**§242** — **the audit trail: one lazy `AuditLogPage` behind `/projects/:projectId/audit` AND `/admin/audit`.** **A LOCAL `tsc --noEmit` PASSED CLEAN WHILE THREE OF THIS SCREEN'S TESTS FAILED** — the working agreement's warning arriving on schedule, and worth carrying because it was tempting to treat the typecheck as coverage while `shanks` was down. **THE RULE TO CARRY: the rail's disable-don't-hide rule has exactly one exception now, and it is written at the type rather than left for the next reader to discover.** `AppShell.AuditReach` gates the two audit entries on `project:audit` / `audit:view` and **HIDES** them — the opposite of §31 and of the five separate comments in that file arguing that hiding lies about the *product*. Taken at the owner's direction: an audit screen's subject is who did what, so advertising it to somebody who may not read it invites the request the permission exists to refuse. It fails closed while pending. **One component for two routes**, branching on whether `useParams` yields a `projectId`; two components would be two renderings of the same twelve columns with nothing keeping them identical. **`Table`, NOT `DataGrid` — and §241 already measured why**: DataGrid does not render in jsdom, so the twelve component arms are only possible on a `Table`. **Action labels go through a curated map + computed fallback (`auditActionLabel`), NOT `satisfies Record<Union, string>`** — `AuditEvent.action` is a bare `string` in the contract because the verb set grows with every slice, so there is no union to be total against; `notificationEventLabel` is the same shape for the same reason. A refusal renders as a sentence **and makes no request at all**. Filters live in the URL (`useAuditFilters`, `useCaseFilters`'s arrangement). Gates: **1602 / 120**, build and lint clean.)
 
 **Superseded header below — §241's, kept because §242 verified none of it.** (**§241** — **the org chart screen: `/org-chart`, `useOrgChart`, and the tree flattening that became shared.** **THE RULE TO CARRY: a notice that appears only when something is hidden IS the disclosure it was meant to avoid.** The matrix columns are clipped to the reader's own `project:read`, so somebody missing six of eight projects gets a grid **that looks complete** — and the standing line *"Only projects you can open are shown here."* therefore renders **unconditionally**, for a Company Admin who sees everything too. Its test drives exactly that reader, which is the case a conditional implementation would pass. **`/org-chart` sits BESIDE `/admin/teams`, not beneath it**: every affordance there answers to `company:teams` and this screen has no gate at all — no `PermissionGate`, no `enabled`, no `lib/permissions.ts`. **`flattenTeamTree` (`features/admin/teamTree.ts`) is the one tree flattening**, extracted from `TeamsPage` in its own commit and called by `OrgChartTeams`; orphans and cycle members surface at the ROOT. **`keys.orgChart` is invalidated by all nine staffing writes, and a tenth is caught by a rule rather than by the list** — the last arm of `orgChartInvalidation.test.tsx` reads `admin.ts` through `import.meta.glob` and fails any `onSuccess` touching `teams`/`users`/`roleAssignments`/`projects` without it. **`OrgChartMatrix` is a `Table` and NOT `DataGrid`, which is load-bearing: DataGrid does not render in jsdom** (its virtualization measures through a `ResizeObserver` the test shim never fires, so the scroller is 0×0 with no rows) — measured, six arms failed on the DataGrid version, and `CaseListPage` is the repo's only DataGrid screen and has no component test at all. Whole-screen bundle cost **+7,054 B of dist JS (+0.37 %)**. Nine new fixtures including the four org-chart factories. Gates: **1582 / 119**.)
+
+## §244 — THE FIELD TWO SCREENS MUST SEND AND NEITHER SHOWS
+
+**Read this before touching `features/runs/ExecutionPage.tsx`, `ExecutionGrid.tsx`, or
+`lib/format.ts`'s duration helpers — and before adding a field to any body the server treats as
+total state.**
+
+> ⚠️ **UNGATED.** No `npm run test:run`, `npm run build` or `npm run lint` was run against this
+> work. The **1602 / 120** figure quoted above is §243's and is stale.
+
+### The rule, which cost two edits nothing found for us
+
+`PATCH …/executions/{id}` states the **whole** result rather than patching it: an omitted field is
+a **clear**. `comment` has carried that since Phase 1, and both non-detail call sites already sent
+it back for exactly that reason, with the argument written in their own comments:
+
+| Site | Has a duration control? | Must send `durationMs` |
+|---|---|---|
+| `ExecutionPage` (Focus/Split detail form) | **yes** | from the box |
+| `ExecutionGrid.mark` (row verdict) | no | from `client.fetchQuery(executionQueryOptions(…))` |
+| `BlockedFromGrid` (grid-mode Blocked dialog) | no | from `useExecution`'s detail |
+
+**A screen with no control for a field is exactly the screen that will forget it**, and forgetting
+it here silently discards a number the tester entered somewhere else. There is **no automated
+observer for either site** — `ED-M9` in the mutation queue and `§244 ED-5` in the browser queue
+record that. The field was added by re-reading the comment-preservation comments, not by a failing
+test.
+
+### The unit boundary lives in `lib/format.ts`, once
+
+- `parseDurationSeconds(text)` — screen seconds → wire milliseconds.
+- `durationSecondsField(ms)` — the inverse, for seeding the control.
+
+Seconds on screen because a tester does not think in milliseconds; milliseconds on the wire because
+that is the unit every report dialect reports. **The CLI names its flag `--duration-ms` rather than
+converting**, so the conversion has one implementation and not three — the same argument
+`lib/labels.ts` and `lib/results.ts` carry.
+
+### `parseDurationSeconds` returns THREE things, and the third is the whole design
+
+| Input | Answer | Meaning |
+|---|---|---|
+| `''` / whitespace | `null` | "I did not time this" — **saved**, and clears a stored value |
+| `'0'` | `0` | "it was instant" — **not** the same statement, and every falsy check collapses them |
+| `'4.5'` | `4500` | the value |
+| `'abc'`, `'-1'` | `undefined` | unreadable — the caller **disables the verdict buttons** |
+
+A two-state parse folding the last row into `null` would make garbage in the box a **silent
+clear**: the tester types nonsense, presses Passed, and a duration they recorded earlier
+disappears. Refusing is worse UX and better behaviour, which is why the helper text says out loud
+that an empty box clears.
+
+### No component test exists for this screen
+
+`ExecutionPage.tsx` has **no `.test.tsx`** in this repository and none was invented for this area —
+nothing in `frontend/src` drives `useSubmitResult` at all. `lib/format.test.ts` covers the parse
+(the half testable without a harness); the screen is `§244 ED-1..ED-6` in the browser queue. Note
+this before assuming the control is covered.
+
+---
 
 ## §242 — THE ONE GATED PAIR IN THE RAIL, AND THE LABELS THAT CANNOT BE TOTAL
 

@@ -2929,3 +2929,34 @@ about, and it is **expected GREEN** — which makes it the recorded gap rather t
 | `§243 RN-M10` | In `ReviewRequestedNotifier`, resolve the assignee with `notices.nameOf(payload.assigneeTeamId())` for the team arm | **Red** — nothing today, ⚠️ **another gap**: `ReviewEndpointTest.askingATeamIsAnOccurrence` asserts the *payload*, and `ReviewRenderingTest.aTeamIsAReviewer` passes the name in already-resolved. **No test drives a team request through the handler**, so a team resolved as a person — which yields null and renders "someone who is no longer on the instance" — would ship. One e2e arm closes it. |
 | `§243 RN-M11` | In `NotificationTexts.reviewEndorsed`, change the title to `"Approved by " + who` | **Red** — `ReviewRenderingTest.theEndorsementIsNotASignOff`, which asserts the title contains no form of "approv". The whole naming argument of this slice, asserted on the one string a phone actually shows. |
 | `§243 RN-M12` | Delete the `submitter != null` guard in `NotificationTexts.verdict` so the fact is always added | **Red** — `ReviewRenderingTest.nobodyIsNotAPerson`. A fact saying the artifact was submitted by nobody invites the reader to look for a person who was never recorded. |
+
+---
+
+## §244 amendment (2026-08-22) — the duration that was already there
+
+⚠️ **Read this before the table.** Every other section here opens by saying the suite behind it is
+green. **This one cannot.** Area A was built under a directive to run no gates at all, so
+`./gradlew build` has **not been run** against this code. Two targeted classes were run before that
+directive arrived — `ExecutionDurationTest` (4 arms) and `IngestionEndpointTest` — and reported
+BUILD SUCCESSFUL. Nothing else. The rows below are predictions against unrun code, not against a
+measured baseline.
+
+**No migration.** `test_execution.duration_ms BIGINT` shipped in `V1__initial_schema.sql:845`. The
+slice is a write path for a column that had **no writer of any kind** since 2026-07-30 — the reads
+(`TestExecutionSummaryView`, `TestExecutionView`, `CaseHistoryView`, `ExecutionSource`'s copy into
+`execution_fact`, `RunSummaryReport`'s sum) all shipped years-of-commits ago and all answered null.
+
+**The row to read first is `ED-M6`**, the one that is expected **GREEN** and is therefore the
+recorded gap rather than a check.
+
+| # | Mutate | Expect |
+|---|---|---|
+| `§244 ED-M1` | In `TestExecution.record`, guard the duration assignment: `if (durationMs != null) this.durationMs = durationMs;` | **Red** — `ExecutionDurationTest.omittingTheDurationClearsIt`. The single most likely edit to this method, because it *looks* like defensiveness: it makes the field un-clearable and silently diverges from `comment`, which sits on the same form and takes the opposite reading of the same absence. |
+| `§244 ED-M2` | Guard it on truthiness instead: `if (durationMs != null && durationMs > 0)` | **Red** — `ExecutionDurationTest.zeroIsADurationAndNotAnAbsence`. A run of sub-second automated checks recorded by hand is the case where this loses real data, and it is invisible to any assertion written about a nonzero duration. |
+| `§244 ED-M3` | In `ExecutionService.validate`, `return errors` immediately after putting the `durationMs` fault | **Red** — `ExecutionDurationTest.aNegativeDurationIsAFieldError`, whose payload carries a second fault and asserts **both** keys come back. The caller is a tester at the end of a test, which is the worst moment to be sent round a loop for one message at a time. |
+| `§244 ED-M4` | Delete the `request.durationMs() < 0` check entirely | **Red** — the same test's 400 assertion. ⚠️ **Note what does NOT catch it**: `openapi.yaml` declares `minimum: 0`, and nothing in this repository enforces an OpenAPI `minimum` at runtime. The contract is documentation here; the check is the check. |
+| `§244 ED-M5` | In `IngestionService.write`, pass `null` where `result.durationMs()` now goes | **Red** — `IngestionEndpointTest.theReportedDurationIsRecorded`. ⚠️ **This is the mutation that restores the state the product actually shipped in for a year**, which is why it earns a row: the parsers always recovered the number and it always went into the job's payload JSON instead of the column. |
+| `§244 ED-M6` | ⚠️ **A gap, not a mutation.** Record durations by hand across a run, then generate that run's **Run Summary** report and read the "recorded duration" line | **Expected GREEN, and this is the recorded gap.** `RunSummaryReport` sums `execution_fact.duration_ms`, which `ExecutionSource` refreshes from `test_execution` on a schedule and on `execution.results_changed`. **No test in this repository asserts that a hand-recorded duration reaches the report** — the reporting suite's fixtures predate any writer, so they were all summing zero. The whole "how long did this cycle take last time" question this area exists to answer runs through that path, and nothing observes it end to end. Closing it is one arm in `reporting` that records a duration, refreshes, and reads the sum. |
+| `§244 ED-M7` | Drop `duration_ms` from `ExecutionSource`'s `ON CONFLICT DO UPDATE` set-list | **Red** — nothing today. ⚠️ **A second gap.** The column is in that seven-column set-list already, so an **amended** duration corrects itself on the next tick and a dropped entry would freeze the first value ever recorded. Until now that was unobservable because the value was always null, which is exactly why no test covers it. Same fix as `ED-M6`, one more assertion. |
+| `§244 ED-M8` | In `ExecutionPage`, remove `durationIsNonsense` from the verdict buttons' `disabled` | **Red** — nothing. ⚠️ **Frontend gap, recorded rather than closed.** `ExecutionPage.tsx` has **no component test in this repository** and none was invented for this slice. The behaviour is `§244 ED-3` in the browser queue. `frontend/src/lib/format.test.ts` covers `parseDurationSeconds` returning `undefined` for unreadable text, which is the half that *can* be tested without a harness. |
+| `§244 ED-M9` | In `ExecutionGrid.mark` (and the grid-mode Blocked dialog), delete the `durationMs: detail.durationMs` line | **Red** — nothing. ⚠️ **The most dangerous gap in this slice.** Both call sites carry a field they show no control for, purely because the body is total state; omitting it clears a duration recorded on another screen. It is `§244 ED-5` in the browser queue and has no automated observer at all. |

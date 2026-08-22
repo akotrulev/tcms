@@ -389,8 +389,20 @@ implementation plan at `docs/plans/2026-08-18-unplanned-gaps.md`.*
 - **No bulk execution assignment.** Cases have `/projects/{projectId}/cases/bulk`; executions have
   only a per-execution assignee endpoint. Splitting a 300-case run across five testers is 300
   operations.
-- **No time tracking on results.** No elapsed or duration field on an execution, so "how long did
-  this cycle take last time" — the question a lead plans the next cycle from — is unanswerable.
+- **~~No time tracking on results.~~ ~~No elapsed or duration field on an execution~~, so "how long
+  did this cycle take last time" — the question a lead plans the next cycle from — is unanswerable.**
+  → **superseded 2026-08-22 (§244).** The second sentence was false when it was written and the
+  first was true for a different reason. `test_execution.duration_ms BIGINT` has existed since
+  `V1__initial_schema.sql:845`, is mapped at `TestExecution.java:96`, is served on
+  `TestExecutionSummary`, `TestExecution` and `ExecutionHistoryEntry`, is copied into
+  `execution_fact` by `ExecutionSource` and is summed into the run summary report's "recorded
+  duration" at `RunSummaryReport.java:396`. **What it had was no writer at all** — the ingestion
+  parsers recovered a duration and `IngestionService#payload` stashed it in the ingestion job's
+  payload JSON, never in the column — so five readers and one report answered null for every run in
+  the product from the schema's first day. Closed by area A of
+  `docs/plans/2026-08-18-unplanned-gaps.md`: `ExecutionResultInput.durationMs` gives a person
+  recording a result by hand a way to set it, and `IngestionService` now writes the value it
+  already had. **Built and unverified** — see `docs/handoff/244-the-duration-that-was-already-there.md`.
 - **No cross-project case search.** The repository is project-scoped throughout, though My Work,
   the boards and the org chart all went cross-project. "Have we tested this anywhere in the
   company" cannot be asked.
