@@ -142,12 +142,30 @@ export function RunSchedulePage() {
           testId="RunSchedules.Region"
           state={{ ...schedules, refetch: () => void schedules.refetch() }}
           isEmpty={(rows) => rows.filter((row) => !enabledOnly || row.enabled).length === 0}
-          empty={{
-            title: enabledOnly ? 'No active schedules' : 'No schedules yet',
-            body: enabledOnly
-              ? 'Every schedule in this project is paused. Turn the filter off to see them.'
-              : 'A schedule asks for a run on a cadence, so a regression cycle happens because it is due rather than because somebody remembered.',
-          }}
+          /*
+            TWO empty states, and the distinction is §242 LG-3's lesson one screen over: "nothing is
+            here" and "the filter found nothing" say different things, and only one of them is about
+            something the reader can undo. So the filtered case is `no-filter-match` with a way out
+            of the filter, and the unfiltered case explains what a schedule is for.
+          */
+          empty={
+            enabledOnly
+              ? {
+                  kind: 'no-filter-match',
+                  title: 'No active schedules',
+                  body: 'Every schedule in this project is paused.',
+                  onClearFilters: () => {
+                    const next = new URLSearchParams(params);
+                    next.delete('enabled');
+                    setParams(next, { replace: true });
+                  },
+                }
+              : {
+                  kind: 'no-records',
+                  title: 'No schedules yet',
+                  body: 'A schedule asks for a run on a cadence, so a regression cycle happens because it is due rather than because somebody remembered.',
+                }
+          }
         >
           {(rows) => (
             <Table size="small" data-testid="RunSchedules.Table">
@@ -294,18 +312,47 @@ function ScheduleRow({
 }
 
 /**
- * A short, curated zone list — plus whatever the schedule already holds.
+ * The zones this form offers — a **picker, not a free-text box**.
  *
- * `Intl.supportedValuesOf` is the complete answer and is not available everywhere this runs, so
- * the fallback is a list rather than a free-text box: a mistyped zone is a 400 the person who
- * typed it cannot diagnose, which is the one refusal on this form with no obvious remedy.
+ * A mistyped zone is a `400` the person who typed it cannot diagnose, and it is the one refusal on
+ * this form with no obvious remedy: `Europe/Sofiaa` looks exactly like `Europe/Sofia`. So the
+ * control constrains the value rather than validating it afterwards.
+ *
+ * **A curated list, and deliberately not `Intl.supportedValuesOf('timeZone')`.** That is the
+ * complete answer and it is not in this project's `lib` (`ES2023`), so reaching for it means either
+ * widening the lib for one control or a `typeof` guard whose fallback is this list anyway. Six
+ * hundred zones in a plain `Select` is also not a better control than fourteen — a real picker with
+ * search is its own slice.
+ *
+ * **The schedule's own value is always offered**, first, whatever it is. Without that, editing a
+ * schedule set to a zone outside this list would silently move it to the first option on save,
+ * which is the total-statement rule turning a curated list into data loss (`§247 SK-11` asks the
+ * browser pass what it thinks of the scope control for the same family of reason).
  */
+const COMMON_ZONES = [
+  'UTC',
+  'Europe/London',
+  'Europe/Dublin',
+  'Europe/Lisbon',
+  'Europe/Madrid',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Sofia',
+  'Europe/Kyiv',
+  'Asia/Jerusalem',
+  'Asia/Kolkata',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Sao_Paulo',
+] as const;
+
 function zoneOptions(current: string | undefined): string[] {
-  const supported =
-    typeof Intl.supportedValuesOf === 'function'
-      ? (Intl.supportedValuesOf('timeZone') as string[])
-      : ['UTC', 'Europe/Sofia', 'Europe/London', 'America/New_York', 'Asia/Tokyo'];
-  const zones = supported.includes('UTC') ? supported : ['UTC', ...supported];
+  const zones: string[] = [...COMMON_ZONES];
   return current && !zones.includes(current) ? [current, ...zones] : zones;
 }
 
