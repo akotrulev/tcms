@@ -3191,3 +3191,37 @@ different account. **No new fixture is asked for**, with one exception named in 
 | `§245 BA-7` | Page through a trail where one bulk act straddles a page boundary (assign 12 rows with the pager at 25 rows and enough other acts around it) | **Two groups, one per page**, each counting only what is on its page — the honest reading, since the page cannot see the rest. And **no row appears twice or goes missing**, which is §242's `(occurredAt DESC, id DESC)` still doing its job under the new rendering. |
 | `§245 BA-8` | As `viewer` (an account holding no `run:execute`), select rows on a live run | The **Assign…** control is **present and disabled with a reason** — §31, and the opposite of the audit rail's deliberate exception. ⚠️ **Note the correction**: the stepped plan said "a Test Engineer", and a Test Engineer **holds** `run:execute` (roles spec §A3, `V3`) — so this row must use a Viewer or it proves nothing. |
 | `§245 BA-9` | In one-person mode, choose **Nobody (unassign)** over rows currently assigned, preview and commit | Every row's destination reads **nobody**, and the audit rows say **Execution unassigned**. `null` is a value here and not an omission; a picker that could not say "nobody" would make "take these off everybody's plate" inexpressible. |
+
+---
+
+## §248 — the execution keyboard (area F of the gaps plan)
+
+⚠️ **Unrun, and the code behind them is completely ungated.** Area F was built under the batch-3
+no-gates directive: no `npm run test:run`, no `npm run build`, no `npm run lint`, not even a single
+targeted file. The `executionKeys.test.ts` arms and the eighteen `ExecutionPage.test.tsx` arms
+exist and **have never executed**. Read every row below as resting on nothing but the code.
+
+Ids are `§248 KB-*`; `KB` was grepped against this file and the mutation queue before minting.
+
+**Lane `A3` — execution.** Every row is the execution *detail* screen in Focus or Split mode,
+which `A3` already drives: `TR-1` with cases to record into. **No new fixture is asked for** — the
+run `A3` builds has more than two cases, which is all `KB-4` needs. `KB-10` needs a screen reader
+(VoiceOver on the pass's Mac is enough) and is the one row that cannot be done by looking.
+
+**Nothing is added to `docs/verification/backend-mutation-checks.md`.** Area F is frontend-only:
+the only write it can cause is `PATCH …/executions/{id}`, which is the same request the verdict
+buttons already send and which `§244 ED-*` and the M2 rows already cover. A mutation row here would
+be a second copy of an existing one.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§248 KB-1` | ⚠️ **The defect this feature ships broken everywhere, and the reason to do this row first.** Open a case in **Focus** mode, click into **What happened**, and type a real sentence containing every bound letter — *"problem: staging kept failing, skipped for now"* | The sentence lands in the box **in full** and **nothing is recorded**: no verdict, no navigation, no dialog. If a single character of it triggers anything, stop and report it — the guard is the feature. Repeat in the per-step **What actually happened** box and in **How long it took**, which are the two other typing surfaces on this screen. |
+| `§248 KB-2` | With focus on the page background, press `p` | The result records as **Passed** and the screen returns to the run, exactly as the button does. Then press `f` on another case, and `s` on a third. |
+| `§248 KB-3` | Press `b` | The **precondition checklist dialog** opens — it does **not** record. Blocked is never one keystroke in any mode, which is the rule `executionMode.ts`, `ExecutionGrid.tsx` and the execution screen all carry. Cancel the dialog and confirm nothing was written. |
+| `§248 KB-4` | Press `j`, then `j` again, then `k` | The screen moves to the next case in the run **in the rail's order** (by case key, `queueOrder.ts`), then the next, then back. In **Split** mode the rail's highlight and its *"Case n of m"* follow along, and `?mode=split` survives every move. At the last case, `j` does nothing and says so, and **Next case** is disabled. |
+| `§248 KB-5` | Press `n`, type a note, press `Escape`, then press `p` | `n` puts the caret in **What happened**; the typed note is untouched by the keys in it; `Escape` takes focus out; `p` then records **Passed** *with the note attached*. This is the loop the feature is for — describe, then verdict, without a pointer. |
+| `§248 KB-6` | Press `?` | The **Keyboard shortcuts** overlay opens and lists **every** binding, including `Escape`, each with a sentence. Close it with `Escape`. Then open it again from the **Keyboard shortcuts (?)** button — an overlay reachable only by a shortcut is circular help. |
+| `§248 KB-7` | On a **completed** run, press `p`. Then, as an account holding neither `result:submit` nor `result:amend` (a Viewer), press `p` on a live run | **Nothing is recorded** in either case, and in both the reason is *announced* — the freeze sentence, and the permission sentence. ⚠️ **This is the row that catches a keyboard used as a way past a gate the buttons enforce.** A shortcut that 403s is worse than a disabled button, because nothing on screen ever said no. |
+| `§248 KB-8` | Type `abc` into **How long it took (seconds)**, click out of the box, then press `p` | **Nothing is recorded** and the refusal is announced. The verdict buttons already disable here (`§244 ED-3`) because the body states total state and would silently clear the duration — the keyboard must refuse for the same reason and not route around it. |
+| `§248 KB-9` | ⚠️ **A judgement this plan could not settle — report an opinion, not just a pass/fail.** Mark two steps, then press `j` | The move is **refused** with *"Record or clear this result first…"*, and **Previous case** / **Next case** are disabled with that reason in their tooltips. The marks survive. **Then say whether the refusal is right**: the alternative is a confirm dialog, which this repo has no shared component for. One keystroke discarding a run's marks is the failure it prevents; being unable to skip a case without clearing it is the cost. |
+| `§248 KB-10` | ⚠️ **Needs a screen reader** (VoiceOver, ⌘F5). With it on, press `p`, then `j`, then `p` on a completed run | Each act is **spoken**: the verdict being recorded, the case moved to and how far through the run it is, and the refusal. Nothing is spoken twice, and nothing interrupts — the region is `polite`. Without this row the a11y half of the feature is a claim rather than an observation. |
