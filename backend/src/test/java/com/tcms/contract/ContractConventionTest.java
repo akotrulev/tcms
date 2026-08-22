@@ -675,7 +675,16 @@ class ContractConventionTest {
             // and not because the pairing is in doubt.
             Map.entry("ReportCapabilities", List.of("com.tcms.reporting.ReportCapabilitiesView")),
             // B7's provenance record — package-private in `execution`, like every view there.
+            // It serves THREE positions since §247: TestRunDetail.scopeRequest, and both halves of
+            // a run schedule (RunSchedule.scope and RunScheduleInput.scope). That is the whole
+            // argument for V68 reusing V61's document rather than declaring a second shape — one
+            // record, one writer (RunScopeDocument), one reader (its own parse).
             Map.entry("RunScopeRequest", List.of("com.tcms.execution.RunScopeRequestView")),
+            // §247. Package-private in `execution`, like every view and request record there. The
+            // name match cannot propose either: RunSchedule is also the ENTITY's name, and a
+            // schema's pairing is looked for among records.
+            Map.entry("RunSchedule", List.of("com.tcms.execution.RunScheduleView")),
+            Map.entry("RunScheduleInput", List.of("com.tcms.execution.RunScheduleWriteRequest")),
             Map.entry("ReportDefinition", List.of("com.tcms.reporting.ReportDefinitionView")),
             // Package-private inside a package-private controller, so it is doubly unnameable.
             Map.entry("ReportDefinitionInput",

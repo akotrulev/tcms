@@ -4225,8 +4225,15 @@ paths:
         do. What is refused is a scope with **no arm at all**, since that could only ever create
         empty runs. An arm that resolves to nothing on a given night is recorded as
         `lastFireError` instead, which is the field that exists for exactly this.
+
+        **There is no `Idempotency-Key` here and none is missing.** What this repository calls
+        idempotency is a unique `idempotency_key` column on a *created row*, and `V68` declares
+        none — so a header here would be a header nothing honours, which is exactly the defect
+        §205 found arriving from the client side. `POST /projects/{projectId}/conditions` and
+        the notification-channel create decline it on the same terms. The cost of a duplicate is
+        also not the same as a run's: a second schedule is visible in this list and deletable,
+        where a second checklist splits one tester's results across two runs.
       operationId: createRunSchedule
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         required: true
         content:
@@ -4239,11 +4246,6 @@ paths:
             Location:
               schema: { type: string }
               description: The new schedule's canonical URL.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/RunSchedule' }
-        '200':
-          description: Replayed — this Idempotency-Key already created a schedule.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RunSchedule' }

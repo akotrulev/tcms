@@ -91,8 +91,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class RunCreateService {
 
-    /** Roles spec §A4. Held by every role except Viewer — see the class header. */
-    private static final String CREATE_RUN = "run:create";
+    /**
+     * Roles spec §A4. Held by every role except Viewer — see the class header.
+     *
+     * <p>Package-private since §247 so {@code RunScheduleService} can gate on it by reading it
+     * rather than by spelling it again. Two endpoints gating one capability on two string literals
+     * is §228's shape — both look correct, and the day one moves only one of them moves.
+     */
+    static final String CREATE_RUN = "run:create";
 
     /**
      * §6g's gating override (§82). Spelled out here rather than imported: the constant lives on
