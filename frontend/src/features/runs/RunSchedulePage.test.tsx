@@ -8,6 +8,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { aProject, aRunSchedule } from '../../test/fixtures'
 import { heldPermissions } from '../../test/permissions'
 import { createTestQueryClient } from '../../test/queryClient'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 import { RunSchedulePage } from './RunSchedulePage'
 
 /**
@@ -199,6 +200,10 @@ describe('RunSchedulePage', () => {
   })
 
   it('lands a 400 on the control that caused it', async () => {
+    // The refusal IS this arm's subject — it asserts the field error lands on `cronExpression`
+    // rather than in the corner — so the failed write is declared rather than left to look like
+    // an unmocked endpoint. `renderFailures` fails the test otherwise, which is what it is for.
+    drivingAFailedWrite()
     mockReads([])
     vi.spyOn(api, 'post').mockRejectedValue(
       new ApiError(400, 'Check the highlighted fields.', {
