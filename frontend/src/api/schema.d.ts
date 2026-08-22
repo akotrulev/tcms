@@ -5402,6 +5402,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/runs/{runId}/executions/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hand many rows of the checklist out at once, to one person or across several
+         * @description Preview-then-commit over a selection of executions, the shape
+         *     `POST /projects/{projectId}/cases/bulk` established for cases (plan §6f): always returns
+         *     what changed, what was already compliant, and what was skipped with a reason, as LISTS
+         *     rather than counts. A blanket success toast over a partial outcome is the worse half of
+         *     the defect, because the caller believes all 300 went through.
+         *
+         *     **Why this exists.** `PUT …/executions/{executionId}/assignee` says it in its own
+         *     description: an execution's assignee *"could be set once, for all two hundred rows, or not
+         *     at all"*. Splitting a 300-case run across five testers was 300 requests.
+         *
+         *     **`DISTRIBUTE` is the request this endpoint was actually built for.** It round-robins the
+         *     selection across a list of people, and the mapping is a pure function of the run's own row
+         *     order and the caller's assignee order — so the same act sent twice produces the same split,
+         *     and the replay finds every row already in that state. **That determinism is this
+         *     operation's idempotency, and it is why there is no `Idempotency-Key` here.** The header
+         *     elsewhere in this API answers a *create* by returning the resource that intent already
+         *     created; nothing is created here, so there would be nothing to answer with. The cases-bulk
+         *     endpoint declares no such header either, for the same reason.
+         *
+         *     **Assignment states the desired state of every named row**, exactly as the single-row `PUT`
+         *     does — a row already assigned to somebody else is reassigned rather than left alone. A
+         *     caller who wants to fill only the gaps selects only the unassigned rows; the run detail's
+         *     filter makes that a click, and a server-side "only if empty" rule would make the outcome
+         *     depend on state the preview cannot show.
+         *
+         *     **The permission is `run:execute`**, the same key the single-row endpoint takes and for the
+         *     same reason: it is the one key in the catalogue that separates a person from a credential,
+         *     so a leaked CI token cannot reorganise a team's workload. No new permission is seeded — the
+         *     catalogue has taken none since `V3`, and a key granted to nobody is a 403 no administrator
+         *     can grant their way out of (roles spec §A6).
+         *
+         *     **A closed run refuses with 409**, the freeze the verdict and its evidence are already
+         *     under: a finished checklist has no work left to hand out, and reopening the run is the way
+         *     forward.
+         *
+         *     **What refuses the whole act and what skips one row** follows the cases-bulk rule exactly.
+         *     A bad assignee is knowable before a single row is read, so it is a **400** with the error
+         *     on the field. An execution id that names nothing in this run is a property of that row, so
+         *     it comes back in `skipped` and the other 299 proceed: a selection is a filter's output and
+         *     may have gone stale, and refusing everything over one row is worse than the problem.
+         *
+         *     **This operation writes one `audit_event` row per target, all sharing one
+         *     `bulkOperationId`** — the first thing in the product to write that column. One row with 300
+         *     `targetIds` would be the shape every other bulk service uses and it cannot state what
+         *     `DISTRIBUTE` did, because one row carries one `changes` document and this act moves rows to
+         *     several different people. `bulkOperationId` is returned so a client can join the two, and
+         *     the audit trail groups on it.
+         */
+        post: operations["bulkAssignExecutions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/runs/{runId}/executions/{executionId}/evidence": {
         parameters: {
             query?: never;
@@ -11906,6 +11975,144 @@ export interface components {
              */
             assigneeId: string | null;
         };
+        /**
+         * @description One action, one argument, over a selection of a run's executions. `BulkOperation`'s shape
+         *     for cases, deliberately — the two are one family and a second spelling of "operate on a
+         *     selection" is how one product starts reading like two.
+         */
+        ExecutionBulkOperation: {
+            /**
+             * @description `ASSIGN` puts every selected row on one person — or on nobody, with a null
+             *     `assigneeId`. There is no separate `UNASSIGN`: the single-row `PUT` already spells
+             *     "nobody" as a null assignee, and two ways to say one thing is two implementations to
+             *     keep agreeing.
+             *
+             *     `DISTRIBUTE` round-robins the selection across `assigneeIds`.
+             * @enum {string}
+             */
+            action: "ASSIGN" | "DISTRIBUTE";
+            /**
+             * @description The selection, as execution ids. Duplicates are collapsed and the result reports each
+             *     distinct id exactly once.
+             *
+             *     Capped for `BulkOperation.caseIds`' reason and a stronger version of it: the whole act
+             *     is one transaction, and here it also writes up to 500 audit rows. A run larger than
+             *     this is assigned in two acts, which is two `bulkOperationId`s and reads correctly in
+             *     the trail.
+             *
+             *     An id naming no execution **in this run** comes back in `skipped`, not as a 404 — see
+             *     the operation.
+             */
+            executionIds: string[];
+            /**
+             * @description Preview first. The UI must show the preview before committing, and for `DISTRIBUTE`
+             *     that is the whole point: the person about to hand 300 cases to five colleagues sees
+             *     the split before they confirm it.
+             * @default true
+             */
+            dryRun: boolean;
+            payload?: components["schemas"]["ExecutionBulkPayload"];
+        };
+        /**
+         * @description The argument, typed. Both members are optional here and **exactly the one its action needs
+         *     is required by the server**, which answers 400 naming the field — `BulkPayload`'s
+         *     arrangement, and its reasoning applies unchanged: a `oneOf` discriminated on `action` would
+         *     state the rule in the schema and cost every consumer a narrow to build a payload it
+         *     constructs one field at a time, while the server has to validate the combination either
+         *     way because it is the only side that knows the action.
+         */
+        ExecutionBulkPayload: {
+            /**
+             * Format: uuid
+             * @description Required by `ASSIGN`; **`null` unassigns every selected row**, which is a value here
+             *     and not an omission — the single-row endpoint's rule, and what makes "take these off
+             *     everybody's plate" expressible.
+             *
+             *     Must be an **ACTIVE member of this company** — the predicate `POST /runs` and the
+             *     single-row `PUT` both apply to this column, read from the same place rather than
+             *     re-spelled. Note it is *company* membership and not the narrower "holds a grant on this
+             *     project" that `GET /members` answers, so a picker built from that list can only offer
+             *     people this operation accepts, never the reverse.
+             *
+             *     Refused with a 400 for any other action.
+             */
+            assigneeId?: string | null;
+            /**
+             * @description Required by `DISTRIBUTE`, and refused for `ASSIGN`.
+             *
+             *     **Order is the caller's and is load-bearing**: the i-th row of the run-ordered
+             *     selection goes to `assigneeIds[i % assigneeIds.length]`, so this order decides who
+             *     takes the remainder. Duplicates are collapsed keeping the first occurrence. A server
+             *     that sorted this list would silently overrule a coordinator who put the senior tester
+             *     first.
+             *
+             *     Every member must be an ACTIVE member of this company, checked before anything is
+             *     written; the 400 names this field and lists the ids that failed.
+             *
+             *     More people than rows is legal — the tail simply receives nothing, and the preview
+             *     shows them with a count of zero rather than dropping them, because a person expecting
+             *     work and getting none is the thing worth seeing.
+             */
+            assigneeIds?: string[];
+        };
+        /**
+         * @description Every outcome as a LIST, never a count — `BulkResult`'s rule.
+         *
+         *     `changed` carries whole rows rather than keys, which is where this diverges from the case
+         *     result and why: a list of keys says *that* something moved and not *where*, and for
+         *     `DISTRIBUTE` "where" is the entire question the preview exists to answer.
+         */
+        ExecutionBulkResult: {
+            /** @description True when this is a preview. Nothing was written and no audit row exists. */
+            dryRun: boolean;
+            /** @description Size of the requested selection, after duplicates are collapsed. */
+            total: number;
+            /**
+             * @description The rows that moved — or would move, on a preview. Ordered as the run orders them, so
+             *     the preview reads in the same order as the checklist behind the dialog.
+             */
+            changed: {
+                /** Format: uuid */
+                executionId: string;
+                /** @example TC-42 */
+                caseKey: string;
+                /**
+                 * Format: uuid
+                 * @description Where the row lands. Null when the act unassigns.
+                 */
+                assigneeId: string | null;
+                /**
+                 * @description Resolved at read time from the company's membership, never stored. Null when the
+                 *     row is being unassigned, and null when the id names a membership that no longer
+                 *     exists at all — the client owns that copy, which is why this is nullable rather
+                 *     than a server-invented placeholder.
+                 */
+                assigneeName: string | null;
+            }[];
+            /**
+             * @description Case keys already in the requested state — compliant, not failed. **No audit row is
+             *     written for these**, which is the same rule the single-row endpoint applies: two people
+             *     handing one case to one tester are agreeing, not conflicting.
+             */
+            unchanged: string[];
+            /** @description Selected ids that could not be assigned, each with a displayable reason. */
+            skipped: {
+                /** Format: uuid */
+                executionId: string;
+                /** @example That execution is not part of this run. */
+                reason: string;
+            }[];
+            /**
+             * Format: uuid
+             * @description The id every `audit_event` row this act wrote shares — the join between the result and
+             *     the trail, and the first value ever written into `audit_event.bulk_operation_id`.
+             *
+             *     **Null on a preview** (nothing happened) and **null on a commit that changed nothing**
+             *     (no rows were written, so naming a group with no members would be a lie). Otherwise a
+             *     fresh id per act.
+             */
+            bulkOperationId: string | null;
+        };
         DefectLink: {
             /** Format: uuid */
             id: string;
@@ -15117,6 +15324,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TestRun"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    bulkAssignExecutions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecutionBulkOperation"];
+            };
+        };
+        responses: {
+            /** @description The result, or the preview when `dryRun` is true. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionBulkResult"];
                 };
             };
             400: components["responses"]["BadRequest"];
