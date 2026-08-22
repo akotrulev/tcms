@@ -38,13 +38,13 @@ R6-7	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	-	-		que
 R6-8	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	-	-		queued
 R6-9	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	-	-		queued
 R6-8	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	-	-		queued
-R7-1	17. R7's three variability sections	AggregateVariabilityTest	W1	-		queued
+R7-1	17. R7's three variability sections	AggregateVariabilityTest	W1	-		RUN:MORE
 R7-2	17. R7's three variability sections	AggregateVariabilityTest	-	-		queued
 R7-3	17. R7's three variability sections	AggregateVariabilityTest	-	-		queued
 R7-4	17. R7's three variability sections	AggregateVariabilityTest	-	-		queued
 R7-5	17. R7's three variability sections	AggregateVariabilityTest	-	-		queued
 R7-6	17. R7's three variability sections	AggregateVariabilityTest	W1	GAP		queued
-R8-1	18. R8's version divergence	AggregateVersionDivergenceTest	W1	-		queued
+R8-1	18. R8's version divergence	AggregateVersionDivergenceTest	W1	-		RUN:MORE
 R8-2	18. R8's version divergence	AggregateVersionDivergenceTest	-	-		queued
 R8-3	18. R8's version divergence	AggregateVersionDivergenceTest	-	-		queued
 R8-4	18. R8's version divergence	AggregateVersionDivergenceTest	-	GAP		queued
@@ -68,7 +68,7 @@ AT-1	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
 AT-2	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
 AT-3	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
 AT-4	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
-AT-5	20. §116's API tokens	ApiTokenEndpointTest	W1	-		queued
+AT-5	20. §116's API tokens	ApiTokenAuthenticationTest	W1	-		RUN:MATCH
 AT-6	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
 AT-7	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
 AT-8	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
@@ -105,7 +105,7 @@ FQ-10	§121	FlakeScoreTest	-	GAP		queued
 FQ-11	§121	FlakeScoreTest	-	-		queued
 FQ-12	§121	FlakeScoreTest	-	-		queued
 FQ-13	§121	FlakeScoreTest	-	GAP		queued
-FQ-14	§121	FlakeScoreTest	W1	GAP		queued
+FQ-14	§121	CaseQuarantineEndpointTest	W1	GAP		RUN:ZERO-AS-PREDICTED
 FQ-15	§121 phase 3	BoardEndpointTest	-	-		queued
 FQ-16	§121 phase 3	BoardEndpointTest	-	-		queued
 FQ-17	§121 phase 3	BoardEndpointTest	-	-		queued
@@ -170,7 +170,7 @@ CA-17	§126 phase 1	CaseAttachmentEndpointTest	-	-		queued
 CA-18	§126 phase 1	CaseAttachmentEndpointTest	-	GAP		queued
 CA-19	§126 phase 1	CaseAttachmentEndpointTest	W1	-		queued
 CA-20	§126 phase 1	CaseAttachmentEndpointTest	-	GAP		queued
-DA-1	§126 phase 2	DocPageAttachmentEndpointTest	W1	-		queued
+DA-1	§126 phase 2	DocPageAttachmentEndpointTest	W1	-		RUN:ZERO-UNEXPECTED
 DA-2	§126 phase 2	DocPageAttachmentEndpointTest	-	-		queued
 DA-3	§126 phase 2	DocPageAttachmentEndpointTest	-	-		queued
 DA-4	§126 phase 2	DocPageAttachmentEndpointTest	-	-		queued
