@@ -671,7 +671,7 @@ export function anSsoProviderChoice(
  * `actorUserId` stays.
  */
 /**
- * The result of a bulk assignment — §244's preview and its commit share one shape.
+ * The result of a bulk assignment — §245's preview and its commit share one shape.
  *
  * The least interesting one the contract admits: a preview of nothing. `bulkOperationId` is null,
  * which is what a dry run and a commit that moved nothing both answer, and a test about either

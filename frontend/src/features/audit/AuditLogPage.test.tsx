@@ -47,7 +47,7 @@ const AUTOMATIC_ACT = anAuditEvent({
 })
 
 /**
- * Three rows of one bulk assignment (§244) — adjacent, sharing an id, stamped from one instant.
+ * Three rows of one bulk assignment (§245) — adjacent, sharing an id, stamped from one instant.
  *
  * That adjacency is a property of the writer and of the `(occurredAt DESC, id DESC)` sort, not a
  * convenience of this fixture: every row of one transaction is written from one `Instant`.
@@ -285,7 +285,7 @@ describe('AuditLogPage', () => {
   })
 
   it('leaves a row with no bulk operation as a plain row', async () => {
-    // Every row written before §244 carries a null id, which is every row in every deployment
+    // Every row written before §245 carries a null id, which is every row in every deployment
     // until then — so the ungrouped rendering is the one that must not move.
     mockApi({ rows: [SESSION_ACT, ...BULK_ACT] })
     renderProjectTrail()

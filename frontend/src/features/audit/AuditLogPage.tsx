@@ -269,7 +269,7 @@ export type AuditGroup = { key: string; bulkOperationId: string | null; rows: Au
  * page cannot see would be the false statement about the past this screen exists not to make. The
  * summary therefore counts *what is here*, in those words.
  *
- * A null `bulkOperationId` is always its own group of one, so every row written before §244 — which
+ * A null `bulkOperationId` is always its own group of one, so every row written before §245 — which
  * is every row in every deployment until then — renders exactly as it did.
  */
 export function groupByBulkOperation(rows: AuditEvent[]): AuditGroup[] {
@@ -358,7 +358,7 @@ function GroupRow({ group }: { group: AuditGroup }) {
   );
 }
 
-/** One act, one line — the rendering every row had before §244, unchanged. */
+/** One act, one line — the rendering every row had before §245, unchanged. */
 function PlainRow({ row, inset = false }: { row: AuditEvent; inset?: boolean }) {
   return (
     <TableRow data-testid="Audit.Row" hover>

@@ -679,10 +679,10 @@ class ArchitectureRulesTest {
      * {@code release_sort_key} sorted a release below its own release candidate from M0 to §151
      * with 2389 tests green. <strong>Writerless as well</strong> — {@code anchorSlug},
      * {@code scheduleCron}, {@code sharedWithTeamId}, <del>{@code bulkOperationId}</del> —
-     * <strong>which left in §244</strong>, the first bulk act in the product to write one row per
+     * <strong>which left in §245</strong>, the first bulk act in the product to write one row per
      * target rather than one row per act. The column had been in one map or the other since §152
      * and is now in neither, having moved between them without the column changing at all: §242
-     * gave it a reader, §244 a writer. That is this pair's longest worked example and the plainest
+     * gave it a reader, §245 a writer. That is this pair's longest worked example and the plainest
      * argument there is for running both rules. <del>And since §156's
      * correction {@code incomplete}</del> — is §116's cheaper
      * one: a column nobody fills is a column nobody is misled by, and its whole cost is that six
@@ -1013,7 +1013,7 @@ class ArchitectureRulesTest {
      * take <em>two</em> out at once, because both are read off one statement over one table),
      * {@code CaseHealth.orphaned} (§181, the last of the five) and {@code CaseHealth.incomplete}
      * (§182, which was never one of the five — it was not a signal, and the derivation made it one)
-     * and {@code AuditEvent.bulkOperationId} (§244, the only one of the nine whose entry had
+     * and {@code AuditEvent.bulkOperationId} (§245, the only one of the nine whose entry had
      * <em>named the slice that would delete it</em>, and the one that took three sections to move
      * between the two maps)
      * — <strong>so no {@code case_health} column is in this map at all</strong>, and
@@ -1044,7 +1044,7 @@ class ArchitectureRulesTest {
      *
      * <p><del>Five of the eight</del> <del>Four of the seven</del> <del>Four of the six</del>
      * <del>Four of the nine</del> — <strong>which was itself stale: the map held EIGHT when that
-     * sentence claimed nine, and §244's deletion of {@code AuditEvent.bulkOperationId} makes it
+     * sentence claimed nine, and §245's deletion of {@code AuditEvent.bulkOperationId} makes it
      * seven.</strong> THREE OF SEVEN are already in
      * {@link #READERLESS_BY_DECISION} — the
      * four §154 called
@@ -1065,11 +1065,11 @@ class ArchitectureRulesTest {
      * produces.
      */
     private static final Map<String, String> WRITERLESS_BY_DECISION = Map.ofEntries(
-            // ~~AuditEvent.bulkOperationId — writerless, and READ since §242.~~ → GONE in §244,
+            // ~~AuditEvent.bulkOperationId — writerless, and READ since §242.~~ → GONE in §245,
             // which is the writer the entry itself named: ExecutionBulkAssignService records one
             // row per target sharing one id, through AuditEvent.record's bulk overload. The column
             // had been in one map or the other since §152 and is now in neither, having moved
-            // between them without the column changing at all — §242 gave it a reader, §244 a
+            // between them without the column changing at all — §242 gave it a reader, §245 a
             // writer. That is this pair's longest worked example.
             Map.entry("DocBlock.anchorSlug",
                     "writerless AND readerless — argued at the field: a link targets "
@@ -1121,7 +1121,7 @@ class ArchitectureRulesTest {
         // READERLESS_BY_DECISION too, which is the harmless half: a column nobody fills and nobody
         // consults costs a javadoc describing a state the database has never been in. (The old
         // tally was wrong in both halves and in the file whose subject is hand-kept tallies: the
-        // map held eight, not nine, before §244 deleted AuditEvent.bulkOperationId. Recounted
+        // map held eight, not nine, before §245 deleted AuditEvent.bulkOperationId. Recounted
         // against the map rather than against the previous sentence.) The FOUR
         // this rule sees alone are the expensive half, and they are invisible to §154 by
         // construction — a column with a reader passes that rule no matter what fills it. Something

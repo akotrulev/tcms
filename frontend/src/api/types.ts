@@ -207,7 +207,7 @@ export type RunStatus = NonNullable<TestRun['status']>;
 export type PlanStatus = NonNullable<TestPlanSummary['status']>;
 export type TestExecution = S['TestExecution'];
 /**
- * The body of `POST …/runs/{runId}/executions/bulk` (§244) — one action over a selection.
+ * The body of `POST …/runs/{runId}/executions/bulk` (§245) — one action over a selection.
  *
  * `ASSIGN` puts every named row on one person, or on nobody with a null `assigneeId`;
  * `DISTRIBUTE` round-robins them across a list. There is no `UNASSIGN` and no `Idempotency-Key`:
