@@ -24,7 +24,9 @@ cd backend
 git checkout -- <the mutated file>          # revert by EXACT PATH, before the next row
 ```
 
-**Two sections govern what is owed before you start.** `DOCUMENTED GAPS` at the foot of this file
+**Wave 1 is run.** `RUN RECORD — 2026-08-22, wave 1` below covers 90 rows, eight findings and the
+five registered gaps that turned out not to exist. **Two sections govern what is owed before you
+start.** `DOCUMENTED GAPS` at the foot of this file
 holds the 44 rows retired from the run on 2026-08-22 (each keeping its id and naming what would
 close it), and the run plan is
 `docs/plans/2026-08-22-backend-mutation-backlog-run-plan.md`. Measured results land in
@@ -2666,10 +2668,10 @@ on is not actually observing it.
 | `§238 SV-2` | In `SuiteVersions.decide`, return `new Decision(currentVersionNo + 1, true, hash)` unconditionally (delete the hash comparison) | **`Unchanged.aNoOpSuiteSave`, `aCaseContentEdit`, `filingWhatIsAlreadyTagged` and `taggingACase`'s first assertion red.** The pre-§238 header argued a `decide()` sibling could not be tested because its false branch was unreachable; this row is the measurement that it now is, on four different acts. |
 | `§238 SV-3` | In `SuiteVersions.reconcileOne`, snapshot the suite's DEFINITION instead of the resolved union — e.g. hash `SuiteCaseRepository.findForSuite` + `SuiteTagRuleRepository.findForSuite` rather than `membership.caseIdsIn` | **`filingWhatIsAlreadyTagged` red**, and `taggingACase` **still green** — which is exactly why that first test exists. This is the plausible alternative reading of C1, it passes almost everything, and what it produces is a `suite_version` table that disagrees with the tree's counts and a run's scope. |
 | `§238 SV-4` | In `Suite.applyCompositionVersion`, add `this.updatedAt = now` (and take a `now`) | Expected **green** — nothing asserts a suite's `updatedAt` across a case write. Recorded as a **known gap, not a decision the tests make**: the omission is deliberate (a suite nobody touched must not sort to the top of "recently updated", nor name as its editor whoever tagged a matching case), and nothing observes it. **The cheapest row to close**, and it wants an assertion on `updatedAt`/`updatedBy` after a `retag` of a case a tag rule reaches. |
-| `§238 SV-5` | In `SuiteVersions.reconcile`, delete the `suites.flush()` | Expected **red**, but confirm *which* tests and whether it is order-dependent: `caseIdsIn` is a native query, and Hibernate's pre-native-query flush may already cover it. If everything stays green the flush is load-bearing only by argument, and the row should say so rather than the comment claiming a defence nothing exercises. |
+| `§238 SV-5` | In `SuiteVersions.reconcile`, delete the `suites.flush()` | Expected **red**, but confirm *which* tests and whether it is order-dependent: `caseIdsIn` is a native query, and Hibernate's pre-native-query flush may already cover it. If everything stays green the flush is load-bearing only by argument, and the row should say so rather than the comment claiming a defence nothing exercises. ❗ **RUN 2026-08-22 — ZERO, and the row's own conditional decides it: the flush is load-bearing only by argument.** Everything stayed green across `SuiteWriteEndpointTest`, `SuiteCompositionVersionTest` and `CaseUpdateEndpointTest`. Hibernate's `FlushMode.AUTO` already flushes before a native query whose query spaces it cannot compute, so the explicit `suites.flush()` in `reconcile` is covered by the session. **The comment above the line claims it is *"load-bearing rather than defensive"*, and for this suite that is not observable.** |
 | `§238 SV-6` | In `SuiteWriteService.create`, revert `versions.writeInitial(created, project.getId(), …)` to write an empty composition | **`Creation.aCreateWithMembers` red** on its snapshot assertion, and `versionNumbers` **still `[1]`** — the shape of the original defect exactly: the right number of rows, each saying something false. |
 | `§238 SV-7` | In `SuiteStatusService.move`, pass `suite.getCurrentVersionNo() + 1` to `reviews.moved` | **`ThePin.thePinMoves` red.** Guards the pin against a "fix" that looks like it is making the version fresher and instead names a composition that does not exist. |
-| `§238 SV-8` | In `Suite.applyStatus`, add a `currentVersionNo++` | **`approvingDoesNotMintItsOwnVersion` red**, and `thePinMoves` red too. This is C1's literal wording implemented, and the row exists so the divergence is a measured refusal rather than a paragraph. |
+| `§238 SV-8` | In `Suite.applyStatus`, add a `currentVersionNo++` | **`approvingDoesNotMintItsOwnVersion` red**, and `thePinMoves` red too. This is C1's literal wording implemented, and the row exists so the divergence is a measured refusal rather than a paragraph. ✅ **RUN 2026-08-22 — RED, exactly the 2 predicted.** MATCH: the divergence from C1 is now a measured refusal. |
 | `§238 SV-9` | In `CaseBulkService`, move the `suitesBefore` read below the mutation loop | **`Bulk.oneVersionPerSuite` red** on the `from` suite. `SV-1` at the other call site, and worth its own row because the bulk path is the one where the read is textually far from the write. |
 | `§238 SV-10` | In `CaseBulkService`, drop the `dryRun` guard on `suitesBefore` and on the reconcile | **`Bulk.aPreviewIsNotAWrite` red.** A preview endpoint that writes is the one failure this operation's whole contract is about. |
 
@@ -2687,7 +2689,7 @@ finding.
 | # | Mutate | Expect |
 |---|---|---|
 | `§239 RT-M1` | In `IdempotencyKeyCapTest`, set `EXPECTED_DECLARATIONS` back to `10` | **Red** — `theCountIsPinned`. Cheap, and it confirms the count is measured over `src/main` rather than asserted from the javadoc beside it. The number went **down** for the first time in this slice, so the direction is worth exercising once. |
-| `§239 RT-M2` | Re-add `sharedStepId` to `CaseUpdateRequest.StepInput` and to `TestStep`'s mapping, and have `CaseUpdateService` persist whatever arrives — i.e. resurrect the field with **no validation at all**, as it was between M1 and §64 | Expected **GREEN**, and that is the point of the row. The contract no longer declares the property, so nothing in the backend suite sends it and nothing would catch a server that quietly started storing it again. Recorded as a **known gap**: `ContractConventionTest` checks that a declared schema has a Java shape, not that a Java shape declares no undeclared field. The nearest real observer is `packages`' `contractExchange`, which reads request payloads — but only for payloads the packages surface sends. **The cheapest row to close, and it wants an assertion that an undeclared property on `TestStepInput` is refused or ignored, not persisted.** |
+| `§239 RT-M2` | Re-add `sharedStepId` to `CaseUpdateRequest.StepInput` and to `TestStep`'s mapping, and have `CaseUpdateService` persist whatever arrives — i.e. resurrect the field with **no validation at all**, as it was between M1 and §64 | Expected **GREEN**, and that is the point of the row. The contract no longer declares the property, so nothing in the backend suite sends it and nothing would catch a server that quietly started storing it again. Recorded as a **known gap**: `ContractConventionTest` checks that a declared schema has a Java shape, not that a Java shape declares no undeclared field. The nearest real observer is `packages`' `contractExchange`, which reads request payloads — but only for payloads the packages surface sends. **The cheapest row to close, and it wants an assertion that an undeclared property on `TestStepInput` is refused or ignored, not persisted.** ✅ **CONFIRMED BY READING 2026-08-22 — not mutated, and the reading is conclusive.** `sharedStepId` occurs nowhere as a live field: every hit across `backend/src`, `docs/specs/openapi.yaml`, `frontend/src` and `packages/` is prose or the retired `V63`/`V24` migrations. There is no `StepInput` field, no contract property and no test payload — so a resurrected field would be sent by nothing and observed by nothing, which is the GREEN the row predicts. A three-file resurrection would have measured the same zero at much greater cost. |
 | `§239 RT-M3` | In `V63`, replace the two `COMMENT ON` statements with `ALTER TABLE test_step DROP COLUMN shared_step_id;` | Expected **green** — nothing maps the column, so `validate` is satisfied and every test passes. That is exactly why the drop is owed to a later slice as a **decision** rather than left to whoever next tidies the migration: no gate distinguishes the safe migration from the destructive one. Confirm `SearchVectorTest` — it still asserts `shared_step`'s trigger and index, so a `DROP TABLE` (unlike a `DROP COLUMN`) **would** redden something, which is worth knowing before the contract slice is written. |
 | `§239 RT-M4` | In `CaseEdit.normalizeSteps`, drop the `existingStepIds` membership check | **Red** — the step-identity tests. Not about this slice, but the check now sits alone where it used to sit beside the shared-step one, and this row confirms the survivor was not removed with its neighbour. |
 
@@ -2705,9 +2707,9 @@ to be able to answer.
 
 | # | Mutate | Expect |
 |---|---|---|
-| `§240 DR-M1` | In `CaseUpdateService`, change `drafts.deleteForCase(testCase.getId(), userId)` back to deleting every draft on the case (add a repository method that omits the user predicate) | **Red** — `anotherPersonsSaveLeavesYoursAlone`. This is the exact behaviour §128 shipped and pinned, so the row confirms the new assertion replaced the old one rather than sitting beside a gap. |
+| `§240 DR-M1` | In `CaseUpdateService`, change `drafts.deleteForCase(testCase.getId(), userId)` back to deleting every draft on the case (add a repository method that omits the user predicate) | **Red** — `anotherPersonsSaveLeavesYoursAlone`. This is the exact behaviour §128 shipped and pinned, so the row confirms the new assertion replaced the old one rather than sitting beside a gap. ✅ **RUN 2026-08-22 — RED, exactly 1**, the named test. MATCH — the new assertion **replaced** the old one. |
 | `§240 DR-M2` | In `CaseDraftService.read`, drop the `userId` predicate — `drafts.findScopedById(caseId, userId)` → a case-only lookup returning any row | **Red** — `oneBufferPerPerson`, on the 204 arm. Worth running because a case-only read is the *cheapest* way to write this service and the one a later refactor would reach for; without that arm's assertion the two-row case still passes every other test in the class. |
-| `§240 DR-M3` | In `V64`, drop the `DELETE FROM test_case_draft WHERE updated_by IS NULL` and keep the `SET NOT NULL` | **Red at migration time** on any database holding such a row — and **green on Testcontainers**, which migrates a fresh container. Recorded as a **known gap**: no gate in this repository can see a migration that is only unsafe against existing data. The row is here to say so, not to be fixed. |
+| `§240 DR-M3` | In `V64`, drop the `DELETE FROM test_case_draft WHERE updated_by IS NULL` and keep the `SET NOT NULL` | **Red at migration time** on any database holding such a row — and **green on Testcontainers**, which migrates a fresh container. Recorded as a **known gap**: no gate in this repository can see a migration that is only unsafe against existing data. The row is here to say so, not to be fixed. ⏭ **NOT RUN 2026-08-22 — manual lane**, on the row's own terms: Testcontainers migrates a fresh container, so the measurement would be a green that proves nothing. Filed beside `§192 DF-7`. |
 | `§240 AR-M1` | In `TestPlanRepository.findLiveInProject(projectId)`, drop the `AND p.archivedAt IS NULL` predicate | **Red** — `archivingRemovesItFromTheWorkingList`. The whole feature is that predicate. |
 | `§240 AR-M2` | In `PlanArchiveService.apply`, re-stamp on a repeat: delete the `archived == plan.isArchived()` early return | **Red** — `theSecondArchiveIsANoOp`, on both the timestamp and the empty audit list. |
 | `§240 AR-M3` | In `TestPlan.applyArchived`, also set `status = PlanStatus.DRAFT` when archiving | **Red** — `archivingRemovesItFromTheWorkingList` asserts the status survives. This is the fourth-status conflation arriving as a one-line "tidy up", which is exactly how it would arrive. |
@@ -2716,11 +2718,11 @@ to be able to answer.
 | `§240 RF-M2` | In `ReportHeaders.of`, pass `generatedAt` where `watermark` is expected | Expected **GREEN**, and that is the finding. The two instants are within milliseconds of each other in a job, so no assertion can tell them apart — the distinction only pays on a deployment where the refresh is slow. Recorded as a **known gap**: closing it wants a test that stalls the refresh, which is a clock seam this service does not have. |
 | `§240 RF-M3` | In `ReportJobService.accept`, delete the replay block (the `findByProjectIdAndCreatedIdempotencyKey` lookup) but keep writing the key | **Red twice** — `aReplayedKeyQueuesNothing` on the status, and then a **unique-constraint violation** from `report_job_created_idempotency_key_idx` on the second insert. The second failure is the more interesting one: it shows the index is the enforcement and the lookup is the courtesy, which is `V14`'s design and the reason its three columns must match the predicate. |
 | `§240 RF-M4` | In `ReportController.generate`, answer `202` for `Replayed` as well as `Accepted` | **Red** — `aReplayedKeyQueuesNothing`. The status is the only thing that tells a caller their retry queued nothing, and this is the most likely way to lose it. |
-| `§241 OC-1` | In `OrgChartService`, replace the `reach.maySee(...)` filter on the project axis with `true` | **Red — five arms, and RUN during the slice rather than recorded.** `noColumnIsServedForAProjectTheReaderCannotOpen`, plus the four §4.4 project-axis arms. **The whole disclosure boundary in one predicate**: the response gets *bigger*, every screen still renders, and nothing looks wrong. Recorded here anyway because the row's value is the *next* time somebody touches that line. |
+| `§241 OC-1` | In `OrgChartService`, replace the `reach.maySee(...)` filter on the project axis with `true` | **Red — five arms, and RUN during the slice rather than recorded.** `noColumnIsServedForAProjectTheReaderCannotOpen`, plus the four §4.4 project-axis arms. **The whole disclosure boundary in one predicate**: the response gets *bigger*, every screen still renders, and nothing looks wrong. Recorded here anyway because the row's value is the *next* time somebody touches that line. ✅ **RE-RUN 2026-08-22 — RED, 5, and they are the five the row names.** The in-slice run is confirmed rather than trusted: the whole disclosure boundary really is in that one predicate. |
 | `§241 OC-1b` | The same mutation, watching **only** the two §8.3 agreement arms | Expected **GREEN**, and it is the finding that shaped the test class. §8.3 pins the SUBJECT's `canView`, and a cell for a project the reader cannot open still names somebody who legitimately holds a role there — so the agreement test as specified does not observe the disclosure boundary at all. The reader-side sweep is a third arm and is what fails. Measured, not reasoned. |
 | `§241 OC-2` | In `OrgChartService.row`, replace `administers && account != null` with `account != null` for `lastLoginAt` | **Red** — `lastLoginIsWithheldFromAnOrdinaryMember`. Field-level redaction has one precedent (`UserView`) and copying it is how the second copy forgets. The contract already declares the field nullable, so **nothing about the shape changes**. |
 | `§241 OC-3` | In the generalised project-role query, delete `AND ra.company_id = :companyId` from both union arms | Expected **GREEN**. ⚠️ **Recorded as the gap, not as a pass.** `RoleAssignmentRepository` measured exactly this on the sibling query: RLS independently scopes the table, so the second layer holds when the first is removed. It becomes load-bearing the moment a deployment takes `V1` up on its offer to disable RLS, and no test covers that configuration. |
-| `§241 OC-4` | Remove `@Transactional(readOnly = true)` from `RoleAssignmentRepository` | **Red** — `RepositoryTransactionTest`, which derives its list from the live context. The zero-rows-under-RLS defect: fail-closed and silent, `CompanyContext` holding the right company while every read returns nothing. This slice adds no repository, so the row is about the one it changed. |
+| `§241 OC-4` | Remove `@Transactional(readOnly = true)` from `RoleAssignmentRepository` | **Red** — `RepositoryTransactionTest`, which derives its list from the live context. The zero-rows-under-RLS defect: fail-closed and silent, `CompanyContext` holding the right company while every read returns nothing. This slice adds no repository, so the row is about the one it changed. ✅ **RUN 2026-08-22 — RED, exactly 1: `EVERY repository interface carries @Transactional, so a new one cannot forget`.** MATCH. **This answers `D6` for the whole family** — `§242 LG-M11`, `§243 RN-M9` and `§247 SK-M10` are the same line on a different repository, and one measurement is enough for all four. |
 | `§241 OC-5` | In `EffectiveRoleNames.on`, return the named role **and** the inherited one instead of replacing | **Red — twelve arms across three classes, and RUN during the slice.** `EffectiveRoleNamesTest` (4), `OrgChartEndpointTest` (5) and `ProjectEndpointTest` (3). *"The one place in this model where adding a grant REMOVES a permission"*: a union renders the colleague you just demoted to Viewer as still a Test Lead. **The `ProjectEndpointTest` failures are the interesting third** — they are the evidence that the helper is genuinely shared across the module boundary rather than merely extracted. |
 | `§241 OC-6` | In `EffectiveRoleNames.stronger`, return `existing` unconditionally — "first row wins" | **Red** — `strongerWinsRegardlessOfRowOrder` and `theStrongerOfTwoGrantsWins`. Two grants on one project, one string on the wire, and *"which role is stronger" must be derived rather than ranked by name*. Row order is a plausible-looking answer that changes between runs, which is why that test drives **both** orders. |
 | `§241 OC-7` | In `IdentityProjectAccess`, point `effectiveProjectRoleNames` at a private copy of the override instead of `EffectiveRoleNames` | Expected **GREEN**. ⚠️ **Recorded as the gap.** The copy and the shared helper produce identical data *today* — nothing can distinguish them, which is exactly the drift the extraction prevents. The real check is the **next** change to §A1.1, and `OC-5` above is what will fail if the copy comes back. Same shape as `§210 DQ-3`. |
@@ -2747,14 +2749,14 @@ unresolvable actor could not be inserted at all. See handoff §242.
 |---|---|---|
 | `§242 LG-M1` | In `AuditEventRepository.pageForProject`, widen the predicate to `e.projectId = :projectId OR e.projectId IS NULL` | **Red** — `aCompanyScopeActIsAbsentFromEveryProjectLog`. The single most likely edit to this query, because it *looks* like generosity: it folds every member invitation and vocabulary change into every project's log, and the screen still renders. |
 | `§242 LG-M2` | Delete `, e.id DESC` from both `ORDER BY` clauses, keeping `e.occurredAt DESC` | **Red** — `theSortIsStableWhenTimestampsCollide`. ⚠️ **Expect this row to be flaky as a mutation check even though the test is not**: whether Postgres actually reorders two equal-key rows between two `LIMIT/OFFSET` reads depends on the plan, so a small fixture may pass by luck. If it comes back green, that is a finding about the *test's* fixture size, not evidence the tiebreaker is unnecessary. |
-| `§242 LG-M3` | In `AuditLogService.forProject`, pass `query.projectId()` instead of `project.getId()` to the repository | Expected **GREEN**, and recorded as the **gap**. Nothing sends `projectId` on the project trail — the SPA strips it and the controller passes null — so the mutation makes the query return nothing only if a caller supplies it. The defect it would open is real (pass the gate on a project you may audit, read the rows of one you may not) and **no test constructs that request**. Closing it wants an arm that sends `?projectId=<other>` to the project path. |
+| `§242 LG-M3` | In `AuditLogService.forProject`, pass `query.projectId()` instead of `project.getId()` to the repository | Expected **GREEN**, and recorded as the **gap**. Nothing sends `projectId` on the project trail — the SPA strips it and the controller passes null — so the mutation makes the query return nothing only if a caller supplies it. The defect it would open is real (pass the gate on a project you may audit, read the rows of one you may not) and **no test constructs that request**. Closing it wants an arm that sends `?projectId=<other>` to the project path. ❗ **RUN 2026-08-22 — RED, 9. The row predicted GREEN and the gap it registers does not exist.** Nothing sends `projectId` on the project trail, so `query.projectId()` is **null** — and the repository filters on it rather than reading null as *"no filter"*, so the trail returns nothing and **every arm in `AuditLogReadTest` falls**: paging, the actors and the project trail alike. The substitution is caught loudly, not silently. |
 | `§242 LG-M4` | In `AuditLogService.forCompany`, replace the `evaluateCompanyWide(userId).has("audit:view")` gate with `true` | **Red** — `aCallerWithoutAuditViewIsRefused`. A Test Lead would read every project's acts through the company trail, including projects they hold nothing on. |
 | `§242 LG-M5` | Change `AuditLogService.READ_COMPANY_AUDIT` to `"project:audit"` | **Red** — `aCallerWithoutAuditViewIsRefused`. The two keys are distinguishable only because that test's persona holds exactly one of them, which is what makes the pair worth asserting in a single test. |
 | `§242 LG-M6` | In `AuditLogController.read`, answer `ResponseEntity.ok(emptyPage)` for `Denied` instead of 403 | **Red** — `aCallerWithoutProjectAuditIsRefused`, which asserts the status *and* that the body does not carry the acts. **This is the mutation the whole design is about**: an empty audit trail reads as "nothing happened", and the reader cannot detect the difference. |
 | `§242 LG-M7` | In `ProjectService.readGranted`'s caller, gate on the permission before visibility (swap the two arms) | **Red** — `anUnreachableProjectIsNotDistinguishableFromAMissingOne`, which asserts 404 on a project the caller cannot see. 403 there confirms the project exists, which is §6t's oracle. |
 | `§242 LG-M8` | In `AuditLogService.render`, drop `actorTokenId`/`actorTokenName` from `AuditEventView` and serve only the person | **Red twice** — `aTokenDrivenActNamesBothThePersonAndTheCredential`, and then `ContractConventionTest.pairedSchemasAndRecordsNameTheSameMembers` on the two contract-only members. The second failure is the more useful one: it is what stops the wire shape and the contract drifting apart without anybody driving the screen. |
 | `§242 LG-M9` | In `AuditLogService.nameOf`, return `"Unknown"` instead of `null` for an unresolvable actor | **Red** — `anUnresolvableActorLosesOnlyTheirName`. A placeholder is the screen inventing a fact; the contract declares the property nullable precisely so the client owns that copy. ⚠️ **Note what that test's fixture had to become**: `audit_event.actor_user_id` carries a FOREIGN KEY to `app_user`, so an invented id cannot be recorded. The actor is a real account with no membership — the ACCOUNT always exists and the MEMBERSHIP is what resolves the name. |
-| `§242 LG-M10` | Filter `AdminDirectoryService.peopleById` to `status != REMOVED` | **Red** — `anOffboardedActorKeepsTheirName`, and ⚠️ **this is the row that corrects the plan.** The plan for this slice *expected* a removal to null the name and specified a test asserting it. It does not, offboarding marks rather than deletes, and the behaviour the code has is the one an audit trail wants: "who did this" must not become unanswerable the day somebody leaves. The mutation would also silently change the org chart and the directory, which is why it is worth a row. |
+| `§242 LG-M10` | Filter `AdminDirectoryService.peopleById` to `status != REMOVED` | **Red** — `anOffboardedActorKeepsTheirName`, and ⚠️ **this is the row that corrects the plan.** The plan for this slice *expected* a removal to null the name and specified a test asserting it. It does not, offboarding marks rather than deletes, and the behaviour the code has is the one an audit trail wants: "who did this" must not become unanswerable the day somebody leaves. The mutation would also silently change the org chart and the directory, which is why it is worth a row. ✅ **RUN 2026-08-22 — RED, exactly 1: `anOffboardedActorKeepsTheirName`.** MATCH, and the correction this row makes to its own slice's plan is backed by the measurement. |
 | `§242 LG-M11` | Remove `@Transactional(readOnly = true)` from `AuditEventRepository` | **Red** — `RepositoryTransactionTest`, which derives its list from the live context. The zero-rows-under-RLS defect, fail-closed and silent. |
 | `§242 LG-M12` | Delete the two `AuditEvent` entries this slice removed from `ArchitectureRulesTest.READERLESS_BY_DECISION` — i.e. put them back | **Red** — `everyExemptionStillExempts`. `containsExactlyInAnyOrderElementsOf` means a stale exemption fails the build, which is §162's rule and the reason removing them was part of this slice rather than a later tidy-up. |
 | `§242 LG-M13` | Drop `AuditEvent` from `ContractConventionTest.RESPONSE_RECORDS` | **Red** — `everyNameMatchedRecordIsPairedOrExplained`. `AuditEventView`'s *name* matches the schema, so leaving it unpaired is a schema compared to no server type in either direction — the hole §170 closed. |
@@ -2838,7 +2840,7 @@ shaped around it — and if it comes back green the entire test class is decorat
 | `§246 CE-M2` | Drop `isolation = Isolation.REPEATABLE_READ` from `ExportCompanyService.export` | **Expected GREEN**, ⚠️ **and recorded as a gap.** Nothing in the suite mutates a company *during* an export, so the snapshot argument has no observer. Closing it needs a concurrent writer mid-walk, which is a test of its own; the argument for the isolation level is in the method's javadoc, where a reader deciding to "simplify" it will meet it. |
 | `§246 CE-M3` | Remove `key_sequence` from `ExportCompanyService.SENTINEL_TABLES` | **Red** — `ExportCompanyTest.everySentinelTableIsNamedInTheRefusal`, which asserts the refusal message names **all five** rather than merely that it aborted. That arm exists because a check written about "did it abort" passes with four of the five sentinels decorative. |
 | `§246 CE-M4` | In `ExportRedactions.DROPPED_COLUMNS`, delete the `app_user → password_hash` entry | **Red twice, and the two reds are the point** — `ExportRedactionSweepTest.everySuspectColumnIsRedactedExcludedOrDeliberatelyKept` (reads the catalogue) **and** `ExportCompanyTest.noRedactedValueAppearsAnywhereInTheArchive` (reads the archive's bytes for the digest itself). One is a claim about the list; the other is a claim about what actually travelled. |
-| `§246 CE-M5` | Add a credential-shaped column that did not exist when the sweep was written: a scratch migration with `ALTER TABLE project ADD COLUMN webhook_secret TEXT` | **Red** — `ExportRedactionSweepTest.everySuspectColumnIsRedactedExcludedOrDeliberatelyKept`. **This is master task 34's stated acceptance and the row that proves it**: *"a test that fails if a new secret-bearing column appears unredacted."* Revert the **migration file**, not just the column — a `flyway_schema_history` row for a deleted script fails the next boot. |
+| `§246 CE-M5` | Add a credential-shaped column that did not exist when the sweep was written: a scratch migration with `ALTER TABLE project ADD COLUMN webhook_secret TEXT` | **Red** — `ExportRedactionSweepTest.everySuspectColumnIsRedactedExcludedOrDeliberatelyKept`. **This is master task 34's stated acceptance and the row that proves it**: *"a test that fails if a new secret-bearing column appears unredacted."* Revert the **migration file**, not just the column — a `flyway_schema_history` row for a deleted script fails the next boot. ✅ **RUN 2026-08-22 — RED, exactly 1: `everySuspectColumnIsRedactedExcludedOrDeliberatelyKept`.** MATCH. **Master task 34's stated acceptance, demonstrated**: `ALTER TABLE project ADD COLUMN webhook_secret TEXT` fails the sweep on the very next run. |
 | `§246 CE-M6` | In `ExportTables.EXCLUDED`, add `test_case` with a made-up reason | **Red** — `ExportTablesTest.everyRlsProtectedTableIsWalked`, and `everyTableIsEitherWalkedOrExcludedForAReason`'s "never both" half. The failure mode with no symptom: a client's cases quietly left out of their own export, in an archive that still opens and still parses. |
 | `§246 CE-M7` | Make the rename unconditional — move `Files.move(partial, out, …)` above the `try`'s failure paths, or delete both `deleteQuietly(partial)` calls and rename in a `finally` | **Red** — `theExportRefusesWithNoCompanyContext`, `theExportRefusesWhenTheContextNamesAnotherCompany` and `aCompanyWithNoSeededVocabulariesAbortsRatherThanExporting`, all three of which assert **no file exists** at `--out`. The whole "a path that exists is a path whose walk finished" property. |
 | `§246 CE-M8` | In `ExportCompanyCommand.report`, `return EXIT_OK` unconditionally | **Red** — `ExportCompanyTest.aRowNamingBytesThatAreGoneIsReportedRatherThanSkipped` asserts `result.wasComplete()` is false, which is what `report` switches on. ⚠️ **Check when running**: the arm asserts the **result**, not the process exit status, because nothing in this suite runs the command as a process. If exit-code coverage matters, that is a gap and the note below says so. |
@@ -2872,7 +2874,7 @@ area A took `§244`.
 | Row | Mutate | Expect |
 |---|---|---|
 | `§245 BA-M1` | ⚠️ **The mutation with the worst consequence in this area.** In `ExecutionBulkAssignRequest.previewing`, return `dryRun != null && dryRun` — so an absent `dryRun` means *commit* | **Red** — `ExecutionBulkAssignTest.aDryRunChangesNothing`, whose second half sends the body with `dryRun` **absent** for exactly this. A client that omits the field would otherwise commit an act nobody confirmed, over up to 500 rows, and the response would look correct. |
-| `§245 BA-M2` | In `ExecutionBulkAssignService`, mint the `bulkOperationId` **inside** the row loop instead of once per act | **Red** — `oneActIsOneBulkOperationId`, whose first assertion is that the twelve ids are all **equal**. A per-row id renders as twelve one-row groups in the trail, which is exactly the flood the column exists to prevent, with every other assertion in the class still green. |
+| `§245 BA-M2` | In `ExecutionBulkAssignService`, mint the `bulkOperationId` **inside** the row loop instead of once per act | **Red** — `oneActIsOneBulkOperationId`, whose first assertion is that the twelve ids are all **equal**. A per-row id renders as twelve one-row groups in the trail, which is exactly the flood the column exists to prevent, with every other assertion in the class still green. ✅ **RUN 2026-08-22 — RED, exactly 1**, the named test, with every other assertion in the class green exactly as the row says. MATCH. |
 | `§245 BA-M3` | In `destinations`, round-robin over `request.executionIds()` instead of the run-ordered `ordered` list | **Red** — `theSelectionIsASetAndTheRunDecidesTheOrder`, which sends the same selection shuffled. Two coordinators selecting the same rows would otherwise get different splits and **neither could detect it**. |
 | `§245 BA-M4` | Sort `assigneeIds` before distributing (`assignees.stream().sorted()`) | **Red** — `distributeRoundRobinsInRunOrder`'s remainder half. The caller's order is a statement about who takes the extra rows; a server that sorted it would silently overrule the coordinator with nothing on any screen to show it had. |
 | `§245 BA-M5` | Treat an id that names no execution in this run as `Outcome.NotFound` instead of a `SkippedRow` | **Red** — `aForeignExecutionIdSkipsOneRow`. This is the "simplification" a reader is most likely to make: a stale selection is an ordinary event, and refusing four hundred rows over one of them is worse than the problem. |
@@ -2882,7 +2884,7 @@ area A took `§244`.
 | `§245 BA-M9` | In `ExecutionAssignmentAudit.action`, return `"execution.bulk_assigned"` from `bulkRow` | **Red** — `theTrailReadsTheSameWhicheverDoorWasUsed`. A separate verb splits every "who took this off Ana" query in two and leaves `auditActionLabel`'s curated map with two entries meaning one thing. |
 | `§245 BA-M10` | Move the `run.isClosed()` check **after** `validate` in `apply` | **Expected GREEN**, ⚠️ **and recorded as a gap.** `aClosedRunIsFrozen` sends a valid body, so the ordering has no observer. Closing it needs an arm sending an invalid body against a closed run and asserting **409, not 400** — the rule being that a field somebody could fix is not worth reporting to a caller whose save cannot succeed at all. |
 | `§245 BA-M11` | Delete the `AuditEvent.bulkOperationId` writer — make the eight-argument `record` overload ignore its last parameter | **Red twice, and the second red is the point** — `oneActIsOneBulkOperationId`, and `ArchitectureRulesTest.everyMappedColumnHasAWriter`, which now reports the column as writerless while `WRITERLESS_BY_DECISION` no longer names it. §162's both-directions property, arriving from the direction this area created. |
-| `§245 BA-M12` | In `inRunOrder`, drop the `.thenComparing(TestExecution::getId)` tiebreak | **Expected GREEN**, ⚠️ **and recorded as a gap.** Every fixture case resolves its pin, so no two rows share a `keySeq` and the tiebreak never decides anything. It is there because an unresolvable pin sorts at `Long.MAX_VALUE` and **two** of them would make the split depend on the row order the database happened to return. Closing it needs a fixture with two executions whose pinned versions are unreadable, which is a test about RLS rather than about assignment. |
+| `§245 BA-M12` | In `inRunOrder`, drop the `.thenComparing(TestExecution::getId)` tiebreak | **Expected GREEN**, ⚠️ **and recorded as a gap.** Every fixture case resolves its pin, so no two rows share a `keySeq` and the tiebreak never decides anything. It is there because an unresolvable pin sorts at `Long.MAX_VALUE` and **two** of them would make the split depend on the row order the database happened to return. Closing it needs a fixture with two executions whose pinned versions are unreadable, which is a test about RLS rather than about assignment. ✅ **RUN 2026-08-22 — ZERO, as predicted: the gap is real.** Every fixture case resolves its pin, so no two rows share a `keySeq` and the tiebreak never decides anything. |
 
 ---
 
@@ -2906,7 +2908,7 @@ Ids are `§247 SK-M*`. `SK` was grepped against every row id in this file and in
 
 | Row | Mutate | Expect |
 |---|---|---|
-| `§247 SK-M1` | ⚠️ **The mutation this whole area is shaped around.** In `RunCreateService.apply`, replace `UUID actor = source == RunSource.SCHEDULED ? null : userId;` with `UUID actor = userId;` | **Red** — `RunScheduleFiringTest.aFiredScheduleCreatesARunWithNoCreator` (the `created_by IS NULL` half) and `theAuditRowForAScheduledRunNamesNobody` (both actor columns, at the row and through `identity.AuditLogService`). This is the mutation that writes *"Ana created TR-91"* about a night Ana did nothing — a lie that reads correct on every screen, and the reason `§242 LG-5` was recorded as not drivable until this area landed. |
+| `§247 SK-M1` | ⚠️ **The mutation this whole area is shaped around.** In `RunCreateService.apply`, replace `UUID actor = source == RunSource.SCHEDULED ? null : userId;` with `UUID actor = userId;` | **Red** — `RunScheduleFiringTest.aFiredScheduleCreatesARunWithNoCreator` (the `created_by IS NULL` half) and `theAuditRowForAScheduledRunNamesNobody` (both actor columns, at the row and through `identity.AuditLogService`). This is the mutation that writes *"Ana created TR-91"* about a night Ana did nothing — a lie that reads correct on every screen, and the reason `§242 LG-5` was recorded as not drivable until this area landed. ✅ **RUN 2026-08-22 — RED, exactly the 2 predicted.** MATCH — the mutation this whole area is shaped around is pinned at the column **and** at the reader. |
 | `§247 SK-M2` | In the same line, keep the null but ALSO pass `actor` to `projects.writeGranted` and to `gate(...)` | **Expected RED at the compile boundary or at runtime** — a null caller has no grants, so `writeGranted` answers `Denied` and the fire records `LOST_GRANT` for every schedule. `anOwnerWhoLostTheGrantStopsTheSchedule` would go green for the wrong reason and `aFiredScheduleCreatesARunWithNoCreator` red. ⚠️ **Recorded because the two halves look interchangeable in the diff**: authority is `userId`, attribution is `actor`, and one line carries both. |
 | `§247 SK-M3` | In `RunScheduleFiringService.fire`, move `scheduleService.recomputeNextFire(schedule, now)` inside the success branch | **Red** — `aFailedFireStillAdvances` and `anArchivedProjectStopsTheFireAndSaysSo`'s third assertion. A schedule that fails once and never advances is re-fired **on every tick for ever**; a broken schedule becoming a hot loop is the worst outcome available in this area, and every other assertion in the class stays green under it. |
 | `§247 SK-M4` | Key the idempotency string on `now` instead of on `slot` — `"schedule:" + id + ":" + now` | **Red** — `theSecondFireOfOneSlotMakesNoSecondChecklist`. Two application instances polling one tick mint two keys a millisecond apart and the run is created **twice**: a second checklist, one tester's results split across two runs, and two pass rates over denominators nobody chose. |
@@ -2947,9 +2949,202 @@ Two rows are **expected green and recorded as gaps** rather than as passes.
 | `§249 CS-M6` | Remove the `IllegalArgumentException` from `CaseScope`'s compact constructor | **Expected GREEN**, ⚠️ **and recorded as a gap.** It guards a future edit, not a current defect — `CS-M5` is what proves the empty state is unreachable today. Kept after reading the code rather than out of habit: the alternative is an arm constructing a `CaseScope` directly, which would pin a package-private record's constructor and not the endpoint. |
 | `§249 CS-M7` | In `CrossProjectSearchService.hit`, resolve `projectKey`/`projectName` from a fresh `ProjectRepository.findById` instead of the gated map | **Expected GREEN** ⚠️ — **a gap, and it is the one worth closing.** Nothing asserts the project fields came from the *gated* set, so the mutation is the shape that would serve an ungranted project's NAME the day the gate and the lookup diverge — and a name is a disclosure where an id is not (`AdminReach`). One arm closes it: seed a same-company ungranted project whose name differs, and assert the hit's `projectName` for a granted row. Kept as a gap because closing it properly needs the lookup to be *able* to diverge, which today it cannot. |
 | `§249 CS-M8` | Change `CrossProjectSearchQuery.isBounded()` to `return true` | **Red** — `anUnboundedSearchIsRefused` and `anEnumFilterAloneIsNotABound`. The endpoint becomes "every case in every project you can see", which is the response `/work-items` refuses to serve for the same reason. |
-| `§249 CS-M9` | Remove the trailing `cb.asc(root.get("keySeq"))` from `CaseSort.orderBy` | **Red** — `pagingIsStableAcrossProjects`, **if the fixture is large enough to page**. ⚠️ Postgres may return a stable order anyway on a seven-row heap; the fixture pages at `size=3` across three pages specifically so it can, but if this comes back green the fixture is too small and **that is the finding** — the row is then a request for a larger one, not a pass. |
+| `§249 CS-M9` | Remove the trailing `cb.asc(root.get("keySeq"))` from `CaseSort.orderBy` | **Red** — `pagingIsStableAcrossProjects`, **if the fixture is large enough to page**. ⚠️ Postgres may return a stable order anyway on a seven-row heap; the fixture pages at `size=3` across three pages specifically so it can, but if this comes back green the fixture is too small and **that is the finding** — the row is then a request for a larger one, not a pass. ❗ **RUN 2026-08-22 — RED, 1, but NOT `pagingIsStableAcrossProjects`, which stayed GREEN. So the finding stands: the fixture is too small, and this row is a request for a larger one.** Postgres returned a stable order over the seven-row heap anyway. What fell instead was `a Company Admin sees every project` — and note why the blast radius is small: the default sort is `keySeq,asc`, so the trailing tiebreak is redundant on the default path and bites only under a non-default sort. |
 
 ---
+
+---
+
+# RUN RECORD — 2026-08-22, wave 1
+
+**The 90 wave-1 rows were executed.** Wave 1 is the set the queue's own authors flagged — *"THE
+row"*, *"the slice's own defect, armed"*, *"the security row"*, *"the row worth running first"* —
+selected by people who had the code in front of them. Run plan:
+`docs/plans/2026-08-22-backend-mutation-backlog-run-plan.md`. Per-row detail is in
+`mutation-results.tsv` (one adjudicated line each) and `mutation-manifest.tsv` (`status=RUN:<outcome>`);
+the runner's raw append log is `mutation-results.raw.tsv`. Every row's `Result` cell in this file is
+filled in place.
+
+**Baseline** `91448743`: `./gradlew test` = 3249 passed, 0 failed, 10m31s. Every measurement is
+against **HEAD plus the other lane's in-flight `docs/specs/openapi.yaml` edit** — a declared Gradle
+test input read as *text* by `IdempotencyKeyCapTest` and `ConfigConventionTest`. The lane was
+verified clean before and after the one row that mutates that file (`SD-2`). The pass ran in its own
+remote tree (`builds/tcms-mut`) and its own Gradle home (`.gradle-mut`), per run plan §7.
+
+| Outcome | Rows |
+|---|---|
+| MATCH — reddened exactly what the row predicted | 44 |
+| MORE — reddened the predicted tests plus others | 20 |
+| FEWER — reddened less than predicted | 4 |
+| ZERO-AS-PREDICTED — row predicted 0, measured 0 | 10 |
+| **ZERO-UNEXPECTED — row predicted ≥1, measured 0 (the findings)** | **8** |
+| STALE — the code moved out from under the row | 2 |
+| NOT-A-MEASUREMENT / CONFIRMED-BY-READING | 3 |
+| Routed to another lane (infra · manual · TypeScript) | 4 |
+
+**Nine of the 90 rows predicted a zero and reddened anyway** — `CL-29`, `DR-9`, `SA-5`, `PB-8`,
+`LG-M3`, `§217 FD-1`, `§187 DC-6` and two more. That is the direction nobody plans for, and it is why
+a zero-prediction is still worth measuring: five of the nine were filed as *known gaps* that turn out
+not to exist.
+
+## The runner now checks the two traps itself
+
+Both had already produced a false zero before this wave started, and neither is visible in a green
+build. `~/bin/tcms-mutate` (machine-local) gained four guards:
+
+- **the diff must be substantive** — not whitespace- or comment-only;
+- **`--gone TEXT` / `--occurs N:TEXT`** prove the mutant no longer contains what the patch meant to
+  remove. `R7-1`'s unused-CTE no-op is the shape; `--occurs` exists because the line being mutated is
+  often one of several *identical* lines, where "gone" is not expressible but "one fewer" is;
+- **the scope must contain the test the row names** — the class must exist under `backend/src/test`,
+  and every `--test` must occur in it **on a line that is not a comment**;
+- **a scope matching no test is `ERROR-NO-TESTS`, never a zero.**
+
+It also takes several files (a row like `13k` is one row and two symmetric sites) and several
+comma-separated scopes, and it appends to `mutation-results.raw.tsv` rather than to the
+hand-adjudicated `mutation-results.tsv`.
+
+**The guards earned their keep immediately.** Six manifest scopes were wrong and every one was caught
+by a guard rather than by a green build: `AD-2` and `ST-10` carried their section's *first-named*
+class, `CR-3` and `§177 GT-M2` named a class the test does not live in, `IK-6` and `UX-3` had the
+wrong package. And the comment-only rule was added mid-pass because `FA-1` had already slipped
+through: the test that row names exists **only** as a `{@link}` in a class javadoc, which `javac`
+does not resolve, so a plain grep was satisfied by it.
+
+**One no-op still got through the guards and was caught by re-reading the mutant.** `OB-4`'s first
+proxy put `@Transactional` on a **self-invoked private method**, which Spring never intercepts — the
+very defect that row describes, arriving as trap one. The substantive-diff check passed it. Reading
+the mutant is not optional.
+
+## The findings
+
+Ordered by what a reader should act on first.
+
+### 1. `§236 DK-4` — the security row passes for the wrong reason
+
+Deleting the `javascript:` scheme check from `DefectLinkService.urlErrors` reddens **nothing**.
+`refusesASchemeThatExecutes` posts `javascript:alert(document.cookie)`, which has no authority
+component — so `parsed.getHost()` is null and the **host** check refuses it, under a different
+message. The test asserts only that `errors.url` is non-null, so it cannot tell the two refusals
+apart. **The scheme check is pinned by nothing.** Repair: assert the *message*, and add a payload
+carrying a host (the `scheme://host/…` shape) so the scheme check is the only thing that can refuse it.
+
+### 2. `§218 NC-7` — nothing stops a second POST
+
+`theDeliveryIsKeyedOnTheOccurrence` dispatches twice and asserts one row with `attempt = 2`, so its
+first delivery never ends `SENT` and the `getStatus() != SENT` refusal is never exercised. The row's
+own warning — *"the unique index stops a second row, not a second POST"* — is right and understated.
+Repair: a fixture whose first dispatch **succeeds**, then make the outbox row due again and assert the
+webhook double received exactly one request.
+
+### 3. The gate distinctions that are real in the code and invisible in the seeded catalogue
+
+`DA-1` found this family; this wave added three more sightings and one correction.
+
+- **`CA-1`** — swapping the case-attachment delete to `writeGrantedByAuthorship(evidence:delete)`
+  moves nothing, for **two independent reasons**: `V51` removed `OWN` from *every* grant, so the
+  authorship arm is inert; and roles spec §A3 gives `case:edit` and `evidence:delete` to the **same
+  four roles**, so the key cannot discriminate either. `CA-7` proves the test is alive — it reddens
+  when the delete stops deleting. What is dead is only its sight of the gate.
+- **`FA-1`** — `V52` left `PLAN_SCOPE` carried by **no seeded row**, and the test the row names no
+  longer exists. ⚠️ **Corrected by `§229 PM-15` later in the same wave**: the seam is still wired and
+  still discriminates. `ArtifactEndpointTest.Correcting` sees it only because its fixture **grants the
+  qualifier by hand**. Copying that persona into `ArtifactFileEndpointTest.Gates` is the repair.
+- **`DA-13`** — `auditNamesThePage` asserts on the **add** event while its comment argues about the
+  row that survives the hard delete, and asserts the payload rather than the target.
+
+**What closes the family is not another persona.** For `CA-1` none exists: no seeded role can tell
+`case:edit` from `evidence:delete`. The closure is a **catalogue-derived convention test** that fails
+when a gate's key is interchangeable with the constant a plausible mutation would substitute — a check
+that a permission swap is observable at all.
+
+### 4. `UX-3` — the unexercised-seam rule is bounded somewhere other than where it says
+
+Making a `@Scheduled` method `public` reddens nothing — not because the `public` narrowing holds, but
+because the rule **skips a method with no caller at all** (`if (callers.isEmpty() || …) continue;`).
+Its message reads *"every caller of this one is a test"*; the strictly worse case falls through the
+same arm silently. Repair: treat an empty caller set as unexercised **unless** the method carries
+`@Scheduled`/`@EventListener` — naming the container, which the row's own last sentence asks for.
+
+### 5. `§238 SV-5` — a flush that is load-bearing by argument only
+
+Deleting `suites.flush()` from `SuiteVersions.reconcile` leaves everything green. Hibernate's
+`FlushMode.AUTO` already flushes before a native query whose query spaces it cannot compute. The
+comment above the line calls it *"load-bearing rather than defensive"*, and for this suite that is not
+observable.
+
+### 6. `§192 DF-1` and `DF-4` — one writer pinned, and one line already redundant
+
+`DF-1` reddens **only the bulk writer**: the edit path's two named arms stay green, because
+`CaseEdit.normalizeDeclines` narrows the list before `reconcileOptouts` is reached, so the deletion is
+over-determined there. **The reversal is pinned by one writer, not two.** `DF-4`'s
+`context.declines().put(...)` is redundant for the same reason — `normalizeDeclines`' absent branch
+recomputes `retainedDeclinesOf` — and becomes load-bearing the moment `DF-3`'s branch is touched.
+
+### 7. Rows that were wrong in the reassuring direction — five registered gaps that do not exist
+
+`CL-29` (`aRetriedIntentClonesOnce` already counts), `§232 PB-8` (`aRefusedCallerRecordsNothing` does
+catch an ungated `recordFailure`), `§242 LG-M3` (a null `projectId` reddens **all nine** arms of
+`AuditLogReadTest`), `SA-5` (the fixture is stricter than it reads, so the version-vs-timestamp
+argument **is** asserted), and `DR-9` (the `P0D` inversion is observed by three tests; only the
+positive-duration **guard** is untested). Each of these should be **withdrawn** from the gap register
+rather than carried.
+
+### 8. `§217 FD-1` — stale in the good direction
+
+The row predicted GREEN as its finding. It is now RED across eight arms: §217's own later phases built
+`SsoFlowIntegrationTest`, and that class **does** observe `V7`'s defect re-authored. Worth recording
+which class does **not**: `RlsIsolationTest`, the row's manifest scope, contributed zero reds.
+
+## Two rows whose value was the pair, and both held
+
+- **`§185 SR-4`** — the row whose expected result is a *green build*. Reproduced exactly: with
+  `inputs.files` deleted, a `Dockerfile` that no longer creates the `raw-reports` root leaves
+  `> Task :test UP-TO-DATE` · `BUILD SUCCESSFUL in 921ms`. **And a control**, which is what makes it
+  conclusive: with `inputs.files` restored and the *same* broken `Dockerfile`,
+  `everyStorageRootIsCreatedInTheImage` fails. The declaration is load-bearing and Gradle's
+  up-to-date check is exactly what would hide its absence.
+- **`§207 DQ-3`** — the retained-machinery proof. An `OWN` grant re-engages the authorship gate through
+  five assertions, so `V51`'s retention argument holds. One half is unpinned: the curated 403 sentence
+  is wired at `CaseController.java:700` and no test reads the body.
+
+## What the families answered
+
+- **`D1` (the dropped project predicate, 12 rows)** — `IH-1` **and** `SD-3` both redden, each with a
+  fixture holding a sibling project. The family is blind **for want of fixtures**, not because the
+  predicate is redundant.
+- **`D6` (`@Transactional(readOnly = true)` on a repository, 4 rows)** — `§241 OC-4` reddens
+  `RepositoryTransactionTest`. One measurement answers for `§242 LG-M11`, `§243 RN-M9` and
+  `§247 SK-M10`.
+- **`D7` (attachment owners)** — `CA-4` measures `findOwnedById`, the **shared** two-segment gate, so
+  it answers for `DA-7` and `FA-7` as well.
+- **`D8` (the `ORDER BY` tiebreak)** — still blind. `IH-6` is a held zero awaiting wave 2's
+  same-instant fixture, and `§249 CS-M9`'s own observer stayed green because the fixture is too small.
+
+## Held, retired and routed
+
+**BLIND — re-run after wave 2** (decision 3's category, recorded as held rather than as coverage):
+`13k` and `IH-6`, both waiting on the two-instant fixture.
+
+**Retired as `NOT-A-MEASUREMENT`**, on each row's own words and confirmed by trying: `CL-8` (no
+one-line proxy is faithful — what closes it is an **ArchUnit rule** that nothing in `repository`
+other than `CaseCreateService` saves a `TestCase`) and `TA-5` (a 42-call-site refactor).
+`§239 RT-M2` was **confirmed by reading**: `sharedStepId` occurs nowhere as a live field, so the
+resurrection would measure the same zero at much greater cost.
+
+**Routed to another lane:** `DP-1` (infrastructure — `docker build`), `§192 DF-7` and `§240 DR-M3`
+(manual — each needs a hand-built database), `AP-13` (a TypeScript row the wave-0 relocation left
+behind in the manifest).
+
+## Proxies, stated rather than discovered
+
+Four rows were run as **proxies** because the mutation they describe is bigger than one edit, and each
+says so in its own `Result` cell: `OB-4` (the self-invocation half is not expressible in one line),
+`§229 PM-15` (`ArtifactEditInput` has no scope field), `§207 DQ-3` (the follow-up `UPDATE` was appended
+to the newest migration rather than added as a new script, so the revert is by exact path) and
+`§246 CE-M5` (the same). A proxy measures what it measures; saying which half was applied is what keeps
+the number attributable.
+
 
 # DOCUMENTED GAPS — rows retired from the run, 2026-08-22
 
