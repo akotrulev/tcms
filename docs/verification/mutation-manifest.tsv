@@ -216,14 +216,14 @@ DB-14	§127	DocPageEndpointTest	-	-		queued
 §128 CD-1	§128	CaseDraftEndpointTest	-	-		queued
 §128 CD-2	§128	CaseDraftEndpointTest	-	-		queued
 §128 CD-3	§128	CaseDraftEndpointTest	-	-		queued
-§128 CD-4	§128	CaseDraftEndpointTest	W1	-		queued
+§128 CD-4	§128	com.tcms.repository.CaseDraftEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseDraftService.java	RUN:MORE
 §128 CD-5	§128	CaseDraftEndpointTest	-	-		queued
 §128 CD-6	§128	CaseDraftEndpointTest	-	-		queued
 §128 CD-7	§128	CaseDraftEndpointTest	-	-		queued
 §128 CD-8	§128	CaseDraftEndpointTest	-	-		queued
 §128 CD-9	§128	CaseDraftEndpointTest	-	-		queued
 §128 CD-10	§128	CaseDraftEndpointTest	-	-		queued
-§128 CD-11	§128	CaseDraftEndpointTest	W1	-		queued
+§128 CD-11	§128	com.tcms.repository.CaseDraftEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseDraftService.java	RUN:MATCH
 §128 CD-12	§128	CaseDraftEndpointTest	-	-		queued
 §128 CD-13	§128	CaseDraftEndpointTest	-	-		queued
 §128 CD-14	§128	CaseDraftEndpointTest	-	-		queued
@@ -236,7 +236,7 @@ CL-4	§129 phase 1	CaseCloneEndpointTest	-	-		queued
 CL-5	§129 phase 1	CaseCloneEndpointTest	-	-		queued
 CL-6	§129 phase 1	CaseCloneEndpointTest	-	-		queued
 CL-7	§129 phase 1	CaseCloneEndpointTest	-	-		queued
-CL-8	§129 phase 1	CaseCloneEndpointTest	W1	-		queued
+CL-8	§129 phase 1	com.tcms.repository.CaseCloneEndpointTest	W1	-	-	RETIRED:NOT-A-MEASUREMENT
 CL-9	§129 phase 1	CaseCloneEndpointTest	-	-		queued
 CL-10	§129 phase 1	CaseCloneEndpointTest	-	-		queued
 CL-11	§129 phase 1	CaseCloneEndpointTest	-	-		queued
@@ -257,13 +257,13 @@ CL-25	§129 phase 2	PlanCloneEndpointTest	-	-		queued
 CL-26	§129 phase 2	PlanCloneEndpointTest	-	-		queued
 CL-27	§129 phase 2	PlanCloneEndpointTest	-	-		queued
 CL-28	§129 phase 2	PlanCloneEndpointTest	-	-		queued
-CL-29	§129 phase 2	PlanCloneEndpointTest	W1	-		queued
+CL-29	§129 phase 2	com.tcms.execution.PlanCloneEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/PlanCloneService.java	RUN:MORE
 CL-30	§129 phase 2	PlanCloneEndpointTest	-	-		queued
-OB-1	§131	OutboxDispatchTest	W1	-		queued
+OB-1	§131	com.tcms.tenancy.OutboxDispatchTest	W1	-	backend/src/main/java/com/tcms/tenancy/Outbox.java	RUN:MATCH
 OB-2	§131	OutboxDispatchTest	-	-		queued
 OB-3	§131	OutboxDispatchTest	-	-		queued
-OB-4	§131	OutboxDispatchTest	W1	-		queued
-OB-5	§131	OutboxDispatchTest	W1	-		queued
+OB-4	§131	com.tcms.tenancy.OutboxDispatchTest	W1	-	backend/src/main/java/com/tcms/tenancy/OutboxDispatcher.java	RUN:FEWER
+OB-5	§131	com.tcms.tenancy.OutboxDispatchTest	W1	-	backend/src/main/java/com/tcms/tenancy/OutboxEntry.java	RUN:MORE
 OB-6	§131	OutboxDispatchTest	-	-		queued
 OB-7	§131	OutboxDispatchTest	-	-		queued
 OB-8	§131	OutboxDispatchTest	-	-		queued
