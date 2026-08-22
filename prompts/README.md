@@ -8,10 +8,14 @@ outside that block is context for the reader, not part of the paste.
 
 ## Start here
 
-**[`batch-3-c-and-f.md`](batch-3-c-and-f.md)** — the current entry point. Two lanes, C ∥ F, and
-they are **not symmetric**: C has a stepped plan and only executes it, while F has no plan at all
-and must run `ep-writing-plans` first. Needs the user's explicit permission: two concurrent
-subagents, and batch 2's permission does not carry over.
+**[`batch-4-d-alone.md`](batch-4-d-alone.md)** — the current entry point. **Two stages, and the
+first blocks the second**: green the tree on `shanks` (five areas are ungated and one was never
+compiled), then implement D **gated**, the way slices ran before batch 1. One lane, so the standing
+one-subagent cap applies again — batch 3's permission was for batch 3.
+
+[`batch-3-c-and-f.md`](batch-3-c-and-f.md) — **done 2026-08-22.** Two lanes, C ∥ F, asymmetric: C
+executed its stepped plan, F wrote its own first. Landed both areas in twenty-three commits
+(`f5bc206`..`356ec13a`); see the state table.
 
 [`batch-2-b-and-e.md`](batch-2-b-and-e.md) — **done 2026-08-22.** Two implementation lanes, B ∥ E.
 Landed both areas in ten commits, plus one correction commit (`7f835ee`); see the state table.
@@ -24,14 +28,22 @@ The per-area files below are still accurate for scope and traps, but their **num
 assignments are superseded** by the master plan's 2026-08-22 revision, and for B, C, D and E the
 **stepped plan supersedes the prompt file entirely**.
 
-## Nothing here is gated
+## The no-gates directive ended with batch 3
 
-Since batch 1, **subagents run no tests and no gates.** Verification is one pass on `shanks` that
-runs after every lane in a batch has finished, driven by the user. So a lane that reports "landed"
-means *implemented and completely ungated* — on top of whatever sits unrun in the §65 queues.
-**Areas A, B and E are all in that state now** — and B and E have never executed a single test,
-where A at least had two targeted classes run before the directive arrived. Say it that way in every
-prompt you write from here on.
+Batches 1–3 ran **no tests and no gates**, by direction: ship while requirements move, verify in one
+concentrated pass. That pass never happened, and it accumulated — **five areas are implemented and
+completely ungated (A, B, E, C, F), and C was never even compiled.** So batch 4 opens by running the
+gates on `shanks` before it adds anything, and **D is gated as it goes.**
+
+Two different things have been called "the pass" and they are not the same:
+
+- **The gates** — `./gradlew build`, the npm suites, `lint`, via `~/bin/tcms-remote`. Mechanical,
+  agent-runnable, and **batch 4 stage 1 does them**.
+- **The §65 queues** — 56 backend mutation rows and 36 browser rows, driven by hand against a live
+  stack. Still batched, still deferred, still the user's own sitting. **They do not block D.**
+
+A lane from batches 1–3 that reports "landed" means *implemented and completely ungated*. Keep
+saying it that way about those five until stage 1 says otherwise.
 
 ## State
 
@@ -41,10 +53,10 @@ prompt you write from here on.
 | 2 | [`02-review-notifications.md`](02-review-notifications.md) | — | backend | — | ✅ **shipped** — `docs/handoff/243` |
 | 3 | [`03-execution-duration.md`](03-execution-duration.md) | **A** | backend + frontend | **none** | 🟡 **landed ungated** — `34314a8`, `docs/handoff/244` |
 | 4 | [`04-bulk-execution-assignment.md`](04-bulk-execution-assignment.md) | **B** | backend + frontend | — | 🟡 **landed ungated** — `3f68100`, `docs/handoff/245` |
-| 5 | [`05-scheduled-runs.md`](05-scheduled-runs.md) | **C** | backend + frontend | **`V68`** | **planned** → [gap-c](../docs/plans/2026-08-18-gap-c-scheduled-runs.md) · **batch 3** |
-| 6 | [`06-cross-project-case-search.md`](06-cross-project-case-search.md) | **D** | backend | — | **planned** → [gap-d](../docs/plans/2026-08-18-gap-d-cross-project-case-search.md) · batch 4, alone |
+| 5 | [`05-scheduled-runs.md`](05-scheduled-runs.md) | **C** | backend + frontend | **`V68`** | 🟡 **landed ungated** — `356ec13a`, `docs/handoff/247`. **Never compiled.** |
+| 6 | [`06-cross-project-case-search.md`](06-cross-project-case-search.md) | **D** | backend | — | **planned** → [gap-d](../docs/plans/2026-08-18-gap-d-cross-project-case-search.md) · **batch 4**, alone, **gated** |
 | 7 | [`07-company-data-export.md`](07-company-data-export.md) | **E** | operator CLI | — | 🟡 **landed ungated** — `61cad11`, `docs/handoff/246` |
-| 8 | [`08-keyboard-driven-execution.md`](08-keyboard-driven-execution.md) | **F** | frontend | — | **unplanned** — plans itself in **batch 3** |
+| 8 | [`08-keyboard-driven-execution.md`](08-keyboard-driven-execution.md) | **F** | frontend | — | 🟡 **landed ungated** — `7a19b263`, `docs/handoff/248`. Planned itself in batch 3. |
 | 9 | [`09-i18n-groundwork.md`](09-i18n-groundwork.md) | **G** | frontend | — | unplanned · batch 5, alone, last |
 
 ## Corrections these prompt files predate
@@ -66,10 +78,15 @@ readers answered null for a year. Area A gave it a writer on both paths. The rea
 it is worth knowing before you trust that gate: `ArchitectureRulesTest:1226` decides "written" by
 matching the field *name* as text, and a JSON key of the same name satisfied it for the column.
 
-**Every number is now spoken for, so pick nothing yourself.** Sections: `§242`–`§246` are spent,
-`§247` is C's and `§248` is F's. Fixture prefixes: `0a`, `66`, `88`, `7c` are spent, `3d` is C's and
-`2c` is F's; **`5e` is already in use in the tree and is not a spare.** `V68` is C's and is the only
-migration in the plan.
+**Every number is now spoken for, so pick nothing yourself.** Sections: `§242`–`§248` are spent and
+**`§249` is D's**. Fixture prefixes: `0a`, `66`, `88`, `7c`, `3d`, `2c` are spent and **`4d` is D's**;
+**`5e` is already in use in the tree and is not a spare.** `V68` was C's and was the only migration
+in the plan — **head is `V68` now**, and D deliberately takes no version, recording its index as
+owed instead.
+
+**`docs/plans/2026-08-18-gap-d-cross-project-case-search.md` is stale in three places** and batch 4's
+prompt says so: it names `§243` as the cache header (it is `§247`) and as the section head (it is
+`§248`), and reasons about `V68` as unspent. Its decisions are unaffected; its numbers are not.
 
 **A section number written into source comments is load-bearing.** Area B's plan was authored as
 `§244`, area A took that number first, and the lane renumbered its handoff but left thirteen
