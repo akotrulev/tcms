@@ -90,7 +90,7 @@ IN-10	§117	IngestionEndpointTest	-	-		queued
 IN-11	§117	IngestionEndpointTest	-	-		queued
 IN-12	§117	IngestionEndpointTest	-	-		queued
 IH-1	§119	com.tcms.execution.IngestionEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/IngestionJobRepository.java	RUN:MATCH
-IH-2	§119	IngestionEndpointTest	S	-		queued
+IH-2	§119	com.tcms.execution.IngestionEndpointTest	S	-	backend/src/main/java/com/tcms/execution/IngestionReadService.java	RUN:MATCH
 IH-3	§119	UnmatchedTest	-	-		queued
 IH-4	§119	IngestionEndpointTest	-	-		queued
 IH-5	§119	IngestionEndpointTest	-	-		queued
@@ -138,7 +138,7 @@ GA-10	§122	com.tcms.provisioning.GrantInstanceAdminServiceTest	W1	-	backend/src
 §124 AG-2	§124	PlanStatisticsEndpointTest	-	-		queued
 §124 AG-3	§124	PlanStatisticsEndpointTest	S	-		queued
 RX-2	§124	com.tcms.execution.ExecutionEndpointTest	S	-		queued
-RX-3	§124	IngestionEndpointTest	S	-		queued
+RX-3	§124	com.tcms.execution.IngestionEndpointTest	S	-	backend/src/main/java/com/tcms/execution/IngestionService.java	RUN:MATCH
 RX-4	§124	PlanStatisticsEndpointTest	-	-		queued
 AD-2	§124	com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/ArtifactWriteService.java	RUN:MATCH
 AD-3	§124	PlanStatisticsEndpointTest	-	-		queued
@@ -160,8 +160,8 @@ ST-11	§125	ArchitectureRulesTest	-	-		queued
 ST-12	§125	ArchitectureRulesTest	-	GAP		queued
 ST-13	§125	ArchitectureRulesTest	-	GAP		queued
 CA-1	§126 phase 1	com.tcms.repository.CaseAttachmentEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseAttachmentService.java	RUN:ZERO-UNEXPECTED
-CA-2	§126 phase 1	CaseAttachmentEndpointTest	S	-		queued
-CA-3	§126 phase 1	CaseAttachmentEndpointTest	S	-		queued
+CA-2	§126 phase 1	CaseAttachmentEndpointTest	S	-	backend/src/main/java/com/tcms/repository/CaseAttachmentService.java	RUN:MATCH
+CA-3	§126 phase 1	CaseAttachmentEndpointTest	S	-	backend/src/main/java/com/tcms/repository/CaseAttachmentService.java	RUN:MATCH
 CA-4	§126 phase 1	com.tcms.repository.CaseAttachmentEndpointTest	W1	-	backend/src/main/java/com/tcms/storage/AttachmentRepository.java	RUN:MATCH
 CA-5	§126 phase 1	CaseAttachmentEndpointTest	-	-		queued
 CA-6	§126 phase 1	CaseAttachmentEndpointTest	W1	GAP		queued
@@ -180,9 +180,9 @@ CA-18	§126 phase 1	CaseAttachmentEndpointTest	-	GAP		queued
 CA-19	§126 phase 1	com.tcms.repository.CaseAttachmentEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseAttachmentService.java	RUN:MATCH
 CA-20	§126 phase 1	CaseAttachmentEndpointTest	-	GAP		queued
 DA-1	§126 phase 2	DocPageAttachmentEndpointTest	W1	-		RUN:ZERO-UNEXPECTED
-DA-2	§126 phase 2	DocPageAttachmentEndpointTest	S	-		queued
-DA-3	§126 phase 2	DocPageAttachmentEndpointTest	S	-		queued
-DA-4	§126 phase 2	DocPageAttachmentEndpointTest	S	-		queued
+DA-2	§126 phase 2	com.tcms.documentation.DocPageAttachmentEndpointTest	S	-	backend/src/main/java/com/tcms/documentation/DocPageAttachmentService.java	RUN:ZERO-UNEXPECTED
+DA-3	§126 phase 2	com.tcms.documentation.DocPageAttachmentEndpointTest	S	-	backend/src/main/java/com/tcms/documentation/DocPageAttachmentService.java	RUN:MATCH
+DA-4	§126 phase 2	com.tcms.documentation.DocPageAttachmentEndpointTest	S	-	backend/src/main/java/com/tcms/documentation/DocPageAttachmentService.java	RUN:MATCH
 DA-5	§126 phase 2	DocPageAttachmentEndpointTest	-	-		queued
 DA-6	§126 phase 2	DocPageAttachmentEndpointTest	-	-		queued
 DA-7	§126 phase 2	DocPageAttachmentEndpointTest	-	-		queued
@@ -203,7 +203,7 @@ FA-7	§126 phase 3	ArtifactFileEndpointTest	-	GAP		queued
 FA-8	§126 phase 3	ArtifactFileEndpointTest	-	-		queued
 FA-9	§126 phase 3	ArtifactFileEndpointTest	-	GAP		queued
 FA-10	§126 phase 3	ArtifactFileEndpointTest	-	-		queued
-FA-11	§126 phase 3	ArtifactFileEndpointTest	S	-		queued
+FA-11	§126 phase 3	com.tcms.documentation.ArtifactFileEndpointTest,com.tcms.documentation.ArtifactEndpointTest	S	-	backend/src/main/java/com/tcms/documentation/ArtifactWriteService.java	RUN:ZERO-UNEXPECTED
 FA-12	§126 phase 3	ArtifactFileEndpointTest	-	-		queued
 FA-13	§126 phase 3	ArtifactFileEndpointTest	-	-		queued
 FA-14	§126 phase 3	ArtifactFileEndpointTest	-	-		queued
@@ -224,7 +224,7 @@ DB-13	§127	DocPageEndpointTest	-	-		queued
 DB-14	§127	DocPageEndpointTest	-	-		queued
 §128 CD-1	§128	CaseDraftEndpointTest	-	-		queued
 §128 CD-2	§128	CaseDraftEndpointTest	-	-		queued
-§128 CD-3	§128	CaseDraftEndpointTest	S	-		queued
+§128 CD-3	§128	com.tcms.repository.CaseDraftEndpointTest	S	-	backend/src/main/java/com/tcms/repository/CaseDraftService.java	RUN:MATCH
 §128 CD-4	§128	com.tcms.repository.CaseDraftEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseDraftService.java	RUN:MORE
 §128 CD-5	§128	CaseDraftEndpointTest	-	-		queued
 §128 CD-6	§128	CaseDraftEndpointTest	-	-		queued
@@ -246,7 +246,7 @@ CL-5	§129 phase 1	CaseCloneEndpointTest	-	-		queued
 CL-6	§129 phase 1	CaseCloneEndpointTest	-	-		queued
 CL-7	§129 phase 1	CaseCloneEndpointTest	-	-		queued
 CL-8	§129 phase 1	com.tcms.repository.CaseCloneEndpointTest	W1	-	-	RETIRED:NOT-A-MEASUREMENT
-CL-9	§129 phase 1	CaseCloneEndpointTest	S	-		queued
+CL-9	§129 phase 1	com.tcms.repository.CaseCloneEndpointTest	S	-	backend/src/main/java/com/tcms/repository/CaseCloneService.java	RUN:FEWER
 CL-10	§129 phase 1	CaseCloneEndpointTest	-	-		queued
 CL-11	§129 phase 1	CaseCloneEndpointTest	-	-		queued
 CL-12	§129 phase 1	CaseCloneEndpointTest	-	-		queued
@@ -261,11 +261,11 @@ CL-20	§129 phase 2	PlanCloneEndpointTest	-	-		queued
 CL-21	§129 phase 2	PlanUpdateEndpointTest	-	-		queued
 CL-22	§129 phase 2	PlanCloneEndpointTest	-	-		queued
 CL-23	§129 phase 2	PlanCloneEndpointTest	-	-		queued
-CL-24	§129 phase 2	PlanCloneEndpointTest	S	-		queued
+CL-24	§129 phase 2	com.tcms.execution.PlanCloneEndpointTest	S	-	backend/src/main/java/com/tcms/execution/PlanCloneService.java	RUN:MATCH
 CL-25	§129 phase 2	PlanCloneEndpointTest	-	-		queued
 CL-26	§129 phase 2	PlanCloneEndpointTest	-	-		queued
 CL-27	§129 phase 2	PlanCloneEndpointTest	-	-		queued
-CL-28	§129 phase 2	PlanCloneEndpointTest	S	-		queued
+CL-28	§129 phase 2	com.tcms.execution.RunCloneEndpointTest	S	-	backend/src/main/java/com/tcms/execution/RunCloneService.java	RUN:MATCH
 CL-29	§129 phase 2	com.tcms.execution.PlanCloneEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/PlanCloneService.java	RUN:MORE
 CL-30	§129 phase 2	PlanCloneEndpointTest	-	-		queued
 OB-1	§131	com.tcms.tenancy.OutboxDispatchTest	W1	-	backend/src/main/java/com/tcms/tenancy/Outbox.java	RUN:MATCH
