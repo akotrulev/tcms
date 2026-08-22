@@ -81,7 +81,7 @@ AT-5	20. §116's API tokens	ApiTokenAuthenticationTest	W1	-		RUN:MATCH
 AT-6	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
 AT-7	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
 AT-8	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
-AT-9	20. §116's API tokens	ApiTokenEndpointTest	S	-		queued
+AT-9	20. §116's API tokens	com.tcms.identity.ApiTokenEndpointTest	S	-	backend/src/main/resources/db/migration/V36__api_token_lookup.sql	RUN:MATCH
 AT-10	20. §116's API tokens	ApiTokenAuthenticationTest	-	-		queued
 AT-11	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
 AT-12	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
@@ -174,7 +174,7 @@ CA-12	§126 phase 1	CaseAttachmentEndpointTest	-	-		queued
 CA-13	§126 phase 1	CaseAttachmentEndpointTest	-	-		queued
 CA-14	§126 phase 1	CaseAttachmentEndpointTest	-	-		queued
 CA-15	§126 phase 1	CaseAttachmentEndpointTest	-	GAP		queued
-CA-16	§126 phase 1	CaseAttachmentEndpointTest	S	-		queued
+CA-16	§126 phase 1	com.tcms.repository.CaseAttachmentEndpointTest	S	-	backend/src/main/resources/db/migration/V39__attachment_owner_types.sql	RUN:MATCH
 CA-17	§126 phase 1	CaseAttachmentEndpointTest	-	-		queued
 CA-18	§126 phase 1	CaseAttachmentEndpointTest	-	GAP		queued
 CA-19	§126 phase 1	com.tcms.repository.CaseAttachmentEndpointTest	W1	-	backend/src/main/java/com/tcms/repository/CaseAttachmentService.java	RUN:MATCH
@@ -308,17 +308,17 @@ TA-15	§132 phase 3	ApiTokenAuthenticationTest	-	-		queued
 §133 AG-2	§133	SeedDataTest	-	-		queued
 §133 AG-3	§133	SeedDataTest	-	-		queued
 §133 AG-4	§133	SeedDataTest	-	-		queued
-§133 AG-5	§133	IsTest	S	-		queued
-§133 AG-6	§133	IsTest	S	-		queued
-§133 AG-7	§133	SeedDataTest	S	-		queued
+§133 AG-5	§133	com.tcms.schema.SeedDataTest	S	-	backend/src/main/resources/db/migration/V40__agent_role_and_assignable.sql	RUN:STALE
+§133 AG-6	§133	com.tcms.schema.SeedDataTest	S	-	backend/src/main/resources/db/migration/V40__agent_role_and_assignable.sql	RUN:FEWER
+§133 AG-7	§133	com.tcms.schema.SeedDataTest	S	-	backend/src/main/resources/db/migration/V40__agent_role_and_assignable.sql	RUN:MORE
 §133 AG-8	§133	SeedDataTest	-	-		queued
 §133 AG-9	§133	IngestionEndpointTest	-	-		queued
-AS-1	§134	SeedDataTest	S	-		queued
+AS-1	§134	com.tcms.identity.RoleGrantEndpointTest,com.tcms.schema.SeedDataTest	S	-	backend/src/main/resources/db/migration/V41__automation_service_not_assignable.sql	RUN:MORE
 AS-2	§134	com.tcms.identity.RoleGrantEndpointTest	W1	-	backend/src/main/java/com/tcms/identity/RoleGrantService.java	RUN:MATCH
 AS-3	§134	SeedDataTest	-	-		queued
 AS-4	§134	SeedDataTest	-	-		queued
-AS-5	§134	SeedDataTest	S	-		queued
-IK-1	§136	SuiteWriteEndpointTest	S	-		queued
+AS-5	§134	com.tcms.identity.RoleGrantEndpointTest,com.tcms.schema.SeedDataTest	S	-	backend/src/main/resources/db/migration/V41__automation_service_not_assignable.sql	RUN:ZERO-AS-PREDICTED
+IK-1	§136	com.tcms.repository.SuiteWriteEndpointTest,com.tcms.documentation.DocPageEndpointTest	S	-	backend/src/main/resources/db/migration/V42__suite_and_doc_page_creation_idempotency.sql	RUN:ZERO-AS-PREDICTED
 IK-2	§136	SuiteWriteEndpointTest	-	-		queued
 IK-3	§136	SuiteWriteEndpointTest	-	-		queued
 IK-4	§136	SuiteWriteEndpointTest	-	-		queued
