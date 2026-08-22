@@ -512,7 +512,16 @@ class ExecutionBulkAssignTest extends IntegrationTestBase {
 
         JsonNode second = commit(assign(rows, ANA, false));
         List<AuditRow> all = assignmentAudit();
-        assertThat(all).hasSize(24);
+        assertThat(all)
+                .as("""
+                        21, not 24 — and the difference IS this class's determinism rule. The \
+                        distribute above put rows 1, 6 and 11 on ANA (indices 0, 5 and 10 of the \
+                        3/3/2/2/2 spread), so assigning all twelve to ANA finds three already in \
+                        the requested state; those are `unchanged` and write NO audit row, which \
+                        is what makes a replay of this endpoint write nothing at all. Expecting 24 \
+                        would be asserting that an unchanged row is audited, i.e. the exact \
+                        behaviour `aRetryChangesNothingAndWritesNoSecondOperation` forbids.""")
+                .hasSize(21);
         List<UUID> operations = all.stream()
                 .map(AuditRow::bulkOperationId).distinct().toList();
         assertThat(operations).hasSize(2);
@@ -553,11 +562,11 @@ class ExecutionBulkAssignTest extends IntegrationTestBase {
                         + "query in two")
                 .isEqualTo(throughTheSingleDoor.action());
         assertThat(throughTheBulkDoor.action()).isEqualTo("execution.assigned");
-        assertThat(normalised(throughTheBulkDoor.changes()))
+        assertThat(document(throughTheBulkDoor.changes()))
                 .as("the two rows differ ONLY in bulk_operation_id")
-                .isEqualTo(normalised(throughTheSingleDoor.changes()));
-        assertThat(normalised(throughTheBulkDoor.changes()))
-                .isEqualTo("{\"from\":null,\"to\":\"" + ANA + "\"}");
+                .isEqualTo(document(throughTheSingleDoor.changes()));
+        assertThat(document(throughTheBulkDoor.changes()))
+                .isEqualTo(document("{\"from\":null,\"to\":\"" + ANA + "\"}"));
     }
 
     // =====================================================================
@@ -618,9 +627,21 @@ class ExecutionBulkAssignTest extends IntegrationTestBase {
         return json.readTree(result.getResponse().getContentAsString());
     }
 
-    /** {@code jsonb} round-trips with its own spacing, so both documents are compared unspaced. */
-    private static String normalised(String changes) {
-        return changes == null ? null : changes.replace(" ", "");
+    /**
+     * The {@code changes} document as a tree, which is the only sound way to compare two of them.
+     *
+     * <p>~~{@code jsonb} round-trips with its own spacing, so both documents are compared
+     * unspaced.~~ → SPACING WAS THE HALF OF IT. {@code jsonb} keeps neither the key order it was
+     * given nor the whitespace: it re-emits an object's keys <em>shortest first</em>, so the string
+     * {@code ExecutionAssignmentAudit.changes} writes — {@code &#123;"from":…,"to":…&#125;} — comes
+     * back as {@code &#123;"to": …, "from": …&#125;}. Stripping spaces left the reordering, so the
+     * two database rows compared equal to each other and neither compared equal to the literal.
+     *
+     * <p>The producer is one hand-built string shared by both doors, so §245's claim was never in
+     * doubt; what was wrong was asking a text comparison a question about a document.
+     */
+    private JsonNode document(String changes) throws Exception {
+        return changes == null ? null : json.readTree(changes);
     }
 
     // =====================================================================
@@ -739,16 +760,28 @@ class ExecutionBulkAssignTest extends IntegrationTestBase {
                 "/api/v1/projects/" + ATLAS + "/runs", payload).get("id").asText());
     }
 
+    /**
+     * Ends the run — by ABORTING it, which is the only ending a run with no results has.
+     *
+     * <p>{@code NOT_STARTED → COMPLETED} is refused on purpose: <em>"a run with no results is not
+     * a pass over its scope, and calling it one puts a 0% completed run into every report"</em>
+     * ({@code RunLifecycle}:119). This fixture records nothing, so COMPLETED was never reachable
+     * and every arm in the class died in {@code @BeforeEach}. {@code RunLifecycle.isClosed} is
+     * {@code COMPLETED || ABORTED}, so an abort freezes the checklist just as hard — which is the
+     * property {@link #aClosedRunIsFrozen} is about, and it is now reached the way the product says
+     * to reach it.
+     */
     private void close(UUID runId) throws Exception {
         MvcResult result = mvc.perform(MockMvcRequestBuilders
                         .put("/api/v1/projects/" + ATLAS + "/runs/" + runId + "/status")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(LEAD, ACME))
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"COMPLETED\"}"))
+                        .content("{\"status\":\"ABORTED\"}"))
                 .andReturn();
         assertThat(result.getResponse().getStatus())
-                .as("the freeze arm needs a genuinely closed run; %s",
+                .as("the freeze arm needs a genuinely ended run, and ABORTED is the only ending "
+                        + "a run with nothing recorded in it has; %s",
                         result.getResponse().getContentAsString())
                 .isEqualTo(200);
     }

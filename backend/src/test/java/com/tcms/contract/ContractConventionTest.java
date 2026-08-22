@@ -155,7 +155,18 @@ class ContractConventionTest {
             // reason plus one of its own: the server must validate the combination anyway, being
             // the only side that knows the action, so the union would cost every consumer a
             // narrow to buy a check the client cannot use. See BulkPayload's own description.
-            ".components.schemas.BulkPayload");
+            ".components.schemas.BulkPayload",
+
+            // §245's argument to the execution bulk assign, and BulkPayload's case one resource
+            // over. `assigneeId` is the ASSIGN payload — present and NULLABLE, because null is how
+            // the act takes a row off everybody and is a value rather than an omission — and
+            // `assigneeIds` is DISTRIBUTE's list. The sibling `action` decides which, so neither is
+            // present across both and a `required` array here would misdescribe one of the two
+            // actions. Enforced server-side by ExecutionBulkAssignRequest's validation, where the
+            // fault lands on `payload.assigneeId` / `payload.assigneeIds`, and covered by
+            // ExecutionBulkAssignTest. The `oneOf` discriminated on `action` was rejected for
+            // BulkPayload's reason, unchanged by there being two actions here rather than eight.
+            ".components.schemas.ExecutionBulkPayload");
 
     @Test
     @DisplayName("every object schema with properties declares a required array")
