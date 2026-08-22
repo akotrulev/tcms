@@ -2,7 +2,9 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-22 (**§244** — **execution duration: `ExecutionResultInput.durationMs`, slice 3 / area A of `docs/plans/2026-08-18-unplanned-gaps.md`. NO MIGRATION, no permission seeded or moved, catalogue still 55, head still `V67`.**) ⚠️ **GATES NOT RUN — this entry is the first in this file that cannot quote a build.** Area A was built under a standing directive to run no tests; `./gradlew build` has not been run against it. Two targeted classes were run before that directive arrived: `ExecutionDurationTest` (4 arms) and `IngestionEndpointTest`, BUILD SUCCESSFUL. Treat every claim below as read off the code, not off a green suite. **THE FINDING THAT DELETED A MIGRATION AND THEN FOUND A WORSE PROBLEM: THE PLAN SAID "ADD `duration_seconds` TO `test_execution`"; THE COLUMN WAS ALREADY THERE, AND SO WAS NOTHING ELSE.** `duration_ms BIGINT` shipped in `V1__initial_schema.sql:845` on the schema's first day, is mapped at `TestExecution.java:96`, is served on `TestExecutionSummaryView` / `TestExecutionView` / `CaseHistoryView`, is copied into `execution_fact` by `ExecutionSource`'s seven-column `ON CONFLICT` set-list, and is summed into `RunSummaryReport`'s "recorded duration" at `:396`. **Five readers, one report, and NO WRITER OF ANY KIND** — the ingestion parsers recovered a duration and `IngestionService#payload` put it in the ingestion *job's* payload JSON, never in the column, so every one of those reads answered null for a year. **THE RULE TO CARRY: "does a column exist" and "does anything write it" are two greps, and a plan that answers only the first is why this area was scoped as a migration.** `ArchitectureRulesTest`'s writerless/readerless exemption maps are the instrument for exactly this and `duration_ms` was in NEITHER, because those maps cover the columns somebody thought to list. **THE WRITE IS TOTAL STATE, and it travels through `TestExecution.record` rather than a setter of its own** — the duration is part of the verdict, so an amendment that omits it CLEARS it, on the same terms as `comment`; a null-guard makes the field un-clearable and a truthiness guard additionally eats a genuine zero, which are `ED-M1` and `ED-M2` in the mutation queue. **Zero is a duration, not an absence** — `zeroIsADurationAndNotAnAbsence` exists because every layer between the tester and the column has a falsy check in it. **The validation is a collected fault, not a short-circuit**: `validate` puts `durationMs` after `stepResults` and before `return`, because the caller is a tester at the end of a test. **`openapi.yaml`'s `minimum: 0` enforces NOTHING at runtime** — nothing in this repository reads an OpenAPI `minimum`; the check in `validate` is the check. **`IngestionService` now writes the value it always had** (one line, `result.durationMs()`), which is a deliberate widening of the area's stated scope and the reason `IngestedResult`'s javadoc claiming the column does not exist is struck through rather than deleted. Gates: **NOT RUN**.)
+**Last verified:** 2026-08-22 (**§246** — **the company data export: `export-company`, a fourth operator CLI verb, area E of `docs/plans/2026-08-18-unplanned-gaps.md`. NO MIGRATION, no contract change, no permission seeded or moved, catalogue still 55, head still `V67`.**) ⚠️ **GATES NOT RUN — the second entry in this file that cannot quote a build.** Area E ran under the same batch-2 no-tests directive as §244; `./gradlew build` was not run and no targeted class was run, so **every claim below is read off the code, not off a green suite**. It also ran **concurrently with area B**, at the user's explicit permission — the two lanes share no file. **THE RULE THAT OUTLIVES THE AREA: a company-scoped operation opens `CompanyContext` OUTSIDE the `@Transactional` boundary.** `CompanyAwareTransactionManager` issues `set_config('app.current_company', …)` in `doBegin`, reading whatever `CompanyContext` holds *at that moment* — so a `CompanyContext.open()` written inside the transactional method runs AFTER the transaction decided there was no company, the GUC stays unset for its whole life, every policy evaluates `company_id = NULL` (never true), and the walk reads **zero rows from every company-owned table without raising anything**. The archive opens, parses and is empty. **`export-company` is the FIRST operator command that runs inside a company context at all** — its three siblings run instance-level with none open, which is why it could not be modelled on `CompanyProvisioningService`'s transaction handling. **THE SECOND PATTERN: `ExportTables` and `ExportRedactions` are the third and fourth members of the family `SchemaConventionTest` started — a schema-wide or catalogue-wide invariant is COMPUTED, never read.** The table list comes from `pg_policies` / `information_schema` at run time and an unclassified table **throws at export time**, so area C's `run_schedule` exports itself the day `V68` lands with no edit here; the redaction sweep fails for a credential-shaped column **that does not exist yet**. **`storage` has a FOURTH port, `BlobInventory`**, and it is a fourth *type* rather than a fifth method because `AttachmentStore`'s header refuses a listing method on the ports request paths hold. **`provisioning` declares `storage`** — its fourth allowed dependency, and `storage` is a foundation module. **The settled open question: `company.logo_storage_key` has NO WRITER ANYWHERE** — the `V1:35` DDL and `ReportHeader.java:55`'s javadoc are the only two hits and the column is not mapped on `Company`, so no root can be named without guessing and the manifest says so out loud. Gates: **NOT RUN**.)
+
+**Superseded header below — §244's, kept because §246 verified none of it: area E touched no file in `execution` and no contract.** (**§244** — **execution duration: `ExecutionResultInput.durationMs`, slice 3 / area A of `docs/plans/2026-08-18-unplanned-gaps.md`. NO MIGRATION, no permission seeded or moved, catalogue still 55, head still `V67`.**) ⚠️ **GATES NOT RUN — this entry is the first in this file that cannot quote a build.** Area A was built under a standing directive to run no tests; `./gradlew build` has not been run against it. Two targeted classes were run before that directive arrived: `ExecutionDurationTest` (4 arms) and `IngestionEndpointTest`, BUILD SUCCESSFUL. Treat every claim below as read off the code, not off a green suite. **THE FINDING THAT DELETED A MIGRATION AND THEN FOUND A WORSE PROBLEM: THE PLAN SAID "ADD `duration_seconds` TO `test_execution`"; THE COLUMN WAS ALREADY THERE, AND SO WAS NOTHING ELSE.** `duration_ms BIGINT` shipped in `V1__initial_schema.sql:845` on the schema's first day, is mapped at `TestExecution.java:96`, is served on `TestExecutionSummaryView` / `TestExecutionView` / `CaseHistoryView`, is copied into `execution_fact` by `ExecutionSource`'s seven-column `ON CONFLICT` set-list, and is summed into `RunSummaryReport`'s "recorded duration" at `:396`. **Five readers, one report, and NO WRITER OF ANY KIND** — the ingestion parsers recovered a duration and `IngestionService#payload` put it in the ingestion *job's* payload JSON, never in the column, so every one of those reads answered null for a year. **THE RULE TO CARRY: "does a column exist" and "does anything write it" are two greps, and a plan that answers only the first is why this area was scoped as a migration.** `ArchitectureRulesTest`'s writerless/readerless exemption maps are the instrument for exactly this and `duration_ms` was in NEITHER, because those maps cover the columns somebody thought to list. **THE WRITE IS TOTAL STATE, and it travels through `TestExecution.record` rather than a setter of its own** — the duration is part of the verdict, so an amendment that omits it CLEARS it, on the same terms as `comment`; a null-guard makes the field un-clearable and a truthiness guard additionally eats a genuine zero, which are `ED-M1` and `ED-M2` in the mutation queue. **Zero is a duration, not an absence** — `zeroIsADurationAndNotAnAbsence` exists because every layer between the tester and the column has a falsy check in it. **The validation is a collected fault, not a short-circuit**: `validate` puts `durationMs` after `stepResults` and before `return`, because the caller is a tester at the end of a test. **`openapi.yaml`'s `minimum: 0` enforces NOTHING at runtime** — nothing in this repository reads an OpenAPI `minimum`; the check in `validate` is the check. **`IngestionService` now writes the value it always had** (one line, `result.durationMs()`), which is a deliberate widening of the area's stated scope and the reason `IngestedResult`'s javadoc claiming the column does not exist is struck through rather than deleted. Gates: **NOT RUN**.)
 
 **Superseded header below — §243's, kept because §244 verified only the `execution` module's write path.** (2026-08-21: **§243** — **review-workflow notifications: four `review.*` event names, one port, three payload pairs, four handlers, slice 2 of `docs/plans/2026-08-18-unplanned-gaps.md`. No migration, no permission seeded or moved, catalogue still 55. The head is still `V67`.**) **THE FINDING THAT COST A GREEN MUTATION: A CHECK WRITTEN ABOUT THE TOTAL PASSES STRAIGHT THROUGH A DEFECT IN *WHICH ONE IT WAS*.** `ReviewNotificationTest.theVerdictsAreSeparatelySubscribable` subscribed one channel to `review.changes_requested`, recorded an LGTM and asserted no `review.endorsed` delivery — and **swapping the two arms of the switch in `ReviewService.apply` left it green**, because under the swap the LGTM lands on that very subscription and the delivery totals come out identical with the mapping inverted. What reddens is asserting the **occurrence** in both directions (`occurrences(ENDORSED) == 1` AND `occurrences(CHANGES_REQUESTED) == 0`) before looking at any delivery. §241's rule, one module over. **THE RULE TO CARRY: when neither the producer nor the consumer may read a table, the answer is a port whose implementations live in the modules that own it, indexed by the caller — never a wider `allowedDependencies`.** `project` is `{api, tenancy}` and `integration` is `{api, tenancy, project}`, so a review's `(subjectType, subjectId)` is unresolvable from both ends; `ReviewSubjectDirectory` (interface in `project`, one `@Component` per subject type in `repository`/`execution`, indexed in `integration.ReviewSubjects`) is `PeopleDirectory`'s shape for a fourth question, and `project/package-info.java` prescribes exactly this. **The index is compared against `EnumSet.allOf(ReviewSubjectType.class)`**, so a fourth member added by somebody who cannot see the three implementations reddens at the moment it is added. **`review.endorsed` is NOT `review.approved`** — recording a peer verdict costs `*:review`, signing off costs `*:approve`, and `ReviewService.record` already refuses to write an `APPROVAL` participation; a name that conflated them would put that second, cheaper door on the wire. **`review.approved` covers case, suite AND plan**, because all four ladder call sites converge on `ReviewService.moved`. **All four names are silent where §6g's review workflow is off** — `moved` returns early, so there is nothing to have been asked about. **`ReviewService` is the FIRST FOUNDATION MODULE to record an outbox occurrence**: "who could have written this row" is no longer answerable by module layer, only by grep. **The bulk fan-out ships knowingly**: `CaseBulkService` calls `moved` up to 500 times, so one act produces 500 occurrences and 500 attempts per channel — each true and naming a different subject, so coalescing would be untruthful; **no `bulkOperationId`**, because `moved` is told about none and the field would be writerless. **A THIRD TEST CLASS WAS NEEDED FOR THE WIRING NONE OF THE OTHER THREE SEES**: the payload pin sees the parse, the rendering test *hands the subject in*, and the end-to-end test's webhook is unreachable by design — so a notifier putting a **team** id through the **people** directory, or ignoring the port entirely, was green in all three. `ReviewNotifierTest` (Mockito, no context) captures what reaches `NotificationDispatchService`. **No test in this repository has ever read a rendered notification off the wire** — every delivery posts to `127.0.0.1:1`. Gates: backend **3128 / 0 / 0**.)
 
@@ -11,6 +13,137 @@
 **Superseded header below — §241's, kept because §242 verified none of it.** (**§241** — **the org chart: `GET /api/v1/org-chart` + `/org-chart`, executed from `docs/plans/2026-08-15-org-chart-tasks.md`. No migration, no permission seeded or moved, catalogue still 55.** **THE RULE TO CARRY: when a rule is about WHO IS ASKING, a test written about who is NAMED passes straight through it.** The plan's own §8.3 agreement test — called "the single most valuable test in this slice" — pins the SUBJECT's `ProjectAccess.canView`, and removing the disclosure filter leaves both its directions GREEN, because a leaked cell still names somebody who legitimately holds that role. The arm that reddens is a third one asking the evaluator about the CALLER. Measured by breaking it and reverting. The invariant the surface rests on: **the people axis is a company fact, the project axis is the reader's own** — person rows complete, matrix columns exactly `AdminReach.visibleProjects`, and a project the caller cannot open contributing no column, no cell and **no count**. **`EffectiveRoleNames` is now the one display implementation of roles spec §A1.1's replace-don't-union override**, so the count of §A1.1 implementations stays at three; turning replace into union reddens twelve arms across three classes, three of them in `ProjectEndpointTest`, which is the evidence it is genuinely shared. **`ProjectAccess` lost its two role-name methods for one `effectiveProjectRoleNames(userId, projectIds)`** — the plan wanted the helper called from `ProjectService` and that does not build: `project`'s declaration is `{api, tenancy}`, its own header forbids widening it, and `com.tcms.api`'s charter refuses shared helpers. **If `project` must share logic with `identity`, the port answers a further question — never a wider list and never `api`.** The two role-name queries take a `Collection<UUID>` and each grant path is its own `UNION ALL` arm, because a team grant's row carries `user_id = NULL` and nothing on it says whose cell it is — **and that same join is what makes `via` and `teamId` answerable at all**. `openapi.yaml`'s `CurrentUser.teams` claimed `GET /teams` is gated on `company:teams`; it is `company:read`, corrected in place, and **`tierClaims.test.ts` has no "gated on `<key>`" shape**, which is an open instrument gap. Gates: backend **3082 / 0 / 0**.)
 
 **Amended 2026-08-17 — `V67`, and the head is `V67`.** ~~"No migration"~~ is still true of the org-chart slice and **no longer true of the feature's record**: the org chart's own T5 query-plan lane ran afterwards and found a seq scan on the **authorization hot path**, which is now `V67__team_membership_answers_which_teams_a_person_is_in.sql`. See §241-A below before adding any index. Gates after `V67`: backend **3082 / 0 / 0**, unchanged — **an index adds no test, and that is the point of the `§241 IX-1` gap row.**
+
+---
+
+## §246 — THE CONTEXT IS OPENED BY THE CALLER, AND THE TABLE LIST IS NOT IN JAVA
+
+**Read this before touching `ExportCompanyService`, `ExportCompanyCommand`, `ExportTables`,
+`ExportRedactions`, `OperatorCommands.ALL`, the three blob ports, or before writing any operator
+task that reads company-owned data.**
+
+> ⚠️ **UNGATED.** `./gradlew build` was **not** run against this work; the batch-2 no-tests
+> directive of 2026-08-22 covers the whole area, and no targeted class was run either. Nothing here
+> can quote a test count.
+
+### The seam
+
+`provisioning` gains a **fourth operator verb** — `export-company --slug=… --out=…` — and it is the
+module's **first read-only command** and the **first operator command that runs inside a
+`CompanyContext` at all**. `provision-company`, `issue-invitation` and `grant-instance-admin` all
+run instance-level with none open (`CompanyContext.clear()`'s documented "correct state for
+instance-level operator work"), so this inverts the module's established transaction handling rather
+than copying it.
+
+New in `provisioning`: `ExportCompanyCommand · ExportCompanyService · ExportCompanyResult ·
+ExportManifest · ExportTables · ExportRedactions`. New in `storage`: `BlobRoot · BlobInventory ·
+FilesystemBlobInventory`, plus `FilesystemBlobStore#list`.
+
+### The rule, stated once so it outlives the area
+
+**A company-scoped operation opens `CompanyContext` OUTSIDE the `@Transactional` boundary, because
+`CompanyAwareTransactionManager` reads the context in `doBegin`.**
+
+A context opened inside the method is a transaction with **no GUC** and therefore a silent zero-row
+read of every policed table. No exception, no log line, no failing query — `company_id = NULL` is
+simply never true. The failure has no symptom at all: the archive opens, parses, and is missing
+everything. That is worse than an outright failure, and it is why the service carries six checks
+rather than trusting the shape.
+
+The two that matter most, because they are the ones a later reader would take out:
+
+- **S2 reads `current_setting('app.current_company', true)` as the FIRST and again as the LAST
+  statement of the transaction.** `SET LOCAL` does not survive a transaction boundary, so a walk
+  that somehow spanned two comes back NULL on the second read even though every statement in
+  between "worked". It is the only in-production check for that shape. ⚠️ **`CE-M13` records that
+  removing it is expected GREEN** — nothing in the suite makes a walk span two transactions.
+- **S3 counts five seeded vocabularies** (`case_status`, `classification_dimension`,
+  `company_membership`, `key_sequence`, `role_assignment`) and aborts on any zero.
+  `CompanyProvisioningServiceTest`'s completeness claim reused as a liveness probe. **A
+  half-provisioned company and a lost context are indistinguishable from inside the walk**, and
+  refusing both is correct. The refusal names **all five**, asserted — a check written about "did it
+  abort" leaves four of the five decorative, which is §241's and §243's lesson in a third place.
+
+**There is no in-band ground truth for an RLS-protected table.** The counterfactual count is itself
+an RLS-filtered query, so with the context lost it answers zero too and comparing the two proves
+nothing. The suite's answer is `IntegrationTestBase.superuserConnection()`, the only thing in this
+repository that bypasses RLS.
+
+**`<out>.partial` + `ATOMIC_MOVE` is not decoration.** Every failure path deletes the partial and the
+rename is the last act, so **a path that exists is a path whose walk finished**. Three test arms
+assert *no file exists* after a refusal.
+
+### The catalogue-driven pattern — the third and fourth members of a family
+
+`ExportTables` and `ExportRedactions` join `SchemaConventionTest` in the family the working
+agreement names: **a schema-wide or catalogue-wide invariant is computed, never read.**
+
+- `ExportTables.classify` reads `pg_tables`, `pg_policies` and `information_schema.columns` **at run
+  time** and partitions them into walked / excluded / unclassified. **The unclassified case throws
+  at export time, not only in a test** — a deployment running a build older than its database is
+  exactly where a test cannot help.
+- **The consequence for area C is: nothing to do.** `V68`'s `run_schedule` arrives in the walked
+  partition by construction and is exported with **no edit to any file in area E**. `ExportTablesTest`
+  sweeps the live catalogue, so it covers the new table automatically. **If that test ever has to be
+  edited to accommodate a new table, the sweep has been rewritten as a list and the whole argument
+  is gone.**
+- `ExportRedactionSweepTest` sweeps `information_schema.columns` and **fails for a credential-shaped
+  column that does not exist yet**. That is master task 34's stated acceptance.
+
+**The redaction list is ENUMERATED and must stay so.** `test_case_version.content_hash`,
+`suite_version.content_hash`, `test_plan_version.content_hash` and `doc_page_version.content_hash`
+are **content addresses of the client's own snapshots**; a blanket `%hash%` rule destroys the
+integrity check on every version snapshot in the archive. `audit_event.actor_token_id`,
+`test_execution.executed_by_token` and `ai_proposal.created_token_id` are **api_token ids**, §132's
+attribution, not credentials. `key` is deliberately **absent** from the suspect-name fragments:
+every storage key, idempotency key, permission key and project key would match, and a list that
+flags sixty benign columns is a list whose failures get waved through.
+
+Six columns dropped (`app_user.password_hash`, `api_token.token_hash`,
+`membership_invitation.token_hash`, `notification_channel.secret`,
+`identity_provider.{client_secret_encrypted,bind_password_encrypted}`); eleven tables excluded with
+a reason each. `api_token`'s name, prefix, expiry and revocation date and
+`notification_channel.secret_hint` are **kept** — the hint's own column comment calls it *"the only
+part of the credential that ever leaves this table"*.
+
+### `storage` has a fourth port, and it is a fourth TYPE on purpose
+
+Orphan reconciliation needs enumeration and the three blob ports cannot provide it:
+`AttachmentStore`'s header refuses exactly that shape — *"An implementation that could be asked
+'list this company's files' would be one refactor away from being the place that decides."* That
+argument is about the ports every **request path** holds, whose callers decide reachability. So the
+capability went onto a type those callers do not hold: **`BlobInventory.keysUnder(BlobRoot,
+prefix)`**, whose only caller is the export and whose javadoc says it **must never become an
+authorization input**. `BlobRoot` is an enum rather than a qualifier string for the package's own
+reason, one turn weaker: it names roots, never bytes, so a wrong member yields a wrong *listing* and
+never a misplaced file.
+
+**`provisioning`'s `allowedDependencies` is now `{tenancy, identity, project, storage}`.** `storage`
+is one of `ArchitectureRules.FOUNDATION_MODULES` and four other modules already declare it, so this
+is not the "wider list standing in for a port" `project`'s header warns against — that warning is
+about reaching sideways into a peer.
+
+### Two facts to reuse rather than re-derive
+
+- **`company.logo_storage_key` has NO WRITER ANYWHERE in this build.** Grepped across
+  `backend/src`, `frontend/src`, `packages/` and `openapi.yaml`: two hits, the `V1:35` DDL and
+  `reporting/ReportHeader.java:55`'s javadoc already saying so. It is not mapped on `Company`. **So
+  no storage root has ever been chosen for it**, and naming one is a guess — the exact "silently
+  under the wrong root" failure `storage/package-info.java` keeps two port types to prevent. The
+  manifest records `"logoBlob": "no writer in this build"`. M6's branding slice picks the root.
+- **`OperatorCommands.ALL` is the whole of registration**, and the `Set.of` entry is the load-bearing
+  half: a runner registered without it starts a servlet container, does the operator's work
+  correctly and **never exits**. `ALL` stays package-private so `OperatorCommandsTest` derives its
+  cases from it — and neither that test nor `CliContextStartsTest` needed editing to cover a fourth
+  verb, which is the property `ALL` exists for. **If either had needed editing, the verb was added
+  in the wrong place.**
+
+### Exit code 3 is a third outcome, not a nicety
+
+A row naming bytes that are not on disk is neither success nor failure: the archive is still the
+best available copy of the client's data, and exiting `0` would tell an offboarding script that a
+complete copy exists. So `EXIT_INCOMPLETE = 3` beside the `0/1/2` all three siblings use, with
+`"complete": false` in the manifest as its machine-readable twin. `1` means **no file was written**.
 
 ---
 
