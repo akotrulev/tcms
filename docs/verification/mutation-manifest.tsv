@@ -571,12 +571,12 @@ CE-M3	§161	?	-	-		queued
 §217 FD-8	§217 phases 3–6	FederatedIdentityServiceTest	-	-		queued
 §217 FD-9	§217 phases 3–6	OidcIdTokenVerifierTest	-	-		queued
 §229 PM-14	§229 phase 2	ArtifactEndpointTest	-	-		queued
-§229 PM-15	§229 phase 2	ArtifactEndpointTest	W1	-		queued
+§229 PM-15	§229 phase 2	com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/ArtifactWriteService.java	RUN:MATCH
 §229 PM-16	§229 phase 2	ArtifactEndpointTest	-	-		queued
 §229 PM-17	§229 phase 2	ArtifactEndpointTest	-	-		queued
 §229 PM-18	§229 phase 2	ArtifactEndpointTest	-	-		queued
 §229 PM-19	§229 phase 2	ArtifactEndpointTest	-	-		queued
-§229 PM-20	§229 phase 2	ArtifactEndpointTest	W1	-		queued
+§229 PM-20	§229 phase 2	com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/Artifact.java	RUN:ZERO-AS-PREDICTED
 §229 PM-21	§229 phase 2	ArtifactEndpointTest	-	-		queued
 §229 PM-22	§229 phase 2	ErrorBodyPolicyTest	-	-		queued
 §229 PM-1	§229 phase 1	ExecutionEndpointTest	-	-		queued
@@ -584,13 +584,13 @@ CE-M3	§161	?	-	-		queued
 §229 PM-3	§229 phase 1	ExecutionEndpointTest	-	-		queued
 §229 PM-4	§229 phase 1	ExecutionEndpointTest	-	-		queued
 §229 PM-5	§229 phase 1	ExecutionEndpointTest	-	-		queued
-§229 PM-6	§229 phase 1	ExecutionEndpointTest	W1	-		queued
+§229 PM-6	§229 phase 1	com.tcms.execution.ExecutionEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/ExecutionAssignmentService.java	RUN:MATCH
 §229 PM-7	§229 phase 1	ExecutionEndpointTest	-	-		queued
 §229 PM-8	§229 phase 1	ExecutionEndpointTest	-	-		queued
-§229 PM-9	§229 phase 1	ExecutionEndpointTest	W1	-		queued
+§229 PM-9	§229 phase 1	com.tcms.execution.ExecutionEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/ConfigurationService.java	RUN:MATCH
 §229 PM-10	§229 phase 1	ExecutionEndpointTest	-	-		queued
 §229 PM-11	§229 phase 1	ExecutionEndpointTest	-	-		queued
-§229 PM-12	§229 phase 1	ErrorBodyPolicyTest	W1	-		queued
+§229 PM-12	§229 phase 1	com.tcms.contract.ErrorBodyPolicyTest	W1	-	backend/src/main/java/com/tcms/execution/RunController.java	RUN:MATCH
 §229 PM-13	§229 phase 1	ExecutionEndpointTest	-	-		queued
 §227 PM-9	§228	CaseBulkEndpointTest	-	-		queued
 §227 PM-10	§228	CaseBulkEndpointTest	-	-		queued
@@ -610,7 +610,7 @@ CE-M3	§161	?	-	-		queued
 §225 PM-1	§225	RoleGrantEndpointTest	-	-		queued
 §225 PM-2	§225	?	-	-		queued
 §225 PM-3	§225	RoleScopeShapeTest	-	-		queued
-§224 SP-2	§224	SsoLoginAttemptPurgeTest	W1	-		queued
+§224 SP-2	§224	com.tcms.auth.SsoLoginAttemptPurgeTest	W1	-	backend/src/main/java/com/tcms/auth/SsoLoginAttemptPurge.java	RUN:ZERO-AS-PREDICTED
 §223 LD-1	§223	LdapDirectoryTest	-	-		queued
 §223 LD-2	§223	LdapDirectoryTest	-	-		queued
 §223 LD-3	§223	LdapDirectoryTest	-	-		queued
@@ -624,9 +624,9 @@ CE-M3	§161	?	-	-		queued
 §232 PB-5	§232	IngestionEndpointTest	-	-		queued
 §232 PB-6	§232	RunCloneEndpointTest	-	-		queued
 §232 PB-7	§232	RunCloneEndpointTest	-	-		queued
-§232 PB-8	§232	IngestionEndpointTest	W1	-		queued
+§232 PB-8	§232	com.tcms.execution.IngestionEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/IngestionService.java	RUN:MORE
 §232 PB-9	§232	PlanCreateEndpointTest	-	-		queued
-§234 PM-1	§234	ArtifactEndpointTest	W1	-		queued
+§234 PM-1	§234	com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/ArtifactWriteService.java	RUN:MATCH
 §234 PM-2	§234	?	-	-		queued
 §235 PM-1	§235	DocPageEndpointTest	-	-		queued
 §235 PM-2	§235	?	-	-		queued
@@ -634,7 +634,7 @@ CE-M3	§161	?	-	-		queued
 §236 DK-1	§236	ExecutionEndpointTest	-	-		queued
 §236 DK-2	§236	ExecutionEndpointTest	-	-		queued
 §236 DK-3	§236	ExecutionEndpointTest	-	-		queued
-§236 DK-4	§236	ExecutionEndpointTest	W1	-		queued
+§236 DK-4	§236	com.tcms.execution.ExecutionEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/DefectLinkService.java	RUN:ZERO-UNEXPECTED
 §236 DK-5	§236	ExecutionEndpointTest	-	-		queued
 §236 DK-6	§236	ExecutionEndpointTest	-	-		queued
 §236 DK-7	§236	ExecutionEndpointTest	-	-		queued
