@@ -1,8 +1,6 @@
 package com.tcms.execution;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
@@ -267,20 +265,12 @@ public class RunCreateService {
         if (source == RunSource.INGESTED) {
             return null;
         }
-        ObjectNode node = json.createObjectNode();
-        if (request.planId() != null) {
-            node.put("planId", request.planId().toString());
-        }
-        putIds(node, "caseIds", PlanEdit.distinct(request.caseIds()));
-        putIds(node, "suiteIds", PlanEdit.distinct(request.suiteIds()));
-        ArrayNode tags = node.putArray("tags");
-        RunEdit.tagsOf(request).forEach(tags::add);
-        return node.toString();
-    }
-
-    private static void putIds(ObjectNode node, String field, List<UUID> ids) {
-        ArrayNode array = node.putArray(field);
-        ids.forEach(id -> array.add(id.toString()));
+        // ~~The eight lines that built the node used to be here.~~ → §247 moved them to
+        // RunScopeDocument, because V68 gave the same document a second home on run_schedule and
+        // "the schedule's scope and the run's scope are the same bytes" has to be a property of
+        // the code rather than something two methods currently agree on. What stays here is the
+        // INGESTED arm above, which is this path's own question and not the document's.
+        return RunScopeDocument.of(json, request);
     }
 
     private Outcome apply(
