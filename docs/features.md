@@ -386,9 +386,18 @@ implementation plan at `docs/plans/2026-08-18-unplanned-gaps.md`.*
 - **Notifications do not cover the review workflow.** Two events fire — item-assigned and
   run-completed. Nobody is told they have been asked to review, that their case was approved, or
   that changes were requested, so a workflow that depends on someone noticing stalls silently.
-- **No bulk execution assignment.** Cases have `/projects/{projectId}/cases/bulk`; executions have
-  only a per-execution assignee endpoint. Splitting a 300-case run across five testers is 300
-  operations.
+- **~~No bulk execution assignment.~~** ~~Cases have `/projects/{projectId}/cases/bulk`; executions
+  have only a per-execution assignee endpoint. Splitting a 300-case run across five testers is 300
+  operations.~~ → **superseded 2026-08-22 (§245).**
+  `POST /projects/{projectId}/runs/{runId}/executions/bulk` assigns a selection to one person — or
+  **distributes** it round-robin across a list, which is the request the gap was actually about.
+  Preview-then-commit, one transaction, no new permission and no migration.
+  **It is also `audit_event.bulk_operation_id`'s first writer in the product's history**: one row
+  per target sharing one id, because one row with 300 `target_ids` cannot state an act that sends
+  twelve cases to five different people — and the audit trail groups on that id rather than being
+  flooded by it. There is deliberately **no `Idempotency-Key`**: nothing is created, so a replay has
+  no resource to be answered with, and determinism is the property instead.
+  **Built, ungated and unverified** — `docs/handoff/245-bulk-execution-assignment.md`.
 - **~~No time tracking on results.~~ ~~No elapsed or duration field on an execution~~, so "how long
   did this cycle take last time" — the question a lead plans the next cycle from — is unanswerable.**
   → **superseded 2026-08-22 (§244).** The second sentence was false when it was written and the

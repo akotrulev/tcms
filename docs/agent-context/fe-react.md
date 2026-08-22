@@ -2,13 +2,105 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-22 (**§244** — **execution duration, and the frontend half is ONE CONTROL AND TWO SCREENS THAT MUST CARRY A FIELD THEY DO NOT SHOW.** ⚠️ **GATES NOT RUN — no `npm run test:run`, no `npm run build`, no `npm run lint` was run against this work**, under the no-gates directive of 2026-08-22; the suite count therefore stays quoted at §243's **1602 / 120** and is a *stale* figure, not a measured one. **THE RULE TO CARRY: when a write body states TOTAL STATE, every call site must send every field — including the ones its own screen has no control for.** `ExecutionGrid`'s row verdict and the grid-mode Blocked dialog both record a result and neither shows a duration, so omitting `durationMs` there would CLEAR a number the tester entered in Focus mode, from a screen that never displayed it. Both already sent `comment` back for exactly this reason and the precedent was written in their comments — **the field was added by re-reading those comments, not by a test**, and `ED-M9` records that there is still no automated observer for either. **The unit boundary is `lib/format.ts` and nowhere else** — `parseDurationSeconds` / `durationSecondsField`, seconds on screen because a tester does not think in milliseconds, milliseconds on the wire because that is what a JUnit/TestNG/Cucumber report reports. The CLI deliberately names its flag `--duration-ms` rather than converting, so the conversion has one implementation and not three. **`parseDurationSeconds` returns THREE things and the third is the point**: `null` for an empty box ("I did not time this"), a number for a value, and `undefined` for unreadable text — which disables the verdict buttons rather than saving. A two-state parse would have made garbage in the box a **silent clear**, which is worse than a refusal because the tester never asked for it. **Zero is a duration**, so nothing on this path may use a falsy check. **`ExecutionPage.tsx` has NO component test in this repository** and none was invented; `format.test.ts` covers the parse and the browser queue's `§244 ED-1..ED-6` covers the screen. Gates: **NOT RUN**.)
+**Last verified:** 2026-08-22 (**§245** — **bulk execution assignment, and the frontend half is A SELECTION MODEL, A PREVIEW DIALOG, AND AN AUDIT TRAIL THAT STOPS FLOODING.** ⚠️ **GATES NOT RUN AND NOTHING HAS EVER EXECUTED — no `npm run test:run`, no `npm run build`, no `npm run lint`**, under the batch-2 no-gates directive; the six `AssignExecutionsDialog.test.tsx` arms and the five new `AuditLogPage.test.tsx` arms exist and have never run. The suite count stays quoted at §243's **1602 / 120** and is stale twice over now. **THE RULE TO CARRY: a caption on a bulk bar is a CLAIM ABOUT WHAT THE BUTTON WILL DO, and copying the neighbouring screen's wording makes it a false one.** `CaseListPage`'s bar says *"Selection covers the rows on this page"*, which is true there because the case grid is server-paged. The run detail is **not paged** — it renders the whole checklist narrowed by a filter chip — so the caption is *"Selection covers the rows this filter shows"*, and **the selection is cleared when the chip changes**, because a selection holding rows the chip has hidden is a bulk act over rows the person cannot see. **THE SPREAD ORDER IS RENDERED BECAUSE IT DECIDES**: the i-th row goes to the i-th person wrapping, so the people at the top take the remainder — a multi-select that hid its order would be a control that lies about the outcome, and the chosen people are therefore a numbered chip list with a caption saying what the numbers mean. **`tallyByAssignee` IS SEEDED FROM THE CHOSEN LIST, NOT DERIVED FROM THE RESULT** — a `groupBy` over `changed` silently drops the person who received nothing, which is the row a coordinator most needs to see. **`executionSelection.ts` is the display-logic module** (`toggleSelected`, `selectAll`, `tallyByAssignee`); the page holds state and not arithmetic. **The audit trail groups on `bulkOperationId` by folding a RUN of consecutive rows, not by scanning the page** — every writer stamps a transaction's rows from one `Instant` and the sort is `(occurredAt DESC, id DESC)`, so one act's rows are adjacent; a null id is always its own group of one, which is every row written before §245, so the ungrouped rendering did not move. **A group straddling a page boundary renders as TWO and says "n of one operation shown here"** rather than claiming a total the page cannot see, and **the pager's count stays `page.total`, the server's ROW count** — deriving a count of operations would make the pager disagree with itself on every page. Mixed-action groups get a neutral label, because a distribute that also unassigns writes both verbs in one act. **The mock arm is NOT in `fixtures.ts`** — that file holds body factories only (`aBulkAssignResult`, `anAssignmentChange` were added there); the doubles are `vi.spyOn(api, …)` wrapped once by `test/contractDoubles.ts`, so every body is compared to `openapi.yaml` without a test opting in. **`RunDetailPage.tsx` still has NO component test** and none was invented. Gates: **NOT RUN**.)
+
+**Superseded header below — §244's, kept because §245 verified only the run detail, the dialog and the audit screen.** (2026-08-22: **§244** — **execution duration, and the frontend half is ONE CONTROL AND TWO SCREENS THAT MUST CARRY A FIELD THEY DO NOT SHOW.** ⚠️ **GATES NOT RUN — no `npm run test:run`, no `npm run build`, no `npm run lint` was run against this work**, under the no-gates directive of 2026-08-22; the suite count therefore stays quoted at §243's **1602 / 120** and is a *stale* figure, not a measured one. **THE RULE TO CARRY: when a write body states TOTAL STATE, every call site must send every field — including the ones its own screen has no control for.** `ExecutionGrid`'s row verdict and the grid-mode Blocked dialog both record a result and neither shows a duration, so omitting `durationMs` there would CLEAR a number the tester entered in Focus mode, from a screen that never displayed it. Both already sent `comment` back for exactly this reason and the precedent was written in their comments — **the field was added by re-reading those comments, not by a test**, and `ED-M9` records that there is still no automated observer for either. **The unit boundary is `lib/format.ts` and nowhere else** — `parseDurationSeconds` / `durationSecondsField`, seconds on screen because a tester does not think in milliseconds, milliseconds on the wire because that is what a JUnit/TestNG/Cucumber report reports. The CLI deliberately names its flag `--duration-ms` rather than converting, so the conversion has one implementation and not three. **`parseDurationSeconds` returns THREE things and the third is the point**: `null` for an empty box ("I did not time this"), a number for a value, and `undefined` for unreadable text — which disables the verdict buttons rather than saving. A two-state parse would have made garbage in the box a **silent clear**, which is worse than a refusal because the tester never asked for it. **Zero is a duration**, so nothing on this path may use a falsy check. **`ExecutionPage.tsx` has NO component test in this repository** and none was invented; `format.test.ts` covers the parse and the browser queue's `§244 ED-1..ED-6` covers the screen. Gates: **NOT RUN**.)
 
 **Superseded header below — §243's, kept because §244 verified only the execution screen.** (2026-08-21: **§243** — **review-workflow notifications, and the frontend half is TWO LABEL MAPS.** The notification event vocabulary went from two members to six (`review.requested`, `review.endorsed`, `review.changes_requested`, `review.approved`) and **not one component changed**: the channel dialog's checkbox list is derived from `NOTIFICATION_EVENT_TYPES`, which is `Object.keys(notificationEventTypeLabels)`. **The `satisfies Record<NotificationEventType, string>` on `notificationEventTypeLabels` AND `notificationEventTypeHelp` is what turned a regenerated `schema.d.ts` into seven compile errors** — in `labels.ts`, `NotificationChannelDialog.tsx` and `NotificationSettingsPage.tsx` — instead of four blank labels and four checkboxes with no help text. That is the whole argument for the `satisfies` pattern, observed rather than asserted: run `npm run build` **before** adding the labels and read the failure. Frontend suite unchanged at **1602 / 120** — no test needed extending, because `NotificationSettingsPage.test.tsx` targets checkboxes by test id rather than counting them, which is the reason a vocabulary change was free here and would not have been under a count assertion. Gates: build clean, lint **0 warnings**, **1602 / 120**.)
 
 **Superseded header below — §242's, kept because §244 verified none of it.** (**§242** — **the audit trail: one lazy `AuditLogPage` behind `/projects/:projectId/audit` AND `/admin/audit`.** **A LOCAL `tsc --noEmit` PASSED CLEAN WHILE THREE OF THIS SCREEN'S TESTS FAILED** — the working agreement's warning arriving on schedule, and worth carrying because it was tempting to treat the typecheck as coverage while `shanks` was down. **THE RULE TO CARRY: the rail's disable-don't-hide rule has exactly one exception now, and it is written at the type rather than left for the next reader to discover.** `AppShell.AuditReach` gates the two audit entries on `project:audit` / `audit:view` and **HIDES** them — the opposite of §31 and of the five separate comments in that file arguing that hiding lies about the *product*. Taken at the owner's direction: an audit screen's subject is who did what, so advertising it to somebody who may not read it invites the request the permission exists to refuse. It fails closed while pending. **One component for two routes**, branching on whether `useParams` yields a `projectId`; two components would be two renderings of the same twelve columns with nothing keeping them identical. **`Table`, NOT `DataGrid` — and §241 already measured why**: DataGrid does not render in jsdom, so the twelve component arms are only possible on a `Table`. **Action labels go through a curated map + computed fallback (`auditActionLabel`), NOT `satisfies Record<Union, string>`** — `AuditEvent.action` is a bare `string` in the contract because the verb set grows with every slice, so there is no union to be total against; `notificationEventLabel` is the same shape for the same reason. A refusal renders as a sentence **and makes no request at all**. Filters live in the URL (`useAuditFilters`, `useCaseFilters`'s arrangement). Gates: **1602 / 120**, build and lint clean.)
 
 **Superseded header below — §241's, kept because §242 verified none of it.** (**§241** — **the org chart screen: `/org-chart`, `useOrgChart`, and the tree flattening that became shared.** **THE RULE TO CARRY: a notice that appears only when something is hidden IS the disclosure it was meant to avoid.** The matrix columns are clipped to the reader's own `project:read`, so somebody missing six of eight projects gets a grid **that looks complete** — and the standing line *"Only projects you can open are shown here."* therefore renders **unconditionally**, for a Company Admin who sees everything too. Its test drives exactly that reader, which is the case a conditional implementation would pass. **`/org-chart` sits BESIDE `/admin/teams`, not beneath it**: every affordance there answers to `company:teams` and this screen has no gate at all — no `PermissionGate`, no `enabled`, no `lib/permissions.ts`. **`flattenTeamTree` (`features/admin/teamTree.ts`) is the one tree flattening**, extracted from `TeamsPage` in its own commit and called by `OrgChartTeams`; orphans and cycle members surface at the ROOT. **`keys.orgChart` is invalidated by all nine staffing writes, and a tenth is caught by a rule rather than by the list** — the last arm of `orgChartInvalidation.test.tsx` reads `admin.ts` through `import.meta.glob` and fails any `onSuccess` touching `teams`/`users`/`roleAssignments`/`projects` without it. **`OrgChartMatrix` is a `Table` and NOT `DataGrid`, which is load-bearing: DataGrid does not render in jsdom** (its virtualization measures through a `ResizeObserver` the test shim never fires, so the scroller is 0×0 with no rows) — measured, six arms failed on the DataGrid version, and `CaseListPage` is the repo's only DataGrid screen and has no component test at all. Whole-screen bundle cost **+7,054 B of dist JS (+0.37 %)**. Nine new fixtures including the four org-chart factories. Gates: **1582 / 119**.)
+
+## §245 — A SELECTION IS NOT A PAGE, AND THE ORDER IN A MULTI-SELECT DECIDES SOMETHING
+
+**Read this before touching `features/runs/RunDetailPage.tsx`, `AssignExecutionsDialog.tsx`,
+`executionSelection.ts` or `features/audit/AuditLogPage.tsx` — and before copying a bulk bar from
+one screen to another.**
+
+> ⚠️ **UNGATED, AND NOTHING RAN.** No `npm run test:run`, `npm run build` or `npm run lint`. The
+> eleven new test arms exist and have never executed. The **1602 / 120** figure is §243's.
+
+### The caption is a claim, and the neighbouring screen's is wrong here
+
+| Screen | Paged? | Caption |
+|---|---|---|
+| `CaseListPage` | server-paged | *"Selection covers the rows on this page."* |
+| `RunDetailPage` | **not paged** — the whole checklist, narrowed by a chip | *"Selection covers the rows this filter shows."* |
+
+Copying the first would have been false, and *"every row in the run"* would have been worse:
+**Not run** is exactly the filter a coordinator applies before distributing. **Changing the chip
+clears the selection**, because a selection holding rows the chip has hidden is a bulk act over
+rows the person cannot see.
+
+The bar is disabled when the run is closed, with the freeze in the tooltip — §31's
+disable-don't-hide, saying the server's 409 before it happens. Row-click selection is deliberately
+**not** added: the row's targets are two links already.
+
+### The spread order is visible because it decides who takes the remainder
+
+The i-th row of the run-ordered selection goes to `assigneeIds[i % length]`, so the people at the
+**top** get the extra rows. A multi-select that hid its order would be a control that lies about
+what the button will do, so the chosen people render as a **numbered chip list** with a caption
+saying what the numbers mean.
+
+### `tallyByAssignee` is seeded from the chosen list, not derived from the result
+
+`executionSelection.ts` owns the arithmetic — `toggleSelected`, `selectAll`, `tallyByAssignee` —
+so the page holds state and not sums. The seeding is the whole point: **a `groupBy` over `changed`
+drops the person who received nothing**, which is the row a coordinator most needs to see. An
+unassignment contributes to no tally, because "nobody" is not a person with a share.
+
+### The audit trail groups on a RUN, not a scan
+
+`groupByBulkOperation` folds **consecutive** rows sharing a non-null `bulkOperationId`. Every writer
+stamps a transaction's rows from one `Instant` and the sort is `(occurredAt DESC, id DESC)`, so one
+act's rows are adjacent — scanning the whole page would buy nothing (two acts cannot share an id)
+and cost the property that makes this cheap.
+
+- **A null id is always its own group of one**, which is every row written in every deployment
+  before §245, so `Audit.Row` and its twelve existing arms did not move. `PlainRow` is that
+  rendering, extracted verbatim.
+- **A group straddling a page boundary renders as TWO groups**, each counting what is on its page,
+  and the copy says *"n of one operation shown here"* rather than claiming a total the page cannot
+  see. Stated rather than hidden.
+- **The pager's count stays `page.total`** — the server pages rows, and a client-side count of
+  operations would make the pager disagree with itself on every page. There is a comment beside it
+  saying so; it is the second-most likely "improvement" here.
+- A group whose rows carry **two different actions** gets a neutral label. A distribute that also
+  takes rows off somebody writes both `execution.assigned` and `execution.unassigned` in one act,
+  so this is reachable in ordinary use and picking either verb would be wrong about half the group.
+
+Test ids: `Audit.Group`, `Audit.Group.Toggle`, `Audit.Group.Action`, `Audit.Group.Targets`, with
+`Audit.Row` kept on the individual rows.
+
+### The write hook, and the two headers it does not send
+
+`useBulkAssignExecutions(projectId, runId)` posts `ExecutionBulkOperation` and **invalidates the run
+only when `result.dryRun` is false** — invalidating after a preview would refetch the run for
+nothing and flash the grid under an open dialog. `meta: { handled: true }`, because the dialog lands
+400s on their controls and renders the 409 in place.
+
+**No `If-Match`** (`useAssignExecution`'s reason) and **no `Idempotency-Key`** — nothing is created,
+so a replay has no resource to be answered with; the split is deterministic, so a retry reports
+everything `unchanged`.
+
+### Where the mock arm goes, and where it does not
+
+**Not in `frontend/src/test/fixtures.ts`** — that file holds **body factories only** (`aBulkAssignResult`
+and `anAssignmentChange` were added there, complete and typed to the contract, never cast). The
+fetch doubles are `vi.spyOn(api, …)` per test file, wrapped once by `test/contractDoubles.ts`, so
+every body crossing them is compared against `openapi.yaml` without any test opting in. The anchored
+path arm (`/^\/projects\/[^/]+\/runs\/[^/]+\/executions\/bulk$/`) lives in
+`AssignExecutionsDialog.test.tsx`.
+
+### What has no observer
+
+`RunDetailPage.tsx` has **no component test in this repository** and none was invented — the
+selection model, the frozen-run disable and the caption are covered only by the browser queue
+(`§245 BA-1`, `BA-5`, `BA-8`).
+
+---
 
 ## §244 — THE FIELD TWO SCREENS MUST SEND AND NEITHER SHOWS
 
@@ -2211,6 +2303,18 @@ directly above the switcher) and the wordmark links there too.
 
 ## Seams to reuse
 
+**New seams §245 created:**
+- `features/runs/executionSelection.ts` — `toggleSelected`, `selectAll`, `tallyByAssignee`. The
+  selection arithmetic, out of the page. `tallyByAssignee` is **seeded from the chosen people** so
+  somebody who receives nothing still appears with a zero.
+- `features/runs/AssignExecutionsDialog.tsx` — preview-then-commit in two modes, `BulkActionDialog`'s
+  structure (mode state, an argument, an effect that drops a stale preview, `run(dryRun)`,
+  `applyServerError` landing field errors on controls). Test ids under `RunDetail.AssignDialog.*`.
+- `api/queries/runs.ts::useBulkAssignExecutions` — invalidates the run **only on a commit**.
+- `features/audit/AuditLogPage.tsx::groupByBulkOperation` + `GroupRow` + `PlainRow` — exported
+  grouping over a **run** of consecutive rows; `PlainRow` is the pre-§245 rendering, unchanged.
+- `test/fixtures.ts::aBulkAssignResult` / `anAssignmentChange`.
+
 - **A FILE IS DOWNLOADED THROUGH `FileDownloadLink`, AND THE OBVIOUS SPELLINGS ARE 401s (§126).**
   `components/FileDownloadLink.tsx` (the control) over `fetchArtifact` (`api/client.ts` — the
   same-origin guard, the bearer token, the 60s budget) + `saveBlob` (`lib/download.ts` — the
@@ -3199,6 +3303,11 @@ directly above the switcher) and the wordmark links there too.
   with the reasoning recorded in `vite.config.ts`.
 
 ## Session log
+
+- 2026-08-22 · EXTEND · **bulk execution assignment, frontend half** (§245; the run detail's
+  selection model and bulk bar, `AssignExecutionsDialog` + its six arms, `executionSelection.ts`,
+  `useBulkAssignExecutions`, two fixture factories, three contract types, and the audit trail's
+  grouping + five arms. **Gates NOT RUN and no test ever executed** — batch-2 no-gates directive.)
 
 - 2026-08-14 · EXTEND · **The panels nothing looked at** (§201) — §198's largest opened instrument
   item: a test whose render tripped an error boundary fails unless it calls

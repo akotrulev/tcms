@@ -2,7 +2,9 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-22 (**§246** — **the company data export: `export-company`, a fourth operator CLI verb, area E of `docs/plans/2026-08-18-unplanned-gaps.md`. NO MIGRATION, no contract change, no permission seeded or moved, catalogue still 55, head still `V67`.**) ⚠️ **GATES NOT RUN — the second entry in this file that cannot quote a build.** Area E ran under the same batch-2 no-tests directive as §244; `./gradlew build` was not run and no targeted class was run, so **every claim below is read off the code, not off a green suite**. It also ran **concurrently with area B**, at the user's explicit permission — the two lanes share no file. **THE RULE THAT OUTLIVES THE AREA: a company-scoped operation opens `CompanyContext` OUTSIDE the `@Transactional` boundary.** `CompanyAwareTransactionManager` issues `set_config('app.current_company', …)` in `doBegin`, reading whatever `CompanyContext` holds *at that moment* — so a `CompanyContext.open()` written inside the transactional method runs AFTER the transaction decided there was no company, the GUC stays unset for its whole life, every policy evaluates `company_id = NULL` (never true), and the walk reads **zero rows from every company-owned table without raising anything**. The archive opens, parses and is empty. **`export-company` is the FIRST operator command that runs inside a company context at all** — its three siblings run instance-level with none open, which is why it could not be modelled on `CompanyProvisioningService`'s transaction handling. **THE SECOND PATTERN: `ExportTables` and `ExportRedactions` are the third and fourth members of the family `SchemaConventionTest` started — a schema-wide or catalogue-wide invariant is COMPUTED, never read.** The table list comes from `pg_policies` / `information_schema` at run time and an unclassified table **throws at export time**, so area C's `run_schedule` exports itself the day `V68` lands with no edit here; the redaction sweep fails for a credential-shaped column **that does not exist yet**. **`storage` has a FOURTH port, `BlobInventory`**, and it is a fourth *type* rather than a fifth method because `AttachmentStore`'s header refuses a listing method on the ports request paths hold. **`provisioning` declares `storage`** — its fourth allowed dependency, and `storage` is a foundation module. **The settled open question: `company.logo_storage_key` has NO WRITER ANYWHERE** — the `V1:35` DDL and `ReportHeader.java:55`'s javadoc are the only two hits and the column is not mapped on `Company`, so no root can be named without guessing and the manifest says so out loud. Gates: **NOT RUN**.)
+**Last verified:** 2026-08-22 (**§245** — **bulk execution assignment: `POST /projects/{projectId}/runs/{runId}/executions/bulk`, area B of `docs/plans/2026-08-18-unplanned-gaps.md`, executed against `docs/plans/2026-08-18-gap-b-bulk-execution-assignment.md`. NO MIGRATION, no permission seeded or moved, catalogue still 55, head still `V67`.**) ⚠️ **GATES NOT RUN, AND NOTHING HERE HAS EVER EXECUTED — the third entry in this file that cannot quote a build, and the most complete failure of the three.** §244 at least had two targeted classes run before the no-tests directive arrived; this area ran entirely under it. No `./gradlew build`, no `./gradlew test`, no targeted class. `ExecutionBulkAssignTest`'s fourteen arms exist and have never run. It ran **concurrently with area E**, at the user's explicit permission; the two lanes share no source file. **THE RULE THAT OUTLIVES THE AREA: "does this column have a writer" is a question the exemption maps answer about the columns somebody listed, and the moment you give one a writer the exemption becomes a FALSE CLAIM that fails the build in the other direction.** `AuditEvent.bulkOperationId` had sat in `WRITERLESS_BY_DECISION` since §152 with an entry naming the slice that would delete it; this is that slice, so `everyMappedColumnHasAWriter` computes a writer, the exemption stops matching, and `containsExactlyInAnyOrderElementsOf` reddens (§162, both directions). **T7 and T8 were therefore landed adjacently on purpose** — under a no-gates directive nobody would have observed that red, so splitting them would have shipped a red gate invisibly. **The column has now been in one map or the other since §152 and is in NEITHER**, having moved between them three times without changing at all: §242 gave it a reader, §245 a writer. That pair's longest worked example. **AND THE TALLY INSIDE THE TALLY-CHECKING FILE WAS STALE AGAIN** — `everyMappedColumnHasAWriter`'s javadoc said "four of the nine" while the map held **eight**; it holds seven now, recounted against the map in both places. **ONE `audit_event` ROW PER TARGET SHARING ONE `bulkOperationId` — a deliberate departure from every other bulk service here**, which writes ONE row with a 143-id `target_ids` array. That shape cannot state a `DISTRIBUTE`: one row carries one `changes` document and this act moves twelve rows to five different people. So `AuditEvent.record` has an **eight-argument overload** rather than an eighth parameter on the form with 42 call sites, and `ExecutionAssignmentAudit` is the **one speller of both verbs and the document, with both writers of `assignee_id` going through it** — the verbs are the EXISTING `execution.assigned` / `execution.unassigned`, because an `execution.bulk_assigned` would split every "who took this off Ana" query in two. **THERE IS NO `Idempotency-Key` AND THAT IS NOT AN OMISSION**: `POST /cases/bulk` declares no parameters at all, and what this repo calls idempotency is a unique `idempotency_key` column on a **created row** — a bulk assign creates nothing, so there is no row to key. Determinism replaces it: the mapping is a pure function of `(the RUN's row order, the CALLER's assignee order)` and an unchanged row writes no audit row, so a replay reports everything `unchanged` and writes nothing. **`RunController` takes the mapping — there is NO new controller**, correcting the master plan: it already maps the prefix and owns the three problem builders this answers with verbatim, and a second controller on one prefix is the shape §72 extracted `ExecutionTargets` to end. **The caller who lacks `run:execute` is a VIEWER, not a Test Engineer** — Test Engineer holds that key (roles spec §A3, `V3`), so the plan's fixture proved nothing and a comment claiming otherwise would additionally redden `tierClaims.test.ts`. **A stale execution id is a SKIP with a reason, never a 404** over the other 299 rows; a bad assignee refuses the whole act, and one `@Transactional` is what makes "nothing was written" true. Cap 500 — one transaction *and* up to 500 audit rows. Fixture prefix **`88`**. Gates: **NOT RUN**.)
+
+**Superseded header below — §246's, kept because §245 verified only the `execution` and `tenancy` halves.** (2026-08-22: **§246** — **the company data export: `export-company`, a fourth operator CLI verb, area E of `docs/plans/2026-08-18-unplanned-gaps.md`. NO MIGRATION, no contract change, no permission seeded or moved, catalogue still 55, head still `V67`.**) ⚠️ **GATES NOT RUN — the second entry in this file that cannot quote a build.** Area E ran under the same batch-2 no-tests directive as §244; `./gradlew build` was not run and no targeted class was run, so **every claim below is read off the code, not off a green suite**. It also ran **concurrently with area B**, at the user's explicit permission — the two lanes share no file. **THE RULE THAT OUTLIVES THE AREA: a company-scoped operation opens `CompanyContext` OUTSIDE the `@Transactional` boundary.** `CompanyAwareTransactionManager` issues `set_config('app.current_company', …)` in `doBegin`, reading whatever `CompanyContext` holds *at that moment* — so a `CompanyContext.open()` written inside the transactional method runs AFTER the transaction decided there was no company, the GUC stays unset for its whole life, every policy evaluates `company_id = NULL` (never true), and the walk reads **zero rows from every company-owned table without raising anything**. The archive opens, parses and is empty. **`export-company` is the FIRST operator command that runs inside a company context at all** — its three siblings run instance-level with none open, which is why it could not be modelled on `CompanyProvisioningService`'s transaction handling. **THE SECOND PATTERN: `ExportTables` and `ExportRedactions` are the third and fourth members of the family `SchemaConventionTest` started — a schema-wide or catalogue-wide invariant is COMPUTED, never read.** The table list comes from `pg_policies` / `information_schema` at run time and an unclassified table **throws at export time**, so area C's `run_schedule` exports itself the day `V68` lands with no edit here; the redaction sweep fails for a credential-shaped column **that does not exist yet**. **`storage` has a FOURTH port, `BlobInventory`**, and it is a fourth *type* rather than a fifth method because `AttachmentStore`'s header refuses a listing method on the ports request paths hold. **`provisioning` declares `storage`** — its fourth allowed dependency, and `storage` is a foundation module. **The settled open question: `company.logo_storage_key` has NO WRITER ANYWHERE** — the `V1:35` DDL and `ReportHeader.java:55`'s javadoc are the only two hits and the column is not mapped on `Company`, so no root can be named without guessing and the manifest says so out loud. Gates: **NOT RUN**.)
 
 **Superseded header below — §244's, kept because §246 verified none of it: area E touched no file in `execution` and no contract.** (**§244** — **execution duration: `ExecutionResultInput.durationMs`, slice 3 / area A of `docs/plans/2026-08-18-unplanned-gaps.md`. NO MIGRATION, no permission seeded or moved, catalogue still 55, head still `V67`.**) ⚠️ **GATES NOT RUN — this entry is the first in this file that cannot quote a build.** Area A was built under a standing directive to run no tests; `./gradlew build` has not been run against it. Two targeted classes were run before that directive arrived: `ExecutionDurationTest` (4 arms) and `IngestionEndpointTest`, BUILD SUCCESSFUL. Treat every claim below as read off the code, not off a green suite. **THE FINDING THAT DELETED A MIGRATION AND THEN FOUND A WORSE PROBLEM: THE PLAN SAID "ADD `duration_seconds` TO `test_execution`"; THE COLUMN WAS ALREADY THERE, AND SO WAS NOTHING ELSE.** `duration_ms BIGINT` shipped in `V1__initial_schema.sql:845` on the schema's first day, is mapped at `TestExecution.java:96`, is served on `TestExecutionSummaryView` / `TestExecutionView` / `CaseHistoryView`, is copied into `execution_fact` by `ExecutionSource`'s seven-column `ON CONFLICT` set-list, and is summed into `RunSummaryReport`'s "recorded duration" at `:396`. **Five readers, one report, and NO WRITER OF ANY KIND** — the ingestion parsers recovered a duration and `IngestionService#payload` put it in the ingestion *job's* payload JSON, never in the column, so every one of those reads answered null for a year. **THE RULE TO CARRY: "does a column exist" and "does anything write it" are two greps, and a plan that answers only the first is why this area was scoped as a migration.** `ArchitectureRulesTest`'s writerless/readerless exemption maps are the instrument for exactly this and `duration_ms` was in NEITHER, because those maps cover the columns somebody thought to list. **THE WRITE IS TOTAL STATE, and it travels through `TestExecution.record` rather than a setter of its own** — the duration is part of the verdict, so an amendment that omits it CLEARS it, on the same terms as `comment`; a null-guard makes the field un-clearable and a truthiness guard additionally eats a genuine zero, which are `ED-M1` and `ED-M2` in the mutation queue. **Zero is a duration, not an absence** — `zeroIsADurationAndNotAnAbsence` exists because every layer between the tester and the column has a falsy check in it. **The validation is a collected fault, not a short-circuit**: `validate` puts `durationMs` after `stepResults` and before `return`, because the caller is a tester at the end of a test. **`openapi.yaml`'s `minimum: 0` enforces NOTHING at runtime** — nothing in this repository reads an OpenAPI `minimum`; the check in `validate` is the check. **`IngestionService` now writes the value it always had** (one line, `result.durationMs()`), which is a deliberate widening of the area's stated scope and the reason `IngestedResult`'s javadoc claiming the column does not exist is struck through rather than deleted. Gates: **NOT RUN**.)
 
@@ -13,6 +15,117 @@
 **Superseded header below — §241's, kept because §242 verified none of it.** (**§241** — **the org chart: `GET /api/v1/org-chart` + `/org-chart`, executed from `docs/plans/2026-08-15-org-chart-tasks.md`. No migration, no permission seeded or moved, catalogue still 55.** **THE RULE TO CARRY: when a rule is about WHO IS ASKING, a test written about who is NAMED passes straight through it.** The plan's own §8.3 agreement test — called "the single most valuable test in this slice" — pins the SUBJECT's `ProjectAccess.canView`, and removing the disclosure filter leaves both its directions GREEN, because a leaked cell still names somebody who legitimately holds that role. The arm that reddens is a third one asking the evaluator about the CALLER. Measured by breaking it and reverting. The invariant the surface rests on: **the people axis is a company fact, the project axis is the reader's own** — person rows complete, matrix columns exactly `AdminReach.visibleProjects`, and a project the caller cannot open contributing no column, no cell and **no count**. **`EffectiveRoleNames` is now the one display implementation of roles spec §A1.1's replace-don't-union override**, so the count of §A1.1 implementations stays at three; turning replace into union reddens twelve arms across three classes, three of them in `ProjectEndpointTest`, which is the evidence it is genuinely shared. **`ProjectAccess` lost its two role-name methods for one `effectiveProjectRoleNames(userId, projectIds)`** — the plan wanted the helper called from `ProjectService` and that does not build: `project`'s declaration is `{api, tenancy}`, its own header forbids widening it, and `com.tcms.api`'s charter refuses shared helpers. **If `project` must share logic with `identity`, the port answers a further question — never a wider list and never `api`.** The two role-name queries take a `Collection<UUID>` and each grant path is its own `UNION ALL` arm, because a team grant's row carries `user_id = NULL` and nothing on it says whose cell it is — **and that same join is what makes `via` and `teamId` answerable at all**. `openapi.yaml`'s `CurrentUser.teams` claimed `GET /teams` is gated on `company:teams`; it is `company:read`, corrected in place, and **`tierClaims.test.ts` has no "gated on `<key>`" shape**, which is an open instrument gap. Gates: backend **3082 / 0 / 0**.)
 
 **Amended 2026-08-17 — `V67`, and the head is `V67`.** ~~"No migration"~~ is still true of the org-chart slice and **no longer true of the feature's record**: the org chart's own T5 query-plan lane ran afterwards and found a seq scan on the **authorization hot path**, which is now `V67__team_membership_answers_which_teams_a_person_is_in.sql`. See §241-A below before adding any index. Gates after `V67`: backend **3082 / 0 / 0**, unchanged — **an index adds no test, and that is the point of the `§241 IX-1` gap row.**
+
+---
+
+## §245 — THE FIRST WRITER OF `bulk_operation_id`, AND THE EXEMPTION IT HAD TO DELETE
+
+**Read this before touching `AuditEvent.record`, `ExecutionAssignmentService`, `RunController`, or
+either exemption map in `ArchitectureRulesTest` — and before adding a bulk endpoint of any kind.**
+
+> ⚠️ **UNGATED, AND NOTHING RAN AT ALL.** No `./gradlew build`, no `./gradlew test`, no targeted
+> class. `ExecutionBulkAssignTest`'s fourteen arms exist and have never executed. Read every claim
+> below as read off the code.
+
+### The endpoint
+
+`POST /api/v1/projects/{projectId}/runs/{runId}/executions/bulk`, mapped by **`RunController`** —
+not a new controller. Two actions: `ASSIGN` (one person, or **nobody** with a null `assigneeId`) and
+`DISTRIBUTE` (round-robin across a list). `dryRun` defaults to **true**; an absent field must
+preview, and defaulting it to false is the one mistake here that destroys data
+(`ExecutionBulkAssignRequest.previewing`, `§245 BA-M1`).
+
+### One audit row per target, and why every other bulk service is still right
+
+| Shape | Used by | States |
+|---|---|---|
+| ONE row, `target_ids` array of 143 | `CaseBulkService` and every other bulk service | one act doing **one** thing to many rows — the trail renders "143 items" |
+| ONE row PER TARGET, sharing one `bulk_operation_id` | `ExecutionBulkAssignService` (§245, the first) | an act doing a **different** thing to each row |
+
+A distribute moves twelve rows to five people. One row carries one `changes` document, so the
+first shape would need `changes` to be a map from execution id to assignee — which no reader can
+render and no filter can search. **That is the whole argument for the column, and it is why this
+area is where the exemption dies.**
+
+`AuditEvent.record` gains an **eight-argument overload** rather than an eighth parameter: the
+seven-argument form has 42 call sites and none of them is in a bulk act, so a parameter would be 42
+edits passing `null` to say "not a bulk".
+
+### `ExecutionAssignmentAudit` — one speller, two writers
+
+Package-private, static, in `execution`. Owns `action(to)` (`execution.assigned` /
+`execution.unassigned`), `changes(from, to)` (`{"from":…,"to":…}`, both ends, because the question
+an auditor asks is about a MOVE) and the two row factories. **Both writers of
+`test_execution.assignee_id` go through it** — `ExecutionAssignmentService.apply`'s inline
+concatenation is gone. `theTrailReadsTheSameWhicheverDoorWasUsed` is the assertion, and it fails the
+day somebody adds an `execution.bulk_assigned` verb.
+
+### Determinism is the idempotency, and it is designed for
+
+There is **no `Idempotency-Key`** and none is missing. `POST /cases/bulk` declares no parameters at
+all, and this repository's idempotency is a unique `idempotency_key` column **on a created row** —
+nothing is created here, so a replay would have no resource to be answered with. Instead:
+
+1. targets are ordered by the **RUN** (pinned key sequence, tie-broken by id), never by the request
+   array — two coordinators selecting the same rows must get the same split;
+2. assignees keep the **CALLER's** order, duplicates collapsed keeping the first — that order
+   decides who takes the remainder, and sorting it would silently overrule the coordinator;
+3. a row already in the requested state is `unchanged` and **writes no audit row**.
+
+Together those make the whole operation a pure function of its input. `§245 BA-M3`, `BA-M4` and
+`BA-M6` are the three mutations that each break one leg.
+
+### Refuse the act versus skip the row
+
+`BulkOperation`'s rule verbatim — **knowable before any row is read ⇒ refuse; a property of the row
+⇒ skip.** A bad assignee is a **400** on `payload.assigneeId` / `payload.assigneeIds`; an id naming
+no execution in this run is a **200 with a `skipped` row**. Turning the second into a 404 is the
+"simplification" a reader is most likely to make, and it makes a filtered selection of four hundred
+unusable because one row went away (`§245 BA-M5`).
+
+**`isActiveMember`, never `resolve`** — `app_user` is instance-level (ERD §0.1's exception list), so
+"the account exists" accepts a user id belonging to another client entirely. `ACTIVE`, not merely
+present: an unaccepted invitation is not a way to be handed a client's work.
+
+**One `@Transactional` for the whole act.** That is what makes "a stranger in the list writes
+nothing" true, including no half-used `bulkOperationId`. Cap 500 — one transaction *and* up to 500
+audit rows, which is a stronger version of `caseIds`' argument rather than a weaker one.
+
+### `run:execute`, and the role that does NOT prove the refusal
+
+The same key the single-row `PUT` takes, for the same reason: it is the one key separating a person
+from a credential, so a leaked CI token cannot reorganise a team's workload. **The caller who lacks
+it is a Viewer.** Test Engineer **holds** `run:execute` (roles spec §A3, `V3`) — the stepped plan's
+fixture said Test Engineer and would have proved nothing, and a *comment* claiming Test Engineer
+lacks it would additionally redden `tierClaims.test.ts`.
+
+### The two exemption maps, and the count that was wrong again
+
+`WRITERLESS_BY_DECISION` lost `AuditEvent.bulkOperationId`. **It had to**: `everyMappedColumnHasAWriter`
+asserts `containsExactlyInAnyOrderElementsOf`, so a stale exemption reddens in **both** directions
+(§162) — the build is red between the service commit and the exemption commit **by design**, and
+they were landed adjacently because under a no-gates directive nobody would have observed it.
+
+The column has been in one map or the other **since §152 and is in neither now**, having moved
+between them three times without the column changing at all (§242 a reader, §245 a writer). That is
+the pair's longest worked example and the plainest argument for running both rules.
+
+**The javadoc's tally said "four of the nine". The map held EIGHT.** It holds seven now, with three
+in `READERLESS_BY_DECISION` too. Recounted against the map in both places — a hand-kept tally being
+wrong inside the check written to end hand-kept tallies has now landed three times.
+
+> ⚠️ **Do not trust `everyMappedColumnHasAWriter`'s verdict without reading it.** It decides
+> "written" as `isWrittenInJava(field) || namedIn(writeText, null, columnOf(field)) ||
+> namedIn(writeText, null, field.getName())` — a **name-text match** over source text, which has
+> already produced one false negative here: `IngestionService`'s `node.put("durationMs", …)`
+> satisfied the sweep for `duration_ms`, a column with no writer at all for a year (§244).
+
+### Fixture prefix
+
+`ExecutionBulkAssignTest` takes **`88…`**, verified unused on 2026-08-22. The runs are **instance
+fields, not id constants** — the fixture builds them through `POST /runs`, and a fixture that
+inserted `test_execution` rows to pin an id would prove the query works over data the product does
+not produce.
 
 ---
 
@@ -4158,6 +4271,28 @@ deliberate edit. `#confirmed`
 
 ## Seams to reuse
 
+**New seams §245 created — `execution` and `tenancy`:**
+- `execution.ExecutionBulkAssignService.assign(userId, projectId, runId, request)` — the bulk act.
+  One `@Transactional` method, sealed `Outcome` with five arms, resolution → gate → freeze →
+  validate → apply. **Reuses `ExecutionPeople.isActiveMember`, `CaseFacts.pinnedCases` and
+  `ExecutionAssignmentAudit` rather than re-spelling any of them.** Its own class rather than a
+  method on `ExecutionAssignmentService`, whose `Outcome` is shaped for one row.
+- `execution.ExecutionAssignmentAudit` — package-private, static. **The one speller of
+  `execution.assigned` / `execution.unassigned` and of `{"from":…,"to":…}`, called by BOTH writers
+  of `test_execution.assignee_id`.** Prevents a bulk row and a single row reading differently in
+  the trail, which is what an `execution.bulk_assigned` verb would produce.
+- `tenancy.AuditEvent.record(..., bulkOperationId)` — the eight-argument overload, delegating to
+  the seven-argument form so there is still one assignment site per column. **`bulk_operation_id`'s
+  first writer in the product's history.** Never null here; a caller with nothing to group calls
+  the shorter form.
+- `execution.TestExecutionRepository.findAllInRun(projectId, runId, ids)` — one query for a whole
+  selection, never one per id. An id the query does not return is not in this run, which is what
+  makes a stale selection a **skip** rather than a 404.
+- `execution.ExecutionBulkAssign{Request,Payload,Result}` — public records, because
+  `ContractConventionTest` compares them to their schemas and their names deliberately do not match
+  (`ExecutionBulkOperation` / `Payload` / `Result`), so all three need explicit `RESPONSE_RECORDS`
+  entries plus two `INLINE_RECORDS` ones for the nested rows.
+
 - **`${VAR:?msg}` IN SPRING CONFIG IS A DEFAULT, NOT A REQUIREMENT — §108, and it cost the
   production signing key.** This repo writes both Compose files and Spring config. In
   `compose*.yaml` the form means *"fail if unset"* and is used correctly on eight variables. In
@@ -5649,6 +5784,14 @@ deliberate edit. `#confirmed`
   a caller may or may not see. `#confirmed`
 
 ## Session log
+
+- 2026-08-22 · EXTEND · **bulk execution assignment** (§245, area B of the gaps plan;
+  `POST …/runs/{runId}/executions/bulk` on `RunController`, `ExecutionBulkAssignService`,
+  `ExecutionAssignmentAudit`, `AuditEvent.record`'s bulk overload, one repository query, three
+  contract schemas, `ExecutionBulkAssignTest`'s 14 arms, and the deletion of
+  `WRITERLESS_BY_DECISION`'s `AuditEvent.bulkOperationId` entry. No migration, no permission.
+  **Gates NOT RUN and no test ever executed** — batch-2 no-tests directive. Ran concurrently with
+  area E, sharing no source file.)
 
 - 2026-08-15 · EXTEND · **notifications, phase 1 — the backend spine** (§218 phase 1;
   `backend/` only: `V54`, a new `integration` module, two producers in `execution` and
