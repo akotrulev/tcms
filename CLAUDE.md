@@ -98,7 +98,7 @@ npm run build                     # THE gate: tsc over source+tests, then emit. 
                                   # — runs them ALPHABETICALLY, so the script names the order
                                   # client → cli → mcp.
 npm run lint --workspaces         # oxlint, 0 warnings
-npm run test:run --workspaces     # 336 tests (130 client / 78 cli / 128 mcp), ~1s — CI runs these
+npm run test:run --workspaces     # 341 tests (130 client / 82 cli / 129 mcp), ~1s — CI runs these
 cd client && npm run gen:api      # THE SECOND COPY of schema.d.ts. Regenerate BOTH after any
                                   # openapi.yaml change; schemaFreshness.test.ts fails otherwise.
 node cli/dist/main.js help        # TCMS_URL + TCMS_TOKEN drive it
@@ -125,7 +125,7 @@ npm install
 npm run dev          # http://localhost:5173 — proxies /api to localhost:8080
 npm run build        # THE gate: tsc -b + vite build
 npm run lint         # oxlint, must stay at 0 warnings — a gate, not advisory
-npm run test:run     # Vitest + RTL, 1582 tests (measured on shanks 2026-08-16) — also a gate
+npm run test:run     # Vitest + RTL, 1679 tests (measured on shanks 2026-08-22) — also a gate
 npm run gen:api      # regenerate src/api/schema.d.ts after ANY openapi.yaml change
                      # — AND packages/client's copy; the two are byte-identical and a test compares them
 ```
