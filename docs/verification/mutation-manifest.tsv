@@ -40,7 +40,7 @@ id	section	scope	wave	gap	file	status
 13k	13. §101's M2 rollups	com.tcms.execution.RollupAgreementTest	W1	-	backend/src/main/java/com/tcms/execution/SuiteHistoryService.java backend/src/main/java/com/tcms/execution/PlanStatisticsService.java	RUN:ZERO-AS-PREDICTED
 R6-2	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	-	-		queued
 R6-3	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	-	-		queued
-R6-4	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	S	-		queued
+R6-4	15. R6 phase 1's aggregate report	com.tcms.reporting.AggregateExecutionCrossCheckTest	S	-	backend/src/main/java/com/tcms/reporting/AggregateExecutionReport.java	RUN:ZERO-AS-PREDICTED
 R6-5	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	-	-		queued
 R6-6	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	-	-		queued
 R6-7	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	-	-		queued
@@ -134,9 +134,9 @@ GA-7	§122	GrantInstanceAdminServiceTest	-	-		queued
 GA-8	§122	GrantInstanceAdminServiceTest	-	-		queued
 GA-9	§122	GrantInstanceAdminServiceTest	-	-		queued
 GA-10	§122	com.tcms.provisioning.GrantInstanceAdminServiceTest	W1	-	backend/src/main/java/com/tcms/provisioning/GrantInstanceAdminService.java	RUN:ZERO-AS-PREDICTED
-§124 AG-1	§124	AggregateExecutionPolicyTest	S	-		queued
+§124 AG-1	§124	com.tcms.contract.ContractEnumTest,com.tcms.reporting.AggregateExecutionCrossCheckTest	S	-	backend/src/main/java/com/tcms/execution/AggregationPolicy.java + reporting/AggregationPolicy.java	RUN:ERROR-COMPILE
 §124 AG-2	§124	PlanStatisticsEndpointTest	-	-		queued
-§124 AG-3	§124	PlanStatisticsEndpointTest	S	-		queued
+§124 AG-3	§124	com.tcms.execution.PlanStatisticsEndpointTest	S	-	backend/src/main/java/com/tcms/execution/PlanStatisticsService.java	RUN:MORE
 RX-2	§124	com.tcms.execution.ExecutionEndpointTest	S	-	backend/src/main/java/com/tcms/execution/ExecutionService.java	RUN:MORE
 RX-3	§124	com.tcms.execution.IngestionEndpointTest	S	-	backend/src/main/java/com/tcms/execution/IngestionService.java	RUN:MATCH
 RX-4	§124	PlanStatisticsEndpointTest	-	-		queued
@@ -440,7 +440,7 @@ RR-M3	§160	IntegrationTest	-	GAP		queued
 RR-M4	§160	?	-	-		queued
 RR-M5	§160	?	-	GAP		queued
 RR-M6	§160	?	-	-		queued
-CE-M3	§161	?	S	-		queued
+CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcms/contract/ContractEnumTest.java	RUN:MATCH
 §166 LR-1	§166	?	-	-		queued
 §166 LR-2	§166	?	-	-		queued
 §166 LR-3	§166	?	-	-		queued
@@ -476,12 +476,12 @@ CE-M3	§161	?	S	-		queued
 §178 SL-M3	§178	CaseHealthRecomputeTest	-	-		queued
 §178 SL-M4	§178	CaseHealthRecomputeTest	-	-		queued
 §178 SL-M5	§178	CaseHealthRecomputeTest	-	-		queued
-§179 RS-M1	§179	RaisedSignalTest	S	-		queued
-§179 RS-M2	§179	?	S	-		queued
-§179 RS-M3	§179	RaisedSignalTest	S	-		queued
-§179 RS-M4	§179	?	S	-		queued
-§179 RS-M5	§179	?	S	-		queued
-§179 RS-M6	§179	ContractEnumTest	S	-		queued
+§179 RS-M1	§179	com.tcms.repository.RaisedSignalTest	S	-	backend/src/main/java/com/tcms/repository/HealthSignal.java	RUN:MORE
+§179 RS-M2	§179	com.tcms.repository.RaisedSignalTest	S	-	backend/src/main/java/com/tcms/repository/HealthSignal.java	RUN:MORE
+§179 RS-M3	§179	com.tcms.repository.RaisedSignalTest	S	-	backend/src/main/java/com/tcms/repository/CaseHealth.java	RUN:ZERO-UNEXPECTED
+§179 RS-M4	§179	com.tcms.repository.RaisedSignalTest	S	-	backend/src/main/java/com/tcms/repository/HealthSignal.java	RUN:MATCH
+§179 RS-M5	§179	com.tcms.repository.RaisedSignalTest	S	-	backend/src/main/java/com/tcms/repository/RaisedSignalView.java	RUN:MATCH
+§179 RS-M6	§179	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcms/contract/ContractEnumTest.java	RUN:MATCH
 §180 TL-M1	§179	DashboardEndpointTest	-	-		queued
 §180 TL-M2	§179	?	-	-		queued
 §180 TL-M3	§179	?	-	-		queued

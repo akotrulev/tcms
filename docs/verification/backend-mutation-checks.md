@@ -24,8 +24,11 @@ cd backend
 git checkout -- <the mutated file>          # revert by EXACT PATH, before the next row
 ```
 
-**Wave 1 is run.** `RUN RECORD — 2026-08-22, wave 1` below covers 90 rows, eight findings and the
-five registered gaps that turned out not to exist. **Two sections govern what is owed before you
+**Waves 1 and S are run.** `RUN RECORD — 2026-08-22, wave 1` below covers 90 rows, eight findings and
+the five registered gaps that turned out not to exist; `RUN RECORD — 2026-08-23, wave S` covers the
+74 rows of the four scripted sweeps, eight findings, and seven registered gaps confirmed by
+measurement. **The wave-S set is derived, not hand-listed** — the criteria are in
+`mutation-manifest.tsv`'s header and the `wave` column is authoritative. **Two sections govern what is owed before you
 start.** `DOCUMENTED GAPS` at the foot of this file
 holds the 44 rows retired from the run on 2026-08-22 (each keeping its id and naming what would
 close it), and the run plan is
@@ -269,7 +272,7 @@ tried to break is a claim and not a test.
 | # | Mutation | Expected |
 |---|---|---|
 | R6-3 | Drop `verdictFirst()` from `WORST`'s ordering | An `UNTESTED` row outranks `PASSED`, so a case that passed in every run it was recorded in reads as owed a verdict. Should redden `policy=WORST`. **Cannot be observed on the current fixture** — every execution in it carries a verdict, so this is expected to redden **nothing** until the fixture grows a recorded non-verdict status. Recorded as a *gap*, not as coverage. |
-| R6-4 | `severityRank`'s `ELSE -1` → `ELSE 99` (an unknown kind ranks best rather than worst) | Unreachable today: `case_status.kind` has a CHECK. Recorded so the choice of direction is not mistaken for arbitrary. |
+| R6-4 | `severityRank`'s `ELSE -1` → `ELSE 99` (an unknown kind ranks best rather than worst) | Unreachable today: `case_status.kind` has a CHECK. Recorded so the choice of direction is not mistaken for arbitrary.  ✅ **RUN 2026-08-23 (wave S) — GREEN.** ZERO-AS-PREDICTED, and the derivation in the cell beside this one is confirmed: the `ELSE` arm of `severityRank` is reached only by a `StatusKind` outside `WORST_FIRST`, and `theLadderNamesEveryKind` asserts the ladder is exactly `StatusKind.values()`. **The arm is unreachable by construction**, so `-1` and `99` cannot differ. Nothing closes this; `theLadderNamesEveryKind` is what keeps it unreachable. |
 | R6-5 | `LATEST_PER_CONFIG`'s partition drops `configuration_id` | Collapses to `LATEST`. **Expected to redden nothing on the current fixture**, which has one configuration — §46's "byConfiguration collapsing to a single column" is *not* yet guarded here. A second configuration is the repair. |
 | R6-6 | `AggregateSelection.where()` emits `IN (:planIds)` even when the list is empty | §99's defect: `IN ()` fails to parse, `IN (NULL)` is never true and reads as an arm that matched. Should redden every test, loudly. |
 | R6-7 | `idList`/`textList` treat an empty array as "select nothing" rather than "do not narrow" | `{"planIds": []}` becomes a clean report of zero executions. **No test names this today.** |
@@ -779,9 +782,9 @@ sibling-project row).
 
 | # | Mutation | Expected | Result |
 |---|---|---|---|
-| §124 AG-1 | `AggregationPolicy.BEST` is restored to **one** of the two enums (either one) | `AggregateExecutionPolicyTest` pins the two name sets equal, so the copies cannot drift. This is the check that made the removal landable at all, and it matters more for a deletion than an addition: a missing value fails closed and loudly, while a copy that still *accepts* a retired policy answers a number the plan page can no longer produce. | ⬜ NOT RUN |
+| §124 AG-1 | `AggregationPolicy.BEST` is restored to **one** of the two enums (either one) | `AggregateExecutionPolicyTest` pins the two name sets equal, so the copies cannot drift. This is the check that made the removal landable at all, and it matters more for a deletion than an addition: a missing value fails closed and loudly, while a copy that still *accepts* a retired policy answers a number the plan page can no longer produce. | ⚠️ **RUN 2026-08-23 (wave S) — BOTH COPIES TRIED, AND NEITHER REACHES A TEST: the build does not compile.** Adding `BEST` to `execution.AggregationPolicy` fails at `PlanStatisticsService.java:490` (*the switch expression does not cover all possible input values*); adding it to `reporting.AggregationPolicy` fails at `AggregateExecutionReport.java:846`. **An exhaustive switch on each copy is the guard, and it fires before any test runs** — a stronger and cheaper protection than the row assumed. The class the row names, `AggregateExecutionPolicyTest`, does not exist. `ContractEnumTest.contractEnumsAndTheirServerTypesAgree` remains the observer for the *other* direction, a constant leaving one copy only, which `§161 CE-M1` already ran RED. |
 | §124 AG-2 | `PlanController` falls back to `DEFAULT` for an unparseable policy instead of 400ing | A bookmark, a saved URL or a screenshot's query string carrying `BEST` answers a **different question under the same name**, silently and in the flattering direction — which is the exact harm the removal exists to prevent, reintroduced by the error path. Should redden `bestIsRefused` and `anUnknownPolicyIsRefused`. | ⬜ NOT RUN |
-| §124 AG-3 | `WORST_FIRST`'s severity order is reversed, restoring `BEST`'s behaviour under `WORST`'s name | The dropdown says "worst result per case" and computes the best. **Worse than shipping `BEST`**, which at least said what it did. Should redden `worst`, `noPolicyClearsTheBlockerList` and `thePoliciesActuallyDiffer`. | ⬜ NOT RUN |
+| §124 AG-3 | `WORST_FIRST`'s severity order is reversed, restoring `BEST`'s behaviour under `WORST`'s name | The dropdown says "worst result per case" and computes the best. **Worse than shipping `BEST`**, which at least said what it did. Should redden `worst`, `noPolicyClearsTheBlockerList` and `thePoliciesActuallyDiffer`. | ⚠️ **RUN 2026-08-23 (wave S) — RED, 3 — two of the three predicted, plus one.** `worst` and `noPolicyClearsTheBlockerList` fell; **`thePoliciesActuallyDiffer` stayed green**, and `worstIgnoresUnrecordedRows` fell in its place. The policies still differ from each other under the inverted comparator — they are simply all wrong — which is why a difference test cannot catch a reversal and a *value* test can. |
 | §124 AG-4 | `criteriaFollowTheDisplayedCounts`' tolerance is tightened back to `within(0.01)` | *(Not a mutation — the finding.)* `actual` is rounded to one decimal for display, so three of thirteen is served as `23.1` against an unrounded `23.0769…`. **This was the phase's only red run**, and the honest fix was the tolerance and not the endpoint: a test asserting the unrounded value asserts against a number no screen shows. | ✅ **FOUND AND FIXED** — `within(0.05)`, with the rounding named in a comment |
 | RX-1 | `projects.holds(userId, projectId, EXECUTE_RUN)` is deleted from `ExecutionService.record` | **RUN.** A leaked CI token can hand-record verdicts through the endpoint a tester uses — with an `If-Match`, with evidence, indistinguishable in the audit trail from a person. | ✅ **RUN — reddened exactly the three new tests** (`theRobotCannotExecuteByHand`, `theTwoRefusalsGiveOppositeAdvice`, `theRefusalsNameNoKey`) and nothing else |
 | RX-2 | The `run:execute` check moves **in front of** the verdict gate | The draft this slice started from. A Viewer, who holds neither key, is told to post to the ingestion endpoint they may not use either — advice that is confidently wrong, which is worse than a flat refusal. Should redden `theTwoRefusalsGiveOppositeAdvice` and `viewerIsRefused`. | ⚠️ **RUN 2026-08-23 (wave S) — RED, 3.** MORE than the 2 predicted, and the extra is coherent: `viewerIsRefused` and `theTwoRefusalsGiveOppositeAdvice` both fall as the row says, and `the amend refusal is still its own sentence` falls beside them — the amend path runs through the same gate, so hoisting the `run:execute` check turns its 403 into the ingestion advice too. **Order really is the point**, and three tests say so rather than two. |
@@ -1753,7 +1756,7 @@ silently emptied.*
 |---|---|---|---|
 | `CE-M1` | Add a constant (`MARKDOWN`) to `execution.StepFormat` and not to `repository.StepFormat` or the contract | Should redden `a contract enum and its server type hold the same members` as **SERVER-ONLY**, naming the copy that moved. This is the defect the rule exists for — a constant Jackson will write that no generated union contains — and the two-copy case is the one a name-matching rule would have missed. | ✅ **RUN 2026-08-10 — red, on the predicted rule and message** |
 | `CE-M2` | Delete `- INCOMPLETE` from `openapi.yaml`'s `HealthSignal` enum | Should redden the **healed** arm: `HealthSignal.INCOMPLETE` is in `DIVERGENCE_BY_DECISION`, and with the member gone from both sides the divergence no longer exists, so the argument for it has outlived its gap. Proves the map fails in *both* directions — the property §157–§160 each relied on in the writerless twin. | ✅ **RUN 2026-08-10 — red, `Expecting empty but was: ["HealthSignal.INCOMPLETE"]`** |
-| `CE-M3` | In `constantsOf`, revert `JavaModifier.ENUM` to `JavaModifier.STATIC` | Restores the bug the rule shipped with for one run: `execution.AggregationPolicy.DEFAULT` — a `public static final` alias for `LATEST`, never serialized — is counted as a constant and reported as SERVER-ONLY. **Should redden the same rule with a false finding**, which is the failure mode worth measuring: a green suite proves the rule finds things, and nothing here proves it does not manufacture them. If it stays green, the alias has gone and the mutation needs a new target. | ⬜ NOT RUN |
+| `CE-M3` | In `constantsOf`, revert `JavaModifier.ENUM` to `JavaModifier.STATIC` | Restores the bug the rule shipped with for one run: `execution.AggregationPolicy.DEFAULT` — a `public static final` alias for `LATEST`, never serialized — is counted as a constant and reported as SERVER-ONLY. **Should redden the same rule with a false finding**, which is the failure mode worth measuring: a green suite proves the rule finds things, and nothing here proves it does not manufacture them. If it stays green, the alias has gone and the mutation needs a new target. | ✅ **RUN 2026-08-23 (wave S) — RED, exactly 1: `a contract enum and its server type hold the same members`.** MATCH, and the row's fallback is not needed: the alias is still there, so the rule reports `AggregationPolicy.DEFAULT` as SERVER-ONLY. **The rule can be made to manufacture a false finding, and the check on that is now measured** — which was the whole point of keeping this row over the two that were run inline. |
 
 > **`CE-M1` and `CE-M2` were run inline and that is a deliberate exception to §65, not a drift back
 > to §72–§76's.** They mutate a *check* rather than the product: the thing under test is the
@@ -2073,12 +2076,12 @@ the automation pair's asymmetry, which is §153's finding with the stacks swappe
 
 | Row | Mutate | Must redden | What a green build would mean |
 |---|---|---|---|
-| `§179 RS-M1` | In `HealthSignal`, change `UNDECLARED_AUTOMATION`'s severity from `WARNING` to `ERROR` | `RaisedSignalTest.Severities.theAutomationPairStaysAsymmetric` **and** `everySignalCarriesItsDecidedSeverity` | The tidy change the pair invites — two mirror signals given a matched appearance — and the one §120 argued against in writing. Both tests must fail: the named one because it is the argument, the table one because a severity that is not the decided one is a product decision nobody typed twice. A green build means `SEVERE_SIGNALS`' deletion cost the repo its only check on the distinction. |
-| `§179 RS-M2` | In `HealthSignal`, swap `CONDITION_DRIFT`'s severity to `WARNING` | `everySignalCarriesItsDecidedSeverity` **only** | The exact member the SPA's deleted list got wrong. It must redden by the *table* rather than by a behaviour test, because there is no behaviour that distinguishes them — which is the whole reason the table is written out instead of read off the enum. |
-| `§179 RS-M3` | In `CaseHealth.signals()`, delete the `raised.sort(Comparator.comparing(HealthSignal::severity))` line | `RaisedSignalTest.Order.theWorstSignalComesFirst` **and** `everySeveritySorts` — and **not** `tiesKeepDeclarationOrder`, which passes either way | The state this slice found: declaration order, so `CaseGrid`'s one visible chip is `UNLINKED` on a case whose automation has stopped reporting. The green third test is the point of having it — a tie-break assertion that fails when the sort is removed is asserting the sort, not the tie-break. |
-| `§179 RS-M4` | In `HealthSignal.Severity`, reorder the constants alphabetically (`ERROR, INFO, NEUTRAL, WARNING`) | `severityIsDeclaredWorstFirst`, **and** `everySeveritySorts` | Two observers for one edit, and the second is what makes the first more than a style rule: a `Comparator` over an enum orders by ordinal, so alphabetising inverts both this sort and `DashboardService.health`'s tiles. `severityIsDeclaredWorstFirst` alone would look like a lint; the behaviour test is the consequence. |
-| `§179 RS-M5` | In `RaisedSignalView.of`, return `new RaisedSignalView(signal, HealthSignal.Severity.ERROR)` | `severityTravelsWithItsOwnSignal` | The pair coming apart — every chip red, which reads as a product in crisis rather than as a bug. It is the cheap version of the off-by-one this record exists to make impossible (two lists assembled separately and zipped); the honest version cannot be written any more, which is the improvement. |
-| `§179 RS-M6` | In `ContractEnumTest.OWNERS`, delete the `HealthSignalSeverity` entry | `everyContractEnumHasAnOwner` | The named-enum population rule, on the enum this slice named. A green build means the schema is on the wire in two places with nothing comparing its members to the server's — the state `DashboardTile.severity`'s inline enum was in from M0 until §179, and the reason it was invisible to §161's audit. |
+| `§179 RS-M1` | In `HealthSignal`, change `UNDECLARED_AUTOMATION`'s severity from `WARNING` to `ERROR` | `RaisedSignalTest.Severities.theAutomationPairStaysAsymmetric` **and** `everySignalCarriesItsDecidedSeverity` | The tidy change the pair invites — two mirror signals given a matched appearance — and the one §120 argued against in writing. Both tests must fail: the named one because it is the argument, the table one because a severity that is not the decided one is a product decision nobody typed twice. A green build means `SEVERE_SIGNALS`' deletion cost the repo its only check on the distinction. ⚠️ **RUN 2026-08-23 (wave S) — RED, 3.** MORE than the 2 predicted; both named arms fell (`theAutomationPairStaysAsymmetric` and `everySignalCarriesItsDecidedSeverity`) plus `severityTravelsWithItsOwnSignal`, which reads the same decided value. **`SEVERE_SIGNALS`' deletion did not cost the repo its check on the distinction** — the answer this row most wanted. |
+| `§179 RS-M2` | In `HealthSignal`, swap `CONDITION_DRIFT`'s severity to `WARNING` | `everySignalCarriesItsDecidedSeverity` **only** | The exact member the SPA's deleted list got wrong. It must redden by the *table* rather than by a behaviour test, because there is no behaviour that distinguishes them — which is the whole reason the table is written out instead of read off the enum. ✅ **RUN 2026-08-23 (wave S) — RED, 2.** `everySignalCarriesItsDecidedSeverity` as predicted, plus `severityTravelsWithItsOwnSignal` for the same reason as `RS-M1`. The table catches it, which is the row's point: there is no behaviour that distinguishes the two. |
+| `§179 RS-M3` | In `CaseHealth.signals()`, delete the `raised.sort(Comparator.comparing(HealthSignal::severity))` line | `RaisedSignalTest.Order.theWorstSignalComesFirst` **and** `everySeveritySorts` — and **not** `tiesKeepDeclarationOrder`, which passes either way | The state this slice found: declaration order, so `CaseGrid`'s one visible chip is `UNLINKED` on a case whose automation has stopped reporting. The green third test is the point of having it — a tie-break assertion that fails when the sort is removed is asserting the sort, not the tie-break. ⚠️ **RUN 2026-08-23 (wave S) — GREEN. ZERO-UNEXPECTED, and this is wave S's best finding.** Deleting `raised.sort(...)` reddens **nothing**: `signals()` iterates `HealthSignal.values()` in declaration order, and **every pair the `Order` fixtures choose is already declaration-ordered worst-first.** `theWorstSignalComesFirst` picks `UNLINKED` (idx 6, INFO) and `STALE_AUTOMATION` (idx 3, ERROR); `everySeveritySorts` picks `CONDITION_DRIFT` (2, ERROR), `NEVER_EXECUTED` (4, WARNING), `UNLINKED` (6, INFO) — both already in the expected order without any sort at all. **A control proves the sort is live rather than dead**: `§179 RS-M4`, run in the same batch, reddens `everySeveritySorts` by reordering `Severity`, so the comparator does execute and that test does observe its result. The declaration order is **not** globally severity-sorted — `STALE_APPROVAL` (1, WARNING) precedes `CONDITION_DRIFT` (2, ERROR), and `UNLINKED` (6, INFO) precedes `FAILING_REPEATEDLY` (7, WARNING) — so the repair is one line: pick a pair that crosses, e.g. `UNLINKED` + `FAILING_REPEATEDLY`. |
+| `§179 RS-M4` | In `HealthSignal.Severity`, reorder the constants alphabetically (`ERROR, INFO, NEUTRAL, WARNING`) | `severityIsDeclaredWorstFirst`, **and** `everySeveritySorts` | Two observers for one edit, and the second is what makes the first more than a style rule: a `Comparator` over an enum orders by ordinal, so alphabetising inverts both this sort and `DashboardService.health`'s tiles. `severityIsDeclaredWorstFirst` alone would look like a lint; the behaviour test is the consequence. ✅ **RUN 2026-08-23 (wave S) — RED, exactly 2: `severityIsDeclaredWorstFirst` and `everySeveritySorts`.** MATCH, and the second is exactly what the row said made the first more than a lint. **It also served as `§179 RS-M3`'s control** — it is the measurement proving the sort executes and is observed, which is what makes RS-M3's zero attributable to the fixtures rather than to dead code. |
+| `§179 RS-M5` | In `RaisedSignalView.of`, return `new RaisedSignalView(signal, HealthSignal.Severity.ERROR)` | `severityTravelsWithItsOwnSignal` | The pair coming apart — every chip red, which reads as a product in crisis rather than as a bug. It is the cheap version of the off-by-one this record exists to make impossible (two lists assembled separately and zipped); the honest version cannot be written any more, which is the improvement. ✅ **RUN 2026-08-23 (wave S) — RED, exactly 1: `severityTravelsWithItsOwnSignal`.** MATCH. |
+| `§179 RS-M6` | In `ContractEnumTest.OWNERS`, delete the `HealthSignalSeverity` entry | `everyContractEnumHasAnOwner` | The named-enum population rule, on the enum this slice named. A green build means the schema is on the wire in two places with nothing comparing its members to the server's — the state `DashboardTile.severity`'s inline enum was in from M0 until §179, and the reason it was invisible to §161's audit. ✅ **RUN 2026-08-23 (wave S) — RED, exactly 1: `everyContractEnumHasAnOwner`.** MATCH. The named-enum population rule holds on the enum §179 named. |
 | `§180 TL-M1` | In `DashboardView.TileView`, add `String label` back and populate it in `DashboardService.health` from a new `signal.name()` | `DashboardEndpointTest.Tiles.tilesCarryNoWords` | The regression this slice exists to prevent, in the form it would actually take — somebody re-adding display text because a client asked for it. The test asserts **absence**, which is the only assertion that can fail on an addition; an assertion on the tile's other fields passes happily beside a new one. |
 | `§180 TL-M2` | In `DashboardService.segments`, restore the `"var(--color-" + status.name().toLowerCase() + ")"` argument and the matching `SegmentView` component | `ByFeature.barsKeepDataWordsAndSegmentsLoseRenderedOnes` | The colour half, which had **no test on either stack** before this slice — the server composed it by concatenation and `StatusChip.tsx` held the identical four strings in a table, and nothing compared them. A green build means the wire can carry presentation for a closed enum again without anybody noticing, which is how it got there the first time. |
 | `§180 TL-M3` | In `DashboardService.byFeature`, replace the bar's `labels.get(entry.getKey())` with `entry.getKey().toString()` | `ByFeature.hierarchyIsReadable`, `oneJoinTableHoldsEveryDimension` **and** `barsKeepDataWordsAndSegmentsLoseRenderedOnes` | The **other side of the line this slice draws**, and the reason it is worth mutating: a bar's label is data only the server can resolve, so deleting it is a real loss where deleting a tile's label was deleting a copy. Three tests must redden. A slice that took "labels belong to the client" one step further than the argument supports would make this mutation green. |
@@ -3144,6 +3147,225 @@ says so in its own `Result` cell: `OB-4` (the self-invocation half is not expres
 to the newest migration rather than added as a new script, so the revert is by exact path) and
 `§246 CE-M5` (the same). A proxy measures what it measures; saying which half was applied is what keeps
 the number attributable.
+
+
+# RUN RECORD — 2026-08-23, wave S
+
+**The 74 wave-S rows were executed.** Wave S is the run plan's *scripted sweeps* (§6) — rows that
+share one mechanical form rather than one subject. **The set was not marked when this pass began:**
+the manifest's `wave` column held only `W1` and `-`, so the wave was neither resumable nor
+size-checkable. It was derived from run plan §5 and §6 in four stated families, written into the
+manifest as `wave=S`, and committed before any row ran. The criteria are in the manifest's header so
+the set can be re-derived rather than re-guessed.
+
+| Family | Criterion | Rows |
+|---|---|---|
+| **S-A** gate-constant swaps | run plan §5's named id list (26 ids; `CA-1`, `DA-1`, `FA-1` and `§128 CD-4` already run in wave 1) | **22** |
+| **S-B** migration edits | the mutated file is under `backend/src/main/resources/db/migration/` — excluding the Hetzner `V20`–`V33` lane, `GAP` rows and the manual lane | **25** |
+| **S-C** convention-register edits | the mutated file is a convention/ArchUnit/schema test, or a production constant register whose only observer is one, **and** the edit adds/removes a register entry, corpus root or exclusion (not rule logic) | **17** |
+| **S-D** enum/severity ordering | enum declaration order, severity value, or severity rank | **10** |
+
+**The derived count is 74 against the plan's ~100 estimate, and the manifest is authoritative.**
+The whole of the gap is S-B: run plan §6 estimates *"~49 `V*` migration edits"*, and only **25** rows
+actually edit a migration — the rest of the earlier count is rows that merely *mention* a `V` number
+as context. S-A is 26 ids where the plan's prose says 28; S-C is 17 against ~15 and S-D 10 against
+~10.
+
+**Baseline** `b5ef2826`, lane clean at the start (`tcms-mutate --baseline` reported nothing dirty,
+`docs/specs/openapi.yaml` included — the other lane had nothing in flight, unlike wave 1). The pass
+ran in its own remote tree (`builds/tcms-mut`) and its own Gradle home (`.gradle-mut`), per run plan §7.
+
+| Outcome | Rows |
+|---|---|
+| MATCH — reddened exactly what the row predicted | 37 |
+| MORE — the predicted tests plus others | 16 |
+| FEWER — less than predicted (in all three cases the predicted test stayed **green**) | 3 |
+| ZERO-AS-PREDICTED | 9 |
+| **ZERO-UNEXPECTED — the row predicted ≥1 and measured 0** | **6** |
+| STALE — the code moved out from under the row | 2 |
+| ERROR-COMPILE — the mutation cannot reach a test | 1 |
+
+## The findings
+
+### 1. `§179 RS-M3` — the sort is unpinned, and a control proves it is not dead code
+
+Deleting `raised.sort(Comparator.comparing(HealthSignal::severity))` from `CaseHealth.signals()`
+reddens **nothing**. `signals()` iterates `HealthSignal.values()` in declaration order, and **every
+pair the `Order` fixtures choose is already declaration-ordered worst-first**:
+`theWorstSignalComesFirst` takes `UNLINKED` (index 6, INFO) and `STALE_AUTOMATION` (index 3, ERROR);
+`everySeveritySorts` takes `CONDITION_DRIFT` (2, ERROR), `NEVER_EXECUTED` (4, WARNING) and `UNLINKED`
+(6, INFO). Both are already in the asserted order with no sort at all.
+
+**`§179 RS-M4` is the control** and is why this is conclusive rather than suggestive: reordering
+`Severity`'s constants reddens `everySeveritySorts`, so the comparator does execute and that test
+does observe its result. The zero is the *fixtures*, not a dead line.
+
+Declaration order is **not** globally severity-sorted — `STALE_APPROVAL` (1, WARNING) precedes
+`CONDITION_DRIFT` (2, ERROR), and `UNLINKED` (6, INFO) precedes `FAILING_REPEATEDLY` (7, WARNING) —
+so the repair is one line: pick a crossing pair, e.g. `UNLINKED` + `FAILING_REPEATEDLY`.
+
+### 2. `UX-4` — a set-derived assertion cannot see a member leave the set
+
+Dropping a verb from `OperatorCommands.ALL` reddens nothing. `everyVerb` is **derived from `ALL`
+itself** — it asserts that every member switches the jar to non-web — so removing a verb shrinks the
+set the test iterates and the test cannot see the removal. The comment beside it (*"a fourth verb is
+covered by the day it is added"*) is true and is only half the question. The failure the guard exists
+for is a hang an operator meets at 2am, and it is unobserved. Repair: assert `ALL` contains each
+named constant, or compare it against the verbs the runner actually dispatches on.
+
+This is the same shape as finding 1 and as `§133 AG-6` below: **a check computed from the thing it
+checks is one-directional unless something else pins the population.**
+
+### 3. The blind-gate family — five more sightings, and a THIRD distinct cause
+
+Wave 1 found this family (`DA-1`, `CA-1`, `FA-1`) and named one cause. Wave S adds five sightings and
+one cause nobody had written down.
+
+- **`§210 DQ-5`** — the family's own closing row, now **measured rather than argued**. All five pairs
+  applied together (`suite:delete`→`suite:manage`, `artifact:delete`→`artifact:edit`,
+  `doc:publish`→`doc:edit`, `run:close`→`run:execute`, `result:amend`→`result:submit`) over five test
+  classes: **not one red.**
+- **`DA-2`** and **`FA-11`** — `CA-1`'s shape in the other two attachment owners. `V51` emptied `OWN`
+  so the authorship arm is inert, and §A3 gives each pair to the same four roles. `FA-11` is stale in
+  the same breath: the test it names was rewritten by `V52`.
+- **`§240 AR-M4`** — the test's own comment says *"This is the persona that tells the two apart"* and
+  has been **false since `V51` landed, eight days before the row was written**.
+- **`§242 LG-M5` is the new cause.** The row is right that a Test Lead holds `project:audit` and not
+  `audit:view` — *at project scope*. This gate is `permissions.evaluateCompanyWide(userId).has(...)`,
+  which answers from the SYSTEM and COMPANY terms only (§43's deliberate design), and there **Company
+  Admin's COMPANY-scope role enumerates every project key including `project:audit`** (`V3`, the
+  `…0002` grant) while the Test Lead's PROJECT-scope grant is invisible. Not *"the catalogue gives
+  both keys to the same roles"* but *"the evaluator cannot see the grant that separates them"*.
+
+**And the counter-example that names the repair.** `§227 PM-1` and `§227 PM-2` discriminate
+`report:view` from `report:export` — which §A3 grants to **identical** roles — purely on the class's
+hand-built screen-only persona. That is `ArtifactEndpointTest.Correcting`'s pattern working, and it
+is what wave 1 proposed. Where no persona is possible (`CA-1`), the catalogue-derived convention test
+is still owed.
+
+### 4. `§239 RT-M3` — a gate the row says does not exist, and it is accidental
+
+The row predicts **green** for replacing `V63`'s two `COMMENT ON` statements with
+`ALTER TABLE test_step DROP COLUMN shared_step_id;`, and argues that *"no gate distinguishes the safe
+migration from the destructive one"*. It reddens: `SchemaCommentTest.everyQualifiedReferenceNamesALiveColumn`
+fails, because **`V59`'s comment on `shared_step.created_idempotency_key` names `test_step.shared_step_id`
+in prose** and that rule reads it. So a gate does exist — three migrations away, entirely by accident,
+and it disappears the day that comment is reworded. `SearchVectorTest` stayed green exactly as the row
+expected of a `DROP COLUMN`. Worth inheriting before the drop slice.
+
+### 5. `§247 SK-M17` — the convention test sees it and the consequence test does not
+
+Dropping `FORCE` from `run_schedule` reddens `everyCompanyOwnedTableForcesRls` and **not**
+`AsyncCompanyContextTest.aFireInOneCompanyCannotSeeAnothersSchedules`, with both classes in scope.
+The test the row leans on to demonstrate the *consequence* connects as `tcms_app`, and plain `ENABLE`
+already isolates a non-owner role. Only the convention test sees the loss — which is the argument for
+`IntegrationTestBase`'s three-role split arriving as the reason the split is not enough on its own.
+
+### 6. `§133 AG-6` — caught, and caught better than the row expected
+
+Adding an `OWN`-qualified `case:delete` to Agent in `V40` leaves the delta test **green** (`V51` gave
+Test Engineer the key and `V52` derives Agent from it, so the *key set* is unchanged) and reddens
+`ownIsCarriedByNoGrant` and `everyQualifierIsAll` instead. `V52` statement 3 inserts
+`ON CONFLICT DO NOTHING`, so **`V40`'s `OWN` row survives the de-qualification**. A delta over key sets
+cannot see a qualifier; two catalogue-derived rules cover the half it cannot.
+
+### 7. `CL-9` — a gate added in front of an already-gated path can only narrow
+
+The predicted test stayed green and two others fell. `cloneCase` has no gate of its own — the create
+path's `case:create` is the gate — so neither variant the row names (`case:edit`, or the "honest"
+`project:read`) can loosen anything, and a Viewer's status does not change. What moved was the
+404-before-403 ordering, because a `holds()` refusal answers 403 before visibility is resolved. So the
+clone route's **key** is unobservable and its **order** is observed by two tests.
+
+### 8. `§207 DQ-2` + `§210 DQ-3` — one registered gap, measured from both sides
+
+`§210 DQ-3` (enumeration replacing the derivation) is green as predicted. `§207 DQ-2` is its mirror
+image: removing `plan:delete` from Test Engineer leaves the Agent delta **green**, because `V52`
+replaced `V40`'s enumeration with a derivation and Agent follows whatever Test Engineer holds. Adding
+a key and removing one, and **neither can tell an enumeration from a derivation.** The real check is
+still the next permission migration — `§210 DQ-4` shows what it looks like when the grant lands
+*after* the derivation has run, and there the delta does redden.
+
+## Registered gaps confirmed by measurement rather than by argument
+
+`AS-5` (a migration that deletes production data — every fixture creates its grants after the
+migration), `IK-1` (two concurrent creates under one idempotency key, on any of the six tables, since
+`V11`), `§217 FD-3` (nothing at all reads a `company_id`'s nullability on an exempt table; thirteen
+tables, none with its shape pinned), `§241 IX-1` (an absent index reddens nothing in any of the four
+classes that could plausibly notice), `§188 NR-4` (no column's only SQL writer is a fixture's `.sql`
+today), `R6-4` (`severityRank`'s `ELSE` arm is unreachable because `theLadderNamesEveryKind` asserts
+the ladder is exactly `StatusKind.values()`), and `§247 SK-M20` — whose zero is **analytic**, since
+the two spellings are the same string and no test could have separated them.
+
+`§247 SK-M18` closes beside `§241 IX-1`: what is gated is the **column order of an index that
+exists**, never its existence and never its value.
+
+## Two rows that came in larger than they claimed
+
+Both counted off the run's own JUnit XML rather than off the failure list.
+
+- **`§188 NR-1`** — the direction is exactly as written (absences, not presences) but not seven:
+  widening the reader corpus back to `src/test/java` empties the computed set and **all sixteen**
+  entries of `READERLESS_BY_DECISION` are reported absent. Every one has a test naming it.
+- **`§188 NR-3`** — **eighteen** `lockVersion` members, not fifteen. Three more entities have gained
+  `@Version` since §188.
+
+## Structural rather than testable
+
+**`§124 AG-1` does not compile, in either copy.** Adding `BEST` back to `execution.AggregationPolicy`
+fails at `PlanStatisticsService.java:490`; adding it to `reporting.AggregationPolicy` fails at
+`AggregateExecutionReport.java:846` — *the switch expression does not cover all possible input values*
+in both. An exhaustive switch per copy is the guard, and it fires before any test runs. The class the
+row names, `AggregateExecutionPolicyTest`, does not exist.
+
+**`§133 AG-7` variant 2** is the same lesson at the database: a *near-miss* qualifier value aborts the
+migration (`FlywayMigrateException` → `FlywaySqlScriptException` → `PSQLException`) and takes all 24
+tests of `SeedDataTest` with it at context startup, so the derived rule the row names never runs.
+Variant 1 — the exact-value spelling — is green and stale, because `V52` sets that row to `ALL` anyway.
+
+## Stale, substituted and proxied — stated rather than discovered
+
+**STALE:** `§133 AG-5` (the exclusion it defends was deleted by §210, over a recorded objection) and
+`§154 RL-4` (`OWN_FILE` does not exist — §188 narrowed the corpus and the file's own header records
+that this made the shape *unreachable*; `§188 NR-1` in the same batch is its live form, and it
+reddens).
+
+**Substituted, because the thing the row names has moved:** `WL-1` (its example column acquired a
+writer in §159 — that is `AR-M5`'s subject, so a different entry was deleted), `§239 RT-M1`
+(`EXPECTED_DECLARATIONS` is **10 again**, so *"set it back to 10"* is a no-op; it was set to 9),
+`UX-2` (`UNEXERCISED_BY_DECISION` is `Map.of()` and `Outbox.record` gained two product callers in
+§218, so the row's *question* was run instead of its literal mutation).
+
+**Proxied:** `RK-4` — a new `V*.sql` cannot be reverted by exact path, so the fourth carrier of
+`release_sort_key` was added to an existing table by appending to the newest migration. The test
+computes the carrier set from `information_schema` and asserts it is exactly three, so a fourth
+carrier is what it sees either way. `§210 DQ-4` and `§241 IX-1` were shaped the same way (append to
+`V68`; replace `V67`'s body with `SELECT 1;`).
+
+## Citation corrections found while running
+
+- **`§242 LG-M12`** names `everyExemptionStillExempts`. That is `SchemaCommentTest`'s rule about
+  *comment* exemptions. The rule that owns `READERLESS_BY_DECISION` is
+  `ArchitectureRulesTest.everyMappedColumnHasAReader`, and it is what reddens. The property holds; the
+  citation was wrong.
+- **`§239 RT-M1`** — `IdempotencyKeyCapTest`'s `@DisplayName` still says *"one cap, nine declarations"*
+  while its assertion says ten. Only the assertion is checked.
+- **Scopes corrected in the manifest:** `RX-2` (carried `PlanStatisticsEndpointTest`, its section's
+  first-named class; the `RX-*` rows are §124's `run:execute` family in `ExecutionEndpointTest`),
+  `§240 AR-M4` (→ `PlanLifecycleEndpointTest`), `§247 SK-M20` (→ `RunScheduleEndpointTest`),
+  `§242 LG-M5` (was `?` → `AuditLogReadTest`), and `§225 PM-3` — `RoleScopeShapeTest` is
+  `com.tcms.schema`, not `com.tcms.identity`, caught by the runner's `ERROR-NO-TESTS` guard rather
+  than by a green build.
+
+## Two runner artefacts, recorded so the numbers stay attributable
+
+`§246 CE-M4` and one attempt at `§188 NR-4` both completed on shanks and then lost the SSH connection,
+so the runner wrote `ERROR` with a wall-clock reflecting the dead socket rather than the work. Both
+results were recovered from the run's own JUnit XML on the box (`failures="2"` in each of `CE-M4`'s
+two classes; `everyMappedColumnHasAWriter PASSED` for `NR-4`), and `NR-4` was re-run — returning
+`:test UP-TO-DATE`, which is the **same mutant's cached green** and not an unexecuted one. A 3-second
+zero is `§185 SR-4`'s shape and is only safe to record because the preceding run's log shows the
+assertion actually executing.
 
 
 # DOCUMENTED GAPS — rows retired from the run, 2026-08-22
