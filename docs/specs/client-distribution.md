@@ -7,6 +7,11 @@ backend image and the SPA. Nothing is published to a public registry.
 This file is the authority on that. `deploy/shanks/Caddyfile`, `deploy/deploy.sh`,
 `.github/workflows/deploy.yml` and `packages/scripts/pack-release.mjs` all point here.
 
+**To put it on a box for the first time, follow
+`docs/plans/2026-08-23-client-distribution-rollout.md`** — the ordered procedure, including the two
+steps no commit can take: production's Caddy block, which is not in this repository, and the compose
+profile that gates the hosted MCP endpoint.
+
 ---
 
 ## For a user

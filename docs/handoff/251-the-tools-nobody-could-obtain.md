@@ -93,4 +93,8 @@ instance.** Specifically:
   `/etc/tcms/tcms.env` on the box and is not visible from here. §142 wired the image, the route and
   the healthcheck; whether the profile is on is an operator fact this repository cannot answer.
 
-The rows for the browser half are in `docs/verification/frontend-browser-checks.md` under §251.
+The rows for the browser half are in `docs/verification/frontend-browser-checks.md` under §251, and
+**`docs/plans/2026-08-23-client-distribution-rollout.md` is the ordered procedure for all three** —
+watch the lab deploy, verify `/downloads` unauthenticated, install both tools from a machine with no
+checkout, turn on the MCP profile, then production's hand-added Caddy block and a dispatched
+release. Nothing in it has been run.
