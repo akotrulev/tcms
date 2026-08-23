@@ -3359,3 +3359,26 @@ verify the same artifact as rows 1–3 and splitting them across two files is ho
 | `§251 D-3` | `curl -s https://<host>/downloads/SHA256SUMS`, then `shasum -a 256` the tarball you downloaded | The digests match, and the file lists four tarballs: `-latest` and the version-pinned copy of each tool. |
 | `§251 D-4` | On a machine with **no checkout of this repository**: `npm install -g https://<host>/downloads/tcms-cli-latest.tgz`, then `TCMS_URL=… TCMS_TOKEN=… tcms whoami` | The install completes, and `tcms whoami` names the token's user and what it can reach. **Silence with exit 0 is the §251 defect returning** — that is what the entry guard did before `isProcessEntryPoint`, and it looks exactly like a successful command that had nothing to say. Then repeat the install with `--offline`: it must still succeed, because the tarball vendors its whole closure. |
 | `§251 D-5` | Install `tcms-mcp-latest.tgz` the same way and name `tcms-mcp` in a real MCP host's config with `TCMS_URL`/`TCMS_TOKEN`; separately, point a host at `https://<host>/mcp` with the token as the bearer | **Both shapes list tools, and the same ones** — the tool list is built per session from the caller's credential (§140), so a difference between the two is a session-construction defect and not a transport one. The hosted half needs `COMPOSE_PROFILES=mcp` on the box; if the container is not running, **record that rather than filing a failure** — `docs/specs/client-distribution.md` has the one-line fix and it is an operator decision, not a defect. |
+
+## §252 — the user guide (`/help`)
+
+**Not a lane in the thirteen, and it needs no fixture.** Every row here renders from the page's own
+content plus one read (`GET /roles`), so it can be driven on a freshly provisioned company before
+any suite, case or run exists — which is exactly the state a new reader arrives in. Drive it
+**early in a sitting**, because it costs nothing and because a broken help page is the one screen
+whose failure a new user cannot route around.
+
+**Drive it as more than one role.** Rows 3 and 4 are the whole point of the section and they say
+different things to a Viewer than to a Company Admin; a pass driven only as the admin the fixture
+created has not checked the reading that matters.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§252 H-1` | Sign in, open **your name → Help & documentation**; then the footer's **Documentation** link | Both land on `/help`, which **redirects to the first section** rather than showing a contents page of its own. The rail is unchanged — Help is deliberately not a rail item. The footer link is the one §65-era `href="#"` that finally has a destination. |
+| `§252 H-2` | Click every entry in **Contents**, in both themes and at 390 px wide | Eleven sections, each rendering its own heading, and the current one marked in the list. At 390 px the contents block sits **above** the prose and scrolls with it rather than sticking. **No horizontal scroll on the page body** — the command blocks and the role table scroll inside themselves. |
+| `§252 H-3` | Open **Roles and access** as a **Company Admin**, then as a **Viewer** | The same table both times, with the same ticks: it describes the instance, not the reader. Confirm against **Company → Teams & roles**' own role reference that the two agree — they read the same `GET /roles`, so a disagreement is a rendering defect in one of them. |
+| `§252 H-4` | Open **Roles and access** as an account holding **no project grant at all** | The table still renders. `GET /roles` costs `company:read`, which membership itself confers, so a member with zero project visibility must still be able to read what the roles mean — that is the reader the page was written for. A refusal here is the defect. |
+| `§252 H-5` | Tab through a section from the Contents list; then use a screen reader on the role matrix | Following a contents link moves focus to the section heading, so the next Tab continues into the prose rather than back down the list. Each matrix cell announces a whole sentence — *"Viewer cannot approve test cases"* — not a bare tick or dash. |
+| `§252 H-6` | Read **The command-line tool** and **AI agent access** against a real instance: run every command shown, substituting your host | Every command works as printed. **This is the row that catches copy going stale** — the CLI's own `tcms help` is the authority for the command list and the tool list comes from the MCP registry, so a divergence is this page being wrong, not the tool. Note in particular whether `Company → API tokens` is still where a token is issued: `packages/cli`'s help text says *"Settings → API tokens"*, which is already wrong, and this page says the rail label. |
+| `§252 H-7` | Follow the pointer in **Running tests** to `/projects/<id>/run-schedules` | The schedules screen renders. The page says in a warning that nothing links to it; **if a rail entry or a link has appeared by the time this is driven, the warning is the thing to delete** — the row is here to catch the note outliving the gap. |
+| `§252 H-8` | Deep-link a section directly (`/help/mcp`), then a retired id (`/help/nonsense`) | The first lands on that section. The second **redirects to the first section**, and does not show the not-found page: an id in somebody's onboarding notes that stopped existing is a wrong turn, not a broken app. |

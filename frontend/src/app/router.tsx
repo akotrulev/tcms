@@ -144,6 +144,16 @@ const NotificationSettingsPage = lazy(() =>
  * One chunk rather than two because the two screens are the same twelve columns behind different
  * gates; splitting them would ship the rendering twice and give the two copies somewhere to drift.
  */
+/**
+ * The user guide (§252) — a session-level screen like `/my-work` and `/account/security`: its
+ * subject is the product, not a project, so any project segment in its URL would be an arbitrary
+ * one and the rail's switcher would appear to change a page it cannot change.
+ *
+ * Lazy, and it earns it more than most: eleven sections of prose plus the role matrix are dead
+ * weight on every session that never opens Help, which is most of them.
+ */
+const HelpPage = lazy(() => import('../features/help/HelpPage').then((m) => ({ default: m.HelpPage })));
+
 const AuditLogPage = lazy(() =>
   import('../features/audit/AuditLogPage').then((m) => ({ default: m.AuditLogPage })),
 );
@@ -232,6 +242,29 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <AccountSecurityPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            Two paths, one component. `/help` has no landing page of its own — it redirects to the
+            first section — so it is declared here rather than as a `<Navigate>`: the redirect
+            target is `helpSections[0]`, which lives with the content, and a literal path here
+            would be a second copy of it that goes stale the day the ordering changes.
+          */}
+          <Route
+            path="/help"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <HelpPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/help/:sectionId"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <HelpPage />
               </Suspense>
             }
           />

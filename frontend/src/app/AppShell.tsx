@@ -4,6 +4,7 @@ import {
   Divider,
   Drawer,
   IconButton,
+  Link,
   ListItemIcon,
   ListItemText,
   Menu,
@@ -32,6 +33,7 @@ import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
+import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import InventoryOutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined';
@@ -951,6 +953,25 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
           </ListItemIcon>
           <ListItemText slotProps={{ primary: { variant: 'body2' } }}>Security</ListItemText>
         </MenuItem>
+        {/*
+          The user guide (§252). Beside Security rather than in the rail: the rail's every item is
+          a place in the *product* — a project's cases, a company's teams — and its grouping tells
+          the reader whether the project switcher changes what they are looking at. Help is about
+          the product rather than a place in it, so it belongs with the two other entries whose
+          subject is the session itself. The footer link below is the second, more discoverable
+          door.
+        */}
+        <MenuItem
+          component={RouterLink}
+          to="/help"
+          onClick={() => setAnchor(null)}
+          data-testid="TopBar.HelpLink"
+        >
+          <ListItemIcon>
+            <HelpOutlineOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText slotProps={{ primary: { variant: 'body2' } }}>Help &amp; documentation</ListItemText>
+        </MenuItem>
         <MenuItem onClick={logout} data-testid="TopBar.SignOutButton">
           <ListItemIcon>
             <LogoutIcon fontSize="small" />
@@ -969,9 +990,13 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
  * It used to also carry "Documentation" and "Contact support", both `href="#"`. Neither
  * destination exists yet, and a link that goes nowhere is worse than an absent one: it costs a
  * click, teaches the user the footer is decorative, and sits in the tab order of every page in the
- * app. **They come back when they have somewhere to point** — a self-hosted instance's support
- * contact is per-deployment configuration, not a constant, so it belongs with the instance
- * settings that release rather than hard-coded here.
+ * app. ~~**They come back when they have somewhere to point**~~ — **Documentation has somewhere to
+ * point since §252**, and this is the condition being satisfied rather than waived: `/help` is a
+ * real route with real content, so the link costs a click and delivers a page.
+ *
+ * **Contact support stays out.** Its destination is still per-deployment configuration rather than
+ * a constant — a self-hosted instance's support contact is not something this repository knows —
+ * so it belongs with the instance settings that release, not hard-coded here.
  */
 function AppFooter() {
   return (
@@ -986,9 +1011,19 @@ function AppFooter() {
         color: 'text.secondary',
       }}
     >
-      <Typography variant="caption">
-        TCMS <Identifier variant="muted">{__APP_VERSION__}</Identifier>
-      </Typography>
+      <Stack direction="row" sx={{ gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Typography variant="caption">
+          TCMS <Identifier variant="muted">{__APP_VERSION__}</Identifier>
+        </Typography>
+        <Link
+          component={RouterLink}
+          to="/help"
+          variant="caption"
+          data-testid="AppFooter.HelpLink"
+        >
+          Documentation
+        </Link>
+      </Stack>
     </Box>
   );
 }
