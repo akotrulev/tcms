@@ -24,11 +24,14 @@ cd backend
 git checkout -- <the mutated file>          # revert by EXACT PATH, before the next row
 ```
 
-**Waves 1 and S are run.** `RUN RECORD — 2026-08-22, wave 1` below covers 90 rows, eight findings and
-the five registered gaps that turned out not to exist; `RUN RECORD — 2026-08-23, wave S` covers the
-74 rows of the four scripted sweeps, eight findings, and seven registered gaps confirmed by
-measurement. **The wave-S set is derived, not hand-listed** — the criteria are in
-`mutation-manifest.tsv`'s header and the `wave` column is authoritative. **Two sections govern what is owed before you
+**Waves 1, S and 2 are run.** `RUN RECORD — 2026-08-22, wave 1` below covers 90 rows, eight findings
+and the five registered gaps that turned out not to exist; `RUN RECORD — 2026-08-23, wave S` covers
+the 74 rows of the four scripted sweeps, eight findings, and seven registered gaps confirmed by
+measurement; `RUN RECORD — 2026-08-23, wave 2` covers the 30 rows of the three cross-cutting fixture
+families, **three fixtures added to the suite**, eight findings and five more registered gaps
+withdrawn. **Wave 2 is the committed stopping point** (run plan §9 decision 4): wave 3 is re-decided
+on what waves 1, S and 2 actually found. **Every wave set is derived, not hand-listed** — the
+criteria are in `mutation-manifest.tsv`'s header and the `wave` column is authoritative. **Two sections govern what is owed before you
 start.** `DOCUMENTED GAPS` at the foot of this file
 holds the 44 rows retired from the run on 2026-08-22 (each keeping its id and naming what would
 close it), and the run plan is
@@ -193,7 +196,7 @@ compiling. Each row names the mutation and what it should redden; **none was run
 | 11b | `SuiteRepository.countLiveCasesFiledIn` — widen to the resolved membership | `SuiteWriteEndpointTest`'s delete-a-claiming-suite case must fail. The two readings are *deliberately* different and nothing but a test distinguishes them; if this reddens nothing, deleting a tag-defined suite could start 409ing on cases it does not hold |
 | 11c | `CaseConditions.ancestry` — return `List.of()` unconditionally | A case must lose the conditions of the suite it is filed in. Suspected **weak**: the method now returns at most one suite, so the mutation is close to the whole feature, and the fixture attaches a condition to exactly one suite (`Refunds`) |
 | 11d | `ExecutionSource` — change `('s' || s.key_seq)::ltree` to `NULL` | Suite-grouped report sections must move their rows into the `(not filed)` bucket. If nothing reddens, no report test covers a suite-grouped section over a **freshly projected** fact row, and the column's contents are unasserted for every row written after §98 |
-| 11e | `SuiteRepository.findLiveForProject` — order by `position` instead of `keySeq` | `SuiteEndpointTest.orderingIsTotalAndStable`. Every fixture row has `position = 0`, so Postgres may return any order — meaning this mutation may pass **intermittently**, which is the honest expectation to record rather than a clean red |
+| 11e | `SuiteRepository.findLiveForProject` — order by `position` instead of `keySeq` | `SuiteEndpointTest.orderingIsTotalAndStable`. Every fixture row has `position = 0`, so Postgres may return any order — meaning this mutation may pass **intermittently**, which is the honest expectation to record rather than a clean red ✅ **RUN 2026-08-23 (wave 2) — RED, exactly 1: `the order is total and stable, so the rail cannot reshuffle between loads`.** MATCH. The row's intermittency worry did not materialise: every fixture row has `position = 0`, and ordering by it reddened cleanly. |
 | 11f | `CaseFacts.memberOf` — drop one of the three arms | `SuiteScopeAgreementTest`. It survived §98 (the plan expected it to be retired — the duplication is the module boundary's, not the subtree's), and the two predicates are now supposed to be **identical** rather than merely equivalent, so this should be its sharpest round |
 
 **And one that cannot be run here at all:** `V33` drops two columns, and `ddl-auto: validate`
@@ -210,7 +213,7 @@ itself and in what the *validator* stops refusing. **None was run**, per §65.
 |---|---|---|
 | 12a | `CaseFacts.caseIdsInRunScope` — replace the suite arm with `c.suite_id IN (:suiteIds)` | **The slice's own defect, armed.** `RunCreateEndpointTest.Scope.aSuiteArmResolvesMembership` must fail, because PAYMENTS claims `caseA` by tag and files nothing. `paymentsFilesNothing` is the guard on that property; if 12a goes green, run *that* test first — a fixture where the two readings agree makes every row below vacuous ✅ **RUN 2026-08-22 — RED, 2.** `aSuiteArmResolvesMembership` fell as predicted, and with it *"a run scoped by a TAG or a SUITE is gated too — §99's arms are not doors"*. The extra is the right extra: §6g's gate reads the **resolved** set, so a broken resolution breaks the gate's own fixture. `paymentsFilesNothing` holds — the fixture discriminates, so the rows below it are not vacuous. |
 | 12b | Same method — drop `AND c.deleted_at IS NULL` | `aDeletedCaseIsNotReachedByItsTag`. `case_tag` rows outlive a soft delete, so this is the one arm where the omission is reachable through data rather than through a missing join |
-| 12c | Same method — drop `AND s.project_id = c.project_id` from the suite arm | Suspected **weak**: `aSiblingProjectsSuiteIsRefused` is refused by `RunEdit`'s `liveSuiteIds` check one step earlier, so the query's own bound may never be reached. If nothing reddens, the second gate is untested and the honest repair is a test that bypasses the validator, not a claim of coverage |
+| 12c | Same method — drop `AND s.project_id = c.project_id` from the suite arm | Suspected **weak**: `aSiblingProjectsSuiteIsRefused` is refused by `RunEdit`'s `liveSuiteIds` check one step earlier, so the query's own bound may never be reached. If nothing reddens, the second gate is untested and the honest repair is a test that bypasses the validator, not a claim of coverage ❗ **RUN 2026-08-23 (wave 2) — ZERO, and the row's own suspicion is confirmed.** `RunEdit.liveSuiteIds` refuses one step earlier, so the query's bound is never reached. The second gate is untested, and the honest repair is the one the row already names: a test that bypasses the validator. |
 | 12d | `RunCreateService` — pass only `requestedCases` to the resolution, dropping the other two arms | `theArmsUnionAndDedupe` and both single-arm tests. Expected to redden broadly; recorded because a narrow red would mean the arms are covered by one test each and not by the union |
 | 12e | `RunEdit.validateCreate` — remove the `liveSuiteIds` loop | `aSiblingProjectsSuiteIsRefused` **and** `anAbsentSuiteIsRefused`. Both, or the check is only pinned in the direction that also fails at the query |
 | 12f | `RunEdit.scopeFields` — return `List.of("caseIds")` unconditionally | `aTagMatchingNothingIsRefusedOnItsOwnField` (its `doesNotContainKey` half) and `everyArmTheCallerUsedCarriesTheRefusal`. The mutation is what the code did before §99, so a green run means the new rule is described and not asserted |
@@ -240,11 +243,11 @@ that must not be skipped: each is one of the slice's own findings, armed.
 | 13d | `ExecutionSource.insertNewSuiteRunSummaries` — replace the three-arm predicate with `c.suite_id = s.id` | `SuiteRunSummaryRefreshTest.summarisesATagDefinedSuite`, `Agreement.theSnapshotAgreesWithTheRepositorysUnion`, and `RollupAgreementTest.suiteHistoryAgrees`. `aTagDefinedSuiteFilesNothing` is the guard on the property — **if 13d goes green, run that first**, because a fixture where the two readings agree makes every row here vacuous |
 | 13e | Same statement — change the `LEFT JOIN case_status` to an inner join | `anUnrecordedExecutionIsNotRunRatherThanMissing`. This is the one place the rollup deliberately differs from `execution_fact`, whose header says coverage denominators can never come from it; the inner spelling makes `total` exclude the un-run cases and a run of 3 of 47 read as 100% |
 | 13f | `ExecutionSource.correctSuiteRunCounts` — drop the trailing `IS DISTINCT FROM` guard | `updatedAtDoesNotMoveWhenNothingChanges`. Predicted to redden exactly one test; recorded because the consequence is not a wrong count but a `computedAt` that always says "just now", which is a freshness field that says nothing |
-| 13g | `ExecutionSource.refreshPlanSnapshot` — reverse the tiebreak to `e.executed_at ASC` | `PlanSnapshotRefreshTest.keepsTheLatestExecutionPerCasePerConfiguration` and `RollupAgreementTest.planStatisticsAgreeUnderLatest`. The fixture's `CASE_TWICE` is what makes this observable — with one execution per case it reddens nothing |
+| 13g | `ExecutionSource.refreshPlanSnapshot` — reverse the tiebreak to `e.executed_at ASC` | `PlanSnapshotRefreshTest.keepsTheLatestExecutionPerCasePerConfiguration` and `RollupAgreementTest.planStatisticsAgreeUnderLatest`. The fixture's `CASE_TWICE` is what makes this observable — with one execution per case it reddens nothing ✅ **RUN 2026-08-23 (wave 2) — RED, 4.** MORE than the 2 predicted; the extras are `RollupAgreementTest`'s two plan-statistics agreements, which is the right extra — a wrong snapshot is a wrong rollup. **Two citation corrections:** the test is `keepsTheLatestPerCasePerConfiguration` (no *Execution*), and `PlanSnapshotRefreshTest` is `com.tcms.reporting`, not `com.tcms.execution`. |
 | 13h | Same statement — drop `AND r.deleted_at IS NULL` from the `test_run` join | Suspected **weak**: no fixture here soft-deletes a run of a plan. If nothing reddens, that is the finding and the repair is a fixture row, not a claim of coverage. The behaviour matters — counting a withdrawn run restores a result somebody meant to retract |
 | 13i | `ExecutionSource.prunePlanSnapshot` — drop the `c.deleted_at IS NULL` conjunct | `prunesASoftDeletedCase` alone. If `prunesACaseThatLeftTheScope` also reddens, the two predicates are not independent and the row's split is wrong ✅ **RUN 2026-08-22 — RED, exactly 1: `prunesASoftDeletedCase`.** MATCH, and it answers the row's own question: `prunesACaseThatLeftTheScope` did **not** redden, so the two predicates are independent and the split between 13b and 13i is right. |
 | 13j | `RollupFacts.runsWithoutSummary` — return `List.of()` unconditionally | `RollupAgreementTest.aRunNewerThanTheRollupIsStillInTheHistory`. The mutation is exactly "serve the suite history from the rollup alone", and what it produces is an **absent** run rather than a stale one |
-| 13k | `SuiteHistoryService.computedAt` / `PlanStatisticsService.computedAt` — take the newest `updated_at` instead of the oldest | Predicted to redden **nothing**, and that is the row rather than a shortfall: no fixture here has two rollup rows written at measurably different instants. The decision is argued in both javadocs and the honest repair is a test that writes two rows a second apart, listed under **Tests to write** below ✅ **RUN 2026-08-22 — ZERO, as predicted.** Both `computedAt` methods mutated together (`isBefore` → `isAfter`), scope `RollupAgreementTest` + `SuiteRunSummaryRefreshTest` + `PlanStatisticsEndpointTest`: nothing moved. The row derived its own zero and the measurement agrees, so this is **BLIND, not proof** — held for wave 2's two-instant fixture, which is the only thing that can tell the decision from its opposite. |
+| 13k | `SuiteHistoryService.computedAt` / `PlanStatisticsService.computedAt` — take the newest `updated_at` instead of the oldest | Predicted to redden **nothing**, and that is the row rather than a shortfall: no fixture here has two rollup rows written at measurably different instants. The decision is argued in both javadocs and the honest repair is a test that writes two rows a second apart, listed under **Tests to write** below ✅ **RUN 2026-08-22 — ZERO, as predicted.** Both `computedAt` methods mutated together (`isBefore` → `isAfter`), scope `RollupAgreementTest` + `SuiteRunSummaryRefreshTest` + `PlanStatisticsEndpointTest`: nothing moved. The row derived its own zero and the measurement agrees, so this is **BLIND, not proof** — held for wave 2's two-instant fixture, which is the only thing that can tell the decision from its opposite. ✅ **RE-RUN 2026-08-23 (wave 2) — RED, 2: both halves.** `RollupAgreementTest.TwoInstants` stamps the rollup rows with two instants an hour apart and asserts the OLDER, and `isBefore` → `isAfter` now reddens the suite history and the plan statistics alike. The 2026-08-05 pass listed this under *Tests to write*; it is written. **WITHDRAWN from `DOCUMENTED GAPS`.** |
 
 **One thing this slice's suite structurally cannot observe**, stated rather than implied: whether the
 rollup is *faster*. Every row above is about correctness. The argument for the rollup is structural —
@@ -340,7 +343,7 @@ them any. That is the reason they are named individually rather than left inside
 | R7-3 | `bool_or(c.passed > 0 AND c.failed > 0)` → `true` | Every listed case reads *Within one configuration and version*, so a configuration-dependent failure is reported as a flaky test. Should redden `theRowSaysWhereTheDisagreementIs`. Then the inverse — `→ false` — which should redden it the other way and turn every genuine flake into "across configurations". |
 | R7-4 | `retryOutcomes`' `ORDER BY s.executed_at ASC NULLS LAST` → `DESC` (the **last** attempt read as the first) | Expected **RED** on the three outcome counts — but note R6-2's lesson: a fixture of mirrored pairs is symmetric under exactly this mutation. Here `BLOCKED_THEN_PASSED` and `ALWAYS_FAILING` break the mirror. If it comes back GREEN, the fixture is the defect, not the code. |
 | R7-5 | `attempts`' partition drops `configuration_id`, then (separately) `case_version_id` | Two runs. Each should move `CONFIG_SPLIT` / `VERSION_SPLIT` out of two groups into one, so the totals fall from 8 and *"passed only after a retry"* rises — a cross-configuration difference reported as a retry, which is §6p's false-flake signal in the third section. |
-| R7-6 | `caseLabels`' `AND c.project_id = :projectId` dropped | A sibling project's case title on this project's report. **Expected to redden nothing** — no test in this class seeds a second project, and RLS scopes to the company, not the project. Recorded as a **gap**: it is `CatalogueFacts`/`PlanFacts`' stated reason for existing, arriving in a fourth file, and the row that would close it is a two-project fixture. |
+| R7-6 | `caseLabels`' `AND c.project_id = :projectId` dropped | A sibling project's case title on this project's report. **Expected to redden nothing** — no test in this class seeds a second project, and RLS scopes to the company, not the project. Recorded as a **gap**: it is `CatalogueFacts`/`PlanFacts`' stated reason for existing, arriving in a fourth file, and the row that would close it is a two-project fixture. ✅ **RUN 2026-08-23 (wave 2) — RED, exactly 1**, against `reporting.SiblingProjectReadsTest`. **The zero-prediction was right about its own class and wrong about the code**: `AggregateVariabilityTest` stayed green, and the two-project fixture caught it. **WITHDRAWN from `DOCUMENTED GAPS`.** |
 
 **Also not covered, and named**: nothing asserts the three sections against a *second* implementation
 the way `AggregateExecutionCrossCheckTest` does for the policy — there is no second implementation to
@@ -371,9 +374,9 @@ that can turn it into a measurement**, and it therefore carries more weight here
 | R8-2 | `HAVING count(DISTINCT s.case_version_id) > 1` → the callout's predicate (`passed > 0 AND failed > 0`) | `STILL_FAILING` — failed at both versions — drops out, and the section becomes a duplicate of the inconsistency callout's *Across versions* rows. Should redden `divergenceIsWiderThanTheInconsistencyCallout`. §6e's harm is the **blending**, not the disagreement. |
 | R8-3 | The `EXISTS` against `resolved` drops its `r.case_version_id = v.case_version_id` term, matching on the case alone | Every listed version reads **Counted** under every policy, and the narrative then claims the totals average across versions when under `LATEST` they average nothing. Should redden `theDefaultPolicyCountsOneVersionPerCase`, `worstCanCountTheOlderVersion` and half of `latestPerConfigBlendsAcrossConfigurations`. |
 | R8-4 | `blendsVersions(...)` → `selection.policy() == AggregationPolicy.ALL` — the shortcut the method's javadoc exists to refuse | Expected to redden **exactly one assertion**: `latestPerConfigBlendsAcrossConfigurations`'s narrative check, where two configurations pinned different versions and the totals blend under a policy that is not `ALL`. A narrow blast radius is the *correct* outcome here. **If it reddens nothing at all, the fixture's second configuration is not doing its job** and the finding is in `PER_CONFIG`, not in the code. |
-| R8-5 | The Java comparator: drop the `-versionsPerCase` term; then, separately, the `versionNo` term | Two runs. The first should move `THREE_VERSIONS` out of the first three rows (`theMostDividedCaseIsFirst`); the second should let a case's versions come back in id order rather than v1, v2, v3 — **and may come back GREEN by luck**, since `gen_random_uuid()` orders arbitrarily. A green here is not a passing mutation, it is an unrepeatable test, and the repair is a deterministic version id in the fixture. |
+| R8-5 | The Java comparator: drop the `-versionsPerCase` term; then, separately, the `versionNo` term | Two runs. The first should move `THREE_VERSIONS` out of the first three rows (`theMostDividedCaseIsFirst`); the second should let a case's versions come back in id order rather than v1, v2, v3 — **and may come back GREEN by luck**, since `gen_random_uuid()` orders arbitrarily. A green here is not a passing mutation, it is an unrepeatable test, and the repair is a deterministic version id in the fixture. ✅ **RUN 2026-08-23 (wave 2) — both halves RED**: (a) 1, (b) 2. ⚠️ **And (b)'s red is exactly as unrepeatable as the green the row feared.** `AggregateVersionDivergenceTest` writes `test_case_version.id` with `gen_random_uuid()`, so what the sort fell back on this run was random. The repair the row named — a deterministic version id in the fixture — is still owed, and a red does not discharge it. |
 | R8-6 | `metadata` emits the divergence entry only when the count is non-zero | Should redden the second assertion of `theMetadataFlagsTheCount`. Recorded as its own row because "print it even when it is zero" is exactly the kind of line a later tidy removes as dead, and the failure mode — a report where the flag's absence and the flag's zero look identical — is this repository's most repeated shape. |
-| R8-7 | `caseVersionNumbers`' `AND c.project_id = :projectId` dropped | A sibling project's version number on this project's report. **Expected to redden nothing** — R7-6 one method over, for the same reason: the class seeds one project and RLS scopes to the company, not the project. Recorded as a **gap**, and it is now the *fifth* file layering this predicate with nothing checking any of them. The row that closes both is a two-project fixture, and it should be written once for the seam rather than twice for its methods. |
+| R8-7 | `caseVersionNumbers`' `AND c.project_id = :projectId` dropped | A sibling project's version number on this project's report. **Expected to redden nothing** — R7-6 one method over, for the same reason: the class seeds one project and RLS scopes to the company, not the project. Recorded as a **gap**, and it is now the *fifth* file layering this predicate with nothing checking any of them. The row that closes both is a two-project fixture, and it should be written once for the seam rather than twice for its methods. ✅ **RUN 2026-08-23 (wave 2) — RED, exactly 1.** `AggregateVersionDivergenceTest` green, the fixture red — `R7-6`'s answer one method over. **WITHDRAWN from `DOCUMENTED GAPS`.** |
 
 **Also not covered, and named.** There is no second implementation of version divergence anywhere in
 the product, so nothing plays `AggregateExecutionCrossCheckTest`'s role here — the counts are
@@ -487,6 +490,13 @@ Also owed on a real box: `EXPLAIN (ANALYZE)` on the step-suggestion query, to co
   over a case whose old failures raise a column of each. Its control asserts each writer alone
   raises something the other cannot.
 
+**And one wave 2 opened rather than closed:** `AggregateVersionDivergenceTest` writes
+`test_case_version.id` with `gen_random_uuid()`. `R8-5` (b) reddened against it, and the red is as
+unrepeatable as the green the row feared — the sort fell back on random ids. A deterministic version
+id in that fixture is a one-line repair and is the difference between a test and a coin flip.
+The same is owed in five places for the same-instant pair: `CM-8` (b), `FQ-10`, `§242 LG-M2`,
+`§245 BA-M12` and `§249 CS-M9`, each needing what `IngestionEndpointTest.SameInstant` demonstrates.
+
 Each is a gap this pass measured rather than a guess. Numbered findings above give the reasoning.
 
 1. A classified case in `CaseBulkEndpointTest`'s fixture (finding 3).
@@ -577,9 +587,9 @@ seam (`doc_page` · `doc_block` · `doc_link`) and a `DISTINCT ON` over `executi
 | CM-3 | `stateOf` returns `VERIFIED` on the first passing case instead of `FAILING` on the first non-passing one | The optimistic roll-up: four green and one red reads as verified. Should redden `oneFailingCaseMakesTheStatementFailing` **and nothing else**, because it is the only statement in the fixture with two cases of differing verdicts. | ✅ **RUN — reddened exactly that one test.** The narrow blast radius is the correct outcome; a wider one would have meant the ladder was being asserted by accident elsewhere. |
 | CM-4 | `isStatement` → `return true` (every block is a coverage candidate) | A specification's prose becomes uncovered requirements. Should redden `listItemsAreStatementsAndProseIsNot` and `aProsePageSaysItHasNoStatements`. | ✅ **RUN — reddened those two plus `statementsBeforeAnyHeadingArePreamble` and `oneFailingCaseMakesTheStatementFailing`.** Four is right: the preamble gains the intro paragraph and the ladder gains three uncovered rows. This is `DocBlockView`'s zeroed-marker objection arriving in a document sent to an auditor. |
 | CM-5 | `verifyingCasesByBlock` drops its `DISTINCT` | The same claim recorded twice becomes two evidence rows while the statement counts stay put, so the table and the summary silently disagree. Should redden `duplicateLinksCountOnce`. | ✅ **RUN — reddened exactly that one test.** `doc_link` has **no unique index**; `BlockLinkService`'s 200-not-409 is a promise with nothing behind it at the database, which is why this is belt and braces rather than paranoia. |
-| CM-6 | `findPage` drops `AND p.project_id = :projectId` | A sibling project's document, in the same company, becomes reportable — RLS scopes to the company and no further. **Expected to redden nothing**: the class seeds one project per company. | ⬜ **NOT RUN — and it is a known gap, not a prediction.** This is now the **sixth** file layering a project predicate over RLS with nothing checking any of them (R7-6, R8-7, `PlanFacts`, `CatalogueFacts`, `ExecutionSource`×2). The row that closes all six is one two-project fixture written **once for the seam**, and it should stop being re-recorded per method. |
+| CM-6 | `findPage` drops `AND p.project_id = :projectId` | A sibling project's document, in the same company, becomes reportable — RLS scopes to the company and no further. **Expected to redden nothing**: the class seeds one project per company. | ⬜ **NOT RUN — and it is a known gap, not a prediction.** This is now the **sixth** file layering a project predicate over RLS with nothing checking any of them (R7-6, R8-7, `PlanFacts`, `CatalogueFacts`, `ExecutionSource`×2). The row that closes all six is one two-project fixture written **once for the seam**, and it should stop being re-recorded per method. ✅ **RUN 2026-08-23 (wave 2) — RED, exactly 1**, and it is the first measurement any of the six files has ever had. `CoverageMatrixReportTest` stayed green, so the row's *expected to redden nothing* was a statement about the fixture. **WITHDRAWN from `DOCUMENTED GAPS`** — closed by `reporting.SiblingProjectReadsTest`. |
 | CM-7 | `findPage` drops `AND p.deleted_at IS NULL` | A report whose spine is a document somebody removed. Should redden `aDeletedPageIsRefused`. | ⬜ NOT RUN |
-| CM-8 | `blocks`' `ORDER BY b.position, b.id` → `ORDER BY b.id` | The specification comes out in a different order from the page it is about. Should redden `theSpineIsTheDocumentsOwnOrder` and `statementsBeforeAnyHeadingArePreamble`. **`doc_block` has no unique constraint on `(page_id, position)`**, so dropping the `b.id` tiebreak alone is expected to redden **nothing** and is the more interesting half — a non-total order produces two documents from one model only when two blocks tie. | ⬜ NOT RUN — run **both halves**; the second is the determinism claim and the first is only its symptom. |
+| CM-8 | `blocks`' `ORDER BY b.position, b.id` → `ORDER BY b.id` | The specification comes out in a different order from the page it is about. Should redden `theSpineIsTheDocumentsOwnOrder` and `statementsBeforeAnyHeadingArePreamble`. **`doc_block` has no unique constraint on `(page_id, position)`**, so dropping the `b.id` tiebreak alone is expected to redden **nothing** and is the more interesting half — a non-total order produces two documents from one model only when two blocks tie. | ⬜ NOT RUN — run **both halves**; the second is the determinism claim and the first is only its symptom. ✅❗ **RUN 2026-08-23 (wave 2) — both halves.** (a) dropping `position` reddens **5**, more than the 2 predicted: the spine decides the coverage arithmetic as well as the order. (b) dropping only `b.id` reddens **ZERO**, exactly as predicted and for its reason — nothing ties a position. **The interesting half is the gap**, and it is the third sighting in this wave of one missing fixture shape. |
 | CM-9 | `caseLabel` returns `""` instead of the raw id for a case that no longer resolves | A `doc_link` outliving its case — reachable, because `source_id` is opaque with **no foreign key** — renders as a blank cell rather than as evidence a claim was recorded. Expected to redden **nothing**: the fixture has no dangling link. | ⬜ NOT RUN — recorded as a **gap in the fixture**, not in the code. Closing it is one `doc_link` row naming a `gen_random_uuid()`. |
 
 ---
@@ -646,7 +656,7 @@ slice ran mutations rather than queuing them, and the rows below record what was
 |---|---|---|---|
 | IN-9 | `IngestionEdit.MAX_REPORT_BYTES` removed | A 400 MB payload becomes an out-of-memory fault taking the instance down for every other company on it, rather than a refusal naming the cap. Needs a large body, so it is a manual check. | ⬜ NOT RUN |
 | IN-10 | `AutomationMatcher.soleKey` returns the first key instead of refusing a name that yields two | A test named after two cases posts its result to whichever the regex found first. Needs a two-key fixture. | ⬜ NOT RUN |
-| IN-11 | `CaseFacts.caseIdsByAutomationKey` drops its `project_id` predicate | A sibling project's case is materialised into this project's run — a `test_execution` and its `test_case` in two different projects, which every read in the module assumes cannot happen. **The sixth file layering a project predicate over RLS with nothing checking it** (`PlanFacts`, `CatalogueFacts`, `ExecutionSource`×3, `DocumentationSource`); the fix is still one two-project fixture written once for the seam, not a row per method. | ⬜ NOT RUN — same gap §115's CM-6 records. |
+| IN-11 | `CaseFacts.caseIdsByAutomationKey` drops its `project_id` predicate | A sibling project's case is materialised into this project's run — a `test_execution` and its `test_case` in two different projects, which every read in the module assumes cannot happen. **The sixth file layering a project predicate over RLS with nothing checking it** (`PlanFacts`, `CatalogueFacts`, `ExecutionSource`×3, `DocumentationSource`); the fix is still one two-project fixture written once for the seam, not a row per method. | ⬜ NOT RUN — same gap §115's CM-6 records. ❗ **RUN 2026-08-23 (wave 2) — ZERO, and the fixture is HALF there.** `IngestionEndpointTest` holds a second project (`SAVINGS`) — its header says so — but no **case** in it, so `keyedLookup` has no sibling row to reach. One case in `SAVINGS` closes this row; that is a smaller repair than the section assumed. |
 | IN-12 | `IngestionService.write` records a result on a case whose execution is absent from a named run | A CI job silently grows a checklist a person is working through, and its denominator. Needs a `runId` whose scope excludes a matched case. | ⬜ NOT RUN |
 
 ---
@@ -665,7 +675,7 @@ fixture grew a sibling project.
 | IH-3 | `UnmatchedTests.landed` drops the `recorded` arm (matched ⇒ landed) | A test whose case is real but is **not in the run the caller named** disappears from the detail read while still counting in `unmatchedCount` — the two populations §117 deliberately unions come apart, and the screen shows fewer names than the number beside them. Should redden `theDetailAgreesWithThePost` on a fixture that names a `runId`; the current fixture does **not** build that state, so this is a manual check and IN-12's sibling. | ⬜ NOT RUN — needs IN-12's fixture |
 | IH-4 | `IngestionService`'s replay serves `List.of()` again | `unmatchedCount: 12` beside `unmatched: []` on the response to a CI **retry** — the caller that most needs the names, on the second time one build failed to bind the same tests. Should redden `aReplayCarriesTheNames` alone. | ⬜ NOT RUN |
 | IH-5 | `findSummariesInProject` selects the entity rather than the constructor projection | No assertion changes and no test goes red — the defect is a `JSONB` blob per row pulled across to render a list that shows none of it. **Recorded because it is invisible to the suite**: the check is the query log on a project with a 5,000-test report in its history, which is the shape of the thing this projection exists for. | ⬜ NOT RUN — not assertable, measure instead |
-| IH-6 | The list's `ORDER BY` loses its `j.id DESC` tiebreak | Two jobs posted inside one microsecond — a matrix build does it every time — swap places between reloads, moving the row somebody is reading out from under the cursor. Not reliably reddenable: the fixture's two posts differ in `createdAt`, so this needs two rows written with an identical timestamp. | ✅ **RUN 2026-08-22 — ZERO**, as the row predicted, and for the reason it gave. **BLIND — re-run after wave 2's same-instant fixture** (D8); recorded as a held row, not as coverage. |
+| IH-6 | The list's `ORDER BY` loses its `j.id DESC` tiebreak | Two jobs posted inside one microsecond — a matrix build does it every time — swap places between reloads, moving the row somebody is reading out from under the cursor. Not reliably reddenable: the fixture's two posts differ in `createdAt`, so this needs two rows written with an identical timestamp. | ✅ **RUN 2026-08-22 — ZERO**, as the row predicted, and for the reason it gave. **BLIND — re-run after wave 2's same-instant fixture** (D8); recorded as a held row, not as coverage. ✅ **RUN 2026-08-23 (wave 2) — RED, exactly 1**, against the new `SameInstant` group. `theListIsSummaries` stayed green, which is the fixture's own claim measured: two posts milliseconds apart never consult the tiebreak. ⚠️ `theOrderIsRepeatable` stayed green too — Postgres returned the same **wrong** order twice, so repeatability is not correctness. |
 | IH-7 | `TestRunRepository.findRunKeys` loses `deletedAt IS NULL` | The history offers a link to a deleted run, which 404s — and `IngestionJobSummary` loses the only thing that tells "matched nothing" apart from "its run was deleted". Needs a soft-deleted run in the fixture. | ⬜ NOT RUN |
 | IH-8 | `UnmatchedTests.outcomeOf` falls back to `IngestedOutcome.values()[0]` on an unknown name | Every historical row of a removed enum constant re-reads as **`PASSED`** — the all-green direction §117 spent its parsers on, arriving through the reader instead. Needs a payload written by a future build, so it is a manual check. | ⬜ NOT RUN |
 
@@ -690,7 +700,7 @@ and seven cases crossing automation status against result age) plus `CaseHealthA
 | DR-2 | The stale arm becomes §6c read literally — `(last_ci.at IS NULL OR last_ci.at < :cutoff)` | A case marked `AUTOMATED` before its automation exists raises an **ERROR-severity** signal immediately, on every case in a project, the day somebody starts declaring intent. §6c makes `automationKey` optional precisely to allow that state. | ✅ **RUN — reddens exactly one**, `automationThatNeverStartedHasNotStopped`, alone. **The first attempt at this mutation was the wrong one and it is worth not repeating**: deleting `last_ci.at IS NOT NULL` outright reddens *all 19*, because a NULL boolean into a `NOT NULL` column aborts the recompute — a crash, which says nothing about the semantics. Mutate to the competing implementation, not to nothing. |
 | DR-3 | The mirror arm narrows to `c.automation_status = 'MANUAL'` — §6c's own wording | A `NOT_AUTOMATABLE` case taking CI results goes unflagged, which is the loudest arm: coverage is denominated `AUTOMATED / (total − NOT_AUTOMATABLE)`, so this one is wrong in the **denominator** of the number the whole signal family exists to keep honest. Should redden `undeclaredIsWiderThanManual` alone. | ⬜ NOT RUN |
 | DR-4 | The mirror arm drops `AND last_ci.at >= :cutoff` (unbounded, as the first draft of the design had it) | The signal can never go false. A case automated, discovered, and then legitimately returned to manual when the automation was deleted stays flagged for ever with nothing anybody can do — `HealthSignal`'s "no button for lying" rule arriving from the other side, as a claim with no route back. Should redden `undeclaredLapses` alone. | ⬜ NOT RUN |
-| DR-5 | The `ON CONFLICT` names every signal column rather than three | This job becomes the author of claims it has no evidence for, and — new in this slice — it now blanks a **live** sibling's work rather than a hypothetical future one's: `reporting.ExecutionSource` writes `failing_repeatedly` into these same rows on its own schedule. Should redden `otherSignalsAreNotClobbered`. **Worth reading the failure rather than just the colour**: that test seeds `stale_approval`, which no job writes, so it does not exercise the two-live-writers race it now describes. | ⬜ NOT RUN |
+| DR-5 | The `ON CONFLICT` names every signal column rather than three | This job becomes the author of claims it has no evidence for, and — new in this slice — it now blanks a **live** sibling's work rather than a hypothetical future one's: `reporting.ExecutionSource` writes `failing_repeatedly` into these same rows on its own schedule. Should redden `otherSignalsAreNotClobbered`. **Worth reading the failure rather than just the colour**: that test seeds `stale_approval`, which no job writes, so it does not exercise the two-live-writers race it now describes. | ⬜ NOT RUN ✅ **RUN 2026-08-23 (wave 2) — RED, 57**, with eight sibling columns added to the set-list. 57 is the blast radius rather than a measurement of the row, and the reason it is still worth having: the two directional tests of wave 2's `LiveWriters` group are among the reds, so a fixture where both values are **derived** discriminates here exactly as the hand-set boundary test does. |
 | DR-6 | `HealthSignal.UNDECLARED_AUTOMATION` is declared **before** `ORPHANED` instead of appended | `CaseSearch.tallyHealth` selects one aggregate per constant and reads the results back **by position**, so every facet count after the insertion point lands on the wrong tile — the dashboard reports the right numbers against the wrong names. **This row may redden nothing, and that would be the finding**: the declaration-order rule is stated in a comment and, as far as this slice could tell, held by no test. | ⬜ NOT RUN |
 | DR-7 | `HealthSignal.UNDECLARED_AUTOMATION`'s attribute is misspelled `"undeclaredAutomatio"` | Every Criteria filter on the signal throws `Unable to locate Attribute` at runtime while the chip, the tile and `CaseHealth.signals()` all keep rendering — one broken filter among ten working ones. Should redden `CaseHealthAttributesTest.everyAttributeResolves` alone, which is the class §47 said existed and did not until this slice. | ⬜ NOT RUN |
 | DR-8 | `CaseHealthRecomputeService` runs the two statements in **two** transactions | Half a tick's signals stamped with this tick's `computed_at` if the second fails — a row claiming to have been derived just now, half of which was not. **Not assertable by a test** without a fault injected into the second statement; recorded because the single transaction looks like an accident of style and is not. | ⬜ NOT RUN — not assertable |
@@ -719,9 +729,9 @@ and two case versions** — the smallest shape that can tell §6l's three false 
 | FQ-5 | The pass predicate becomes `ef.counts_as_pass` (and the filter `counts_as_pass OR status_kind = 'FAILED'`) — **the implementation this slice originally shipped and corrected** | `kind` and `counts_as_pass` are independent columns, so this agrees with `execution.CaseHistoryService.flakiness` on all six seeded defaults and diverges the moment a project defines "Passed with known issues" as `RETEST`-kind counting toward the pass rate. The case page and the worklist would then quote different numbers for the same test. Should redden `thePredicateIsTheKindAndNotThePassRateColumn` alone — the only test in the suite that seeds such a status. | ⬜ NOT RUN |
 | FQ-6 | `flake_score` becomes `0` rather than null below the floor | The confident zero, in the place it costs most: `0.0` reads as *evidently stable* on a test whose only three results went pass, fail, pass. It is the number a human then uses to decide whether to quarantine. Should redden `belowTheFloorThereIsNoScore`. | ⬜ NOT RUN |
 | FQ-7 | The denominator becomes `executions` rather than `transitions` | A case with six results across six cells scores `0.0` on evidence that says nothing about stability at all — and looks exactly like the cases that really are stable. Should redden `alternationAcrossConfigurationsIsAPlatformBug`'s counts and `alternationIsTheScore`. | ⬜ NOT RUN |
-| FQ-8 | The recompute's `ON CONFLICT` set-list becomes `EXCLUDED.*` | **Every quarantined test is released on the next tick** — silently, in the reassuring direction, presenting as a board whose quarantine column empties itself overnight with no action recorded by anyone. The first time the own-your-own-columns rule binds two writers of one *table* rather than of one row across modules. Should redden `theAuthoredHalfIsUntouchable`. | ⬜ NOT RUN |
+| FQ-8 | The recompute's `ON CONFLICT` set-list becomes `EXCLUDED.*` | **Every quarantined test is released on the next tick** — silently, in the reassuring direction, presenting as a board whose quarantine column empties itself overnight with no action recorded by anyone. The first time the own-your-own-columns rule binds two writers of one *table* rather than of one row across modules. Should redden `theAuthoredHalfIsUntouchable`. | ⬜ NOT RUN ✅ **RUN 2026-08-23 (wave 2) — RED, exactly 1.** MATCH. The one `D3` row that already had a two-**live**-writers fixture: `theAuthoredHalfIsUntouchable` calls the real quarantine writer rather than an `UPDATE`. |
 | FQ-9 | `ef.executed_at >= :cutoff` removed (unbounded window) | The score can never go false: a test that flapped badly last spring and has been solid since stays flagged for ever. §120's rule for `UNDECLARED_AUTOMATION`, arriving from the other direction. Should redden `theWindowIsBounded`. | ⬜ NOT RUN |
-| FQ-10 | `ef.execution_id` removed from the `ORDER BY` inside the window | Two results recorded in the same microsecond — what a CI run posting a batch produces — resolve differently per tick, so the score flickers between two values with no input moving. **This row may redden nothing**: the fixture spaces results a day apart, so `isIdempotent` cannot observe it without a same-instant pair. That would be the finding. | ⬜ NOT RUN — may redden nothing |
+| FQ-10 | `ef.execution_id` removed from the `ORDER BY` inside the window | Two results recorded in the same microsecond — what a CI run posting a batch produces — resolve differently per tick, so the score flickers between two values with no input moving. **This row may redden nothing**: the fixture spaces results a day apart, so `isIdempotent` cannot observe it without a same-instant pair. That would be the finding. | ⬜ NOT RUN — may redden nothing ❗ **RUN 2026-08-23 (wave 2) — ZERO.** One of decision 1's six undetermined rows, settled: **it is a gap.** The fixture spaces results a day apart, so the `lag()` window's `execution_id` tiebreak never decides anything. The fourth sighting in this wave of one missing fixture. |
 | FQ-11 | `CaseQuarantineRequest.quarantined` becomes a primitive `boolean` | An absent field arrives as `false`, so a client sending only a `reason` **releases a quarantine it never mentioned** and gets a 200. The one shape of this request that destroys a decision by omission. Should redden `theStateFieldDoesNotDefault`. | ⬜ NOT RUN |
 | FQ-12 | `CaseFlake.release()` clears the flag and leaves `quarantineReason` | A row saying "not quarantined" beside "quarantined by L. Lead — flaky on Firefox", read in whichever order the screen puts them. The reason field is exactly the one a card renders without checking the flag first. Should redden `aReleaseLeavesNoResidue`. | ⬜ NOT RUN |
 | FQ-13 | `case_flake_quarantine_complete` dropped from `V38` | The reason becomes optional at the storage layer, so any future caller — a bulk action, a board drag — can quarantine without one. **Not assertable by the current suite**, whose only writer already sends all four; recorded because the constraint is what stops the one-argument toggle from being addable, and because it is the check that caught this slice's own fixture writing a null `quarantined_by`. | ⬜ NOT RUN — not assertable without a second writer |
@@ -1250,7 +1260,7 @@ other four creates have had since `V11`/`V14`/`V17`. Assertions live in
 | IK-1 | `V42`'s unique indexes are made non-unique | The lookup still finds the first row, so every single-threaded test stays green — the constraint exists for the **race** between two retries of one intent, which the suite does not run. Reddens nothing. **Known gap: no test in this repo drives two concurrent creates carrying one key**, on any of the six tables. The same gap has existed since `V11`. | ✅ **RUN 2026-08-23 (wave S) — GREEN.** ZERO-AS-PREDICTED across both `SuiteWriteEndpointTest` and `DocPageEndpointTest`: with both indexes made non-unique the lookup still finds the first row and every single-threaded test passes. **The known gap is real** — nothing in this repository drives two concurrent creates carrying one key, on any of the six tables, and has not since `V11`. |
 | IK-2 | The replay lookup moves **after** `SuiteEdit.validate` / `PageContent.validateCreate` | A retry whose payload drifted gets a 400 naming fields on a resource that already exists, sending the client to fix a suite it cannot see. Should redden `aRetryIgnoresADriftedPayload` in both classes. | ⬜ NOT RUN |
 | IK-3 | `trimToNull` is dropped from either controller (header passed through raw) | `Idempotency-Key: ` (empty) is stored as `''` and becomes one key every misconfigured client in the project replays against — the project accepts exactly one suite, or one page, from all of them, forever. Should redden `aBlankKeyIsAbsent` in both classes. | ⬜ NOT RUN |
-| IK-4 | `findByIdempotencyKey` drops its `projectId` predicate | A key reused across two projects of one company passes the lookup and then violates the index: a validated request that 500s on insert. Should redden `keysAreScopedToTheProject` (suite). **The doc-page class has no second granted project**, so its own scope test only crosses *companies* — a narrower observation, recorded rather than papered over. | ⬜ NOT RUN |
+| IK-4 | `findByIdempotencyKey` drops its `projectId` predicate | A key reused across two projects of one company passes the lookup and then violates the index: a validated request that 500s on insert. Should redden `keysAreScopedToTheProject` (suite). **The doc-page class has no second granted project**, so its own scope test only crosses *companies* — a narrower observation, recorded rather than papered over. | ⬜ NOT RUN ✅ **RUN 2026-08-23 (wave 2) — RED, exactly 1: `the same key in a DIFFERENT project creates a suite — the scope is the index's`.** **Not blind.** The row's caveat is about the doc-page class; the suite class has a second granted project and sees this. A `D1` member that was never a gap. |
 | IK-5 | The controller answers `201` + `Location` on a replay | A client following the `Location` reads the replay as having created something, which is what the 200 exists to tell it apart from. Should redden `aReplayCarriesNoLocation` and the status assertion in `aRetryReplaysTheOriginal`, both classes. | ⬜ NOT RUN |
 | IK-6 | `MAX_IDEMPOTENCY_KEY` is changed to 500 in **one** of the seven services | The drift the copies invite: one key format works against part of the API and 400s against the rest. Should redden `IdempotencyKeyCapTest.everyCapAgrees` and `theContractAgreesWithTheCode`. **This is the row that justifies not extracting a shared constant** — if it does not redden, the argument in `SuiteWriteService`'s field comment is wrong and the symbol should be extracted. | ✅ **RUN 2026-08-22 — RED, 1 of the 2 predicted. FEWER, and the shortfall is correct.** `everyCapAgrees` falls, so **the argument in `SuiteWriteService`'s comment stands and the constant should not be extracted** — which is what this row exists to decide. `theContractAgreesWithTheCode` **cannot** redden on this mutation and is right not to: it compares `openapi.yaml`'s `maxLength` against the test's own `EXPECTED_CAP`, a different axis entirely. The row's prediction of two was a misreading of the second test. ⚠️ The class is `com.tcms.config.IdempotencyKeyCapTest`, not `com.tcms.shared` — the first attempt matched no tests, which the hardened runner reports as `ERROR-NO-TESTS` rather than as a zero. |
 | IK-7 | `DocPageWriteService.writeSubjectPage` passes a key instead of null | A plan-document create starts consuming keys from a header it never receives — harmless today (the parameter is null at the only call site) but it would make `uq_doc_page_subject` and this index two answers to one question. Reddens nothing. **Known gap**, recorded because the null is a decision and not an omission. | ⬜ NOT RUN |
@@ -1676,7 +1686,7 @@ cd backend
 | `SA-3` | Move `c.lifecycle_status = 'APPROVED'` out of the `SELECT` expression and into the `WHERE` | The statement becomes a filter, so a row already flagged stale and then demoted keeps the flag for ever. Should redden `a stale flag left behind by an earlier tick is cleared, not merely not set` and `a case sent back to DRAFT is not stale, even with the old approval on record`. **The expensive direction**: it is a signal with no route back, which is `HealthSignal`'s no-button-for-lying rule failing from the other side. | ⬜ NOT RUN |
 | `SA-4` | Drop `c.lifecycle_status = 'APPROVED'` entirely | Every case whose review history is behind its current version reports stale regardless of whether it claims to be approved. Should redden `a case sent back to DRAFT is not stale, even with the old approval on record`. | ⬜ NOT RUN |
 | `SA-5` | Replace the version comparison with the timestamp one — `c.updated_at > approved.at` | Predicted **zero** reds, and that is the deliverable: this fixture cannot tell the two apart, because the case that separates them is a save whose content hash is unchanged (no new version, `updated_at` moved). Writing the row is what records that the argument at the method is unasserted. A red here would mean the fixture is stricter than it reads. | ❗ **RUN 2026-08-22 — RED, 1. The fixture IS stricter than it reads, and the argument at the method is asserted after all.** `APPROVED at a version the case has since moved past is STALE_APPROVAL` falls when the version comparison is replaced by `c.updated_at > approved.at` over `max(r.approved_at)`. The row's own reading of its fixture was wrong, in the reassuring direction. Informs `D9`'s `SA-5 ≡ §158 CD-6 ≡ §169 XL-6` pairing: the version-vs-timestamp distinction **is** observable here, so the family is not uniformly blind. |
-| `SA-6` | Add `stale_approval` to `ExecutionFacts.recomputeAutomationDrift`'s `ON CONFLICT` update list | The last statement in the tick blanks the third one's work. Should redden `APPROVED at a version the case has since moved past is STALE_APPROVAL` — and it is the concrete instance of the hazard `signals this job does not compute survive a recompute` has guarded against hypothetically since §53. | ⬜ NOT RUN |
+| `SA-6` | Add `stale_approval` to `ExecutionFacts.recomputeAutomationDrift`'s `ON CONFLICT` update list | The last statement in the tick blanks the third one's work. Should redden `APPROVED at a version the case has since moved past is STALE_APPROVAL` — and it is the concrete instance of the hazard `signals this job does not compute survive a recompute` has guarded against hypothetically since §53. | ⬜ NOT RUN ❗ **RUN 2026-08-23 (wave 2) — RED, 1, and NOT the predicted test.** `APPROVED at a version the case has since moved past is STALE_APPROVAL` stayed **green**; only `otherSignalsAreNotClobbered` fell. **The row has the tick order backwards**: drift is statement 2 and approval is statement 3, so approval rewrites the correct value inside the same transaction. §247 `SK-M17`'s shape — the boundary test sees it and the consequence test cannot. |
 
 > **One browser-queue row block, `SA-B1`…`SA-B3`**, in lane 4 beside `HP-1`…`HP-3`. Unlike §156's,
 > these need a fixture the pass must author — a project with §6g review switched **on** for cases,
@@ -1713,7 +1723,7 @@ cd backend
 | §158 `CD-4` | Drop the `postconditions` half of the `||` | Only the PRE arm is compared. Should redden `the postcondition arm counts, not only the preconditions`. Worth measuring rather than assuming, because the two arms are concatenated in one expression and an edit that "simplifies" it drops the second silently. | ⬜ NOT RUN |
 | §158 `CD-5` | `coalesce(drift.drifted, false)` → `drift.drifted` | `bool_or` over zero rows is NULL and the column is `NOT NULL`, so this is not a wrong answer but an **aborted transaction**, taking the other three statements' work with it. Should redden `a snapshot with no conditions raises nothing rather than failing`, `a case with no version at all has nothing to have drifted from`, and — because the whole tick rolls back — most of the class. ✅ **RUN 2026-08-22 — RED, 90 — and the blast radius IS the deliverable.** `bool_or` over zero rows is NULL into a `NOT NULL` column, so the tick aborts and takes every other statement's work with it: automation drift, stale approval, completeness, the documentation mirror, the linkage signals, the owner check, the two execution signals and `computed_at` all fall, alongside both arms the row names by hand. Ninety of the class. **The row exists to measure how far the blast radius reaches**, since the failure mode is a job that stops rather than one that lies. | see above |
 | §158 `CD-6` | Replace the content comparison with the timestamp one — `lib.updated_at > newest.created_at` | Predicted **some** reds (`an entry still saying what the snapshot recorded raises nothing`, since every fixture condition is written after its case's version row) but **not** the one that matters: nothing here expresses "edited and changed straight back", which is the state where the timestamp spelling can never heal. **The deliverable is the gap**, and closing it is a fixture that writes a version, bumps `condition.updated_at`, and restores the body. | ⬜ NOT RUN |
-| §158 `CD-7` | Add `condition_drift` to `ApprovalFacts.recomputeStaleApproval`'s `ON CONFLICT` update list | The third statement in the tick blanks the fourth's — or rather, being third, is blanked *by* it, so the mutation that shows the hazard is the one on the **later** statement. Should redden `an entry edited since the snapshot drifts the case that references it`. `SA-6`'s row for the other pair; the column-ownership rule now binds four statements and the number of ways to break it grows with it. | ⬜ NOT RUN |
+| §158 `CD-7` | Add `condition_drift` to `ApprovalFacts.recomputeStaleApproval`'s `ON CONFLICT` update list | The third statement in the tick blanks the fourth's — or rather, being third, is blanked *by* it, so the mutation that shows the hazard is the one on the **later** statement. Should redden `an entry edited since the snapshot drifts the case that references it`. `SA-6`'s row for the other pair; the column-ownership rule now binds four statements and the number of ways to break it grows with it. | ❗ **RUN 2026-08-23 (wave 2) — RED, 1, and not the predicted test.** `an entry edited since the snapshot drifts the case that references it` stayed **green**; only `otherSignalsAreNotClobbered` fell. Identical to `SA-6` and for the same newly-measured reason: approval is statement 3 and drift is statement 4, so the later statement repairs it before the transaction ends. |
 
 > **One browser-queue row block, `CD-B1`…`CD-B3`**, in lane 4 beside `HP-1`…`HP-3` and
 > `SA-B1`…`SA-B3`. Its fixture is the **cheapest of the three blocks** and worth saying so: no
@@ -1871,8 +1881,8 @@ assertion elsewhere.*
 |---|---|---|---|
 | `§166 LR-1` | In `ExecutionFacts.recomputeExecutionSignals`, delete `AND e.executed_at IS NOT NULL` from the lateral | Should redden **nothing**, and that is the finding rather than a pass. The predicate exists because `ORDER BY … DESC` sorts NULLs **first** in Postgres where `max()` skipped them, so a row with a status and no `executed_at` would win — and `TestExecution.record()` sets both together, so no fixture may legitimately build that row. A mutation that kills no test on a line that is load-bearing is exactly what §53's note about `status_id IS NOT NULL` recorded from the other side. **If it DOES redden, the fixture has drifted into an unreachable state and that is the more interesting finding.** | ⬜ not run |
 | `§166 LR-2` | Change the lateral's `ORDER BY e.executed_at DESC, e.id DESC` to `ORDER BY e.executed_at ASC, e.id DESC` | Should redden `the newest execution wins, and the stale one is the PASSING one` — `REVISITED`'s two rows carry opposite kinds precisely so this reports a **green case that is currently red**, not merely an old date. Should also redden `long_unexecuted`'s own assertion, and the pair reddening together is the property: one statement, one row, five columns. | ⬜ not run |
-| `§166 LR-3` | In the `ON CONFLICT DO UPDATE`, drop the three `last_*` assignments (keep `never_executed`, `long_unexecuted`, `computed_at`) | Should redden `removing the executions clears the last result on the next tick` and **only** that one — every other assertion runs against a first recompute, which takes the INSERT arm. That asymmetry is the reason the removal test exists: the update arm is unreachable from a fresh fixture, and it is the arm a live deployment is in on every tick after the first. | ⬜ not run |
-| `§166 LR-4` | In the same `ON CONFLICT`, guard the three with `COALESCE(EXCLUDED.last_status_kind, case_health.last_status_kind)` etc. — i.e. "only update when non-null", the tidy-looking edit | Should redden `removing the executions clears the last result on the next tick` while leaving `never_executed` correct — so the two **disagree on one grid row**, which is the exact failure the shared-row design is arranged against. Distinct from `LR-3` because this one is what a reader trying to be careful would write. | ⬜ not run |
+| `§166 LR-3` | In the `ON CONFLICT DO UPDATE`, drop the three `last_*` assignments (keep `never_executed`, `long_unexecuted`, `computed_at`) | Should redden `removing the executions clears the last result on the next tick` and **only** that one — every other assertion runs against a first recompute, which takes the INSERT arm. That asymmetry is the reason the removal test exists: the update arm is unreachable from a fresh fixture, and it is the arm a live deployment is in on every tick after the first. | ⬜ not run ✅ **RUN 2026-08-23 (wave 2) — RED, exactly 1.** MATCH including the *and only that one* half. |
+| `§166 LR-4` | In the same `ON CONFLICT`, guard the three with `COALESCE(EXCLUDED.last_status_kind, case_health.last_status_kind)` etc. — i.e. "only update when non-null", the tidy-looking edit | Should redden `removing the executions clears the last result on the next tick` while leaving `never_executed` correct — so the two **disagree on one grid row**, which is the exact failure the shared-row design is arranged against. Distinct from `LR-3` because this one is what a reader trying to be careful would write. | ⬜ not run ✅ **RUN 2026-08-23 (wave 2) — RED, exactly 1.** ⚠️ The row's *extra* claim is not reached: `theBooleanAndTheValueCannotDisagree` stayed **green**, because no fixture case goes from executed back to unexecuted, so the two never disagree on a grid row. |
 | `§166 LR-5` | In `CaseHealth.lastResult()`, key on `lastStatusKind == null` instead of `lastExecutedAt == null` | Should redden **nothing today** — the two columns are written together, so they are null together. It is recorded because the accessor's javadoc claims the choice is not arbitrary: keying on the moment renders a kind-less row as an incomplete-but-real result, and keying on the kind renders it as "never run", which is the falsehood this whole slice removed. A mutation with no killer is a claim with no check, and saying so is the point of the row. | ⬜ not run |
 
 > **Not mutation-tested and NO TEST IS POSSIBLE — the `id DESC` tiebreak.** Two executions of one
@@ -1893,7 +1903,7 @@ decides what a reader sees on the case detail's traceability panel, not a check 
 |---|---|---|---|
 | `§167 DL-1` | In `DocumentationFacts.refreshCaseDocLinks`, delete the leading `DELETE FROM case_doc_link` | Should redden `removing the executions clears the last result on the next tick`'s sibling in `TheDocumentationLinks` — a link withdrawn (block deleted, page deleted, or the link itself removed) stays in the mirror forever. Same defect `BlockLinkService` refuses in `doc_link` itself, arriving one table later, and the reason the refresh is delete-then-insert rather than `ON CONFLICT`. | ⬜ not run |
 | `§167 DL-2` | Change `stale`'s predicate from `coalesce(page_content.at, p.created_at) > coalesce(case_content.at, c.created_at)` to compare `p.updated_at > c.updated_at` instead | Should redden a `TheDocumentationLinks` assertion on a case that was given an owner or moved status after its content last changed for real — the timestamp spelling forgives every accumulated spec change on an act that read nothing, the exact refusal `ApprovalFacts` already made for `STALE_APPROVAL`. | ⬜ not run |
-| `§167 DL-3` | Delete `AND p.project_id = c.project_id` from the mirror statement | Should redden nothing in this module's own fixtures (single-project) but is the row worth running first if this queue is ever drained partially: it is the one predicate that can only ever drop a row a defect produced, and its absence would surface as a sibling project's page title rendered on a case whose reader holds no grant on that project. | ⬜ not run |
+| `§167 DL-3` | Delete `AND p.project_id = c.project_id` from the mirror statement | Should redden nothing in this module's own fixtures (single-project) but is the row worth running first if this queue is ever drained partially: it is the one predicate that can only ever drop a row a defect produced, and its absence would surface as a sibling project's page title rendered on a case whose reader holds no grant on that project. | ⬜ not run ❗ **RUN 2026-08-23 (wave 2) — RED, 2**, against a fixture that already existed: `a page of a sibling project is not shown` and `a page of a sibling project is no link either`. `CaseHealthRecomputeTest` holds a sibling-project page and this row did not know. **A registered gap that does not exist — WITHDRAWN**, and NOT by wave 2's fixture. |
 | `§167 DL-4` | In `HealthRecomputeOnLinksChanged`, delete the class (or gate it behind a property that defaults off) | Should redden nothing — no test asserts the outbox latency directly, the same gap `§166 LR-1`'s browser row exists to cover rather than a unit test. Recorded because "no test can catch this" here is a live gap and not a design choice, unlike `id DESC` above. | ⬜ not run |
 | `§167 DL-5` | In `CaseRenderer.docLinksFor`, change `computeIfAbsent(...).add(...)` to overwrite (`put`) instead of accumulate | Should redden a `TheDocumentationLinks` assertion on any fixture case with more than one link — the map would carry only the last link found per case instead of the full list, and `findForCases`'s `ORDER BY l.pageKey, l.blockId` is what makes "last found" deterministic rather than merely usually wrong. | ⬜ not run |
 
@@ -1907,7 +1917,7 @@ counts are the kind of number nobody re-derives by hand once it is on screen.*
 |---|---|---|---|
 | `§168 CV-1` | In `BlockLinks#coverage`, drop the `LinkRelationship.VERIFIES` half of the guard, so every case link counts | Should redden `a block linked only by REFERENCES has links and NO marker`, and **only** that one. The narrowness is the finding to check: every other coverage test links with `VERIFIES`, so a single test carries the whole rule that keeps this marker agreeing with `CoverageMatrixReport`'s spine about which links are coverage claims. | ⬜ not run |
 | `§168 CV-2` | Change the `LinkedHashSet` collecting a block's verifiers to an `ArrayList` — i.e. stop deduping | Should redden `one case linked to one block twice counts once`. Worth running because the dedupe looks like defensive tidiness and is not: `DocLinkRepository#findForSource` states its idempotency check cannot stop a concurrent double-submit, so the duplicate row is a state the product reaches without any defect at all. | ⬜ not run |
-| `§168 CV-3` | In `CatalogueFacts#lastResultKinds`, delete `AND c.project_id = :projectId` | Should redden **nothing**, and that is the row's whole point. The ids reaching this method were already resolved through `#resolve`, which applies the predicate — so this one is a restatement that can only ever matter to a *later* caller that skipped that path. A mutation with no killer on a predicate that is deliberately redundant is the honest shape of "belt and braces"; if it ever DOES redden, some caller has started passing unresolved ids and that is the more interesting finding. | ⬜ not run |
+| `§168 CV-3` | In `CatalogueFacts#lastResultKinds`, delete `AND c.project_id = :projectId` | Should redden **nothing**, and that is the row's whole point. The ids reaching this method were already resolved through `#resolve`, which applies the predicate — so this one is a restatement that can only ever matter to a *later* caller that skipped that path. A mutation with no killer on a predicate that is deliberately redundant is the honest shape of "belt and braces"; if it ever DOES redden, some caller has started passing unresolved ids and that is the more interesting finding. | ⬜ not run ✅ **RUN 2026-08-23 (wave 2) — ZERO, as predicted and for the stated reason.** The ids reached this method through `#resolve`, which applies the predicate. Argued zero now measured; the row stays a gap and stays correct. |
 | `§168 CV-4` | In the same method, change the `JOIN case_health` to a `LEFT JOIN` and drop `AND h.last_status_kind IS NOT NULL` | Should redden **nothing** — a null kind and an absent row are collapsed to the same answer by the caller on purpose, so both spellings produce identical output today. Recorded rather than skipped because the collapse is an *argument* in `lastResultKinds`' javadoc, and an argument with no check is what §166's `LR-5` row exists to name. The day a fourth count is added to the contract, this row is the one that stops being a no-op. | ⬜ not run |
 | `§168 CV-5` | In `BlockLinks#coverage`, compute `notRun` as a literal `0` instead of `keys.size() - passed - failed` | Should redden `the three counts always sum to linkedCases`, `a BLOCKED case is notRun`, `a case that has never been executed is notRun` — three tests, which is the sum property being genuinely load-bearing rather than asserted once. The failure this prevents is a marker that reads "2 cases · 1 passed" and leaves a reader to conclude the second one failed. | ⬜ not run |
 
@@ -2082,7 +2092,7 @@ the collapse the slice exists to refuse.
 | `§178 SL-M2` | In `SpecLinkage`, add `AND l.relationship = 'VERIFIES'` to the `case_doc_link` lateral | `LinkageSignals.everyRelationshipCountsAsALink` (via `UNLINKED`) — and **not** `aMovedSpecRaisesTheErrorAndNotTheInfo` | The "consistency with the coverage matrix" edit, which is the single likeliest change anybody makes to this file. A green build means the decision is prose only: a case whose panel lists a `REFERENCES` link would be chipped "Unlinked", one inch away from the link it denies. |
 | `§178 SL-M3` | In `SpecLinkage`, change `bool_or(l.stale)` to `bool_or(l.stale AND l.relationship = 'VERIFIES')` | `LinkageSignals.anyStaleLinkIsEnough` — and **not** `everyRelationshipCountsAsALink` | The opposite direction of the same decision, and this row is why `LINKED_TO_ONE_MOVED_SPEC_OF_TWO`'s moved link is `DERIVED_FROM`: **writing this row is what found that the fixture's first draft made both links `VERIFIES`**, at which point the mutation could not fail and half of THE decision — that an ERROR fires on a case *written from* a rewritten statement — was pinned by nothing. Fixed in the fixture rather than recorded as a gap. A green build now means the narrowing is prose only. |
 | `§178 SL-M4` | In `SpecLinkage`, change `bool_or` to `bool_and` | `LinkageSignals.anyStaleLinkIsEnough` **only** — `aMovedSpecRaisesTheErrorAndNotTheInfo` must stay **GREEN**, because that case has exactly one link | The reason a case needs *two* links in a fixture at all. With one link the two folds are indistinguishable, so the green half is what proves the multi-link fixture earns its keep: a case verifying two statements is wrong the moment either is rewritten, and `bool_and` would put a clean chip above a panel carrying a stale marker. |
-| `§178 SL-M5` | In `SpecLinkage`, remove `unlinked` from the `ON CONFLICT … DO UPDATE SET` list (leave it in the `INSERT`) | `LinkageSignals.aStaleFlagIsCleared` and `bothSignalsSelfHeal` | The latching failure, and the one no fixture can produce by accident — the only writer of this column is the statement under test, so a flag that never clears is invisible to everything except a test that sets one by hand. §6o's "no button for lying" rule from the other side: a signal that cannot go false is a claim nobody can act on. |
+| `§178 SL-M5` | In `SpecLinkage`, remove `unlinked` from the `ON CONFLICT … DO UPDATE SET` list (leave it in the `INSERT`) | `LinkageSignals.aStaleFlagIsCleared` and `bothSignalsSelfHeal` | The latching failure, and the one no fixture can produce by accident — the only writer of this column is the statement under test, so a flag that never clears is invisible to everything except a test that sets one by hand. §6o's "no button for lying" rule from the other side: a signal that cannot go false is a claim nobody can act on. ❗ **RUN 2026-08-23 (wave 2) — RED, 53**, against 2 predicted — and the cause is a fact nobody had written down. `SpecLinkage` is the **fifth** statement of the tick, so the row always exists by the time it runs and it is **always in the `ON CONFLICT` arm**. Dropping `unlinked` from that arm does not make the flag latch; it means the column is **never written at all**. The `INSERT` column list is reachable only for the tick's first statement. |
 
 ## §179 — the severity nobody compared, and the order that hid the failure
 
@@ -2642,7 +2652,7 @@ out wrong.
 
 | # | Mutation | Expected observation |
 |---|---|---|
-| `§235 PM-1` | In `DocPageRepository#search`, delete the `p.company_id = :companyId` line | **`DocPageEndpointTest$Searching.theCompanyBoundIsEnforced` red.** The mutation is the whole subject of §2 of the handoff: RLS is still underneath and would still refuse, so this row is really asking *whether the suite can tell*. If it goes **green**, the belt-and-braces predicate is unobserved and the argument for writing it is weaker than the header claims — which is worth knowing either way, and is why this is the first row. |
+| `§235 PM-1` | In `DocPageRepository#search`, delete the `p.company_id = :companyId` line | **`DocPageEndpointTest$Searching.theCompanyBoundIsEnforced` red.** The mutation is the whole subject of §2 of the handoff: RLS is still underneath and would still refuse, so this row is really asking *whether the suite can tell*. If it goes **green**, the belt-and-braces predicate is unobserved and the argument for writing it is weaker than the header claims — which is worth knowing either way, and is why this is the first row. ❗ **RUN 2026-08-23 (wave 2) — ZERO. `theCompanyBoundIsEnforced` stays GREEN**, which is the answer the row asked for and the less comfortable one: RLS refuses the foreign row anyway, the belt-and-braces predicate is unobserved, and the argument for writing it is weaker than the header claims. Proxied — the predicate was replaced with `CAST(:companyId AS uuid) IS NOT NULL` rather than deleted, because an unbound `@Param` will not start. |
 | `§235 PM-2` | In `DocPageService#search`, drop the re-ordering and return the entity read's own order | **`Searching.rankingUsesTheStoredWeights` red.** `IN` has no order, so the answer becomes whatever the JPQL read returns — usually insertion order, which agrees with the ranking often enough that a fixture of two pages ranked the same way as they were created would not catch it. The fixture is authored body-match-first for exactly this reason. |
 | `§235 PM-3` | Change `ts_headline`'s source from `body.text` to `p.title` | **`Searching.theSnippetLocatesTheMatch` red on both halves at once**: the blockless page stops serving null (a title is never null), and the prose page's fragment stops containing the match. One mutation, two failures, which is the pin that the snippet is drawn from the same corpus the vector was built from. |
 
@@ -2773,7 +2783,7 @@ unresolvable actor could not be inserted at all. See handoff §242.
 | # | Mutate | Expect |
 |---|---|---|
 | `§242 LG-M1` | In `AuditEventRepository.pageForProject`, widen the predicate to `e.projectId = :projectId OR e.projectId IS NULL` | **Red** — `aCompanyScopeActIsAbsentFromEveryProjectLog`. The single most likely edit to this query, because it *looks* like generosity: it folds every member invitation and vocabulary change into every project's log, and the screen still renders. |
-| `§242 LG-M2` | Delete `, e.id DESC` from both `ORDER BY` clauses, keeping `e.occurredAt DESC` | **Red** — `theSortIsStableWhenTimestampsCollide`. ⚠️ **Expect this row to be flaky as a mutation check even though the test is not**: whether Postgres actually reorders two equal-key rows between two `LIMIT/OFFSET` reads depends on the plan, so a small fixture may pass by luck. If it comes back green, that is a finding about the *test's* fixture size, not evidence the tiebreaker is unnecessary. |
+| `§242 LG-M2` | Delete `, e.id DESC` from both `ORDER BY` clauses, keeping `e.occurredAt DESC` | **Red** — `theSortIsStableWhenTimestampsCollide`. ⚠️ **Expect this row to be flaky as a mutation check even though the test is not**: whether Postgres actually reorders two equal-key rows between two `LIMIT/OFFSET` reads depends on the plan, so a small fixture may pass by luck. If it comes back green, that is a finding about the *test's* fixture size, not evidence the tiebreaker is unnecessary. ❗ **RUN 2026-08-23 (wave 2) — ZERO, with both tiebreaks deleted.** The row predicted this risk in its own warning and it is the right reading: a finding about the **test's fixture size**, not evidence the tiebreak is unnecessary. `IngestionEndpointTest.SameInstant` is what this fixture has to become. |
 | `§242 LG-M3` | In `AuditLogService.forProject`, pass `query.projectId()` instead of `project.getId()` to the repository | Expected **GREEN**, and recorded as the **gap**. Nothing sends `projectId` on the project trail — the SPA strips it and the controller passes null — so the mutation makes the query return nothing only if a caller supplies it. The defect it would open is real (pass the gate on a project you may audit, read the rows of one you may not) and **no test constructs that request**. Closing it wants an arm that sends `?projectId=<other>` to the project path. ❗ **RUN 2026-08-22 — RED, 9. The row predicted GREEN and the gap it registers does not exist.** Nothing sends `projectId` on the project trail, so `query.projectId()` is **null** — and the repository filters on it rather than reading null as *"no filter"*, so the trail returns nothing and **every arm in `AuditLogReadTest` falls**: paging, the actors and the project trail alike. The substitution is caught loudly, not silently. |
 | `§242 LG-M4` | In `AuditLogService.forCompany`, replace the `evaluateCompanyWide(userId).has("audit:view")` gate with `true` | **Red** — `aCallerWithoutAuditViewIsRefused`. A Test Lead would read every project's acts through the company trail, including projects they hold nothing on. |
 | `§242 LG-M5` | Change `AuditLogService.READ_COMPANY_AUDIT` to `"project:audit"` | **Red** — `aCallerWithoutAuditViewIsRefused`. The two keys are distinguishable only because that test's persona holds exactly one of them, which is what makes the pair worth asserting in a single test. ⚠️ **RUN 2026-08-23 (wave S) — GREEN. ZERO-UNEXPECTED, and the cause is a SCOPE mismatch rather than a catalogue one.** The row is right that a Test Lead holds `project:audit` and not `audit:view` — **at project scope**. This gate is `permissions.evaluateCompanyWide(userId).has(...)`, which answers from the SYSTEM and COMPANY terms only (§43's deliberate design), and there **Company Admin's COMPANY-scope role enumerates every project key including `project:audit`** (`V3`, the `…0002` grant) while the Test Lead's PROJECT-scope grant is invisible. So at the scope this gate is evaluated at, the two keys are held by exactly the same principals and neither persona in the test moves. A third sighting of the blind-gate family with a **new** cause: not "the catalogue gives both keys to the same roles", but "the evaluator cannot see the grant that separates them". |
@@ -2840,7 +2850,7 @@ recorded gap rather than a check.
 | `§244 ED-M4` | Delete the `request.durationMs() < 0` check entirely | **Red** — the same test's 400 assertion. ⚠️ **Note what does NOT catch it**: `openapi.yaml` declares `minimum: 0`, and nothing in this repository enforces an OpenAPI `minimum` at runtime. The contract is documentation here; the check is the check. |
 | `§244 ED-M5` | In `IngestionService.write`, pass `null` where `result.durationMs()` now goes | **Red** — `IngestionEndpointTest.theReportedDurationIsRecorded`. ⚠️ **This is the mutation that restores the state the product actually shipped in for a year**, which is why it earns a row: the parsers always recovered the number and it always went into the job's payload JSON instead of the column. |
 | `§244 ED-M6` | ⚠️ **A gap, not a mutation.** Record durations by hand across a run, then generate that run's **Run Summary** report and read the "recorded duration" line | **Expected GREEN, and this is the recorded gap.** `RunSummaryReport` sums `execution_fact.duration_ms`, which `ExecutionSource` refreshes from `test_execution` on a schedule and on `execution.results_changed`. **No test in this repository asserts that a hand-recorded duration reaches the report** — the reporting suite's fixtures predate any writer, so they were all summing zero. The whole "how long did this cycle take last time" question this area exists to answer runs through that path, and nothing observes it end to end. Closing it is one arm in `reporting` that records a duration, refreshes, and reads the sum. |
-| `§244 ED-M7` | Drop `duration_ms` from `ExecutionSource`'s `ON CONFLICT DO UPDATE` set-list | **Red** — nothing today. ⚠️ **A second gap.** The column is in that seven-column set-list already, so an **amended** duration corrects itself on the next tick and a dropped entry would freeze the first value ever recorded. Until now that was unobservable because the value was always null, which is exactly why no test covers it. Same fix as `ED-M6`, one more assertion. |
+| `§244 ED-M7` | Drop `duration_ms` from `ExecutionSource`'s `ON CONFLICT DO UPDATE` set-list | **Red** — nothing today. ⚠️ **A second gap.** The column is in that seven-column set-list already, so an **amended** duration corrects itself on the next tick and a dropped entry would freeze the first value ever recorded. Until now that was unobservable because the value was always null, which is exactly why no test covers it. Same fix as `ED-M6`, one more assertion. ✅ **RUN 2026-08-23 (wave 2) — RED, exactly 1: `an amended result IS corrected on the next refresh`.** The row predicts *red — nothing today* and calls itself a second gap. **It is not a gap** — `ExecutionFactRefreshTest`'s set-list test already covers it. |
 | `§244 ED-M8` | In `ExecutionPage`, remove `durationIsNonsense` from the verdict buttons' `disabled` | **Red** — nothing. ⚠️ **Frontend gap, recorded rather than closed.** `ExecutionPage.tsx` has **no component test in this repository** and none was invented for this slice. The behaviour is `§244 ED-3` in the browser queue. `frontend/src/lib/format.test.ts` covers `parseDurationSeconds` returning `undefined` for unreadable text, which is the half that *can* be tested without a harness. |
 | `§244 ED-M9` | In `ExecutionGrid.mark` (and the grid-mode Blocked dialog), delete the `durationMs: detail.durationMs` line | **Red** — nothing. ⚠️ **The most dangerous gap in this slice.** Both call sites carry a field they show no control for, purely because the body is total state; omitting it clears a duration recorded on another screen. It is `§244 ED-5` in the browser queue and has no automated observer at all. |
 
@@ -3390,6 +3400,224 @@ zero is `§185 SR-4`'s shape and is only safe to record because the preceding ru
 assertion actually executing.
 
 
+# RUN RECORD — 2026-08-23, wave 2
+
+**Wave 2 is different in kind from waves 1 and S: it SHIPS TEST CODE.** Every row before this was
+applied, measured and reverted. Here three fixtures are a permanent addition to the suite, gated by
+`./gradlew build` on shanks in the **shared** `builds/tcms` tree (`BUILD SUCCESSFUL in 8m 48s`) and
+committed *before* a single row ran against them — a row measured against an uncommitted fixture is
+not reproducible, and the runner's dirty-tree guard aborts on it anyway. The 28 mutation runs then
+used the pass's own tree (`builds/tcms-mut`) and Gradle home (`.gradle-mut`), per run plan §7.
+
+## The set, and its disagreement with the plan
+
+**The wave-2 set was not marked when this pass began** — the manifest's `wave` column held `W1`, `S`
+and `-`. It was derived from run plan §5's `D1`/`D3`/`D8` id tables plus `13k`, the row wave 1 held
+as BLIND for the same fixture `D8` needs, written into the manifest as `wave=2` and **committed
+before any test code was written**, so the wave is resumable and its size is checkable.
+
+**The derived count is 30 against the plan's "~10 rows + 3 tests", and the manifest is
+authoritative** — the same rule wave S applied when its own derivation came in 26 rows under the
+estimate. The two numbers are not about the same thing: the plan's ~10 is its **collapse** (keep 2 of
+`D1`, 3 of `D8`, 3 of `D3`), and 30 is the family membership the fixtures have to answer for.
+Eleven of the 30 carry `W1+2` — measured in wave 1, re-measured here — which is decision 3's
+*"BLIND — re-run after wave 2"* category being collected on rather than quietly dropped.
+
+| | Rows |
+|---|---|
+| Wave-2 set (manifest `wave` contains `2`) | **30** |
+| Measured in this pass | 26 (28 runs — `CM-8` and `R8-5` are two halves each) |
+| Conclusive from wave 1, not re-run | 2 (`IH-1`, `SD-3` — both RED, and both are what made `D1` worth a fixture) |
+| Held, because wave 2 wrote no fixture for them | 2 (`§245 BA-M12`, `§249 CS-M9`) |
+
+| Outcome | Rows |
+|---|---|
+| MATCH | 11 |
+| MORE | 7 |
+| FEWER — the predicted test stayed **green** and a different one fell | 2 |
+| ZERO-AS-PREDICTED | 3 |
+| **ZERO-UNEXPECTED — the row predicted ≥1 and measured 0** | **4** |
+
+## The three fixtures, and the boundary each crosses
+
+Each says in its own comment which boundary it crosses and why a fixture that does not cross it would
+be green — the §179 `RS-M3` lesson, which is this wave's subject. And each lands with a **control**,
+because a fixture added without one is an assertion nobody has seen fail.
+
+- **`reporting.SiblingProjectReadsTest`** — one company, **two projects**. Every other class in the
+  package seeds one project per company, and that arrangement cannot see a dropped
+  `AND x.project_id = :projectId` *at all*: `FORCE ROW LEVEL SECURITY` refuses the foreign row before
+  the `WHERE` clause is consulted, so the query returns nothing whether or not it asked to. Here both
+  projects are the same company, one session sees both, and the bound is entirely the query's —
+  which `Reachability.bothProjectsRowsAreVisibleToOneSession` asserts directly rather than leaving as
+  the comment's claim. **The controls** re-ask every question bounded to the sibling's own project,
+  so an empty result is the predicate's doing and not the fixture's.
+- **`IngestionEndpointTest.SameInstant`** — six jobs sharing one `created_at`, **written by SQL and
+  never by racing the clock**. A test that hoped two inserts would land in the same microsecond
+  passes or fails by machine speed, and the one thing it must never do is go green because the tie
+  did not happen. The ids ascend in insertion order and the required answer descends, so the two are
+  opposites rather than merely different.
+- **`FailingRepeatedlyTest.LiveWriters`** — both writers of a `case_health` row, each deriving its
+  value from evidence, in both orders. The two tests that cover this today establish the sibling's
+  columns with an `UPDATE`, and **a hand-set boolean has no writer to lose a race with**. `THRICE` is
+  the subject because its failures are old: it raises `failing_repeatedly`, which only `reporting`
+  writes, *and* four columns only `repository` writes. **The control** asserts each writer alone
+  raises something the other cannot.
+
+## The findings
+
+### 1. `§235 PM-1` — the belt-and-braces predicate is unobserved, and the row asked to know
+
+Replacing `p.company_id = :companyId` in `DocPageRepository#search` with a tautology reddens
+**nothing**. `theCompanyBoundIsEnforced` — the test named for exactly this — stays green, because RLS
+refuses the foreign company's row underneath and the suite cannot tell the two layers apart. The row
+put both outcomes on the record in advance (*"if it goes green, the belt-and-braces predicate is
+unobserved and the argument for writing it is weaker than the header claims"*), and this is the less
+comfortable one. **The predicate is not wrong; the claim that the suite checks it is.**
+
+Proxied, and it matters: the line was replaced with `CAST(:companyId AS uuid) IS NOT NULL` rather
+than deleted, because a Spring Data `@Query` with an unbound `@Param` will not start. Same shape as
+`AP-7` below.
+
+### 2. The same-instant fixture is owed in FOUR places, and exists in one
+
+This is the wave's largest single result, and it was invisible until three rows were measured
+together.
+
+- **`IH-6`** — closed. `SameInstant` reddens it; `History.theListIsSummaries`, which posts two reports
+  milliseconds apart, stays green. That green is the fixture's own claim, measured.
+- **`CM-8` (b)** — `doc_block`'s `ORDER BY b.position, b.id` with only the tiebreak dropped: **ZERO**,
+  exactly as the row predicted. Nothing in the fixture ties a position, and `doc_block` has no unique
+  constraint that would stop one.
+- **`§242 LG-M2`** — `audit_event`'s two `ORDER BY e.occurredAt DESC, e.id DESC` clauses, both
+  tiebreaks deleted: **ZERO**. The test is *called* `theSortIsStableWhenTimestampsCollide` and its
+  fixture is too small for Postgres to reorder. The row predicted this risk and read it correctly in
+  advance: a finding about the test's fixture, not about the tiebreak.
+- **`FQ-10`** — the `lag()` window in `recomputeFlakeScores`, `ef.execution_id` removed: **ZERO**. The
+  fixture spaces results a day apart. One of decision 1's six *undetermined* rows, now settled as a
+  gap.
+
+Add wave 1's `§249 CS-M9` — *"Postgres returned a stable order over the seven-row heap anyway"* — and
+`§245 BA-M12`, and the count is **six**. `SameInstant` is the shape all six need, and it is three
+lines of fixture each: enough rows to defeat a small sort, keys written by SQL, inserted in the
+reverse of the asserted order.
+
+### 3. `case_health`'s statement ORDER decides what a set-list mutation can do — and nobody had written it down
+
+Three rows measured together produce one fact that changes how the whole `D3` family reads.
+
+- **`SA-6`** (add `stale_approval` to `recomputeAutomationDrift`) and **`§158 CD-7`** (add
+  `condition_drift` to `recomputeStaleApproval`) both redden **1**, and in **neither case is it the
+  test the row named**. Both consequence tests stay green. The reason is the tick's fixed order:
+  drift is statement 2 and approval is statement 3, so approval rewrites its own column inside the
+  same transaction; approval is 3 and drift is 4, likewise. **A set-list naming a LATER statement's
+  column is always repaired before the transaction ends**, and only `otherSignalsAreNotClobbered`,
+  which drives each statement alone, can see it. §247 `SK-M17`'s shape — the boundary test sees it
+  and the consequence test structurally cannot.
+- **`§178 SL-M5`** reddens **53** against 2 predicted, and the cause is the other half of the same
+  fact. `SpecLinkage` is statement **5**, so the row always exists by the time it runs: it is
+  **always in the `ON CONFLICT` arm**, never the `INSERT` arm. Dropping `unlinked` from that arm does
+  not make the flag latch — it means the column is **never written at all**. For six of the seven
+  statements the `INSERT` column list is unreachable, and only the tick's first statement ever
+  inserts.
+
+The row's own words — *"the update arm is unreachable from a fresh fixture, and it is the arm a live
+deployment is in on every tick after the first"* (`§166 LR-3`) — are true for statement 1 and exactly
+backwards for statements 2–7.
+
+### 4. `§167 DL-3` and `IK-4` — two more registered zeros that are not zeros
+
+`§167 DL-3` was retired to `DOCUMENTED GAPS` as a project-predicate zero-prediction. It reddens
+**2** — `a page of a sibling project is not shown` and `a page of a sibling project is no link
+either` — because `CaseHealthRecomputeTest` already holds a sibling-project page and the row did not
+know. **Not closed by anything wave 2 wrote.** `IK-4` is the same shape: its caveat is about the
+doc-page class, and the suite class has a second granted project. Wave 1 withdrew five registered
+gaps that did not exist; this is two more, and both were found by running rather than by re-reading.
+
+`§244 ED-M7` is a third, one register over: the row calls itself *"a second gap"* and
+`ExecutionFactRefreshTest`'s set-list test covers it.
+
+### 5. `IN-11` — the fixture is HALF there, which is a smaller repair than six sections assumed
+
+Dropping the project predicate from `CaseFacts.keyedLookup` reddens nothing, and the reason is
+precise rather than general: `IngestionEndpointTest` **does** hold a second project — `SAVINGS`, and
+its header says why — but holds no **case** in it, so the lookup has no sibling row to reach. One
+case in `SAVINGS` closes the row. Six sections have been asking for "a two-project fixture" as though
+it were a slice of work; here it is one line.
+
+### 6. `R8-5` (b) — a RED that is as unrepeatable as the GREEN the row feared
+
+Dropping the `versionNo` term from the divergence comparator reddens 2. The row predicted it *"may
+come back GREEN by luck, since `gen_random_uuid()` orders arbitrarily"* — and
+`AggregateVersionDivergenceTest` does write `test_case_version.id` with `gen_random_uuid()`, so what
+the sort fell back on this run was random. **A red does not discharge the repair the row named.** A
+deterministic version id in that fixture is still owed, and is listed under *Tests to write*.
+
+### 7. `12c` — the second gate is untested, as the row suspected
+
+Dropping `AND s.project_id = c.project_id` from the suite arm reddens nothing: `RunEdit.liveSuiteIds`
+refuses one step earlier, so the query's own bound is never reached. The row said so and named the
+repair — a test that bypasses the validator — and the measurement is what turns that from a
+suspicion into a fact.
+
+### 8. `DR-5` — 57 reds, and why the number is still worth having
+
+Adding eight sibling columns to `recomputeAutomationDrift`'s set-list reddens 57 tests across both
+classes. That is a blast radius, not a measurement of the row — §158 `CD-5`'s shape. What makes it
+worth recording is *which* 57: two of them are the new `LiveWriters` group's directional tests, so a
+fixture in which **both** values are derived discriminates here exactly as the hand-set boundary test
+does. `FQ-8` is the clean version of the same family — RED, exactly 1, against
+`theAuthoredHalfIsUntouchable`, which is the one `D3` test that already drove two *live* writers.
+
+## Which of the three families are now sighted, and which are still blind
+
+- **`D1` — SIGHTED where a fixture exists, and the blindness is now per-package rather than
+  per-method.** Ten of its twelve rows are measured. `R7-6`, `R8-7`, `CM-6` (wave 2's fixture),
+  `§167 DL-3`, `IK-4`, `IH-1` and `SD-3` (wave 1) all redden. `§168 CV-3` and `12c` are zeros the
+  rows derived correctly. **Still blind: `IN-11`** (needs one case in `SAVINGS`) **and `AP-7`** (needs
+  a second project in `AiProposalEndpointTest`). The seam is not blind any more; two classes are.
+- **`D8` — SIGHTED for the two rows held BLIND, and the family's real answer is a fixture pattern
+  rather than a verdict.** `IH-6` and `13k` both redden. `11e`, `13g` and `CM-8` (a) redden without
+  needing a tie at all. **Still blind: `CM-8` (b), `FQ-10`, `§242 LG-M2`, `§245 BA-M12`,
+  `§249 CS-M9`** — five places needing what `SameInstant` demonstrates.
+- **`D3` — SIGHTED, and the family collapses further than the run plan assumed.** All eight rows
+  redden. But six of the eight are caught by `otherSignalsAreNotClobbered` alone, and two of those
+  six (`SA-6`, `§158 CD-7`) are caught *only* by it — so the family's real content is one
+  per-statement boundary test plus finding 3's ordering fact, not eight measurements.
+
+## Stated rather than discovered
+
+- **Proxies.** `§235 PM-1` and `AP-7` replaced a predicate with a bound tautology rather than
+  deleting it, because a Spring Data `@Query` with an unbound `@Param` will not start. A proxy
+  measures what it measures; saying which half was applied is what keeps the number attributable.
+- **One build gated four files**, not one build per fixture: they share a tree and a Gradle daemon,
+  and three full builds of a suite that boots Postgres per context buy nothing the one over the union
+  does not.
+- **`§245 BA-M12` and `§249 CS-M9` were not re-run.** Wave 2 wrote no fixture either of them could
+  see, and re-running a row against an unchanged fixture reproduces the number rather than measuring
+  anything. Held, and named in finding 2's list of six.
+- **§138 is a BACKEND section sitting in `packages-and-frontend-mutation-checks.md`.** Its own header
+  reads *"Scope is `./gradlew test --tests 'com.tcms.repository.AiProposalEndpointTest'`"* and all
+  fourteen of its rows are Java. The wave-0 relocation moved it for `AP-13` alone. Recorded rather
+  than moved back — section homes, like ids, are quoted from handoff sections — and `AP-7`'s result
+  is filled in where the row lives.
+
+## Citation corrections found while running
+
+- **`13g`** names `keepsTheLatestExecutionPerCasePerConfiguration`; the test is
+  `keepsTheLatestPerCasePerConfiguration`, and `PlanSnapshotRefreshTest` is `com.tcms.reporting`, not
+  `com.tcms.execution`. Caught by the runner's scope guard, not by a green build — the fifth and
+  sixth wrong scopes this pass has found that way.
+- **`CaseFacts.caseIdsByDisplayKey`'s javadoc says `uq_case_key` makes the display key "unique per
+  project".** `V1` declares `CONSTRAINT uq_test_case_key UNIQUE (company_id, key)` — it is unique per
+  **company**. The method's safety argument (*"a token that is not a key of this project matches
+  nothing here"*) rests on the predicate this row mutates, not on the constraint, so the conclusion
+  survives and the reason given for it does not.
+- **`§166 LR-4`'s extra claim is not reached.** The row predicts the two signals will *disagree on
+  one grid row*; `theBooleanAndTheValueCannotDisagree` stayed green, because no fixture case goes
+  from executed back to unexecuted.
+
+
 # DOCUMENTED GAPS — rows retired from the run, 2026-08-22
 
 **Decided by the user on 2026-08-22**, as part of the run plan in
@@ -3427,7 +3655,7 @@ of this register actually is.
 
 | Row | Why no measurement is available | What would close it |
 |---|---|---|
-| `13k` | No fixture writes two rollup rows at measurably different instants, so oldest-vs-newest `computedAt` is unobservable | The same-instant/two-instant fixture (wave 2) |
+| ~~`13k`~~ | ~~No fixture writes two rollup rows at measurably different instants, so oldest-vs-newest `computedAt` is unobservable~~ | **WITHDRAWN 2026-08-23** — `RollupAgreementTest.TwoInstants` is that fixture, and the row measures **RED, 2** against it |
 | `AT-3` | Automation Service's keys are unqualified in the seeded catalogue, so key-vs-qualifier cannot be told apart | One token carrying Test Engineer, whose `case:delete` is `OWN` |
 | `CM-8` (first half) · `CM-9` | `doc_block` has no unique `(page_id, position)`; the fixture has no dangling `doc_link` | A tied-position pair; one `doc_link` naming a `gen_random_uuid()` |
 | `CA-6` · `CA-15` · `CA-18` · `CA-20` · `DA-11` (ordering half) · `DA-14` · `FA-4` · `FA-7` · `FA-9` | Single-threaded tests cannot arrange a failure between two writes; no test in this repository counts queries; every storage root is one temp directory in `IntegrationTestBase` | A fault-injecting store; a query counter; a second root in the harness |
@@ -3457,6 +3685,33 @@ of this register actually is.
 read the plan against a large `audit_event`), `§243 RN-M7` (200 approvals → 200 deliveries; run it to
 get the real number), `§244 ED-M6` (nothing in this repository asserts that a hand-recorded duration
 reaches the Run Summary report). Each needs the compose stack, not `./gradlew test`.
+
+## WITHDRAWN by wave 2 — 2026-08-23
+
+**Five rows leave this register**, four of them measured RED and one because the fixture that closes
+it now exists. Decision 1 required every retired row to name what would close it; this is that
+requirement being collected on, and it is the reason the naming was mandatory.
+
+| Row | Withdrawn because | Measured |
+|---|---|---|
+| `R7-6` | `reporting.SiblingProjectReadsTest` — one company, two projects | **RED, 1.** `AggregateVariabilityTest` stayed green, so the row's zero was a fact about its own class |
+| `R8-7` | the same fixture, one method over | **RED, 1** |
+| `CM-6` | the same fixture, `DocumentationSource.findPage` | **RED, 1**, and the first measurement any of the six project-predicate files has had |
+| `§167 DL-3` | **nothing wave 2 wrote** — `CaseHealthRecomputeTest` already holds a sibling-project page | **RED, 2.** A registered gap that never existed, and the third time this pass has found one |
+| `13k` | `RollupAgreementTest.TwoInstants` — two rollup rows, two instants | **RED, 2**, both `computedAt` methods |
+
+**`§168 CV-3` stays**, now measured rather than argued: ZERO, because the ids reaching
+`lastResultKinds` were already resolved through `#resolve`, which applies the predicate. That is the
+row's own reasoning, confirmed.
+
+**Two rows the register does NOT hold, and should be read beside it**, because both predicted a zero
+that did not happen: `IK-4` (**RED, 1** — the suite class has a second granted project; the row's
+caveat is about the doc-page class) and `§244 ED-M7` (**RED, 1** — the row calls itself *a second
+gap*; `ExecutionFactRefreshTest` covers it).
+
+**And one new gap the register gains**: `FQ-10`, one of decision 1's six undetermined rows, measured
+ZERO. The `lag()` window's `execution_id` tiebreak never decides anything because the fixture spaces
+results a day apart. What closes it is the same-instant fixture, in a fourth place.
 
 ## Corrections made while writing this register
 

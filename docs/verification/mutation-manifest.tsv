@@ -27,11 +27,11 @@ id	section	scope	wave	gap	file	status
 11b	11. §98's flattening	SuiteWriteEndpointTest	-	-		queued
 11c	11. §98's flattening	?	-	-		queued
 11d	11. §98's flattening	?	-	-		queued
-11e	11. §98's flattening	SuiteEndpointTest	2	-		queued
+11e	11. §98's flattening	com.tcms.repository.SuiteEndpointTest	2	-	backend/src/main/java/com/tcms/repository/SuiteRepository.java	RUN:MATCH
 11f	11. §98's flattening	SuiteScopeAgreementTest	-	-		queued
 12a	12. §99's run scope	RunCreateEndpointTest	W1	-		RUN:MORE
 12b	12. §99's run scope	?	-	-		queued
-12c	12. §99's run scope	?	2	-		queued
+12c	12. §99's run scope	com.tcms.execution.RunCreateEndpointTest	2	-	backend/src/main/java/com/tcms/execution/CaseFacts.java	RUN:ZERO-AS-PREDICTED
 12d	12. §99's run scope	?	-	-		queued
 12e	12. §99's run scope	?	-	-		queued
 12f	12. §99's run scope	?	-	-		queued
@@ -42,11 +42,11 @@ id	section	scope	wave	gap	file	status
 13d	13. §101's M2 rollups	SuiteRunSummaryRefreshTest	-	-		queued
 13e	13. §101's M2 rollups	?	-	-		queued
 13f	13. §101's M2 rollups	?	-	-		queued
-13g	13. §101's M2 rollups	PlanSnapshotRefreshTest	2	-		queued
+13g	13. §101's M2 rollups	com.tcms.reporting.PlanSnapshotRefreshTest,com.tcms.execution.RollupAgreementTest	2	-	backend/src/main/java/com/tcms/reporting/ExecutionSource.java	RUN:MORE
 13h	13. §101's M2 rollups	?	-	-		queued
 13i	13. §101's M2 rollups	PlanSnapshotRefreshTest	W1	-		RUN:MATCH
 13j	13. §101's M2 rollups	RollupAgreementTest	-	-		queued
-13k	13. §101's M2 rollups	com.tcms.execution.RollupAgreementTest	W1+2	-	backend/src/main/java/com/tcms/execution/SuiteHistoryService.java backend/src/main/java/com/tcms/execution/PlanStatisticsService.java	RUN:ZERO-AS-PREDICTED
+13k	13. §101's M2 rollups	com.tcms.execution.RollupAgreementTest,com.tcms.execution.SuiteRunSummaryRefreshTest,com.tcms.execution.PlanStatisticsEndpointTest	W1+2	-	backend/src/main/java/com/tcms/execution/SuiteHistoryService.java backend/src/main/java/com/tcms/execution/PlanStatisticsService.java	RUN:MATCH
 R6-2	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	-	-		queued
 R6-3	15. R6 phase 1's aggregate report	AggregateExecutionCrossCheckTest	-	-		queued
 R6-4	15. R6 phase 1's aggregate report	com.tcms.reporting.AggregateExecutionCrossCheckTest	S	-	backend/src/main/java/com/tcms/reporting/AggregateExecutionReport.java	RUN:ZERO-AS-PREDICTED
@@ -61,14 +61,14 @@ R7-2	17. R7's three variability sections	AggregateVariabilityTest	-	-		queued
 R7-3	17. R7's three variability sections	AggregateVariabilityTest	-	-		queued
 R7-4	17. R7's three variability sections	AggregateVariabilityTest	-	-		queued
 R7-5	17. R7's three variability sections	AggregateVariabilityTest	-	-		queued
-R7-6	17. R7's three variability sections	AggregateVariabilityTest	W1+2	GAP		queued
+R7-6	17. R7's three variability sections	com.tcms.reporting.SiblingProjectReadsTest,com.tcms.reporting.AggregateVariabilityTest	W1+2	GAP-WITHDRAWN	backend/src/main/java/com/tcms/reporting/ExecutionSource.java	RUN:MATCH
 R8-1	18. R8's version divergence	AggregateVersionDivergenceTest	W1	-		RUN:MORE
 R8-2	18. R8's version divergence	AggregateVersionDivergenceTest	-	-		queued
 R8-3	18. R8's version divergence	AggregateVersionDivergenceTest	-	-		queued
 R8-4	18. R8's version divergence	AggregateVersionDivergenceTest	-	-		queued
-R8-5	18. R8's version divergence	AggregateVersionDivergenceTest	2	-		queued
+R8-5	18. R8's version divergence	com.tcms.reporting.AggregateVersionDivergenceTest	2	-	backend/src/main/java/com/tcms/reporting/AggregateExecutionReport.java	RUN:MATCH+MORE
 R8-6	18. R8's version divergence	AggregateVersionDivergenceTest	-	-		queued
-R8-7	18. R8's version divergence	AggregateVersionDivergenceTest	W1+2	GAP		queued
+R8-7	18. R8's version divergence	com.tcms.reporting.SiblingProjectReadsTest,com.tcms.reporting.AggregateVersionDivergenceTest	W1+2	GAP-WITHDRAWN	backend/src/main/java/com/tcms/reporting/ExecutionSource.java	RUN:MATCH
 ~~14a~~	14. §106's board drag	?	W1	-	-	RUN:STALE-VOID
 14b	14. §106's board drag	WorkItemEndpointTest	-	-		queued
 V20	Needs the Hetzner box	?	-	-		queued
@@ -78,9 +78,9 @@ V23	Needs the Hetzner box	?	-	-		queued
 V24–V28	Needs the Hetzner box	?	-	-		queued
 V33	Needs the Hetzner box	?	-	-		queued
 V32	Needs the Hetzner box	?	-	-		queued
-CM-6	19. §115's coverage matrix	CoverageMatrixReportTest	W1+2	GAP		queued
+CM-6	19. §115's coverage matrix	com.tcms.reporting.SiblingProjectReadsTest,com.tcms.reporting.CoverageMatrixReportTest	W1+2	GAP-WITHDRAWN	backend/src/main/java/com/tcms/reporting/DocumentationSource.java	RUN:MATCH
 CM-7	19. §115's coverage matrix	CoverageMatrixReportTest	-	-		queued
-CM-8	19. §115's coverage matrix	CoverageMatrixReportTest	2	GAP		queued
+CM-8	19. §115's coverage matrix	com.tcms.reporting.CoverageMatrixReportTest	2	GAP	backend/src/main/java/com/tcms/reporting/DocumentationSource.java	RUN:MORE+ZERO
 CM-9	19. §115's coverage matrix	CoverageMatrixReportTest	-	GAP		queued
 AT-1	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
 AT-2	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
@@ -96,19 +96,19 @@ AT-11	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
 AT-12	20. §116's API tokens	ApiTokenEndpointTest	-	-		queued
 IN-9	§117	IngestionEndpointTest	-	-		queued
 IN-10	§117	IngestionEndpointTest	-	-		queued
-IN-11	§117	IngestionEndpointTest	2	-		queued
+IN-11	§117	com.tcms.execution.IngestionEndpointTest	2	-	backend/src/main/java/com/tcms/execution/CaseFacts.java	RUN:ZERO-UNEXPECTED
 IN-12	§117	IngestionEndpointTest	-	-		queued
 IH-1	§119	com.tcms.execution.IngestionEndpointTest	W1+2	-	backend/src/main/java/com/tcms/execution/IngestionJobRepository.java	RUN:MATCH
 IH-2	§119	com.tcms.execution.IngestionEndpointTest	S	-	backend/src/main/java/com/tcms/execution/IngestionReadService.java	RUN:MATCH
 IH-3	§119	UnmatchedTest	-	-		queued
 IH-4	§119	IngestionEndpointTest	-	-		queued
 IH-5	§119	IngestionEndpointTest	-	-		queued
-IH-6	§119	com.tcms.execution.IngestionEndpointTest	W1+2	-	backend/src/main/java/com/tcms/execution/IngestionJobRepository.java	RUN:ZERO-AS-PREDICTED
+IH-6	§119	com.tcms.execution.IngestionEndpointTest	W1+2	-	backend/src/main/java/com/tcms/execution/IngestionJobRepository.java	RUN:MATCH
 IH-7	§119	IngestionEndpointTest	-	-		queued
 IH-8	§119	UnmatchedTest	-	-		queued
 DR-3	§120	CaseHealthRecomputeTest	-	-		queued
 DR-4	§120	CaseHealthRecomputeTest	-	-		queued
-DR-5	§120	CaseHealthRecomputeTest	2	-		queued
+DR-5	§120	com.tcms.repository.CaseHealthRecomputeTest,com.tcms.reporting.FailingRepeatedlyTest	2	-	backend/src/main/java/com/tcms/repository/ExecutionFacts.java	RUN:MORE
 DR-6	§120	CaseHealthRecomputeTest	-	-		queued
 DR-7	§120	CaseHealthAttributesTest	-	-		queued
 DR-8	§120	CaseHealthRecomputeTest	-	GAP		queued
@@ -117,9 +117,9 @@ FQ-4	§121	FlakeScoreTest	-	-		queued
 FQ-5	§121	FlakeScoreTest	-	-		queued
 FQ-6	§121	FlakeScoreTest	-	-		queued
 FQ-7	§121	FlakeScoreTest	-	-		queued
-FQ-8	§121	FlakeScoreTest	2	-		queued
+FQ-8	§121	com.tcms.reporting.FlakeScoreTest	2	-	backend/src/main/java/com/tcms/reporting/ExecutionSource.java	RUN:MATCH
 FQ-9	§121	FlakeScoreTest	-	-		queued
-FQ-10	§121	FlakeScoreTest	2	-		queued
+FQ-10	§121	com.tcms.reporting.FlakeScoreTest	2	-	backend/src/main/java/com/tcms/reporting/ExecutionSource.java	RUN:ZERO-UNEXPECTED
 FQ-11	§121	FlakeScoreTest	-	-		queued
 FQ-12	§121	FlakeScoreTest	-	-		queued
 FQ-13	§121	FlakeScoreTest	-	GAP		queued
@@ -330,7 +330,7 @@ AS-5	§134	com.tcms.identity.RoleGrantEndpointTest,com.tcms.schema.SeedDataTest	
 IK-1	§136	com.tcms.repository.SuiteWriteEndpointTest,com.tcms.documentation.DocPageEndpointTest	S	-	backend/src/main/resources/db/migration/V42__suite_and_doc_page_creation_idempotency.sql	RUN:ZERO-AS-PREDICTED
 IK-2	§136	SuiteWriteEndpointTest	-	-		queued
 IK-3	§136	SuiteWriteEndpointTest	-	-		queued
-IK-4	§136	SuiteWriteEndpointTest	2	-		queued
+IK-4	§136	com.tcms.repository.SuiteWriteEndpointTest	2	-	backend/src/main/java/com/tcms/repository/SuiteRepository.java	RUN:MATCH
 IK-5	§136	SuiteWriteEndpointTest	-	-		queued
 IK-6	§136	com.tcms.config.IdempotencyKeyCapTest	W1	-	backend/src/main/java/com/tcms/repository/SuiteWriteService.java	RUN:FEWER
 IK-7	§136	SuiteWriteEndpointTest	-	-		queued
@@ -349,7 +349,7 @@ AP-3	§138	AiProposalEndpointTest	-	-		queued
 AP-4	§138	AiProposalEndpointTest	-	-		queued
 AP-5	§138	AiProposalEndpointTest	-	-		queued
 AP-6	§138	AiProposalEndpointTest	-	-		queued
-AP-7	§138	AiProposalEndpointTest	2	-		queued
+AP-7	§138	com.tcms.repository.AiProposalEndpointTest	2	-	backend/src/main/java/com/tcms/repository/AiProposalRepository.java	RUN:ZERO-AS-PREDICTED
 AP-8	§138	AiProposalEndpointTest	-	-		queued
 AP-9	§138	AiProposalEndpointTest	-	-		queued
 AP-10	§138	AiProposalEndpointTest	-	-		queued
@@ -432,11 +432,11 @@ SA-2	§157	CaseHealthRecomputeTest	-	-		queued
 SA-3	§157	CaseHealthRecomputeTest	-	-		queued
 SA-4	§157	CaseHealthRecomputeTest	-	-		queued
 SA-5	§157	com.tcms.repository.CaseHealthRecomputeTest	W1	-	backend/src/main/java/com/tcms/repository/ApprovalFacts.java	RUN:MORE
-SA-6	§157	CaseHealthRecomputeTest	2	-		queued
+SA-6	§157	com.tcms.repository.CaseHealthRecomputeTest,com.tcms.reporting.FailingRepeatedlyTest	2	-	backend/src/main/java/com/tcms/repository/ExecutionFacts.java	RUN:FEWER
 §158 CD-4	§158	CaseHealthRecomputeTest	-	-		queued
 §158 CD-5	§158	com.tcms.repository.CaseHealthRecomputeTest	W1	-	backend/src/main/java/com/tcms/repository/ConditionDrift.java	RUN:MATCH
 §158 CD-6	§158	CaseHealthRecomputeTest	-	-		queued
-§158 CD-7	§158	CaseHealthRecomputeTest	2	-		queued
+§158 CD-7	§158	com.tcms.repository.CaseHealthRecomputeTest	2	-	backend/src/main/java/com/tcms/repository/ApprovalFacts.java	RUN:FEWER
 AR-M1	§159	com.tcms.project.ProjectEndpointTest	W1	-	backend/src/main/java/com/tcms/project/ProjectArchiveService.java	RUN:MATCH
 AR-M2	§159	ProjectEndpointTest	-	-		queued
 AR-M3	§159	ProjectEndpointTest	-	-		queued
@@ -452,17 +452,17 @@ RR-M6	§160	?	-	-		queued
 CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcms/contract/ContractEnumTest.java	RUN:MATCH
 §166 LR-1	§166	?	-	-		queued
 §166 LR-2	§166	?	-	-		queued
-§166 LR-3	§166	?	2	-		queued
-§166 LR-4	§166	?	2	-		queued
+§166 LR-3	§166	com.tcms.repository.CaseHealthRecomputeTest	2	-	backend/src/main/java/com/tcms/repository/ExecutionFacts.java	RUN:MATCH
+§166 LR-4	§166	com.tcms.repository.CaseHealthRecomputeTest	2	-	backend/src/main/java/com/tcms/repository/ExecutionFacts.java	RUN:MATCH
 §166 LR-5	§166	?	W1	GAP		queued
 §167 DL-1	§167	?	-	-		queued
 §167 DL-2	§167	?	-	-		queued
-§167 DL-3	§167	?	W1+2	GAP		queued
+§167 DL-3	§167	com.tcms.repository.CaseHealthRecomputeTest	W1+2	GAP-WITHDRAWN	backend/src/main/java/com/tcms/repository/DocumentationFacts.java	RUN:MORE
 §167 DL-4	§167	?	-	-		queued
 §167 DL-5	§167	?	-	-		queued
 §168 CV-1	§168	?	-	-		queued
 §168 CV-2	§168	?	-	-		queued
-§168 CV-3	§168	?	W1+2	GAP		queued
+§168 CV-3	§168	com.tcms.documentation.DocPageEndpointTest	W1+2	GAP	backend/src/main/java/com/tcms/documentation/CatalogueFacts.java	RUN:ZERO-AS-PREDICTED
 §168 CV-4	§168	?	-	-		queued
 §168 CV-5	§168	?	-	-		queued
 §169 XL-1	§169	?	-	-		queued
@@ -484,7 +484,7 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §178 SL-M2	§178	CaseHealthRecomputeTest	-	-		queued
 §178 SL-M3	§178	CaseHealthRecomputeTest	-	-		queued
 §178 SL-M4	§178	CaseHealthRecomputeTest	-	-		queued
-§178 SL-M5	§178	CaseHealthRecomputeTest	2	-		queued
+§178 SL-M5	§178	com.tcms.repository.CaseHealthRecomputeTest	2	-	backend/src/main/java/com/tcms/repository/SpecLinkage.java	RUN:MORE
 §179 RS-M1	§179	com.tcms.repository.RaisedSignalTest	S	-	backend/src/main/java/com/tcms/repository/HealthSignal.java	RUN:MORE
 §179 RS-M2	§179	com.tcms.repository.RaisedSignalTest	S	-	backend/src/main/java/com/tcms/repository/HealthSignal.java	RUN:MORE
 §179 RS-M3	§179	com.tcms.repository.RaisedSignalTest	S	-	backend/src/main/java/com/tcms/repository/CaseHealth.java	RUN:ZERO-UNEXPECTED
@@ -646,7 +646,7 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §232 PB-9	§232	PlanCreateEndpointTest	-	-		queued
 §234 PM-1	§234	com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/ArtifactWriteService.java	RUN:MATCH
 §234 PM-2	§234	?	-	-		queued
-§235 PM-1	§235	DocPageEndpointTest	2	-		queued
+§235 PM-1	§235	com.tcms.documentation.DocPageEndpointTest	2	-	backend/src/main/java/com/tcms/documentation/DocPageRepository.java	RUN:ZERO-UNEXPECTED
 §235 PM-2	§235	?	-	-		queued
 §235 PM-3	§235	?	-	-		queued
 §236 DK-1	§236	ExecutionEndpointTest	-	-		queued
@@ -703,7 +703,7 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §241 OC-8	§240	?	-	-		queued
 §241 IX-1	§241 amendment (2026-08-17)	com.tcms.tenancy.SchemaConventionTest,com.tcms.schema.SchemaCommentTest,com.tcms.identity.OrgChartEndpointTest,com.tcms.identity.PermissionEvaluatorTest	S	-	backend/src/main/resources/db/migration/V67__team_membership_answers_which_teams_a_person_is_in.sql	RUN:ZERO-AS-PREDICTED
 §242 LG-M1	§242 amendment (2026-08-18)	?	-	-		queued
-§242 LG-M2	§242 amendment (2026-08-18)	?	2	-		queued
+§242 LG-M2	§242 amendment (2026-08-18)	com.tcms.identity.AuditLogReadTest	2	-	backend/src/main/java/com/tcms/tenancy/AuditEventRepository.java	RUN:ZERO-UNEXPECTED
 §242 LG-M3	§242 amendment (2026-08-18)	com.tcms.identity.AuditLogReadTest	W1	-	backend/src/main/java/com/tcms/identity/AuditLogService.java	RUN:MORE
 §242 LG-M4	§242 amendment (2026-08-18)	?	-	-		queued
 §242 LG-M5	§242 amendment (2026-08-18)	com.tcms.identity.AuditLogReadTest	S	-	backend/src/main/java/com/tcms/identity/AuditLogService.java	RUN:ZERO-UNEXPECTED
@@ -734,7 +734,7 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §244 ED-M4	§244 amendment (2026-08-22)	ExecutionDurationTest	-	-		queued
 §244 ED-M5	§244 amendment (2026-08-22)	IngestionEndpointTest	-	-		queued
 §244 ED-M6	§244 amendment (2026-08-22)	ExecutionDurationTest	-	GAP		queued
-§244 ED-M7	§244 amendment (2026-08-22)	ExecutionDurationTest	2	-		queued
+§244 ED-M7	§244 amendment (2026-08-22)	com.tcms.execution.ExecutionDurationTest,com.tcms.reporting.ExecutionFactRefreshTest	2	-	backend/src/main/java/com/tcms/reporting/ExecutionSource.java	RUN:MORE
 §244 ED-M8	§244 amendment (2026-08-22)	ExecutionDurationTest	-	-		queued
 §244 ED-M9	§244 amendment (2026-08-22)	ExecutionDurationTest	-	-		queued
 §246 CE-M1	§246	ExportCompanyTest	-	-		queued
@@ -761,7 +761,7 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §245 BA-M9	§245	ExecutionBulkAssignTest	-	-		queued
 §245 BA-M10	§245	ExecutionBulkAssignTest	-	-		queued
 §245 BA-M11	§245	ArchitectureRulesTest	-	-		queued
-§245 BA-M12	§245	com.tcms.execution.ExecutionBulkAssignTest	W1+2	-	backend/src/main/java/com/tcms/execution/ExecutionBulkAssignService.java	RUN:ZERO-AS-PREDICTED
+§245 BA-M12	§245	com.tcms.execution.ExecutionBulkAssignTest	W1+2	-	backend/src/main/java/com/tcms/execution/ExecutionBulkAssignService.java	RUN:ZERO-AS-PREDICTED (wave 1) — HELD, wave 2 wrote no fixture for it
 §247 SK-M1	§247	com.tcms.execution.RunScheduleFiringTest	W1	-	backend/src/main/java/com/tcms/execution/RunCreateService.java	RUN:MATCH
 §247 SK-M2	§247	CronScheduleTest	-	-		queued
 §247 SK-M3	§247	CronScheduleTest	-	-		queued
@@ -792,4 +792,4 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §249 CS-M6	§249	?	-	-		queued
 §249 CS-M7	§249	?	-	-		queued
 §249 CS-M8	§249	?	-	-		queued
-§249 CS-M9	§249	com.tcms.repository.CaseSearchTest	W1+2	-	backend/src/main/java/com/tcms/repository/CaseSort.java	RUN:FEWER
+§249 CS-M9	§249	com.tcms.repository.CaseSearchTest	W1+2	-	backend/src/main/java/com/tcms/repository/CaseSort.java	RUN:FEWER (wave 1) — HELD, wave 2 wrote no fixture for it
