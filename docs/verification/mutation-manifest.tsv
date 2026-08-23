@@ -148,7 +148,7 @@ AD-6	§124	com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/jav
 AD-7	§124	com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/ArtifactWriteService.java	RUN:MORE
 ST-1	§125	ArchitectureRulesTest	-	-		queued
 ST-2	§125	ArchitectureRulesTest	W1	GAP		queued
-ST-3	§125	ModuleStructureTest	S	-		queued
+ST-3	§125	com.tcms.architecture.ModuleStructureTest	S	-	backend/src/test/java/com/tcms/architecture/ModuleStructureTest.java	RUN:MATCH
 ST-4	§125	ArchitectureRulesTest	-	-		queued
 ST-5	§125	ArchitectureRulesTest	-	-		queued
 ST-6	§125	ExecutionEndpointTest	-	-		queued
@@ -400,11 +400,11 @@ RK-3	§151	com.tcms.execution.ReleaseSortKeyBackfillTest	S	-	backend/src/main/re
 RK-4	§151	com.tcms.execution.ReleaseSortKeyBackfillTest,com.tcms.schema.SchemaConventionTest	S	-	backend/src/main/resources/db/migration/V68__runs_can_be_scheduled.sql (proxy)	RUN:MATCH
 SC-3	§152	ArchitectureRulesTest	-	-		queued
 SC-4	§152	ArchitectureRulesTest	-	-		queued
-UX-2	§153	ArchitectureRulesTest	S	-		queued
+UX-2	§153	com.tcms.architecture.ArchitectureRulesTest	S	-	backend/src/test/java/com/tcms/architecture/ArchitectureRulesTest.java (proxy)	RUN:MATCH
 UX-3	§153	com.tcms.architecture.ArchitectureRulesTest	W1	-	backend/src/main/java/com/tcms/tenancy/OutboxScheduler.java	RUN:ZERO-UNEXPECTED
-UX-4	§153	OperatorCommandsTest	S	-		queued
+UX-4	§153	com.tcms.provisioning.OperatorCommandsTest	S	-	backend/src/main/java/com/tcms/provisioning/OperatorCommands.java	RUN:ZERO-UNEXPECTED
 §154 RL-3	§154	IngestionEndpointTest	-	-		queued
-§154 RL-4	§154	ArchitectureRulesTest	S	-		queued
+§154 RL-4	§154	com.tcms.architecture.ArchitectureRulesTest	S	-	-	RUN:STALE
 §154 RL-5	§154	ArchitectureRulesTest	-	-		queued
 §154 RL-6	§154	ArchitectureRulesTest	-	-		queued
 §154 RL-7	§154	ArchitectureRulesTest	-	-		queued
@@ -412,12 +412,12 @@ LV-3	§155	ArchitectureRulesTest	-	-		queued
 LV-4	§155	PlanUpdateEndpointTest	-	-		queued
 LV-5	§155	com.tcms.execution.ExecutionEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/ExecutionService.java	RUN:MATCH
 LV-6	§155	ArchitectureRulesTest	-	-		queued
-WL-1	§156	ArchitectureRulesTest	S	-		queued
+WL-1	§156	com.tcms.architecture.ArchitectureRulesTest	S	-	backend/src/test/java/com/tcms/architecture/ArchitectureRulesTest.java	RUN:MATCH
 WL-2	§156	ArchitectureRulesTest	-	-		queued
 WL-3	§156	DocPageEndpointTest	-	-		queued
 WL-4	§156	ArchitectureRulesTest	-	-		queued
 WL-5	§156	com.tcms.architecture.ArchitectureRulesTest	W1	-	backend/src/test/java/com/tcms/architecture/ArchitectureRulesTest.java	RUN:MATCH
-WL-6	§156	ArchitectureRulesTest	S	-		queued
+WL-6	§156	com.tcms.architecture.ArchitectureRulesTest	S	-	backend/src/test/java/com/tcms/architecture/ArchitectureRulesTest.java	RUN:MATCH
 WL-7	§156	ArchitectureRulesTest	-	-		queued
 SA-2	§157	CaseHealthRecomputeTest	-	-		queued
 SA-3	§157	CaseHealthRecomputeTest	-	-		queued
@@ -432,7 +432,7 @@ AR-M1	§159	com.tcms.project.ProjectEndpointTest	W1	-	backend/src/main/java/com/
 AR-M2	§159	ProjectEndpointTest	-	-		queued
 AR-M3	§159	ProjectEndpointTest	-	-		queued
 AR-M4	§159	ProjectEndpointTest	-	-		queued
-AR-M5	§159	ArchitectureRulesTest	S	-		queued
+AR-M5	§159	com.tcms.architecture.ArchitectureRulesTest	S	-	backend/src/test/java/com/tcms/architecture/ArchitectureRulesTest.java	RUN:MATCH
 AR-M6	§159	ProjectEndpointTest	-	-		queued
 RR-M1	§160	?	-	-		queued
 RR-M2	§160	?	-	-		queued
@@ -490,13 +490,13 @@ CE-M3	§161	?	S	-		queued
 §181 OS-M2	§181	?	-	-		queued
 §181 OS-M3	§181	com.tcms.repository.CaseHealthRecomputeTest	W1	-	backend/src/main/java/com/tcms/repository/OwnerStanding.java	RUN:MATCH
 §181 OS-M4	§181	?	-	-		queued
-§181 OS-M5	§181	?	S	-		queued
+§181 OS-M5	§181	com.tcms.architecture.ArchitectureRulesTest	S	-	backend/src/test/java/com/tcms/architecture/ArchitectureRulesTest.java	RUN:MATCH
 §181 OS-M6	§181	CaseHealthRecomputeTest	-	-		queued
 §182 CC-M1	§182	?	-	-		queued
 §182 CC-M2	§182	?	-	-		queued
 §182 CC-M3	§182	?	-	-		queued
 §182 CC-M4	§182	com.tcms.repository.CaseHealthRecomputeTest	W1	-	backend/src/main/java/com/tcms/repository/CaseCompleteness.java	RUN:MORE
-§182 CC-M5	§182	?	S	-		queued
+§182 CC-M5	§182	com.tcms.architecture.ArchitectureRulesTest	S	-	backend/src/test/java/com/tcms/architecture/ArchitectureRulesTest.java	RUN:MATCH
 §182 CC-M6	§182	com.tcms.repository.CaseHealthRecomputeTest	W1	-	backend/src/test/java/com/tcms/repository/CaseHealthRecomputeTest.java	RUN:MATCH
 §185 SR-1	§185	?	-	-		queued
 §185 SR-2	§185	?	-	-		queued
@@ -513,10 +513,10 @@ CE-M3	§161	?	S	-		queued
 §187 DC-4	§187	ConditionWriteEndpointTest	-	-		queued
 §187 DC-5	§187	CaseBulkEndpointTest	-	-		queued
 §187 DC-6	§187	com.tcms.architecture.ArchitectureRulesTest	W1	-	backend/src/main/java/com/tcms/repository/CaseConditions.java	RUN:MORE
-§188 NR-1	§188	ArchitectureRulesTest	S	-		queued
+§188 NR-1	§188	com.tcms.architecture.ArchitectureRulesTest	S	-	backend/src/test/java/com/tcms/architecture/ArchitectureRulesTest.java	RUN:MORE
 §188 NR-2	§188	com.tcms.architecture.ArchitectureRulesTest	W1	-	backend/src/main/java/com/tcms/repository/SuiteVersion.java	RUN:MATCH
-§188 NR-3	§188	?	S	-		queued
-§188 NR-4	§188	?	S	-		queued
+§188 NR-3	§188	com.tcms.architecture.ArchitectureRulesTest	S	-	backend/src/test/java/com/tcms/architecture/ArchitectureRulesTest.java	RUN:MORE
+§188 NR-4	§188	com.tcms.architecture.ArchitectureRulesTest	S	-	backend/src/test/java/com/tcms/architecture/ArchitectureRulesTest.java	RUN:ZERO-AS-PREDICTED
 §188 NR-5	§188	com.tcms.schema.SeedDataTest	W1	-	backend/src/test/java/com/tcms/schema/SeedDataTest.java	RUN:ZERO-AS-PREDICTED
 §189 CN-1	§189	?	W1	-		moved:packages-and-frontend-mutation-checks.md
 §189 CN-2	§189	?	-	-		moved:packages-and-frontend-mutation-checks.md
@@ -562,7 +562,7 @@ CE-M3	§161	?	S	-		queued
 §210 DQ-5	§209	com.tcms.repository.SuiteWriteEndpointTest,com.tcms.documentation.DocPageEndpointTest,com.tcms.execution.ExecutionEndpointTest,com.tcms.documentation.ArtifactEndpointTest,com.tcms.documentation.ArtifactFileEndpointTest	S	-	backend/src/main/java/com/tcms/repository/SuiteWriteService.java + DocPageWriteService + RunStatusService + ExecutionService + ArtifactWriteService	RUN:ZERO-AS-PREDICTED
 §210 DQ-6	§209	PermissionEvaluatorTest	-	-		queued
 §217 FD-1	§217	com.tcms.auth.SsoFlowIntegrationTest	W1	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:MORE
-§217 FD-2	§217	SchemaConventionTest	S	-		queued
+§217 FD-2	§217	com.tcms.tenancy.SchemaConventionTest	S	-	backend/src/test/java/com/tcms/tenancy/SchemaConventionTest.java	RUN:MATCH
 §217 FD-3	§217	com.tcms.tenancy.SchemaConventionTest,com.tcms.auth.SsoFlowIntegrationTest	S	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:ZERO-AS-PREDICTED
 §217 FD-4	§217	com.tcms.tenancy.SchemaConventionTest	S	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:MATCH
 §217 FD-5	§217	com.tcms.tenancy.SchemaConventionTest	S	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:MATCH
@@ -668,7 +668,7 @@ CE-M3	§161	?	S	-		queued
 §238 SV-8	§237	com.tcms.repository.SuiteCompositionVersionTest	W1	-	backend/src/main/java/com/tcms/repository/Suite.java	RUN:MATCH
 §238 SV-9	§237	?	-	-		queued
 §238 SV-10	§237	?	-	-		queued
-§239 RT-M1	§239	IdempotencyKeyCapTest	S	-		queued
+§239 RT-M1	§239	com.tcms.config.IdempotencyKeyCapTest	S	-	backend/src/test/java/com/tcms/config/IdempotencyKeyCapTest.java	RUN:MATCH
 §239 RT-M2	§239	-	W1	-	-	CONFIRMED-BY-READING
 §239 RT-M3	§239	com.tcms.schema.SearchVectorTest,com.tcms.schema.SchemaCommentTest	S	-	backend/src/main/resources/db/migration/V63__shared_step_library_is_retired.sql	RUN:MORE
 §239 RT-M4	§239	?	-	-		queued
@@ -704,8 +704,8 @@ CE-M3	§161	?	S	-		queued
 §242 LG-M9	§242 amendment (2026-08-18)	?	-	-		queued
 §242 LG-M10	§242 amendment (2026-08-18)	com.tcms.identity.AuditLogReadTest	W1	-	backend/src/main/java/com/tcms/identity/AdminDirectoryService.java	RUN:MATCH
 §242 LG-M11	§242 amendment (2026-08-18)	RepositoryTransactionTest	-	-		queued
-§242 LG-M12	§242 amendment (2026-08-18)	ArchitectureRulesTest	S	-		queued
-§242 LG-M13	§242 amendment (2026-08-18)	ContractConventionTest	S	-		queued
+§242 LG-M12	§242 amendment (2026-08-18)	com.tcms.architecture.ArchitectureRulesTest	S	-	backend/src/test/java/com/tcms/architecture/ArchitectureRulesTest.java	RUN:MATCH
+§242 LG-M13	§242 amendment (2026-08-18)	com.tcms.contract.ContractConventionTest	S	-	backend/src/test/java/com/tcms/contract/ContractConventionTest.java	RUN:MORE
 §242 LG-M14	§242 amendment (2026-08-18)	?	-	GAP		queued
 §243 RN-M1	§243 amendment (2026-08-21)	ReviewEndpointTest	-	-		queued
 §243 RN-M2	§243 amendment (2026-08-21)	ReviewNotificationTest	-	-		queued
@@ -731,7 +731,7 @@ CE-M3	§161	?	S	-		queued
 §246 CE-M1	§246	ExportCompanyTest	-	-		queued
 §246 CE-M2	§246	?	-	-		queued
 §246 CE-M3	§246	ExportCompanyTest	-	-		queued
-§246 CE-M4	§246	ExportRedactionSweepTest	S	-		queued
+§246 CE-M4	§246	com.tcms.provisioning.ExportRedactionSweepTest,com.tcms.provisioning.ExportCompanyTest	S	-	backend/src/main/java/com/tcms/provisioning/ExportRedactions.java	RUN:MORE
 §246 CE-M5	§246	com.tcms.provisioning.ExportRedactionSweepTest	W1	-	backend/src/main/resources/db/migration/V68__runs_can_be_scheduled.sql	RUN:MATCH
 §246 CE-M6	§246	ExportTablesTest	-	-		queued
 §246 CE-M7	§246	?	-	-		queued
