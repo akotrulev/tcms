@@ -470,7 +470,7 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §167 DL-1	§167	?	-	-		queued
 §167 DL-2	§167	?	-	-		queued
 §167 DL-3	§167	com.tcms.repository.CaseHealthRecomputeTest	W1+2	GAP-WITHDRAWN	backend/src/main/java/com/tcms/repository/DocumentationFacts.java	RUN:MORE
-§167 DL-4	§167	?	W3	-		queued
+§167 DL-4	§167	?	W3	-	backend/src/main/java/com/tcms/repository/HealthRecomputeOnLinksChanged.java	RUN:ZERO-AS-PREDICTED
 §167 DL-5	§167	?	W3	-		queued
 §168 CV-1	§168	?	-	-		queued
 §168 CV-2	§168	?	-	-		queued
@@ -575,7 +575,7 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §209 AM-2	§209	?	-	-		queued
 §209 AM-3	§209	com.tcms.documentation.ArtifactCirculationTest,com.tcms.documentation.ArtifactEndpointTest	W1	-	backend/src/main/java/com/tcms/documentation/Artifact.java	RUN:MORE
 §209 AM-4	§209	ArtifactCirculationTest	-	-		queued
-§209 AM-5	§209	?	W3	-		queued
+§209 AM-5	§209	?	W3	-	backend/src/main/java/com/tcms/documentation/ArtifactWriteService.java	RUN:ZERO-AS-PREDICTED
 §210 DQ-1	§209	com.tcms.schema.SeedDataTest,com.tcms.documentation.ArtifactEndpointTest	S	-	backend/src/main/resources/db/migration/V52__the_tier_line_is_approvals_and_configuration.sql	RUN:MORE
 §210 DQ-2	§209	com.tcms.schema.SeedDataTest	S	-	backend/src/main/resources/db/migration/V52__the_tier_line_is_approvals_and_configuration.sql	RUN:MORE
 §210 DQ-3	§209	com.tcms.schema.SeedDataTest	S	-	backend/src/main/resources/db/migration/V52__the_tier_line_is_approvals_and_configuration.sql	RUN:ZERO-AS-PREDICTED
@@ -587,12 +587,12 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §217 FD-3	§217	com.tcms.tenancy.SchemaConventionTest,com.tcms.auth.SsoFlowIntegrationTest	S	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:ZERO-AS-PREDICTED
 §217 FD-4	§217	com.tcms.tenancy.SchemaConventionTest	S	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:MATCH
 §217 FD-5	§217	com.tcms.tenancy.SchemaConventionTest	S	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:MATCH
-§217 FD-6	§217	SchemaConventionTest	W3	-		queued
+§217 FD-6	§217	SchemaConventionTest	W3	-	backend/src/main/resources/db/migration/V53__external_identity_oidc.sql	RUN:ZERO-AS-PREDICTED
 §218 NC-1	§218 phase 2	com.tcms.integration.NotificationChannelTest	W1	-	backend/src/main/java/com/tcms/integration/NotificationChannelService.java	RUN:MORE
-§218 NC-2	§218 phase 2	?	W3	-		queued
+§218 NC-2	§218 phase 2	?	W3	-	backend/src/main/java/com/tcms/integration/NotificationChannelController.java	RUN:ZERO-AS-PREDICTED
 §218 NC-3	§218 phase 2	NotificationChannelTest	W3	-		queued
 §218 NC-4	§218 phase 2	NotificationChannelTest	-	-		queued
-§218 NC-6	§218 phase 2	?	W3	-		queued
+§218 NC-6	§218 phase 2	?	W3	-	docs/specs/openapi.yaml	RUN:ZERO-AS-PREDICTED
 §218 NC-7	§218 phase 2	com.tcms.integration.NotificationDeliveryTest	W1	-	backend/src/main/java/com/tcms/integration/NotificationLedger.java	RUN:ZERO-UNEXPECTED
 §218 NC-8	§218 phase 2	NotificationRenderingTest	-	-		queued
 §218 NC-9	§218 phase 2	NotificationDeliveryTest	-	-		queued
@@ -638,7 +638,7 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §227 PM-7	§227 phase 1	?	W3	-	backend/src/main/java/com/tcms/reporting/ReportJobRunner.java	RUN:MORE
 §227 PM-8	§227 phase 1	?	W3	-	backend/src/main/java/com/tcms/reporting/ReportingProperties.java	RUN:ZERO-AS-PREDICTED
 §225 PM-1	§225	RoleGrantEndpointTest	-	-		queued
-§225 PM-2	§225	?	W3	-		queued
+§225 PM-2	§225	?	W3	-	backend/src/main/java/com/tcms/identity/PermissionEvaluator.java	RUN:ZERO-AS-PREDICTED
 §225 PM-3	§225	com.tcms.schema.RoleScopeShapeTest	S	-	backend/src/main/resources/db/migration/V56__role_scope_agrees_with_the_grant_shape.sql	RUN:MATCH
 §224 SP-2	§224	com.tcms.auth.SsoLoginAttemptPurgeTest	W1	-	backend/src/main/java/com/tcms/auth/SsoLoginAttemptPurge.java	RUN:ZERO-AS-PREDICTED
 §223 LD-1	§223	LdapDirectoryTest	-	-		queued
@@ -663,12 +663,12 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §235 PM-3	§235	?	W3	-		queued
 §236 DK-1	§236	ExecutionEndpointTest	-	-		queued
 §236 DK-2	§236	ExecutionEndpointTest	-	-		queued
-§236 DK-3	§236	ExecutionEndpointTest	W3	-		queued
+§236 DK-3	§236	ExecutionEndpointTest	W3	-	backend/src/main/java/com/tcms/execution/DefectLinkRepository.java backend/src/main/java/com/tcms/execution/DefectLinkService.java	RUN:ZERO-AS-PREDICTED
 §236 DK-4	§236	com.tcms.execution.ExecutionEndpointTest	W1	-	backend/src/main/java/com/tcms/execution/DefectLinkService.java	RUN:ZERO-UNEXPECTED
-§236 DK-5	§236	ExecutionEndpointTest	W3	-		queued
+§236 DK-5	§236	ExecutionEndpointTest	W3	-	backend/src/main/java/com/tcms/execution/DefectLinkService.java	RUN:ZERO-AS-PREDICTED
 §236 DK-6	§236	com.tcms.execution.ExecutionEndpointTest	S	-	backend/src/main/java/com/tcms/execution/DefectLinkService.java	RUN:MATCH
 §236 DK-7	§236	ExecutionEndpointTest	-	-		queued
-§236 SE-1	§236	ExecutionEndpointTest	W3	-		queued
+§236 SE-1	§236	ExecutionEndpointTest	W3	-	backend/src/main/java/com/tcms/execution/EvidenceService.java	RUN:MORE
 §237 QR-1	§237	RunSummaryReportTest	-	-		queued
 §237 QR-2	§237	AggregateVariabilityTest	W3	-		queued
 §237 QR-3	§237	?	-	-		queued
@@ -801,7 +801,7 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §249 CS-M3	§249	CaseSearchTest	-	-		queued
 §249 CS-M4	§249	?	W3	-		queued
 §249 CS-M5	§249	?	-	-		queued
-§249 CS-M6	§249	?	W3	-		queued
-§249 CS-M7	§249	?	W3	-		queued
+§249 CS-M6	§249	?	W3	-	backend/src/main/java/com/tcms/repository/CaseScope.java	RUN:ZERO-AS-PREDICTED
+§249 CS-M7	§249	?	W3	-	backend/src/main/java/com/tcms/repository/CrossProjectSearchService.java	RUN:ZERO-AS-PREDICTED
 §249 CS-M8	§249	?	-	-		queued
 §249 CS-M9	§249	com.tcms.repository.CaseSearchTest	W1+2	-	backend/src/main/java/com/tcms/repository/CaseSort.java	RUN:FEWER (wave 1) — HELD, wave 2 wrote no fixture for it
