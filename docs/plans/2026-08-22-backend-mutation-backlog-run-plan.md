@@ -1,5 +1,11 @@
 # Running the backend mutation backlog — the plan
 
+> **CLOSED 2026-08-23.** Waves 0, 1, S and 2 ran in full; wave 3 ran **batch A of its slimmed set
+> only** (`docs/plans/2026-08-23-wave-3-slimmed.md`). Waves 4–7 — the TypeScript, infrastructure,
+> manual/live-stack and Hetzner lanes — **never started**. 492 rows are `CLOSED:NOT-RUN`, which is a
+> deliberate stop and **not a measurement**. 244 rows were adjudicated and stand as evidence; see
+> `docs/verification/backend-mutation-checks.md`'s banner and its four RUN RECORD sections.
+
 **Written 2026-08-22.** Subject: `docs/verification/backend-mutation-checks.md`, the §65 deferred
 queue, as it stands after §249. This plan does **not** run anything. It counts what is owed, prices
 it against a measurement taken today, splits it into the lanes that can actually execute it, and —

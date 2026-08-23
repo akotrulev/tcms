@@ -24,12 +24,30 @@ cd backend
 git checkout -- <the mutated file>          # revert by EXACT PATH, before the next row
 ```
 
+> # ⛔ THE PASS IS CLOSED — 2026-08-23, at the user's direction.
+>
+> **492 rows are `CLOSED:NOT-RUN` in the manifest, and that status means CLOSED WITHOUT
+> MEASUREMENT and nothing else.** It is not a zero, not a green, and not evidence that the test a
+> row names observes anything. **A closed row answers no question about coverage** — the honest
+> reading is "nobody looked", which is where the row stood before the pass began.
+>
+> What WAS measured stands: 244 adjudicated rows across waves 1, S, 2 and wave 3's batch A, in
+> `mutation-results.tsv`. Those are real and are the only thing in this file that may be cited as
+> evidence.
+>
+> **Re-opening costs a status edit.** Every closed row keeps its id, its text and its derived
+> scope, and `mutation-manifest.tsv`'s `wave` column still carries the wave-3 selection. The
+> harness (`~/bin/tcms-mutate`) and the isolated remote tree are intact.
+
 **Waves 1, S and 2 are run.** `RUN RECORD — 2026-08-22, wave 1` below covers 90 rows, eight findings
 and the five registered gaps that turned out not to exist; `RUN RECORD — 2026-08-23, wave S` covers
 the 74 rows of the four scripted sweeps, eight findings, and seven registered gaps confirmed by
 measurement; `RUN RECORD — 2026-08-23, wave 2` covers the 30 rows of the three cross-cutting fixture
 families, **three fixtures added to the suite**, eight findings and five more registered gaps
-withdrawn. **Wave 2 was the committed stopping point** (run plan §9 decision 4), and wave 3 has now been
+withdrawn. **Wave 3 ran batch A only — its 41 gap rows** (`RUN RECORD — 2026-08-23, wave 3 batch A` below):
+36 gaps confirmed, four withdrawn, one already-measured row caught as stale. **The remaining 72
+rows of the slimmed set, and the 414 rows never selected into it, are `CLOSED:NOT-RUN`.**
+Wave 2 was the committed stopping point (run plan §9 decision 4), and wave 3 was
 re-decided on what waves 1, S and 2 actually found: **`docs/plans/2026-08-23-wave-3-slimmed.md`**
 selects **113 of the 509** rows wave 3 would have held, admitted on each row's own text — the rows
 predicting GREEN (the class waves 1+2 withdrew ten registered gaps from), the rows that say they do
@@ -74,6 +92,88 @@ shortfall was a defect in the *test suite* or in the row's own reasoning. Those 
 **Frontend rows in this file were not run** — they belong to `npx vitest` and are out of scope for a
 backend pass. They are retained in §83, §85, §89, §90 and §96 phases 5–6 of the git history for
 whoever runs them; see `f0279de` for the last version of this file carrying them in full.
+
+---
+
+# RUN RECORD — 2026-08-23, wave 3 batch A (the gap rows) — AND THE CLOSE OF THE PASS
+
+**41 rows, the whole `gap` class of the slimmed wave 3** (`docs/plans/2026-08-23-wave-3-slimmed.md`
+§4, batch A). Run on the isolated tree with the isolated Gradle home; the lane reverted clean after
+every row and ended byte-identical to HEAD.
+
+| Outcome | Rows |
+|---|---|
+| ZERO-AS-PREDICTED — the gap is real | **36** |
+| MORE — **a registered gap WITHDRAWN**, by a red the row did not expect | **4** |
+| STALE — already measured; the derivation picked up a superseded entry | 1 |
+
+**The withdrawal rate is 4 of 40, and that matters more than the four.** The slimmed set was built
+on the claim that a green prediction is close to a coin flip — waves 1 and 2 withdrew ten registered
+gaps against seven confirmed. Batch A came in at **10%**, not ~59%. The register is materially more
+honest than the earlier waves implied, and the argument that ranked this class first is weaker than
+when it was written. **Recorded here rather than left standing in the plan**, which still carries the
+older estimate.
+
+## The four withdrawn
+
+| id | What the row believed | What the measurement said |
+|---|---|---|
+| `§246 CE-M11` | the belt-and-braces `company_id` predicate might have no observer on the policied tables | **Two** observers — `companyBIsAbsentFromEveryLine` and the direct-count arm |
+| `§246 CE-M9` | a filesystem blob sweep stays green on the happy path | Green there, but `aRowNamingBytesThatAreGoneIsReportedRatherThanSkipped` falls: a sweep sees only what exists, so it can never report bytes that are gone. The row's *orphan* half still stands |
+| `§227 PM-7` | folding the reaped count into the tick budget needs 25 stranded jobs to see | Visible at a reap count of **one** — `run = reaped` costs the loop an iteration the fixture depends on |
+| `§236 SE-1` | nothing asserts the step-evidence refusal, only the success path | Both arms the refusal deliberately conflates assert it — a step of another case, and a step nobody has marked |
+
+## The confirmed gaps worth acting on
+
+Ordered by what a reader should act on first. Each is a place where the product's behaviour is held
+by a comment, a convention, or review — and by no test.
+
+1. **`DR-6` — `HealthSignal`'s declaration order is enforced by a comment.** `CaseSearch.tallyHealth`
+   selects one aggregate per constant and reads the results back **by position**. Moving
+   `UNDECLARED_AUTOMATION` ahead of `ORPHANED` reddens nothing, and puts every facet count after the
+   insertion point on the wrong dashboard tile: right numbers, wrong names, no error anywhere.
+2. **`§225 PM-2` — the credential is absent from the memo key's observers.** Dropping the `token`
+   component from `PermissionEvaluator.MemoKey` is green. Two resolutions under different
+   credentials sharing an entry is a **cap bypass**, and it is held by review alone. Closing it needs
+   `TokenContext` swapped mid-transaction, which no production path does.
+3. **`§227 PM-11` — §6g's review policy does not bind on the single-case status endpoint.** Deleting
+   the `reviews.refuses(...)` arm reddens nothing. Author-cannot-approve-own-work and
+   minimum-peer-LGTM bind on the bulk path, on suites and on plans — and not on the endpoint a person
+   actually uses to approve one case. **`§227 PM-12` is its sibling**: `reviews.moved(...)` deleted is
+   also green, so a submit would move the status and open no review record.
+4. **`GA-1` — the "hangs after succeeding" defect has no observer.** `TcmsApplication.main` reads the
+   verb set *before the context exists* to pick `WebApplicationType.NONE`. Removing a verb is green:
+   the command does its work, prints success, boots a web server and never exits. An operator's
+   terminal blocks and CI hangs on a step that passed.
+5. **`§249 CS-M7` — a search hit's project NAME is not asserted to come from the gated set.** Resolving
+   it from a fresh `findById` is green. A name is a disclosure where an id is not.
+6. **`§241 OC-3` — the tenancy second layer is unobserved.** Both UNION arms lose
+   `AND ra.company_id = :companyId` and nothing moves: RLS alone holds the line. It becomes
+   load-bearing the moment a deployment takes `V1` up on its offer to disable RLS, which no test
+   covers.
+
+## Queue hygiene the run exposed
+
+**Six rows cite something that is not there**, each caught by the runner's scope guard before a wrong
+scope could be recorded as a zero — the guard `AT-5` bought:
+
+- `ReviewGateTest` and `ReviewPolicyTest` (`§227 PM-11`), `PlanEndpointTest` and
+  `PlanDetailEndpointTest` (`§229 PM-13`): **no such class on disk.**
+- `theSupersededOneNamesItsReplacement` (`§209 AM-5`) and `theSuiteDefaultsToTheSources` (`FQ-24`):
+  renamed, or living in a different class than the row says.
+
+**`R6-5` was already measured.** The queued entry is superseded by the same id's re-run after R6
+phase 4 — RED on `Configurations`, once the fixture grew a second configuration. The wave-3
+derivation read the stale first entry. This is the D9 shape the run plan records for `R6-8`, and it
+means **a derived wave set can carry an already-answered row**; a future derivation should exclude
+ids that appear twice in this file.
+
+## And then the pass was closed
+
+**At the user's direction, 2026-08-23: no further mutation time is spent on this file.** The
+remaining 72 rows of the slimmed wave 3, and the 414 never selected into it, are `CLOSED:NOT-RUN`.
+See the banner at the top of this file for what that status does and does not mean — the short
+version is that it is **not a measurement**, and no closed row may be cited as coverage.
 
 ---
 

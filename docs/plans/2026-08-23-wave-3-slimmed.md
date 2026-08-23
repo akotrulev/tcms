@@ -1,6 +1,18 @@
 # Wave 3, slimmed — 509 queued rows to 113
 
-**Status: proposed, not run.** This is the wave-3 re-decision the run plan
+> **STATUS: CLOSED, 2026-08-23.** Batch A ran in full — its **41 gap rows**, 36 confirmed, 4
+> withdrawn, 1 caught as already-measured. **Batches B, C, D and E did not run** and their 72 rows
+> are `CLOSED:NOT-RUN` in the manifest, at the user's direction: no further mutation time is spent
+> on this file. `CLOSED:NOT-RUN` is **not a measurement** — see the banner at the top of
+> `docs/verification/backend-mutation-checks.md`.
+>
+> **One number in §1 below is now wrong and is left standing on purpose.** The claim that a green
+> prediction is close to a coin flip rested on waves 1+2 withdrawing ten registered gaps against
+> seven confirmed. Batch A's 41 rows withdrew **four** — a 10% rate, not ~59%. The register is more
+> honest than the argument that ranked this class first assumed. The full record is in
+> `RUN RECORD — 2026-08-23, wave 3 batch A`.
+
+**Status: proposed, not run — superseded by the banner above.** This is the wave-3 re-decision the run plan
 (`docs/plans/2026-08-22-backend-mutation-backlog-run-plan.md` §9, decision 4) deferred until waves 1,
 S and 2 were measured. All three are now landed, so the decision is due.
 
