@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -318,6 +319,91 @@ class RollupAgreementTest extends IntegrationTestBase {
         assertThat(inTransaction(() -> suite(TAGGED_SUITE)).entries())
                 .as("no tick has run since; the run must be visible anyway")
                 .hasSize(before + 1);
+    }
+
+    // =====================================================================
+    // Two rollup rows, two instants — wave 2's fixture for 13k
+    // =====================================================================
+
+    /**
+     * The freshness line, made observable — the fixture {@code 13k} has been waiting for since the
+     * 2026-08-05 pass listed it under <em>Tests to write</em>.
+     *
+     * <h2>The boundary this crosses, and why every fixture above it is green</h2>
+     *
+     * <p>Both {@code computedAt} methods take the <strong>oldest</strong> {@code updated_at} across
+     * the rows they served, and both argue the choice in a javadoc: the page mixes rolled-up rows
+     * with a live tail, so the newest is a claim true of one row and false of the others — false in
+     * the reassuring direction. Nothing pins it. One {@link #refresh()} writes every row inside one
+     * statement, so all of them carry <em>the same</em> instant, and minimum and maximum over a set
+     * of equal values are the same number. Reversing {@code isBefore} to {@code isAfter} in either
+     * method reddens nothing anywhere in this suite — measured 2026-08-22, and the row was recorded
+     * as BLIND rather than as coverage precisely because a zero derived from the fixture is not a
+     * statement about the code.
+     *
+     * <p>So the fixture stamps the rows with <strong>two</strong> instants, an hour apart, and
+     * asserts the older one comes back. Written by SQL rather than by ticking twice: a second
+     * refresh would rewrite every row, and sleeping between two of them would put a wall-clock
+     * dependency into an assertion about which of two values is chosen.
+     */
+    @Nested
+    @DisplayName("computedAt — the freshness line, over rows of two different ages")
+    class TwoInstants {
+
+        private static final Instant OLDER = Instant.parse("2026-06-01T09:00:00Z");
+        private static final Instant NEWER = Instant.parse("2026-06-01T10:00:00Z");
+
+        @Test
+        @DisplayName("the suite history reports the STALEST row, not the freshest")
+        void suiteHistoryTakesTheOldest() throws SQLException {
+            refresh();
+            int stamped = ageOneRowOf("suite_run_summary");
+
+            assertThat(stamped)
+                    .as("THE CONTROL — with fewer than two rows the minimum and the maximum are "
+                            + "one number and this test could not fail")
+                    .isGreaterThanOrEqualTo(2);
+            assertThat(inTransaction(() -> suite(TAGGED_SUITE)).computedAt())
+                    .as("'nothing here is older than this' is the only reading a freshness line "
+                            + "supports for the whole response")
+                    .isEqualTo(OLDER);
+        }
+
+        @Test
+        @DisplayName("plan statistics report the STALEST row too — the same decision, twice written")
+        void planStatisticsTakeTheOldest() throws SQLException {
+            refresh();
+            int stamped = ageOneRowOf("plan_snapshot");
+
+            assertThat(stamped).as("THE CONTROL — see the sibling test").isGreaterThanOrEqualTo(2);
+            assertThat(inTransaction(() -> plan(AggregationPolicy.LATEST)).computedAt())
+                    .isEqualTo(OLDER);
+        }
+
+        /**
+         * Every row {@link #NEWER}, then exactly one of them {@link #OLDER} — so a maximum returns
+         * {@code NEWER} and a minimum returns {@code OLDER}, and the two answers are different
+         * whichever row the plan happens to reach first.
+         *
+         * @return how many rows the table held, which is what makes the assertion able to fail
+         */
+        private int ageOneRowOf(String table) throws SQLException {
+            try (Connection connection = appConnection(ACME)) {
+                int rows;
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "UPDATE " + table + " SET updated_at = CAST(? AS timestamptz)")) {
+                    statement.setString(1, NEWER.toString());
+                    rows = statement.executeUpdate();
+                }
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "UPDATE " + table + " SET updated_at = CAST(? AS timestamptz)"
+                                + " WHERE ctid = (SELECT ctid FROM " + table + " LIMIT 1)")) {
+                    statement.setString(1, OLDER.toString());
+                    statement.executeUpdate();
+                }
+                return rows;
+            }
+        }
     }
 
     // =====================================================================

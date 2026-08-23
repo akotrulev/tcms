@@ -26,6 +26,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -814,6 +815,109 @@ class IngestionEndpointTest extends IntegrationTestBase {
 
             assertThat(missing.getResponse().getStatus()).isEqualTo(404);
             assertThat(missing.getResponse().getContentAsString()).isEmpty();
+        }
+    }
+
+    // =====================================================================
+    // The same-instant pair — wave 2's D8 fixture
+    // =====================================================================
+
+    /**
+     * Six jobs sharing <strong>one</strong> {@code created_at} — the fixture {@code IH-6} has been
+     * waiting for, and the only arrangement in which {@code findSummariesInProject}'s
+     * {@code j.id DESC} tiebreak decides anything.
+     *
+     * <h2>The boundary this crosses, and why a fixture that does not cross it is green</h2>
+     *
+     * <p>{@link History#theListIsSummaries()} posts two reports through the endpoint and reads them
+     * back newest first. Two posts a few milliseconds apart have <em>distinct</em>
+     * {@code created_at} values, so {@code ORDER BY j.createdAt DESC} decides the whole order on its
+     * own and the tiebreak beside it is never consulted. Deleting {@code j.id DESC} leaves that test
+     * — and every other read of this list — green. That is exactly the shape §179 {@code RS-M3}
+     * measured one module over: a comparator that reddens nothing because every pair the fixture
+     * chose was already in the asserted order without it.
+     *
+     * <p>The instant is written by <strong>SQL, not by racing the clock</strong>. A test that hoped
+     * two inserts would land in the same microsecond would pass or fail by machine speed, which is
+     * worse than no test: the one thing it must never do is go green because the tie did not happen.
+     * The rows are posted normally and then stamped with one literal value.
+     *
+     * <p>The ids ascend in insertion order and the required answer descends, so the two orders are
+     * opposites rather than merely different. A sort left to its own devices on six equal keys
+     * returns them in the order it read them, which is the answer this asserts against.
+     */
+    @Nested
+    @DisplayName("The same-instant pair — what makes the id tiebreak decide anything")
+    class SameInstant {
+
+        private static final Instant ONE_INSTANT = Instant.parse("2026-04-01T10:15:30.123456Z");
+
+        /** Ascending, and therefore the exact reverse of what the list must serve. */
+        private static final List<UUID> MATRIX_BUILD = List.of(
+                UUID.fromString("d7009000-0000-4000-8000-000000000001"),
+                UUID.fromString("d7009000-0000-4000-8000-000000000002"),
+                UUID.fromString("d7009000-0000-4000-8000-000000000003"),
+                UUID.fromString("d7009000-0000-4000-8000-000000000004"),
+                UUID.fromString("d7009000-0000-4000-8000-000000000005"),
+                UUID.fromString("d7009000-0000-4000-8000-000000000006"));
+
+        @Test
+        @DisplayName("six jobs posted at one instant come back in a total order, newest id first")
+        void theTiebreakDecides() throws Exception {
+            seedMatrixBuild();
+
+            JsonNode listed = body(get(LEAD, "/projects/" + BANKING + "/ingestions"));
+
+            assertThat(idsOf(listed))
+                    .as("createdAt cannot separate these six, so the whole order is the tiebreak's; "
+                            + "without it the list is whatever the plan produced and the row a "
+                            + "reader is looking at moves under their cursor between reloads")
+                    .containsExactlyElementsOf(MATRIX_BUILD.reversed());
+        }
+
+        @Test
+        @DisplayName("and the same list twice is the same list — the property the tiebreak buys")
+        void theOrderIsRepeatable() throws Exception {
+            seedMatrixBuild();
+
+            List<UUID> first = idsOf(body(get(LEAD, "/projects/" + BANKING + "/ingestions")));
+            List<UUID> second = idsOf(body(get(LEAD, "/projects/" + BANKING + "/ingestions")));
+
+            assertThat(second)
+                    .as("determinism is the claim; two reads of one unchanged table must agree")
+                    .isEqualTo(first);
+        }
+
+        /**
+         * Inserted ascending and then stamped, so the heap order the planner is free to return is
+         * the ASCENDING one — the opposite of the answer under test. A fixture that inserted them
+         * descending would be green with the tiebreak deleted.
+         */
+        private void seedMatrixBuild() throws SQLException {
+            try (Connection connection = appConnection(ACME)) {
+                for (int i = 0; i < MATRIX_BUILD.size(); i++) {
+                    try (var statement = connection.prepareStatement("""
+                            INSERT INTO ingestion_job
+                                (id, company_id, project_id, format, idempotency_key, status,
+                                 matched_count, unmatched_count, created_at)
+                            VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), 'JUNIT',
+                                    ?, 'COMPLETED', 0, 0, CAST(? AS timestamptz))
+                            """)) {
+                        statement.setString(1, MATRIX_BUILD.get(i).toString());
+                        statement.setString(2, ACME.toString());
+                        statement.setString(3, BANKING.toString());
+                        statement.setString(4, "ik-matrix-" + i);
+                        statement.setString(5, ONE_INSTANT.toString());
+                        statement.executeUpdate();
+                    }
+                }
+            }
+        }
+
+        private List<UUID> idsOf(JsonNode listed) {
+            List<UUID> ids = new ArrayList<>();
+            listed.forEach(job -> ids.add(UUID.fromString(job.get("id").asText())));
+            return ids;
         }
     }
 

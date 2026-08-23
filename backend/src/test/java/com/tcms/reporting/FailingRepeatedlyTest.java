@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.tcms.IntegrationTestBase;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectRepository;
+import com.tcms.repository.CaseHealthRecomputeService;
 import com.tcms.tenancy.Company;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.CompanyRepository;
@@ -102,6 +103,14 @@ class FailingRepeatedlyTest extends IntegrationTestBase {
 
     @Autowired
     private ExecutionFactRefreshService refresh;
+
+    /**
+     * {@code repository}'s tick, the second live writer of these rows. Injected here rather than
+     * driven through {@code CaseHealthRecomputeTest} because that class has no fact log, and
+     * {@code failing_repeatedly} is derived from one.
+     */
+    @Autowired
+    private CaseHealthRecomputeService recompute;
 
     @Autowired
     private CompanyRepository companies;
@@ -316,12 +325,119 @@ class FailingRepeatedlyTest extends IntegrationTestBase {
     }
 
     // =====================================================================
+    // Two LIVE writers — wave 2's D3 fixture
+    // =====================================================================
+
+    /**
+     * Both writers of a {@code case_health} row, run for real, in both orders.
+     *
+     * <h2>The boundary this crosses, and why {@link Boundaries#theOtherModulesSignalsSurvive()}
+     * does not</h2>
+     *
+     * <p>That test — and {@code CaseHealthRecomputeTest.otherSignalsAreNotClobbered}, which is the
+     * stronger of the two — establishes the sibling's columns <strong>by hand</strong>, with an
+     * {@code UPDATE}. That is enough to catch an {@code ON CONFLICT} set-list naming a column its
+     * statement does not compute, and it is the whole of what the queue's {@code D3} family has ever
+     * been able to observe. What it cannot observe is the thing the design is actually about: two
+     * jobs, on two schedules, in two modules, each deriving a value from evidence, writing the same
+     * row. A hand-set boolean has no writer to lose a race with, and a set-list that named every
+     * column would fail both tests for the same reason and tell you nothing about which job was
+     * running when.
+     *
+     * <p>So {@link #THRICE} is the subject and it is chosen, not convenient: its three failures are
+     * <em>old</em> — {@link #BASE} is months back — so it raises {@code failing_repeatedly}, which
+     * only {@code reporting.ExecutionSource} writes, <strong>and</strong> {@code long_unexecuted},
+     * {@code unlinked}, {@code orphaned} and {@code incomplete}, which only {@code repository}'s
+     * seven statements write. One row, two authors, no {@code UPDATE} anywhere in the test.
+     *
+     * <p>{@link #eachWriterAuthorsSomethingOfItsOwn()} is the control, and without it the two
+     * order tests would be assertions nobody has seen fail: a fixture where one of the two writers
+     * happens to raise nothing passes them both while proving neither.
+     */
+    @Nested
+    @DisplayName("Two live writers — both halves derived, neither hand-set")
+    class LiveWriters {
+
+        /** Only {@code reporting} computes this one. */
+        private static final String REPORTING_OWNED = "failing_repeatedly";
+
+        @Test
+        @DisplayName("THE CONTROL — each writer alone raises a signal the other cannot")
+        void eachWriterAuthorsSomethingOfItsOwn() {
+            refreshFor(ACME);
+            assertThat(signalsOf(ACME, THRICE))
+                    .as("reporting alone: its own column and nothing else on this row")
+                    .containsExactly(REPORTING_OWNED);
+
+            recomputeFor(ACME);
+            assertThat(repositoryOwned(signalsOf(ACME, THRICE)))
+                    .as("repository alone must raise something, or the two tests below cannot fail")
+                    .isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("reporting ticks, then repository: the derived failing_repeatedly survives")
+        void theRepositoryTickKeepsReportingsColumn() {
+            refreshFor(ACME);
+            recomputeFor(ACME);
+
+            assertThat(signalsOf(ACME, THRICE))
+                    .as("seven statements ran over a row another module had just authored; a "
+                            + "set-list naming a column it does not compute blanks work that was "
+                            + "correct, and presents an hour later as a defect in the innocent job")
+                    .contains(REPORTING_OWNED);
+        }
+
+        @Test
+        @DisplayName("repository ticks, then reporting: the derived repository signals survive")
+        void theReportingTickKeepsRepositorysColumns() {
+            recomputeFor(ACME);
+            List<String> mine = repositoryOwned(signalsOf(ACME, THRICE));
+
+            refreshFor(ACME);
+
+            assertThat(repositoryOwned(signalsOf(ACME, THRICE)))
+                    .as("the other direction, and the one no test in this repository has driven: "
+                            + "an EXCLUDED.* set-list here resets a worklist somebody is reading")
+                    .containsExactlyInAnyOrderElementsOf(mine);
+        }
+
+        @Test
+        @DisplayName("and ticking both twice more changes nothing — the two do not fight")
+        void theTwoConverge() {
+            refreshFor(ACME);
+            recomputeFor(ACME);
+            List<String> settled = signalsOf(ACME, THRICE);
+
+            refreshFor(ACME);
+            recomputeFor(ACME);
+            refreshFor(ACME);
+
+            assertThat(signalsOf(ACME, THRICE))
+                    .as("two schedulers running forever; a row that alternates between two answers "
+                            + "is a worklist whose contents depend on which job ran last")
+                    .containsExactlyInAnyOrderElementsOf(settled);
+        }
+
+        private List<String> repositoryOwned(List<String> raised) {
+            return raised.stream().filter(signal -> !REPORTING_OWNED.equals(signal)).toList();
+        }
+    }
+
+    // =====================================================================
     // Fixture plumbing
     // =====================================================================
 
     private void refreshFor(UUID companyId) {
         try (var ignored = CompanyContext.open(companyId)) {
             refresh.refresh();
+        }
+    }
+
+    /** The other module's whole tick — seven statements, one transaction, one GUC. */
+    private void recomputeFor(UUID companyId) {
+        try (var ignored = CompanyContext.open(companyId)) {
+            recompute.recompute();
         }
     }
 

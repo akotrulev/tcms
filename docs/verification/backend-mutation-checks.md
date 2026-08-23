@@ -458,12 +458,34 @@ Also owed on a real box: `EXPLAIN (ANALYZE)` on the step-suggestion query, to co
 ## Tests to write
 
 
-- **§101 — two rollup rows written a second apart**, so `computedAt`'s oldest-not-newest
+- ~~**§101 — two rollup rows written a second apart**, so `computedAt`'s oldest-not-newest
   decision becomes assertable. Row 13k predicts zero reds today: both services pick the minimum
   `updated_at` across the rows they used, and no fixture produces two distinct instants, so the
   choice is argued in javadoc and pinned by nothing. It matters because the page mixes rolled-up rows
   with a live tail, and the newest is a claim true of one row and false of the others — false in the
-  reassuring direction.
+  reassuring direction.~~
+  **→ WRITTEN, wave 2, 2026-08-23.** `RollupAgreementTest.TwoInstants` stamps the rollup rows with
+  two instants an hour apart by SQL and asserts the OLDER comes back, in both services. It carries
+  its own control — the row count, asserted `>= 2`, because over one row the minimum and the maximum
+  are the same number and the test could not fail. `13k` is measured against it below.
+
+**The three fixtures wave 2 shipped**, listed here because this is the section that owes them:
+
+- ~~**One two-project fixture, written once for the seam** — the row six sections have been asking
+  for (`R7-6`, `R8-7`, `CM-6`, `IN-11`, `§167 DL-3`, `§168 CV-3`, and every other `D1` member).~~
+  **→ WRITTEN, wave 2** as `reporting.SiblingProjectReadsTest`: one company, two projects, and every
+  absence paired with the same query bounded to the sibling's own project so an empty result is the
+  predicate's doing and not the fixture's. It closes `R7-6`, `R8-7` and `CM-6`; the `D1` members in
+  `documentation` and `execution` need the same fixture in their own packages and are still blind.
+- ~~**A same-instant pair**, so an `ORDER BY` that loses its id tiebreak is observable (`IH-6` and
+  the rest of `D8`).~~ **→ WRITTEN, wave 2** as `IngestionEndpointTest.SameInstant`: six jobs
+  stamped with one literal `created_at` by SQL — never by racing the clock — inserted in ascending
+  id order so the answer under test is the exact reverse of the order a sort left alone returns.
+- ~~**Two live writers on `case_health`**, both authoring from evidence rather than one of them
+  hand-set (`DR-5` and the rest of `D3`).~~ **→ WRITTEN, wave 2** as
+  `FailingRepeatedlyTest.LiveWriters`: `reporting`'s tick and `repository`'s tick, in both orders,
+  over a case whose old failures raise a column of each. Its control asserts each writer alone
+  raises something the other cannot.
 
 Each is a gap this pass measured rather than a guess. Numbered findings above give the reasoning.
 
