@@ -29,8 +29,13 @@ and the five registered gaps that turned out not to exist; `RUN RECORD — 2026-
 the 74 rows of the four scripted sweeps, eight findings, and seven registered gaps confirmed by
 measurement; `RUN RECORD — 2026-08-23, wave 2` covers the 30 rows of the three cross-cutting fixture
 families, **three fixtures added to the suite**, eight findings and five more registered gaps
-withdrawn. **Wave 2 is the committed stopping point** (run plan §9 decision 4): wave 3 is re-decided
-on what waves 1, S and 2 actually found. **Every wave set is derived, not hand-listed** — the
+withdrawn. **Wave 2 was the committed stopping point** (run plan §9 decision 4), and wave 3 has now been
+re-decided on what waves 1, S and 2 actually found: **`docs/plans/2026-08-23-wave-3-slimmed.md`**
+selects **113 of the 509** rows wave 3 would have held, admitted on each row's own text — the rows
+predicting GREEN (the class waves 1+2 withdrew ten registered gaps from), the rows that say they do
+not know, the cross-company and silent-data-loss consequences, and two probes into each section that
+has already produced a finding. The other 396 keep their ids and their `queued` status with no wave
+tag — a recorded deferral, not a truncation. **Every wave set is derived, not hand-listed** — the
 criteria are in `mutation-manifest.tsv`'s header and the `wave` column is authoritative. **Two sections govern what is owed before you
 start.** `DOCUMENTED GAPS` at the foot of this file
 holds the 44 rows retired from the run on 2026-08-22 (each keeping its id and naming what would
