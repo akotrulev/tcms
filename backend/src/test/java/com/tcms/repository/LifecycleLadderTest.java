@@ -22,10 +22,10 @@ import org.junit.jupiter.api.Test;
  * the <em>wiring</em> (that each caller passes its own {@code Keys} and the row's stored status)
  * while this one asserts the <em>rule</em>.
  *
- * <p>No Spring context and no database, for the reason the retired
- * {@code CaseSharedStepReferenceTest} gave: the rule
- * is a pure function of two enum values and a record, which is the whole point of it taking both
- * ends rather than looking anything up.
+ * <p>No Spring context and no database, for the reason
+ * <del>{@code CaseSharedStepReferenceTest}</del> gave before §239 deleted it with the shared-step
+ * library: the rule is a pure function of two enum values and a record, which is the whole point of
+ * it taking both ends rather than looking anything up.
  *
  * <h2>What §208 changed, and what this pins so it cannot drift back</h2>
  *
