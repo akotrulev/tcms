@@ -209,8 +209,14 @@ for (const pkg of SHIPPED) {
 
   const packed = pack(target, out);
   const named = join(out, `${pkg.file}-${release}.tgz`);
-  cpSync(packed, named);
-  rmSync(packed);
+  // For a bare-semver release npm's own filename IS the stable name — `@tcms/cli` at 0.9.0 packs
+  // as `tcms-cli-0.9.0.tgz` — and copying a file onto itself is ERR_FS_CP_EINVAL, not a no-op.
+  // Only a lab build (`g<sha>`, staged as `0.1.0+g<sha>`) actually needs the rename, which is why
+  // this held for every lab build and broke on the first dispatched version.
+  if (packed !== named) {
+    cpSync(packed, named);
+    rmSync(packed);
+  }
   // A SECOND COPY, not a symlink. The stable URL is the one every document hands out, and a
   // symlink survives neither `rsync -a` into a web root nor Caddy's file_server by default.
   cpSync(named, join(out, `${pkg.file}-latest.tgz`));
