@@ -624,19 +624,19 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §229 PM-13	§229 phase 1	ExecutionEndpointTest	W3	-		queued
 §227 PM-9	§228	CaseBulkEndpointTest	-	-		queued
 §227 PM-10	§228	CaseBulkEndpointTest	-	-		queued
-§227 PM-11	§228	ReviewGateTest	W3	-		queued
-§227 PM-12	§228	?	W3	-		queued
+§227 PM-11	§228	ReviewGateTest	W3	-	backend/src/main/java/com/tcms/repository/CaseStatusService.java	RUN:ZERO-AS-PREDICTED
+§227 PM-12	§228	?	W3	-	backend/src/main/java/com/tcms/repository/CaseStatusService.java	RUN:ZERO-AS-PREDICTED
 §227 PM-13	§228	CaseBulkEndpointTest	-	-		queued
 §227 PM-14	§228	CaseBulkEndpointTest	-	-		queued
 §227 PM-15	§228	CaseBulkEndpointTest	-	-		queued
 §227 PM-1	§227 phase 1	com.tcms.reporting.ReportEndpointTest	S	-	backend/src/main/java/com/tcms/reporting/ReportReadService.java	RUN:MATCH
 §227 PM-2	§227 phase 1	com.tcms.reporting.ReportEndpointTest	S	-	backend/src/main/java/com/tcms/reporting/ReportReadService.java	RUN:MATCH
-§227 PM-3	§227 phase 1	?	W3	-		queued
+§227 PM-3	§227 phase 1	?	W3	-	backend/src/main/java/com/tcms/reporting/ReportJobView.java	RUN:ZERO-AS-PREDICTED
 §227 PM-4	§227 phase 1	ReportEndpointTest	-	-		queued
 §227 PM-5	§227 phase 1	ReportJobPipelineTest	-	-		queued
 §227 PM-6	§227 phase 1	ReportJobPipelineTest	-	-		queued
-§227 PM-7	§227 phase 1	?	W3	-		queued
-§227 PM-8	§227 phase 1	?	W3	-		queued
+§227 PM-7	§227 phase 1	?	W3	-	backend/src/main/java/com/tcms/reporting/ReportJobRunner.java	RUN:MORE
+§227 PM-8	§227 phase 1	?	W3	-	backend/src/main/java/com/tcms/reporting/ReportingProperties.java	RUN:ZERO-AS-PREDICTED
 §225 PM-1	§225	RoleGrantEndpointTest	-	-		queued
 §225 PM-2	§225	?	W3	-		queued
 §225 PM-3	§225	com.tcms.schema.RoleScopeShapeTest	S	-	backend/src/main/resources/db/migration/V56__role_scope_agrees_with_the_grant_shape.sql	RUN:MATCH
@@ -701,18 +701,18 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §240 AR-M3	§240	?	-	-		queued
 §240 AR-M4	§240	com.tcms.execution.PlanLifecycleEndpointTest	S	-	backend/src/main/java/com/tcms/execution/PlanArchiveService.java	RUN:ZERO-UNEXPECTED
 §240 RF-M1	§240	?	-	-		queued
-§240 RF-M2	§240	?	W3	-		queued
+§240 RF-M2	§240	?	W3	-	backend/src/main/java/com/tcms/reporting/ReportHeaders.java	RUN:ZERO-AS-PREDICTED
 §240 RF-M3	§240	?	-	-		queued
 §240 RF-M4	§240	?	-	-		queued
 §241 OC-1	§240	com.tcms.identity.OrgChartEndpointTest	W1	-	backend/src/main/java/com/tcms/identity/OrgChartService.java	RUN:MATCH
-§241 OC-1b	§240	?	W3	-		queued
+§241 OC-1b	§240	?	W3	-	backend/src/main/java/com/tcms/identity/OrgChartService.java	RUN:ZERO-AS-PREDICTED
 §241 OC-2	§240	?	-	-		queued
-§241 OC-3	§240	?	W3	-		queued
+§241 OC-3	§240	?	W3	-	backend/src/main/java/com/tcms/identity/RoleAssignmentRepository.java	RUN:ZERO-AS-PREDICTED
 §241 OC-4	§240	com.tcms.tenancy.RepositoryTransactionTest	W1	-	backend/src/main/java/com/tcms/identity/RoleAssignmentRepository.java	RUN:MATCH
 §241 OC-5	§240	EffectiveRoleNamesTest	-	-		queued
 §241 OC-6	§240	?	-	-		queued
-§241 OC-7	§240	?	W3	-		queued
-§241 OC-8	§240	?	W3	-		queued
+§241 OC-7	§240	?	W3	-	backend/src/main/java/com/tcms/identity/IdentityProjectAccess.java	RUN:ZERO-AS-PREDICTED
+§241 OC-8	§240	?	W3	-	backend/src/main/java/com/tcms/identity/OrgChartService.java backend/src/main/java/com/tcms/identity/RoleAssignmentRepository.java	RUN:ZERO-AS-PREDICTED
 §241 IX-1	§241 amendment (2026-08-17)	com.tcms.tenancy.SchemaConventionTest,com.tcms.schema.SchemaCommentTest,com.tcms.identity.OrgChartEndpointTest,com.tcms.identity.PermissionEvaluatorTest	S	-	backend/src/main/resources/db/migration/V67__team_membership_answers_which_teams_a_person_is_in.sql	RUN:ZERO-AS-PREDICTED
 §242 LG-M1	§242 amendment (2026-08-18)	?	-	-		queued
 §242 LG-M2	§242 amendment (2026-08-18)	com.tcms.identity.AuditLogReadTest	2	-	backend/src/main/java/com/tcms/tenancy/AuditEventRepository.java	RUN:ZERO-UNEXPECTED
@@ -750,18 +750,18 @@ CE-M3	§161	com.tcms.contract.ContractEnumTest	S	-	backend/src/test/java/com/tcm
 §244 ED-M8	§244 amendment (2026-08-22)	ExecutionDurationTest	-	-		queued
 §244 ED-M9	§244 amendment (2026-08-22)	ExecutionDurationTest	-	-		queued
 §246 CE-M1	§246	ExportCompanyTest	W3	-		queued
-§246 CE-M2	§246	?	W3	-		queued
+§246 CE-M2	§246	?	W3	-	backend/src/main/java/com/tcms/provisioning/ExportCompanyService.java	RUN:ZERO-AS-PREDICTED
 §246 CE-M3	§246	ExportCompanyTest	-	-		queued
 §246 CE-M4	§246	com.tcms.provisioning.ExportRedactionSweepTest,com.tcms.provisioning.ExportCompanyTest	S	-	backend/src/main/java/com/tcms/provisioning/ExportRedactions.java	RUN:MORE
 §246 CE-M5	§246	com.tcms.provisioning.ExportRedactionSweepTest	W1	-	backend/src/main/resources/db/migration/V68__runs_can_be_scheduled.sql	RUN:MATCH
 §246 CE-M6	§246	ExportTablesTest	-	-		queued
 §246 CE-M7	§246	?	-	-		queued
 §246 CE-M8	§246	ExportCompanyTest	W3	-		queued
-§246 CE-M9	§246	?	W3	-		queued
-§246 CE-M10	§246	?	W3	-		queued
-§246 CE-M11	§246	ExportCompanyTest	W3	-		queued
+§246 CE-M9	§246	?	W3	-	backend/src/main/java/com/tcms/provisioning/ExportCompanyService.java	RUN:MORE
+§246 CE-M10	§246	?	W3	-	backend/src/main/java/com/tcms/provisioning/ExportCompanyService.java	RUN:ZERO-AS-PREDICTED
+§246 CE-M11	§246	ExportCompanyTest	W3	-	backend/src/main/java/com/tcms/provisioning/ExportCompanyService.java	RUN:MORE
 §246 CE-M12	§246	ExportTablesTest	-	-		queued
-§246 CE-M13	§246	?	W3	-		queued
+§246 CE-M13	§246	?	W3	-	backend/src/main/java/com/tcms/provisioning/ExportCompanyService.java	RUN:ZERO-AS-PREDICTED
 §245 BA-M1	§245	ExecutionBulkAssignTest	-	-		queued
 §245 BA-M2	§245	com.tcms.execution.ExecutionBulkAssignTest	W1	-	backend/src/main/java/com/tcms/execution/ExecutionBulkAssignService.java	RUN:MATCH
 §245 BA-M3	§245	ExecutionBulkAssignTest	-	-		queued
