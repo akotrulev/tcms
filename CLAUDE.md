@@ -99,6 +99,13 @@ npm run build                     # THE gate: tsc over source+tests, then emit. 
                                   # client → cli → mcp.
 npm run lint --workspaces         # oxlint, 0 warnings
 npm run test:run --workspaces     # 341 tests (130 client / 82 cli / 129 mcp), ~1s — CI runs these
+npm run pack:release -- --version 0.0.0 --out /tmp/rel
+                                  # THE TARBALLS USERS INSTALL. No registry holds these packages —
+                                  # the instance serves them at /downloads (§251,
+                                  # docs/specs/client-distribution.md). It BUNDLES @tcms/client,
+                                  # which no registry could resolve, and install-verifies BOTH
+                                  # `npm i` and `npm i -g`: the two lay the tree out differently
+                                  # and have already disagreed. CI runs this on every push.
 cd client && npm run gen:api      # THE SECOND COPY of schema.d.ts. Regenerate BOTH after any
                                   # openapi.yaml change; schemaFreshness.test.ts fails otherwise.
 node cli/dist/main.js help        # TCMS_URL + TCMS_TOKEN drive it

@@ -3337,3 +3337,25 @@ No row here needs a fixture the pass does not already author, with one exception
 | `§250 AR-7` | Compare, in **both** light and dark themes: a user's ACTIVE/inactive dot (Teams), an overdue card and a CRITICAL/HIGH priority stripe (Board), a stale-figures caption and a trend delta (Plan statistics), a live API token, the automation share bar (Dashboard), and requirement coverage (Docs) | All read as *semantic* colour — success / warning / danger — and none of them borrows the **test-result** palette (`--color-passed` / `--color-failed` / `--color-blocked`), which now means a test outcome and nothing else. Check the run screens still look exactly as they did: those legitimately keep the result palette and must not have moved. |
 | `§250 AR-8` | Delete a plan, a case, a suite and a user; each time reopen the same dialog after a **refused** attempt | The previous refusal is gone every time. The ten dialogs' reset effects were rewritten in §250 to depend on the mutation's bound `reset` rather than suppress a lint rule that never ran; this row is what proves the rewrite kept the behaviour. |
 | `§250 AR-9` | Rename a case, then open `/search` and search for its **old** title, then its new one | The stale hit is gone. `keys.caseSearch` sits outside `['projects', …]` on purpose and consequently had **no** invalidation at all before §250 — a renamed, retired or deleted case stayed in a held result indefinitely. |
+
+---
+
+## §251 — the downloads page and the two install paths
+
+**Not a lane in the thirteen, and deliberately outside them.** Every lane above needs one of the six
+accounts and a fixture the pass authors; these rows need **no session at all** — that is the point
+of them, because npm cannot present a credential. They also cannot be driven until a release has
+been dispatched: `/downloads` does not exist on any box until the next deploy from master publishes
+it. Run them **first thing after that deploy**, before the lanes, because a failure here is a failure
+for every user of the instance and takes a redeploy to fix.
+
+Rows 4 and 5 are shell, not browser. They are here rather than in the mutation queue because they
+verify the same artifact as rows 1–3 and splitting them across two files is how one half gets run.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§251 D-1` | Open `https://<host>/downloads/` in both themes | The page renders, **filled in with the host you are actually on** — every `https://your-tcms-host` is replaced by `location.origin` at render. A page still showing the placeholder means the inline script did not run and every command on it is wrong. Read the version line: it is the release now deployed. |
+| `§251 D-2` | `curl -sI https://<host>/downloads/tcms-cli-latest.tgz`, then `curl -sI https://<host>/downloads/nonexistent.tgz` | The first is **200 with `application/gzip`** and `Cache-Control: no-cache`. The second is a **404** — *not* a 200 with `text/html`, which is the SPA catch-all answering and is what makes npm report an invalid gzip header on a file that is really a web page. **Check the content-type before believing either.** |
+| `§251 D-3` | `curl -s https://<host>/downloads/SHA256SUMS`, then `shasum -a 256` the tarball you downloaded | The digests match, and the file lists four tarballs: `-latest` and the version-pinned copy of each tool. |
+| `§251 D-4` | On a machine with **no checkout of this repository**: `npm install -g https://<host>/downloads/tcms-cli-latest.tgz`, then `TCMS_URL=… TCMS_TOKEN=… tcms whoami` | The install completes, and `tcms whoami` names the token's user and what it can reach. **Silence with exit 0 is the §251 defect returning** — that is what the entry guard did before `isProcessEntryPoint`, and it looks exactly like a successful command that had nothing to say. Then repeat the install with `--offline`: it must still succeed, because the tarball vendors its whole closure. |
+| `§251 D-5` | Install `tcms-mcp-latest.tgz` the same way and name `tcms-mcp` in a real MCP host's config with `TCMS_URL`/`TCMS_TOKEN`; separately, point a host at `https://<host>/mcp` with the token as the bearer | **Both shapes list tools, and the same ones** — the tool list is built per session from the caller's credential (§140), so a difference between the two is a session-construction defect and not a transport one. The hosted half needs `COMPOSE_PROFILES=mcp` on the box; if the container is not running, **record that rather than filing a failure** — `docs/specs/client-distribution.md` has the one-line fix and it is an operator decision, not a defect. |

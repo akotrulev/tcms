@@ -2,8 +2,11 @@
 /**
  * The entry point: two transports, one server.
  *
- * **HTTP is the deployment** (WIP plan §4). **Stdio is the developer's loop** — `npx @tcms/mcp`
- * in a local host config, one credential from the environment, nothing to deploy. Both build the
+ * **HTTP is the deployment** (WIP plan §4). ~~**Stdio is the developer's loop** — `npx @tcms/mcp`.~~
+ * → **corrected 2026-08-23**: stdio is a SHIPPED shape, not just a developer's loop, and the
+ * channel was never npx. Users install it from the instance's own /downloads
+ * (`docs/specs/client-distribution.md`) and name `tcms-mcp` in a local host config; one credential
+ * from the environment, nothing to deploy. Both build the
  * same server over the same session, so a tool that behaves differently in one of them is a
  * defect rather than a mode.
  *
@@ -20,6 +23,7 @@
  * goes to stderr for that reason, including the ones that look like output.
  */
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { isProcessEntryPoint } from '@tcms/client';
 import { parseArgs } from 'node:util';
 
 import { createHost, BIND_DEFAULT, PATH_DEFAULT } from './http.js';
@@ -131,7 +135,9 @@ Environment:
   ${ENV_TOKEN}       an API token — stdio only
   ${ENV_PROJECT}     bind every session to one project, when a token can see several`;
 
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+// See `isProcessEntryPoint`: the string comparison this used to spell is false for every
+// `npm install -g` copy, because the bin is a symlink and import.meta.url is already resolved.
+if (isProcessEntryPoint(import.meta.url)) {
   main(process.argv.slice(2))
     .then((code) => { if (code !== EXIT.ok) process.exitCode = code; })
     .catch((error: unknown) => {

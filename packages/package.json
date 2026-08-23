@@ -13,6 +13,7 @@
   "scripts": {
     "build": "npm run build -w @tcms/client && npm run build -w @tcms/cli && npm run build -w @tcms/mcp",
     "test:run": "npm run test:run --workspaces --if-present",
+    "pack:release": "node scripts/pack-release.mjs",
     "lint": "oxlint"
   },
   "devDependencies": {

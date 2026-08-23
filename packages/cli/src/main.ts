@@ -3,13 +3,22 @@
  * The CLI entry point: parse, dispatch, and turn a failure into an exit code and one sentence.
  *
  * Argument parsing is Node's own `util.parseArgs`, so this package has **no dependencies beyond
- * `@tcms/client`**. That is worth a line: it is published as `npx @tcms/cli`, which means every
- * dependency is something a user's CI fetches and executes on the strength of this repo's say-so,
- * and the argument parser is the one place where taking a package would buy the least.
+ * `@tcms/client`**. That is worth a line: ~~it is published as `npx @tcms/cli`~~ — it is served by
+ * the instance as a tarball that VENDORS its whole dependency closure (2026-08-23,
+ * `docs/specs/client-distribution.md`), which makes the argument stronger rather than weaker. Every
+ * dependency is bytes this repository ships to a user and their agent executes on our say-so, and
+ * they no longer float a patch version at install time either. The argument parser is the one place
+ * where taking a package would buy the least.
  */
 import { parseArgs } from 'node:util';
 
-import { TcmsApiError, TcmsClientError, TcmsTimeoutError, isAbort } from '@tcms/client';
+import {
+  TcmsApiError,
+  TcmsClientError,
+  TcmsTimeoutError,
+  isAbort,
+  isProcessEntryPoint,
+} from '@tcms/client';
 
 import { COMMANDS, UsageError, findCommand } from './commands.js';
 import { connect, requestOptions } from './config.js';
@@ -186,8 +195,10 @@ function usage(out: Output): void {
 }
 
 // `import.meta.main` is Node 24+; this package targets 22.12, so the entry check is the older
-// spelling. Guarded at all so `main` can be imported by the tests without running.
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+// spelling. Guarded at all so `main` can be imported by the tests without running, and shared
+// with @tcms/mcp because the obvious spelling of it is wrong for `npm install -g` — see
+// `isProcessEntryPoint`.
+if (isProcessEntryPoint(import.meta.url)) {
   main(process.argv.slice(2))
     .then((code) => { process.exitCode = code; })
     .catch((error: unknown) => {

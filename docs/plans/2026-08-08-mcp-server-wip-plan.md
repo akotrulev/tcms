@@ -345,8 +345,14 @@ synthetic actor — so "who changed this test case" stops having an answer.
 
 ## 4. Deployment **[SETTLED]**
 
-**CLI:** published as `npx @tcms/cli`. Nothing to deploy. Do not reuse `tcms.jar` — that is an
-operator tool with database access; this is a REST client that must not require a JRE.
+**CLI:** ~~published as `npx @tcms/cli`. Nothing to deploy.~~ → **superseded 2026-08-23**, and the
+second sentence is the one that was wrong. It was never published to any registry, so there was no
+way for a user without access to this repository to obtain it at all — and "nothing to deploy" is
+what made that invisible for two weeks: no job was missing, no step failed. It is now built by
+`deploy.yml`'s `packs` job and **served by the instance** at `/downloads`, which also gets the
+version pairing right by construction. See `docs/specs/client-distribution.md`. The rest stands: do
+not reuse `tcms.jar` — that is an operator tool with database access; this is a REST client that
+must not require a JRE.
 
 **MCP server:** remote HTTPS. Local stdio cannot be reached by the Messages API connector
 (*"Local STDIO servers cannot be connected directly"*), and Anthropic recommends HTTP as the

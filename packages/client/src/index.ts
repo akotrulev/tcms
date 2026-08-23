@@ -50,6 +50,8 @@ export { caseInputFrom, planInputFrom, suiteInputFrom } from './core/rewrite.js'
 
 export { REQUIRED_CASE_FIELDS, requireProposableCase } from './core/proposal.js';
 
+export { isProcessEntryPoint } from './core/entrypoint.js';
+
 export { describeReach, describeRefusal } from './core/refusal.js';
 export type { RefusalCopy, RefusedOperation } from './core/refusal.js';
 

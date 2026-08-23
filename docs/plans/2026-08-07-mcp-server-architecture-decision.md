@@ -164,7 +164,9 @@ Same architecture as B, in the language the frontend already uses.
 **For:** everything in B's "for" column, plus **no third language**. The repo already runs npm, and
 already generates typed API bindings from `openapi.yaml` via `npm run gen:api` — so the MCP
 server's calls into TCMS are typed against the same contract the SPA uses, and a contract change
-breaks its build the same way it breaks the SPA's. Ships as `npx @tcms/mcp`.
+breaks its build the same way it breaks the SPA's. ~~Ships as `npx @tcms/mcp`.~~ → **superseded
+2026-08-23**: it ships as a GHCR image for the hosted endpoint, and as a tarball the instance serves
+at `/downloads` for the stdio shape — `docs/specs/client-distribution.md`.
 
 **Against:** the TypeScript FastMCP is the counterpart, not the flagship — expect a thinner feature
 set and less documentation than B. Still breaks "one deployable." Still capped at the REST surface.
@@ -186,7 +188,10 @@ Three reasons C over B:
    is the exact defect class that killed the mock layer (§52, §81, §98).
 2. **No third stack.** Two build systems is already the documented shape of this repo. Three is a
    new standing cost on every gate, every CI change, and every onboarding pass.
-3. **`npx` distribution.** stdio-first means the server is a process the *user's* agent spawns, and
+3. **`npx` distribution.** *(The reasoning below still holds; the channel does not — see the
+   strikethrough above. Nothing here depended on the registry being npmjs.org, only on the artifact
+   being client-side and small, which the served tarball also is.)* stdio-first means the server is
+   a process the *user's* agent spawns, and
    the `api_token` is a *user's* credential bound to one user and one project. The MCP server is
    therefore naturally a client-side artifact, not part of the deployed system — which is an
    argument for a sidecar generally, and for the one that ships over npm specifically.

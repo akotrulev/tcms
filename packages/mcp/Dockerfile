@@ -10,7 +10,11 @@
 # @tcms/client through the root's `node_modules`, and a context rooted at `mcp/` cannot see
 # either the client's sources or the lockfile that pins both. The file lives with the package it
 # builds rather than at the workspace root because the root builds three packages and only one of
-# them is ever containerized — @tcms/cli is `npx`-published (WIP plan §4: *"nothing to deploy"*).
+# them is ever containerized. ~~@tcms/cli is `npx`-published (WIP plan §4: *"nothing to deploy"*).~~
+# → **superseded 2026-08-23**: nothing was ever published to a registry. @tcms/cli — and @tcms/mcp
+# for the stdio shape — are npm tarballs built by deploy.yml's `packs` job and served by the
+# instance at /downloads (`docs/specs/client-distribution.md`). This image is still the only
+# CONTAINER, which is what decides the context question above; it is no longer the only artifact.
 #
 # WHAT THIS PROCESS IS, because it decides everything below: one long-running HTTP server that
 # holds NO credential of its own. Under `--http` the bearer is each request's `Authorization`
