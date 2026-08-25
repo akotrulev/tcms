@@ -27,6 +27,7 @@
  * server at accept exactly as it is here.
  */
 import { TcmsClientError } from '../errors.js';
+import { CASE_SHAPE, fieldsFor, isRequired } from './shapes.js';
 
 /**
  * What `CaseEdit.validate` demands unconditionally, on create and on edit alike.
@@ -35,12 +36,9 @@ import { TcmsClientError } from '../errors.js';
  * for AUTOMATED, `notAutomatableReason` for NOT_AUTOMATABLE — are checked below rather than
  * listed here, because each is required only given a value of another field.
  */
-export const REQUIRED_CASE_FIELDS = [
-  'title',
-  'stepFormat',
-  'priority',
-  'automationStatus',
-] as const;
+export const REQUIRED_CASE_FIELDS: readonly string[] = fieldsFor(CASE_SHAPE, 'propose', 'body')
+  .filter((field) => field.required === 'always')
+  .map((field) => field.name);
 
 /**
  * Refuses a proposal whose case could not be accepted, naming every missing field at once.
@@ -52,35 +50,25 @@ export const REQUIRED_CASE_FIELDS = [
  * @param source   how to name it in the message — the CLI's `--file`, the MCP tool's `testCase`
  */
 export function requireProposableCase(testCase: Record<string, unknown>, source: string): void {
-  const missing: string[] = REQUIRED_CASE_FIELDS.filter(
-    (field) => testCase[field] === undefined || testCase[field] === null || testCase[field] === '',
-  );
+  /*
+    Derived from the catalogue since §253 rather than listed here, so the field set, the enums and
+    the conditional rules have one home. What is NOT delegated is the message: it is the only
+    feedback the caller gets, it is read and retried against, and `violationsOfShape` composes a
+    list rather than the sentence below.
 
-  const format = testCase['stepFormat'];
-  // THE NEXT TWO ARE STRICTER THAN THE SERVER SINCE §200, and that is now a decision rather than
-  // parity. The create path defers the procedure — a case may exist before anybody has written how
-  // to run it — so accepting a stepless proposal would succeed and produce a DRAFT stub.
-  //
-  // They stay because the deferral was granted to a different act. A person typing a title into a
-  // plan they are writing has said what the case is FOR and will say how it runs later; a model
-  // filing a proposal has been asked for the case itself, and one with no procedure is an empty
-  // proposal whose acceptance gains the reviewer nothing they could not have got by typing the
-  // title. The refusal is also the only feedback the model gets — see the message below, which is
-  // what a caller reads and retries against.
-  //
-  // Non-empty, not merely present: `CaseEdit` reads null and `[]` alike as "nothing was sent".
-  if (format === 'STRUCTURED' && !(Array.isArray(testCase['steps']) && testCase['steps'].length > 0)) {
-    missing.push('steps');
-  }
-  if (format === 'GHERKIN' && !testCase['gherkinSource']) {
-    missing.push('gherkinSource');
-  }
-  if (testCase['automationStatus'] === 'AUTOMATED' && !testCase['automationKey']) {
-    missing.push('automationKey');
-  }
-  if (testCase['automationStatus'] === 'NOT_AUTOMATABLE' && !testCase['notAutomatableReason']) {
-    missing.push('notAutomatableReason');
-  }
+    Two of the checks are stricter than the server and stay so — see the header. The catalogue
+    carries that as `steps` being `required: { when: 'stepFormat', is: ['STRUCTURED'] }`, which is
+    what the create path would defer and both non-SPA clients will not.
+  */
+  const missing = fieldsFor(CASE_SHAPE, 'propose', 'body')
+    .filter((field) => isRequired(field, testCase))
+    .filter((field) => {
+      const value = testCase[field.name];
+      // Non-empty, not merely present: `CaseEdit` reads null and `[]` alike as "nothing was sent".
+      return value === undefined || value === null || value === ''
+        || (Array.isArray(value) && value.length === 0);
+    })
+    .map((field) => field.name);
 
   if (missing.length === 0) return;
 

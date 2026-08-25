@@ -121,9 +121,17 @@ export interface ActionSpec {
   readonly name: string;
   readonly kind: ActionKind;
   readonly permission: string;
-  /** False when this adapter has no such command — see `EXPOSURE` in the conformance check. */
+  /** False when this adapter has no such command — see `UNOFFERED` in the conformance check. */
   readonly mcp: boolean;
   readonly cli: boolean;
+  /**
+   * How the CLI spells this action's fields: as flags, or as the JSON body of `--file`.
+   *
+   * Recorded because printing the wrong one is actively misleading — `tcms case propose` takes
+   * `--file` and no per-field flag, so a help screen listing `--title` names an option that does
+   * not exist. The MCP has no equivalent split: every field is a key of one JSON argument there.
+   */
+  readonly cliSpelling?: 'flags' | 'file';
   readonly describe: string;
 }
 
@@ -420,6 +428,7 @@ export const CASE_SHAPE: EntityShape = {
       permission: 'case:create',
       mcp: true,
       cli: true,
+      cliSpelling: 'file',
       describe:
         'Files a GENERATED case for a person to accept. It does not create a test case, and '
         + 'nothing on either surface can: a credential cannot accept its own proposal.',
@@ -430,6 +439,7 @@ export const CASE_SHAPE: EntityShape = {
       permission: 'case:edit',
       mcp: true,
       cli: true,
+      cliSpelling: 'flags',
       describe: 'Changes a case that already exists.',
     },
     {
@@ -487,6 +497,19 @@ export function fieldsFor(
 }
 
 /**
+ * Whether an action's payload is validated as a whole, so its required fields bind the caller.
+ *
+ * A `create` assembles the whole object and every unconditional field must be in it. An `edit`
+ * does **not**: both adapters read the case and send what it already had for anything the caller
+ * did not name (`core/rewrite.ts` — the PATCH is not partial, so an omitted field would otherwise
+ * be CLEARED). So marking `title` as required on an edit would be false, and it is the kind of
+ * false that makes a person pass a field they did not want to change.
+ */
+export function bindsRequired(shape: EntityShape, action: string): boolean {
+  return shape.actions.find((candidate) => candidate.name === action)?.kind !== 'edit';
+}
+
+/**
  * Whether a field must be present, given what the caller has already filled in.
  *
  * Answers `false` for a conditional whose governing field is absent, which is the honest reading:
@@ -520,7 +543,9 @@ export function jsonSchemaFor(
   scope: FieldScope = 'all',
 ): Record<string, unknown> {
   const fields = fieldsFor(shape, action, scope);
-  const required = fields.filter((field) => field.required === 'always').map((field) => field.name);
+  const required = bindsRequired(shape, action)
+    ? fields.filter((field) => field.required === 'always').map((field) => field.name)
+    : [];
 
   return {
     type: 'object',
@@ -627,34 +652,75 @@ export function optionSpecFor(
   return { ...spec, ...(kind ? mechanicsFor(kind) : {}) };
 }
 
-/** The `--help` body: every flag, whether it is required, and what it takes. */
+/**
+ * The `--help` body — every field, whether it is required, and what it takes.
+ *
+ * Two spellings, because the CLI has two. A `flags` action lists `--kebab-case` options and must
+ * leave out the object arrays, which argv cannot carry at all; a `file` action lists JSON keys and
+ * must put them back in, since a body is the one place `steps` can be written. Rendering one
+ * spelling for both is how a help screen ends up naming options that do not exist.
+ */
 export function usageFor(shape: EntityShape, action: string): string {
-  const lines = fieldsFor(shape, action)
-    .filter((field) => field.type !== 'object[]')
-    .map((field) => {
-      const marks = [
-        field.required === 'always' ? 'required' : undefined,
-        field.required && field.required !== 'always'
-          ? `required when --${kebab(field.required.when)} is ${field.required.is.join(' or ')}`
-          : undefined,
-        field.set ? 'complete set' : undefined,
-        field.enum ? field.enum.join(' | ') : undefined,
-        field.keyExample ? `e.g. ${field.keyExample}` : undefined,
-      ].filter(Boolean);
+  const spelling = shape.actions.find((candidate) => candidate.name === action)?.cliSpelling
+    ?? 'flags';
+  const asFile = spelling === 'file';
 
-      return `  --${flagOf(field)}${field.cli?.multiple ? ' (repeatable)' : ''}`
-        + `\n      ${field.describe}`
-        + (marks.length > 0 ? `\n      [${marks.join('; ')}]` : '')
-        + (field.cli?.negate ? `\n      --${field.cli.negate} clears it.` : '');
-    });
+  /*
+    A `file` action's BODY keys are the entity's own fields; its wrapper fields stay flags. `tcms
+    case propose` is exactly this — `--file` carries the `TestCaseInput` and `--verdict` rides
+    beside it, because a claim about whether the case was checked is not part of the case. Listing
+    `verdict` as a body key would have a caller put it where the endpoint ignores it.
+  */
+  const fields = fieldsFor(shape, action, asFile ? 'body' : 'all')
+    .filter((field) => asFile || field.type !== 'object[]');
 
-  const objects = fieldsFor(shape, action).filter((field) => field.type === 'object[]');
-  const viaFile = objects.length > 0
-    ? `\n\n${objects.map((field) => `  ${field.name}`).join(', ')} cannot be spelled in argv. `
-      + 'Pass them in the --file body.'
-    : '';
+  const lines = fields.map((field) => {
+    const name = asFile ? field.name : `--${flagOf(field)}`;
+    const binds = bindsRequired(shape, action);
+    const marks = [
+      binds && field.required === 'always' ? 'required' : undefined,
+      binds && field.required && field.required !== 'always'
+        ? `required when ${asFile ? field.required.when : `--${kebab(field.required.when)}`} `
+          + `is ${field.required.is.join(' or ')}`
+        : undefined,
+      field.set ? 'complete set — omit to leave alone, [] to clear' : undefined,
+      field.enum ? field.enum.join(' | ') : undefined,
+      field.keyExample ? `e.g. ${field.keyExample}` : undefined,
+      asFile && field.fields
+        ? `each: ${field.fields.map((inner) => inner.name).join(', ')}`
+        : undefined,
+    ].filter(Boolean);
 
-  return `${shape.title} — ${action}\n\n${lines.join('\n')}${viaFile}`;
+    return `  ${name}${!asFile && field.cli?.multiple ? ' (repeatable)' : ''}`
+      + `\n      ${field.describe}`
+      + (marks.length > 0 ? `\n      [${marks.join('; ')}]` : '')
+      + (!asFile && field.cli?.negate ? `\n      --${field.cli.negate} clears it.` : '');
+  });
+
+  const excluded = asFile
+    ? ''
+    : `\n\n${fieldsFor(shape, action).filter((field) => field.type === 'object[]')
+      .map((field) => `  ${field.name}`).join(', ')} cannot be spelled in argv. `
+      + 'Pass them in the --file body.';
+
+  const objects = fieldsFor(shape, action).some((field) => field.type === 'object[]');
+  const how = asFile ? ' (JSON keys in the --file body)' : ' (flags)';
+
+  const beside = asFile
+    ? fieldsFor(shape, action, 'wrapper').map((field) =>
+      `  --${flagOf(field)}\n      ${field.describe}`
+        + (field.enum ? `\n      [${field.enum.join(' | ')}]` : ''))
+    : [];
+
+  const note = bindsRequired(shape, action)
+    ? ''
+    : '\n\nNothing here is required: anything you do not name is read from the current row and '
+      + 'sent back unchanged. Name at least one field.';
+
+  return `${shape.title} — ${action}${how}\n\n${lines.join('\n')}`
+    + (objects && !asFile ? excluded : '')
+    + (beside.length > 0 ? `\n\nFlags beside --file:\n${beside.join('\n')}` : '')
+    + note;
 }
 
 /**
@@ -763,12 +829,13 @@ export function violationsOfShape(
 ): string[] {
   const problems: string[] = [];
 
+  const binds = bindsRequired(shape, action);
   for (const field of fieldsFor(shape, action)) {
     const value = payload[field.name];
     const empty = value === undefined || value === null || value === ''
       || (Array.isArray(value) && value.length === 0);
 
-    if (isRequired(field, payload) && empty) {
+    if (binds && isRequired(field, payload) && empty) {
       problems.push(
         field.required === 'always'
           ? field.name

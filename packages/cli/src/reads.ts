@@ -9,11 +9,22 @@
  * injected sink. Nothing here builds a URL, generates a key, or decides what a refusal may say —
  * those are `@tcms/client`'s, once, which is the entire reason that package exists.
  */
-import { clampPageSize, resolveId, resolveProject } from '@tcms/client';
+import {
+  SHAPES,
+  clampPageSize,
+  guideFor,
+  resolveId,
+  resolveProject,
+  shapeOf,
+  templateFor,
+  usageFor,
+} from '@tcms/client';
 
 import {
+  UsageError,
   all,
   first,
+  flag,
   number,
   projectOf,
   requireArg,
@@ -486,8 +497,84 @@ const docShow: Command = {
   },
 };
 
+/**
+ * `tcms format` — the authoring format at a terminal, and the CLI half of `tcms_shape`.
+ *
+ * It is filed with the reads and it reads **nothing**: no project, no token, no request. That is
+ * worth stating because every other command here needs at least a token, and this one is usable
+ * before a person has one — which is when somebody writing their first `--file` body needs it.
+ *
+ * The long form is behind a flag rather than being the default. The template plus the flag list is
+ * what a person wants at the moment they are assembling a command; the guide is four screens of
+ * prose about attachment ids and complete-set semantics, and printing it every time would train
+ * people to pipe this through `head`.
+ */
+const format: Command = {
+  name: 'format',
+  summary: 'The fields and rules for a thing you are about to write',
+  offline: true,
+  usage:
+    'tcms format [ENTITY] [--long]\n\n'
+    + '  --long\n      The full guide, including the pitfalls that cost a round trip.\n'
+    + '  --json\n      The template alone, ready to fill in and pass to --file.',
+  options: { long: { type: 'boolean' } },
+  run: async ({ out, json, args, options }) => {
+    const requested = args[0];
+
+    if (!requested) {
+      for (const entity of Object.values(SHAPES)) {
+        out.line(`${entity.entity} — ${entity.title}`);
+        for (const action of entity.actions) {
+          // The adapter columns are the point: an action the CLI does not expose is one a person
+          // would otherwise keep looking for in `--help`.
+          const where = [action.cli ? 'cli' : undefined, action.mcp ? 'mcp' : undefined]
+            .filter(Boolean).join('+');
+          out.line(`    ${action.name.padEnd(10)} ${action.permission.padEnd(16)} ${where}`);
+        }
+      }
+      out.line('');
+      out.line('tcms format ENTITY for its fields, --long for the guide.');
+      return;
+    }
+
+    const shape = shapeOf(requested);
+    if (!shape) {
+      throw new UsageError(
+        `No entity named '${requested}'. There is: ${Object.keys(SHAPES).sort().join(', ')}.`,
+      );
+    }
+
+    if (json) {
+      out.json(templateFor(shape, shape.actions[0]!.name));
+      return;
+    }
+
+    if (flag(options['long'])) {
+      out.line(guideFor(shape));
+      return;
+    }
+
+    /*
+      Every body-carrying action the CLI exposes, not just the first. They spell the same fields
+      differently — `case propose` takes a `--file` body and `case edit` takes flags — and a
+      person reading one and running the other is the mistake this whole command exists to stop.
+    */
+    const authored = shape.actions.filter(
+      (action) => action.cli && (action.kind === 'create' || action.kind === 'edit'),
+    );
+    for (const action of authored) {
+      out.line(usageFor(shape, action.name));
+      out.line('');
+    }
+
+    out.line('Template for --file:');
+    out.line(JSON.stringify(templateFor(shape, authored[0]?.name ?? shape.actions[0]!.name), null, 2));
+  },
+};
+
 export const READS: readonly Command[] = [
   whoami,
+  format,
   projectList,
   caseList,
   caseShow,

@@ -18,6 +18,7 @@ import {
   TcmsTimeoutError,
   isAbort,
   isProcessEntryPoint,
+  type TcmsClient,
 } from '@tcms/client';
 
 import { COMMANDS, UsageError, findCommand } from './commands.js';
@@ -95,13 +96,24 @@ export async function main(
   }
 
   try {
-    const client = connect(
-      {
-        url: typeof values['url'] === 'string' ? values['url'] : undefined,
-        timeout,
-      },
-      env,
-    );
+    /*
+      An offline command is handed a client that throws rather than one that is absent, so the
+      `CommandContext` shape stays uniform and a command that *starts* reaching the instance later
+      fails loudly at the call instead of silently taking a different path. See `Command.offline`.
+    */
+    const client = found.command.offline
+      ? new Proxy({}, {
+        get: () => () => {
+          throw new Error('This command is declared offline and must reach no instance.');
+        },
+      }) as TcmsClient
+      : connect(
+        {
+          url: typeof values['url'] === 'string' ? values['url'] : undefined,
+          timeout,
+        },
+        env,
+      );
 
     await found.command.run({
       client,

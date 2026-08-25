@@ -74,6 +74,18 @@ export interface Command {
   options?: OptionSpec;
   /** Absent on a read. */
   write?: WriteDeclaration;
+  /**
+   * True when the command reaches no instance at all, so `main` must not require one.
+   *
+   * `tcms format` is the only one: it answers what a payload must look like, which is a property
+   * of the build rather than of any instance — and the person who most needs it is the one who
+   * has not got a URL or a token yet. Every other command here fails correctly without them.
+   *
+   * Declared rather than inferred from "does it touch `context.client`", because that question
+   * cannot be asked of a function without running it, and the failure of guessing wrong is a
+   * command that demands credentials it never uses.
+   */
+  offline?: boolean;
   run: (context: CommandContext) => Promise<void>;
 }
 

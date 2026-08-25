@@ -24,6 +24,7 @@
  * is structurally incapable of, rather than one it declines to offer.
  */
 import {
+  CASE_SHAPE,
   TcmsClientError,
   caseInputFrom,
   classify,
@@ -31,8 +32,10 @@ import {
   editIntent,
   planInputFrom,
   requireExplicitVersion,
+  optionSpecFor,
   requireProposableCase,
   resolveId,
+  usageFor,
   suiteInputFrom,
   type CreateIntent,
   type EditVersion,
@@ -211,27 +214,21 @@ function outcome(intent: CreateIntent, verb: string): string {
 const caseEdit: Command = {
   name: 'case edit',
   summary: 'Change a test case',
-  usage:
-    'tcms case edit TC-42 [--title T] [--description D] [--objective O] [--expected-outcome E]\n'
-    + '                    [--priority P] [--severity S] [--automation-status S] [--suite TS-3]\n'
-    + '                    [--unfile] [--tag T]... [--decline ATTACHMENT-ID]...\n'
-    + '                    [--file BODY.json --lock-version N]',
-  options: {
-    title: { type: 'string' },
-    description: { type: 'string' },
-    objective: { type: 'string' },
-    'expected-outcome': { type: 'string' },
-    priority: { type: 'string' },
-    severity: { type: 'string' },
-    'automation-status': { type: 'string' },
-    'automation-key': { type: 'string' },
-    suite: { type: 'string' },
-    unfile: { type: 'boolean' },
-    tag: { type: 'string', multiple: true },
-    decline: { type: 'string', multiple: true },
-    file: { type: 'string' },
-    'lock-version': { type: 'string' },
-  },
+  /*
+    Rendered from the shape catalogue since §253, both of them, rather than written out twice —
+    which is how `--not-automatable-reason` arrived: the flag was missing here while
+    `automationStatus: NOT_AUTOMATABLE` was accepted, so the one spelling the server refuses was
+    the only one this command could produce.
+
+    `--file` is added by hand and deliberately is NOT derived. It is on six of the ten
+    body-carrying commands across this registry and missing from four, which reads as an accident
+    rather than a decision; deriving it would silently widen the CLI surface, and straightening it
+    is a slice of its own. `mechanicsFor` has the argument, and the conformance check reports the
+    four.
+  */
+  usage: `tcms case edit TC-42\n\n${usageFor(CASE_SHAPE, 'edit')}\n\n`
+    + '  --file BODY.json\n      A whole TestCaseInput, instead of the flags. Needs --lock-version.',
+  options: { ...optionSpecFor(CASE_SHAPE, 'edit'), file: { type: 'string' } },
   write: { kind: 'edit', permission: 'case:edit' },
   run: async (context) => {
     const { client, out, json, options, request } = context;
@@ -260,6 +257,7 @@ const caseEdit: Command = {
           severity: text(options['severity']) as TestCaseInput['severity'],
           automationStatus: text(options['automation-status']) as TestCaseInput['automationStatus'],
           automationKey: nullableText(options['automation-key']),
+          notAutomatableReason: nullableText(options['not-automatable-reason']),
           // Both spellings of "move this case", and they are different requests: a suite key
           // files it there, `--unfile` sends an explicit null. Omitting both leaves it where it
           // is — the third state, and the one a client that collapsed null and absent would lose.
