@@ -1,815 +1,389 @@
-# Unplanned Gaps — Slice Plan
+# Unplanned Gaps — Task Plan
 
-**Date:** 2026-08-18 · **Written by:** `ep-writing-plans`
+**Date:** 2026-08-18 · **Revised:** 2026-08-22 (twice — restructure, then progress) · **Written by:** `ep-writing-plans`
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement a slice
-> task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Each slice below is one Claude
-> session.** Do not start a slice until the one before it has landed, unless the dependency note
-> says otherwise.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
+> task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Close the nine gaps recorded in `docs/features.md` § *Gaps Not Currently Planned*, in an
-order where each slice ships working software on its own.
+**Goal:** Close the gaps recorded in `docs/features.md` § *Gaps Not Currently Planned*. **Seven of
+the nine are implemented. Two remain: D and G.**
 
-**Architecture:** Eight of the nine are additive — a new read surface, a new notifier, a new column,
-a new endpoint — and none changes the tenancy, permission or contract machinery. They are sequenced
-so the cheap high-value work lands first and the two that touch every file in the SPA land last,
-when the surface they must sweep has stopped moving.
+**Architecture:** Every closed area was additive — a new write field, a new endpoint, a new table, a
+new operator command — and none changed the tenancy, permission or contract machinery. The
+catalogue has stayed at **55 keys** through all seven. Exactly one area needed DDL and it has spent
+it.
 
 **Tech Stack:** Spring Boot 3.5.6 / Java 21 / Flyway / Postgres 17 · React 19 / TypeScript / MUI v7
-/ TanStack Query · `openapi.yaml` as the contract, generated into both `schema.d.ts` copies.
+/ TanStack Query · `openapi.yaml` as the contract, generated into `frontend/src/api/schema.d.ts` and
+`packages/client/src/schema.ts`.
 
 ---
 
-## Scope Check — read this before starting
+## Status
 
-The `ep-writing-plans` skill requires a plan to cover **one** subsystem. This document deliberately
-does not: it covers nine, because the request was for the *slicing and the order*. It is therefore
-a **master plan**, and it is detailed to two different depths on purpose:
-
-- **Slice 1 is fully specified** — files, contract fragment, code and tests — because it is next.
-- **Slices 2–9 are scoped, not stepped**: goal, exact files, acceptance gate, dependencies and the
-  traps already known. Writing bite-sized TDD steps for slice 8 today would be invention, not
-  planning — the surface it sweeps will have moved by then.
-
-**When you pick up slice N (N ≥ 2), your first act is to run `ep-writing-plans` on that slice alone**
-and save the result as `docs/plans/2026-08-18-gap-N-<slug>.md`. This master plan is the input to
-that, not a substitute for it.
-
-## Order, and why it is this order
-
-| # | Slice | Session size | Why here |
+| Area | Gap | State | Section |
 |---|---|---|---|
-| 1 | Audit log reader | Full | Highest value per unit of work — the writing half already exists. Nothing depends on it, so it de-risks nothing else, but it is the cheapest thing that turns dead data into a feature. |
-| 2 | Review-workflow notifications | Full | Second-highest value, and it needs no schema change — the notifier seam already ships two events. |
-| 3 | Execution duration | Half | One column, one contract field, one form control. Must precede 4 so bulk assignment and duration land on one migration wave rather than two. |
-| 4 | Bulk execution assignment | Full | Mirrors the existing `/cases/bulk` shape. After 3 so the execution write path is touched once. |
-| 5 | Scheduled runs | Full | Needs 4's bulk-assignment path to be useful (a scheduled run nobody is assigned to is a dead run). |
-| 6 | Cross-project case search | Full | Independent, but deliberately after the write-side work: it adds a company-scoped read path and is the one slice that can expose a tenancy defect, so it wants a quiet tree. |
-| 7 | Company data export | Full | Reads every table. Wants to run last among the backend slices so it exports the columns 3 and 5 added. |
-| 8 | Keyboard-driven execution | Full | Frontend only. After 3 and 4, whose controls it must bind. |
-| 9 | Internationalisation groundwork | Full | Touches every user-facing string in the SPA. Must be last — any earlier and slices 1–8 add untranslated strings behind it. |
+| — | Audit log reader | ✅ shipped | `docs/handoff/242` |
+| — | Review-workflow notifications | ✅ shipped | `docs/handoff/243` |
+| **A** | Execution duration | ✅ shipped | `docs/handoff/244` |
+| **B** | Bulk execution assignment | ✅ shipped | `docs/handoff/245` |
+| **E** | Company data export | ✅ shipped | `docs/handoff/246` |
+| **C** | Scheduled runs | ✅ shipped — spent **`V68`** | `docs/handoff/247` |
+| **F** | Keyboard-driven execution | ✅ shipped | `docs/handoff/248` |
+| **D** | Cross-project case search | ⬜ **next** — stepped plan written, not implemented | → §249 |
+| **G** | i18n groundwork | ⬜ open — not planned, deliberately | — |
 
-**Slices 1, 2, 6 and 7 are backend-led. Slices 8 and 9 are frontend-only.** Slices 3, 4 and 5 cross
-both.
+### The state that matters more than the tally
 
-**Flyway numbering.** The head is `V67`. Slices needing a migration take, in order:
-`V68` (slice 3, execution duration), `V69` (slice 5, run schedule). No other slice adds DDL.
-`out-of-order` is unset, so these must land in this numeric order — if a slice is skipped, do
-**not** renumber; leave the gap.
+**Five of the seven shipped areas have never been gated.** A, B, E, C and F are implemented,
+committed and pushed to `origin/master`, and `./gradlew build` and the npm suites have not been run
+over any of them — §247 was never even compiled. That is **~93 backend arms and 32 frontend arms
+whose first execution is still ahead**, plus whatever the five authors' comment citations did to
+`citedFiles.test.ts`.
+
+This is not the §65 queue backlog, and conflating the two would stall the work. They are different
+things with different owners:
+
+| | What it is | Who runs it | Blocks D? |
+|---|---|---|---|
+| **The gates** | `./gradlew build`, the three npm suites, `lint` — on `shanks` | the session, mechanically | **Yes** |
+| **The §65 queues** | 56 backend mutation rows + 36 browser rows, driven by hand | the user, in a sitting of its own | No — still deferred by standing policy |
+
+**Gate the tree before D lands.** `./gradlew build` compiles and tests the whole backend, so there
+is no gating D alone: D's own gate would necessarily be the first execution of A, B, C and E too, and
+every red would arrive unattributed in the session least able to judge whose it is. D is also the one
+area that can expose a **tenancy** defect — precisely the finding you do not want landing in a pile
+of five other authors' failures. `prompts/batch-4-d-alone.md` stages this: gates first, then D.
+
+**Every shipped area is therefore "built and unverified"** in both senses. Describe it that way.
+
+## What the two 2026-08-22 revisions changed
+
+**First revision — restructure.** Slices and phases became 55 numbered tasks; two areas were found
+already shipped; and one premise was found false. The old plan opened area A with *"Migration `V68`.
+Add `duration_seconds INTEGER` to `test_execution`."* **The column already existed** — `duration_ms
+BIGINT` since `V1__initial_schema.sql:845`, mapped, served and summed into the run rollup. The real
+gap was one field wide: `ExecutionResultRequest` carried no duration, so only ingestion could write
+it. §244 shipped it with **no migration**, which freed `V68` for scheduled runs and voided the old
+A→B ordering reason ("one migration wave" — there was no wave).
+
+**Second revision — progress.** Five more areas landed. What the run confirmed, and what it did not:
+
+- **The parallelism analysis held.** E was marked *"the one area that shares nothing with anyone"*;
+  §246 records *"no contract change … no file under `frontend/` or `packages/` touched."* B ∥ E and
+  C ∥ F both ran concurrently without a conflict.
+- **The pre-assigned fixture prefixes were not all honoured, and it cost nothing** only because the
+  namespace is large. C took `3d` rather than the assigned `e7`; F took `2c`, which was the spare.
+  Pre-assignment still did its job — no collision — but assignment and use should be reconciled.
+- **`V68` went to C exactly as re-assigned**, and is the plan's only migration.
+- **Two things the stepped plans missed, both caught by an author reading the code rather than the
+  plan.** `SchemaConventionTest`'s policy count is a **literal** (C moved `70` → `71` in the
+  migration's own commit); and `everyMappedColumnHasAWriter`'s name-text match produced a **false
+  negative** in §244, which C then avoided by leaning only on the genuine-Java-setter disjunct.
+  Neither is visible without gates, which is the argument for running them.
+- **One coverage gap nobody has filed.** C added five `run-schedule` contract operations and gave
+  `@tcms/cli` and `@tcms/mcp` **no verbs for any of them**. `writeConformance.test.ts` checks the
+  *command registry*, so a missing command is invisible to it. Not a red — a gap. It needs a row.
+- **`§242 LG-5` is drivable at last.** The scheduled-runs poller is the product's first actorless
+  writer, so the audit row with `actorUserId` null now has a producer. Superseded in place, id
+  unchanged.
+- **`CLAUDE.md`'s frontend test count (1582) is stale by at least 43.** Re-measure from a run.
+
+## Old slice numbers → task groups
+
+Handoff §242 and `docs/features.md` cite this plan by slice number. The mapping is stable:
+
+| Old | New | Area | State |
+|---|---|---|---|
+| Slice 1 | — | Audit log reader | ✅ §242 |
+| Slice 2 | — | Review-workflow notifications | ✅ §243 |
+| Slice 3 | **A** — Tasks 1–6 | Execution duration | ✅ §244 |
+| Slice 4 | **B** — Tasks 7–14 | Bulk execution assignment | ✅ §245 |
+| Slice 5 | **C** — Tasks 15–25 | Scheduled runs | ✅ §247 |
+| Slice 6 | **D** — Tasks 26–32 | Cross-project case search | ⬜ **next**, → §249 |
+| Slice 7 | **E** — Tasks 33–40 | Company data export | ✅ §246 |
+| Slice 8 | **F** — Tasks 41–46 | Keyboard-driven execution | ✅ §248 |
+| Slice 9 | **G** — Tasks 47–55 | i18n groundwork | ⬜ open |
+
+## Scope Check
+
+`ep-writing-plans` requires a plan to cover **one** subsystem; this covers nine, because the request
+was for the order and the sizing. It is a **master plan**, and its two-tier shape is the one this
+repo has now proved seven times: the master plan scopes, and **each area's first act is to run
+`ep-writing-plans` on itself alone** before touching code.
+
+Six stepped plans exist and all six were followed to completion:
+
+| Area | Stepped plan |
+|---|---|
+| B | `docs/plans/2026-08-18-gap-b-bulk-execution-assignment.md` |
+| C | `docs/plans/2026-08-18-gap-c-scheduled-runs.md` |
+| **D** | `docs/plans/2026-08-18-gap-d-cross-project-case-search.md` — **written, not yet executed** |
+| E | `docs/plans/2026-08-18-gap-e-company-data-export.md` |
+| F | `docs/plans/2026-08-18-gap-f-keyboard-driven-execution.md` |
+| (2) | `docs/plans/2026-08-18-gap-2-review-notifications.md` |
+
+**G has no stepped plan and must not get one yet** — it sweeps a surface D is about to move. Write it
+after D lands, not before.
+
+**D's plan carries three stale references.** It says `be-java.md`'s header names `§243` (now `§247`),
+that `§243` is the section head (now `§248`), and it reasons about `V68` as unspent (C spent it).
+Its *decisions* are unaffected — it takes no Flyway version either way — but do not copy its numbers.
+
+## What is left, and in what order
+
+| Area | Tasks | Size | Lane | Why here |
+|---|---|---|---|---|
+| **D** Cross-project case search | 7 | Full | BE-led | The riskiest read in the plan — it must narrow to the caller's project grants *inside* the query. Wants a green, quiet tree, which is why the gate pass precedes it. |
+| **G** i18n groundwork | 9 | **Full+ — largest overall** | FE only | 132 components / ~41.7k lines / 51 `satisfies Record` maps. Last by construction: any earlier and D adds untranslated strings behind it. |
+
+**Flyway.** Head is **`V68`**, spent by C. **Neither D nor G migrates.** D's Task 15 *measures* a
+query plan and records an index as **owed** rather than adding DDL. `out-of-order` is unset — leave
+gaps, never renumber.
+
+## Parallelism — now moot
+
+The parallelism matrix governed batches 1–3 and has done its job. **It no longer applies: two areas
+remain and they cannot run together.**
+
+**`D ∥ G` is not eligible.** G sweeps all 132 frontend components, and D adds a new one
+(`CaseSearchPage.tsx`) plus a `router.tsx` edit. G conflicts with every frontend area by
+construction, and D is a frontend area.
+
+So the rest of this plan is **sequential**: gate the tree → D → G. **One subagent, so the standing
+cap applies and no special permission is needed.** `docs/specs/parallel-work-rules.md` is back to
+being the default rather than something to argue against.
+
+**What the concluded matrix got right, kept for the next plan that needs one.** Eligibility was
+decided on four shared resources only — `openapi.yaml`, Flyway, backend module, frontend files — and
+the two calls it staked itself on both held: E ran beside everything and touched nothing, and the
+A→B spine was genuinely unsplittable because both edit `ExecutionService.java`. The rule that proved
+most load-bearing was the least obvious one: **the close is a conflict even between lanes whose code
+is disjoint**, because every area ends by writing `docs/agent-context/*.md` and `docs/HANDOFF.md`.
+
+### Resources consumed, so nothing is reused
+
+- **Fixture UUID prefixes taken:** `0a` (§242), `66` (§244), `88` (§245), `7c` (§246), `3d` (§247),
+  `2c` (§248). **D takes `4d`** — self-assigned in its own stepped plan and verified unused.
+  **`5e` is in use in the tree and is not a spare.**
+- **Sections taken:** §242–§248. **D is §249**, G is §250.
+- **Queue ids:** D takes `CS-1..7` and `CS-M1..M9`, both unused in either queue.
+- **Contract and router:** D holds `openapi.yaml` and `router.tsx` alone, and is the only lane
+  running `npm run gen:api`.
+
+## File structure
+
+**Area D** — `openapi.yaml` · `backend/…/repository/{CaseSearchController,CaseSearchService,CaseSearchQuery,CaseSearchHitView}.java` (new) ·
+`frontend/src/features/cases/CaseSearchPage.tsx` (new) · `frontend/src/app/router.tsx`
+
+**Area G** — `frontend/src/i18n/` (new) · `frontend/src/app/Providers.tsx` ·
+`frontend/src/lib/labels.ts` · a bare-literal check under `frontend/src/test/`
 
 ---
 
-# Slice 1 — The audit log reader
-
-**One session.** Backend + frontend + contract.
-
-**Goal:** Make the audit trail readable. Two endpoints, two screens, no new writes and no schema
-change.
-
-**Why first:** `AuditEvent.java:220` records that `audit:view` and `project:audit` have *zero
-consumers*. Every act in the product already writes a row; the permissions are seeded; the SPA
-already carries the labels "view the project audit log" and "view the company audit log" in
-`frontend/src/lib/permissions.ts:164,177`. Everything except the reader exists.
-
-**Scope boundary — read this before widening the slice:**
-- **In:** a project-scoped log (`project:audit`), a company-scoped log (`audit:view`), both
-  read-only, both paged, both filterable by actor, action and date range.
-- **Out:** the *instance* log (`instance:audit` over `InstanceAuditEvent`) — it is a different table
-  with a different scope and no company context, and it belongs with the M6 operator console.
-  Do not add it here. Say so in the handoff.
-- **Out:** export. `report:export` is a different permission and a report type is a different slice.
-
-## What already exists — do not rebuild it
-
-`backend/src/main/java/com/tcms/tenancy/AuditEvent.java` is a JPA entity on `audit_event`, carrying
-the company filter. Its columns, verified:
-
-| Column | Java field | Note |
-|---|---|---|
-| `id` | `UUID id` | |
-| `company_id` | `UUID companyId` | `@Filter` applies |
-| `project_id` | `UUID projectId` | **nullable** — a company-scope act has none |
-| `actor_user_id` | `UUID actorUserId` | nullable |
-| `actor_token_id` | `UUID actorTokenId` | nullable — the act came from a token |
-| `action` | `String action` | the verb |
-| `target_type` | `String targetType` | |
-| `target_ids` | `UUID[] targetIds` | array, `@JdbcTypeCode(SqlTypes.ARRAY)` |
-| `changes` | `String changes` | JSON, nullable |
-| `bulk_operation_id` | `UUID bulkOperationId` | nullable — ties one bulk act's rows together |
-| `occurred_at` | `Instant occurredAt` | |
-
-**Both actor columns are nullable and so is `project_id`.** A view that assumes an actor is a person
-will NPE on a token-driven act, and a project filter that assumes `project_id` is present will hide
-every company-scope row. Both are covered by tests below.
-
-## Files
-
-- Create: `backend/src/main/java/com/tcms/tenancy/AuditEventRepository.java`
-- Create: `backend/src/main/java/com/tcms/tenancy/AuditLogService.java`
-- Create: `backend/src/main/java/com/tcms/tenancy/AuditLogController.java`
-- Create: `backend/src/main/java/com/tcms/tenancy/AuditEventView.java`
-- Create: `backend/src/main/java/com/tcms/tenancy/AuditLogQuery.java`
-- Create: `backend/src/test/java/com/tcms/tenancy/AuditLogReadTest.java`
-- Modify: `docs/specs/openapi.yaml` — two paths, two schemas
-- Create: `frontend/src/features/audit/AuditLogPage.tsx`
-- Create: `frontend/src/features/audit/AuditLogPage.test.tsx`
-- Create: `frontend/src/features/audit/auditLabels.ts`
-- Modify: `frontend/src/api/queries/` — a read hook per endpoint
-- Modify: `frontend/src/app/router.tsx` — two routes
-- Modify: `frontend/src/api/schema.d.ts` **and** `packages/client/src/schema.d.ts` (both, generated)
-- Modify: `docs/agent-context/be-java.md` and `fe-react.md` — seam entry, **in this slice's commit**
-- Create: `docs/handoff/242-the-audit-log-reader.md` + one index row in `docs/HANDOFF.md`
-
-## Phase A — the contract
-
-- [ ] **Step 1: Add the two paths to `docs/specs/openapi.yaml`**
-
-Add under the project-scoped paths, beside `/projects/{projectId}/cases/bulk`:
-
-```yaml
-  /projects/{projectId}/audit-events:
-    get:
-      operationId: listProjectAuditEvents
-      summary: This project's audit trail, newest first
-      description: |
-        Costs `project:audit`. Rows are the acts recorded against this project.
-        A company-scope act has no `projectId` and is NOT returned here — ask
-        `/audit-events` for those.
-
-        `actorUserId` and `actorTokenId` are both nullable and exactly one is set:
-        an act arrives either from a signed-in person or from a token. A row with
-        neither is a defect, not a shape a client must render.
-      tags: [Audit]
-      parameters:
-        - $ref: '#/components/parameters/ProjectId'
-        - name: actorUserId
-          in: query
-          required: false
-          schema: { type: string, format: uuid }
-        - name: action
-          in: query
-          required: false
-          schema: { type: string }
-        - name: occurredAfter
-          in: query
-          required: false
-          schema: { type: string, format: date-time }
-        - name: occurredBefore
-          in: query
-          required: false
-          schema: { type: string, format: date-time }
-        - name: page
-          in: query
-          required: false
-          schema: { type: integer, minimum: 0, default: 0 }
-        - name: size
-          in: query
-          required: false
-          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
-      responses:
-        '200':
-          description: The page of audit events.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/AuditEventPage' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-
-  /audit-events:
-    get:
-      operationId: listCompanyAuditEvents
-      summary: The company's audit trail, newest first
-      description: |
-        Costs `audit:view` (COMPANY scope). Returns acts across the whole company,
-        project-scoped ones included, so this is a superset of every project log
-        the caller could read.
-      tags: [Audit]
-      parameters:
-        - name: projectId
-          in: query
-          required: false
-          schema: { type: string, format: uuid }
-        - name: actorUserId
-          in: query
-          required: false
-          schema: { type: string, format: uuid }
-        - name: action
-          in: query
-          required: false
-          schema: { type: string }
-        - name: occurredAfter
-          in: query
-          required: false
-          schema: { type: string, format: date-time }
-        - name: occurredBefore
-          in: query
-          required: false
-          schema: { type: string, format: date-time }
-        - name: page
-          in: query
-          required: false
-          schema: { type: integer, minimum: 0, default: 0 }
-        - name: size
-          in: query
-          required: false
-          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
-      responses:
-        '200':
-          description: The page of audit events.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/AuditEventPage' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-```
-
-- [ ] **Step 2: Add the two schemas**
-
-Under `components.schemas`. **Both `required` arrays are mandatory** — the working agreement says a
-schema without one generates every property optional and no consumer can use it:
-
-```yaml
-    AuditEventPage:
-      type: object
-      required: [items, page, size, totalElements, totalPages]
-      properties:
-        items:
-          type: array
-          items: { $ref: '#/components/schemas/AuditEvent' }
-        page: { type: integer }
-        size: { type: integer }
-        totalElements: { type: integer, format: int64 }
-        totalPages: { type: integer }
-
-    AuditEvent:
-      type: object
-      required:
-        [id, projectId, actorUserId, actorUserName, actorTokenId, actorTokenName,
-         action, targetType, targetIds, changes, bulkOperationId, occurredAt]
-      properties:
-        id: { type: string, format: uuid }
-        projectId:
-          type: string
-          format: uuid
-          nullable: true
-          description: Null for a company-scope act.
-        actorUserId: { type: string, format: uuid, nullable: true }
-        actorUserName:
-          type: string
-          nullable: true
-          description: |
-            Resolved display name. Null when the actor is a token, and ALSO null
-            when the person has since been removed — a log must survive its actors.
-        actorTokenId: { type: string, format: uuid, nullable: true }
-        actorTokenName: { type: string, nullable: true }
-        action: { type: string }
-        targetType: { type: string }
-        targetIds:
-          type: array
-          items: { type: string, format: uuid }
-        changes:
-          type: string
-          nullable: true
-          description: JSON document of what changed, as recorded. Opaque to the client.
-        bulkOperationId:
-          type: string
-          format: uuid
-          nullable: true
-          description: Set when this row is one of many from a single bulk act.
-        occurredAt: { type: string, format: date-time }
-```
-
-- [ ] **Step 3: Regenerate both schema copies and confirm they are identical**
-
-```bash
-cd frontend && npm run gen:api
-cd ../packages/client && npm run gen:api
-diff ../../frontend/src/api/schema.d.ts src/schema.d.ts && echo IDENTICAL
-```
-
-Expected: `IDENTICAL`. If it differs, `schemaFreshness.test.ts` will fail — fix it now, not later.
-
-- [ ] **Step 4: Commit the contract**
-
-```bash
-git add docs/specs/openapi.yaml frontend/src/api/schema.d.ts packages/client/src/schema.d.ts
-git commit -m "contract: audit log read endpoints"
-```
-
-## Phase B — the backend read path (TDD)
-
-- [ ] **Step 5: Write the failing test**
-
-Create `backend/src/test/java/com/tcms/tenancy/AuditLogReadTest.java`. Extend
-`IntegrationTestBase` — a real Postgres via Testcontainers, as every backend test here does.
-
-```java
-package com.tcms.tenancy;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
-import com.tcms.IntegrationTestBase;
-import java.util.List;
-import org.junit.jupiter.api.Test;
-
-/**
- * The audit log's first reader.
- *
- * <p>Three of these four exist because the table's nullable columns are the ones a naive reader
- * gets wrong: a token-driven act has no person, a company-scope act has no project, and a removed
- * person must not take their history with them.
- */
-class AuditLogReadTest extends IntegrationTestBase {
-
-    @Test
-    void aProjectLogReturnsThatProjectsActsNewestFirst() {
-        // Arrange: three acts on this project, one on another, written through the
-        // existing audit writer — never by INSERT, or the test proves nothing about
-        // what the product records.
-        // Assert: three rows, ordered occurredAt DESC.
-    }
-
-    @Test
-    void aCompanyScopeActIsAbsentFromEveryProjectLog() {
-        // A row with project_id NULL must not appear in a project-scoped read.
-        // The defect this catches is a filter written as `projectId = :id OR projectId IS NULL`.
-    }
-
-    @Test
-    void aTokenDrivenActRendersWithNoPerson() {
-        // actorUserId null, actorTokenId set. actorUserName must be null, NOT "Unknown",
-        // and the read must not throw.
-    }
-
-    @Test
-    void anActSurvivesTheRemovalOfItsActor() {
-        // Deactivate the person, then read. The row is still returned; actorUserName
-        // may be null. A log that loses rows when someone leaves is not a log.
-    }
-
-    @Test
-    void aCallerWithoutProjectAuditIsRefused() {
-        // Test Engineer holds no project:audit — expect 403, not an empty page.
-        // An empty page would read as "nothing happened", which is a lie.
-    }
-}
-```
-
-- [ ] **Step 6: Run it and watch it fail**
-
-```bash
-~/bin/tcms-remote backend ./gradlew test --tests 'com.tcms.tenancy.AuditLogReadTest'
-```
-
-Expected: FAIL — `AuditLogService` does not exist. **Tests run on `shanks`, not locally** — standing
-directive. Do not run `./gradlew` on the Mac.
-
-- [ ] **Step 7: Write `AuditEventRepository`**
-
-Mirror `NotificationDeliveryRepository` exactly, including the annotation and the reason for it.
-
-```java
-package com.tcms.tenancy;
-
-import java.time.Instant;
-import java.util.UUID;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
-import org.springframework.transaction.annotation.Transactional;
-
-/**
- * Reads over {@code audit_event}.
- *
- * <p>{@code @Transactional(readOnly = true)} is not decoration: isolation is established in
- * {@code doBegin}, so a derived or {@code @Query} method declared on this interface runs outside
- * any transaction without it, {@code app.current_company} is never set, and every read returns
- * ZERO ROWS while {@code CompanyContext} holds the right company. {@code RepositoryTransactionTest}
- * derives its list from the live context and will fail the build if this is dropped.
- */
-@Transactional(readOnly = true)
-interface AuditEventRepository extends JpaRepository<AuditEvent, UUID> {
-
-    /**
-     * One project's acts, newest first.
-     *
-     * <p>{@code e.projectId = :projectId} and nothing else — a company-scope act carries a NULL
-     * here and must NOT be folded in. Widening this to {@code OR e.projectId IS NULL} is the
-     * defect {@code aCompanyScopeActIsAbsentFromEveryProjectLog} exists to catch.
-     */
-    @Query("""
-            SELECT e FROM AuditEvent e
-             WHERE e.projectId = :projectId
-               AND (:actorUserId IS NULL OR e.actorUserId = :actorUserId)
-               AND (:action IS NULL OR e.action = :action)
-               AND (CAST(:after AS timestamp) IS NULL OR e.occurredAt >= :after)
-               AND (CAST(:before AS timestamp) IS NULL OR e.occurredAt <= :before)
-             ORDER BY e.occurredAt DESC, e.id DESC
-            """)
-    Page<AuditEvent> pageForProject(
-            @Param("projectId") UUID projectId,
-            @Param("actorUserId") UUID actorUserId,
-            @Param("action") String action,
-            @Param("after") Instant after,
-            @Param("before") Instant before,
-            Pageable pageable);
-
-    /**
-     * The company's acts, newest first — project-scoped rows included.
-     *
-     * <p>No {@code company_id} predicate: the {@code @Filter} on {@link AuditEvent} and the RLS
-     * policy behind it are what scope this. Writing one by hand here would read as though the
-     * filter were optional.
-     */
-    @Query("""
-            SELECT e FROM AuditEvent e
-             WHERE (:projectId IS NULL OR e.projectId = :projectId)
-               AND (:actorUserId IS NULL OR e.actorUserId = :actorUserId)
-               AND (:action IS NULL OR e.action = :action)
-               AND (CAST(:after AS timestamp) IS NULL OR e.occurredAt >= :after)
-               AND (CAST(:before AS timestamp) IS NULL OR e.occurredAt <= :before)
-             ORDER BY e.occurredAt DESC, e.id DESC
-            """)
-    Page<AuditEvent> pageForCompany(
-            @Param("projectId") UUID projectId,
-            @Param("actorUserId") UUID actorUserId,
-            @Param("action") String action,
-            @Param("after") Instant after,
-            @Param("before") Instant before,
-            Pageable pageable);
-}
-```
-
-**`ORDER BY occurredAt DESC, id DESC`** — the secondary key is not optional. Two acts in one
-transaction share a timestamp to the microsecond, and an unstable sort makes page 2 repeat or skip
-rows.
-
-- [ ] **Step 8: Write `AuditLogQuery` and `AuditEventView`**
-
-`AuditLogQuery` is the filter carrier — a record of the five nullable filters plus page and size,
-so neither the service nor the controller grows a seven-argument signature.
-
-`AuditEventView` is the wire shape. It must match the contract's `AuditEvent` schema property for
-property, including both nullable actor names.
-
-- [ ] **Step 9: Write `AuditLogService`**
-
-Two methods, `forProject` and `forCompany`. Each gates first, reads second. Gate on
-`project:audit` (PROJECT scope) and `audit:view` (COMPANY scope) respectively — check the
-permission, **never a role name**. Resolve actor display names in one batched lookup keyed by the
-distinct `actorUserId` values on the page, not per row.
-
-- [ ] **Step 10: Write `AuditLogController`**
-
-Mirror `NotificationChannelController`'s shape: `@AuthenticationPrincipal Jwt jwt`, `callerOf(jwt)`,
-a `read(...)` wrapper for the outcome. Two `@GetMapping`s.
-
-- [ ] **Step 11: Run the tests until green**
-
-```bash
-~/bin/tcms-remote backend ./gradlew test --tests 'com.tcms.tenancy.AuditLogReadTest'
-```
-
-Expected: PASS, 5 tests.
-
-- [ ] **Step 12: Run the full backend gate**
-
-```bash
-~/bin/tcms-remote backend ./gradlew build
-```
-
-Expected: BUILD SUCCESSFUL. `RepositoryTransactionTest` will fail here if step 7's annotation was
-dropped, and `ArchitectureRulesTest` will fail if the new classes reach outside `tenancy`.
-
-- [ ] **Step 13: Commit the backend**
-
-```bash
-git add backend/src/main/java/com/tcms/tenancy/ backend/src/test/java/com/tcms/tenancy/AuditLogReadTest.java
-git commit -m "feat: audit log read path"
-```
-
-## Phase C — the screens
-
-- [ ] **Step 14: Write the failing frontend test**
-
-Create `frontend/src/features/audit/AuditLogPage.test.tsx`. Build fixtures with
-`src/test/fixtures.ts` — the harness compares every mocked body against `openapi.yaml` and fails a
-test that serves a shape the server could not send.
-
-Cover: the table renders rows newest-first; a token-driven row renders without a person; the filter
-controls write to the URL; an empty result reads as "no activity" and not as a failure.
-
-**Do not build your own `QueryClient`** — use `createTestQueryClient`. Only that helper's caches are
-visible to the render- and query-failure checks, and `renderFailures.test.tsx` sweeps every test
-source to keep the opt-out list empty.
-
-- [ ] **Step 15: Run it and watch it fail**
-
-```bash
-~/bin/tcms-remote frontend npm run test:run -- AuditLogPage
-```
-
-Expected: FAIL — the module does not exist.
-
-- [ ] **Step 16: Build `AuditLogPage.tsx` and `auditLabels.ts`**
-
-`auditLabels.ts` maps the `action` and `targetType` strings to human copy. Put it in the shared
-layer per the working agreement — **new display logic goes in `lib/`-shaped modules, not the page**
-— and type the map so an unlabelled action is a compile error rather than a raw verb leaking to
-screen.
-
-Use `DataRegion` for the loading/loaded/failed/empty/stale matrix and `Identifier` for the ids.
-Filter state goes in the URL via `useSearchParams`, not component state.
-
-- [ ] **Step 17: Add the two routes to `router.tsx`**
-
-`/projects/:projectId/audit` and `/admin/audit`. Lazy-load both — the page pulls DataGrid.
-
-- [ ] **Step 18: Add the read hooks**
-
-One hook per endpoint in `frontend/src/api/queries/`, with the `keys` factory entry, the `enabled`
-gate and a timeout budget. Follow the neighbouring hooks exactly.
-
-- [ ] **Step 19: Gate the navigation entries on the permissions**
-
-`useCan('project:audit')` and `useCan('audit:view')`. **Disable, do not hide** — the product's
-standing rule.
-
-- [ ] **Step 20: Run the frontend gates**
-
-```bash
-~/bin/tcms-remote frontend npm run test:run
-~/bin/tcms-remote frontend npm run build
-~/bin/tcms-remote frontend npm run lint
-```
-
-Expected: all green, lint at 0 warnings.
-
-- [ ] **Step 21: Commit the frontend**
-
-```bash
-git add frontend/src/features/audit/ frontend/src/api/queries/ frontend/src/app/router.tsx
-git commit -m "feat: audit log screens"
-```
-
-## Phase D — close the slice
-
-- [ ] **Step 22: Update the orientation caches, in this slice's commit**
-
-Add a seam entry to `docs/agent-context/be-java.md` and `docs/agent-context/fe-react.md`.
-**Delete the "zero consumers" sentence at `AuditEvent.java:220`** — it will be false, and a stale
-claim in a comment is exactly what `citedFiles`/`tierClaims` exist to prevent elsewhere.
-
-- [ ] **Step 23: Add the verification queue rows**
-
-Browser passes are **deferred and batched** (§65) — write the rows, run nothing. Append to
-`docs/verification/frontend-browser-checks.md` in the lane whose state the check needs, with a
-stable id, and to `docs/verification/backend-mutation-checks.md`.
-
-**This slice is "built and unverified" until that queue runs. Describe it that way in the handoff.**
-
-- [ ] **Step 24: Write the handoff section**
-
-Create `docs/handoff/242-the-audit-log-reader.md` and add **one index row** to `docs/HANDOFF.md`.
-Never append prose to `HANDOFF.md` itself.
-
-Record: that the instance log was deliberately left out and why; that the actor columns are nullable
-in two independent ways; and the paging sort key.
-
-- [ ] **Step 25: Final gate and push**
-
-```bash
-~/bin/tcms-remote backend ./gradlew build
-~/bin/tcms-remote frontend npm run test:run
-~/bin/tcms-remote packages npm run build
-git add docs/ && git commit -m "docs: audit log reader handoff and seams"
-git push
-```
+# Shipped areas — the record
+
+Task-by-task steps for these lived here until they landed; the handoffs are now the record and are
+not duplicated. What is kept is only what a later reader needs.
+
+| Area | Section | Shipped | Kept because |
+|---|---|---|---|
+| **A** Execution duration | §244 | No migration; `durationMs` on `ExecutionResultInput`, the service write, the form control, both write clients | The plan called for a migration for **a column that had shipped in `V1`**. Reading the code rather than the plan is what caught it — and `docs/features.md`'s claim that no duration field existed was false when written. |
+| **B** Bulk assignment | §245 | `POST /runs/{runId}/executions/bulk` with round-robin distribute; one `audit_event` per target sharing a `bulk_operation_id` | It was the product's **first `bulk_operation_id` writer**, which made the `ArchitectureRulesTest` writerless exemption false and required the shipped audit reader to group. Both debts came from §242 and both are now paid. |
+| **E** Company export | §246 | `export-company` operator CLI command; one `CompanyContext`, one read-only transaction, blobs included, redaction list settled up front | The **only area touching no contract, no migration and no frontend file** — which is what made it eligible beside every other area, and it ran that way. |
+| **C** Scheduled runs | §247 | **`V68`** `run_schedule`; per-company poller on `CaseHealthScheduler`'s shape; five contract operations; settings screen | Spent the plan's **only migration**. Found `SchemaConventionTest`'s policy count is a **literal** (`70`→`71`). Made **`§242 LG-5` drivable** as the first actorless writer. **Left `@tcms/cli` and `@tcms/mcp` with no verbs for its five operations** — an unfiled coverage gap. |
+| **F** Keyboard execution | §248 | Key map in one module, the focus guard, the live region, the `?` overlay; `ExecutionPage.test.tsx` created | The focus guard **is** the feature — shortcuts firing while a text field has focus is the defect every implementation of this ships first. 32 arms, none yet executed. |
 
 ---
 
-# Slice 2 — Review-workflow notifications
+# Area D — Cross-project case search
 
-**One session.** Backend-led, small frontend.
+> **Next.** Stepped plan written, not executed. Runs **alone**, after the gate pass. §249, prefix `4d`, no migration.
 
-**Goal:** Fire notifications for the review workflow, so a review request reaches the reviewer.
 
-**Depends on:** nothing. Can swap with slice 1 if you prefer.
+**Tasks 26–32. One session, backend-led.** **Run `ep-writing-plans` on this area first.**
 
-**Events to add:** review-requested (to the named reviewer), review-approved and changes-requested
-(to the submitter), and case-approved (to subscribers). Four notifiers.
+**Goal:** Search cases across every project the caller can see, in one query. My Work, the boards and
+the org chart all went cross-project; the repository did not.
 
-**Files:** new `*Notifier` and `*Payload` pairs in
-`backend/src/main/java/com/tcms/integration/`, mirroring `ItemAssignedNotifier` /
-`ItemAssignedPayload` and `RunCompletedNotifier` / `RunCompletedPayload` — both already ship, so the
-seam is proven. Extend `NotificationTexts` for the copy and
-`NotificationSubscriptionView` for the new subscribable events.
-
-**Traps already known:**
-- Delivery is **at-least-once** and idempotency is the `(channelId, eventId)` unique constraint. A
-  new notifier that does not supply a stable `eventId` will double-send on every retry.
-- The review workflow raises domain events across a module boundary; `integration` must consume
-  them as `CompanyScopedEvent` and re-establish context from the envelope. A handler that reads
-  `CompanyContext` directly gets nothing — the decorator clears it on every task, deliberately.
-
-**Acceptance gate:** `./gradlew build` green; a test per notifier proving a second delivery of the
-same event is suppressed; queue rows written.
-
----
-
-# Slice 3 — Execution duration
-
-**Half a session.** Backend + contract + one form control. Pair it with slice 4 if you have room.
-
-**Goal:** Record how long an execution took, so cycle effort can be measured.
-
-**Migration:** `V68`. Add `duration_seconds INTEGER` to `test_execution` (nullable — a result
-recorded without a stopwatch is ordinary, not an error). Include the `company_id` rule check: the
-table already carries it, so this is a plain `ADD COLUMN`.
-
-**Files:** the migration; the execution entity, input and view; `openapi.yaml`'s result-recording
-request body and execution response; both `schema.d.ts` copies; the result form; the run rollup so a
-run can total it.
-
-**Traps:**
-- `SchemaConventionTest` asserts the tenancy rule over every table — an `ADD COLUMN` will not trip
-  it, but confirm the migration header states what the column is *for*, as every migration here does.
-- The MCP's `tcms_record_result` and the CLI's `result record` both write this endpoint. Adding a
-  required field would break both; keep it optional. `writeConformance.test.ts` drives every write
-  arm and will catch a header change.
-
-**Acceptance gate:** backend build green; `contractExchange` comparisons green in packages;
-frontend suite green.
-
----
-
-# Slice 4 — Bulk execution assignment
-
-**One session.** Backend + contract + frontend.
-
-**Goal:** Assign many executions to people in one act, the way `/projects/{projectId}/cases/bulk`
-already does for cases.
-
-**Depends on:** slice 3, only so the execution write path is opened once.
-
-**Shape:** `POST /projects/{projectId}/runs/{runId}/executions/bulk`, mirroring the cases bulk
-endpoint's request/response shape. Include a round-robin distribute mode — "spread these 300 across
-these 5 people" is the actual request behind this gap.
-
-**Files:** controller, service and input beside the existing per-execution assignee endpoint at
-`openapi.yaml:3740`; the run detail screen's selection model and a bulk action bar.
-
-**Traps:**
-- Bulk acts write **one `audit_event` row per target sharing a `bulk_operation_id`** — the column
-  exists for this. Slice 1's reader must group them, or a 300-case assignment floods the log with
-  300 rows. **If slice 1 has landed, update its view in this slice.**
-- The idempotency header applies. A retried bulk assign must not reassign.
-
-**Acceptance gate:** backend build; a test proving a partial failure does not half-apply; queue rows.
-
----
-
-# Slice 5 — Scheduled runs
-
-**One session.**
-
-**Goal:** Create a run automatically on a schedule from a saved scope.
-
-**Migration:** `V69`. A `run_schedule` table — `company_id` first in every index per the tenancy
-rule, project reference, the scope request (reuse the shape `V61` stores on `test_run`), a cron
-expression, an enabled flag, and last-fired.
-
-**Files:** the migration; a `RunScheduleService` and controller in `execution`; a `@Scheduled`
-poller mirroring `OutboxScheduler`'s shape; a settings screen under the project.
-
-**Traps:**
-- The poller runs outside a web request, so it **must** open `CompanyContext` per schedule row from
-  the row's own `company_id`. `AsyncCompanyContextTest` covers this family — add to it.
-- Cron parsing belongs in one place. Do not scatter it.
-- A schedule whose project was archived must not fire. Decide and record the behaviour.
-
-**Acceptance gate:** backend build; a test proving a fire in company A cannot see company B's
-schedules.
-
----
-
-# Slice 6 — Cross-project case search
-
-**One session.** Backend-led.
-
-**Goal:** Search cases across every project the caller can see, in one query.
-
-**Shape:** `GET /cases/search` — company-scoped, returning `projectId` and `projectName` on each hit.
+**Shape:** `GET /cases/search` — company-scoped, returning `projectId` and `projectName` per hit.
 
 **Why it is the riskiest read in this plan:** every other case read is scoped to one project and
-gated by that project's grant. This one must return rows from *many* projects and filter to the
-caller's grants **inside the query**, not after it — filtering in Java after an unrestricted read
-means the count and the paging are computed over rows the caller may not see.
+gated by that project's grant. This one returns rows from *many* projects.
 
-**Traps:**
-- RLS scopes to the **company**, not the project. It will not save you here. The project-visibility
-  narrowing is the application's job and this is exactly where it is easiest to get wrong.
-- Add a test that a person granted one project of three sees hits from one project only — and assert
-  on the **total count**, not just the page.
+### Task 26: Read the two cross-project precedents before designing
 
-**Acceptance gate:** backend build; the grant-narrowing test above; a query plan check that the
-search does not seq-scan (`V67` already fixed one seq scan on the authorization hot path — do not
-add another).
+**Files:** read `openapi.yaml:7071` (`/work-items`) and `backend/…/identity/OrgChartService.java`
 
----
+- [ ] `/work-items` is the shipped company-scoped cross-project read. `OrgChartService` and
+  `AdminReach` already carry visible-project narrowing. **Reuse that narrowing** — a second
+  implementation of "which projects may this caller see" is the defect class this task exists to
+  avoid.
 
-# Slice 7 — Company data export
+### Task 27: Contract
 
-**One session.**
+- [ ] Path, query parameters, a paged response whose hit carries `projectId` and `projectName`.
+  `required` arrays throughout. Regenerate both copies and `diff`.
 
-**Goal:** Export one company's data as a single downloadable archive, for offboarding and GDPR.
+### Task 28: Write the failing grant-narrowing test
 
-**Shape:** an operator CLI command — `export-company --slug=acme --out=...` — beside
-`provision-company`, **not** an HTTP endpoint. The act is an operator's, it is long-running, and it
-must be possible without a browser.
+**Files:** Create `backend/src/test/java/com/tcms/repository/CaseSearchTest.java`
 
-**Files:** a service in `provisioning`, a command registration beside the existing operator commands,
-and the runbook note.
+- [ ] A person granted **one project of three** sees hits from one project only — and **assert on
+  the total count, not just the page**. A count computed over rows the caller may not see leaks the
+  existence of those rows even when the page hides them.
+- [ ] An arm proving RLS is not what saves you here: RLS scopes to the **company**. Two projects in
+  one company are both RLS-visible, so the narrowing is entirely the application's job.
 
-**Traps:**
-- It reads every table, so it must run **inside one `CompanyContext`** and one read-only transaction,
-  or a table read outside context returns zero rows and the export is silently short.
-- Blobs (evidence, report artifacts, attachments) live on the filesystem, not in Postgres. An export
-  that walks only tables produces a manifest referencing bytes it did not include.
-- Decide and record whether the export is redacted. Password hashes and token secrets must not be
-  in it.
+### Task 29: Narrow inside the query, not after it
 
-**Acceptance gate:** a test that exports a seeded company and asserts row counts per table match a
-direct count; and that company B's rows are absent.
+**Files:** Create `backend/…/repository/{CaseSearchController,CaseSearchService,CaseSearchQuery,CaseSearchHitView}.java`
 
----
+- [ ] The project-grant predicate goes **in the SQL**. Filtering in Java after an unrestricted read
+  means the count and the paging are computed over rows the caller may not see — which is the
+  defect Task 28 asserts against.
+- [ ] Stable sort with a secondary key, so paging cannot repeat or skip.
 
-# Slice 8 — Keyboard-driven execution
+### Task 30: Check the query plan
 
-**One session.** Frontend only.
+- [ ] Confirm the search does not seq-scan, measured on a seeded `shanks` container. `V67` already
+  fixed one seq scan on the authorization hot path — do not add another.
+- [ ] **Record any index this needs as OWED; do not add DDL.** Head is `V68` and D takes no Flyway
+  version — its own stepped plan says so, and an index added here would be the plan's second
+  migration arriving without a number assigned to it. Write the finding into the handoff, with the
+  measurement behind it, so whoever spends `V69` has the evidence rather than the hunch.
 
-**Goal:** Record results without a pointer — the highest-volume repetitive task in the product.
+### Task 31: The search screen
 
-**Depends on:** slices 3 and 4, whose controls it binds.
+**Files:** Create `frontend/src/features/cases/CaseSearchPage.tsx`; modify the router
 
-**Shape:** on the execution screen, single-key status entry, next/previous case, a key to focus the
-notes field, and a discoverable shortcut overlay. Bind at the screen, not globally.
+### Task 32: Close the area
 
-**Traps:**
-- Shortcuts must not fire while a text field has focus. This is the defect every implementation of
-  this feature ships first.
-- Accessibility: every shortcut needs a visible, focusable equivalent — this is an accelerator, not
-  the only route. Screen-reader users must be told the status changed, via a live region.
-- Put the key map in one module so the overlay and the handler cannot disagree.
-
-**Acceptance gate:** frontend suite, build and lint green; tests covering the typing-into-a-field
-case explicitly.
+- [ ] All gates; caches; queue rows; handoff + index row; push.
 
 ---
 
-# Slice 9 — Internationalisation groundwork
+---
 
-**One session for the groundwork. English stays the only locale.**
+# Area G — Internationalisation groundwork
+
+> **Last, and alone.** Do **not** write its stepped plan until D has landed — it sweeps a surface D is about to move.
+
+
+**Tasks 47–55. Full+ — the largest area overall. Frontend only. English stays the only locale.**
+**Run `ep-writing-plans` on this area first.**
 
 **Goal:** Route every user-facing string through a translation layer, so adding a locale later is
 data rather than surgery.
 
-**Why last:** it sweeps every screen. Run it earlier and slices 1–8 each add untranslated strings
+**Measured scope, not estimated:** 132 non-test `.tsx` files, ~41,700 lines, and 51
+`satisfies Record<…>` maps in `lib/labels.ts` alone.
+
+**Why last:** it sweeps every screen. Run it earlier and areas A–F each add untranslated strings
 behind it.
 
-**Scope boundary:** ship the *mechanism* and the English catalogue only. **Do not translate
+**Scope boundary:** ship the **mechanism and the English catalogue only. Do not translate
 anything.** A second locale is a separate slice and probably a paid one.
 
-**Shape:** an i18n provider in `app/Providers.tsx` — mind the nesting order, which is load-bearing
-and documented in the file — a catalogue module, and a lint rule or test that fails on a bare string
-literal in JSX so the sweep cannot silently regress.
+### Task 47: Choose the library and pin the decision
 
-**Traps:**
-- `lib/labels.ts` already maps enums with `satisfies Record<Union, string>`, which makes a new enum
-  member a compile error. **Preserve that property through the move** — losing it trades a
-  compile-time guarantee for a runtime blank.
-- Dates and numbers are `lib/format.ts`'s job. Do not let a second formatting path in.
-- `lib/planScope.ts:78` warns against `localeCompare` for case keys. An i18n pass is exactly when
-  someone "fixes" that sort. Do not.
+- [ ] No i18n dependency is installed today (`frontend/package.json` has none). Choose one, and
+  **measure the bundle change before believing it** — the working agreement records a split that
+  looked obviously right and made total JS ~40% worse.
 
-**Acceptance gate:** frontend suite, build and lint green; the bare-literal check passing; a written
-note in the handoff that no locale was added.
+### Task 48: Add the provider, minding the nesting order
+
+**Files:** Modify `frontend/src/app/Providers.tsx`
+
+- [ ] The nesting order in that file is **load-bearing and documented in it** — the query client is
+  constructed innermost because its global error handlers consume the notification and
+  session-recovery providers. Read the file's own comment before inserting anything.
+
+### Task 49: Write the bare-literal check first
+
+**Files:** Create `frontend/src/test/bareStrings.test.ts`
+
+- [ ] A test that fails on a bare string literal in JSX, so the sweep cannot silently regress. Write
+  it **before** the sweep, with an explicit allow-list that starts large and shrinks — that is what
+  makes tasks 51–53 measurable instead of open-ended.
+
+### Task 50: Move `lib/labels.ts` without losing its compile-time guarantee
+
+**Files:** Modify `frontend/src/lib/labels.ts`
+
+- [ ] All 51 maps use `satisfies Record<Union, string>`, which makes a new enum member **a compile
+  error** until it is labelled. **Preserve that property through the move.** Losing it trades a
+  compile-time guarantee for a runtime blank, which is the single most expensive mistake available
+  in this area.
+
+### Task 51: Sweep the shared layer
+
+**Files:** `frontend/src/lib/`, `frontend/src/components/`
+
+- [ ] Shared first: `DataRegion`, `Identifier`, the error boundaries and `describeError.ts`. Every
+  page depends on these, so doing them first shrinks the per-page diffs.
+- [ ] `lib/describeError.ts` is the one place an error becomes user-facing copy — keep it the one
+  place.
+
+### Task 52: Sweep the features, area by area
+
+**Files:** `frontend/src/features/**`
+
+- [ ] One commit per feature directory, shrinking the Task 49 allow-list as you go. Do not do this
+  in one commit — a 132-file diff is unreviewable.
+
+### Task 53: Empty the allow-list
+
+- [ ] The Task 49 allow-list reaches zero, or every remaining entry has a written reason beside it.
+
+### Task 54: Guard the two things an i18n pass reliably breaks
+
+- [ ] **Dates and numbers are `lib/format.ts`'s job.** Do not let a second formatting path in
+  through the i18n library's own formatters.
+- [ ] **`lib/planScope.ts:78` warns against `localeCompare` for case keys.** An i18n pass is exactly
+  when someone "fixes" that sort. **Do not.** Read the comment before touching it.
+
+### Task 55: Close the area
+
+- [ ] `test:run`, `build`, `lint` at 0 warnings; the bare-literal check green with an empty
+  allow-list; `fe-react.md` seam entry.
+- [ ] **A written note in the handoff that no locale was added**, so the next reader does not go
+  looking for the translations.
+- [ ] Handoff + index row; push.
+
+---
 
 ---
 
 ## Self-review
 
-**Coverage.** All nine gaps in `docs/features.md` § *Gaps Not Currently Planned* have a slice:
-audit log → 1, review notifications → 2, time tracking → 3, bulk assignment → 4, scheduled runs → 5,
-cross-project search → 6, data export → 7, keyboard execution → 8, i18n → 9.
+**Coverage.** All nine gaps have an area. **Seven are shipped** (§242–§248); **two remain** — D
+(cross-project search, stepped plan written) and G (i18n, deliberately unplanned until D lands).
 
-**Known softness, stated rather than hidden.** Slices 2–9 carry goal, files, traps and an acceptance
-gate but not bite-sized TDD steps — deliberate, and the Scope Check at the top says why and what to
-do about it. Slice 1 is the only one fully stepped.
+**Order.** Held. The relative order survived the whole run unchanged, and the two dependency claims
+it staked itself on both proved real: B genuinely inherited §242's two debts, and F genuinely needed
+A's and B's controls before it could bind them.
 
-**Flyway.** `V68` (slice 3) and `V69` (slice 5) are the only DDL, assigned in slice order. Nothing
-else migrates.
+**Size.** A's re-estimate from half a session to a quarter was correct — it shipped with no
+migration. G remains the largest and is still measured (132 files / 41.7k lines / 51 label maps)
+rather than guessed.
 
-**Cross-slice dependency to not forget:** slice 4 changes what slice 1's screen must render — the
-`bulk_operation_id` grouping. It is written into slice 4's traps.
+**Flyway.** `V68` (area C) was the only migration, exactly as re-assigned after A's was deleted.
+Head is `V68`; neither remaining area migrates.
+
+**Parallelism.** Concluded. It governed batches 1–3, its two staked calls held, and it no longer
+applies: `D ∥ G` is ineligible, so the remainder is sequential under the standing one-subagent cap.
+
+**The open risk, stated plainly.** **Five shipped areas have never been gated** — ~93 backend arms
+and 32 frontend arms whose first execution is still ahead, one area never compiled. Everything above
+describing those areas as "shipped" means *landed and pushed*, not *verified*. The gate pass is the
+next action in this plan, ahead of D, and until it runs the tally at the top is a statement about
+commits rather than about working software.
+
+**Carried into D, so none is forgotten:**
+- Gate the tree first — D's plan assumes a tree that compiles (its Task 14 is *"Go green, and gate"*).
+- D's plan has three stale section/version references; its decisions are unaffected.
+- RLS scopes to the **company**, not the project — the grant narrowing is entirely D's job, inside
+  the query, and its test must assert on the **total count**, not just the page.
+- File a row for C's missing `cli`/`mcp` verbs; closing it is not D's job.
+- Re-measure the frontend test count; `CLAUDE.md`'s 1582 is stale by at least 43.

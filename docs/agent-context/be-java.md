@@ -5845,6 +5845,36 @@ deliberate edit. `#confirmed`
 - **Async**: `CompanyContextTaskDecorator` clears the context on every task so a handler that forgets
   fails closed; `CompanyScopedEvent` is the only thing a handler may re-establish from.
 
+## Audit spine — `code-auditor` (added 2026-08-22)
+
+**Spine only. No verdicts, findings, severities or coverage numbers live here** — those are in
+`docs/audits/` with IDs, rounds and dates, and a "resolved" is only ever claimed after re-reading the
+code in that round.
+
+- **Engagement `001` — backend spec-conformance.** SPEC lane (`ep-spec-vs-code-audit`).
+  - Register: `docs/audits/001-backend-spec-conformance-requirements.md` — 54 requirements, 7
+    sections, **ID-stable and append-only**. Sections: `T` tenancy · `Z` authorization · `M` module
+    boundaries · `C` configuration/secrets · `P` provisioning & async context · `N` naming/keys ·
+    `X` contract · `V` verification discipline. **Never renumber; EXTEND appends with the next free
+    ID marked `Added r<N>`.**
+  - Rounds: `docs/audits/001-backend-spec-conformance-audit-r<N>.md`. `r1` = 2026-08-22 at
+    `62875cc5` (§249), static evidence only.
+  - Sources consolidated, in the repo's own precedence order: the roles spec, `openapi.yaml`, the
+    ERD (§0.1 / §0.2), the high-level plan, `tenancy-invariants.md`, `CLAUDE.md`'s working agreement.
+  - The four computed sweeps `r1` wrote are described in `r1` §0 in enough detail to re-run: schema
+    (`company_id` / FORCE / policy predicate / exception list, both directions), cross-module FK
+    (table→module via `@Table` + package), catalogue (replay `V3`+`V12`+`V15`+`V16`+`V19`+`V40`+`V51`+`V52`
+    against roles spec §A3, and key literals in `src/main` both ways), and `@Filter` coverage.
+    **A later round re-runs them rather than carrying their numbers forward.**
+- **The other `docs/audits/` series are different engagements and not rounds of this one:**
+  `*-remaining-scope-assessment.md` (rounds 1–5, last 2026-08-13) asks *what is left to build*;
+  `2026-08-15-flow-review-and-improvements.md` is a flow review; `2026-08-18-org-chart-disclosure-boundary.md`
+  is a single live probe. Do not renumber or fold them into `001`.
+- **A subagent audit runs no gates** (`V3` of the register): `./gradlew build` and the npm suites go
+  to `shanks` via `~/bin/tcms-remote`, so any round's build/test state is a *lead*, not evidence, and
+  runtime-only invariants (`PrivilegeSplitTest`, the paired-fixture isolation suite) come back
+  `Unverifiable` from a static round by construction.
+
 ## Conventions observed
 
 - Constructor injection, `final` fields, records for DTOs and results, `Optional` in return
