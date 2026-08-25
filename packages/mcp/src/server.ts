@@ -24,10 +24,14 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import {
   CallToolRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
   type CallToolResult,
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
+
+import { SHAPES, guideFor } from '@tcms/client';
 
 import { renderInstructions } from './instructions.js';
 import { failed, ok } from './result.js';
@@ -46,6 +50,18 @@ export function buildServer(session: Session, tools: readonly ToolDefinition[] =
         // `tcms_whoami` re-probes and the listed set can change under a role change mid-session.
         // Advertising a capability nothing emits is the kind of claim a host plans around.
         tools: { listChanged: true },
+        /*
+          Carrier 3 of the authoring format. `listChanged` is deliberately NOT advertised here, on
+          the rule the line above states: the resource set is compiled into the build and cannot
+          change within a session, so claiming the notification would be a claim about behaviour
+          that will never occur.
+
+          Resources rather than more tool description because this is where the guide's prose fits
+          — a tool description truncates at 2KB and the pitfalls are longer than that. Hosts vary
+          in whether they surface resources at all, which is exactly why it is the third carrier
+          and not the first: `tcms_shape` serves the same guide to a host that has no resource UI.
+        */
+        resources: {},
       },
       instructions: renderInstructions(session.reach, tools),
     },
@@ -74,6 +90,37 @@ export function buildServer(session: Session, tools: readonly ToolDefinition[] =
       .filter((tool) => isListed(tool, session.reach.permissions))
       .map((tool) => describe(tool, session)),
   }));
+
+  /*
+    Unfiltered by permission, unlike `tools/list`, and that is not an oversight in the §6w.3 rule.
+    That rule hides a tool an agent cannot use because it would call it, be refused, and retry.
+    These carry no capability: the shape of a test case is the same document whatever a credential
+    holds, it names no project, no company and no row, and withholding it would tell a caller
+    nothing except that it must guess the format instead.
+  */
+  server.setRequestHandler(ListResourcesRequestSchema, () => ({
+    resources: Object.values(SHAPES).map((entity) => ({
+      uri: `tcms://shape/${entity.entity}`,
+      name: `${entity.title} — authoring format`,
+      description: `Every field of a ${entity.title.toLowerCase()}, what it takes, and the `
+        + 'mistakes that cost a round trip.',
+      mimeType: 'text/markdown',
+    })),
+  }));
+
+  server.setRequestHandler(ReadResourceRequestSchema, (request) => {
+    const entity = Object.values(SHAPES)
+      .find((candidate) => request.params.uri === `tcms://shape/${candidate.entity}`);
+    if (!entity) throw new Error(`No resource at '${request.params.uri}'.`);
+
+    return {
+      contents: [{
+        uri: request.params.uri,
+        mimeType: 'text/markdown',
+        text: guideFor(entity),
+      }],
+    };
+  });
 
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const tool = findTool(request.params.name);

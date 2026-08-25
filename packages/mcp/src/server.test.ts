@@ -108,8 +108,16 @@ describe('tools/list', () => {
     const whoami = tools.find((tool) => tool.name === 'tcms_whoami');
     expect(whoami?._meta?.['anthropic/alwaysLoad']).toBe(true);
 
+    /*
+      ~~Two~~ → three since §253. `tcms_shape` earns the raised ceiling for the same reason the
+      other two do (§4.6): it returns ONE authored document, and a truncated one is worse than
+      none — a model that reads the first half of `declinedConditions` learns that it takes ids
+      and not that they are ATTACHMENT ids, which is exactly the mistake the field exists to warn
+      about. The other two are a case and a doc page; this one is the format itself.
+    */
     const raised = tools.filter((tool) => tool._meta?.['anthropic/maxResultSizeChars']);
-    expect(raised.map((tool) => tool.name).sort()).toEqual(['tcms_open_case', 'tcms_open_doc_page']);
+    expect(raised.map((tool) => tool.name).sort())
+      .toEqual(['tcms_open_case', 'tcms_open_doc_page', 'tcms_shape']);
   });
 
   it('marks the tools that remove something, because that is what makes a host prompt', async () => {

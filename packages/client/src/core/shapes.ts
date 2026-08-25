@@ -463,9 +463,27 @@ export function shapeOf(entity: string): EntityShape | undefined {
 
 /* -------------------------------------------------------------- selection ---- */
 
+/**
+ * Which half of a payload a field belongs to.
+ *
+ * `body` is the entity itself — what `TestCaseInput` carries. `wrapper` is everything the surface
+ * sends *about* the write rather than as part of it, which today is `verdict` alone: a claim about
+ * whether a proposal was checked is not a property of the case, and rendering it inside the case
+ * body would offer a model a field the endpoint would reject.
+ */
+export type FieldScope = 'body' | 'wrapper' | 'all';
+
 /** The fields one action accepts, in catalogue order. */
-export function fieldsFor(shape: EntityShape, action: string): readonly FieldSpec[] {
-  return shape.fields.filter((field) => !field.actions || field.actions.includes(action));
+export function fieldsFor(
+  shape: EntityShape,
+  action: string,
+  scope: FieldScope = 'all',
+): readonly FieldSpec[] {
+  return shape.fields.filter((field) => {
+    if (field.actions && !field.actions.includes(action)) return false;
+    const wrapper = field.contractSchema !== undefined && field.contractSchema !== shape.contractSchema;
+    return scope === 'all' || (scope === 'wrapper') === wrapper;
+  });
 }
 
 /**
@@ -496,8 +514,12 @@ export function isRequired(field: FieldSpec, payload: Record<string, unknown>): 
  * wire to a host, not OpenAPI, and `{"type": "string", "nullable": true}` means nothing there —
  * it would read as a plain string and a legitimate `null` would look like a type error.
  */
-export function jsonSchemaFor(shape: EntityShape, action: string): Record<string, unknown> {
-  const fields = fieldsFor(shape, action);
+export function jsonSchemaFor(
+  shape: EntityShape,
+  action: string,
+  scope: FieldScope = 'all',
+): Record<string, unknown> {
+  const fields = fieldsFor(shape, action, scope);
   const required = fields.filter((field) => field.required === 'always').map((field) => field.name);
 
   return {
@@ -645,7 +667,7 @@ export function usageFor(shape: EntityShape, action: string): string {
 export function templateFor(shape: EntityShape, action: string): Record<string, unknown> {
   const body: Record<string, unknown> = {};
 
-  for (const field of fieldsFor(shape, action)) {
+  for (const field of fieldsFor(shape, action, 'body')) {
     if (field.required !== 'always') continue;
     body[field.name] = exampleOf(field);
   }

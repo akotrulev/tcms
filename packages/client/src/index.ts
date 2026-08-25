@@ -70,6 +70,7 @@ export type {
   ActionSpec,
   CliBinding,
   EntityShape,
+  FieldScope,
   FieldSpec,
   Requirement,
 } from './core/shapes.js';

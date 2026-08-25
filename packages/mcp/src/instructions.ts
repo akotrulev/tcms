@@ -94,7 +94,8 @@ export function renderInstructions(reach: Reach, tools: readonly ToolDefinition[
   }
 
   sections.push(
-    'Ground yourself before you write: call tcms_orient once, then read the cases or the '
+    'Ground yourself before you write: tcms_shape for the format of what you are writing, '
+      + 'tcms_orient once for this project\'s own vocabulary, then read the cases or the '
       + 'documentation you are about to change. A generated case is filed as a proposal for a '
       + 'person to accept — it never becomes a test case on its own.',
   );

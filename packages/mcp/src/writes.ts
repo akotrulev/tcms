@@ -97,8 +97,10 @@
  * call. If a tool ever grows prose, this is the fact it has to carry.
  */
 import {
+  CASE_SHAPE,
   caseInputFrom,
   createIntent,
+  jsonSchemaFor,
   editIntent,
   planInputFrom,
   requireExplicitVersion,
@@ -240,17 +242,13 @@ const writeCase: ToolDefinition = {
       action: ACTION(['propose', 'edit', 'submit', 'delete'], 'What to do.'),
       case: idProperty('case to edit, submit or delete — required for those, refused for propose', 'TC-42'),
       testCase: {
-        type: 'object',
+        ...jsonSchemaFor(CASE_SHAPE, 'propose', 'body'),
         description:
-          'The generated case, for `propose`. FOUR fields are required and the accept refuses '
-          + 'without them: `title`, `stepFormat` (STRUCTURED or GHERKIN), `priority` '
-          + '(CRITICAL/HIGH/MEDIUM/LOW) and `automationStatus` '
-          + '(MANUAL/TO_BE_AUTOMATED/AUTOMATED/NOT_AUTOMATABLE). A STRUCTURED case also needs a '
-          + 'non-empty `steps`, and a GHERKIN one needs `gherkinSource`. Optional: description, '
-          + 'objective, expectedOutcome, severity, preconditions, postconditions, tags, suiteId. '
-          + 'A proposal is stored UNVALIDATED and checked when a person accepts it, so a missing '
-          + 'field is not refused here — it becomes a refusal on a screen you are not at, weeks '
-          + 'later, that the reviewer cannot fix without rewriting your case.',
+          'The generated case, for `propose`. Its fields are declared below rather than described '
+          + 'here, which is the point of the change: a proposal is stored UNVALIDATED and checked '
+          + 'only when a person accepts it, so a missing field is not refused here — it becomes a '
+          + 'refusal on a screen you are not at, weeks later, that the reviewer cannot fix without '
+          + 'rewriting your case. Call tcms_shape for the pitfalls that do not fit in a schema.',
       },
       verdict: {
         type: 'string',
@@ -259,36 +257,17 @@ const writeCase: ToolDefinition = {
           + 'it out if you did not check — absent and UNVERIFIED are different answers, and the '
           + 'difference is recorded.',
       },
-      // The `edit` arm's fields. Every one of them is optional here even though the server
-      // requires four, because the arm reads the case and sends what it already had for anything
-      // you do not name — see the run body.
-      title: { type: 'string' },
-      description: { type: ['string', 'null'] },
-      objective: { type: ['string', 'null'] },
-      expectedOutcome: { type: ['string', 'null'] },
-      priority: { type: 'string', enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] },
-      severity: { type: ['string', 'null'], enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', null] },
-      automationStatus: {
-        type: 'string',
-        enum: ['MANUAL', 'TO_BE_AUTOMATED', 'AUTOMATED', 'NOT_AUTOMATABLE'],
-      },
-      suite: idProperty('suite to file it in — null to unfile it', 'TS-7'),
-      tags: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'The COMPLETE tag set, not an addition. Omit to leave the tags alone.',
-      },
-      declinedConditions: {
-        type: 'array',
-        items: { type: 'string' },
-        description:
-          'The inherited conditions this case declines — the COMPLETE set, so `[]` re-imposes '
-          + 'every one it had turned off and omitting the field leaves them alone. Pass the `id` '
-          + 'of an entry in tcms_open_case\'s preconditions / postconditions / '
-          + 'declinedPreconditions / declinedPostconditions, which is an ATTACHMENT id and NOT '
-          + 'the conditionId beside it: the same library entry attached at two suites is two '
-          + 'attachments, and declining one leaves the other in force.',
-      },
+      /*
+        The `edit` arm's fields, rendered from the catalogue rather than written out — which is
+        how `automationKey` arrived. It was on the CLI's `case edit` and missing here, so this
+        surface could set `automationStatus: AUTOMATED` and had no way to send the key the server
+        requires alongside it: a guaranteed 400 that no test asked about, because both adapters
+        were hand-maintained and nothing compared them.
+
+        Every one of them is optional even though the server requires four, because the arm reads
+        the case and sends what it already had for anything you do not name — see the run body.
+      */
+      ...(jsonSchemaFor(CASE_SHAPE, 'edit', 'body')['properties'] as Record<string, unknown>),
       lockVersion: LOCK_VERSION_PROPERTY,
     },
   },
@@ -402,6 +381,8 @@ const writeCase: ToolDefinition = {
       priority: str(input, 'priority'),
       severity: nullableStr(input, 'severity'),
       automationStatus: str(input, 'automationStatus'),
+      automationKey: nullableStr(input, 'automationKey'),
+      notAutomatableReason: nullableStr(input, 'notAutomatableReason'),
       // Null and absent are different requests and JSON can say both: null unfiles the case,
       // absent leaves it where it is. The CLI needed two flags to express this; here it is the
       // shape the caller already sent.

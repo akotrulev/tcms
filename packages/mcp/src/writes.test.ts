@@ -677,7 +677,10 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
     // target. It is asserted so that a merge or a split has to be a decision somebody records.
     // ~~21~~ → 23 with audit C10: `tcms_list_artifacts` and `tcms_write_artifact`, which arrived
     // together because a delete arm needs a read that serves the ids it takes (`writes.ts`).
-    expect(TOOLS).toHaveLength(23);
+    // ~~23~~ → 24 with `tcms_shape` (§253), which is the one tool on this surface that reads
+    // nothing: it answers what a payload must look like, which is a property of the build rather
+    // than of the instance, and so has no gate and no project.
+    expect(TOOLS).toHaveLength(24);
   });
 
   it('names every tool in the tcms_ namespace', () => {
