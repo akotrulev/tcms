@@ -50,6 +50,30 @@ export { caseInputFrom, planInputFrom, suiteInputFrom } from './core/rewrite.js'
 
 export { REQUIRED_CASE_FIELDS, requireProposableCase } from './core/proposal.js';
 
+export {
+  CASE_SHAPE,
+  SHAPES,
+  fieldsFor,
+  flagOf,
+  guideFor,
+  isRequired,
+  jsonSchemaFor,
+  mechanicsFor,
+  optionSpecFor,
+  shapeOf,
+  templateFor,
+  usageFor,
+  violationsOfShape,
+} from './core/shapes.js';
+export type {
+  ActionKind,
+  ActionSpec,
+  CliBinding,
+  EntityShape,
+  FieldSpec,
+  Requirement,
+} from './core/shapes.js';
+
 export { isProcessEntryPoint } from './core/entrypoint.js';
 
 export { describeReach, describeRefusal } from './core/refusal.js';
