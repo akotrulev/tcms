@@ -79,6 +79,56 @@ const UNOFFERED: Readonly<Record<string, string>> = {
   'AiProposalInput.testCase':
     'The wrapper itself. The catalogue flattens it — every field of the case is a field of the '
     + 'proposal here, which is the shape both adapters already accept.',
+
+  /* ---- artifact ---- */
+  'ArtifactInput.kind':
+    'DERIVED, not taken. `tcms_write_artifact` reads it off which payload was named — docPage, '
+    + 'url or reportJob — because a `kind` argument would be a second statement of something the '
+    + 'arguments already say, and the two can disagree. Naming none, or more than one, is refused '
+    + 'with a sentence rather than by the server with a field error about a field the caller never '
+    + 'sent. This was the first thing the catalogue check found.',
+
+  /* ---- plan ---- */
+  'TestPlanInput.tags':
+    'A plan carries tags on the wire and neither adapter offers them. Not a decision — an '
+    + 'omission this check now records rather than hides. It is a follow-up, not this slice.',
+  'TestPlanInput.sections':
+    'The plan document body (§6, the plan-detail rework). It is a nested structure with its own '
+    + 'ordering rules, and neither machine surface writes one yet.',
+  'TestPlanInput.scopeText':
+    'Part of the plan document body, with `sections`.',
+  'TestPlanInput.outOfScopeText':
+    'Part of the plan document body, with `sections`.',
+  'TestPlanInput.entryCriteria':
+    'Part of the plan document body, with `sections`.',
+  'TestPlanInput.exitCriteria':
+    'Part of the plan document body, with `sections`.',
+
+  /* ---- run ---- */
+  'TestRunInput.assigneeId':
+    'A user UUID, and nothing on either surface can obtain one — the same wall `ownerId` hits.',
+  'TestRunInput.configurationId':
+    'Project configuration, which §3.3 excludes from this surface entirely.',
+  'TestRunInput.overrideApprovalGate':
+    'It overrides an approval, and no credential on this surface holds any `*:approve`. Offering '
+    + 'it would be offering a flag whose only outcome is a 403.',
+
+  /* ---- result ---- */
+  'ExecutionResultInput.stepResults':
+    'Per-step outcomes. `tcms_record_result` records the case-level verdict only; the step array '
+    + 'is an untyped object in the contract, so there is nothing to render.',
+
+  /* ---- work item ---- */
+  'WorkItemInput.projectId':
+    'Surface spec §4.1: `projectId` appears in NO schema on either adapter. It comes from the '
+    + 'session scope, and a tool taking one would let a caller name a project they never resolved.',
+  'WorkItemInput.assigneeId':
+    'A user UUID — the same wall `ownerId` and `TestRunInput.assigneeId` hit.',
+
+  /* ---- doc page ---- */
+  'DocBlockInput.id':
+    'Block identity on a rewrite. The edit arm sends the whole body, so an id would be the '
+    + 'caller asserting something the position already says.',
 };
 
 describe('the shape catalogue against openapi.yaml', () => {
@@ -86,7 +136,12 @@ describe('the shape catalogue against openapi.yaml', () => {
     for (const shape of ENTITIES) {
       for (const field of shape.fields) {
         if (!field.enumOf) continue;
-        const declared = deref(schema(field.enumOf))?.['enum'] as string[] | undefined;
+        // `Schema` or `Schema.property` — see FieldSpec.enumOf for why both exist.
+        const [schemaName, property] = field.enumOf.split('.');
+        const site = property
+          ? ((schema(schemaName!)['properties'] as Record<string, Node>)[property])
+          : schema(schemaName!);
+        const declared = deref(site)?.['enum'] as string[] | undefined;
         expect(declared, `${field.enumOf} declares no enum`).toBeDefined();
         expect([...(field.enum ?? [])].sort(), `${shape.entity}.${field.name}`)
           .toEqual([...declared!].sort());
@@ -160,24 +215,44 @@ describe('the shape catalogue against openapi.yaml', () => {
     }
   });
 
-  it('nests the step and condition shapes against their own contract schemas', () => {
-    const pairs = [['steps', 'TestStepInput'], ['preconditions', 'CaseConditionInput']] as const;
-    for (const [name, contractName] of pairs) {
-      const field = SHAPES['case']!.fields.find((candidate) => candidate.name === name)!;
-      const properties = Object.keys((schema(contractName)['properties'] as Node) ?? {});
-      const required = (schema(contractName)['required'] as string[] | undefined) ?? [];
+  it('pins every nested object shape to its own contract schema', () => {
+    /*
+      Generalised after the doc-page blocks shipped as `{ type, text }` for one commit while
+      `DocBlockInput` declares `blockType` — a field name that does not exist, rendered into a tool
+      schema and offered to a model as if it did. The outer checks could not see it: they read
+      top-level properties only, and every nested shape was invisible to all four.
 
-      for (const inner of field.fields ?? []) {
-        expect(properties, `${name}.${inner.name}`).toContain(inner.name);
-      }
-      for (const property of required) {
-        expect(
-          (field.fields ?? []).some((inner) => inner.name === property && inner.required === 'always'),
-          `${contractName}.${property} is required and ${name} does not say so.`,
-        ).toBe(true);
+      The pairwise list this replaced named `steps` and `preconditions` by hand, which is why it
+      covered neither `postconditions` nor anything outside the case.
+    */
+    for (const shape of ENTITIES) {
+      for (const field of shape.fields.filter((candidate) => candidate.type === 'object[]')) {
+        expect(field.itemsSchema, `${shape.entity}.${field.name} is an object[] and names no `
+          + 'itemsSchema, so nothing pins the shape a caller is told to send.')
+          .toBeDefined();
+
+        const properties = Object.keys((schema(field.itemsSchema!)['properties'] as Node) ?? {});
+        const required = (schema(field.itemsSchema!)['required'] as string[] | undefined) ?? [];
+
+        for (const inner of field.fields ?? []) {
+          expect(properties, `${shape.entity}.${field.name}[].${inner.name} renders to `
+            + `${field.itemsSchema}.${inner.name}, which the contract does not declare.`)
+            .toContain(inner.name);
+        }
+
+        for (const property of required) {
+          expect(
+            (field.fields ?? []).some(
+              (inner) => inner.name === property && inner.required === 'always',
+            ),
+            `${field.itemsSchema}.${property} is required and ${shape.entity}.${field.name} does `
+              + 'not say so — a caller would be told it is optional and get a 400.',
+          ).toBe(true);
+        }
       }
     }
   });
+
 });
 
 describe('the renderers', () => {

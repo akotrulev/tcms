@@ -71,6 +71,11 @@ export interface FieldSpec {
    *
    * Naming the schema rather than repeating "these four strings are the priorities" is what makes
    * the pin mechanical: a value added to `Priority` in the contract reddens `packages/`.
+   *
+   * Two spellings, because the contract has two. `'Priority'` names a component schema that IS an
+   * enum; `'ArtifactInput.scope'` names a property carrying an inline one. The second is not a
+   * lesser case to be tidied later — an enum used by one operation is reasonably written where it
+   * is used, and a pin that only worked on extracted enums would silently cover none of them.
    */
   readonly enumOf?: string;
   /** `null` is a meaningful value here, and means something other than "absent". */
@@ -108,10 +113,28 @@ export interface FieldSpec {
   readonly cli?: CliBinding;
   /** One line, for a tool schema and for `--help`. */
   readonly describe: string;
+  /**
+   * A literal value a caller can copy on its first call.
+   *
+   * `tool-mcp-builder` step 4: *every field description ends with its example — it is the agent's
+   * first-call template*. Derived where the catalogue already knows one (an enum's first member, a
+   * `keyExample`), so this is only written out for the fields where neither applies and the format
+   * is the thing a caller would otherwise guess — a date, a duration, a commit sha.
+   */
+  readonly example?: string;
   /** The pitfall. Long-form guide only — it will not fit in a tool schema. */
   readonly note?: string;
   /** `steps`, `preconditions`. */
   readonly fields?: readonly FieldSpec[];
+  /**
+   * The contract schema an `object[]`'s items render to, so the nested shape is pinned too.
+   *
+   * Required on every `object[]`, and the reason is a defect this file shipped for one commit:
+   * the doc-page blocks were written as `{ type, text }` when `DocBlockInput` declares
+   * `blockType` — a field name that does not exist, offered to a model as if it did. The outer
+   * check could not see it, because it only ever looked at top-level properties.
+   */
+  readonly itemsSchema?: string;
 }
 
 /** What `WriteDeclaration.kind` already says, restated here so a renderer can read it. */
@@ -138,6 +161,13 @@ export interface ActionSpec {
 export interface EntityShape {
   readonly entity: string;
   readonly title: string;
+  /**
+   * What one of these looks like when it is named — `TC-42`.
+   *
+   * The positional argument of every command that acts on an existing row, so a worked example
+   * that omitted it would not run. Absent on an entity with no display key of its own.
+   */
+  readonly keyExample?: string;
   /** The contract schema the body renders to, which the conformance check reads. */
   readonly contractSchema: string;
   readonly actions: readonly ActionSpec[];
@@ -256,6 +286,7 @@ const CASE_FIELDS: readonly FieldSpec[] = [
     type: 'object[]',
     required: { when: 'stepFormat', is: ['STRUCTURED'] },
     fields: STEP_FIELDS,
+    itemsSchema: 'TestStepInput',
     actions: ['propose'],
     describe: 'The procedure, in order. Required when stepFormat is STRUCTURED.',
     note:
@@ -279,7 +310,8 @@ const CASE_FIELDS: readonly FieldSpec[] = [
     type: 'string',
     nullable: true,
     required: { when: 'automationStatus', is: ['AUTOMATED'] },
-    describe: 'The identifier the runner reports results under. Required when AUTOMATED.',
+    example: 'login.smoke.happyPath',
+      describe: 'The identifier the runner reports results under. Required when AUTOMATED.',
     note:
       'This is the handle result ingestion matches on. A case marked AUTOMATED without one is '
       + 'refused, and a case whose key does not match what the runner emits is silently never '
@@ -347,6 +379,7 @@ const CASE_FIELDS: readonly FieldSpec[] = [
     name: 'preconditions',
     type: 'object[]',
     fields: CONDITION_FIELDS,
+    itemsSchema: 'CaseConditionInput',
     actions: ['propose'],
     describe: 'Library conditions that must hold before the steps run, in order.',
   },
@@ -354,6 +387,7 @@ const CASE_FIELDS: readonly FieldSpec[] = [
     name: 'postconditions',
     type: 'object[]',
     fields: CONDITION_FIELDS,
+    itemsSchema: 'CaseConditionInput',
     actions: ['propose'],
     describe: 'Library conditions to restore afterwards, in order.',
   },
@@ -413,12 +447,14 @@ const CASE_FIELDS: readonly FieldSpec[] = [
     type: 'integer',
     nullable: true,
     actions: ['propose'],
-    describe: 'How long one manual run takes, in seconds.',
+    example: '180',
+      describe: 'How long one manual run takes, in seconds.',
   },
 ];
 
 export const CASE_SHAPE: EntityShape = {
   entity: 'case',
+  keyExample: 'TC-42',
   title: 'Test case',
   contractSchema: 'TestCaseInput',
   actions: [
@@ -464,8 +500,308 @@ export const CASE_SHAPE: EntityShape = {
   fields: CASE_FIELDS,
 };
 
+/* ------------------------------------------------------------------ suite ---- */
+
+/**
+ * A suite is **flat since §98** — a named collection whose members are three arms (filed, added,
+ * tagged), not a folder in a tree. The fields below are why that matters to an author: `cases`
+ * adds membership directly and `tagRules` resolves it, and the two are different acts.
+ */
+const SUITE_SHAPE: EntityShape = {
+  entity: 'suite',
+  keyExample: 'TS-7',
+  title: 'Suite',
+  contractSchema: 'SuiteInput',
+  actions: [
+    { name: 'create', kind: 'create', permission: 'suite:manage', mcp: true, cli: true, cliSpelling: 'flags', describe: 'Creates a suite.' },
+    { name: 'edit', kind: 'edit', permission: 'suite:manage', mcp: true, cli: true, cliSpelling: 'flags', describe: 'Changes one.' },
+    { name: 'status', kind: 'state', permission: 'suite:manage', mcp: true, cli: true, describe: 'Submits it for review, or withdraws it. Approving costs suite:approve, which is not on this surface.' },
+    { name: 'delete', kind: 'delete', permission: 'suite:delete', mcp: true, cli: false, describe: 'Removes a suite. The cases in it are not touched.' },
+  ],
+  fields: [
+    { name: 'name', type: 'string', required: 'always', describe: 'What this collection is called.' },
+    { name: 'description', type: 'string', nullable: true, describe: 'What belongs in it and why.' },
+    {
+      name: 'tagRules',
+      type: 'string[]',
+      set: true,
+      cli: { flag: 'tag-rule', multiple: true },
+      describe: 'Tags whose cases this suite RESOLVES — the COMPLETE set.',
+      note:
+        'A rule is not a copy: a case carrying the tag belongs to the suite for as long as it '
+        + 'carries it, and stops belonging when the tag comes off. That is the difference from '
+        + '`cases`, which is direct membership and survives a retag.',
+    },
+    {
+      name: 'cases',
+      type: 'string[]',
+      set: true,
+      contract: 'caseIds',
+      keyExample: 'TC-42',
+      cli: { flag: 'case', multiple: true },
+      describe: 'Cases added to this suite directly, by display key — the COMPLETE set.',
+    },
+    {
+      name: 'preconditions',
+      type: 'object[]',
+      fields: CONDITION_FIELDS,
+      itemsSchema: 'CaseConditionInput',
+      cli: { flag: 'precondition', multiple: true },
+      describe: 'Library conditions every case in this suite inherits before its steps.',
+      note:
+        'Offered on the create as well as the edit, and not for symmetry: a suite\'s conditions '
+        + 'reach the cases filed in it, so "create it, then attach the conditions" is a window in '
+        + 'which those cases run without a setup step their author intended. A case can decline an '
+        + 'inherited condition — see the case shape\'s `declinedConditions`.',
+    },
+    {
+      name: 'postconditions',
+      type: 'object[]',
+      fields: CONDITION_FIELDS,
+      itemsSchema: 'CaseConditionInput',
+      cli: { flag: 'postcondition', multiple: true },
+      describe: 'Library conditions every case in this suite inherits after its steps.',
+    },
+  ],
+};
+
+/* ------------------------------------------------------------------- plan ---- */
+
+const PLAN_SHAPE: EntityShape = {
+  entity: 'plan',
+  keyExample: 'TP-3',
+  title: 'Test plan',
+  contractSchema: 'TestPlanInput',
+  actions: [
+    { name: 'create', kind: 'create', permission: 'plan:create', mcp: true, cli: true, cliSpelling: 'flags', describe: 'Creates a plan.' },
+    { name: 'edit', kind: 'edit', permission: 'plan:edit', mcp: true, cli: true, cliSpelling: 'flags', describe: 'Changes one.' },
+    { name: 'status', kind: 'state', permission: 'plan:edit', mcp: true, cli: true, describe: 'Submits it for review, or withdraws it.' },
+    { name: 'delete', kind: 'delete', permission: 'plan:delete', mcp: true, cli: false, describe: 'Removes a plan.' },
+  ],
+  fields: [
+    { name: 'name', type: 'string', required: 'always', describe: 'What this plan covers.' },
+    { name: 'description', type: 'string', nullable: true, describe: 'Its purpose, in prose.' },
+    { name: 'milestoneName', type: 'string', nullable: true, describe: 'The release or milestone it belongs to.' },
+    { name: 'milestoneDate', type: 'string', nullable: true, example: '2026-09-30', describe: 'When that milestone is due, as a date.' },
+    {
+      name: 'suites',
+      type: 'string[]',
+      set: true,
+      contract: 'suiteIds',
+      keyExample: 'TS-7',
+      cli: { flag: 'suite', multiple: true },
+      describe: 'Suites in scope for this plan — the COMPLETE set.',
+    },
+    {
+      name: 'cases',
+      type: 'string[]',
+      set: true,
+      contract: 'caseIds',
+      keyExample: 'TC-42',
+      cli: { flag: 'case', multiple: true },
+      describe: 'Individual cases in scope, beyond whole suites — the COMPLETE set.',
+    },
+  ],
+};
+
+/* --------------------------------------------------------------- doc page ---- */
+
+const DOC_PAGE_SHAPE: EntityShape = {
+  entity: 'docPage',
+  keyExample: 'DOC-1',
+  title: 'Documentation page',
+  contractSchema: 'DocPageInput',
+  actions: [
+    { name: 'create', kind: 'create', permission: 'doc:edit', mcp: true, cli: true, cliSpelling: 'flags', describe: 'Creates a page.' },
+    { name: 'edit', kind: 'edit', permission: 'doc:edit', mcp: true, cli: true, cliSpelling: 'flags', describe: 'Rewrites its blocks.' },
+    { name: 'link', kind: 'state', permission: 'doc:edit', mcp: true, cli: true, describe: 'Links a block to a case or a suite.' },
+    { name: 'unlink', kind: 'delete', permission: 'doc:edit', mcp: true, cli: true, describe: 'Removes one such link. Nothing about the page changes.' },
+    { name: 'publish', kind: 'state', permission: 'doc:publish', mcp: true, cli: false, describe: 'Moves the page through its lifecycle.' },
+  ],
+  fields: [
+    { name: 'title', type: 'string', required: 'always', describe: 'The page heading.' },
+    {
+      name: 'parent',
+      type: 'string',
+      nullable: true,
+      contract: 'parentId',
+      keyExample: 'DOC-1',
+      describe: 'The page this one sits under. Null puts it at the root.',
+    },
+    {
+      name: 'blocks',
+      type: 'object[]',
+      itemsSchema: 'DocBlockInput',
+      describe: 'The page body, in order — the COMPLETE set on an edit.',
+      note:
+        'A rewrite, not a patch: the blocks you send are the page afterwards. A block a link '
+        + 'points at that is not in the new set takes the link with it, which is why `link` and '
+        + '`unlink` are separate actions rather than fields here.',
+      fields: [
+        {
+          name: 'blockType',
+          type: 'string',
+          required: 'always',
+          describe: 'The block kind — heading, paragraph, list, table, attachment.',
+        },
+        { name: 'text', type: 'string', required: 'always', describe: 'Its content.' },
+        { name: 'level', type: 'integer', nullable: true, describe: 'Heading depth, for a heading block.' },
+        { name: 'attachmentId', type: 'string', nullable: true, describe: 'The file this block embeds.' },
+      ],
+    },
+  ],
+};
+
+/* -------------------------------------------------------------------- run ---- */
+
+const RUN_SHAPE: EntityShape = {
+  entity: 'run',
+  keyExample: 'RUN-12',
+  title: 'Test run',
+  contractSchema: 'TestRunInput',
+  actions: [
+    { name: 'create', kind: 'create', permission: 'run:create', mcp: true, cli: true, cliSpelling: 'flags', describe: 'Opens a run over a selection of cases.' },
+    { name: 'clone', kind: 'create', permission: 'run:create', mcp: true, cli: false, describe: 'Opens a new run with the same scope as an existing one.' },
+    { name: 'status', kind: 'state', permission: 'run:close', mcp: true, cli: true, describe: 'Closes or reopens a run.' },
+  ],
+  fields: [
+    { name: 'name', type: 'string', required: 'always', describe: 'What this run is called.' },
+    {
+      name: 'plan',
+      type: 'string',
+      nullable: true,
+      contract: 'planId',
+      keyExample: 'TP-3',
+      describe: 'The plan this run executes, if any.',
+    },
+    {
+      name: 'suites',
+      type: 'string[]',
+      set: true,
+      contract: 'suiteIds',
+      keyExample: 'TS-7',
+      cli: { flag: 'suite', multiple: true },
+      describe: 'Suites whose cases this run covers.',
+    },
+    {
+      name: 'cases',
+      type: 'string[]',
+      set: true,
+      contract: 'caseIds',
+      keyExample: 'TC-42',
+      cli: { flag: 'case', multiple: true },
+      describe: 'Individual cases to include beyond the suites.',
+    },
+    { name: 'tags', type: 'string[]', set: true, cli: { flag: 'tag', multiple: true }, describe: 'Include every case carrying these tags.' },
+    { name: 'releaseVersion', type: 'string', nullable: true, example: '2026.9.0', describe: 'The release under test.' },
+    { name: 'buildNumber', type: 'string', nullable: true, example: '4821', describe: 'The build under test.' },
+    { name: 'commitSha', type: 'string', nullable: true, example: '9f2c1ab', describe: 'The commit under test.' },
+    { name: 'branch', type: 'string', nullable: true, example: 'release/2026.9', describe: 'The branch under test.' },
+  ],
+};
+
+/* ----------------------------------------------------------------- result ---- */
+
+const RESULT_SHAPE: EntityShape = {
+  entity: 'result',
+  title: 'Execution result',
+  contractSchema: 'ExecutionResultInput',
+  actions: [
+    { name: 'record', kind: 'edit', permission: 'result:submit', mcp: true, cli: true, cliSpelling: 'flags', describe: 'Records the outcome of executing one case in one run.' },
+  ],
+  fields: [
+    {
+      name: 'status',
+      type: 'string',
+      required: 'always',
+      contract: 'statusId',
+      describe: 'A status NAME from tcms_orient\'s executionStatuses, not a UUID.',
+      note:
+        'Per-project and configurable — a project may rename "Blocked" to "Environment down" — so '
+        + 'a status guessed from another project is refused. `tcms_orient` serves this project\'s '
+        + 'own list with the fixed aggregation kind beside each name, which is what a rollup reads.',
+    },
+    { name: 'comment', type: 'string', nullable: true, describe: 'What happened, for a person reading the run later.' },
+    { name: 'durationMs', type: 'integer', nullable: true, example: '4200', describe: 'How long the execution took, in milliseconds.' },
+  ],
+};
+
+/* -------------------------------------------------------------- work item ---- */
+
+const WORK_ITEM_SHAPE: EntityShape = {
+  entity: 'workItem',
+  title: 'Work item',
+  contractSchema: 'WorkItemInput',
+  actions: [
+    { name: 'create', kind: 'create', permission: 'workitem:manage', mcp: true, cli: false, cliSpelling: 'flags', describe: 'Raises a work item.' },
+    { name: 'move', kind: 'state', permission: 'workitem:manage', mcp: true, cli: false, describe: 'Moves it along its board.' },
+  ],
+  fields: [
+    { name: 'title', type: 'string', required: 'always', describe: 'What needs doing.' },
+    { name: 'description', type: 'string', nullable: true, describe: 'The detail.' },
+    { name: 'priority', type: 'string', enum: PRIORITY, enumOf: 'Priority', describe: 'How urgent it is.' },
+    { name: 'dueDate', type: 'string', nullable: true, example: '2026-09-30', describe: 'When it is due, as a date.' },
+  ],
+};
+
+/* --------------------------------------------------------------- artifact ---- */
+
+const ARTIFACT_SHAPE: EntityShape = {
+  entity: 'artifact',
+  title: 'Artifact',
+  contractSchema: 'ArtifactInput',
+  actions: [
+    { name: 'register', kind: 'create', permission: 'artifact:edit', mcp: true, cli: false, cliSpelling: 'flags', describe: 'Registers a reference — a doc page, a URL, or a generated report.' },
+    { name: 'edit', kind: 'edit', permission: 'artifact:edit', mcp: true, cli: false, cliSpelling: 'flags', describe: 'Changes its title or description.' },
+    { name: 'status', kind: 'state', permission: 'artifact:edit', mcp: true, cli: false, describe: 'Archives it, or brings it back.' },
+    { name: 'delete', kind: 'delete', permission: 'artifact:delete', mcp: true, cli: false, describe: 'Removes it. Hard for a FILE, which this surface cannot register anyway.' },
+  ],
+  fields: [
+    { name: 'title', type: 'string', required: 'always', describe: 'What this artifact is.' },
+    {
+      name: 'scope',
+      type: 'string',
+      required: 'always',
+      enum: ['PROJECT', 'PLAN'],
+      enumOf: 'ArtifactInput.scope',
+      describe: 'PROJECT for one inherited by every plan, PLAN for one belonging to a single plan.',
+      note:
+        'PLAN requires `plan`; PROJECT requires it to be ABSENT. A project-scope artifact is '
+        + 'inherited by every plan, so a plan id on one would name a relationship that does not '
+        + 'exist. This is also the field the permission qualifier reads, and it is retained for '
+        + 'that reason even though no seeded role is refused by scope since V52.',
+    },
+    {
+      name: 'category',
+      type: 'string',
+      required: 'always',
+      example: 'Strategy',
+      describe: 'Strategy, TestData, Environment, SignOff, Compliance, Tooling, Template, Other.',
+      note:
+        'A free string rather than an enum, deliberately: the list is project-configurable, and '
+        + 'the register groups by it rather than switching on it.',
+    },
+    { name: 'description', type: 'string', nullable: true, describe: 'What it holds.' },
+    { name: 'plan', type: 'string', nullable: true, contract: 'planId', keyExample: 'TP-3', describe: 'The plan it belongs to. Required when scope is PLAN.' },
+    { name: 'docPage', type: 'string', nullable: true, contract: 'docPageId', keyExample: 'DOC-1', describe: 'The page this artifact points at.' },
+    { name: 'url', type: 'string', nullable: true, example: 'https://wiki.example.com/strategy', describe: 'The external address this artifact points at.' },
+    { name: 'reportJob', type: 'string', nullable: true, contract: 'reportJobId', describe: 'The generated report this artifact pins.' },
+    { name: 'supersedes', type: 'string', nullable: true, describe: 'The artifact this one replaces.' },
+    { name: 'writeOnce', type: 'boolean', describe: 'True to make this artifact immutable once registered.' },
+  ],
+};
+
 /** Every entity the catalogue covers, by name. */
-export const SHAPES: Readonly<Record<string, EntityShape>> = { case: CASE_SHAPE };
+export const SHAPES: Readonly<Record<string, EntityShape>> = {
+  artifact: ARTIFACT_SHAPE,
+  case: CASE_SHAPE,
+  docPage: DOC_PAGE_SHAPE,
+  plan: PLAN_SHAPE,
+  result: RESULT_SHAPE,
+  run: RUN_SHAPE,
+  suite: SUITE_SHAPE,
+  workItem: WORK_ITEM_SHAPE,
+};
 
 export function shapeOf(entity: string): EntityShape | undefined {
   return SHAPES[entity];
@@ -563,6 +899,8 @@ function propertyOf(field: FieldSpec): Record<string, unknown> {
       : []),
     ...(field.set ? ['A COMPLETE set: omit to leave alone, [] to clear.'] : []),
     ...(field.keyExample ? [`A display key, e.g. ${field.keyExample}.`] : []),
+    // Last, always: it is what a model copies, so it must not be buried mid-sentence.
+    ...(exampleTextOf(field) ? [`e.g. ${exampleTextOf(field)}`] : []),
   ].join(' ');
 
   if (field.type === 'object[]') {
@@ -586,6 +924,18 @@ function propertyOf(field: FieldSpec): Record<string, unknown> {
     ...(field.enum ? { enum: field.nullable ? [...field.enum, null] : [...field.enum] } : {}),
     description,
   };
+}
+
+/**
+ * The literal a field's description ends with, or `undefined` when the field speaks for itself.
+ *
+ * An enum needs none — its permitted values are already rendered, and repeating one of them as an
+ * example is noise. A display key already carries `keyExample`. What is left is the fields whose
+ * *format* is guessable-and-wrong: a date, a duration, an opaque key.
+ */
+function exampleTextOf(field: FieldSpec): string | undefined {
+  if (field.enum || field.keyExample) return undefined;
+  return field.example;
 }
 
 /** The flag a field is spelled with at a terminal. */
@@ -686,6 +1036,7 @@ export function usageFor(shape: EntityShape, action: string): string {
       field.set ? 'complete set — omit to leave alone, [] to clear' : undefined,
       field.enum ? field.enum.join(' | ') : undefined,
       field.keyExample ? `e.g. ${field.keyExample}` : undefined,
+      field.example ? `e.g. ${field.example}` : undefined,
       asFile && field.fields
         ? `each: ${field.fields.map((inner) => inner.name).join(', ')}`
         : undefined,
@@ -712,6 +1063,16 @@ export function usageFor(shape: EntityShape, action: string): string {
         + (field.enum ? `\n      [${field.enum.join(' | ')}]` : ''))
     : [];
 
+  /*
+    `tool-cli-builder` step 7: a help text without a worked example makes the reader guess the
+    format of exactly the field they are unsure about. One line, from the same template the
+    `--json` mode emits, so the two cannot drift.
+  */
+  const worked = asFile
+    ? `\n\nWorked example — save as body.json and pass --file body.json:\n`
+      + JSON.stringify(templateFor(shape, action), null, 2).split('\n').map((line) => `  ${line}`).join('\n')
+    : `\n\nWorked example:\n  ${workedFlags(shape, action)}`;
+
   const note = bindsRequired(shape, action)
     ? ''
     : '\n\nNothing here is required: anything you do not name is read from the current row and '
@@ -720,7 +1081,30 @@ export function usageFor(shape: EntityShape, action: string): string {
   return `${shape.title} — ${action}${how}\n\n${lines.join('\n')}`
     + (objects && !asFile ? excluded : '')
     + (beside.length > 0 ? `\n\nFlags beside --file:\n${beside.join('\n')}` : '')
-    + note;
+    + note
+    + worked;
+}
+
+/**
+ * One invocation a reader can paste, built from the same examples the field list shows.
+ *
+ * Two flags at most beyond the required ones: a worked example that sets every option is not an
+ * example, it is the help text again on one line.
+ */
+function workedFlags(shape: EntityShape, action: string): string {
+  const chosen = fieldsFor(shape, action)
+    .filter((field) => field.type !== 'object[]')
+    .filter((field) => (bindsRequired(shape, action) ? isRequired(field, {}) : true))
+    .slice(0, bindsRequired(shape, action) ? 99 : 2);
+
+  const flags = chosen
+    .map((field) => `--${flagOf(field)} ${exampleOf(field) === null ? "''" : String(exampleOf(field))}`)
+    .join(' ');
+
+  // The positional first: every command that acts on an existing row takes one, and an example
+  // without it is one that does not run.
+  const target = bindsRequired(shape, action) ? '' : `${shape.keyExample ?? ''} `;
+  return `tcms ${shape.entity} ${action} ${target}${flags}`.replace(/\s+/g, ' ').trim();
 }
 
 /**

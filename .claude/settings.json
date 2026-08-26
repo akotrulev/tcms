@@ -2,12 +2,13 @@
   "enabledPlugins": {
     "be-java@skills-library": true,
     "business-analysis@skills-library": true,
+    "context7@claude-plugins-official": true,
     "data@skills-library": true,
     "devops@skills-library": true,
     "fe-react@skills-library": true,
     "qa-java@skills-library": true,
     "security-guidance@claude-plugins-official": true,
-    "context7@claude-plugins-official": true
+    "tooling@skills-library": true
   },
   "autoMode": {
     "hard_deny": [
