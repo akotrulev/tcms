@@ -1,6 +1,6 @@
 # The authoring shape catalogue — one answer to "what does this object look like"
 
-**Status:** proposed, 2026-08-26. Target handoff section: **§253**.
+**Status:** **SHIPPED 2026-08-26** as [§253](../handoff/253-one-answer-to-what-shape-is-this.md). All five phases landed. Two things in §3 and §4 were deliberately not done and are recorded there as follow-ups: the CLI/MCP action asymmetry (now declared and checked, not closed) and `--file`'s raggedness.
 **Stacks:** `packages/` only (`@tcms/client`, `@tcms/cli`, `@tcms/mcp`). No backend, no frontend,
 no contract change — `openapi.yaml` is read, never edited.
 

@@ -183,6 +183,9 @@ Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema**
 | 19 | `tcms_triage` | `case:read` + `report:view` | dashboard, quarantine state, `GET …/ingestions`, `…/automation-mappings` | **Buildable** |
 | 20 | `tcms_write_work_item` | `workitem:manage` + `defect:create` | `POST`/`PATCH /work-items` | **Buildable** |
 | 21 | `tcms_report` | `report:view` + `report:export` | `POST …/reports/generate`, poll, download | **Buildable** |
+| 22 | `tcms_list_artifacts` | `case:read` | `GET …/artifacts` | Audit C10 |
+| 23 | `tcms_write_artifact` | `artifact:edit` + `artifact:delete` | `POST`/`PATCH`/`DELETE …/artifacts` | Audit C10 |
+| 24 | `tcms_shape` | **none** | **nothing — it reads no endpoint** | §253 |
 
 Eighteen are buildable against today's contract; two need §4.2's contract addition first; one has a
 blocked arm (§5).
@@ -216,6 +219,35 @@ description names which subjects it will accept. That is the honest reading of �
 are one gate applied to three nouns, not three arms — and it is why the resolution of a comment
 thread sits here rather than beside the commenting: §A3 is explicit that resolving a thread is not
 commenting and costs the subject's `*:review`.
+
+### 3.0a `tcms_shape` — the one tool that reads nothing (§253)
+
+Added by the authoring-shape catalogue slice
+([plan](../plans/2026-08-26-authoring-shape-catalogue.md)). It answers *what a payload must look
+like*, which is a property of the **build** rather than of the instance, so it calls no endpoint and
+carries no gate.
+
+**Why it is not part of `tcms_orient`,** which is where it obviously belongs and does not: orient
+opens with `session.projectId()` and every one of its five reads is project-scoped. The caller who
+most needs the format is the one who has connected and has **not yet resolved a project**, and
+folding this into orient would make the one tool that must work early depend on the thing that is
+not there yet.
+
+The division of labour is stated in both descriptions and checked: **orient owns the project's live
+vocabulary** — statuses, classification dimensions and their value paths, tags in use — and
+`tcms_shape` owns the shape. A second copy of orient's half here would go stale the moment a project
+adds a dimension.
+
+It also engages **none** of §3.1's rule: that governs tools fanning out to more than one *read*, and
+this fans out to zero.
+
+**A `resources` capability arrived with it** — `tcms://shape/{entity}`, serving the long-form guide,
+which is the carrier for the pitfalls that do not fit in a 2KB tool description. Advertised
+**without** `listChanged`, on the rule §3.2's `tools` capability already states: the set is compiled
+into the build and cannot change within a session, so claiming a notification nothing emits would be
+a claim a host plans around. Resources are **not permission-filtered**, unlike `tools/list`: the
+shape of a test case is the same document whatever a credential holds, it names no project, no
+company and no row, and withholding it would tell a caller nothing except that it must guess.
 
 ### 3.1 The two composites, and why only two
 
@@ -479,6 +511,18 @@ instance is §108.
    `RepositoryTransactionTest` deriving its repository list from the live context.
 4. **Refusal copy.** Assert the 404 branch's message contains no role name and no permission key.
    This is the one test whose failure is a security finding rather than a defect.
+5. **The shape catalogue against the contract (§253).** `@tcms/client`'s `core/shapes.ts` is the one
+   place either adapter answers *what fields does this object take*, and it is written by hand —
+   §3.0a's tools take display keys where the API takes UUIDs, so it cannot be generated. That is only
+   safe with `shapesContract.test.ts` beside it, which parses `openapi.yaml` and asks five questions:
+   every declared enum equals the contract's, **both ways**; every unconditionally-required field
+   matches the contract's `required` array, **both ways**; every field names a real contract property
+   or carries a stated `surfaceOnly` reason; every contract property is either offered or in
+   `UNOFFERED` with its reason; and every nested `object[]` is pinned to its own item schema. The
+   fourth is the one that finds omissions rather than errors — it is what surfaced that a plan's
+   `tags` reach neither adapter. The fifth was added after the doc-page blocks shipped as
+   `{ type, text }` against a `DocBlockInput` that declares `blockType`, invisible to the other four
+   because they read top-level properties only.
 
 ## 9. Verification obligations (§65)
 
