@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { CASE_SHAPE, optionSpecFor } from '@tcms/client';
+import { CASE_SHAPE, SHAPES, fieldsFor, flagOf, optionSpecFor } from '@tcms/client';
 
 import { findCommand } from './commands.js';
 import { EXIT, main } from './main.js';
@@ -113,5 +113,72 @@ describe('case edit, rendered from the catalogue', () => {
     const edit = findCommand(['case', 'edit'])!.command;
     expect(Object.keys(edit.options ?? {})).toContain('lock-version');
     expect(Object.keys(edit.options ?? {})).not.toContain('idempotency-key');
+  });
+});
+
+/**
+ * The catalogue against the COMMANDS — the CLI half of the same pin `mcp/src/writes.test.ts` runs.
+ *
+ * §253 wired `optionSpecFor` into exactly one command (`case edit`) and left fifteen hand-written,
+ * with nothing comparing either to the field set. Three disagreements were live and invisible when
+ * this was written: `tcms format plan` printed `--milestone-name` where the command takes
+ * `--milestone`, the same for a run's `--release-version` / `--build-number` / `--commit-sha`, and
+ * `doc edit` had no `--parent` at all while `tcms_write_doc_page` accepted one. The first two are
+ * worse than they look — a flag printed by the surface's own help screen and refused by
+ * `parseArgs` in strict mode is a usage error the user was walked into.
+ */
+describe('the shape catalogue against the commands that declare it', () => {
+  const COMMAND_FOR: Record<string, string> = {
+    'case.propose': 'case propose',
+    'case.edit': 'case edit',
+    'docPage.create': 'doc create',
+    'docPage.edit': 'doc edit',
+    'plan.create': 'plan create',
+    'plan.edit': 'plan edit',
+    'result.record': 'result record',
+    'run.create': 'run create',
+    'suite.create': 'suite create',
+    'suite.edit': 'suite edit',
+  };
+
+  it('gives every field a flag the command actually takes', () => {
+    const gaps: string[] = [];
+
+    for (const [entity, shape] of Object.entries(SHAPES)) {
+      for (const action of shape.actions) {
+        if (!action.cli || (action.kind !== 'create' && action.kind !== 'edit')) continue;
+
+        const name = COMMAND_FOR[`${entity}.${action.name}`];
+        expect(name, `no command is mapped for ${entity}.${action.name}`).toBeDefined();
+        const command = findCommand(name!.split(' '))!.command;
+        const declared = Object.keys(command.options ?? {});
+
+        /*
+          A `file` action carries its body in `--file`, so only its WRAPPER fields are flags —
+          `case propose`'s `verdict` rides beside the `TestCaseInput` rather than inside it. Asking
+          for the body fields there would demand seventeen flags on a command that deliberately
+          has one.
+        */
+        const scope = action.cliSpelling === 'file' ? 'wrapper' : 'all';
+        for (const field of fieldsFor(shape, action.name, scope)) {
+          // argv cannot carry an object array at all; `--file` is how those are sent.
+          if (field.type === 'object[]') continue;
+          for (const flag of [flagOf(field), ...(field.cli?.negate ? [field.cli.negate] : [])]) {
+            if (!declared.includes(flag)) gaps.push(`${name} does not take --${flag}`);
+          }
+        }
+      }
+    }
+
+    expect(gaps).toEqual([]);
+  });
+
+  it('maps every body-carrying action the catalogue says this surface has', () => {
+    const declared = Object.entries(SHAPES).flatMap(([entity, shape]) =>
+      shape.actions
+        .filter((action) => action.cli && (action.kind === 'create' || action.kind === 'edit'))
+        .map((action) => `${entity}.${action.name}`));
+
+    expect(declared.sort()).toEqual(Object.keys(COMMAND_FOR).sort());
   });
 });

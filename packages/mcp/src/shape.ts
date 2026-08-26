@@ -26,6 +26,7 @@
  */
 import { SHAPES, guideFor, shapeOf, templateFor } from '@tcms/client';
 
+import { InputError } from './input.js';
 import type { ToolDefinition } from './tool.js';
 
 const ENTITIES = Object.keys(SHAPES).sort();
@@ -39,7 +40,10 @@ export const shape: ToolDefinition = {
     + 'nothing and needs no project, so it is safe to call first. It does NOT carry this '
     + "project's vocabulary — the priorities are fixed, but statuses, classification values and "
     + 'tags are per-project and configurable, and tcms_orient is what serves those. A value '
-    + 'guessed from another project will be refused.',
+    + 'guessed from another project will be refused. Reviews and reports are NOT here and the '
+    + 'omission is deliberate: a review verdict, a remark and a report request are arguments to '
+    + 'tcms_review_verdict, tcms_review_comment and tcms_report rather than objects with a shape, '
+    + "and those tools' own schemas carry them in full.",
   gate: { mode: 'all', permissions: [] },
   inputSchema: {
     type: 'object',
@@ -83,12 +87,15 @@ export const shape: ToolDefinition = {
 
     const found = shapeOf(requested);
     if (!found) {
-      // A result rather than a throw, and it names what does exist: a model that mistypes an
-      // entity should not have to guess twice.
-      return {
-        error: `No entity named '${requested}'.`,
-        entities: ENTITIES,
-      };
+      /*
+        ~~A result rather than a throw~~ → **a refusal that still names what exists.** Returning it
+        through `ok()` set no `isError`, so a host rendered a failure as data and a model read an
+        object with an `error` key as a successful answer about a shape. The `enum` on the input
+        means a validating host refuses this first — but `input.ts` is written on the rule that a
+        server trusting a peer's validation is trusting a peer it did not write, and this was the
+        one place that did. The naming half was right and is kept.
+      */
+      throw new InputError(`No entity named '${requested}'. Entities: ${ENTITIES.join(', ')}.`);
     }
 
     return {

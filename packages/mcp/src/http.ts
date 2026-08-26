@@ -24,8 +24,17 @@
  *
  * OAuth 2.1 buys Claude Code's `/mcp` browser sign-in and Directory eligibility, and §4 is
  * explicit that it is **a slice of its own**.
+ *
+ * ## The credential is re-checked on every request, not only on `initialize`
+ *
+ * A session id is a routing handle, not a credential: it travels as `mcp-session-id` on every
+ * request and response, so proxy access logs and crash reports are ordinary places for it to land.
+ * Checking the bearer once and then trusting the id would mean an unauthenticated request — or one
+ * carrying a *different* token — driving the first token's session, with its grants, and an
+ * unauthenticated `DELETE` terminating it. So {@link Live} carries a fingerprint of the token that
+ * opened it and every later request must present the same one.
  */
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
 
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -47,6 +56,17 @@ export const PATH_DEFAULT = '/mcp';
  */
 export const MAX_BODY_BYTES = 1_000_000;
 
+/**
+ * How long a session may sit unused before it is closed.
+ *
+ * A host that vanishes without a `DELETE` otherwise leaves a live `Server`, its `Reach` and a
+ * token-bound client resident for the lifetime of the process — the same class of unbounded
+ * appetite {@link MAX_BODY_BYTES} exists to cap, on the same box that is also running Postgres.
+ * The sweep is lazy, driven by the next request rather than a timer, so an idle process still
+ * exits on its own.
+ */
+export const SESSION_IDLE_MS = 30 * 60 * 1000;
+
 export interface HostOptions {
   baseUrl: string;
   port: number;
@@ -59,6 +79,9 @@ export interface HostOptions {
 interface Live {
   transport: StreamableHTTPServerTransport;
   close: () => Promise<void>;
+  /** SHA-256 of the bearer that opened this session. Never the token itself. */
+  fingerprint: Buffer;
+  lastSeen: number;
 }
 
 export function createHost(options: HostOptions): HttpServer {
@@ -75,10 +98,17 @@ export function createHost(options: HostOptions): HttpServer {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname !== path) return fail(res, 404, 'Not found');
 
+    sweep();
+
     const sessionId = header(req, 'mcp-session-id');
     const existing = sessionId ? sessions.get(sessionId) : undefined;
 
     if (existing) {
+      // Before the body is even read: an id alone does not authorise anything, and a `DELETE`
+      // reaches the transport through this branch without passing the POST guard below.
+      const presented = bearer(req);
+      if (!presented || !sameToken(existing.fingerprint, presented)) return unauthorized(res);
+      existing.lastSeen = Date.now();
       const body = await bodyOf(req, res);
       // `bodyOf` has already answered (413, 400) — handing the transport a consumed request on
       // an ended response would only make it throw into the outer catch.
@@ -125,7 +155,7 @@ export function createHost(options: HostOptions): HttpServer {
       transport.onclose = () => {
         if (transport.sessionId) sessions.delete(transport.sessionId);
       };
-      live = { transport, close: () => server.close() };
+      live = { transport, close: () => server.close(), fingerprint: fingerprintOf(token), lastSeen: Date.now() };
       /*
         The cast is `exactOptionalPropertyTypes` and nothing else: the SDK's `Transport` declares
         `onclose?: () => void` while this class exposes it as `(() => void) | undefined`, which
@@ -143,6 +173,15 @@ export function createHost(options: HostOptions): HttpServer {
     }
 
     await live.transport.handleRequest(req, res, body);
+  }
+
+  function sweep(): void {
+    const deadline = Date.now() - SESSION_IDLE_MS;
+    for (const [id, live] of sessions) {
+      if (live.lastSeen > deadline) continue;
+      sessions.delete(id);
+      void live.close().catch(() => undefined);
+    }
   }
 
   async function bodyOf(req: IncomingMessage, res: ServerResponse): Promise<unknown> {
@@ -183,6 +222,18 @@ function bearer(req: IncomingMessage): string | undefined {
   if (!value) return undefined;
   const match = /^Bearer\s+(.+)$/i.exec(value.trim());
   return match?.[1];
+}
+
+function fingerprintOf(token: string): Buffer {
+  return createHash('sha256').update(token, 'utf8').digest();
+}
+
+/**
+ * Constant-time comparison, because the alternative leaks the fingerprint a byte at a time to
+ * anyone holding a session id — and a session id is the one thing this check assumes is public.
+ */
+function sameToken(fingerprint: Buffer, presented: string): boolean {
+  return timingSafeEqual(fingerprint, fingerprintOf(presented));
 }
 
 function unauthorized(res: ServerResponse): void {

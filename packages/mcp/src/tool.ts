@@ -76,6 +76,22 @@ export interface ToolArm {
    * least one, and that each name is a property the tool actually declares.
    */
   targets?: readonly string[];
+  /**
+   * The permission this arm costs **for this particular input**, when one key does not cover it.
+   *
+   * `tcms_review_verdict` is the whole reason it exists: one arm serves cases, suites and plans,
+   * and the key charged is the *subject's* — so the declared `case:review` sent every caller
+   * refused on a `TS-` or `TP-` key to an administrator to ask for the wrong thing. That is
+   * {@link Attempt.permission}'s own failure reproduced one level down, on the surface's only
+   * `any`-gated tool, which is exactly the tool most often listed for a caller holding one of its
+   * three keys and refused on the other two.
+   *
+   * Synchronous and derived from the input alone — the subject's kind is readable off the display
+   * key's prefix, so nothing here needs a round trip. Returning `undefined` falls back to
+   * {@link ToolArm.permission}. Whatever it returns must be inside the tool's gate;
+   * `writes.test.ts` asserts that over every declared subject.
+   */
+  permissionFor?: (input: Record<string, unknown>) => string | undefined;
 }
 
 /** `all`: every permission is required to list. `any`: one is enough — see `tcms_review_verdict`. */

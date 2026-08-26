@@ -24,23 +24,70 @@
  * keeps the result under the 25K-token cap, which is what the budget is for, and it buys the
  * server nothing. Saying so beats implying a pagination the contract does not have.
  */
-import { clampPageSize, resolveId } from '@tcms/client';
+import { READ_ENUMS, clampPageSize, resolveId } from '@tcms/client';
 
 import { PAGING_PROPERTIES, bool, idProperty, num, requireStr, str, strings } from './input.js';
 import type { ToolDefinition } from './tool.js';
 
-/** A client-side window, for the four lists the contract does not paginate. See the header. */
+/**
+ * **The one list shape on this surface.** A client-side window, for the lists the contract does not
+ * paginate — see the header — and the envelope every other list is now rendered into as well.
+ *
+ * One shape and one has-more key, because the alternative was measured: `tcms_search_cases`
+ * answered `{ cases, page, size, total, more }`, `tcms_list_suites` `{ items, …, truncated }`,
+ * `tcms_list_library` the same thing nested one level deeper under `conditions`, and the
+ * single-suite branch a bare upstream object. Every list a model paged cost it a shape to re-learn,
+ * and the loop condition was not the same field twice in a row.
+ *
+ * `hasMore` and `truncated` are kept apart rather than merged, and §4.6's argument is why: on a
+ * server-paginated list `hasMore` means *ask for page + 1*, while `truncated` means *the endpoint
+ * handed over everything and this tool cut it to fit the budget*. Collapsing them would imply a
+ * next page four of these endpoints do not have.
+ */
 function window<T>(rows: readonly T[], input: Record<string, unknown>): {
   items: T[];
   page: number;
   size: number;
   total: number;
+  hasMore: boolean;
   truncated: boolean;
 } {
   const size = clampPageSize(num(input, 'size'));
   const page = Math.max(0, num(input, 'page') ?? 0);
   const items = rows.slice(page * size, page * size + size);
-  return { items, page, size, total: rows.length, truncated: rows.length > items.length };
+  return {
+    items,
+    page,
+    size,
+    total: rows.length,
+    hasMore: (page + 1) * size < rows.length,
+    truncated: rows.length > items.length,
+  };
+}
+
+/**
+ * {@link window}'s envelope over a list the server paged, so both read the same to a caller.
+ *
+ * The page metadata and the rows are separate parameters because the rows are usually a PROJECTION
+ * of what arrived — `tcms_search_cases` drops the ids and keeps the keys — so the two have
+ * different element types and inferring one from the other would tie them together.
+ */
+function paged<T>(meta: { page: number; size: number; total: number }, items: T[]): {
+  items: T[];
+  page: number;
+  size: number;
+  total: number;
+  hasMore: boolean;
+} {
+  return {
+    items,
+    page: meta.page,
+    size: meta.size,
+    total: meta.total,
+    // Stated even when the page is full: "25 of 25" and "25 of 812" look identical and mean very
+    // different things about whether the filter did anything.
+    hasMore: (meta.page + 1) * meta.size < meta.total,
+  };
 }
 
 /* ------------------------------------------------------------------ orient ---- */
@@ -126,12 +173,24 @@ const searchCases: ToolDefinition = {
       suite: idProperty('suite to search inside', 'TS-7'),
       tag: { type: 'array', items: { type: 'string' }, description: 'Cases carrying ALL of these.' },
       unfiled: { type: 'boolean', description: 'Only cases filed in no suite.' },
-      lifecycleStatus: { type: 'string', description: 'DRAFT, IN_REVIEW, APPROVED, DEPRECATED.' },
-      automationStatus: { type: 'string' },
-      priority: { type: 'string' },
-      healthSignal: { type: 'string', description: 'One of the repository health signals — see tcms_triage.' },
+      /*
+        Enumerated, not described — §203's rule applied to the half it was stated for and never
+        swept. A host validates the input schema before the call, so a wrong member is refused
+        here rather than at the server, and a filter value is refused exactly as hard as a body
+        value. The members come from the catalogue and are pinned to `openapi.yaml` there.
+      */
+      lifecycleStatus: { type: 'string', enum: [...READ_ENUMS.lifecycleStatus.values] },
+      automationStatus: { type: 'string', enum: [...READ_ENUMS.automationStatus.values] },
+      priority: { type: 'string', enum: [...READ_ENUMS.priority.values] },
+      healthSignal: {
+        type: 'string',
+        enum: [...READ_ENUMS.healthSignal.values],
+        description: 'One of the repository health signals — see tcms_triage.',
+      },
       releaseVersion: { type: 'string' },
-      sort: { type: 'string' },
+      // Open by design: the contract declares `field,dir` with an example and no enum, because
+      // the orderings are the resource's columns. Saying the FORM is what a caller was missing.
+      sort: { type: 'string', description: 'field,dir — e.g. keySeq,asc. Every ordering ends in the case key.' },
       ...PAGING_PROPERTIES,
     },
   },
@@ -162,35 +221,31 @@ const searchCases: ToolDefinition = {
       tcms: session.request,
     });
 
-    return {
-      // High-signal fields only (§6's *"UUIDs resolved to display keys"*). The ids are dropped
-      // deliberately: every tool on this surface takes the key, so an id in the result is a
-      // second handle for the same row that costs tokens on every case.
-      cases: result.items.map((row) => ({
-        key: row.key,
-        title: row.title,
-        suite: row.suiteName,
-        lifecycleStatus: row.lifecycleStatus,
-        priority: row.priority,
-        automationStatus: row.automationStatus,
-        tags: row.tags,
-        // THE CODES, not the {signal, severity} pairs the wire carries since §179. Two reasons,
-        // and the first is this block's own rule: a pair doubles the tokens of a field that fires
-        // on most cases of a young project (`unlinked`), for a word a model already knows how to
-        // rank. The second is that the ranking is not lost — the server sends them WORST FIRST, so
-        // position carries what the severity would have said. A tool that starts needing the
-        // severity itself should send the pair rather than reintroduce a table of them here; that
-        // table is exactly what §179 deleted from the SPA.
-        healthSignals: row.healthSignals.map((raised) => raised.signal),
-        updatedAt: row.updatedAt,
-      })),
-      page: result.page,
-      size: result.size,
-      total: result.total,
-      // Printed even when the page is full: "25 of 25" and "25 of 812" look identical and mean
-      // very different things about whether the filter did anything.
-      more: (result.page + 1) * result.size < result.total,
-    };
+    /*
+      `items`, not `cases`: one list shape for the whole surface — see `window`.
+
+      High-signal fields only (§6's *"UUIDs resolved to display keys"*). The ids are dropped
+      deliberately: every tool on this surface takes the key, so an id in the result is a second
+      handle for the same row that costs tokens on every case.
+    */
+    return paged(result, result.items.map((row) => ({
+      key: row.key,
+      title: row.title,
+      suite: row.suiteName,
+      lifecycleStatus: row.lifecycleStatus,
+      priority: row.priority,
+      automationStatus: row.automationStatus,
+      tags: row.tags,
+      // THE CODES, not the {signal, severity} pairs the wire carries since §179. Two reasons,
+      // and the first is this block's own rule: a pair doubles the tokens of a field that fires
+      // on most cases of a young project (`unlinked`), for a word a model already knows how to
+      // rank. The second is that the ranking is not lost — the server sends them WORST FIRST, so
+      // position carries what the severity would have said. A tool that starts needing the
+      // severity itself should send the pair rather than reintroduce a table of them here; that
+      // table is exactly what §179 deleted from the SPA.
+      healthSignals: row.healthSignals.map((raised) => raised.signal),
+      updatedAt: row.updatedAt,
+    })));
   },
 };
 
@@ -292,7 +347,9 @@ const listLibrary: ToolDefinition = {
     additionalProperties: false,
     properties: {
       q: { type: 'string', description: 'Free text over the condition titles.' },
-      type: { type: 'string', description: 'PRE or POST.' },
+      // `BOTH` is a real member and the prose here omitted it, so the one value that narrows
+      // nothing was undocumented on the only surface offering the filter.
+      type: { type: 'string', enum: [...READ_ENUMS.conditionType.values] },
       ...PAGING_PROPERTIES,
     },
   },
@@ -307,7 +364,9 @@ const listLibrary: ToolDefinition = {
       params: { path, query: { ...optional('q', q), ...optional('type', type) } }, tcms,
     });
 
-    return { conditions: window(conditions, input) };
+    // Not `{ conditions: … }`: the extra key was one level of nesting no other list has, so a
+    // caller that had just learned to read `items` had to learn it again here.
+    return window(conditions, input);
   },
 };
 
@@ -328,7 +387,11 @@ const listArtifacts: ToolDefinition = {
     type: 'object',
     additionalProperties: false,
     properties: {
-      scope: { type: 'string', description: 'PROJECT or PLAN. Omit for the project register.' },
+      scope: {
+        type: 'string',
+        enum: [...READ_ENUMS.artifactScope.values],
+        description: 'Omit for the project register.',
+      },
       plan: idProperty('plan whose register to read — implies scope PLAN', 'OLB-P1'),
       ...PAGING_PROPERTIES,
     },
@@ -585,6 +648,74 @@ function optional<T>(name: string, value: T | undefined): Record<string, T> {
   return value === undefined ? {} : { [name]: value };
 }
 
+/**
+ * The other end of `tcms_write_case propose` — without it the flagship write is a queue an agent
+ * files into and can never read.
+ *
+ * §5 routes every generated case through review, the server instructions tell the model so
+ * (*"filed as a proposal for a person to accept"*), and until this tool existed neither surface
+ * offered `GET …/ai-proposals`. So an agent could not report to its user whether yesterday's twelve
+ * proposals were accepted, could not learn from a rejection, and could not tell a duplicate from a
+ * gap before filing again. Unlike the two exclusions the surface spec argues — reviewer assignment
+ * and evidence upload — that one was never a decision.
+ *
+ * Gated with the sibling reads rather than on a key of its own: the endpoint enforces **project
+ * visibility only** (`AiProposalService.list` goes through `readVisible` and asks for no
+ * permission), so any narrower gate here would be this surface inventing one and hiding a tool
+ * from a caller the server would have answered.
+ */
+const listProposals: ToolDefinition = {
+  name: 'tcms_list_proposals',
+  title: 'Read the review queue of proposed cases',
+  description:
+    'The proposals filed by tcms_write_case propose and by anything else generating cases here, '
+    + 'newest first, PENDING by default — a decided queue is not a queue. Read it to find out what '
+    + 'became of what you filed: ACCEPTED means a person turned it into a real test case, REJECTED '
+    + 'means they did not, and the reason is on the proposal. Name one by id for its full payload '
+    + 'and its grounding evidence. `verdict` is what the FILER claimed about grounding and '
+    + '`verdictSource` is what that claim is worth — reading the first without the second reports '
+    + 'a claim as a finding. You cannot accept a proposal: no credential can, by design.',
+  gate: { mode: 'all', permissions: ['case:read'] },
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      proposal: { type: 'string', description: "One proposal's id, for its payload and grounding." },
+      status: {
+        type: 'string',
+        enum: [...READ_ENUMS.proposalStatus.values],
+        description: 'Defaults to PENDING.',
+      },
+      ...PAGING_PROPERTIES,
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const proposalId = str(input, 'proposal');
+    const tcms = session.request;
+
+    if (proposalId) {
+      return session.client.GET('/projects/{projectId}/ai-proposals/{proposalId}', {
+        params: { path: { projectId, proposalId } }, tcms,
+      });
+    }
+
+    const result = await session.client.GET('/projects/{projectId}/ai-proposals', {
+      params: {
+        path: { projectId },
+        query: {
+          ...optional('status', str(input, 'status')),
+          page: num(input, 'page') ?? 0,
+          size: clampPageSize(num(input, 'size')),
+        },
+      },
+      tcms,
+    });
+
+    return paged(result, result.items);
+  },
+};
+
 export const READ_TOOLS: readonly ToolDefinition[] = [
   orient,
   searchCases,
@@ -596,5 +727,6 @@ export const READ_TOOLS: readonly ToolDefinition[] = [
   openDocPage,
   listPlans,
   openRun,
+  listProposals,
   triage,
 ];

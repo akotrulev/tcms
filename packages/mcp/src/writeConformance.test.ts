@@ -37,7 +37,11 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { contractPathOfRequest, declaredHeadersOf } from '../../client/src/test/contractBodies.js';
+import {
+  contractPathOfRequest,
+  declaredHeadersOf,
+  declaredPermissionsOf,
+} from '../../client/src/test/contractBodies.js';
 import {
   artifact,
   bulkResult,
@@ -112,6 +116,18 @@ describe('write conformance — surface spec §8.3', () => {
     expect(WRITE_TOOLS.every((tool) => (tool.arms ?? []).length > 0)).toBe(true);
   });
 
+  it('can read a stated gate out of the contract at all', () => {
+    /*
+      The §8.1 check's vacuity guard, and it has to be a guard on the READER rather than a count of
+      arms: the gate is read out of each operation's prose, and prose is a source that can quietly
+      stop answering. A rewrite that drops the sentence, or a `Requires` spelled differently, turns
+      every assertion below into a no-op that reads exactly like a pass.
+    */
+    const suite = '/projects/{projectId}/suites/{suiteId}';
+    expect(declaredPermissionsOf('delete', suite)).toContain('suite:delete');
+    expect(declaredPermissionsOf('patch', suite)).toContain('suite:manage');
+  });
+
   it.each(arms.map((entry) => [entry.id, entry] as const))(
     '%s sends what its declaration implies',
     async (id, { arm }) => {
@@ -152,6 +168,27 @@ describe('write conformance — surface spec §8.3', () => {
       const expected = (implied ?? []).filter((header) => (declared ?? []).includes(header));
       expect(carried, `${id} sent [${carried.join(', ')}] to ${sent.method} ${sent.path}`)
         .toEqual(expected);
+
+      /*
+        Surface spec §8.1 — *"assert its declared permission set equals the permission set the
+        wrapped endpoints actually enforce, derived from the code rather than from a list in this
+        document."* Specified in §140 and not built until now, which mattered because
+        `writes.test.ts` asserts only that an arm's permission is inside its own tool's gate: that
+        is self-consistency, and a gate wrong in both places is consistent.
+
+        The endpoint the arm actually wrote to is the source, resolved above from the URL. §8.1's
+        live catch is `tcms_review_verdict`, whose arms name `case:review` for a subject that may
+        be a suite or a plan — see `ToolArm.permissionFor`, which is why the resolved key is
+        checked rather than the declared one where an arm has both.
+      */
+      const enforced = declaredPermissionsOf(sent.method.toLowerCase(), contractPath ?? '') ?? [];
+      if (enforced.length > 0) {
+        const claimed = arm.permissionFor?.(invocation.input) ?? arm.permission;
+        expect(enforced, `${id} declares '${claimed}' and ${sent.method} ${sent.path} requires `
+          + `${enforced.map((key) => `'${key}'`).join(' or ')}. A refused caller is sent to an `
+          + 'administrator to ask for the wrong thing.')
+          .toContain(claimed);
+      }
 
       const missing = (implied ?? []).filter((header) => !(declared ?? []).includes(header));
       if (missing.length > 0) {

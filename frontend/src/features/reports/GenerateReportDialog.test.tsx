@@ -97,7 +97,13 @@ function mockReads(
 ) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.includes('/doc-pages')) return docPages
-    if (path.includes('/reports/capabilities')) return { formats }
+    // `types` is required by the contract as of §254 — the report catalogue is now an ANSWER
+    // rather than something a caller discovers by being refused. The picker does not read it yet;
+    // the conformance check does, and a fixture short of a required field is a fixture the
+    // server would never send.
+    if (path.includes('/reports/capabilities')) {
+      return { formats, types: ['aggregate_execution', 'coverage_matrix', 'run_summary'] }
+    }
     if (path.includes('/runs')) return rows
     if (path.includes('/plans')) return plans
     if (path.includes('/me/permissions')) return heldPermissions(['report:export', 'report:view'], {}, PROJECT)

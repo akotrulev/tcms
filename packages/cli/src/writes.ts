@@ -316,6 +316,23 @@ const caseEdit: Command = {
   },
 };
 
+/**
+ * The three states of `--parent`, in the spelling the rest of this file uses for a nullable key.
+ *
+ * Absent leaves the page where it is; `--root` sends an explicit null and moves it to the top;
+ * a key resolves. The same shape as `--suite` / `--unfile` on a case, deliberately — two nullable
+ * key fields that behaved differently would be two rules a person has to remember which of.
+ */
+async function parentIdFrom(
+  context: CommandContext,
+  projectId: string,
+): Promise<string | null | undefined> {
+  if (flag(context.options['root'])) return null;
+  const parent = text(context.options['parent']);
+  if (parent === undefined) return undefined;
+  return resolveId({ client: context.client, projectId, value: parent, entity: 'DOC_PAGE' });
+}
+
 async function optionalSuite(
   context: CommandContext,
   projectId: string,
@@ -604,10 +621,12 @@ const suiteStatus: Command = {
 const docCreate: Command = {
   name: 'doc create',
   summary: 'Create a documentation page',
-  usage: 'tcms doc create --title T [--parent DOC-n] [--file BLOCKS.json] [--idempotency-key K]',
+  usage: 'tcms doc create --title T [--parent DOC-n | --root] [--file BLOCKS.json] [--idempotency-key K]',
   options: {
     title: { type: 'string' },
     parent: { type: 'string' },
+    // Explicit here and load-bearing on `doc edit`: absent and null are different requests.
+    root: { type: 'boolean' },
     file: { type: 'string' },
     'idempotency-key': { type: 'string' },
   },
@@ -615,7 +634,6 @@ const docCreate: Command = {
   run: async (context) => {
     const { client, out, json, options, request } = context;
     const projectId = await projectOf(context);
-    const parent = text(options['parent']);
     const file = text(options['file']);
 
     /*
@@ -634,9 +652,7 @@ const docCreate: Command = {
       body: present({
         ...fromFile,
         title,
-        parentId: parent === undefined
-          ? undefined
-          : await resolveId({ client, projectId, value: parent, entity: 'DOC_PAGE' }),
+        parentId: await parentIdFrom(context, projectId),
       }) as components['schemas']['DocPageInput'],
       tcms: { ...request, ...intent },
     });
@@ -653,9 +669,17 @@ const docCreate: Command = {
 const docEdit: Command = {
   name: 'doc edit',
   summary: 'Retitle a page, or replace its blocks',
-  usage: 'tcms doc edit DOC-1 [--title T] [--file BODY.json --lock-version N]',
+  usage: 'tcms doc edit DOC-1 [--title T] [--parent DOC-n | --root] [--file BODY.json --lock-version N]',
   options: {
     title: { type: 'string' },
+    /*
+      Re-parenting had no spelling here at all until the catalogue↔surface pin asked for one: the
+      field is on `DocPageInput`, `tcms_write_doc_page` accepts it on its edit arm, and `tcms
+      format docPage` printed it — so this command was the only place that said a page's position
+      could not be changed, and said it by omission.
+    */
+    parent: { type: 'string' },
+    root: { type: 'boolean' },
     file: { type: 'string' },
     'lock-version': { type: 'string' },
   },
@@ -679,8 +703,11 @@ const docEdit: Command = {
     const body = file
       ? objectFrom(file, 'a DocPageInput')
       : requireSomethingToDo(
-        present({ title: text(options['title']) }),
-        'Pass --title, or --file with the page body.',
+        present({
+          title: text(options['title']),
+          parentId: await parentIdFrom(context, projectId),
+        }),
+        'Pass --title or --parent, or --file with the page body.',
       );
 
     const version = await versionFor(context, {

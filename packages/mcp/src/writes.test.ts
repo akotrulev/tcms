@@ -37,6 +37,10 @@ import {
   step,
   suite,
 } from '../../client/src/test/fixtures.js';
+import { SHAPES, fieldsFor } from '@tcms/client';
+
+import { roleMatrix, type Role } from '../../client/src/test/roleMatrix.js';
+
 import { armFor } from './server.js';
 import { TOOLS } from './tools.js';
 import { WRITE_TOOLS } from './writes.js';
@@ -680,7 +684,9 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
     // ~~23~~ → 24 with `tcms_shape` (§253), which is the one tool on this surface that reads
     // nothing: it answers what a payload must look like, which is a property of the build rather
     // than of the instance, and so has no gate and no project.
-    expect(TOOLS).toHaveLength(24);
+    // ~~24~~ → 25 with `tcms_list_proposals`: `tcms_write_case propose` is the flagship write and
+    // its queue was on neither surface, so an agent filed into a list it could never read.
+    expect(TOOLS).toHaveLength(25);
   });
 
   it('names every tool in the tcms_ namespace', () => {
@@ -740,5 +746,147 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
     for (const candidate of TOOLS) {
       expect(candidate.inputSchema.additionalProperties, candidate.name).toBe(false);
     }
+  });
+});
+
+/**
+ * The catalogue against the SURFACE — §253's other half, and the one where a disagreement is
+ * invisible.
+ *
+ * `shapesContract.test.ts` pins `core/shapes.ts` to `openapi.yaml`, five questions deep and mostly
+ * both ways, so the catalogue cannot become a fifth copy *of the contract*. It asks nothing of the
+ * eleven write tools, and ten of them hand-write their `inputSchema` — only `tcms_write_case`
+ * renders one through `jsonSchemaFor`. So `tcms_shape` could tell a model one thing about a suite
+ * and `tcms_write_suite` declare another, and nothing in the repository would fire.
+ *
+ * §253's own rule is *"hand-written is fine; hand-written **and unpinned** is the defect."* This is
+ * the pin. It does not force the ten tools to be rendered — a tool schema legitimately carries
+ * wrapper arguments the entity has none of (`action`, the display key, `lockVersion`) — it asserts
+ * only the direction that matters: **a field the catalogue tells a caller to send must be a field
+ * the tool accepts.** The other direction is the wrapper set, and `additionalProperties: false`
+ * plus the exchange check already cover a property the contract does not have.
+ */
+describe('the shape catalogue against the tools that declare it', () => {
+  /*
+    Explicit rather than derived from the name: `result`'s tool is `tcms_record_result`, not
+    `tcms_write_result`, and a convention that happened to hold for seven of eight would quietly
+    skip the eighth. A missing entry fails below rather than being ignored.
+  */
+  const TOOL_FOR: Record<string, string> = {
+    artifact: 'tcms_write_artifact',
+    case: 'tcms_write_case',
+    docPage: 'tcms_write_doc_page',
+    plan: 'tcms_write_plan',
+    result: 'tcms_record_result',
+    run: 'tcms_write_run',
+    suite: 'tcms_write_suite',
+    workItem: 'tcms_write_work_item',
+  };
+
+  /**
+   * Every property a caller may send, one nesting level down included.
+   *
+   * `tcms_write_case`'s `propose` arm carries the whole case under `testCase`, because a proposal
+   * is a wrapper around one — so a flat read of the schema would report eight of that action's
+   * fields as missing when every one of them is declared.
+   */
+  function acceptedBy(schema: { properties: Record<string, unknown> }): Set<string> {
+    const names = new Set<string>();
+    for (const [name, property] of Object.entries(schema.properties)) {
+      names.add(name);
+      const nested = (property as { properties?: Record<string, unknown> }).properties;
+      for (const inner of Object.keys(nested ?? {})) names.add(inner);
+    }
+    return names;
+  }
+
+  it('declares every field the catalogue offers, for every body-carrying arm', () => {
+    const gaps: string[] = [];
+
+    for (const [entity, shape] of Object.entries(SHAPES)) {
+      const toolName = TOOL_FOR[entity];
+      const tool = TOOLS.find((candidate) => candidate.name === toolName);
+      expect(tool, `no tool is mapped for the '${entity}' shape`).toBeDefined();
+      const accepted = acceptedBy(tool!.inputSchema);
+
+      for (const action of shape.actions) {
+        // A `state` or `delete` arm carries no body, so the entity's fields say nothing about it.
+        if (!action.mcp || (action.kind !== 'create' && action.kind !== 'edit')) continue;
+
+        for (const field of fieldsFor(shape, action.name)) {
+          if (!accepted.has(field.name)) {
+            gaps.push(`${toolName} (${action.name}) does not accept '${field.name}'`);
+          }
+        }
+      }
+    }
+
+    /*
+      Listed rather than asserted one at a time, because the useful failure is the whole list: this
+      check exists to turn silence into a list, the same way question four of
+      `shapesContract.test.ts` did.
+    */
+    expect(gaps).toEqual([]);
+  });
+
+  it('maps every entity in the catalogue, so a ninth cannot arrive unpinned', () => {
+    expect(Object.keys(TOOL_FOR).sort()).toEqual(Object.keys(SHAPES).sort());
+  });
+});
+
+/**
+ * The merge rule against the ROLE CATALOGUE — surface spec §8.2, specified in §140 and not built.
+ *
+ * §2's rule is that arms merge into one tool only when every reachable intersection holds all of
+ * them, because `tools/list` filters on the whole gate: a role holding two of a three-key gate does
+ * not get a narrowed tool, it gets **no tool**, and then goes looking for a capability the surface
+ * says it has. The nearest existing check (`registry declarations`, above) asserts each arm's
+ * permission is inside its own tool's gate — self-consistency, which a gate wrong in both places
+ * satisfies.
+ *
+ * The intersection to check is §2's: `Agent ∩ each ASSIGNABLE role`, because an MCP credential
+ * carries `Agent` and a person's grants narrow it. `Automation Service` is excluded for the reason
+ * §134 keeps having to be restated — `V41` made it non-assignable, and `tcms_write_run`'s two-key
+ * merge is legal only because of that.
+ *
+ * Every merge is legal today, which is what makes this worth writing rather than skipping: nothing
+ * fails now, and a migration that narrows one key would otherwise take a whole tool away from every
+ * contributor with the build staying green.
+ */
+describe('the merge rule against the role catalogue — surface spec §8.2', () => {
+  /** `AS` is non-assignable (`V41`); `IA` is the instance tier and holds everything below it. */
+  const ASSIGNABLE: readonly Role[] = ['CA', 'TL', 'TE', 'V'];
+
+  it('gives no assignable role a strict subset of any tool\'s arms', () => {
+    const matrix = roleMatrix();
+    const agent = new Set(AGENT_KEYS);
+    const partial: string[] = [];
+
+    for (const candidate of TOOLS) {
+      const gate = candidate.gate;
+      // `any` is the narrowed shape this rule is the alternative to — `tcms_review_verdict` is
+      // listed for a caller holding one of its three keys, and says so in its own description.
+      if (gate.mode !== 'all' || gate.permissions.length < 2) continue;
+
+      for (const role of ASSIGNABLE) {
+        const held = new Set([...matrix[role]].filter((key) => agent.has(key)));
+        const has = gate.permissions.filter((key) => held.has(key));
+        if (has.length > 0 && has.length < gate.permissions.length) {
+          const short = gate.permissions.filter((key) => !held.has(key));
+          partial.push(`${candidate.name} is hidden from ${role}, which holds `
+            + `${has.join(', ')} and not ${short.join(', ')}`);
+        }
+      }
+    }
+
+    expect(partial).toEqual([]);
+  });
+
+  it('finds a multi-key gate to ask about', () => {
+    // Vacuity: eight tools gate `all` over two or three keys. A registry this could not see would
+    // pass by having nothing to assert on.
+    const merged = TOOLS.filter((candidate) =>
+      candidate.gate.mode === 'all' && candidate.gate.permissions.length >= 2);
+    expect(merged.length).toBeGreaterThanOrEqual(6);
   });
 });

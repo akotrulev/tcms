@@ -462,15 +462,27 @@ needing a separate decision. A bulk generation therefore decomposes per item.
 against the MCP surface's 21. It is wide on purpose (§1): `--help` is paged and nobody loads all of
 it.
 
-- **Nouns match the MCP tool families exactly** — `case`, `suite`, `plan`, `run`, `doc`, `review`,
-  `work-item`, `report`, `triage` — so the two surfaces share vocabulary even where they do not share
-  granularity. A person who has read one can predict the other.
+- ~~**Nouns match the MCP tool families exactly** — `case`, `suite`, `plan`, `run`, `doc`, `review`,
+  `work-item`, `report`, `triage`~~ → **superseded 2026-08-26.** Three of those nouns —
+  `work-item`, `report` and `triage` — have **no CLI command at all**, and never did. What is true
+  is the weaker claim, which is still the useful one: **where both surfaces offer a capability they
+  spell it the same way**, so a person who has read one can predict the other for everything it
+  covers. Which actions each surface offers is declared per action in the shape catalogue
+  (`ActionSpec.cli` / `.mcp`) and printed by `tcms format`, so the asymmetry is a checked fact
+  rather than a sentence here — see §253.
 - **Read commands are phase 5, writes are phase 7**, per the plan's order.
 - **`--json` on every command**, so the CLI composes in a shell. Human-readable output is the
   default and the JSON is the generated client's response verbatim.
 - **`--project` is the only context flag**, per §4.1.
 - Refusal copy, keys, idempotency and `If-Match` all come from the core, so a CLI command and its MCP
   counterpart cannot disagree about any of them.
+  - **This was aspirational until 2026-08-26 and the CLI half was simply not wired.** `describeRefusal`
+    had exactly one consumer — `mcp/src/result.ts` — and the CLI printed the server's raw `detail`
+    instead, so the same 403 read *"this token's role does not hold `case:edit`. Ask a project
+    administrator…"* through a host and *"You do not have permission to do this."* in a terminal.
+    The safe direction, and the wrong surface: the CLI is the one a **person** uses to find out what
+    to ask for. Both adapters now go through `core/outcome.ts`, which classifies the failure and
+    composes the copy once.
 
 ---
 
@@ -502,10 +514,23 @@ instance is §108.
 1. **Gate conformance.** For every tool, assert its declared permission set equals the permission set
    the wrapped endpoints actually enforce, derived from the code rather than from a list in this
    document. A tool whose endpoint's gate changes must fail the build, not be discovered by an agent.
+   - **Built 2026-08-26**, in `mcp/src/writeConformance.test.ts`, after being specified here and left
+     unwritten for as long as the surface existed. It reads the gate out of the operation's own prose
+     in `openapi.yaml` (*"Requires `suite:manage`."*) via `declaredPermissionsOf`, resolving the
+     operation from the URL the arm actually sent. That is a weaker source than the Java annotation
+     and the strongest one a TypeScript test can reach; what matters is that it is **not a list kept
+     beside the tool registry**, which is the whole of the requirement. Its own vacuity guard is a
+     guard on the *reader*, because prose can quietly stop answering.
 2. **The §2 merge rule, derived from the catalogue.** For every multi-arm tool, assert that no role
    in `role_permission` holds a strict subset of its arms' permissions. This is what would have
    caught the `Automation Service` case in §2 had §134 not already separated the two token roles, and
    it is what will catch the next role that is added.
+   - **Built 2026-08-26**, in `mcp/src/writes.test.ts`, on `roleMatrix()` — the §A3 parser
+     `matrixCopies.test.ts` and `tierClaims.test.ts` already trust. Every merge is legal today, which
+     is exactly why it was worth writing: nothing fails now, and a migration narrowing one key would
+     otherwise take a whole tool away from every contributor with the build staying green. The
+     nearest thing that existed asserted each arm's permission is inside **its own tool's** gate,
+     which a gate wrong in both places satisfies.
 3. **`Idempotency-Key` and `If-Match` coverage.** Assert every create arm sends a key and every edit
    arm sends `If-Match`, over the tool registry rather than per tool — the same shape as
    `RepositoryTransactionTest` deriving its repository list from the live context.
@@ -523,6 +548,20 @@ instance is §108.
    `tags` reach neither adapter. The fifth was added after the doc-page blocks shipped as
    `{ type, text }` against a `DocBlockInput` that declares `blockType`, invisible to the other four
    because they read top-level properties only.
+6. **The shape catalogue against the SURFACE (2026-08-26).** §5 pins the catalogue to the contract
+   and asks nothing of the eleven write tools, ten of which hand-write their `inputSchema`. So
+   `tcms_shape` could tell a model one thing about a suite and `tcms_write_suite` declare another
+   with nothing firing. `mcp/src/writes.test.ts` now asserts that every field the catalogue offers
+   for a body-carrying arm is a property that tool accepts, and `cli/src/format.test.ts` the same
+   for flags. It found three live disagreements: `tcms format plan` printed `--milestone-name`
+   where the command takes `--milestone` (a flag the surface's own help screen refused in strict
+   mode), the same for a run's `--release-version` / `--build-number` / `--commit-sha`, and
+   `doc edit` had no `--parent` at all while `tcms_write_doc_page` accepted one.
+7. **The shipped user guide against both registries (2026-08-26).** `frontend/src/features/help/`
+   enumerates the tools and commands in prose, and it went stale the slice it was written in —
+   `tcms_shape` and `tcms format` shipped in §253 and neither list gained them. `guideCopies.test.ts`
+   in each package compares the prose to the registry, both ways for the tools, and to the tool
+   count beside it.
 
 ## 9. Verification obligations (§65)
 

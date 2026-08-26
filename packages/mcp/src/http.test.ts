@@ -140,6 +140,59 @@ describe('the credential', () => {
     expect(String(bo['instructions'])).not.toContain('Ana Engineer');
   });
 
+  it('is re-checked on every request, not only on initialize', async () => {
+    globalThis.fetch = tcmsByToken();
+    const url = await listen();
+
+    const opened = await initialize(url, 'token-ana');
+    const sessionId = opened.headers.get('mcp-session-id') ?? '';
+    const call = (token?: string) => REAL_FETCH(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'mcp-session-id': sessionId,
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }),
+    });
+
+    /*
+      The session id travels as a header on every request and response, so it lands in proxy access
+      logs. Bound to nothing, it would be a bearer token that everything in the path records: the
+      first call below is an unauthenticated stranger driving Ana's session with Ana's grants, and
+      the second is Bo doing it while their own client is built for a different company.
+    */
+    expect((await call()).status).toBe(401);
+    expect((await call('token-bo')).status).toBe(401);
+    expect((await call('token-ana')).status).toBe(200);
+  });
+
+  it('will not let an unauthenticated DELETE terminate a live session', async () => {
+    globalThis.fetch = tcmsByToken();
+    const url = await listen();
+
+    const opened = await initialize(url, 'token-ana');
+    const sessionId = opened.headers.get('mcp-session-id') ?? '';
+
+    // A DELETE reaches the transport through the existing-session branch and never passes the
+    // POST guard, so this is the one method for which the credential check is the only gate.
+    const killed = await REAL_FETCH(url, { method: 'DELETE', headers: { 'mcp-session-id': sessionId } });
+    expect(killed.status).toBe(401);
+
+    const after = await REAL_FETCH(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: 'Bearer token-ana',
+        'mcp-session-id': sessionId,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list' }),
+    });
+    expect(after.status).toBe(200);
+  });
+
   it('hands each session its own id', async () => {
     globalThis.fetch = tcmsByToken();
     const url = await listen();
@@ -214,6 +267,7 @@ describe('the endpoint', () => {
       headers: {
         'content-type': 'application/json',
         accept: 'application/json, text/event-stream',
+        authorization: 'Bearer token-ana',
         'mcp-session-id': sessionId,
       },
       body: JSON.stringify({ pad: 'x'.repeat(MAX_BODY_BYTES + 1) }),

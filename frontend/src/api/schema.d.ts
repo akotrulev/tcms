@@ -12863,6 +12863,18 @@ export interface components {
              *     rather than as a loading state that never ends.
              */
             formats: ("PDF" | "MD" | "HTML")[];
+            /**
+             * @description Every value of `generate`'s `type` this server can compute, sorted. **The `type` is an
+             *     open string on purpose** — a deployment's report set is what its `ReportComputation`
+             *     beans are — so until this field existed the catalogue was discoverable only by being
+             *     refused: `ReportTypes.refusal` names it, and names it *after* the caller guessed wrong.
+             *
+             *     That is workable for the SPA, which has a picker, and not for an API caller with a
+             *     `type` field and no list. Derived from the registry rather than written down, on
+             *     `ReportTypes`' own argument — a report added in a later slice becomes requestable by
+             *     existing, and a copy of the list would be edited on one endpoint and not the other.
+             */
+            types: string[];
         };
         ReportJob: {
             /** Format: uuid */

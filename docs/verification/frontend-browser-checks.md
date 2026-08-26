@@ -3382,3 +3382,18 @@ created has not checked the reading that matters.
 | `§252 H-6` | Read **The command-line tool** and **AI agent access** against a real instance: run every command shown, substituting your host | Every command works as printed. **This is the row that catches copy going stale** — the CLI's own `tcms help` is the authority for the command list and the tool list comes from the MCP registry, so a divergence is this page being wrong, not the tool. Note in particular whether `Company → API tokens` is still where a token is issued: `packages/cli`'s help text says *"Settings → API tokens"*, which is already wrong, and this page says the rail label. |
 | `§252 H-7` | Follow the pointer in **Running tests** to `/projects/<id>/run-schedules` | The schedules screen renders. The page says in a warning that nothing links to it; **if a rail entry or a link has appeared by the time this is driven, the warning is the thing to delete** — the row is here to catch the note outliving the gap. |
 | `§252 H-8` | Deep-link a section directly (`/help/mcp`), then a retired id (`/help/nonsense`) | The first lands on that section. The second **redirects to the first section**, and does not show the not-found page: an id in somebody's onboarding notes that stopped existing is a wrong turn, not a broken app. |
+
+## §254 — the guide's two lists, now pinned
+
+**One row, and it belongs beside `§252 H-6` rather than replacing it.** That row asks whether the
+commands on the page still work; this one asks whether the page still lists them all. The two lists
+went stale the slice they were written in — `tcms_shape` and `tcms format` shipped in §253 and
+neither the tool list, the command list nor the tool count beside them gained an entry — and a
+computed check now compares each to its registry (`guideCopies.test.ts`, one per package). So the
+*content* is pinned; what is not pinned is that it renders.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§254 H-9` | Open **The command-line tool** and **AI agent access**. Run `tcms help` against a real instance and compare the two command lists; then read the **Exit codes** block and provoke one — a `tcms case show TC-99999` for a case that does not exist, and `echo $?` | The page's Reading block now names `tcms format` and the two `proposal` commands, and its Writing block matches `tcms help`. The exit-code table is new; the provoked read answers **5**, not 1, which is the whole reason the table exists. **The `--yes` and `--dry-run` entries under "Options that apply everywhere" are the ones to check by doing**: `tcms doc unlink DOC-1 --link <id>` with no terminal must refuse rather than delete, and with `--dry-run` must print what it would do and send nothing. |
+
+---

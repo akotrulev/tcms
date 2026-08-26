@@ -572,6 +572,102 @@ const format: Command = {
   },
 };
 
+/**
+ * The CLI end of the review queue — the counterpart to `tcms_list_proposals`.
+ *
+ * `case propose` is the CLI's one create and it files into a queue this surface could not read, so
+ * a person driving an agent from a terminal had no way to see what became of what it filed. The
+ * three nouns surface spec §6 promises and does not deliver (`work-item`, `report`, `triage`) are
+ * a recorded asymmetry; this one was an omission on both surfaces at once.
+ */
+const proposalList: Command = {
+  name: 'proposal list',
+  summary: 'The review queue of proposed cases',
+  usage: 'tcms proposal list [--status PENDING|ACCEPTED|REJECTED] [--page N] [--size N]',
+  options: {
+    status: { type: 'string' },
+    page: { type: 'string' },
+    size: { type: 'string' },
+  },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const status = first(options['status']);
+
+    const result = await client.GET('/projects/{projectId}/ai-proposals', {
+      params: {
+        path: { projectId: await projectOf(context) },
+        query: {
+          // Defaulted by the server to PENDING, and left to it: a queue is a list of things
+          // waiting, and a client second-guessing that default is a second answer to what a
+          // queue is.
+          ...(status === undefined ? {} : { status: status as 'PENDING' | 'ACCEPTED' | 'REJECTED' }),
+          page: number(first(options['page'])) ?? 0,
+          size: clampPageSize(number(first(options['size']))),
+        },
+      },
+      tcms: request,
+    });
+
+    if (json) return out.json(result);
+
+    table(out, result.items, [
+      { header: 'ID', value: (row) => show(row.id) },
+      { header: 'TITLE', value: (row) => show(row.title) },
+      { header: 'STATUS', value: (row) => show(row.status) },
+      // Both, never one: a verdict rendered without its source shows a filer's CLAIM as a
+      // finding, which is the inflation §6w.1a exists to prevent one layer up.
+      { header: 'VERDICT', value: (row) => show(row.verdict) },
+      { header: 'SOURCE', value: (row) => show(row.verdictSource) },
+      { header: 'FILED', value: (row) => showDate(row.createdAt) },
+    ]);
+
+    out.line();
+    out.line(
+      `${result.items.length} of ${result.total} — page ${result.page + 1}`
+        + `${result.size ? ` of ${Math.max(1, Math.ceil(result.total / result.size))}` : ''}`,
+    );
+  },
+};
+
+const proposalShow: Command = {
+  name: 'proposal show',
+  summary: 'One proposal, with its payload and its grounding',
+  usage: 'tcms proposal show PROPOSAL_ID',
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    // By id, not by key: a proposal is not a case and has none — there is no `TC-n` until a
+    // person accepts it, which is the whole point of the queue.
+    const proposalId = requireArg(context, 'proposal');
+
+    const found = await client.GET('/projects/{projectId}/ai-proposals/{proposalId}', {
+      params: { path: { projectId: await projectOf(context), proposalId } },
+      tcms: request,
+    });
+
+    if (json) return out.json(found);
+
+    fields(out, [
+      ['Id', show(found.id)],
+      ['Title', show(found.title)],
+      ['Status', show(found.status)],
+      ['Verdict', `${show(found.verdict)} (${show(found.verdictSource)})`],
+      ['Filed', showDate(found.createdAt)],
+    ]);
+    out.line();
+    // Nullable, and null means UNREADABLE — a payload stored before a field left `TestCaseInput`.
+    // The proposal still renders and can still be rejected, which is a decidable state.
+    out.line(found.testCase ? JSON.stringify(found.testCase, null, 2) : '(the payload cannot be read)');
+
+    if (found.grounding) {
+      out.line();
+      // Free-form and DISPLAYED, never interpreted — it is somebody else's critic's evidence, and
+      // the contract declines to schema it for that reason.
+      out.line('Grounding:');
+      out.line(JSON.stringify(found.grounding, null, 2));
+    }
+  },
+};
+
 export const READS: readonly Command[] = [
   whoami,
   format,
@@ -585,4 +681,6 @@ export const READS: readonly Command[] = [
   runList,
   docList,
   docShow,
+  proposalList,
+  proposalShow,
 ];

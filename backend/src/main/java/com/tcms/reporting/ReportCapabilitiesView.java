@@ -29,10 +29,20 @@ import java.util.List;
  * filter is therefore against the contract's {@code format} enum, which is the set a person may
  * ask for, and not against the renderer registry alone.
  *
+ * <h2>The type catalogue is here for the same reason and arrived later</h2>
+ *
+ * <p>{@code type} is an open string — a deployment's report set is whichever {@link
+ * ReportComputation} beans it has — so until {@code types} was added the catalogue was discoverable
+ * only by being <em>refused</em>: {@link ReportTypes#refusal} names what this server can produce,
+ * and names it after the caller has already guessed wrong. Workable for the SPA, which has a
+ * picker, and a dead end for an API caller with a {@code type} field and no list.
+ *
  * @param formats every format this server can render <em>and</em> a caller may ask for, sorted, so
  *     a picker built from it is stable between reads.
+ * @param types every report type this server can compute, sorted, straight off the registry rather
+ *     than written down beside it.
  */
-record ReportCapabilitiesView(List<String> formats) {
+record ReportCapabilitiesView(List<String> formats, List<String> types) {
 
     /**
      * The contract's {@code format} enum, as the server's own copy.
@@ -45,11 +55,13 @@ record ReportCapabilitiesView(List<String> formats) {
     private static final List<ReportFormat> ASKABLE =
             List.of(ReportFormat.PDF, ReportFormat.MD, ReportFormat.HTML);
 
-    static ReportCapabilitiesView of(List<ReportFormat> supported) {
-        return new ReportCapabilitiesView(ASKABLE.stream()
-                .filter(supported::contains)
-                .map(Enum::name)
-                .sorted()
-                .toList());
+    static ReportCapabilitiesView of(List<ReportFormat> supported, List<String> types) {
+        return new ReportCapabilitiesView(
+                ASKABLE.stream()
+                        .filter(supported::contains)
+                        .map(Enum::name)
+                        .sorted()
+                        .toList(),
+                types);
     }
 }

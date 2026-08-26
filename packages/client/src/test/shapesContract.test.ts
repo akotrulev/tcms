@@ -19,7 +19,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { SHAPES, fieldsFor, type EntityShape, type FieldSpec } from '../core/shapes.js';
+import { READ_ENUMS, SHAPES, fieldsFor, type EntityShape, type FieldSpec } from '../core/shapes.js';
 
 import { contractDocument } from './contractBodies.js';
 
@@ -146,6 +146,23 @@ describe('the shape catalogue against openapi.yaml', () => {
         expect([...(field.enum ?? [])].sort(), `${shape.entity}.${field.name}`)
           .toEqual([...declared!].sort());
       }
+    }
+  });
+
+  it('declares the contract\'s enum for the values a caller FILTERS by, too', () => {
+    /*
+      The same question as above, asked of `READ_ENUMS` — the half that was prose. It found the
+      condition filter documented as "PRE or POST" against a contract that has always taken
+      `[PRE, POST, BOTH]`, which is what an unpinned spelling costs.
+    */
+    for (const [name, declared] of Object.entries(READ_ENUMS)) {
+      const [schemaName, property] = declared.of.split('.');
+      const site = property
+        ? ((schema(schemaName!)['properties'] as Record<string, Node>)[property])
+        : schema(schemaName!);
+      const contract = deref(site)?.['enum'] as string[] | undefined;
+      expect(contract, `${declared.of} declares no enum`).toBeDefined();
+      expect([...declared.values].sort(), name).toEqual([...contract!].sort());
     }
   });
 

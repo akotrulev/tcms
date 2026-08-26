@@ -146,7 +146,7 @@ describe('tcms_search_cases', () => {
 
     const answer = await run(stub, 'tcms_search_cases', {});
     expect(answer['total']).toBe(812);
-    expect(answer['more']).toBe(true);
+    expect(answer['hasMore']).toBe(true);
   });
 
   it('flattens a health signal to its code, keeping the order the server sent', async () => {
@@ -169,7 +169,7 @@ describe('tcms_search_cases', () => {
     }));
 
     const answer = await run(stub, 'tcms_search_cases', {});
-    expect((answer['cases'] as { healthSignals: string[] }[])[0]?.healthSignals)
+    expect((answer['items'] as { healthSignals: string[] }[])[0]?.healthSignals)
       .toEqual(['STALE_AUTOMATION', 'UNLINKED']);
   });
 });

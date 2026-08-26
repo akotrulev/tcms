@@ -98,7 +98,7 @@ npm run build                     # THE gate: tsc over source+tests, then emit. 
                                   # — runs them ALPHABETICALLY, so the script names the order
                                   # client → cli → mcp.
 npm run lint --workspaces         # oxlint, 0 warnings
-npm run test:run --workspaces     # 341 tests (130 client / 82 cli / 129 mcp), ~1s — CI runs these
+npm run test:run --workspaces     # 383 tests (138 client / 97 cli / 148 mcp), ~1s — CI runs these
 npm run pack:release -- --version 0.0.0 --out /tmp/rel
                                   # THE TARBALLS USERS INSTALL. No registry holds these packages —
                                   # the instance serves them at /downloads (§251,

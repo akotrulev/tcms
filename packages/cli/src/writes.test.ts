@@ -38,8 +38,17 @@ import {
   step,
   suite,
 } from '../../client/src/test/fixtures.js';
+import { CASE_SHAPE, fieldsFor, flagOf, type FieldSpec } from '@tcms/client';
+
 import { EXIT } from './main.js';
 import { PROJECT, api, mainWith, recorder } from './test/harness.js';
+
+/** One flag at its catalogue-declared spelling, carrying a value the catalogue itself supplies. */
+function argvFor(field: FieldSpec): string[] {
+  const flag = `--${flagOf(field)}`;
+  if (field.type === 'boolean') return [flag];
+  return [flag, field.enum?.[0] ?? field.keyExample ?? field.example ?? 'x'];
+}
 
 /*
   A WHOLE case detail, not the four fields the assertions read.
@@ -241,6 +250,39 @@ function tempJson(name: string, value: unknown): string {
 }
 
 describe('case edit', () => {
+  /*
+    `format.test.ts` pins this command's FLAGS to the catalogue by comparing the spread to itself
+    — an assertion that can never fail on its own. This is the half that was missing, and the door §253 cut into
+    the defect it was closing: the **body** is still read back by hand, one named key at a time, so
+    a field added to `CASE_FIELDS` produces a `--flag` that `parseArgs` accepts in strict mode and
+    a builder that silently ignores it. The command then reports success having sent nothing for
+    it, and `requireSomethingToDo` does not notice whenever any other flag was also given.
+
+    That is §137/§139's silently-dropped-flag defect exactly. So this drives the command with every
+    flag the catalogue declares and asserts each one reaches the wire.
+  */
+  it('sends every catalogue field it accepts a flag for', async () => {
+    const fields = fieldsFor(CASE_SHAPE, 'edit').filter((field) => field.type !== 'object[]');
+    expect(fields.length).toBeGreaterThanOrEqual(8);
+
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'GET /suites': { status: 200, body: [SUITE] },
+      'PATCH /cases/c-9': { status: 200, body: CASE },
+    });
+
+    const argv = ['case', 'edit', 'TC-42', ...fields.flatMap(argvFor)];
+    expect(await mainWith(argv, out, stub.fetch)).toBe(EXIT.ok);
+
+    const body = JSON.parse(stub.write('/cases/c-9').body ?? '{}') as Record<string, unknown>;
+    const missing = fields
+      .map((field) => field.contract ?? field.name)
+      .filter((key) => !(key in body));
+
+    expect(missing, 'case edit accepts a flag for these and sends nothing').toEqual([]);
+  });
+
   it('reads the case for its lockVersion and sends it as If-Match', async () => {
     const out = recorder();
     const stub = api({ ...scaffolding(), 'PATCH /cases/c-9': { status: 200, body: { ...CASE, lockVersion: 4 } } });
@@ -387,7 +429,9 @@ describe('case edit', () => {
     // verbatim, so a four-field literal here would be a payload the server refuses.
     const file = tempJson('case.json', { ...PROPOSABLE, title: 'From a file' });
 
-    expect(await mainWith(['case', 'edit', 'TC-42', '--file', file], out, stub.fetch)).toBe(EXIT.failed);
+    // `usage`, not the old catch-all `1`: the command was driven with an argument it cannot use,
+    // and no retry of it fixes that. See `EXIT`.
+    expect(await mainWith(['case', 'edit', 'TC-42', '--file', file], out, stub.fetch)).toBe(EXIT.usage);
     expect(out.stderr).toMatch(/silently overwrites whoever saved in between/);
     expect(stub.sent.some((request) => request.method === 'PATCH')).toBe(false);
   });
@@ -510,7 +554,7 @@ describe('case propose', () => {
     const stub = api(scaffolding());
     const file = tempJson('case.json', { title: 'Login works' });
 
-    expect(await mainWith(['case', 'propose', '--file', file], out, stub.fetch)).toBe(EXIT.failed);
+    expect(await mainWith(['case', 'propose', '--file', file], out, stub.fetch)).toBe(EXIT.usage);
     expect(out.stderr).toContain('stepFormat');
     expect(out.stderr).toContain('automationStatus');
     expect(stub.sent.some((request) => request.method === 'POST')).toBe(false);
@@ -681,8 +725,10 @@ describe('suite writes', () => {
     // APPROVED costs `suite:approve`, which an Agent token does not hold. The command sends it
     // anyway: a client-side ladder would be a second copy of §6g's, and the person running this
     // CLI may hold a Test Lead token.
+    // `denied`, which is the whole point of the table: a CI step can now tell this from a 429 and
+    // stop rather than retrying what will never succeed.
     expect(await mainWith(['suite', 'status', 'TS-7', '--status', 'APPROVED'], out, stub.fetch))
-      .toBe(EXIT.failed);
+      .toBe(EXIT.denied);
     expect(stub.write('/suites/s-1/status').body).toContain('APPROVED');
   });
 });
@@ -767,7 +813,9 @@ describe('doc writes', () => {
     const out = recorder();
     const stub = api({ ...scaffolding(), 'DELETE /links/l-1': { status: 204 } });
 
-    expect(await mainWith(['doc', 'unlink', 'DOC-3', '--link', 'l-1', '--json'], out, stub.fetch))
+    // `--yes`: this is the surface's one delete arm and it now asks first. Without a terminal to
+    // ask at the command refuses rather than proceeding, which is the MCP gate's rule brought over.
+    expect(await mainWith(['doc', 'unlink', 'DOC-3', '--link', 'l-1', '--json', '--yes'], out, stub.fetch))
       .toBe(EXIT.ok);
     expect(JSON.parse(out.stdout)).toEqual({ deleted: 'l-1' });
   });

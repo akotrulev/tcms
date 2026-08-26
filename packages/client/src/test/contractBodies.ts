@@ -460,6 +460,26 @@ export function schemaProperties(name: string): { properties: string[]; required
  * `undefined` means the path declares no such operation — the case `checkSent` already reports in its
  * own words.
  */
+export function declaredPermissionsOf(method: string, contractPath: string): string[] | undefined {
+  const item = spec().paths[contractPath];
+  const operation = item && OPERATIONS.has(method) ? (item[method] as Node | undefined) : undefined;
+  if (!operation) return undefined;
+
+  /*
+    Read out of the operation's own prose, which is where this contract states its gates —
+    *"Requires `suite:manage`."* — rather than in an extension the document does not have. That is
+    a weaker source than the Java annotation and the strongest one a TypeScript test can reach; it
+    is still not a list kept beside the tool registry, which is the whole of §8.1's requirement.
+
+    Deliberately loose about WHICH keys and not about how many: an operation naming two keys is
+    matched by an arm declaring either, because several endpoints name an alternative
+    (*"`case:edit`, not a new `case:quarantine` key"*) and treating prose as a set equation would
+    make the check a check on the sentence's grammar.
+  */
+  const text = String(operation['description'] ?? '');
+  return [...text.matchAll(/Requires \*{0,2}`([a-z]+:[a-z]+)`/g)].map((match) => match[1]!);
+}
+
 export function declaredHeadersOf(method: string, contractPath: string): string[] | undefined {
   const item = spec().paths[contractPath];
   const operation = item && OPERATIONS.has(method) ? (item[method] as Node | undefined) : undefined;

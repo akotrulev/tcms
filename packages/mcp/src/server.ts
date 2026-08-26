@@ -34,7 +34,7 @@ import {
 import { SHAPES, guideFor } from '@tcms/client';
 
 import { renderInstructions } from './instructions.js';
-import { failed, ok } from './result.js';
+import { RESULT_SCHEMA, failed, ok } from './result.js';
 import { MCP_VERSION, type Session } from './session.js';
 import { annotationsFor, describeFor, isListed, type ToolArm, type ToolDefinition } from './tool.js';
 import { TOOLS, findTool } from './tools.js';
@@ -134,6 +134,14 @@ export function buildServer(session: Session, tools: readonly ToolDefinition[] =
       return {
         content: [{ type: 'text', text: `No tool named '${request.params.name}' is available.` }],
         isError: true,
+        structuredContent: {
+          ok: false,
+          error: {
+            code: 'not_found',
+            message: `No tool named '${request.params.name}' is available.`,
+            retryable: false,
+          },
+        },
       } satisfies CallToolResult;
     }
 
@@ -167,7 +175,15 @@ export function buildServer(session: Session, tools: readonly ToolDefinition[] =
     } catch (error) {
       return failed(error, {
         what: `${tool.title.charAt(0).toLowerCase()}${tool.title.slice(1)}`,
-        permission: arm?.permission ?? tool.gate.permissions[0] ?? 'a permission this credential does not hold',
+        /*
+          `permissionFor` first: one arm can serve several subjects at different keys, and naming
+          the arm's declared default then sends a caller refused on `TP-1` to ask for
+          `case:review`. See `ToolArm.permissionFor`.
+        */
+        permission: arm?.permissionFor?.(input)
+          ?? arm?.permission
+          ?? tool.gate.permissions[0]
+          ?? 'a permission this credential does not hold',
         write: arm !== undefined || tool.arms !== undefined,
       }) as CallToolResult;
     }
@@ -182,6 +198,12 @@ function describe(tool: ToolDefinition, session: Session): Tool {
     title: tool.title,
     description: describeFor(tool, session.reach.permissions, session.reach.qualifiers),
     inputSchema: tool.inputSchema as Tool['inputSchema'],
+    /*
+      One envelope for every tool, so a host knows a result has a machine-readable half before it
+      calls. Declared identically across the surface on purpose — see `RESULT_SCHEMA`, which
+      explains why `data` is left unconstrained rather than mirrored from `openapi.yaml`.
+    */
+    outputSchema: RESULT_SCHEMA as Tool['outputSchema'],
     annotations: annotationsFor(tool) as Tool['annotations'],
     ...(tool.meta ? { _meta: tool.meta } : {}),
   };

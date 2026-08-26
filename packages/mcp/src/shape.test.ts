@@ -59,12 +59,11 @@ describe('tcms_shape', () => {
     expect(answer.guide).toContain('required when `stepFormat` is STRUCTURED');
   });
 
-  it('names what does exist when the entity is mistyped', async () => {
-    const answer = await run(api(agentRoutes()), { entity: 'testcase' }) as {
-      error: string; entities: string[];
-    };
-    expect(answer.error).toContain('testcase');
-    expect(answer.entities).toContain('case');
+  it('refuses a mistyped entity as a failure, and names what does exist', async () => {
+    // It used to answer through the success path, so a host rendered a failure as data and a model
+    // read `{ error: … }` as a successful answer about a shape.
+    await expect(run(api(agentRoutes()), { entity: 'testcase' })).rejects.toThrow(/testcase/);
+    await expect(run(api(agentRoutes()), { entity: 'testcase' })).rejects.toThrow(/case/);
   });
 
   it('does not restate the vocabulary tcms_orient owns', async () => {

@@ -186,6 +186,41 @@ const STEP_FORMAT = ['STRUCTURED', 'GHERKIN'] as const;
 const AUTOMATION_STATUS = ['MANUAL', 'TO_BE_AUTOMATED', 'AUTOMATED', 'NOT_AUTOMATABLE'] as const;
 const PROPOSAL_VERDICT = ['GROUNDED', 'PARTIAL', 'HALLUCINATED', 'UNVERIFIED'] as const;
 
+/**
+ * The enums a caller **filters** by, as against the ones it writes.
+ *
+ * The write side has enumerated its enums since §203, when `verdict`'s description told every
+ * caller to send `APPROVED` — a member the schema does not have — and *"the description was the
+ * whole of the contract the caller had"*. The fix was stated as a rule and applied to one property:
+ * the read tools went on describing `lifecycleStatus` as *"DRAFT, IN_REVIEW, APPROVED,
+ * DEPRECATED."* in prose, and a filter value is refused exactly as hard as a body value.
+ *
+ * Prose is not merely a weaker spelling of an enum, it is an unpinned one, and it had already
+ * drifted: the condition-library filter was documented as *"PRE or POST"* while the contract has
+ * taken `[PRE, POST, BOTH]` all along, so the one value that narrows nothing was undocumented on
+ * the only surface offering the filter.
+ *
+ * Keyed by the contract site each is pinned to, on the same rule as {@link FieldSpec.enumOf} —
+ * `shapesContract.test.ts` reads this map and compares it to `openapi.yaml`, so a member added
+ * there reddens `packages/` rather than being discovered as a 400.
+ */
+export const READ_ENUMS = {
+  lifecycleStatus: { of: 'LifecycleStatus', values: ['DRAFT', 'IN_REVIEW', 'APPROVED', 'DEPRECATED'] },
+  automationStatus: { of: 'AutomationStatus', values: AUTOMATION_STATUS },
+  priority: { of: 'Priority', values: PRIORITY },
+  healthSignal: {
+    of: 'HealthSignal',
+    values: [
+      'OUTDATED_SPEC_CHANGED', 'STALE_APPROVAL', 'CONDITION_DRIFT', 'STALE_AUTOMATION',
+      'NEVER_EXECUTED', 'LONG_UNEXECUTED', 'UNLINKED', 'FAILING_REPEATEDLY', 'ORPHANED',
+      'INCOMPLETE', 'UNDECLARED_AUTOMATION',
+    ],
+  },
+  conditionType: { of: 'Condition.type', values: ['PRE', 'POST', 'BOTH'] },
+  proposalStatus: { of: 'ProposalStatus', values: ['PENDING', 'ACCEPTED', 'REJECTED'] },
+  artifactScope: { of: 'Artifact.scope', values: ['PROJECT', 'PLAN'] },
+} as const satisfies Record<string, { of: string; values: readonly string[] }>;
+
 /* ------------------------------------------------------------- test case ---- */
 
 /**
@@ -581,7 +616,16 @@ const PLAN_SHAPE: EntityShape = {
   fields: [
     { name: 'name', type: 'string', required: 'always', describe: 'What this plan covers.' },
     { name: 'description', type: 'string', nullable: true, describe: 'Its purpose, in prose.' },
-    { name: 'milestoneName', type: 'string', nullable: true, describe: 'The release or milestone it belongs to.' },
+    /*
+      The four flag bindings below (`milestone`, and `release`/`build`/`commit` on a run) are
+      recorded rather than derived, and they are the defect the catalogue↔surface pin found: the
+      commands have shipped these spellings since §137, `flagOf` kebab-cased the field name
+      instead, and `tcms format plan` therefore printed `--milestone-name` — a flag `parseArgs`
+      refuses in strict mode. The catalogue was telling callers to type something no command
+      accepts. Renaming the shipped flags would be the other repair and a worse one; a spelling is
+      a promise to whoever already scripted against it.
+    */
+    { name: 'milestoneName', type: 'string', nullable: true, cli: { flag: 'milestone' }, describe: 'The release or milestone it belongs to.' },
     { name: 'milestoneDate', type: 'string', nullable: true, example: '2026-09-30', describe: 'When that milestone is due, as a date.' },
     {
       name: 'suites',
@@ -626,6 +670,10 @@ const DOC_PAGE_SHAPE: EntityShape = {
       nullable: true,
       contract: 'parentId',
       keyExample: 'DOC-1',
+      // `--root` is the clearing form, on the same rule as `--unfile` beside `--suite`: a nullable
+      // field with no way to send null is one the CLI can never empty. `doc edit` had neither
+      // spelling until the catalogue↔surface pin asked for the first.
+      cli: { negate: 'root' },
       describe: 'The page this one sits under. Null puts it at the root.',
     },
     {
@@ -693,9 +741,9 @@ const RUN_SHAPE: EntityShape = {
       describe: 'Individual cases to include beyond the suites.',
     },
     { name: 'tags', type: 'string[]', set: true, cli: { flag: 'tag', multiple: true }, describe: 'Include every case carrying these tags.' },
-    { name: 'releaseVersion', type: 'string', nullable: true, example: '2026.9.0', describe: 'The release under test.' },
-    { name: 'buildNumber', type: 'string', nullable: true, example: '4821', describe: 'The build under test.' },
-    { name: 'commitSha', type: 'string', nullable: true, example: '9f2c1ab', describe: 'The commit under test.' },
+    { name: 'releaseVersion', type: 'string', nullable: true, cli: { flag: 'release' }, example: '2026.9.0', describe: 'The release under test.' },
+    { name: 'buildNumber', type: 'string', nullable: true, cli: { flag: 'build' }, example: '4821', describe: 'The build under test.' },
+    { name: 'commitSha', type: 'string', nullable: true, cli: { flag: 'commit' }, example: '9f2c1ab', describe: 'The commit under test.' },
     { name: 'branch', type: 'string', nullable: true, example: 'release/2026.9', describe: 'The branch under test.' },
   ],
 };
@@ -792,6 +840,24 @@ const ARTIFACT_SHAPE: EntityShape = {
 };
 
 /** Every entity the catalogue covers, by name. */
+/**
+ * The eight entities this catalogue carries — and the three write tools it does not.
+ *
+ * `tcms_review_comment`, `tcms_review_verdict` and `tcms_report` have no entry, so `tcms_shape`
+ * refuses those words. That is a **stated exclusion rather than an oversight**, and each has a
+ * different reason:
+ *
+ *   - The two review tools take no *entity* body. Their payloads are a verdict, a remark and a
+ *     resolution flag — arguments to a state transition, which is what their arms declare — so an
+ *     entry here would be an `EntityShape` with no create and no edit, checked by nothing that
+ *     checks the other eight, existing only to be printed.
+ *   - `tcms_report`'s body is an **inline** schema on `POST …/reports/generate` with no component
+ *     name, and every pin in `shapesContract.test.ts` resolves a named one. Extracting it is a
+ *     contract change whose only driver is this sentence, so it is written down instead.
+ *
+ * What closed the gap for a caller is on the other side: `tcms_shape`'s refusal names every entity
+ * that does exist, and its description routes the three that do not to the tool that owns them.
+ */
 export const SHAPES: Readonly<Record<string, EntityShape>> = {
   artifact: ARTIFACT_SHAPE,
   case: CASE_SHAPE,

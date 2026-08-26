@@ -3091,6 +3091,21 @@ Two rows are **expected green and recorded as gaps** rather than as passes.
 | `§249 CS-M8` | Change `CrossProjectSearchQuery.isBounded()` to `return true` | **Red** — `anUnboundedSearchIsRefused` and `anEnumFilterAloneIsNotABound`. The endpoint becomes "every case in every project you can see", which is the response `/work-items` refuses to serve for the same reason. |
 | `§249 CS-M9` | Remove the trailing `cb.asc(root.get("keySeq"))` from `CaseSort.orderBy` | **Red** — `pagingIsStableAcrossProjects`, **if the fixture is large enough to page**. ⚠️ Postgres may return a stable order anyway on a seven-row heap; the fixture pages at `size=3` across three pages specifically so it can, but if this comes back green the fixture is too small and **that is the finding** — the row is then a request for a larger one, not a pass. ❗ **RUN 2026-08-22 — RED, 1, but NOT `pagingIsStableAcrossProjects`, which stayed GREEN. So the finding stands: the fixture is too small, and this row is a request for a larger one.** Postgres returned a stable order over the seven-row heap anyway. What fell instead was `a Company Admin sees every project` — and note why the blast radius is small: the default sort is `keySeq,asc`, so the trailing tiebreak is redundant on the default path and bites only under a non-default sort. |
 
+## §254 — the report type catalogue (`ReportCapabilities.types`)
+
+**Two rows.** The slice's backend half is one field: `GET …/reports/capabilities` now answers the
+report TYPES this deployment can compute as well as the formats it can render. It exists because
+`type` is an open string whose catalogue was reachable only through `ReportTypes.refusal` — which
+names it *after* the caller has guessed wrong — and `tcms_report` on the MCP surface was exactly
+that caller.
+
+| # | Mutate | Expect |
+|---|---|---|
+| `§254 RC-M1` | In `ReportReadService.capabilities`, pass `List.of()` instead of `types.supported()` | **Red** — `ReportEndpointTest.Capabilities.whatThisServerCanCompute` (the list no longer contains `run_summary`) and `.theTypeListAgreesWithTheRefusal` becomes vacuous rather than failing. ⚠️ **Record whether the second reddens at all**: a pairing check that iterates an empty list passes, and if it does, that is the finding — the check needs its own non-empty guard, exactly as `formats` would. |
+| `§254 RC-M2` | In `ReportCapabilitiesView.of`, filter `types` against a hardcoded `List.of("run_summary")` the way `formats` is filtered against `ASKABLE` | **Red** — `ReportCapabilitiesTest.theTypesAreTheRegistrys`. The two fields get opposite treatment on purpose and the reason is worth the row: a format is filtered because the wire declares three and a deployment renders two, while a type's whole set *is* whichever computations are registered, so filtering it here would be the second copy `ReportTypes` refuses to keep. |
+
+---
+
 ---
 
 ---

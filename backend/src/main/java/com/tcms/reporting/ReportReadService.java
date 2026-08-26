@@ -61,6 +61,8 @@ class ReportReadService {
     private final ReportJobRepository jobs;
     private final ReportArtifactRepository artifacts;
     private final ReportRenderers renderers;
+    /** Only for the catalogue in {@link #capabilities}; the refusal stays in {@link ReportTypes}. */
+    private final ReportComputations types;
     private final ReportStore store;
 
     ReportReadService(
@@ -68,12 +70,14 @@ class ReportReadService {
             ReportJobRepository jobs,
             ReportArtifactRepository artifacts,
             ReportRenderers renderers,
+            ReportComputations types,
             ReportStore store) {
 
         this.projects = projects;
         this.jobs = jobs;
         this.artifacts = artifacts;
         this.renderers = renderers;
+        this.types = types;
         this.store = store;
     }
 
@@ -153,7 +157,8 @@ class ReportReadService {
     @Transactional(readOnly = true)
     Outcome<ReportCapabilitiesView> capabilities(UUID userId, UUID projectId) {
         return gate(projects.readGranted(userId, projectId, VIEW_REPORT,
-                project -> Optional.of(ReportCapabilitiesView.of(renderers.supported()))));
+                project -> Optional.of(ReportCapabilitiesView.of(
+                        renderers.supported(), types.supported()))));
     }
 
     /**

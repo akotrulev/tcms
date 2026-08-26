@@ -272,7 +272,9 @@ const INVOCATIONS: Record<string, Invocation> = {
     routes: { 'POST /blocks/b-1/links': { status: 201, body: BLOCK_LINK } },
   },
   'doc unlink': {
-    argv: () => ['doc', 'unlink', 'DOC-3', '--link', 'l-1'],
+    // `--yes` because the delete arm asks first now; the header conformance this file checks is
+    // downstream of the consent gate and unchanged by it.
+    argv: () => ['doc', 'unlink', 'DOC-3', '--link', 'l-1', '--yes'],
     path: '/links/l-1',
     routes: { 'DELETE /links/l-1': { status: 204 } },
   },

@@ -77,11 +77,14 @@ describe('argument handling', () => {
 
   it('refuses to run without an instance or a token, before making a request', async () => {
     const out = recorder();
-    expect(await main(['project', 'list'], out, { TCMS_TOKEN: 'x' })).toBe(EXIT.failed);
+    // `EXIT.usage`, not `EXIT.failed`: a missing `TCMS_URL` is the caller's own configuration and
+    // no retry fixes it. Every one of these used to be `1`, which is the collapse the ten-code
+    // table exists to undo — see `EXIT`.
+    expect(await main(['project', 'list'], out, { TCMS_TOKEN: 'x' })).toBe(EXIT.usage);
     expect(out.stderr).toContain('TCMS_URL');
 
     const second = recorder();
-    expect(await main(['project', 'list'], second, { TCMS_URL: env.TCMS_URL })).toBe(EXIT.failed);
+    expect(await main(['project', 'list'], second, { TCMS_URL: env.TCMS_URL })).toBe(EXIT.usage);
     expect(second.stderr).toContain('TCMS_TOKEN');
   });
 });
@@ -98,7 +101,8 @@ describe('failures', () => {
 
     const code = await mainWith(['project', 'list'], out, stub.fetch);
 
-    expect(code).toBe(EXIT.failed);
+    // A payload the server rejected is a usage mistake found one hop later than a mistyped flag.
+    expect(code).toBe(EXIT.usage);
     expect(out.stderr).toContain('That is not valid.');
     expect(out.stderr).toContain('key: is required');
   });
@@ -107,7 +111,9 @@ describe('failures', () => {
     const out = recorder();
     const stub = api({ '/projects': { status: 404, body: { detail: 'Not found.', status: 404 } } });
 
-    expect(await mainWith(['project', 'list'], out, stub.fetch)).toBe(EXIT.failed);
+    expect(await mainWith(['project', 'list'], out, stub.fetch)).toBe(EXIT.notFound);
+    // The copy is the core's now, so this asserts §4.5's boundary on the CLI as well as the MCP:
+    // a 404 must not distinguish "exists but you cannot see it" from "does not exist".
     expect(out.stderr).not.toMatch(/permission|role|Viewer|Test Lead/i);
   });
 });
@@ -177,7 +183,7 @@ describe('reads', () => {
       '/projects': { status: 200, body: [PROJECT, { ...PROJECT, id: 'p-2', key: 'PAY' }] },
     });
 
-    expect(await mainWith(['suite', 'list'], out, stub.fetch)).toBe(EXIT.failed);
+    expect(await mainWith(['suite', 'list'], out, stub.fetch)).toBe(EXIT.usage);
     expect(out.stderr).toContain('--project');
   });
 
@@ -304,7 +310,7 @@ describe('reads', () => {
     const out = recorder();
     const stub = api({ '/projects': { status: 200, body: [PROJECT] } });
 
-    expect(await mainWith(['case', 'show', 'TS-7'], out, stub.fetch)).toBe(EXIT.failed);
+    expect(await mainWith(['case', 'show', 'TS-7'], out, stub.fetch)).toBe(EXIT.usage);
     expect(out.stderr).toMatch(/is a suite key, but a case was expected/);
     expect(stub.urls.filter((url) => url.includes('/cases'))).toEqual([]);
   });

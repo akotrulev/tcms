@@ -642,6 +642,7 @@ tcms whoami`}</Terminal>
 
         <H>Reading</H>
         <Terminal>{`tcms whoami            # who this token acts as, and what it can reach
+tcms format case       # what a payload must look like — reaches no instance
 tcms project list      # projects this token can see
 tcms case list         # search and filter test cases
 tcms case show TC-42   # one case in full
@@ -651,7 +652,9 @@ tcms suite show TS-7   # one suite, with the conditions it imposes
 tcms plan list
 tcms run list
 tcms doc list
-tcms doc show <page>   # one documentation page, with its blocks`}</Terminal>
+tcms doc show <page>   # one documentation page, with its blocks
+tcms proposal list     # the review queue of proposed cases
+tcms proposal show <id># one proposal, with its payload and grounding`}</Terminal>
 
         <H>Writing</H>
         <Terminal>{`tcms case edit         # change a test case
@@ -680,8 +683,29 @@ tcms review comment    # a remark on an open review`}</Terminal>
               ),
             },
             { term: <Code>--timeout SECS</Code>, detail: 'Override the request deadline.' },
+            {
+              term: <Code>--yes</Code>,
+              detail:
+                'Skip the confirmation on a command that removes something. Without it, and with '
+                + 'no terminal to ask at, the command refuses rather than proceeding.',
+            },
+            {
+              term: <Code>--dry-run</Code>,
+              detail: 'Say what a write would do, and send nothing.',
+            },
+            { term: <Code>--version</Code>, detail: 'Print the client version.' },
           ]}
         />
+
+        <H>Exit codes</H>
+        <P>
+          Ten of them, so a script can branch without parsing output — the difference between{' '}
+          <em>rate limited, back off</em> and <em>this token will never be allowed to do this</em>{' '}
+          is the whole reason they are not all <Code>1</Code>.
+        </P>
+        <Terminal>{`0 ok            2 usage        3 not authenticated   4 permission denied
+5 not found     6 conflict     7 rate limited        8 timed out
+9 unavailable   1 other        130 cancelled`}</Terminal>
 
         <H>What it will not do</H>
         <Definitions
@@ -773,14 +797,14 @@ tcms review comment    # a remark on an open review`}</Terminal>
         <Definitions
           items={[
             {
-              term: 'Orientation — 2',
+              term: 'Orientation — 3',
               detail:
-                'tcms_whoami reports who the credential acts as and what it can reach. tcms_orient returns the project with its classification dimensions, execution statuses, suites, tags and case counts in one call — the vocabulary is per-project, so an agent that skips this guesses values that get refused.',
+                'tcms_whoami reports who the credential acts as and what it can reach. tcms_orient returns the project with its classification dimensions, execution statuses, suites, tags and case counts in one call — the vocabulary is per-project, so an agent that skips this guesses values that get refused. tcms_shape answers what a payload of a given kind must look like, and reaches no instance at all, so it is safe to call before anything is configured.',
             },
             {
-              term: 'Reading — 10',
+              term: 'Reading — 11',
               detail:
-                'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_triage',
+                'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_list_proposals · tcms_triage',
             },
             {
               term: 'Writing — 11',
@@ -790,7 +814,7 @@ tcms review comment    # a remark on an open review`}</Terminal>
           ]}
         />
         <P>
-          The list is workflow-shaped rather than one tool per endpoint: 23 tools over roughly 88 API
+          The list is workflow-shaped rather than one tool per endpoint: 25 tools over roughly 88 API
           paths. Tool definitions cost the model context, so a mirror of the API would be a surface
           only the largest hosts could afford to load.
         </P>

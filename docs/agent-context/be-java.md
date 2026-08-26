@@ -4498,6 +4498,20 @@ deliberate edit. `#confirmed`
 
 ## Seams to reuse
 
+**§254 touched `reporting` and nothing else — one field, and the reason is worth carrying:**
+- `ReportCapabilitiesView` is now `(List<String> formats, List<String> types)`, and the two halves
+  get **opposite treatment on purpose**. `formats` is filtered against `ASKABLE` — the contract's
+  `generate` enum — because the wire declares three formats and a shipped image renders two.
+  `types` is passed straight through from `ReportComputations.supported()` **unfiltered**, because a
+  type's whole set *is* whichever `ReportComputation` beans this deployment registers; filtering it
+  would be the second copy `ReportTypes` exists to refuse. `ReportReadService` gained
+  `ReportComputations` **only for that catalogue** — the refusal stays in `ReportTypes`.
+- Why the field exists at all: `type` is an open string whose catalogue was reachable **only through
+  `ReportTypes.refusal`**, which names it *after* the caller has guessed wrong. A picker can live
+  with that; `packages/mcp`'s `tcms_report` — a `report:export`-gated capability with a `type` field
+  and no list — could not. If a fourth report is added, it becomes both requestable and
+  **discoverable** by existing, which is the property `ReportComputations`' own header argues for.
+
 **New seams §245 created — `execution` and `tenancy`:**
 - `execution.ExecutionBulkAssignService.assign(userId, projectId, runId, request)` — the bulk act.
   One `@Transactional` method, sealed `Outcome` with five arms, resolution → gate → freeze →

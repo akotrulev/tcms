@@ -10,18 +10,78 @@
  * **core** composed (`core/refusal.ts`), and the protocol error is reserved for a request this
  * server could not turn into a call at all.
  *
- * That is also what keeps §4.5's boundary in one place. `describeRefusal` knows that a 403 past
- * the read gate may name the permission and that a 404 may name nothing; this file knows only how
- * to put a string in an envelope. A handler that composed its own sentence would be a second
- * implementation of the rule whose failure is a security finding.
+ * That is also what keeps §4.5's boundary in one place. `describeFailure` — and `describeRefusal`
+ * under it — knows that a 403 past the read gate may name the permission and that a 404 may name
+ * nothing; this file knows only how to put a string in an envelope. A handler that composed its
+ * own sentence would be a second implementation of the rule whose failure is a security finding.
+ *
+ * ## Every result carries a machine-readable half beside the prose
+ *
+ * The prose stays exactly as it was — it is good prose, and a model reads it. What sits beside it
+ * now is `structuredContent`, declared here since the package was written and assigned nowhere:
+ * one envelope, `{ ok }` either way, and on a failure a **closed** `code` with `retryable` stated
+ * rather than implied. Without it the one decision a model must get right — wait and retry, or
+ * stop — was recoverable only by pattern-matching an English sentence that the core had composed
+ * from a branch it had already taken. See `client/src/core/outcome.ts`.
  */
-import { TcmsApiError, TcmsTimeoutError, describeRefusal, isAbort } from '@tcms/client';
+import { TcmsApiError, describeFailure } from '@tcms/client';
 
 export interface ToolResult {
   content: { type: 'text'; text: string }[];
   isError?: boolean;
   structuredContent?: Record<string, unknown>;
 }
+
+/**
+ * The envelope, declared as every tool's `outputSchema`.
+ *
+ * One schema for the whole surface rather than one per tool: what a caller must be able to branch
+ * on is the *outcome*, and `data` is already described by the tool that produced it. Declaring a
+ * per-tool response shape would be a second copy of `openapi.yaml` — the thing this package spends
+ * a contract test per slice not becoming.
+ *
+ * `data` is left unconstrained on purpose. A host validates `structuredContent` against this, and a
+ * schema that guessed at each payload would refuse correct answers.
+ */
+export const RESULT_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    ok: { type: 'boolean', description: 'False on any refusal, timeout or cancellation.' },
+    data: { description: "The tool's answer, when `ok` is true. Shape varies by tool." },
+    error: {
+      type: 'object',
+      description: 'Present when `ok` is false.',
+      properties: {
+        code: {
+          type: 'string',
+          enum: [
+            'cancelled', 'unauthenticated', 'forbidden', 'not_found', 'conflict',
+            'invalid_input', 'rate_limited', 'timeout', 'unavailable', 'failed',
+          ],
+          description: 'A closed vocabulary — branch on this, never on the message.',
+        },
+        message: { type: 'string', description: 'The same sentence as the text content.' },
+        retryable: {
+          type: 'boolean',
+          description: 'Whether repeating this exact call could succeed. Stated, not inferred.',
+        },
+        retryAfterSeconds: { type: 'number', description: 'Only when the server said so.' },
+        permission: {
+          type: 'string',
+          description: 'The permission to ask an administrator for — only when it may be named.',
+        },
+        mayHaveWritten: {
+          type: 'boolean',
+          description: 'A timed-out write. Read the resource before retrying.',
+        },
+        fields: { type: 'object', description: 'Per-field rejections, keyed as this tool spells them.' },
+        correlationId: { type: 'string' },
+      },
+      required: ['code', 'message', 'retryable'],
+    },
+  },
+  required: ['ok'],
+};
 
 /**
  * A successful answer.
@@ -33,7 +93,10 @@ export interface ToolResult {
  * to parse back.
  */
 export function ok(value: unknown): ToolResult {
-  return { content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] };
+  return {
+    content: [{ type: 'text', text: JSON.stringify(value, null, 2) }],
+    structuredContent: { ok: true, data: value },
+  };
 }
 
 export interface Attempt {
@@ -59,34 +122,18 @@ export interface Attempt {
  * in {@link Attempt} is the only thing that can tell a refused caller what to ask for.
  */
 export function failed(error: unknown, attempt: Attempt): ToolResult {
-  if (isAbort(error)) {
-    // A cancellation is not a failure. The host cancelled; saying "could not" would have the
-    // model apologise for something the user did on purpose, and possibly retry it.
-    return { content: [{ type: 'text', text: 'Cancelled.' }], isError: true };
-  }
+  const failure = describeFailure(error, {
+    what: attempt.what,
+    permission: attempt.permission,
+    write: attempt.write,
+  });
 
-  if (error instanceof TcmsTimeoutError) {
-    /*
-      A timed-out **write** is the one failure whose result is unknown, and the model is the party
-      that decides what happens next — so it is told, in as many words, rather than being handed
-      "the request failed" and left to retry. The retry is safe precisely because every create arm
-      carries an `Idempotency-Key` for the intent; saying so is what makes the model use it.
-    */
-    return {
-      content: [{
-        type: 'text',
-        text: attempt.write
-          ? `${error.message} The write may or may not have happened. Read the resource before `
-            + 'trying again; a retry of this call reuses the same idempotency key and cannot '
-            + 'create a second record.'
-          : error.message,
-      }],
-      isError: true,
-    };
-  }
-
-  const copy = describeRefusal(error, { what: attempt.what, permission: attempt.permission });
-  return { content: [{ type: 'text', text: copy.message + fieldDetail(error) }], isError: true };
+  return {
+    content: [{ type: 'text', text: failure.message + fieldDetail(error) }],
+    isError: true,
+    // The prose above and this object say the same thing; only one of them can be branched on.
+    structuredContent: { ok: false, error: { ...failure } },
+  };
 }
 
 /**

@@ -204,9 +204,8 @@ export function objectFrom(path: string, what: string): Record<string, unknown> 
  * Refuses a write that would send nothing.
  *
  * A `PATCH` with an empty body is accepted by the contract (every field is optional) and changes
- * nothing while answering 200 — so a command whose flags were all misspelled reports success. The
- * CLI parses non-strictly on purpose (`main.ts` says why), which makes this the place that
- * notices.
+ * nothing while answering 200 — so a command that was given no field to change reports success
+ * having sent nothing.
  */
 export function requireSomethingToDo(
   body: Record<string, unknown>,

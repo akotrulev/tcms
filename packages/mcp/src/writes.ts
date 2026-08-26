@@ -1084,6 +1084,19 @@ const SUBJECTS = {
 }>;
 
 /**
+ * Which review permission a display key costs — `TS-7` is `suite:review`, not `case:review`.
+ *
+ * Declared apart from {@link openReview} because the refusal needs the answer *without* a round
+ * trip: the dispatcher composes "ask an administrator for X" in a catch block, and the subject's
+ * kind is legible from two characters. See {@link ToolArm.permissionFor}.
+ */
+function reviewPermissionFor(input: Record<string, unknown>): string | undefined {
+  const key = input['subject'];
+  if (typeof key !== 'string') return undefined;
+  return SUBJECTS[key.slice(0, 2).toUpperCase() as keyof typeof SUBJECTS]?.permission;
+}
+
+/**
  * The open review of a subject named by its display key.
  *
  * Shared by both review tools, and the "open" is load-bearing: a review is **history** once it
@@ -1091,7 +1104,7 @@ const SUBJECTS = {
  * than reopening the old — so "the latest row" and "the one that can still be written to" are
  * different questions, and picking the wrong one is a refusal the caller cannot act on.
  */
-async function openReview(session: Session, key: string): Promise<{ id: string; subject: string }> {
+async function openReview(session: Session, key: string): Promise<{ id: string }> {
   const projectId = session.projectId();
   const prefix = key.slice(0, 2).toUpperCase() as keyof typeof SUBJECTS;
   const subject = SUBJECTS[prefix];
@@ -1118,7 +1131,7 @@ async function openReview(session: Session, key: string): Promise<{ id: string; 
     );
   }
 
-  return { id: open.id, subject: subject.permission };
+  return { id: open.id };
 }
 
 const reviewComment: ToolDefinition = {
@@ -1170,8 +1183,8 @@ const reviewVerdict: ToolDefinition = {
   */
   gate: { mode: 'any', permissions: ['case:review', 'suite:review', 'plan:review'] },
   arms: [
-    { action: 'verdict', kind: 'state', permission: 'case:review' },
-    { action: 'resolve', kind: 'state', permission: 'case:review' },
+    { action: 'verdict', kind: 'state', permission: 'case:review', permissionFor: reviewPermissionFor },
+    { action: 'resolve', kind: 'state', permission: 'case:review', permissionFor: reviewPermissionFor },
   ],
   narrow: (held) => {
     const subjects = Object.values(SUBJECTS)
@@ -1491,10 +1504,13 @@ const report: ToolDefinition = {
   title: 'Generate a report, and poll it',
   description:
     'Generation is asynchronous by contract: `generate` returns a job, `poll` says where it got '
-    + "to. A report's own parameters are validated inside the worker, so a bad one surfaces as a "
-    + 'FAILED job carrying the sentence rather than as an error on the request. The finished '
-    + 'artifact is a file with a download URL — this returns the URL; fetching it needs the same '
-    + 'credential and is not something a tool call can hand you.',
+    + "to. **Call `capabilities` first** — it names the report types and output formats THIS "
+    + 'deployment can produce, and both are per-install: a type it cannot compute is a 400 and a '
+    + "format it cannot render is another. `definitions` lists your own saved reports, which is "
+    + 'where a `definitionId` comes from. A report\'s own parameters are validated inside the '
+    + 'worker, so a bad one surfaces as a FAILED job carrying the sentence rather than as an error '
+    + 'on the request. The finished artifact is a file with a download URL — this returns the URL; '
+    + 'fetching it needs the same credential and is not something a tool call can hand you.',
   gate: { mode: 'all', permissions: ['report:view', 'report:export'] },
   arms: [
     /*
@@ -1520,15 +1536,31 @@ const report: ToolDefinition = {
     additionalProperties: false,
     required: ['action'],
     properties: {
-      action: ACTION(['generate', 'poll'], 'What to do.'),
-      type: { type: 'string', description: 'The report type. Omit when naming a saved definition.' },
-      // The enum is stated rather than left open, because a format this deployment cannot render
-      // is a 400 the model would have to discover by being refused — and the enum is the set that
-      // may be ASKED for, which is not the set installed here. `MD` and `HTML` are in every image;
-      // `PDF` needs a renderer most deployments do not have, and the description says so rather
-      // than the tool offering a value that is refused everywhere. (The SPA asks
-      // `GET …/reports/capabilities` instead; this surface has no read tool to hang that on, and
-      // adding one to answer a two-element list is a tool for a sentence.)
+      action: ACTION(['generate', 'poll', 'capabilities', 'definitions'], 'What to do.'),
+      /*
+        Open by contract, and the catalogue is now ANSWERABLE rather than only discoverable by
+        refusal. It stays an open string here because a deployment's report set is whichever
+        computations it registers — enumerating three type names in this schema would be a copy of
+        a server-side registry in the one file that never talks to the server it is pointed at,
+        which is `describeRefusal`'s recorded argument for not baking the role catalogue.
+      */
+      type: {
+        type: 'string',
+        description: 'The report type — one of the `types` from `capabilities`. Omit when naming '
+          + 'a saved definition.',
+      },
+      /*
+        The enum is stated rather than left open, because a format this deployment cannot render
+        is a 400 the model would have to discover by being refused — and the enum is the set that
+        may be ASKED for, which is not the set installed here. `MD` and `HTML` are in every image;
+        `PDF` needs a renderer most deployments do not have.
+
+        ~~*"the SPA asks `GET …/reports/capabilities` instead; this surface has no read tool to
+        hang that on, and adding one to answer a two-element list is a tool for a sentence."*~~ →
+        **the answer moved onto this tool as the `capabilities` action**, and it is no longer a
+        two-element list: the endpoint now carries the report TYPE catalogue as well, which was
+        the half no caller could obtain at all.
+      */
       format: {
         type: 'string',
         enum: ['PDF', 'MD', 'HTML'],
@@ -1537,7 +1569,10 @@ const report: ToolDefinition = {
           + 'unless this deployment has installed a renderer, and the refusal names what it can '
           + 'produce.',
       },
-      definitionId: { type: 'string', description: 'Regenerate a saved report.' },
+      definitionId: {
+        type: 'string',
+        description: 'Regenerate a saved report, by an id from `definitions`.',
+      },
       parameters: { type: 'object', description: 'The report\'s own parameters.' },
       jobId: { type: 'string', description: 'For `poll`.' },
     },
@@ -1550,6 +1585,26 @@ const report: ToolDefinition = {
       return session.client.GET('/projects/{projectId}/reports/jobs/{jobId}', {
         params: { path: { projectId, jobId: requireStr(input, 'jobId') } },
         tcms: session.request,
+      });
+    }
+
+    /*
+      Two reads on a write tool, and they are here rather than in a read tool of their own for the
+      reason the old comment gave about the formats half — *"adding one to answer a two-element
+      list is a tool for a sentence"*. What changed is that the sentence was not answerable at all:
+      `type` is an open string whose catalogue lived only inside a refusal, and `definitionId` took
+      an id nothing on this surface could produce. A `report:export`-gated capability an agent can
+      neither address correctly nor read the result of is a dead end, however honestly described.
+    */
+    if (action === 'capabilities') {
+      return session.client.GET('/projects/{projectId}/reports/capabilities', {
+        params: { path: { projectId } }, tcms: session.request,
+      });
+    }
+
+    if (action === 'definitions') {
+      return session.client.GET('/projects/{projectId}/reports', {
+        params: { path: { projectId } }, tcms: session.request,
       });
     }
 

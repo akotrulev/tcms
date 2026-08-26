@@ -687,10 +687,51 @@ class ReportEndpointTest extends IntegrationTestBase {
             assertThat(capabilities(NO_GRANT, PROJECT).getResponse().getStatus()).isEqualTo(404);
         }
 
+        @Test
+        @DisplayName("it names the report types too, so a caller need not guess one to be told")
+        void whatThisServerCanCompute() throws Exception {
+            /*
+              `type` is an open string and the catalogue used to be reachable only through
+              `ReportTypes.refusal` — which names it AFTER the caller has guessed wrong. A picker
+              can live with that; an API caller with a `type` field and no list cannot, and
+              `tcms_report` on the MCP surface was exactly that caller.
+            */
+            java.util.List<String> types = names(parse(capabilities(SCREEN_ONLY, PROJECT)), "types");
+
+            assertThat(types).contains(RUN_SUMMARY);
+            // Sorted, so a client rendering it is stable between reads.
+            assertThat(types).isSorted();
+        }
+
+        @Test
+        @DisplayName("what it lists as a type is what the refusal names")
+        void theTypeListAgreesWithTheRefusal() throws Exception {
+            /*
+              `formats`' pairing, asked of the other field. It compares the catalogue to the
+              REFUSAL rather than driving each type through `generate`, because whether one
+              succeeds also depends on its own parameters — which the worker validates, not the
+              request — and a check that conflated the two would fail for the wrong reason.
+            */
+            java.util.List<String> types = names(parse(capabilities(LEAD, PROJECT)), "types");
+
+            String refusal = generate(LEAD, PROJECT, "{\"type\":\"no_such_report\",\"format\":\"MD\"}")
+                    .getResponse().getContentAsString();
+
+            for (String type : types) {
+                assertThat(refusal)
+                        .as("%s is offered by capabilities and must be in what the refusal lists", type)
+                        .contains(type);
+            }
+        }
+
         private java.util.List<String> formats(JsonNode body) {
-            java.util.List<String> formats = new java.util.ArrayList<>();
-            body.get("formats").forEach(row -> formats.add(row.asText()));
-            return formats;
+            return names(body, "formats");
+        }
+
+        private java.util.List<String> names(JsonNode body, String field) {
+            java.util.List<String> values = new java.util.ArrayList<>();
+            body.get(field).forEach(row -> values.add(row.asText()));
+            return values;
         }
     }
 

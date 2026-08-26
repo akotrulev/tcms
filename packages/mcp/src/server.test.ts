@@ -317,7 +317,7 @@ describe('tools/call', () => {
 
     expect(result.isError).toBeFalsy();
     const text = (result.content as { type: string; text: string }[])[0]?.text ?? '';
-    expect(JSON.parse(text).cases[0].key).toBe('TC-42');
+    expect(JSON.parse(text).items[0].key).toBe('TC-42');
   });
 
   it('returns a refusal as a result, not as a protocol error', async () => {

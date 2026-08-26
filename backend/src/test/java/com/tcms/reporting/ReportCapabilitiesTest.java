@@ -57,7 +57,7 @@ class ReportCapabilitiesTest {
         // Through `of` rather than by reading the constant: the filter is the behaviour, and a
         // supported-everything input is the only way to see the whole askable set through it.
         ReportCapabilitiesView everything =
-                ReportCapabilitiesView.of(List.of(ReportFormat.values()));
+                ReportCapabilitiesView.of(List.of(ReportFormat.values()), List.of());
 
         assertThat(everything.formats())
                 .containsExactlyInAnyOrderElementsOf(inline.get(GENERATE_FORMAT));
@@ -70,8 +70,23 @@ class ReportCapabilitiesTest {
         // asked for on SOME deployment, and this answer is what may be asked for on THIS one.
         ReportCapabilitiesView installed =
                 ReportCapabilitiesView.of(List.of(ReportFormat.MD, ReportFormat.HTML,
-                        ReportFormat.JSON));
+                        ReportFormat.JSON), List.of());
 
         assertThat(installed.formats()).containsExactly("HTML", "MD");
+    }
+
+    @Test
+    @DisplayName("the type catalogue is carried through, not filtered")
+    void theTypesAreTheRegistrys() {
+        /*
+          The opposite treatment from `formats`, and deliberately: a format is filtered against the
+          contract's askable enum because the wire declares three and a deployment renders two,
+          while `type` is an open string whose whole set is whichever computations are registered.
+          Filtering it against a list here would be inventing the copy `ReportTypes` refuses to keep.
+        */
+        ReportCapabilitiesView view = ReportCapabilitiesView.of(
+                List.of(ReportFormat.MD), List.of("aggregate_execution", "coverage_matrix"));
+
+        assertThat(view.types()).containsExactly("aggregate_execution", "coverage_matrix");
     }
 }

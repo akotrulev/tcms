@@ -52,6 +52,7 @@ export { REQUIRED_CASE_FIELDS, requireProposableCase } from './core/proposal.js'
 
 export {
   CASE_SHAPE,
+  READ_ENUMS,
   SHAPES,
   bindsRequired,
   fieldsFor,
@@ -80,6 +81,9 @@ export { isProcessEntryPoint } from './core/entrypoint.js';
 
 export { describeReach, describeRefusal } from './core/refusal.js';
 export type { RefusalCopy, RefusedOperation } from './core/refusal.js';
+
+export { describeFailure } from './core/outcome.js';
+export type { Failure, FailureCode, FailedOperation } from './core/outcome.js';
 
 export {
   DEFAULT_PAGE_SIZE,
