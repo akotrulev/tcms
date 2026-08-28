@@ -1,0 +1,326 @@
+<title>Case Authoring Redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap">
+
+<style>
+:root{
+  --ground:#0a0e14; --panel:#141a23; --paper:#11161e; --field:#0e141c;
+  --line:rgb(255 255 255/8%); --line-2:rgb(255 255 255/14%);
+  --ink:#e6ecf3; --ink-2:#9aa8ba; --ink-3:#66738a; --ink-4:#4a5566;
+  --steel:#6ba8c4; --steel-dim:rgb(107 168 196/12%); --steel-glow:rgb(107 168 196/28%);
+  --given:#7ec8a0; --when:#e0b95f; --then:#8fa9e0; --tagc:#c48ec4;
+  --failed:#e07568;
+  --sans:'IBM Plex Sans',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --r:8px; --r-lg:12px;
+  --e1:0 1px 2px rgb(0 0 0/40%); --e3:0 16px 32px -8px rgb(0 0 0/60%);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1580px;margin:0 auto;padding:36px 24px 60px}
+
+.head{max-width:80ch;margin-bottom:26px}
+.head .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--steel);margin:0 0 9px}
+.head h1{font-size:29px;font-weight:620;letter-spacing:-.022em;line-height:1.15;margin:0 0 9px;text-wrap:balance}
+.head p{margin:0;color:var(--ink-2);font-size:15px}
+
+.cap{display:flex;align-items:baseline;gap:12px;margin:38px 0 12px}
+.cap b{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--steel)}
+.cap span{color:var(--ink-3);font-size:13px}
+
+.frame{border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--e3);background:var(--ground)}
+.bar{display:flex;align-items:center;gap:7px;padding:9px 14px;background:#0d1218;border-bottom:1px solid var(--line)}
+.dot{width:9px;height:9px;border-radius:50%;background:#2b3340}
+.bar .u{margin-left:9px;font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+
+.app{display:grid;grid-template-columns:60px 1fr;min-height:760px}
+/* collapsed icon rail — the redesign gives the document the width */
+.mini{background:#0c1119;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:5px;padding:13px 0}
+.mini .m{width:32px;height:32px;border-radius:var(--r);display:grid;place-items:center;color:var(--ink-3)}
+.mini .m.on{background:var(--steel-dim);color:var(--steel)}
+.mini .m svg{width:16px;height:16px}
+.mini .sep{width:22px;height:1px;background:var(--line);margin:6px 0}
+
+.stage{display:flex;flex-direction:column;min-width:0}
+.top{display:flex;align-items:center;gap:14px;padding:13px 22px;border-bottom:1px solid var(--line)}
+.top .crumb{font-size:12.5px;color:var(--ink-3)}
+.top .crumb b{color:var(--ink-2);font-weight:500}
+.top .sp{flex:1}
+.lens{display:inline-flex;background:rgb(255 255 255/4%);border-radius:var(--r);padding:2px;gap:2px}
+.lens b{font-size:12px;font-weight:500;color:var(--ink-3);padding:4px 11px;border-radius:6px;display:flex;align-items:center;gap:6px}
+.lens b.on{background:var(--panel);color:var(--ink);box-shadow:var(--e1)}
+.lens b svg{width:12px;height:12px}
+.btn{font-family:var(--sans);font-size:13px;font-weight:500;padding:7px 14px;border-radius:var(--r);border:1px solid transparent;background:none;color:var(--ink-2);min-height:32px}
+.btn.ghost{border-color:var(--line)}
+.btn.primary{background:var(--steel);color:#08121a;font-weight:600;box-shadow:0 0 0 1px rgb(107 168 196/30%),0 4px 14px -4px rgb(107 168 196/35%)}
+
+.split{display:grid;grid-template-columns:minmax(0,1fr) 300px;flex:1;min-height:0}
+
+/* ============ THE DOCUMENT ============ */
+.doc{padding:30px 34px 26px;background:var(--paper);min-width:0;display:flex;flex-direction:column}
+.tagline{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:20px}
+.tag{font-family:var(--mono);font-size:12px;color:var(--tagc);background:rgb(196 142 196/10%);border:1px solid rgb(196 142 196/22%);border-radius:5px;padding:2px 7px}
+.tag.k{color:var(--steel);background:var(--steel-dim);border-color:rgb(107 168 196/22%)}
+.tag.add{color:var(--ink-4);background:none;border:1px dashed var(--line-2)}
+
+.dtitle{font-size:25px;font-weight:620;letter-spacing:-.02em;line-height:1.25;margin:0 0 6px;max-width:34ch;text-wrap:balance}
+.dwhy{color:var(--ink-2);font-size:14.5px;line-height:1.6;max-width:62ch;margin:0 0 26px}
+.dwhy .lab{color:var(--ink-4);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;display:block;margin-bottom:3px}
+
+.rule{height:1px;background:var(--line);margin:0 0 20px}
+
+/* the procedure: a document with a gutter, not a stack of controls */
+.proc{font-size:15px;line-height:1.75;max-width:74ch}
+.ln{display:grid;grid-template-columns:26px 1fr;gap:14px;padding:2px 0}
+.ln .g{font-family:var(--mono);font-size:11px;color:var(--ink-4);text-align:right;padding-top:5px;font-variant-numeric:tabular-nums}
+.ln .t{min-width:0}
+.kw{font-family:var(--mono);font-weight:500;font-size:14px;margin-right:7px}
+.kw.g{color:var(--given)} .kw.w{color:var(--when)} .kw.t{color:var(--then)} .kw.a{color:var(--ink-3)}
+.blk{font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--ink-2);background:var(--field);border-left:2px solid var(--line-2);border-radius:0 6px 6px 0;padding:8px 12px;margin:7px 0 3px;display:table;white-space:pre}
+.blk .h{color:var(--ink-4)}
+.cursor{display:inline-block;width:1.5px;height:18px;background:var(--steel);vertical-align:-3px;margin-left:1px}
+.ghost{color:var(--ink-4)}
+
+/* inline autocomplete popped under the caret — the corpus, at the moment of writing */
+.pop{margin:6px 0 0 40px;width:min(560px,100%);background:var(--panel);border:1px solid var(--line-2);border-radius:var(--r);box-shadow:var(--e3);overflow:hidden}
+.pop .r{display:flex;align-items:baseline;gap:10px;padding:8px 12px;font-size:13.5px}
+.pop .r.sel{background:var(--steel-dim)}
+.pop .r .n{font-family:var(--mono);font-size:11px;color:var(--ink-4);margin-left:auto;flex:none}
+.pop .r em{font-style:normal;color:var(--steel)}
+.pop .f{padding:6px 12px;border-top:1px solid var(--line);font-size:11px;color:var(--ink-4);font-family:var(--mono);display:flex;gap:14px}
+
+/* ============ SIDE: the intelligence, not the schema ============ */
+.side{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-width:0}
+.sec{padding:15px 16px;border-bottom:1px solid var(--line)}
+.sec h3{margin:0 0 11px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.kv{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 0;font-size:13px}
+.kv .k{color:var(--ink-3)}
+.kv .v{color:var(--ink);font-weight:450;display:flex;align-items:center;gap:6px}
+.kv .v svg{width:11px;height:11px;color:var(--ink-4)}
+.mini-chip{font-size:11.5px;padding:2px 8px;border-radius:20px;background:rgb(255 255 255/6%);border:1px solid var(--line);color:var(--ink-2)}
+
+.corp{display:flex;flex-direction:column;gap:2px}
+.corp .c{padding:8px 10px;border-radius:6px;font-size:13px;line-height:1.45;color:var(--ink-2)}
+.corp .c:hover{background:rgb(255 255 255/4%)}
+.corp .c .m{display:flex;gap:8px;align-items:baseline;margin-top:3px}
+.corp .c .m span{font-family:var(--mono);font-size:10.5px;color:var(--ink-4)}
+.corp .c b{font-weight:500;color:var(--ink)}
+.corp .kwt{font-family:var(--mono);font-size:11px;margin-right:6px}
+
+.quiet{font-size:12px;color:var(--ink-4);line-height:1.55}
+.quiet a{color:var(--steel);text-decoration:none;border-bottom:1px solid rgb(107 168 196/35%)}
+
+.foot{display:flex;align-items:center;gap:12px;padding:11px 22px;border-top:1px solid var(--line);background:rgb(14 19 26/92%)}
+.foot .s{flex:1;font-size:12px;color:var(--ink-4)}
+.foot .s b{color:var(--ink-3);font-weight:500}
+
+/* ============ blank state ============ */
+.blank{padding:44px 34px;background:var(--paper);display:flex;flex-direction:column;min-width:0}
+.blank .lead{font-size:25px;font-weight:620;letter-spacing:-.02em;color:var(--ink-4);margin:0 0 4px}
+.blank .sub{color:var(--ink-4);font-size:14px;margin:0 0 28px}
+.starts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:860px;margin-bottom:30px}
+.start{border:1px solid var(--line);border-radius:var(--r);padding:14px;background:var(--panel)}
+.start.hi{border-color:rgb(107 168 196/35%);background:linear-gradient(180deg,rgb(107 168 196/7%),transparent)}
+.start h4{margin:0 0 5px;font-size:13.5px;font-weight:600}
+.start p{margin:0;font-size:12.5px;color:var(--ink-3);line-height:1.5}
+.start .kbd{font-family:var(--mono);font-size:10.5px;color:var(--ink-4);border:1px solid var(--line-2);border-radius:4px;padding:1px 5px;margin-top:9px;display:inline-block}
+.scaffold{font-size:15px;line-height:1.75;max-width:74ch;color:var(--ink-4)}
+.scaffold .kw{opacity:.55}
+
+.notes{margin-top:40px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+.note{background:var(--panel);padding:18px 20px}
+.note h4{margin:0 0 7px;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--steel)}
+.note p{margin:0;font-size:13px;color:var(--ink-2);line-height:1.55}
+.note p em{font-style:normal;color:var(--ink-4)}
+.note .was{display:block;margin-top:7px;font-size:12px;color:var(--ink-4)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<div class="head">
+  <p class="eyebrow">Proposal · nothing implemented</p>
+  <h1>The case is a document, not a record</h1>
+  <p>Gherkin already has syntax for almost everything the metadata rail was asking for, and the server already round-trips text&nbsp;↔&nbsp;steps losslessly. So the procedure becomes the page, the schema retreats to a summary you can open, and the step corpus — the one genuinely smart thing in here — arrives while you are writing instead of after you find the right box.</p>
+</div>
+
+<!-- ==================== A. WRITING ==================== -->
+<div class="cap"><b>A · Writing</b><span>the same case as your screenshot, mid-sentence on step 4</span></div>
+
+<div class="frame">
+  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="u">tcms.local / reflex / cases / TC-194</span></div>
+  <div class="app">
+    <nav class="mini">
+      <span class="m"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 8h6M9 12h6"/></svg></span>
+      <span class="m"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></span>
+      <span class="sep"></span>
+      <span class="m on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></span>
+      <span class="m"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h10M4 12h7M4 17h13"/><path d="M17 6l2 2 3-3"/></svg></span>
+      <span class="m"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 20V10M10 20V4M16 20v-7"/></svg></span>
+      <span class="sep"></span>
+      <span class="m"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+    </nav>
+
+    <div class="stage">
+      <div class="top">
+        <span class="crumb">Test cases &nbsp;/&nbsp; <b>TC-194</b></span>
+        <span class="sp"></span>
+        <span class="lens">
+          <b class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 11h13M4 16h9"/></svg>Write</b>
+          <b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="5" rx="1.5"/><rect x="3" y="12" width="18" height="5" rx="1.5"/></svg>Fields</b>
+        </span>
+        <button class="btn ghost">Cancel</button>
+        <button class="btn primary">Save · v7</button>
+      </div>
+
+      <div class="split">
+        <div class="doc">
+          <div class="tagline">
+            <span class="tag">@smoke</span>
+            <span class="tag">@regression</span>
+            <span class="tag">@payments</span>
+            <span class="tag k">@suite:refunds</span>
+            <span class="tag k">@automated</span>
+            <span class="tag add">+ tag</span>
+          </div>
+
+          <h2 class="dtitle">A settled payment cannot be refunded twice</h2>
+          <p class="dwhy"><span class="lab">Why this exists</span>Prove the ledger rejects a second refund against a payment that has already been fully refunded — the double-credit path found in incident&nbsp;INC-4471.</p>
+
+          <div class="rule"></div>
+
+          <div class="proc">
+            <div class="ln"><span class="g">1</span><span class="t"><span class="kw g">Given</span>a settled payment of 100.00 EUR exists</span></div>
+            <div class="ln"><span class="g">2</span><span class="t"><span class="kw w">When</span>the operator refunds it in full</span></div>
+            <div class="ln"><span class="g">3</span><span class="t"><span class="kw t">Then</span>the refund is accepted and the balance falls to 0.00</span></div>
+            <div class="ln"><span class="g">4</span><span class="t"><span class="kw a">And</span>a second refund of the same payment is rejected<div class="blk"><span class="h">|</span> attempt <span class="h">|</span> outcome           <span class="h">|</span><br><span class="h">|</span> 1st     <span class="h">|</span> accepted          <span class="h">|</span><br><span class="h">|</span> 2nd     <span class="h">|</span> ALREADY_REFUNDED  <span class="h">|</span></div>
+            </span></div>
+            <div class="ln"><span class="g">5</span><span class="t"><span class="kw a">And</span>the customer bal<span class="cursor"></span>
+              <div class="pop">
+                <div class="r sel"><span>the customer <em>bal</em>ance is unchanged</span><span class="n">41 cases</span></div>
+                <div class="r"><span>the customer <em>bal</em>ance is credited once</span><span class="n">12 cases</span></div>
+                <div class="r"><span>the customer <em>bal</em>ance reflects the refund</span><span class="n">3 cases</span></div>
+                <div class="f"><span>↵ accept</span><span>⇥ next word</span><span>esc keep mine</span></div>
+              </div>
+            </span></div>
+          </div>
+        </div>
+
+        <aside class="side">
+          <div class="sec">
+            <h3>Summary</h3>
+            <div class="kv"><span class="k">Suite</span><span class="v">Refunds <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></span></div>
+            <div class="kv"><span class="k">Priority</span><span class="v"><span class="mini-chip">Medium</span></span></div>
+            <div class="kv"><span class="k">Automation</span><span class="v">RefundsIT#doubleRefund</span></div>
+            <div class="kv"><span class="k">Duration</span><span class="v" style="font-family:var(--mono);font-variant-numeric:tabular-nums">90s</span></div>
+            <div class="kv"><span class="k">Preconditions</span><span class="v">2 inherited</span></div>
+          </div>
+
+          <div class="sec">
+            <h3>Steps this project uses</h3>
+            <div class="corp">
+              <div class="c"><span class="kwt" style="color:var(--given)">Given</span><b>I am signed in as a customer</b><div class="m"><span>128 cases</span><span>· press ⌥↵ to insert</span></div></div>
+              <div class="c"><span class="kwt" style="color:var(--given)">Given</span><b>a settled payment of {amount} exists</b><div class="m"><span>41 cases</span></div></div>
+              <div class="c"><span class="kwt" style="color:var(--when)">When</span><b>the operator refunds it in full</b><div class="m"><span>27 cases</span></div></div>
+              <div class="c"><span class="kwt" style="color:var(--then)">Then</span><b>the balance is unchanged</b><div class="m"><span>41 cases</span></div></div>
+            </div>
+          </div>
+
+          <div class="sec">
+            <h3>Classification</h3>
+            <p class="quiet">This project has no test types, levels or features defined, so there is nothing to set. <a href="#">Define them</a> if you want to group cases by area.</p>
+          </div>
+        </aside>
+      </div>
+
+      <div class="foot">
+        <span class="s">Backup saved <b>14:02</b> · <b>5 steps</b>, 2 preconditions inherited from Refunds</span>
+        <span class="s" style="flex:none;font-family:var(--mono);font-size:11px">⌘↵ save &nbsp; ⌥↵ insert step &nbsp; ⌘K commands</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== B. BLANK STATE ==================== -->
+<div class="cap"><b>B · The blank state</b><span>what “New test case” is instead of an empty form</span></div>
+
+<div class="frame">
+  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="u">tcms.local / reflex / cases / new</span></div>
+  <div class="app" style="min-height:520px">
+    <nav class="mini">
+      <span class="m"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 8h6M9 12h6"/></svg></span>
+      <span class="m"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></span>
+      <span class="sep"></span>
+      <span class="m on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></span>
+      <span class="m"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h10M4 12h7M4 17h13"/><path d="M17 6l2 2 3-3"/></svg></span>
+    </nav>
+    <div class="stage">
+      <div class="top">
+        <span class="crumb">Test cases &nbsp;/&nbsp; <b>New</b></span>
+        <span class="sp"></span>
+        <span class="lens"><b class="on">Write</b><b>Fields</b></span>
+        <button class="btn ghost">Cancel</button>
+        <button class="btn primary" style="opacity:.45">Create case</button>
+      </div>
+      <div class="blank">
+        <div class="starts">
+          <div class="start hi">
+            <h4>Write it</h4>
+            <p>Type the title, then the steps. Suggestions come from the 312 steps this project already has.</p>
+            <span class="kbd">start typing</span>
+          </div>
+          <div class="start">
+            <h4>Start from a case</h4>
+            <p>Copy the shape of one that already works. <em>TC-188 · Refund a settled payment</em> was edited yesterday.</p>
+            <span class="kbd">⌘O</span>
+          </div>
+          <div class="start">
+            <h4>Paste a .feature</h4>
+            <p>Drop Gherkin from a repo. It parses into steps, background becomes preconditions.</p>
+            <span class="kbd">⌘V</span>
+          </div>
+        </div>
+
+        <div class="tagline" style="margin-bottom:18px"><span class="tag k">@suite:refunds</span><span class="tag add">+ tag</span></div>
+        <p class="lead">A settled payment cannot be…<span class="cursor"></span></p>
+        <p class="sub">One sentence stating what is verified</p>
+        <div class="rule" style="max-width:74ch"></div>
+        <div class="scaffold">
+          <div class="ln"><span class="g">1</span><span class="t"><span class="kw g">Given</span><span class="ghost">the state the test starts from</span></span></div>
+          <div class="ln"><span class="g">2</span><span class="t"><span class="kw w">When</span><span class="ghost">the action under test</span></span></div>
+          <div class="ln"><span class="g">3</span><span class="t"><span class="kw t">Then</span><span class="ghost">what must be true afterwards</span></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== notes ==================== -->
+<div class="notes">
+  <div class="note">
+    <h4>The procedure is the page</h4>
+    <p>One writing surface at full width, with a gutter and syntax colour instead of a control per field. Five steps cost five lines of typing.<span class="was">Was: a panel below the summary and below Conditions, nine controls in three modalities for three steps.</span></p>
+  </div>
+  <div class="note">
+    <h4>Then <em>is</em> the expected result</h4>
+    <p>Per-step <em>Expected result</em> is a TCMS invention Gherkin does not have, which is exactly why it collided with case-level <em>Expected outcome</em> and the helper text apologised. A <b>Then</b> step is the assertion. Both fields go.<span class="was">BE: keep the columns, stop authoring into them — the parser already maps Then → assertion.</span></p>
+  </div>
+  <div class="note">
+    <h4>Three prose boxes become one</h4>
+    <p>Title is the first line. <em>Why this exists</em> is the objective, and it is the only prose left because it is the only one that says something the procedure cannot. Description dies — Gherkin comments carry it and already round-trip.</p>
+  </div>
+  <div class="note">
+    <h4>Metadata is tags, not a rail</h4>
+    <p><em>@smoke @regression @suite:refunds @automated</em> — priority, phase, placement and automation are typed inline and autocompleted from the project's own vocabulary. The rail becomes a read-only summary you click to change.</p>
+  </div>
+  <div class="note">
+    <h4>Nothing configured, nothing shown</h4>
+    <p>Four dead selects and <em>"this vocabulary is empty"</em> become one sentence and a link. A project that has never set up classification is not asked about it five times.</p>
+  </div>
+  <div class="note">
+    <h4>The corpus arrives while you write</h4>
+    <p>312 known steps, ranked by use, in the panel before you type and under the caret as you do — with the use count visible, so you can see you are about to write the project's 21st wording of a step it already has.<span class="was">Was: invisible until you found and focused the right autocomplete.</span></p>
+  </div>
+</div>
+
+</div>
