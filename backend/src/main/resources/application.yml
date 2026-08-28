@@ -443,6 +443,26 @@ tcms:
     # would ever reveal that.
     secret-key: ${TCMS_INTEGRATION_SECRET_KEY}
 
+    outbound:
+      # Whether OutboundUrlGuard will connect to a destination that RESOLVES to a private,
+      # loopback, link-local or unique-local address (plan 004 D10).
+      #
+      # FALSE by default, and turning it on must be an operator's sentence. A self-hosted Jira
+      # Data Center on a private LAN is exactly who sets it; a hostname that resolves to
+      # 169.254.169.254 is exactly who it is refused for — and under per-user tracker
+      # credentials, a base URL that resolves somewhere unintended exfiltrates EVERY CONNECTED
+      # PERSON'S token to whatever answered, not one bot's.
+      #
+      # Defaulted, unlike secret-key above, and the difference is what each failure costs: a
+      # missing key means no credential in the instance can be decrypted, so refusing to start is
+      # the only safe behaviour; a missing value here has a correct answer, which is the safe one.
+      #
+      # ONE COLON. `${VAR:false}` is Spring's default syntax; `${VAR:-false}` is the shell's, and
+      # Spring reads that as the literal default "-false". ConfigConventionTest reads this text
+      # rather than the resolved value, because a test that supplies its own configuration cannot
+      # see a defect in the expression that ships.
+      allow-private-hosts: ${TCMS_INTEGRATION_ALLOW_PRIVATE_HOSTS:false}
+
     mail:
       # Who a notification email comes from — deliberately not tcms.invitation.from-address.
       # That one is what a stranger receives an account activation link from and a deployment

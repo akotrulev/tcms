@@ -16,7 +16,8 @@ import org.hibernate.annotations.Filter;
  * <p>TCMS is not a defect tracker; it links out. The row is therefore a key, a URL and the name of
  * whatever holds them, and nothing that would have to be kept in step with the tracker.
  *
- * <h2>{@link #provider} is {@code EXTERNAL} and the caller cannot say otherwise</h2>
+ * <h2>{@link #provider} is {@code EXTERNAL} <s>and the caller cannot say otherwise</s> — or a
+ * tracker's name, since 004, and the caller still cannot say which</h2>
  *
  * <p>{@code V1} defaulted the column to {@code 'JIRA'}, which named a product the instance does not
  * talk to; {@code V62} dropped that default and the argument is in its header. What is decided
@@ -27,8 +28,20 @@ import org.hibernate.annotations.Filter;
  * against, so a caller-supplied {@code JIRA} would be an unverified assertion recorded as a fact —
  * and worse than the old default, because it reads as somebody's deliberate statement rather than
  * as a column nobody filled in. {@link #PROVIDER_EXTERNAL} is the only thing this writer can say
- * truthfully: a person made this link. M4's adapter states a real provider because it will have
- * spoken to one.
+ * truthfully: a person made this link.
+ *
+ * <p><strong>→ the adapter arrived (004, {@code V74}), and the shape of the second writer is the
+ * part worth reading.</strong> {@link DefectLinkInput} gained a {@code bindingId} and <em>not</em> a
+ * {@code provider}. The server resolves the binding through
+ * {@code project.TrackerBindingDirectory} and states the provider that binding names, so the column
+ * still records something this server established rather than something a client asserted. A
+ * request that names no binding still writes {@link #PROVIDER_EXTERNAL}, which stays the honest
+ * answer for a link a person typed.
+ *
+ * <p>That the field is a binding id rather than a provider string is also what keeps the outbox
+ * backstop from writing a twin: {@code defect_link_execution_key_idx} has {@code provider} in it, so
+ * the SPA's row and the handler's row must agree on the value, and they can only agree if both
+ * derive it from the same binding.
  *
  * <h2>{@code status_cache}, {@code synced_at} and {@code case_id} are not mapped</h2>
  *
@@ -91,9 +104,18 @@ public class DefectLink {
      * it a link to a different defect. Unlink and link again, which is what the two endpoints do
      * and what leaves the audit trail saying what happened.
      */
+    /**
+     * @param provider what to record in {@link #provider}. {@link #PROVIDER_EXTERNAL} for a link a
+     *                 person typed, or the tracker's own name when the request named a
+     *                 {@code tracker_binding} and the server resolved it ({@code V74}, 004). Still
+     *                 not a caller-supplied string: {@link DefectLinkInput} carries a binding id and
+     *                 has no provider field, so the value here is always something this server
+     *                 established.
+     */
     static DefectLink to(
             UUID companyId,
             UUID executionId,
+            String provider,
             String externalKey,
             String url,
             UUID userId,
@@ -103,7 +125,7 @@ public class DefectLink {
         link.id = UUID.randomUUID();
         link.companyId = companyId;
         link.executionId = executionId;
-        link.provider = PROVIDER_EXTERNAL;
+        link.provider = provider;
         link.externalKey = externalKey;
         link.url = url;
         link.createdAt = now;

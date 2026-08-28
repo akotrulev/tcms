@@ -405,6 +405,47 @@ class ContractConventionTest {
      */
     private static final Map<String, List<Class<?>>> RESPONSE_RECORDS = Map.ofEntries(
             Map.entry("AiProposal", List.of(com.tcms.repository.AiProposalView.class)),
+            // ---- 004's tracker block: the last unpaired schemas in the contract ----
+            // Every one of them is public in com.tcms.integration.tracker, so they are class
+            // literals rather than PACKAGE_PRIVATE_OWNERS strings. What is worth reading here is
+            // which record serves which schema, because three of the pairings are not name matches:
+            // the contract names a shape for the wire (TrackerBinding, TrackerIdentity,
+            // TrackerIssueCreated) and this codebase names a record for what it is (…View).
+            Map.entry("TrackerBinding",
+                    List.of(com.tcms.integration.tracker.TrackerBindingView.class)),
+            Map.entry("TrackerBindingInput",
+                    List.of(com.tcms.integration.tracker.TrackerBindingInput.class)),
+            Map.entry("TrackerBindingPatch",
+                    List.of(com.tcms.integration.tracker.TrackerBindingPatch.class)),
+            // A SEPARATE record from TrackerIdentityView, and the separation is the D19 decision
+            // rather than a naming preference: that view carries secretHint, accountId, expiresAt,
+            // lastError and lastCheckedAt, and this endpoint may carry none of them. Reusing it is
+            // the natural implementation, which is why the pairing is pinned here and the response's
+            // key set is closed by its own test.
+            Map.entry("TrackerConnectedMember",
+                    List.of(com.tcms.integration.tracker.TrackerConnectedMemberView.class)),
+            Map.entry("TrackerIdentity",
+                    List.of(com.tcms.integration.tracker.TrackerIdentityView.class)),
+            Map.entry("TrackerIdentityInput",
+                    List.of(com.tcms.integration.tracker.TrackerIdentityInput.class)),
+            Map.entry("TrackerConnectionCheck",
+                    List.of(com.tcms.integration.tracker.TrackerConnectionCheckView.class)),
+            // The one tracker record with no `View` suffix, because it is not a view of anything
+            // stored: it is what a tracker said this request, rendered and dropped (004 D15).
+            Map.entry("TrackerIssue", List.of(com.tcms.integration.tracker.TrackerIssue.class)),
+            Map.entry("TrackerIssueSearch",
+                    List.of(com.tcms.integration.tracker.TrackerIssueSearchView.class)),
+            Map.entry("TrackerIssueLookup",
+                    List.of(com.tcms.integration.tracker.TrackerIssueLookupView.class)),
+            Map.entry("TrackerIssueCreateInput",
+                    List.of(com.tcms.integration.tracker.TrackerIssueCreateInput.class)),
+            Map.entry("TrackerIssueCreated",
+                    List.of(com.tcms.integration.tracker.TrackerIssueCreatedView.class)),
+            // Served from `documentation`, not from `integration`: the row is a doc_link, and
+            // `integration` may not write that table. IssueLinkController's header carries the
+            // split, which is ExternalLinkController's verbatim.
+            Map.entry("IssueLink", List.of(com.tcms.documentation.IssueLinkView.class)),
+            Map.entry("IssueLinkInput", List.of(com.tcms.documentation.IssueLinkInput.class)),
             Map.entry("AiProposalInput", List.of(com.tcms.repository.AiProposalInput.class)),
             Map.entry("AiProposalSummary",
                     List.of(com.tcms.repository.AiProposalSummaryView.class)),
@@ -1243,6 +1284,12 @@ class ContractConventionTest {
                     List.of(com.tcms.repository.DashboardView.ActivityPointView.class)),
             Map.entry("ReviewImpact.plansBlockedFromRunning[]",
                     List.of(com.tcms.project.ReviewImpactSource.BlockedPlan.class)),
+            // 004 D19. Nested in the record that carries it, and it is the whole of what the
+            // endpoint may say about a person's relationship to one host: a provider, a base URL
+            // and a state. Anything else added here is a widening of a privacy decision, not a
+            // field.
+            Map.entry("TrackerConnectedMember.hosts[]",
+                    List.of(com.tcms.integration.tracker.TrackerConnectedMemberView.HostState.class)),
             Map.entry("Team.projects[]", List.of(com.tcms.identity.TeamView.ProjectRole.class)),
             Map.entry("TestCaseSummary.lastResult",
                     List.of(com.tcms.repository.LastResultView.class)),

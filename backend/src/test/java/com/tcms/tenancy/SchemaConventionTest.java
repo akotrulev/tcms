@@ -305,7 +305,15 @@ class SchemaConventionTest extends IntegrationTestBase {
                 // like every other row a project holds, so it is NOT a fourteenth exception: it
                 // takes company_id NOT NULL, FORCE ROW LEVEL SECURITY and the predicate above, and
                 // this number moving one is what says so.
-                .isEqualTo(71);
+                //
+                // 74 since V73 (plan 004) — tracker_binding, tracker_identity and
+                // tracker_issue_creation. All three are company-owned and none is an exception,
+                // INCLUDING tracker_identity, whose rows are one person's credential: company_id
+                // is what stops Acme reading Globex's, and the PER-PERSON half is the service
+                // layer's (TrackerIdentityService filters on user_id = the caller). Reading this
+                // number as "the credential table is protected" would be reading half of it — see
+                // that class, and V73's header, which says the same thing from the schema side.
+                .isEqualTo(74);
     }
 
     @Test

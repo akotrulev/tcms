@@ -144,6 +144,22 @@ public class ProjectMembershipService {
     }
 
     /**
+     * Who is staffed on this project — {@code project.ProjectMemberDirectory}'s answer (004 D19).
+     *
+     * <p>The same predicate {@link #membersOf} applies, with the caller half removed: this is asked
+     * <em>about</em> a project by an endpoint that has already gated the caller, so resolving the
+     * project through somebody's visibility again would ask a settled question with the wrong
+     * subject. Reusing {@link #activeMemberIds} and the evaluator is what keeps it from becoming
+     * the third copy of a predicate the class header spends four paragraphs on.
+     */
+    @Transactional(readOnly = true)
+    public List<UUID> memberIdsOf(UUID projectId) {
+        return activeMemberIds().stream()
+                .filter(userId -> access.canView(userId, projectId))
+                .toList();
+    }
+
+    /**
      * Every active membership in the company currently open.
      *
      * <p>{@code REMOVED} and {@code INVITED} are both excluded, which is narrower than

@@ -25,6 +25,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -101,6 +102,10 @@ class ExternalLinkEndpointTest extends IntegrationTestBase {
     private static final UUID DELETED_CASE = UUID.fromString("e1005000-0000-4000-8000-000000000004");
 
     private static final ObjectMapper JSON = new ObjectMapper();
+
+    /** 004's A1 predicate and the mirror are both asserted through the real recompute. */
+    @Autowired
+    private com.tcms.repository.CaseHealthRecomputeService health;
 
     @Autowired
     private MockMvc mvc;
@@ -680,6 +685,297 @@ class ExternalLinkEndpointTest extends IntegrationTestBase {
     // helpers — requests
     // =====================================================================
 
+    // =====================================================================
+    // Issue links — 004's fourth target kind
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Issue links — an annotation, not a traceability edge (004 D7/D13/D17/D18)")
+    class IssueLinks {
+
+        private static final String HOST = "https://acme.atlassian.net";
+        private static final String ISSUE_ID = "10042";
+        /** Names a DIFFERENT key from the id — the D17 fixture, and the whole of test (a). */
+        private static final String STALE_URL = HOST + "/browse/PAY-991";
+
+        @Test
+        @DisplayName("the row carries an id, a host and a provider — and no key, title or status")
+        void theRowIsIdOnly() throws Exception {
+            UUID bindingId = seedBinding();
+
+            JsonNode link = JSON.readTree(
+                    linkIssue(ENGINEER, ACME_BANKING, CASE, bindingId, ISSUE_ID, STALE_URL)
+                            .getResponse().getContentAsString());
+
+            assertThat(link.get("issueId").asText()).isEqualTo(ISSUE_ID);
+            assertThat(link.get("host").asText()).isEqualTo(HOST);
+            assertThat(link.get("provider").asText())
+                    .as("stated by the server from the binding, never asserted by the caller")
+                    .isEqualTo("JIRA_CLOUD");
+            assertThat(link.has("key")).isFalse();
+            assertThat(link.has("title")).isFalse();
+            assertThat(link.has("status")).isFalse();
+        }
+
+        @Test
+        @DisplayName("nothing renders PAY-991 — the url names one key and the id names another")
+        void noLabelIsDerivedFromTheUrl() throws Exception {
+            // 004 D17, test (a). Parsing a key out of a stored URL gives a string that LOOKS
+            // current, is unverifiable, and goes silently wrong after exactly the event id-only was
+            // chosen to survive. The row's url says PAY-991; the id says 10042; the API must serve
+            // 10042 and never PAY-991 as anything but the href.
+            UUID bindingId = seedBinding();
+            linkIssue(ENGINEER, ACME_BANKING, CASE, bindingId, ISSUE_ID, STALE_URL);
+
+            JsonNode row = listIssues(ENGINEER, ACME_BANKING, CASE).get(0);
+
+            assertThat(row.get("issueId").asText()).isEqualTo(ISSUE_ID);
+            assertThat(row.toString().replace(STALE_URL, ""))
+                    .as("PAY-991 appears in the href and NOWHERE else in the document")
+                    .doesNotContain("PAY-991");
+        }
+
+        @Test
+        @DisplayName("the same (provider, host, id) twice on one case is a 409")
+        void theSameIssueTwiceIsAConflict() throws Exception {
+            UUID bindingId = seedBinding();
+            linkIssue(ENGINEER, ACME_BANKING, CASE, bindingId, ISSUE_ID, STALE_URL);
+
+            assertThat(linkIssue(ENGINEER, ACME_BANKING, CASE, bindingId, ISSUE_ID, STALE_URL)
+                    .getResponse().getStatus()).isEqualTo(409);
+        }
+
+        @Test
+        @DisplayName("D18 — deleting the binding leaves the link, degraded, with its href")
+        void theLinkSurvivesTheBinding() throws Exception {
+            UUID bindingId = seedBinding();
+            linkIssue(ENGINEER, ACME_BANKING, CASE, bindingId, ISSUE_ID, STALE_URL);
+
+            deleteBinding(bindingId);
+
+            JsonNode row = listIssues(ENGINEER, ACME_BANKING, CASE).get(0);
+            assertThat(row.get("bindingId").isNull())
+                    .as("resolved at READ time by matching (provider, host); no binding matches "
+                            + "any more, so the chip stops previewing")
+                    .isTrue();
+            assertThat(row.get("url").asText())
+                    .as("and keeps its href — it is somebody's traceability record, not the "
+                            + "deleting request's business")
+                    .isEqualTo(STALE_URL);
+            assertThat(row.get("issueId").asText()).isEqualTo(ISSUE_ID);
+        }
+
+        @Test
+        @DisplayName("THE A1 PREDICATE — a case whose only link is an issue stays UNLINKED")
+        void anIssueLinkDoesNotClearUnlinked() throws Exception {
+            // 004 D13, taken literally. The DEFAULT behaviour is the opposite: SpecLinkage counts
+            // every mirror row, so filing one defect on one failed run would silently mark a case
+            // traceable. This asserts the SIGNAL and not the SQL, because the shape of the
+            // regression is somebody tidying the predicate away as redundant.
+            UUID bindingId = seedBinding();
+            linkIssue(ENGINEER, ACME_BANKING, CASE, bindingId, ISSUE_ID, STALE_URL);
+
+            recomputeHealth();
+
+            assertThat(unlinked(CASE))
+                    .as("an issue link is an ANNOTATION. If this reads false, the count in "
+                            + "SpecLinkage has lost its target_kind clause")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("THE MIRROR — the refresh copies the provider, host and id")
+        void theMirrorCarriesTheThreeColumns() throws Exception {
+            // 004 C3. DocumentationFacts' second SELECT is `target_kind <> 'DOC_BLOCK'`, so it
+            // copies these rows the moment they exist — and would violate
+            // ck_case_doc_link_target until the mirror gained the columns. Without them the case
+            // detail's Links panel loses everything a degraded chip renders from.
+            UUID bindingId = seedBinding();
+            linkIssue(ENGINEER, ACME_BANKING, CASE, bindingId, ISSUE_ID, STALE_URL);
+
+            recomputeHealth();
+
+            try (Connection connection = appConnection(ACME);
+                 var statement = connection.prepareStatement("""
+                         SELECT external_provider, external_host, external_issue_id, stale
+                           FROM case_doc_link
+                          WHERE case_id = CAST(? AS uuid)
+                            AND target_kind = 'EXTERNAL_ISSUE'
+                         """)) {
+                statement.setString(1, CASE.toString());
+                try (ResultSet rows = statement.executeQuery()) {
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getString(1)).isEqualTo("JIRA_CLOUD");
+                    assertThat(rows.getString(2)).isEqualTo(HOST);
+                    assertThat(rows.getString(3)).isEqualTo(ISSUE_ID);
+                    assertThat(rows.getBoolean(4))
+                            .as("false, and NOT for V47 §3's reason: an issue has no pin, so there "
+                                    + "is nothing for a freshness marker to be about")
+                            .isFalse();
+                }
+            }
+        }
+
+        @Test
+        @DisplayName("issue links do not appear in relatedDocuments — a fourth value on a closed enum")
+        void theyAreNotServedAsDocLinks() throws Exception {
+            // DocLink.targetKind in the contract is [DOC_BLOCK, EXTERNAL_GIT, EXTERNAL_URL].
+            // Serving a fourth through it would put a member no generated client can name onto the
+            // wire, on every case that has ever been linked to an issue.
+            UUID bindingId = seedBinding();
+            linkIssue(ENGINEER, ACME_BANKING, CASE, bindingId, ISSUE_ID, STALE_URL);
+
+            recomputeHealth();
+
+            try (Connection connection = appConnection(ACME);
+                 var statement = connection.prepareStatement(
+                         "SELECT count(*) FROM case_doc_link WHERE case_id = CAST(? AS uuid)")) {
+                statement.setString(1, CASE.toString());
+                try (ResultSet rows = statement.executeQuery()) {
+                    rows.next();
+                    assertThat(rows.getLong(1))
+                            .as("the mirror HAS the row — the exclusion is in the query that feeds "
+                                    + "relatedDocuments, not in the refresh")
+                            .isEqualTo(1);
+                }
+            }
+        }
+
+        @Test
+        @DisplayName("case:edit gates the write, and a Viewer is refused")
+        void theGateIsCaseEdit() throws Exception {
+            UUID bindingId = seedBinding();
+
+            assertThat(linkIssue(VIEWER, ACME_BANKING, CASE, bindingId, ISSUE_ID, STALE_URL)
+                    .getResponse().getStatus()).isEqualTo(403);
+        }
+
+        @Test
+        @DisplayName("a binding this project does not have is a field error, not a 404")
+        void anUnknownBindingIsAFieldError() throws Exception {
+            MvcResult refused = linkIssue(
+                    ENGINEER, ACME_BANKING, CASE, UUID.randomUUID(), ISSUE_ID, STALE_URL);
+
+            assertThat(refused.getResponse().getStatus())
+                    .as("the case and the project both resolved, so the form has somewhere to put "
+                            + "it — a bodiless 404 here would read as \"your case is gone\"")
+                    .isEqualTo(400);
+        }
+
+        @Test
+        @DisplayName("a javascript: url is refused — the value is rendered as an href")
+        void refusesASchemeThatExecutes() throws Exception {
+            UUID bindingId = seedBinding();
+
+            assertThat(linkIssue(ENGINEER, ACME_BANKING, CASE, bindingId, ISSUE_ID,
+                    "javascript:alert(document.cookie)")
+                    .getResponse().getStatus()).isEqualTo(400);
+        }
+
+        @Test
+        @DisplayName("unlinking removes the annotation")
+        void unlinks() throws Exception {
+            UUID bindingId = seedBinding();
+            JsonNode link = JSON.readTree(
+                    linkIssue(ENGINEER, ACME_BANKING, CASE, bindingId, ISSUE_ID, STALE_URL)
+                            .getResponse().getContentAsString());
+
+            MvcResult removed = mvc.perform(MockMvcRequestBuilders
+                            .delete("/api/v1/projects/" + ACME_BANKING + "/cases/" + CASE
+                                    + "/issue-links/" + link.get("id").asText())
+                            .header(HttpHeaders.AUTHORIZATION,
+                                    "Bearer " + tokenFor(ENGINEER, ACME)))
+                    .andReturn();
+
+            assertThat(removed.getResponse().getStatus()).isEqualTo(204);
+            assertThat(listIssues(ENGINEER, ACME_BANKING, CASE)).isEmpty();
+        }
+    }
+
+    private MvcResult linkIssue(
+            UUID userId, UUID projectId, UUID caseId, UUID bindingId, String issueId, String url)
+            throws Exception {
+
+        String payload = JSON.writeValueAsString(Map.of(
+                "bindingId", bindingId.toString(), "issueId", issueId, "url", url));
+
+        return mvc.perform(MockMvcRequestBuilders
+                        .post("/api/v1/projects/" + projectId + "/cases/" + caseId + "/issue-links")
+                        .header(HttpHeaders.AUTHORIZATION,
+                                "Bearer " + tokenFor(userId, companyOf(userId)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andReturn();
+    }
+
+    private JsonNode listIssues(UUID userId, UUID projectId, UUID caseId) throws Exception {
+        MvcResult result = mvc.perform(MockMvcRequestBuilders
+                        .get("/api/v1/projects/" + projectId + "/cases/" + caseId + "/issue-links")
+                        .header(HttpHeaders.AUTHORIZATION,
+                                "Bearer " + tokenFor(userId, companyOf(userId)))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andReturn();
+        return JSON.readTree(result.getResponse().getContentAsString());
+    }
+
+    /**
+     * A {@code tracker_binding} row, through SQL.
+     *
+     * <p>Not laziness: {@code documentation} may not import {@code integration}, so a test in this
+     * package cannot build one through its service either. The row is the fixture and
+     * {@code project.TrackerBindingDirectory} is the seam under test.
+     */
+    private UUID seedBinding() throws SQLException {
+        UUID bindingId = UUID.randomUUID();
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement("""
+                     INSERT INTO tracker_binding (
+                             id, company_id, project_id, provider, base_url,
+                             external_project, config, is_default, enabled)
+                     VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid),
+                             'JIRA_CLOUD', 'https://acme.atlassian.net', 'PAY',
+                             '{}'::jsonb, false, true)
+                     """)) {
+            statement.setString(1, bindingId.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, ACME_BANKING.toString());
+            statement.executeUpdate();
+        }
+        return bindingId;
+    }
+
+    private void deleteBinding(UUID bindingId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "DELETE FROM tracker_binding WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, bindingId.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /** The mirror refresh and the linkage signals, in the order the real handler runs them. */
+    private void recomputeHealth() {
+        try (var ignored = CompanyContext.open(ACME)) {
+            health.recompute();
+        }
+    }
+
+    private boolean unlinked(UUID caseId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+             var statement = connection.prepareStatement(
+                     "SELECT unlinked FROM case_health WHERE case_id = CAST(? AS uuid)")) {
+            statement.setString(1, caseId.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                assertThat(rows.next())
+                        .as("the recompute must have produced a row, or the assertion above is "
+                                + "about nothing")
+                        .isTrue();
+                return rows.getBoolean(1);
+            }
+        }
+    }
+
     private MvcResult link(UUID userId, UUID projectId, UUID caseId, String payload)
             throws Exception {
 
@@ -894,7 +1190,13 @@ class ExternalLinkEndpointTest extends IntegrationTestBase {
         for (UUID companyId : List.of(ACME, UMBRA)) {
             try (Connection connection = appConnection(companyId)) {
                 execute(connection, "DELETE FROM doc_link");
+                execute(connection, "DELETE FROM case_doc_link");
                 execute(connection, "DELETE FROM audit_event");
+                // 004: the IssueLinks fixture inserts a binding per test, and D18's assertion
+                // needs (provider, host) to match NOTHING after its own delete — a leftover
+                // binding from an earlier test would resolve and the assertion would silently
+                // stop being about anything.
+                execute(connection, "DELETE FROM tracker_binding");
             }
         }
     }

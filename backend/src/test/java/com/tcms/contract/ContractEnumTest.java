@@ -138,6 +138,28 @@ class ContractEnumTest {
             // restating it. Deliberately NOT a member of IdentityProviderKind — these are
             // instance-level authorities for people, not a company's own issuers (V58).
             Map.entry("SocialProvider", List.of("com.tcms.identity.SocialProviderKey")),
+            // 004's four. TrackerProvider is CHECKed on tracker_binding.provider — the value
+            // selects an adapter that must exist — and deliberately NOT on defect_link.provider or
+            // doc_link.external_provider, which record what an adapter said. That asymmetry is why
+            // a fourth tracker is an adapter and not a migration (D9/D20).
+            Map.entry("TrackerProvider",
+                    List.of("com.tcms.integration.tracker.TrackerProvider")),
+            // The whole of what /tracker/connected-members may say about a person, per host (D19).
+            // The enum being three closed members IS the privacy bound that decision was taken
+            // under, so it is a type rather than three strings a view could widen.
+            Map.entry("TrackerConnectionState",
+                    List.of("com.tcms.integration.tracker.TrackerConnectionState")),
+            // The CLOSED set a client may colour by. The tracker's free-text status NAME travels
+            // beside it as `statusName` and nothing branches on that — it is per project, in
+            // somebody else's product, and a client switching on "Ready for QA" renders grey the
+            // day a team renames a column.
+            Map.entry("TrackerIssueStatusCategory",
+                    List.of("com.tcms.integration.tracker.TrackerIssueStatusCategory")),
+            // Three states, and UNAVAILABLE folds four conditions into one on purpose (D16):
+            // telling "tracker down" from "no access to this issue" apart would make the preview an
+            // oracle for what exists in a tracker the viewer cannot read.
+            Map.entry("TrackerIssueAvailability",
+                    List.of("com.tcms.integration.tracker.TrackerIssueAvailability")),
             Map.entry("WorkItemStatus", List.of("com.tcms.work.WorkItemStatus")),
             Map.entry("NotificationChannelKind",
                     List.of("com.tcms.integration.NotificationChannelKind")),

@@ -26,16 +26,31 @@ import java.util.regex.Pattern;
  *       part an operator actually needs: which host refused.</li>
  * </ul>
  *
+ *
+ * <h2>Public since 004, and only just</h2>
+ *
+ * <p>It was package-private, which was the right visibility while the only caller sat beside it.
+ * The tracker sub-package holds one credential per <em>person</em> per host and needs exactly this
+ * class — {@code SecretCipher}'s argument about a recoverable value is the same argument — and a
+ * sub-package is a different package to the compiler. The alternatives were a second cipher (two
+ * places a key is used, which is how a rotation misses one) or flattening thirty tracker classes
+ * into this package.
+ *
+ * <p><strong>Widening this does not widen the module.</strong>
+ * {@code ArchitectureRulesTest.crossModuleDependenciesPointOnlyAtTheFoundation} forbids any module
+ * outside {@code integration} from importing anything here, {@code public} or not, so the reachable
+ * set is unchanged and the modifier says "the tracker package may call this" rather than "anyone
+ * may".
  * <p>The second pass alone would be enough for a URL credential and is kept as the general rule;
  * the first exists because a future channel kind's secret need not be a URL at all, and the day
  * one is a bare token the general pass sees nothing.
  */
-final class SecretRedaction {
+public final class SecretRedaction {
 
     /** Scheme and host are kept; everything from the path onward is what carries the secret. */
     private static final Pattern URL = Pattern.compile("(https?://[^/\\s]+)[^\\s\"']*");
 
-    static final String REPLACEMENT = "[redacted]";
+    public static final String REPLACEMENT = "[redacted]";
 
     private SecretRedaction() {
     }
@@ -44,7 +59,7 @@ final class SecretRedaction {
      * @param text   the failure as the transport described it, possibly null
      * @param secret the credential this delivery used, or null for a channel that has none
      */
-    static String apply(String text, String secret) {
+    public static String apply(String text, String secret) {
         if (text == null) {
             return null;
         }

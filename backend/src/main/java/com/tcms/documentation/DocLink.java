@@ -33,7 +33,7 @@ import org.hibernate.annotations.Filter;
  * tidied a page is the silent breakage this module is arranged against. The cascade is the backstop
  * for a page genuinely being destroyed, not the ordinary path.
  *
- * <h2>All three target kinds are mapped now, and until §169 only one was</h2>
+ * <h2>Four target kinds since {@code V75}, and all of them are mapped</h2>
  *
  * <p>~~{@code target_kind} has three legal values and only {@code DOC_BLOCK} has a writer; the
  * {@code external_*} columns belong to the other two and are left unmapped rather than mapped as
@@ -50,7 +50,7 @@ import org.hibernate.annotations.Filter;
  *
  * <h2>A row is one kind of link and there is no arm for the other</h2>
  *
- * <p>Three factories, no setters, and no field that two kinds share except the source. {@code V1}'s
+ * <p>Four factories since {@code V75}, no setters, and no field that two kinds share except the source. {@code V1}'s
  * {@code ck_doc_link_target} is the backstop and the factories are the gate: a caller cannot
  * assemble a row with a block id <em>and</em> a URL, because no method here takes both. The
  * alternative — one factory taking everything nullable — is a constructor whose valid combinations
@@ -124,6 +124,37 @@ public class DocLink {
     /** An {@code EXTERNAL_URL} target. {@code http} or {@code https} only — see the service. */
     @Column(name = "external_url", updatable = false)
     private String externalUrl;
+
+    /**
+     * Which tracker an {@code EXTERNAL_ISSUE} target lives in ({@code V75}, 004).
+     *
+     * <p>Free text and no enum, for {@link #targetKind}'s reason doubled: the value set is the
+     * database's, and a fourth tracker must be an adapter rather than a migration (D9/D20).
+     */
+    @Column(name = "external_provider", updatable = false)
+    private String externalProvider;
+
+    /**
+     * The tracker's <strong>stable id</strong> — Jira's numeric issue id, ADO's work-item id.
+     *
+     * <p>There is no {@code externalIssueKey} beside it and there must not be (D17): a key moves
+     * when an issue moves between projects, and the whole point of storing the id is that the row
+     * survives that. The consequence is a rule the readers obey rather than a column: <strong>no
+     * display label is ever derived from {@link #externalUrl}</strong>.
+     */
+    @Column(name = "external_issue_id", updatable = false)
+    private String externalIssueId;
+
+    /**
+     * The tracker site the id belongs to — stored, never parsed out of {@link #externalUrl}.
+     *
+     * <p>An id is only unique within a host, so identity is {@code (provider, host, id)}. This
+     * column is also what replaces a {@code binding_id}: a foreign key from this table into
+     * {@code integration}'s would be a cross-module edge the architecture forbids <em>and</em> would
+     * cascade a binding's deletion into somebody's traceability record (D18).
+     */
+    @Column(name = "external_host", updatable = false)
+    private String externalHost;
 
     /**
      * What the source claims about the target — and <strong>the one mutable column on this
@@ -219,6 +250,41 @@ public class DocLink {
         created.externalLineStart = lineStart;
         created.externalLineEnd = lineEnd;
         created.externalCommitSha = commitSha;
+        return created;
+    }
+
+    /**
+     * A new link from a case or suite to an issue in somebody else's tracker ({@code V75}, 004 D7).
+     *
+     * <p><strong>It carries no title and no status</strong>, and the absence is a security property
+     * rather than a shape decision: both would have been fetched with one person's credential, and a
+     * shared row rendering them would serve them to somebody who cannot see the issue at all
+     * (D5/D15). The client fetches them live per viewer, and renders
+     * {@code <provider> issue <id> ↗} when it cannot.
+     *
+     * <p>It also carries no key ({@link #externalIssueId}) and no binding id ({@link #externalHost}),
+     * each for its own reason, both stated at the field.
+     *
+     * @param url what the caller pasted or the search returned. A <em>pointer</em>, allowed to go
+     *            historical — Jira redirects a moved key, and where it does not the href is dead,
+     *            which is a visible failure rather than a quiet wrong answer.
+     */
+    static DocLink toIssue(
+            LinkSourceType sourceType,
+            UUID sourceId,
+            String provider,
+            String host,
+            String issueId,
+            String url,
+            LinkRelationship relationship,
+            UUID creatorId,
+            Instant now) {
+
+        DocLink created = external(sourceType, sourceId, "EXTERNAL_ISSUE", relationship, creatorId, now);
+        created.externalProvider = provider;
+        created.externalHost = host;
+        created.externalIssueId = issueId;
+        created.externalUrl = url;
         return created;
     }
 
@@ -343,5 +409,25 @@ public class DocLink {
 
     String getExternalUrl() {
         return externalUrl;
+    }
+
+    String getExternalProvider() {
+        return externalProvider;
+    }
+
+    String getExternalIssueId() {
+        return externalIssueId;
+    }
+
+    String getExternalHost() {
+        return externalHost;
+    }
+
+    UUID getCreatedBy() {
+        return createdBy;
+    }
+
+    Instant getCreatedAt() {
+        return createdAt;
     }
 }

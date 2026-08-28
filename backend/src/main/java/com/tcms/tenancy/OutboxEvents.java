@@ -192,6 +192,26 @@ public final class OutboxEvents {
      */
     public static final String REVIEW_APPROVED = "review.approved";
 
+    /**
+     * An issue was created in somebody else's tracker — recorded by
+     * {@code integration.tracker.TrackerIssueService} inside the transaction that wrote the
+     * {@code tracker_issue_creation} ledger row (004, <em>The creation seam</em>).
+     *
+     * <p>An occurrence with a payload, for {@link #RUN_COMPLETED}'s reason — and the ninth name,
+     * the first produced by {@code integration} rather than consumed by it. That direction is worth
+     * noting: this module has until now been the outbox's only reader, and the paragraph above
+     * about "who could have written this row" applies to it now too.
+     *
+     * <p><strong>It is a backstop, not the delivery path.</strong> The SPA files the issue and then
+     * writes the {@code defect_link} itself, in two calls, because {@code execution} may not import
+     * {@code integration}. This event covers the crash between them: {@code execution}'s handler
+     * writes the same row from the payload, and the two writes collide on
+     * {@code defect_link_execution_key_idx} rather than producing a twin. Which is also why the
+     * follow-up call must carry its {@code bindingId} — without it the two rows name different
+     * providers, the index does not collide, and one defect renders twice.
+     */
+    public static final String TRACKER_ISSUE_CREATED = "integration.tracker_issue_created";
+
     private OutboxEvents() {
     }
 }

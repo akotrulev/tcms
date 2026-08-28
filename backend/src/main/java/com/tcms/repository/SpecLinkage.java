@@ -94,7 +94,8 @@ class SpecLinkage {
      * would silence an ERROR-severity signal on the cases whose relationship says a human copied the
      * text by hand.
      *
-     * <h2>An external target clears one signal and can never raise the other</h2>
+     * <h2><s>An external target clears one signal and can never raise the other</s> — true of TWO
+     * of the three external kinds, and V75 added the third</h2>
      *
      * <p>{@code EXTERNAL_GIT} and {@code EXTERNAL_URL} rows (§169) are links, so they take a case out
      * of {@code UNLINKED} — a case pinned to a file at a commit, or to a spec on somebody's wiki, is
@@ -103,6 +104,30 @@ class SpecLinkage {
      * {@code V47} §3 argues why: a commit sha pins the lines, and a URL is not a row in this
      * database at all. The asymmetry is stated rather than tidied because both halves are answers —
      * the link exists, and nothing here can observe its target moving.
+     *
+     * <p><strong>→ amended for {@code EXTERNAL_ISSUE} ({@code V75}, 004 D13). The section above
+     * argues the policy for the two kinds §169 built and must not be read as covering the
+     * third.</strong> An issue link does <em>not</em> take a case out of {@code UNLINKED}, and the
+     * difference is not a hair being split: a git link and a wiki link are somebody saying <em>this
+     * case is traceable to that specification</em>, which is what {@code UNLINKED} is asking about.
+     * A link to a bug in Jira says nothing of the kind — it is an annotation on the case, made while
+     * somebody was looking at a failure, and 004's A1 requires literally that it change no derived
+     * fact.
+     *
+     * <p>The default behaviour is the opposite. {@code UNLINKED} is a bare {@code count(*)} over the
+     * mirror's rows in a lateral aggregate with no {@code target_kind} predicate, so an issue link
+     * takes a case out of {@code UNLINKED} <em>by doing nothing at all</em> — filing one defect on
+     * one failed run would silently mark a case as traceable. So the count carries
+     * {@code AND target_kind <> 'EXTERNAL_ISSUE'}, and {@code ExternalLinkEndpointTest} asserts the
+     * <em>signal</em> rather than the SQL, because the shape of the regression is somebody tidying
+     * the predicate away as redundant.
+     *
+     * <p>It still cannot raise {@code OUTDATED_SPEC_CHANGED}, for a <strong>different reason</strong>
+     * from the git one and the distinction is worth keeping: {@code V47} §3 says {@code stale} is
+     * {@code false} for a git link because the sha <em>pins</em> the lines. An issue has no pin. Here
+     * {@code false} is honest because the row carries no derived meaning at all, so there is nothing
+     * for a freshness marker to be about. One sentence covering both would be wrong about one of
+     * them.
      *
      * <h2>Order inside the transaction, and what reading the stale mirror would cost</h2>
      *
@@ -162,6 +187,12 @@ class SpecLinkage {
                                   bool_or(l.stale) AS spec_moved
                              FROM case_doc_link l
                             WHERE l.case_id = c.id
+                              -- 004 A1/D13, V75. An EXTERNAL_ISSUE link is an annotation and not
+                              -- a traceability edge, so it must NOT take a case out of UNLINKED.
+                              -- Without this clause it does, by default and silently: the count
+                              -- is over every mirror row. Do not "tidy" it away — the class
+                              -- header argues it and ExternalLinkEndpointTest asserts the signal.
+                              AND l.target_kind <> 'EXTERNAL_ISSUE'
                        ) links ON true
                  WHERE c.deleted_at IS NULL
                     ON CONFLICT (case_id) DO UPDATE

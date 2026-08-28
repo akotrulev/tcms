@@ -108,6 +108,29 @@ public class CaseDocLink {
     @Column(name = "external_commit_sha", updatable = false)
     private String externalCommitSha;
 
+    /**
+     * Which tracker an {@code EXTERNAL_ISSUE} row's issue lives in ({@code V75}) — copied, like the
+     * six above, and interpreted by nothing in this module.
+     */
+    @Column(name = "external_provider", updatable = false)
+    private String externalProvider;
+
+    /**
+     * The tracker's stable id. <strong>The only thing a degraded chip can render</strong>: there is
+     * no key column here or in {@code doc_link}, because a key moves (004 D17), and no label is ever
+     * derived from {@link #externalUrl}.
+     */
+    @Column(name = "external_issue_id", updatable = false)
+    private String externalIssueId;
+
+    /**
+     * The tracker site the id belongs to. An id is only unique within a host, and this is also what
+     * a reader matches against the project's bindings to decide whether a preview is possible at all
+     * — there is no binding id on either side of the mirror (004 D18).
+     */
+    @Column(name = "external_host", updatable = false)
+    private String externalHost;
+
     @Column(name = "external_url", updatable = false)
     private String externalUrl;
 

@@ -163,13 +163,15 @@ class DocumentationFacts {
                         id, company_id, case_id, target_kind, relationship,
                         page_id, page_key, page_title, block_id, block_excerpt,
                         external_repo, external_path, external_line_start, external_line_end,
-                        external_commit_sha, external_url, stale)
+                        external_commit_sha, external_url,
+                        external_provider, external_issue_id, external_host, stale)
                 SELECT l.id, c.company_id, c.id, l.target_kind, l.relationship,
                        p.id, p.key, p.title, b.id,
                        CASE WHEN length(flat.text) > :limit
                             THEN btrim(left(flat.text, :cut)) || '…'
                             ELSE flat.text END,
                        NULL, NULL, NULL, NULL, NULL, NULL,
+                       NULL, NULL, NULL,
                        coalesce(page_content.at, p.created_at)
                            > coalesce(case_content.at, c.created_at)
                   FROM doc_link l
@@ -204,6 +206,17 @@ class DocumentationFacts {
                        NULL, NULL, NULL, NULL, NULL,
                        l.external_repo, l.external_path, l.external_line_start,
                        l.external_line_end, l.external_commit_sha, l.external_url,
+                       -- V75: the three EXTERNAL_ISSUE columns. This arm's predicate is
+                       -- `<> 'DOC_BLOCK'`, so it already copied issue rows the moment they
+                       -- existed — and would have violated ck_case_doc_link_target until the
+                       -- mirror gained the columns. That is why V75 moves both tables at once
+                       -- and why this SELECT had to move with it: without these three the
+                       -- mirror loses the provider, host and id a degraded chip renders from.
+                       l.external_provider, l.external_issue_id, l.external_host,
+                       -- `false` for every external kind, and the reason DIFFERS BY KIND: a git
+                       -- link is pinned to a sha so the lines cannot move under it (V47 §3); an
+                       -- issue link carries no derived meaning at all, so there is nothing for a
+                       -- freshness marker to be about (004 D13). See the column comment.
                        false
                   FROM doc_link l
                   JOIN test_case c ON c.id = l.source_id

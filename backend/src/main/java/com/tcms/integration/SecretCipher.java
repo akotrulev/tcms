@@ -26,13 +26,28 @@ import org.springframework.stereotype.Component;
  * of yielding plausible bytes, so a row somebody edited in the database is a loud failure rather
  * than a POST to an attacker's URL.
  *
+ *
+ * <h2>Public since 004, and only just</h2>
+ *
+ * <p>It was package-private, which was the right visibility while the only caller sat beside it.
+ * The tracker sub-package holds one credential per <em>person</em> per host and needs exactly this
+ * class — {@code SecretCipher}'s argument about a recoverable value is the same argument — and a
+ * sub-package is a different package to the compiler. The alternatives were a second cipher (two
+ * places a key is used, which is how a rotation misses one) or flattening thirty tracker classes
+ * into this package.
+ *
+ * <p><strong>Widening this does not widen the module.</strong>
+ * {@code ArchitectureRulesTest.crossModuleDependenciesPointOnlyAtTheFoundation} forbids any module
+ * outside {@code integration} from importing anything here, {@code public} or not, so the reachable
+ * set is unchanged and the modifier says "the tracker package may call this" rather than "anyone
+ * may".
  * <p>The 12-byte nonce is prepended to the ciphertext rather than stored in its own column. It is
  * not a secret, it must never repeat under one key, and keeping it in the same value is what makes
  * that impossible to get wrong by copying a row between columns. A separate column is one more
  * thing a migration can forget to carry.
  */
 @Component
-class SecretCipher {
+public class SecretCipher {
 
     /** The size GCM is specified for; a different length is legal and slower for no benefit. */
     private static final int NONCE_BYTES = 12;
@@ -50,7 +65,7 @@ class SecretCipher {
     }
 
     /** @return nonce ‖ ciphertext ‖ tag, which is what {@code notification_channel.secret} holds */
-    byte[] encrypt(String plaintext) {
+    public byte[] encrypt(String plaintext) {
         byte[] nonce = new byte[NONCE_BYTES];
         random.nextBytes(nonce);
         try {
@@ -77,7 +92,7 @@ class SecretCipher {
      * diagnostic, printing what was decrypted, would put a credential into a log on the one path
      * where somebody is already looking at the logs.
      */
-    String decrypt(byte[] stored) {
+    public String decrypt(byte[] stored) {
         if (stored == null || stored.length <= NONCE_BYTES) {
             throw new IllegalStateException(
                     "A channel secret is missing or too short to contain a nonce");

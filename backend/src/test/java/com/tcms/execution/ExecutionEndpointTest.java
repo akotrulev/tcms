@@ -83,6 +83,13 @@ import org.springframework.transaction.support.TransactionTemplate;
 @DisplayName("Execution endpoints — plans, runs, the pinned execution, and recording a result")
 class ExecutionEndpointTest extends IntegrationTestBase {
 
+    /**
+     * The outbox handler 004 added — driven directly, because the delivery path it backs up is a
+     * client making two calls and the failure it covers is the client not making the second.
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    private TrackerDefectLinkBackstop backstop;
+
     private static final UUID ACME = UUID.fromString("e2000000-0000-4000-8000-00000000000a");
     private static final UUID UMBRA = UUID.fromString("e2000000-0000-4000-8000-00000000000b");
 
@@ -2138,6 +2145,133 @@ class ExecutionEndpointTest extends IntegrationTestBase {
                     .hasSize(1);
         }
 
+        // -------------------------------------------------------------- 004 ----
+
+        @Test
+        @DisplayName("a bindingId makes the row name the tracker the server actually resolved")
+        void aBindingNamesTheProvider() throws Exception {
+            // V74. The caller sends a BINDING and never a provider, so the column still records
+            // something this server established — V62's argument, with a second writer behind it.
+            UUID bindingId = seedBinding();
+
+            JsonNode link = body(postDefect(ENGINEER, ACME, EXEC_A, json.writeValueAsString(
+                    Map.of("externalKey", KEY, "url", URL, "bindingId", bindingId.toString()))));
+
+            assertThat(link.get("provider").asText()).isEqualTo("JIRA_CLOUD");
+        }
+
+        @Test
+        @DisplayName("a binding this project does not have falls back to EXTERNAL, not to a claim")
+        void anUnresolvableBindingIsExternal() throws Exception {
+            JsonNode link = body(postDefect(ENGINEER, ACME, EXEC_A, json.writeValueAsString(
+                    Map.of("externalKey", KEY, "url", URL,
+                            "bindingId", UUID.randomUUID().toString()))));
+
+            assertThat(link.get("provider").asText())
+                    .as("\"nobody verified which tracker this is\" is the same answer a request "
+                            + "naming no binding gets")
+                    .isEqualTo("EXTERNAL");
+        }
+
+        @Test
+        @DisplayName("THE CONVERGENCE: the SPA's row and the outbox backstop's row are ONE row")
+        void theBackstopCollidesRatherThanTwinning() throws Exception {
+            // 004, The creation seam, property 4. The SPA files the issue and writes the link; the
+            // handler writes the same row from the event if that second call never arrived. Both
+            // derive `provider` from the binding, so defect_link_execution_key_idx collides.
+            UUID bindingId = seedBinding();
+
+            body(postDefect(ENGINEER, ACME, EXEC_A, json.writeValueAsString(
+                    Map.of("externalKey", KEY, "url", URL, "bindingId", bindingId.toString()))));
+
+            deliverTrackerIssueCreated(bindingId, "JIRA_CLOUD");
+
+            assertThat(body(get(ENGINEER, ACME, executionPath(RUN, EXEC_A))).get("defects"))
+                    .as("one defect, not two")
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("THE TWIN: omit the bindingId and the documented second row appears")
+        void omittingTheBindingProducesTheDocumentedTwin() throws Exception {
+            // The reason DefectLinkInput.bindingId exists, pinned by a test rather than by a
+            // paragraph. Without it the SPA's row says EXTERNAL and the handler's says JIRA_CLOUD,
+            // the index does not collide, and the run screen shows one defect twice — both rows
+            // looking entirely correct.
+            UUID bindingId = seedBinding();
+
+            body(linkDefect(ENGINEER, ACME, EXEC_A, KEY, URL));
+
+            deliverTrackerIssueCreated(bindingId, "JIRA_CLOUD");
+
+            assertThat(body(get(ENGINEER, ACME, executionPath(RUN, EXEC_A))).get("defects"))
+                    .as("TWO rows. This assertion is the documentation: if it ever reads 1, either "
+                            + "the index changed or somebody made the handler guess")
+                    .hasSize(2);
+        }
+
+        @Test
+        @DisplayName("the backstop is idempotent — a redelivered event writes nothing")
+        void theBackstopIsIdempotent() throws Exception {
+            // Outbox delivery is at least once, so the handler runs again for an event it already
+            // handled. Its one durable write is keyed on exactly the four columns of the index.
+            UUID bindingId = seedBinding();
+
+            deliverTrackerIssueCreated(bindingId, "JIRA_CLOUD");
+            deliverTrackerIssueCreated(bindingId, "JIRA_CLOUD");
+
+            assertThat(body(get(ENGINEER, ACME, executionPath(RUN, EXEC_A))).get("defects"))
+                    .hasSize(1);
+        }
+
+        /**
+         * Inserts a {@code tracker_binding} row directly.
+         *
+         * <p>Through SQL rather than through {@code TrackerBindingService}, and not out of
+         * laziness: {@code execution} may not import {@code integration}, so a test in this package
+         * cannot construct one either. The row is the fixture, and the port under test
+         * ({@code TrackerBindingDirectory}) is what reads it.
+         */
+        private UUID seedBinding() throws Exception {
+            UUID bindingId = UUID.randomUUID();
+            try (java.sql.Connection connection = appConnection(ACME);
+                 var statement = connection.prepareStatement("""
+                         INSERT INTO tracker_binding (
+                                 id, company_id, project_id, provider, base_url,
+                                 external_project, config, is_default, enabled)
+                         VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid),
+                                 'JIRA_CLOUD', 'https://acme.atlassian.net', 'PAY',
+                                 '{}'::jsonb, false, true)
+                         """)) {
+                statement.setString(1, bindingId.toString());
+                statement.setString(2, ACME.toString());
+                statement.setString(3, ACME_BANKING.toString());
+                statement.executeUpdate();
+            }
+            return bindingId;
+        }
+
+        /** Drives the handler with the event {@code integration} would have recorded. */
+        private void deliverTrackerIssueCreated(UUID bindingId, String provider) throws Exception {
+            String payload = json.writeValueAsString(Map.of(
+                    "eventId", UUID.randomUUID().toString(),
+                    "companyId", ACME.toString(),
+                    "projectId", ACME_BANKING.toString(),
+                    "executionId", EXEC_A.toString(),
+                    "bindingId", bindingId.toString(),
+                    "provider", provider,
+                    "externalId", "10042",
+                    "externalKey", KEY,
+                    "url", URL,
+                    "createdBy", ENGINEER.toString()));
+
+            try (var ignored = com.tcms.tenancy.CompanyContext.open(ACME)) {
+                backstop.handle(new com.tcms.tenancy.OutboxMessage(
+                        ACME, "tracker_issue", UUID.randomUUID(),
+                        com.tcms.tenancy.OutboxEvents.TRACKER_ISSUE_CREATED, payload));
+            }
+        }
+
         @Test
         @DisplayName("a javascript: url is refused — three screens render this as an href")
         void refusesASchemeThatExecutes() throws Exception {
@@ -2613,6 +2747,11 @@ class ExecutionEndpointTest extends IntegrationTestBase {
             try (Connection connection = appConnection(companyId)) {
                 execute(connection, "DELETE FROM audit_event");
                 execute(connection, "DELETE FROM defect_link");
+                // 004: the DefectLinks fixture inserts a tracker_binding per test, and the
+                // convergence assertions count rows — a binding left behind is a resolution the
+                // next test did not ask for.
+                execute(connection, "DELETE FROM tracker_issue_creation");
+                execute(connection, "DELETE FROM tracker_binding");
                 // evidence would cascade from test_execution below, but attachment would NOT —
                 // it is polymorphic and holds no foreign key to anything, so its rows would
                 // accumulate across every test in the class and a count assertion would drift.

@@ -38,10 +38,26 @@ public interface CaseDocLinkRepository extends JpaRepository<CaseDocLink, UUID> 
      * this clause exists to prevent, arriving through the clause itself. Leading with the kind also
      * groups the panel the way it reads (specifications, then code, then links out), which falls out
      * of the enum's own alphabet rather than being imposed by a {@code CASE}.
+     *
+     * <h2>{@code EXTERNAL_ISSUE} rows are excluded, and it is not a rendering preference</h2>
+     *
+     * <p>{@code V75} added a fourth target kind and the mirror copies it, because the case detail's
+     * Links panel needs the provider, host and id to render a degraded chip. This query feeds a
+     * different reader — {@code TestCase.relatedDocuments} — whose {@code DocLink.targetKind} in the
+     * contract is the closed set {@code [DOC_BLOCK, EXTERNAL_GIT, EXTERNAL_URL]}. Serving a fourth
+     * value through it would put a member no generated client can name onto the wire, silently, on
+     * every case that has ever been linked to an issue.
+     *
+     * <p>The tracker links are served by {@code GET …/cases/{caseId}/issue-links} instead, which is
+     * their own shape for their own reason: they carry an id and a host and never a title, and their
+     * previews are fetched live per viewer. An issue link is an <em>annotation</em>, not a
+     * traceability edge (004 D13) — the same distinction {@code SpecLinkage} draws one predicate
+     * over — so the two populations are genuinely different and not one list somebody split.
      */
     @Query("""
             SELECT l FROM CaseDocLink l
              WHERE l.caseId IN :caseIds
+               AND l.targetKind <> 'EXTERNAL_ISSUE'
              ORDER BY l.targetKind, l.pageKey, l.blockId, l.externalPath, l.externalUrl, l.id
             """)
     List<CaseDocLink> findForCases(@Param("caseIds") Collection<UUID> caseIds);

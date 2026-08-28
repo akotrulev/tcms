@@ -2,6 +2,7 @@ package com.tcms.execution;
 
 import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
+import com.tcms.project.TrackerBindingDirectory;
 import com.tcms.tenancy.CompanyContext;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -47,6 +48,16 @@ import org.springframework.transaction.annotation.Transactional;
  * carries no qualifier (roles spec §A5; nothing has carried one since {@code V51}), and adding a
  * row-scoped rule that the catalogue does not express would be this service inventing a grant.
  *
+ * <h2>{@code bindingId} arrived in 004, and it is the collision key</h2>
+ *
+ * <p>{@link DefectLinkInput#bindingId} is optional and its absence is not neutral. The replay
+ * lookup and {@code defect_link_execution_key_idx} both key on {@code provider}, and the outbox
+ * backstop ({@link TrackerDefectLinkBackstop}) writes its row with the provider the binding names.
+ * A client that files an issue through the tracker and then omits the binding here produces two
+ * rows that do not collide — one saying {@code EXTERNAL}, one saying {@code JIRA_CLOUD} — and the
+ * run screen shows one defect twice, both rows looking correct. That is documented at the field and
+ * pinned by a test.
+ *
  * <h2>A closed run freezes both writes</h2>
  *
  * <p>The same rule {@link EvidenceService} applies to attachments, for the same reason: a defect
@@ -63,17 +74,27 @@ public class DefectLinkService {
     private final ProjectService projects;
     private final ExecutionTargets targets;
     private final DefectLinkRepository links;
+    /**
+     * Resolves {@code DefectLinkInput.bindingId} to a provider (004, {@code V74}).
+     *
+     * <p>A port declared in {@code project} and implemented in {@code integration}, because this
+     * module may not import that one and never may — the constraint that also forces the two-call
+     * seam this field exists to make safe.
+     */
+    private final TrackerBindingDirectory bindings;
     private final Clock clock;
 
     public DefectLinkService(
             ProjectService projects,
             ExecutionTargets targets,
             DefectLinkRepository links,
+            TrackerBindingDirectory bindings,
             Clock clock) {
 
         this.projects = projects;
         this.targets = targets;
         this.links = links;
+        this.bindings = bindings;
         this.clock = clock;
     }
 
@@ -121,7 +142,8 @@ public class DefectLinkService {
         ExecutionTargets.Target target = found.get();
 
         GateResult<Outcome> gate = projects.writeGranted(
-                userId, projectId, CREATE_DEFECT, project -> write(target, input, userId));
+                userId, projectId, CREATE_DEFECT,
+                project -> write(project.getId(), target, input, userId));
 
         return switch (gate) {
             case GateResult.Allowed<Outcome> allowed -> allowed.value();
@@ -156,7 +178,8 @@ public class DefectLinkService {
      * validation errors to learn what is already linked — {@link EvidenceService#attach}'s
      * structural reason for resolving the step id in the same place.
      */
-    private Outcome write(ExecutionTargets.Target target, DefectLinkInput input, UUID userId) {
+    private Outcome write(
+            UUID projectId, ExecutionTargets.Target target, DefectLinkInput input, UUID userId) {
         if (target.run().isClosed()) {
             return new Outcome.RunClosed();
         }
@@ -169,8 +192,17 @@ public class DefectLinkService {
         String externalKey = input.externalKey().trim();
         String url = input.url().trim();
 
+        // The provider the SERVER establishes, never one the caller asserted (004, V74). A binding
+        // this project does not have resolves to nothing and the row says EXTERNAL — the same answer
+        // a request naming no binding gets, because both are "nobody verified which tracker this is".
+        String provider = input.bindingId() == null
+                ? DefectLink.PROVIDER_EXTERNAL
+                : bindings.resolve(projectId, input.bindingId())
+                        .map(TrackerBindingDirectory.TrackerTarget::provider)
+                        .orElse(DefectLink.PROVIDER_EXTERNAL);
+
         Optional<DefectLink> existing = links.findByExecutionIdAndProviderAndExternalKey(
-                target.execution().getId(), DefectLink.PROVIDER_EXTERNAL, externalKey);
+                target.execution().getId(), provider, externalKey);
         if (existing.isPresent()) {
             // The same defect, already linked. Answered 200 with the row that is there rather than
             // 409: the caller asked for this result and has it, and the stored URL is served rather
@@ -182,6 +214,7 @@ public class DefectLinkService {
         DefectLink link = DefectLink.to(
                 CompanyContext.require(),
                 target.execution().getId(),
+                provider,
                 externalKey,
                 url,
                 userId,
