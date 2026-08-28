@@ -19,6 +19,20 @@ import java.util.UUID;
  * reparenting rewrote paths, and a consumer parsing a path would have needed the label-sanitizing
  * rules to get back to a row). A suite is a flat collection now, so a client assembles nothing.
  *
+ * @param filedCount the cases whose {@code suiteId} is this suite — the first arm, and the one
+ *                  that used to be the whole of membership. Beside {@link #addedCount} and
+ *                  {@link #taggedCount} since 005 S1, because {@code caseCount} <strong>cannot
+ *                  explain itself</strong>: a suite reading "41 cases" with no way to see that 30
+ *                  are filed, 3 were added by hand and 8 arrive through {@code smoke} is a
+ *                  collection nobody can reason about, and a reader trying to reconcile it has no
+ *                  numbers to reconcile it with.
+ * @param addedCount the size of {@link #caseIds} — the cases somebody added individually.
+ * @param taggedCount the live cases matching any of {@link #tagRules}.
+ *                  <p><strong>The three do not sum to {@link #caseCount}</strong>, ever, and a
+ *                  client must render them as arms rather than as parts of a total: a case both
+ *                  filed here and carrying one of the tag rules is in two arms and in the union
+ *                  once. Serving the union alongside them is what stops anybody adding them up to
+ *                  get it.
  * @param caseCount the suite's resolved membership — the cases filed in it, plus those added
  *                  individually, plus every live case carrying any of its {@link #tagRules},
  *                  unioned and deduped by {@link SuiteMembership}. Since §98 there is no subtree
@@ -49,6 +63,9 @@ public record SuiteView(
         String key,
         String name,
         String description,
+        long filedCount,
+        long addedCount,
+        long taggedCount,
         long caseCount,
         List<String> tagRules,
         List<UUID> caseIds,

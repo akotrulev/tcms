@@ -1,6 +1,7 @@
 package com.tcms.storage;
 
 import java.util.Optional;
+import java.util.OptionalLong;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -47,6 +48,11 @@ class FilesystemReportStore implements ReportStore {
     @Override
     public Optional<StoredBlob> open(String key) {
         return blobs.open(key);
+    }
+
+    @Override
+    public OptionalLong size(String key) {
+        return blobs.size(key);
     }
 
     @Override

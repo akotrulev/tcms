@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.stream.Stream;
 
 /**
@@ -139,6 +140,25 @@ final class FilesystemBlobStore {
             return Optional.of(new StoredBlob(stream, size));
         } catch (IOException failure) {
             throw new UncheckedIOException("Could not read " + kind + " bytes under " + key, failure);
+        }
+    }
+
+    /**
+     * {@code Files.size} on the resolved path — one {@code stat}, no handle acquired.
+     *
+     * <p>Empty for anything that is not a regular file, which covers both the key that names nothing
+     * and the directory a malformed key could resolve to. A read failure is still loud: an
+     * {@code IOException} on a file that exists is a broken volume, not a size of zero.
+     */
+    OptionalLong size(String key) {
+        Path source = resolve(key);
+        if (!Files.isRegularFile(source)) {
+            return OptionalLong.empty();
+        }
+        try {
+            return OptionalLong.of(Files.size(source));
+        } catch (IOException failure) {
+            throw new UncheckedIOException("Could not size " + kind + " bytes under " + key, failure);
         }
     }
 

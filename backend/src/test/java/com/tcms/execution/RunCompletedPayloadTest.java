@@ -95,7 +95,8 @@ class RunCompletedPayloadTest {
     private static TestRunView view() {
         return new TestRunView(
                 RUN, "RUN-14", "Regression 4.3", null, null, null, RunStatus.COMPLETED,
-                "4.3", null, null, null, RunSource.MANUAL, null, null,
+                // createdBy null: a hand-built fixture, and the shape a SCHEDULED run is in.
+                "4.3", null, null, null, RunSource.MANUAL, null, null, null,
                 new ResultCountsView(9, 3, 1, 0, 2, 15),
                 // No recorded request: this fixture is a view built by hand, which is what a run
                 // created before `V61` looks like on the wire (B7).

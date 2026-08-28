@@ -5,6 +5,7 @@ import com.tcms.project.ClassificationDimensionView;
 import com.tcms.project.ClassificationValueView;
 import com.tcms.project.ProjectConfigurationService;
 import com.tcms.project.ProjectService;
+import com.tcms.project.StatusKind;
 import com.tcms.repository.DashboardView.ActivityPointView;
 import com.tcms.repository.DashboardView.AutomationCoverageView;
 import com.tcms.repository.DashboardView.BreakdownView;
@@ -151,6 +152,7 @@ public class DashboardService {
                 healthRows.latestComputedAt(projectId),
                 byFeature(unfiltered, scope, vocabularies),
                 byOwner(companyId, unfiltered, scope),
+                byLastRun(unfiltered, scope, vocabularies),
                 automation(search.tally(
                         unfiltered, scope, "automationStatus", AutomationStatus.class)),
                 activity(unfiltered, scope, now));
@@ -304,15 +306,7 @@ public class DashboardService {
     private List<BreakdownView> byFeature(
             CaseQuery request, CaseScope scope, List<ClassificationDimensionView> vocabularies) {
 
-        Map<UUID, String> labels = new LinkedHashMap<>();
-        for (ClassificationDimensionView dimension : vocabularies) {
-            if (!dimension.key().equals(DimensionKeys.FEATURE)) {
-                continue;
-            }
-            for (ClassificationValueView value : dimension.values()) {
-                labels.put(value.id(), label(value, dimension.values()));
-            }
-        }
+        Map<UUID, String> labels = featureLabels(vocabularies);
 
         Map<UUID, Map<LifecycleStatus, Long>> counts =
                 tallies.byClassification(request, scope, List.copyOf(labels.keySet()));
@@ -328,6 +322,96 @@ public class DashboardService {
         }
         bars.sort(byTotalDescending());
         return List.copyOf(bars);
+    }
+
+    /**
+     * One bar per Feature, split by <strong>the outcome of each case's last execution</strong>
+     * (005 N3) — the third breakdown, and the first that is not about authoring.
+     *
+     * <p>Same vocabulary, same labels and same ordering as {@link #byFeature}, deliberately: the two
+     * panels sit above one another and a reader compares rows across them, which they cannot do if
+     * one is sorted by count and the other by name. The <em>segments</em> are where they differ.
+     *
+     * <p>{@code NEVER_RUN} is derived by subtraction rather than counted, which is
+     * {@link DashboardTallies#byClassificationAndLastRun}'s argument: a case with no
+     * {@code case_health} row is not reachable by grouping on a column that is not there, and it is
+     * exactly the case this segment is about. A negative result is not representable — the totals
+     * and the kinds come from one predicate — so no clamp is needed and none is added, because a
+     * clamp would hide the day that stops being true.
+     *
+     * <p>Features whose every case is unclassified do not appear, for {@link #byFeature}'s reason:
+     * a value nobody has used is an aspirational vocabulary entry, and a panel of empty bars buries
+     * the ones carrying work.
+     */
+    private List<BreakdownView> byLastRun(
+            CaseQuery request, CaseScope scope, List<ClassificationDimensionView> vocabularies) {
+
+        Map<UUID, String> labels = featureLabels(vocabularies);
+        List<UUID> valueIds = List.copyOf(labels.keySet());
+
+        Map<UUID, Map<String, Long>> kinds =
+                tallies.byClassificationAndLastRun(request, scope, valueIds);
+        Map<UUID, Long> totals = tallies.totalsByClassification(request, scope, valueIds);
+
+        List<BreakdownView> bars = new ArrayList<>(totals.size());
+        for (Map.Entry<UUID, Long> entry : totals.entrySet()) {
+            UUID valueId = entry.getKey();
+            Map<String, Long> counted = kinds.getOrDefault(valueId, Map.of());
+
+            long recorded = 0;
+            List<SegmentView> segments = new ArrayList<>();
+            // StatusKind's own declaration order, so two features' bars stack their segments the
+            // same way — the property `lifecycle` relies on one panel up.
+            for (StatusKind kind : StatusKind.values()) {
+                long count = counted.getOrDefault(kind.name(), 0L);
+                recorded += count;
+                if (count > 0) {
+                    // The bar, not the segment: the case list binds no last-result parameter, so
+                    // there is no query string that reproduces "last failed". Recorded on
+                    // DashboardView#byLastRun rather than left for a reader to find by clicking.
+                    segments.add(new SegmentView(
+                            kind.name(), count, Map.of("featureId", valueId.toString())));
+                }
+            }
+
+            long neverRun = entry.getValue() - recorded;
+            if (neverRun > 0) {
+                // The one segment whose filter IS exact: never-executed is a health signal the case
+                // list already binds, and it is the same fact `case_health.never_executed` asserts.
+                segments.add(new SegmentView(
+                        DashboardView.NEVER_RUN,
+                        neverRun,
+                        Map.of(
+                                "featureId", valueId.toString(),
+                                "healthSignal", List.of(HealthSignal.NEVER_EXECUTED.name()))));
+            }
+
+            if (!segments.isEmpty()) {
+                bars.add(new BreakdownView(
+                        valueId.toString(), labels.get(valueId), List.copyOf(segments)));
+            }
+        }
+        bars.sort(byTotalDescending());
+        return List.copyOf(bars);
+    }
+
+    /**
+     * The live Feature vocabulary as id → display path — resolved once and read by both feature
+     * panels, so they cannot label or omit different values.
+     */
+    private static Map<UUID, String> featureLabels(
+            List<ClassificationDimensionView> vocabularies) {
+
+        Map<UUID, String> labels = new LinkedHashMap<>();
+        for (ClassificationDimensionView dimension : vocabularies) {
+            if (!dimension.key().equals(DimensionKeys.FEATURE)) {
+                continue;
+            }
+            for (ClassificationValueView value : dimension.values()) {
+                labels.put(value.id(), label(value, dimension.values()));
+            }
+        }
+        return labels;
     }
 
     /**

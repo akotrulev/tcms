@@ -2,7 +2,13 @@ package com.tcms.repository;
 
 import com.tcms.project.ProjectService;
 import com.tcms.tenancy.CompanyContext;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,17 +62,20 @@ public class CaseDetailService {
     private final TestCaseRepository cases;
     private final SuiteRepository suites;
     private final CaseRenderer renderer;
+    private final ConditionRepository conditions;
 
     public CaseDetailService(
             ProjectService projects,
             TestCaseRepository cases,
             SuiteRepository suites,
-            CaseRenderer renderer) {
+            CaseRenderer renderer,
+            ConditionRepository conditions) {
 
         this.projects = projects;
         this.cases = cases;
         this.suites = suites;
         this.renderer = renderer;
+        this.conditions = conditions;
     }
 
     /**
@@ -106,6 +115,106 @@ public class CaseDetailService {
     @Transactional(readOnly = true)
     public Optional<GherkinParseResult> parseGherkin(UUID userId, UUID projectId, String text) {
         return projects.readVisible(userId, projectId, project -> GherkinScenarios.parse(text));
+    }
+
+    /**
+     * The {@code .feature} text an unsaved case would render as — {@link #parseGherkin}'s inverse
+     * (003 Phase 2, C1).
+     *
+     * <p>Beside its twin for that method's reason, and it takes the <strong>same read gate and no
+     * write permission</strong>: it stores nothing, so a caller with no grant on the project gets
+     * the same empty {@link Optional} and the same bodiless 404 every other read here answers.
+     *
+     * <p><strong>Two lookups, and they are the only reason this is not a pure function.</strong> The
+     * {@code Feature:} line is the suite's name and the {@code Background:} block is the bodies of
+     * the conditions the request names by id — neither of which the editor holds. Resolving them
+     * server-side is what makes an unsaved render equal to the saved one; asking the client to send
+     * them would put the render's inputs under the control of the thing being rendered.
+     *
+     * <p>Ids that name nothing live in this project are <strong>skipped</strong> rather than
+     * refused. A render is a view, not a save: the write path already refuses an unknown condition
+     * id with a field error, and answering 400 here would leave an author unable to <em>see</em> the
+     * case they are being told is wrong.
+     */
+    @Transactional(readOnly = true)
+    public Optional<String> renderGherkin(UUID userId, UUID projectId, CaseUpdateRequest request) {
+        return projects.readVisible(userId, projectId, project -> {
+            String featureName = request.suiteId() == null
+                    ? null
+                    : suites.findLiveInProject(project.getId(), request.suiteId())
+                            .map(Suite::getName)
+                            .orElse(null);
+
+            Map<UUID, List<String>> library = bodiesById(request);
+            return GherkinScenarios.renderInput(
+                    featureName,
+                    request,
+                    bodies(request.preconditions(), library),
+                    bodies(request.postconditions(), library));
+        });
+    }
+
+    /**
+     * The library bodies the request's two condition lists name, in one query for both lists.
+     *
+     * <p>One round trip whatever the case's size — the rule every read in this module follows, and
+     * the one a render assembled condition by condition would break for a case with twenty of them.
+     */
+    private Map<UUID, List<String>> bodiesById(CaseUpdateRequest request) {
+        Set<UUID> ids = new LinkedHashSet<>();
+        collectIds(request.preconditions(), ids);
+        collectIds(request.postconditions(), ids);
+        if (ids.isEmpty()) {
+            // Not merely an optimization: an empty collection bound into SQL `IN ()` is a syntax
+            // error, and a case whose conditions are all inline is an ordinary case.
+            return Map.of();
+        }
+        Map<UUID, List<String>> bodies = new HashMap<>();
+        for (Condition condition : conditions.findLiveByIds(ids)) {
+            bodies.put(condition.getId(), condition.getBody());
+        }
+        return bodies;
+    }
+
+    private static void collectIds(List<CaseConditionInput> attachments, Set<UUID> into) {
+        if (attachments == null) {
+            return;
+        }
+        for (CaseConditionInput attachment : attachments) {
+            if (attachment != null && attachment.conditionId() != null) {
+                into.add(attachment.conditionId());
+            }
+        }
+    }
+
+    /**
+     * One list of attachments as bodies, in the author's order.
+     *
+     * <p>An inline body is its own answer; a library reference resolves through the map. An
+     * attachment that is neither — no id and no body — contributes nothing, which is what an empty
+     * row in the editor is.
+     */
+    private static List<List<String>> bodies(
+            List<CaseConditionInput> attachments, Map<UUID, List<String>> library) {
+
+        if (attachments == null) {
+            return List.of();
+        }
+        List<List<String>> resolved = new ArrayList<>(attachments.size());
+        for (CaseConditionInput attachment : attachments) {
+            if (attachment == null) {
+                continue;
+            }
+            if (attachment.inlineBody() != null && !attachment.inlineBody().isEmpty()) {
+                resolved.add(List.copyOf(attachment.inlineBody()));
+            } else if (attachment.conditionId() != null) {
+                List<String> body = library.get(attachment.conditionId());
+                if (body != null) {
+                    resolved.add(body);
+                }
+            }
+        }
+        return List.copyOf(resolved);
     }
 
     private TestCaseDetailView detail(

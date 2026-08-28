@@ -72,6 +72,28 @@ public interface DocPageRepository extends JpaRepository<DocPage, UUID> {
     long countLiveChildren(@Param("pageId") UUID pageId);
 
     /**
+     * How many live pages of one project are in one publication state — {@code ReviewImpact}'s draft
+     * count (005 N7, S9b).
+     *
+     * <p>A count and not a list, because the caller renders a number: "4 draft pages" is the whole
+     * of what the Review settings screen says, and returning rows would make a settings read load a
+     * project's documentation tree to discard it.
+     *
+     * <p>Parameterised on the status rather than fixed to {@code DRAFT} for the reason
+     * {@code Problem#stale} is parameterised on its noun — the query is the same question for every
+     * member, and a second method differing by one enum constant is the copy that survives until
+     * somebody changes one of them.
+     */
+    @Query("""
+            SELECT COUNT(p) FROM DocPage p
+             WHERE p.projectId = :projectId
+               AND p.status = :status
+               AND p.deletedAt IS NULL
+            """)
+    long countLiveByStatus(
+            @Param("projectId") UUID projectId, @Param("status") DocPageStatus status);
+
+    /**
      * The live page documenting one artifact — see {@link DocSubject} and {@code V29}.
      *
      * <p>Scoped by project as well as by subject, even though {@code uq_doc_page_subject} already

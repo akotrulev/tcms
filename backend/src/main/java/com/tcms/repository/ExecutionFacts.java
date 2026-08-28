@@ -168,6 +168,22 @@ class ExecutionFacts {
      * is the thing that keeps being true when that assumption stops holding, and its cost is one
      * line in an already-indexed scan.
      *
+     * <h2>The run join is V72's, and it is the join V45 deliberately did not make</h2>
+     *
+     * <p>{@code V45} §3 takes {@code release_version} off the execution row rather than joining back
+     * to {@code test_run}, <em>"which is what keeps the cheap statement cheap"</em>. {@code V72}'s
+     * configuration name has no such denormalized copy — {@code configuration_id} is on the run and
+     * nowhere else — so the join arrives here, and it is worth being explicit that this is a
+     * reversal rather than an oversight. It is inside the {@code LATERAL}, which is bounded by
+     * {@code LIMIT 1}: the two joins run once per case, against two primary keys, not once per
+     * execution. What V45 refused was a join in the outer scan.
+     *
+     * <p>Both joins are <strong>inner</strong>, which they can be: {@code test_execution.run_id} and
+     * {@code test_run.configuration_id} are {@code NOT NULL} foreign keys, so an execution with no
+     * run or a run with no configuration is not a row the schema can hold. An outer join here would
+     * be defending against a state that cannot arise, and it would hide the one that can — a
+     * migration that ever made either nullable would go silently missing instead of loudly.
+     *
      * <p>§166 gave it a <em>third</em> reader that also makes it redundant: the inner
      * {@code JOIN case_status}, which the last result's {@code kind} needs, drops any row with a
      * null {@code status_id} on its own. Three spellings of one predicate is more than this
@@ -190,6 +206,7 @@ class ExecutionFacts {
                         case_id, company_id, project_id,
                         never_executed, long_unexecuted,
                         last_status_kind, last_executed_at, last_release_version,
+                        last_configuration_name,
                         computed_at)
                 SELECT c.id, c.company_id, c.project_id,
                        last_run.at IS NULL,
@@ -197,14 +214,18 @@ class ExecutionFacts {
                        last_run.kind,
                        last_run.at,
                        last_run.release_version,
+                       last_run.configuration_name,
                        :now
                   FROM test_case c
                   LEFT JOIN LATERAL (
                            SELECT e.executed_at AS at,
                                   s.kind        AS kind,
-                                  e.release_version
+                                  e.release_version,
+                                  cfg.name      AS configuration_name
                              FROM test_execution e
                              JOIN case_status s ON s.id = e.status_id
+                             JOIN test_run    r ON r.id = e.run_id
+                             JOIN configuration cfg ON cfg.id = r.configuration_id
                             WHERE e.case_id = c.id
                               AND e.status_id IS NOT NULL
                               AND e.executed_at IS NOT NULL
@@ -218,6 +239,7 @@ class ExecutionFacts {
                        last_status_kind     = EXCLUDED.last_status_kind,
                        last_executed_at     = EXCLUDED.last_executed_at,
                        last_release_version = EXCLUDED.last_release_version,
+                       last_configuration_name = EXCLUDED.last_configuration_name,
                        computed_at          = EXCLUDED.computed_at
                 """)
                 .setParameter("cutoff", cutoff)

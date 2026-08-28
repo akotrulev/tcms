@@ -175,6 +175,7 @@ public class SuiteService {
 
         List<UUID> suiteIds = live.stream().map(Suite::getId).toList();
         Map<UUID, Long> caseCounts = membership.countsBySuite(companyId, projectId);
+        Map<UUID, SuiteMembership.Arms> arms = membership.armsBySuite(companyId, projectId);
         Map<ConditionKind, Map<UUID, List<SuiteConditionView>>> byKind = conditionsBySuite(suiteIds);
         Map<UUID, List<SuiteConditionView>> pre = byKind.get(ConditionKind.PRE);
         Map<UUID, List<SuiteConditionView>> post = byKind.get(ConditionKind.POST);
@@ -187,6 +188,14 @@ public class SuiteService {
                         suite.getKey(),
                         suite.getName(),
                         suite.getDescription(),
+                        // Same GROUP BY, same default, same reason as the union below.
+                        arms.getOrDefault(suite.getId(), SuiteMembership.Arms.NONE).filed(),
+                        // Read off the list this response already carries rather than counted a
+                        // second time in SQL: the contract defines `addedCount` AS the length of
+                        // `caseIds`, so deriving it any other way would be two answers to one
+                        // question, visibly disagreeing on the same screen.
+                        addedCases.getOrDefault(suite.getId(), List.of()).size(),
+                        arms.getOrDefault(suite.getId(), SuiteMembership.Arms.NONE).tagged(),
                         // A suite with no members has no GROUP BY row at all, so this default is
                         // the normal path for an empty suite rather than a fallback for a broken
                         // query.

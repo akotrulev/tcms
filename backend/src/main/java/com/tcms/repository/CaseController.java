@@ -225,14 +225,7 @@ public class CaseController {
 
         String source = text == null ? "" : text;
         if (source.getBytes(StandardCharsets.UTF_8).length > GherkinScenarios.MAX_PASTE_BYTES) {
-            // Checked here rather than left to a container limit: Tomcat's `maxPostSize` bounds
-            // form bodies only, so a 300 KiB paste would otherwise be read in full and parsed.
-            return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(new Problem(
-                    "payload-too-large",
-                    "Pasted text too large",
-                    HttpStatus.PAYLOAD_TOO_LARGE.value(),
-                    "This endpoint reads one scenario, up to 256 KiB. Import the file instead.",
-                    null));
+            return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(tooLarge());
         }
 
         try {
@@ -240,13 +233,102 @@ public class CaseController {
                     .<ResponseEntity<Object>>map(ResponseEntity::ok)
                     .orElseGet(() -> ResponseEntity.notFound().build());
         } catch (GherkinSyntaxException refused) {
-            return ResponseEntity.badRequest().body(new Problem(
-                    typeOf(refused.reason()),
-                    titleOf(refused.reason()),
-                    HttpStatus.BAD_REQUEST.value(),
-                    "The pasted text could not be read as a scenario.",
-                    Map.of("text", List.of(refused.getMessage()))));
+            return ResponseEntity.badRequest().body(refusal(refused));
         }
+    }
+
+    /**
+     * The 413 both Gherkin endpoints answer, written once.
+     *
+     * <p>Checked in the controller rather than left to a container limit: Tomcat's
+     * {@code maxPostSize} bounds form bodies only, so a 300 KiB paste would otherwise be read in
+     * full and parsed. {@code line} is null — the refusal is about the whole body, and there is no
+     * line in it that is the problem.
+     */
+    private static Problem tooLarge() {
+        return new Problem(
+                "payload-too-large",
+                "Pasted text too large",
+                HttpStatus.PAYLOAD_TOO_LARGE.value(),
+                "This endpoint reads one scenario, up to 256 KiB. Import the file instead.",
+                null,
+                null,
+                null,
+                null);
+    }
+
+    /**
+     * One of the four parse refusals, <strong>with the line it is about</strong> (003 C4, 005 S1).
+     *
+     * <p>Written with the canonical eight-argument constructor rather than the five-argument
+     * compatibility one, because {@code line} is the component this endpoint family exists to fill:
+     * under 003's D1 the author has no row editor to fall back to, so the sentence has to land on
+     * the line it names, and a client regexing the number out of {@code errors.text} would be
+     * parsing prose this server is free to reword. {@code permission} and {@code scope} stay null —
+     * this is a 400 and no key is missing.
+     *
+     * <p>{@code gherkin-empty} sends a null line, and that is the honest answer rather than a gap:
+     * a paste with nothing that parses as a step has no line to point at.
+     */
+    private static Problem refusal(GherkinSyntaxException refused) {
+        return new Problem(
+                typeOf(refused.reason()),
+                titleOf(refused.reason()),
+                HttpStatus.BAD_REQUEST.value(),
+                "The pasted text could not be read as a scenario.",
+                null,
+                null,
+                refused.line(),
+                Map.of("text", List.of(refused.getMessage())));
+    }
+
+    /**
+     * The inverse of the paste above — <strong>the case the editor holds, as {@code .feature}
+     * text</strong> (003 Phase 2).
+     *
+     * <h2>Why it exists, and why an unsaved case needs it</h2>
+     *
+     * <p>{@code GET …/{caseId}/feature} renders a case that has been <em>saved</em>. Under 003 D1
+     * the text is the writing surface, so the editor needs the render of a case that has not been —
+     * and 003 C1 is the finding that there was no path to one: the SPA cannot render it itself,
+     * because a client-side renderer is a second copy of {@link GherkinScenarios} and the two would
+     * disagree on the day either is touched (003 C2's standing rule, arriving from the render side).
+     *
+     * <h2>A POST that creates nothing, with the read gate — {@link #parseGherkin}'s rules exactly</h2>
+     *
+     * <p>The verb is POST because the payload is a whole case and a query string cannot carry one;
+     * the resource is the answer rather than a thing that now exists, so there is no
+     * {@code Location} and no 201. It writes nothing, so it takes the <strong>read</strong> gate and
+     * no write permission, and a caller with no grant on the project gets the same bodiless 404 —
+     * from {@link CaseDetailService#renderGherkin}'s empty {@link java.util.Optional}.
+     *
+     * <p>The same 256 KiB cap and the same {@code payload-too-large} refusal as the paste, measured
+     * on the serialized body Jackson has already read. That is later than the paste measures — the
+     * paste sees the raw string — and it is the earliest point at which a JSON body's size is known
+     * here at all; the container's own limits stand in front of it for anything pathological.
+     *
+     * <p>No 400 of its own: there is nothing to parse. A body Jackson cannot bind is the container's
+     * 400 and a {@code Content-Type} that is not JSON is its 415, both {@code about:blank}, which is
+     * what the contract declares for this path.
+     */
+    // No `produces`, deliberately, though every SUCCESS here is text/plain: the 413 body is a
+    // `Problem`, and a mapping that declared text/plain would make Spring refuse to write it —
+    // turning the size refusal into a content-negotiation failure with nothing in it that explains
+    // the cap. The 200 sets its own content type below, which is where it belongs.
+    @PostMapping(path = "/render-gherkin", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Object> renderGherkin(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @RequestBody CaseUpdateRequest request) {
+
+        return detail.renderGherkin(UUID.fromString(jwt.getSubject()), projectId, request)
+                .<ResponseEntity<Object>>map(text -> text.getBytes(StandardCharsets.UTF_8).length
+                        > GherkinScenarios.MAX_PASTE_BYTES
+                        ? ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(tooLarge())
+                        : ResponseEntity.ok()
+                                .contentType(new MediaType(MediaType.TEXT_PLAIN, StandardCharsets.UTF_8))
+                                .body(text))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -10,6 +11,14 @@ import java.util.UUID;
  *                against a plan list it may not have loaded breaks the moment the run list is shown
  *                on its own, and puts a second copy of "which plan is this" in the client.
  * @param counts  the result bar. Never percentages — see {@link ResultCountsView}.
+ * @param createdBy who opened the run, resolved in the same one-query-per-page pass the plan keys
+ *                and counts use (005 S1). <strong>Null for a {@code SCHEDULED} run</strong> —
+ *                {@code source}'s own description names it as the one value whose run has no
+ *                creator, because a schedule firing is not an act anybody performed — and null for
+ *                a creator who no longer resolves to an account. Served here rather than left to
+ *                the client for {@code planKey}'s reason, one field down: the run list is shown on
+ *                its own, and a client joining ids against a directory it may not have loaded
+ *                renders "Opened by" blank on exactly the screen the column exists for.
  * @param commitSha the code this run tested, if it is known — Git traceability (plan §3 phase 2).
  *                <strong>Here, and not only on the detail, because the detail is built from this
  *                record</strong> ({@link TestRunDetailView#of}) — a field absent from the list view
@@ -31,6 +40,7 @@ public record TestRunView(
         String commitSha,
         String branch,
         RunSource source,
+        UserRef createdBy,
         Instant startedAt,
         Instant completedAt,
         ResultCountsView counts,

@@ -12,8 +12,11 @@ import com.tcms.identity.CompanyMembershipRepository;
 import com.tcms.identity.Role;
 import com.tcms.identity.RoleAssignment;
 import com.tcms.identity.RoleAssignmentRepository;
+import com.tcms.project.EditAfterApproval;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectRepository;
+import com.tcms.project.ReviewImpactSource;
+import com.tcms.project.ReviewSettings;
 import com.tcms.tenancy.Company;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.CompanyRepository;
@@ -118,6 +121,9 @@ class RunCreateEndpointTest extends IntegrationTestBase {
 
     @Autowired
     private TransactionTemplate tx;
+
+    @Autowired
+    private PlanRunGateImpact runGateImpact;
 
     /** In REFUNDS, beneath PAYMENTS. Edited to v2 by one test, before its run is created. */
     private UUID caseA;
@@ -642,6 +648,11 @@ class RunCreateEndpointTest extends IntegrationTestBase {
                             + "named in a meeting")
                     .isEqualTo("NOT_STARTED");
             assertThat(run.get("source").asText()).isEqualTo("MANUAL");
+            // 005 S1 — stored since V1 and served since. The name comes from the caller's COMPANY
+            // MEMBERSHIP (§6u), which is what makes "Opened by" the same words every other screen
+            // in this company uses for the same person.
+            assertThat(run.get("createdBy").get("id").asText()).isEqualTo(LEAD.toString());
+            assertThat(run.get("createdBy").get("displayName").asText()).isNotBlank();
             assertThat(run.get("startedAt").isNull()).isTrue();
             assertThat(run.get("completedAt").isNull()).isTrue();
             assertThat(run.get("planKey").asText()).isEqualTo("TP-1");
@@ -1075,6 +1086,37 @@ class RunCreateEndpointTest extends IntegrationTestBase {
         }
 
         @Test
+        @DisplayName("the review impact names the plans the gate would block, and only while it is on")
+        void blockedPlansAreNamedWhileTheGateIsOn() throws Exception {
+            // The `execution` half of the ReviewImpactSource SPI (005 N7). The endpoint's fold is
+            // ReviewImpactEndpointTest's; what only this class can assert is WHICH plans, because
+            // the plan, its scope and its cases' statuses all have to be real.
+            ReviewSettings on = new ReviewSettings(
+                    false, false, false, false, 0, false, EditAfterApproval.RETAIN, true);
+            ReviewSettings off = new ReviewSettings(
+                    false, false, false, false, 0, false, EditAfterApproval.RETAIN, false);
+
+            assertThat(blocked(ACME_BANKING, off))
+                    .as("with the gate off no run is refused for this reason, so the honest answer "
+                            + "is an empty list and the query is not worth running")
+                    .isEmpty();
+
+            assertThat(blocked(ACME_BANKING, on))
+                    .as("the plan's scope holds caseA and caseB, both DRAFT")
+                    .extracting(ReviewImpactSource.BlockedPlan::planId)
+                    .contains(plan);
+
+            approve(List.of(caseA, caseB));
+
+            assertThat(blocked(ACME_BANKING, on))
+                    .as("approve the scope and the plan stops being blocked — the predicate is "
+                            + "`<> APPROVED` over the RESOLVED set, the same reading the run "
+                            + "refusal uses")
+                    .extracting(ReviewImpactSource.BlockedPlan::planId)
+                    .doesNotContain(plan);
+        }
+
+        @Test
         @DisplayName("approve them all and the same run is created")
         void approvedCasesRunNormally() throws Exception {
             approve(List.of(caseA, caseB));
@@ -1414,6 +1456,13 @@ class RunCreateEndpointTest extends IntegrationTestBase {
             assertThat(lifecycleOf(caseId))
                     .as("and the fixture must actually have got there")
                     .isEqualTo("APPROVED");
+        }
+    }
+
+    /** {@link PlanRunGateImpact}'s answer, in a company scope and a transaction of its own. */
+    private List<ReviewImpactSource.BlockedPlan> blocked(UUID projectId, ReviewSettings settings) {
+        try (var ignored = CompanyContext.open(ACME)) {
+            return tx.execute(status -> runGateImpact.plansBlockedFromRunning(projectId, settings));
         }
     }
 

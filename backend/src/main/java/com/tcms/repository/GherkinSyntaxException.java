@@ -13,6 +13,20 @@ package com.tcms.repository;
  *               message to {@code errors.text}; the four are distinguished because the remedies
  *               differ — a syntax error is fixed by editing the line named, an Outline by expanding
  *               it, several scenarios by pasting one, and an empty paste by writing something.
+ *
+ * <h2>2026-08-28 (003 C4, 005 S1) — the line is a field, not a substring of the message</h2>
+ *
+ * <p>Every refusal but {@code EMPTY} is <em>about</em> a line, and until {@code Problem.line} existed
+ * the only spelling of that was the {@code "Line 4, column 3: …"} prose {@link GherkinScenarios} puts
+ * in front of the message. Under 003's D1 the editor has no row form to fall back to, so the sentence
+ * has to land <strong>on</strong> the line it names — and a client regexing a number out of English
+ * is a parser for a message this server is free to reword. So the line travels beside the message,
+ * {@link CaseController} copies it into {@code Problem.line}, and the prose stays exactly as it was
+ * for the readers that only print it (@tcms/cli, the import's REFUSE rows).
+ *
+ * <p>{@code EMPTY} carries <strong>null</strong>, and that is the honest answer rather than a gap: a
+ * paste with nothing that parses as a step has no line to point at — the remedy is to write
+ * something, anywhere.
  */
 class GherkinSyntaxException extends RuntimeException {
 
@@ -29,12 +43,24 @@ class GherkinSyntaxException extends RuntimeException {
 
     private final Reason reason;
 
+    private final Integer line;
+
     GherkinSyntaxException(Reason reason, String message) {
+        this(reason, message, null);
+    }
+
+    GherkinSyntaxException(Reason reason, String message, Integer line) {
         super(message);
         this.reason = reason;
+        this.line = line;
     }
 
     Reason reason() {
         return reason;
+    }
+
+    /** The 1-based line the refusal is about, or null when there is none to point at. */
+    Integer line() {
+        return line;
     }
 }

@@ -368,9 +368,32 @@ public class CaseHealth {
     @Column(name = "last_release_version")
     private String lastReleaseVersion;
 
+    /**
+     * {@code case_health.last_configuration_name} ({@code V72}, 005 S1) — the environment that
+     * execution ran under.
+     *
+     * <p>The fourth column of one fact, written by the same statement as the three above for
+     * {@code V45}'s reason. The <em>name</em> and not the id: the contract declares a string, a
+     * configuration is unique by name within a project, and storing the id would put a join into
+     * {@code CaseSummaries} on every page of the case grid to recover something this row could
+     * carry. A rename leaves it stale until the next recompute, which is what a read model is.
+     */
+    @Column(name = "last_configuration_name")
+    private String lastConfigurationName;
+
     /** JPA only. */
     protected CaseHealth() {
     }
+
+    /**
+     * What a last result written before {@code V72} says its configuration was.
+     *
+     * <p>Not a configuration anybody named — no project can have one called this, because the write
+     * path trims and a blank name is refused — so it cannot be mistaken for a real environment on
+     * the screen it appears on. It is visible for at most one recompute interval, on rows the
+     * recompute has not reached since the column existed.
+     */
+    private static final String UNKNOWN_CONFIGURATION = "";
 
     public UUID getCaseId() {
         return caseId;
@@ -395,7 +418,16 @@ public class CaseHealth {
     LastResultView lastResult() {
         return lastExecutedAt == null
                 ? null
-                : new LastResultView(lastStatusKind, lastExecutedAt, lastReleaseVersion);
+                // The contract makes `configurationName` required and non-null while the object is
+                // present, and V72's column arrives null on every row written before it — so a row
+                // the recompute has not reached since is resolved here rather than served as a null
+                // into a required field. It is a window of at most one recompute interval, and the
+                // alternative is a response the SPA's own type says cannot happen.
+                : new LastResultView(
+                        lastStatusKind,
+                        lastExecutedAt,
+                        lastReleaseVersion,
+                        lastConfigurationName == null ? UNKNOWN_CONFIGURATION : lastConfigurationName);
     }
 
     /**

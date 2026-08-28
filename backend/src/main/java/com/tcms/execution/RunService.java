@@ -1,13 +1,16 @@
 package com.tcms.execution;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tcms.api.UserRef;
 import com.tcms.project.CaseStatusView;
 import com.tcms.project.ProjectService;
 import com.tcms.tenancy.CompanyContext;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +44,7 @@ public class RunService {
     private final ConfigurationRepository configurations;
     private final ResultStatuses statuses;
     private final ExecutionViews views;
+    private final ExecutionPeople people;
     private final PlanCriteria criteria;
     /** Reads `scope_request` back (B7). The module's own mapper, never a second one. */
     private final ObjectMapper json;
@@ -52,6 +56,7 @@ public class RunService {
             ConfigurationRepository configurations,
             ResultStatuses statuses,
             ExecutionViews views,
+            ExecutionPeople people,
             PlanCriteria criteria,
             ObjectMapper json) {
 
@@ -61,6 +66,7 @@ public class RunService {
         this.configurations = configurations;
         this.statuses = statuses;
         this.views = views;
+        this.people = people;
         this.criteria = criteria;
         this.json = json;
     }
@@ -124,7 +130,8 @@ public class RunService {
             Map<UUID, String> planKeys,
             Map<UUID, ConfigurationView> configurations,
             Map<UUID, CaseStatusView> statuses,
-            Map<UUID, ResultCountsView> counts) {
+            Map<UUID, ResultCountsView> counts,
+            Map<UUID, UserRef> creators) {
     }
 
     private Context contextFor(UUID projectId, List<TestRun> rows) {
@@ -164,7 +171,17 @@ public class RunService {
                     ExecutionViews.tally(byRun.getOrDefault(run.getId(), Map.of()), statusesById));
         }
 
-        return new Context(planKeys, byId, statusesById, counts);
+        // One lookup for the page, like everything else here. A SCHEDULED run contributes no id at
+        // all, so the resolve is asked only about runs somebody actually opened.
+        Set<UUID> creatorIds = new LinkedHashSet<>();
+        for (TestRun run : rows) {
+            if (run.getCreatedBy() != null) {
+                creatorIds.add(run.getCreatedBy());
+            }
+        }
+        Map<UUID, UserRef> creators = people.resolve(CompanyContext.require(), creatorIds);
+
+        return new Context(planKeys, byId, statusesById, counts, creators);
     }
 
     /**
@@ -195,6 +212,10 @@ public class RunService {
                 run.getCommitSha(),
                 run.getBranch(),
                 run.getSource(),
+                // Null for a SCHEDULED run, which has no creator, and null for a creator who no
+                // longer resolves — two different absences the client renders one way, because
+                // "opened by nobody" is what both of them mean to a reader.
+                run.getCreatedBy() == null ? null : context.creators().get(run.getCreatedBy()),
                 run.getStartedAt(),
                 run.getCompletedAt(),
                 context.counts().getOrDefault(

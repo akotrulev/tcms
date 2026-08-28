@@ -24,18 +24,27 @@ import org.springframework.transaction.annotation.Transactional;
  * naming a project the caller does hold — and every cross-company test still passes, because the row
  * is in the caller's own company.
  *
- * <h2>{@code passRate} and {@code coverage} stay null, and now for a better reason</h2>
+ * <h2><s>{@code passRate} and {@code coverage} stay null, and now for a better reason</s> → they are
+ * written, and the reason decided which policy</h2>
  *
- * <p>They were null because the statistics endpoint did not exist. It does
+ * <p><s>They were null because the statistics endpoint did not exist. It does
  * ({@link PlanStatisticsService}), and they are still null — because filling them here would mean
  * resolving every plan's executions <em>once per row of the plan list</em>, which is that endpoint
- * run N times for a screen that shows a bar.
+ * run N times for a screen that shows a bar.</s> <strong>→ 005 S5.</strong> That objection is about
+ * an implementation, and {@link PlanListStatistics} is not it: two queries for the whole page,
+ * neither of them per plan. What made the old sentence right was never the arithmetic, it was the
+ * loop.
  *
- * <p>The deeper reason is the one that would survive making it cheap: a pass rate has no meaning
- * without the aggregation policy that produced it, and the list has nowhere to state one. Two
- * numbers computed under different policies, on two screens, neither of which says which — that is
- * the §6p ambiguity the whole statistics page is shaped to remove. The contract marks both nullable
- * and the SPA renders a null as "not measured", which is true.
+ * <p><strong>The second reason survives intact and decided the design rather than blocking it.</strong>
+ * A pass rate has no meaning without the aggregation policy that produced it, and the list has
+ * nowhere to state one. So the list does not <em>offer</em> one: it reports
+ * {@link AggregationPolicy#LATEST}, the default the statistics page opens on, fixed. Two numbers
+ * computed under different policies on two screens with neither saying which is the §6p ambiguity —
+ * one number under one named policy, matching what a reader sees on the screen they click through
+ * to, is not.
+ *
+ * <p>Null still means "not measured" and the SPA still renders it that way; it now happens on the
+ * plans it is true of rather than on all of them.
  */
 @Service
 public class PlanService {
@@ -46,6 +55,7 @@ public class PlanService {
     private final ConfigurationService configurations;
     private final CaseFacts cases;
     private final PlanCriteria criteria;
+    private final PlanListStatistics statistics;
 
     public PlanService(
             ProjectService projects,
@@ -53,7 +63,8 @@ public class PlanService {
             PlanScopeItemRepository scopeItems,
             ConfigurationService configurations,
             CaseFacts cases,
-            PlanCriteria criteria) {
+            PlanCriteria criteria,
+            PlanListStatistics statistics) {
 
         this.projects = projects;
         this.plans = plans;
@@ -61,6 +72,7 @@ public class PlanService {
         this.configurations = configurations;
         this.cases = cases;
         this.criteria = criteria;
+        this.statistics = statistics;
     }
 
     /**
@@ -87,10 +99,12 @@ public class PlanService {
                     cases.caseCountsBySection(project.getId(), planIds);
             Map<UUID, PlanScope> scopes = scopesOf(planIds);
             List<ConfigurationView> projectConfigurations = configurationsOf(project.getId());
+            Map<UUID, PlanListStatistics.PlanStats> stats =
+                    statistics.forPlans(project.getId(), rows);
 
             return rows.stream()
                     .map(plan -> view(
-                            plan, caseCounts, sectionCounts, scopes, projectConfigurations))
+                            plan, caseCounts, sectionCounts, scopes, projectConfigurations, stats))
                     .toList();
         });
     }
@@ -121,7 +135,11 @@ public class PlanService {
                 cases.caseCountsByPlan(plan.getProjectId(), List.of(plan.getId())),
                 cases.caseCountsBySection(plan.getProjectId(), List.of(plan.getId())),
                 scopesOf(List.of(plan.getId())),
-                configurationsOf(plan.getProjectId()));
+                configurationsOf(plan.getProjectId()),
+                // The same batched pass over a batch of one. A create answers the same numbers the
+                // reload after it will, which is the whole reason this method exists rather than a
+                // second assembler.
+                statistics.forPlans(plan.getProjectId(), List.of(plan)));
     }
 
     /**
@@ -138,10 +156,13 @@ public class PlanService {
             Map<UUID, Long> caseCounts,
             Map<UUID, Map<String, Long>> sectionCounts,
             Map<UUID, PlanScope> scopes,
-            List<ConfigurationView> configurations) {
+            List<ConfigurationView> configurations,
+            Map<UUID, PlanListStatistics.PlanStats> stats) {
 
         PlanScope scope = scopes.getOrDefault(plan.getId(), PlanScope.empty());
         Map<String, Long> counts = sectionCounts.getOrDefault(plan.getId(), Map.of());
+        PlanListStatistics.PlanStats measured =
+                stats.getOrDefault(plan.getId(), PlanListStatistics.PlanStats.NONE);
         return new TestPlanView(
                 plan.getId(),
                 plan.getKey(),
@@ -153,8 +174,10 @@ public class PlanService {
                 // A plan with no scope items has no GROUP BY row at all, so zero is the normal path
                 // for a plan someone has only just named — not a fallback for a broken query.
                 caseCounts.getOrDefault(plan.getId(), 0L),
-                null,
-                null,
+                measured.passRate(),
+                measured.coverage(),
+                measured.exitCriteriaMet(),
+                measured.exitCriteriaTotal(),
                 plan.getDescription(),
                 criteria.parse(plan.getEntryCriteria()),
                 criteria.parse(plan.getExitCriteria()),

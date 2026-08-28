@@ -281,7 +281,34 @@ the wrong tool from a foundation module: it would invert the architecture invisi
 |---|---|
 | *"Not run in 90 days"* | **Design change** — `tcms.case-health.long-unexecuted` is a configurable `Duration`. Reword to *"Not run recently"*. Serving the threshold means a config-disclosure endpoint for one adverb. |
 | Flakiness definition + the null-below-floor state | **Design change** — the render has no state for `flakeScore == null`, which the contract requires be rendered as *"3 results, not enough to score"* and never as blank or `0`. **The render must gain a sixth state.** Zero backend. |
-| `FAILING_REPEATEDLY` copy | **Verify before shipping copy** — derived in `reporting/ExecutionSource.java:244`, tuned by `reporting/ReportingProperties.java:28`. Read the predicate; do not paraphrase it. |
+| `FAILING_REPEATEDLY` copy | **Verify before shipping copy** — derived in `reporting/ExecutionSource.java:244`, tuned by `reporting/ReportingProperties.java:28`. Read the predicate; do not paraphrase it. **Read 2026-08-28 in B3 — see below.** |
+
+#### What `FAILING_REPEATEDLY` actually computes — read 2026-08-28 (build batch B3)
+
+Recorded here so B5/B6's copy is honest and nobody has to re-derive it from SQL.
+`ExecutionSource.recomputeFailingRepeatedly` raises the signal for a live case when, and only when:
+
+- take that case's **`window` most recent rows in `execution_fact`** — default **3**
+  (`tcms.reporting.failing-repeatedly-window`, `ReportingProperties.failingRepeatedlyWindow`),
+  ordered `executed_at DESC NULLS LAST, execution_id DESC`;
+- **every one of them** has `status_kind = 'FAILED'`. The count of `FAILED` in the window is
+  compared to the **window size**, not to the number of rows found — so a case with only one or two
+  recorded results **never** raises it, however badly it did.
+
+Four things the copy must not say:
+
+1. **It is `FAILED`, not "did not pass."** `BLOCKED`, `SKIPPED`, `RETEST` and `UNTESTED` are all
+   not-a-pass and none of them counts. A case blocked three times running does not raise it.
+2. **It is a count of executions, not a period.** There is no "in the last N days" — a case run
+   quarterly and one run nightly both raise it after three consecutive failures.
+3. **It spans every run, plan and configuration in the project.** The window is the case's own
+   history in `execution_fact`, unfiltered by run, plan, release or environment — so three failures
+   across three different configurations raise it exactly as three in one do.
+4. **It reads the fact log, which is history**: a soft-deleted *run* is still in it (deleting a run
+   does not un-run it), while a soft-deleted *case* gets no `case_health` row at all.
+
+Wording that is true: *"failed the last 3 times it ran."* Wording that is not: "failing for N days",
+"failed 3 of the last 10", "failing in this run", "not passing recently".
 
 ### 5.5 §6 — documentation corrections
 

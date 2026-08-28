@@ -22,6 +22,20 @@ import java.util.UUID;
  * @param healthComputedAt null when {@code case_health} has never been derived for this project —
  *                         see {@link DashboardService#health} for why that is not the same as an
  *                         empty {@code health} list and must not render the same way
+ * @param byLastRun one bar per Feature split by <strong>the outcome of each case's last
+ *                  execution</strong> (005 N3) — a different segmentation from the two above, which
+ *                  split by authoring status. A segment's {@code key} is a {@link
+ *                  com.tcms.project.StatusKind} constant or the literal {@link #NEVER_RUN}, and the
+ *                  client labels both from its own catalogue, which is §180's rule applied to a
+ *                  second closed set.
+ *                  <p><strong>Its segments' {@code filter} narrows to the bar and not to the
+ *                  segment, and that is a known shortfall rather than a design.</strong> The case
+ *                  list binds no last-result parameter, so there is no query string that reproduces
+ *                  "this feature's cases that last failed" — {@code NEVER_RUN} is the exception,
+ *                  because {@code healthSignal=NEVER_EXECUTED} is exactly it. The rule this file
+ *                  opens with says a wider filter is worse than a dead link; that is why it is
+ *                  written down here rather than left for a reader to find by clicking. Closing it
+ *                  is a case-list parameter and therefore a contract change.
  */
 public record DashboardView(
         Instant generatedAt,
@@ -30,6 +44,7 @@ public record DashboardView(
         Instant healthComputedAt,
         List<BreakdownView> byFeature,
         List<BreakdownView> byOwner,
+        List<BreakdownView> byLastRun,
         AutomationCoverageView automationCoverage,
         List<ActivityPointView> recentActivity) {
 
@@ -122,6 +137,18 @@ public record DashboardView(
      */
     public record ActivityPointView(LocalDate date, long created, long modified) {
     }
+
+    /**
+     * The segment key for a case with no recorded result — a literal, and deliberately not a
+     * {@link com.tcms.project.StatusKind} member.
+     *
+     * <p>"Never run" is not an outcome, and adding it to the enum would put it in front of every
+     * consumer that switches over one: the plan statistics' severity ranking, the aggregation
+     * policies, {@code counts_as_pass}. It belongs to this panel, so it is spelled here — and it is
+     * spelled once, because the contract names the same literal and the SPA labels it from the same
+     * string.
+     */
+    static final String NEVER_RUN = "NEVER_RUN";
 
     /** A case-list link filtered to one owner, for {@link DashboardService}'s by-owner segments. */
     static Map<String, Object> ownedBy(UUID ownerId, LifecycleStatus status) {

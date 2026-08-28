@@ -1,6 +1,7 @@
 package com.tcms.storage;
 
 import java.util.Optional;
+import java.util.OptionalLong;
 
 /**
  * Where generated report bytes live — <strong>the port</strong>, so an S3 adapter is additive, the
@@ -55,6 +56,21 @@ public interface ReportStore {
 
     /** The bytes, or empty when the key names nothing. <strong>The caller closes it.</strong> */
     Optional<StoredBlob> open(String key);
+
+    /**
+     * How large the stored artifact is, without opening it — {@code ReportJob.sizeBytes} (005 S1).
+     *
+     * <p>Separate from {@link #open} rather than read off the {@link StoredBlob} it returns, and the
+     * reason is what the job list does with it: a page of a hundred jobs would open a hundred
+     * streams to read a number off each and then have to close them all, and a stream leaked on an
+     * exception path is a file handle this module exists to be careful with. The size is metadata;
+     * asking for it should not acquire a resource.
+     *
+     * <p>Empty when the key names nothing — a job that has not completed, or one whose bytes have
+     * gone missing. The caller serves null, which is what the contract declares for a job with no
+     * artifact yet, so a vanished file degrades to "size unknown" rather than to a 500 on a list.
+     */
+    OptionalLong size(String key);
 
     /** Removes the bytes. A key naming nothing is not an error — delete is idempotent. */
     void delete(String key);

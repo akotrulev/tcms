@@ -107,6 +107,9 @@ class ReportJobPipelineTest extends IntegrationTestBase {
     private ReportJobRepository jobs;
 
     @Autowired
+    private ReportReadService reads;
+
+    @Autowired
     private ReportArtifactRepository artifacts;
 
     @Autowired
@@ -273,6 +276,30 @@ class ReportJobPipelineTest extends IntegrationTestBase {
             // version of this pipeline that never wrote a byte.
             assertThat(read(rendered.getStorageKey())).contains("Release 5.0 regression");
             assertThat(read(model.getStorageKey())).contains("\"title\"");
+        }
+
+        @Test
+        @DisplayName("sizeBytes is the stored artifact's size, and null until there is one (005 S1)")
+        void sizeBytesIsTheStoredSize() throws IOException {
+            UUID jobId = accepted(request(LEAD, ACME_PROJECT, RUN_SUMMARY, ReportFormat.MD));
+
+            ReportJobView pending = polled(jobId);
+            assertThat(pending.sizeBytes())
+                    .as("nothing has been rendered yet, so there is nothing to size — and the "
+                            + "contract declares null on the same terms as downloadUrl")
+                    .isNull();
+
+            assertThat(runIn(ACME)).isEqualTo(1);
+
+            ReportJob job = readIn(ACME, () -> jobs.findById(jobId).orElseThrow());
+            long onDisk = read(artifact(job.getArtifactId()).getStorageKey())
+                    .getBytes(StandardCharsets.UTF_8).length;
+
+            assertThat(polled(jobId).sizeBytes())
+                    .as("read from the STORE and not from a column: a column would have needed a "
+                            + "backfill no migration can perform under forced RLS, so every "
+                            + "already-completed job would have served null for ever")
+                    .isEqualTo(onDisk);
         }
 
         @Test
@@ -569,6 +596,14 @@ class ReportJobPipelineTest extends IntegrationTestBase {
         try (var ignored = CompanyContext.open(companyId)) {
             return runner.runPendingJobs();
         }
+    }
+
+    /** The poll's own view — the read path the SPA uses, not a hand-built record. */
+    private ReportJobView polled(UUID jobId) {
+        ReportReadService.Outcome<ReportJobView> outcome =
+                readIn(ACME, () -> reads.poll(LEAD, ACME_PROJECT, jobId));
+        assertThat(outcome).isInstanceOf(ReportReadService.Outcome.Found.class);
+        return ((ReportReadService.Outcome.Found<ReportJobView>) outcome).value();
     }
 
     private static UUID accepted(ReportJobService.Outcome outcome) {

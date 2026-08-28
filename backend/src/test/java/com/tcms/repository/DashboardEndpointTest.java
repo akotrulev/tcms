@@ -196,7 +196,7 @@ class DashboardEndpointTest extends IntegrationTestBase {
             JsonNode body = dashboardAs(LEAD, ACME, ACME_BANKING);
 
             assertThat(List.of("generatedAt", "lifecycle", "health", "healthComputedAt",
-                    "byFeature", "byOwner", "automationCoverage", "recentActivity"))
+                    "byFeature", "byOwner", "byLastRun", "automationCoverage", "recentActivity"))
                     .allSatisfy(field -> assertThat(body.has(field))
                             .as("RepositoryDashboard.%s is required by openapi.yaml", field)
                             .isTrue());
@@ -357,6 +357,59 @@ class DashboardEndpointTest extends IntegrationTestBase {
 
             assertThat(barTotal(body, "byFeature", F_PAYMENTS.toString())).isEqualTo(2);
             assertThat(barTotal(body, "byFeature", F_REFUNDS.toString())).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("byLastRun segments a feature by outcome, and NEVER_RUN is a segment (005 N3)")
+        void lastRunIsADifferentSegmentation() throws Exception {
+            // TC-1 carries both features, TC-2 only Payments. Giving TC-1 a FAILED last result and
+            // leaving TC-2 with none is what makes this panel say something the authoring panels
+            // cannot: a feature can be fully approved and entirely failing.
+            recordLastResult(caseId("tc1"), "FAILED");
+
+            JsonNode body = dashboardAs(LEAD, ACME, ACME_BANKING);
+
+            assertThat(segmentKeys(body, "byLastRun", F_PAYMENTS.toString()))
+                    .as("the literal NEVER_RUN sits beside the StatusKind constants — it is not an "
+                            + "outcome, so it is not an enum member either")
+                    .containsExactlyInAnyOrder("FAILED", "NEVER_RUN");
+            assertThat(segmentCount(body, "byLastRun", F_PAYMENTS.toString(), "FAILED"))
+                    .isEqualTo(1);
+            assertThat(segmentCount(body, "byLastRun", F_PAYMENTS.toString(), "NEVER_RUN"))
+                    .as("derived by subtraction, because a case with no case_health row is not "
+                            + "reachable by grouping on a column that is not there — and it is "
+                            + "exactly the case this segment is about")
+                    .isEqualTo(1);
+
+            assertThat(barTotal(body, "byLastRun", F_PAYMENTS.toString()))
+                    .as("the same denominator as byFeature: one segmentation of one set of cases")
+                    .isEqualTo(barTotal(body, "byFeature", F_PAYMENTS.toString()));
+        }
+
+        @Test
+        @DisplayName("a project nobody has run is one NEVER_RUN segment per feature, not an empty panel")
+        void nothingRunIsStillAPanel() throws Exception {
+            JsonNode body = dashboardAs(LEAD, ACME, ACME_BANKING);
+
+            assertThat(segmentKeys(body, "byLastRun", F_REFUNDS.toString()))
+                    .containsExactly("NEVER_RUN");
+        }
+
+        @Test
+        @DisplayName("the NEVER_RUN segment's filter is exact — it drills to the cases it counts")
+        void theNeverRunSegmentDrills() throws Exception {
+            // The one segment of this panel whose filter reproduces it: never-executed is a health
+            // signal the case list already binds. The StatusKind segments narrow to the BAR and not
+            // to the segment, which is written down on DashboardView#byLastRun rather than left for
+            // a reader to find by clicking — closing it is a case-list parameter and therefore a
+            // contract change.
+            JsonNode body = dashboardAs(LEAD, ACME, ACME_BANKING);
+            JsonNode segment = segmentOf(body, "byLastRun", F_REFUNDS.toString(), "NEVER_RUN");
+
+            assertThat(segment.get("filter").get("healthSignal").get(0).asText())
+                    .isEqualTo("NEVER_EXECUTED");
+            assertThat(segment.get("filter").get("featureId").asText())
+                    .isEqualTo(F_REFUNDS.toString());
         }
 
         @Test
@@ -705,6 +758,64 @@ class DashboardEndpointTest extends IntegrationTestBase {
     }
 
     /** Every segment of every bar in one panel drills to exactly the cases it counted. */
+    /**
+     * Writes one case's last recorded result straight into {@code case_health}.
+     *
+     * <p>The read model, not an execution: {@code repository} may not import {@code execution}, so
+     * the panel reads a derived row and the derivation itself is {@code CaseHealthRecomputeTest}'s.
+     * Writing the row is what lets this class assert the SEGMENTATION without standing up a run.
+     */
+    private void recordLastResult(UUID caseId, String kind) throws SQLException {
+        try (Connection connection = appConnection(ACME)) {
+            try (var statement = connection.prepareStatement("""
+                    INSERT INTO case_health (case_id, company_id, project_id,
+                                             last_status_kind, last_executed_at,
+                                             last_configuration_name)
+                    VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, now(), 'Chrome')
+                    ON CONFLICT (case_id) DO UPDATE
+                       SET last_status_kind = EXCLUDED.last_status_kind,
+                           last_executed_at = EXCLUDED.last_executed_at,
+                           last_configuration_name = EXCLUDED.last_configuration_name
+                    """)) {
+                statement.setString(1, caseId.toString());
+                statement.setString(2, ACME.toString());
+                statement.setString(3, ACME_BANKING.toString());
+                statement.setString(4, kind);
+                statement.execute();
+            }
+        }
+    }
+
+    private List<String> segmentKeys(JsonNode body, String panel, String barId) {
+        List<String> keys = new ArrayList<>();
+        for (JsonNode segment : barOf(body, panel, barId).get("segments")) {
+            keys.add(segment.get("key").asText());
+        }
+        return keys;
+    }
+
+    private long segmentCount(JsonNode body, String panel, String barId, String key) {
+        return segmentOf(body, panel, barId, key).get("count").asLong();
+    }
+
+    private JsonNode segmentOf(JsonNode body, String panel, String barId, String key) {
+        for (JsonNode segment : barOf(body, panel, barId).get("segments")) {
+            if (segment.get("key").asText().equals(key)) {
+                return segment;
+            }
+        }
+        throw new AssertionError(panel + " bar " + barId + " has no segment " + key);
+    }
+
+    private JsonNode barOf(JsonNode body, String panel, String barId) {
+        for (JsonNode bar : body.get(panel)) {
+            if (bar.get("id").asText().equals(barId)) {
+                return bar;
+            }
+        }
+        throw new AssertionError(panel + " has no bar " + barId);
+    }
+
     private void assertSegmentsDrillCorrectly(JsonNode body, String panel) throws Exception {
         int segments = 0;
         for (JsonNode bar : body.get(panel)) {

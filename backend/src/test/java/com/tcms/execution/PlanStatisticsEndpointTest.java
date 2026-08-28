@@ -153,6 +153,8 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
     private UUID mobilePlan;
     /** Scoped, never run. The "not executed yet" branch. */
     private UUID untouchedPlan;
+    /** No scope at all, and one exit criterion — the plan-list row's two null branches (005 S5). */
+    private UUID emptyScopePlan;
 
     private UUID defaultConfiguration;
 
@@ -209,6 +211,13 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
         plan = createPlan(ACME_BANKING, "Release 4.3", List.of(PAYMENTS), List.of(caseB));
         mobilePlan = createPlan(ACME_MOBILE, "Mobile 1.0", List.of(MOBILE_SUITE), List.of());
         untouchedPlan = createPlan(ACME_BANKING, "Release 4.4", List.of(PAYMENTS), List.of());
+        emptyScopePlan = createPlan(ACME_BANKING, "Nothing chosen yet", List.of(), List.of());
+        // Two criteria on the run plan: one this endpoint can evaluate and one it cannot, which is
+        // what makes `exitCriteriaMet` a narrowing rather than a copy of `exitCriteria.length`.
+        setExitCriteria(plan, "Release 4.3", """
+                [{"metric":"coverage","op":">=","value":0},
+                 {"metric":"open_critical","op":"<=","value":0}]
+                """);
 
         defaultConfiguration = configurationOf(ACME_BANKING, true);
         secondConfiguration();
@@ -470,6 +479,99 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
         void theParameterIsCaseInsensitive() throws Exception {
             assertThat(raw(LEAD, ACME, planPath() + "/statistics?aggregation=worst")
                     .getResponse().getStatus()).isEqualTo(200);
+        }
+    }
+
+    @Nested
+    @DisplayName("The plan LIST's own statistics — one batched pass, agreeing with this endpoint")
+    class ListStatistics {
+
+        /**
+         * <strong>The agreement assertion 005 S5 owes.</strong> {@link PlanListStatistics} is a
+         * second implementation of the arithmetic in {@link PlanStatisticsService}, forced by the
+         * same thing that forces {@code rollupTrend}: a per-row answer for a page cannot be
+         * assembled from a per-plan service without running it per row. A duplicated computation
+         * the shape of the read makes unavoidable is kept honest by a test or not at all — the
+         * device {@code SuiteScopeAgreementTest} and {@code RollupAgreementTest} already use.
+         */
+        @Test
+        @DisplayName("the list's passRate and coverage equal the statistics page under LATEST")
+        void theListAgreesWithTheDetail() throws Exception {
+            JsonNode detail = statistics(LEAD, null);
+            JsonNode counts = detail.get("counts");
+            double expectedPassRate = counts.get("passed").asDouble() * 100.0
+                    / counts.get("total").asDouble();
+
+            JsonNode row = planRow(plan);
+
+            assertThat(row.get("passRate").asDouble())
+                    .as("LATEST is what the list reports, fixed — the list has nowhere to state a "
+                            + "policy, so it may not offer a choice of one")
+                    .isCloseTo(expectedPassRate, within(1e-9));
+            assertThat(row.get("coverage").asDouble())
+                    .isCloseTo(detail.get("coveragePercent").asDouble(), within(1e-9));
+        }
+
+        @Test
+        @DisplayName("a plan nobody has run has a null passRate, and a coverage of 0 — not the same thing")
+        void anUnrunPlanHasNoPassRate() throws Exception {
+            // Null and not zero: `0` says every case failed. Coverage IS zero, because the
+            // denominator exists and nothing is covered — the two nullabilities are different
+            // questions and the contract spells both.
+            JsonNode row = planRow(untouchedPlan);
+
+            assertThat(row.get("passRate").isNull()).isTrue();
+            assertThat(row.get("coverage").asDouble()).isZero();
+        }
+
+        @Test
+        @DisplayName("an empty scope has a null coverage — the denominator is zero")
+        void anEmptyScopeHasNoCoverage() throws Exception {
+            JsonNode row = planRow(emptyScopePlan);
+
+            assertThat(row.get("coverage").isNull()).isTrue();
+            assertThat(row.get("passRate").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("exitCriteriaTotal counts what the plan declares; met counts what is TRUE")
+        void exitCriteriaAreCountedNotEvaluatedTwice() throws Exception {
+            JsonNode detail = statistics(LEAD, null);
+            long metOnTheDetail = 0;
+            for (JsonNode criterion : detail.get("exitCriteria")) {
+                if (criterion.get("met").isBoolean() && criterion.get("met").asBoolean()) {
+                    metOnTheDetail++;
+                }
+            }
+
+            JsonNode row = planRow(plan);
+
+            assertThat(row.get("exitCriteriaTotal").asInt())
+                    .isEqualTo(detail.get("exitCriteria").size());
+            assertThat(row.get("exitCriteriaMet").asInt())
+                    .as("a criterion the endpoint cannot evaluate is NOT met here — \"2 of 3\" has "
+                            + "no spelling for \"and one we did not check\", and the detail keeps "
+                            + "the three-valued answer")
+                    .isEqualTo(Math.toIntExact(metOnTheDetail));
+        }
+
+        @Test
+        @DisplayName("a plan with no exit criteria reports 0 of 0, never a null")
+        void noCriteriaIsZeroOfZero() throws Exception {
+            JsonNode row = planRow(emptyScopePlan);
+
+            assertThat(row.get("exitCriteriaMet").asInt()).isZero();
+            assertThat(row.get("exitCriteriaTotal").asInt()).isZero();
+        }
+
+        private JsonNode planRow(UUID planId) throws Exception {
+            JsonNode list = body(get(LEAD, ACME, "/projects/" + ACME_BANKING + "/plans"));
+            for (JsonNode row : list) {
+                if (row.get("id").asText().equals(planId.toString())) {
+                    return row;
+                }
+            }
+            throw new AssertionError("plan " + planId + " is not on the list");
         }
     }
 
@@ -920,6 +1022,31 @@ class PlanStatisticsEndpointTest extends IntegrationTestBase {
 
         return UUID.fromString(created(
                 "/api/v1/projects/" + projectId + "/plans", LEAD, ACME, payload).get("id").asText());
+    }
+
+    /**
+     * Sets a plan's exit criteria through the real {@code PATCH}, so the fixture exercises the one
+     * writer either JSONB column has — {@code PlanCriteria}, which reads them back too.
+     */
+    private void setExitCriteria(UUID planId, String name, String criteria) throws Exception {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        // `name` is required on the PATCH body (PlanEdit) and every other field is leave-alone, so
+        // this is the smallest edit that sets the criteria and touches nothing else.
+        payload.put("name", name);
+        payload.put("exitCriteria", json.readTree(criteria));
+
+        MvcResult saved = mvc.perform(MockMvcRequestBuilders
+                        .patch("/api/v1/projects/" + ACME_BANKING + "/plans/" + planId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(LEAD, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(payload)))
+                .andReturn();
+
+        assertThat(saved.getResponse().getStatus())
+                .as("the fixture depends on the real plan editor; %s",
+                        saved.getResponse().getContentAsString())
+                .isEqualTo(200);
     }
 
     private UUID createRun(String name, UUID configurationId) throws Exception {

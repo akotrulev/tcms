@@ -413,6 +413,21 @@ public class TestRun {
         return completedAt;
     }
 
+    /**
+     * Who opened this run — {@code TestRun.createdBy} on the wire since 005 S1.
+     *
+     * <p>Stored since {@code V1} and served by nothing until then. <strong>Null for a
+     * {@code SCHEDULED} run</strong>, which is the one door nobody walks through: {@code source}'s
+     * own contract description names it as the value whose run has no creator, because a
+     * {@code run_schedule} firing is not an act anybody performed. Also null for a run whose creator
+     * has since been removed from the instance, which the caller renders the same way — see
+     * {@link com.tcms.project.PeopleDirectory#resolve} on why an unresolvable id yields no entry
+     * rather than an invented person.
+     */
+    UUID getCreatedBy() {
+        return createdBy;
+    }
+
     Instant getDeletedAt() {
         return deletedAt;
     }

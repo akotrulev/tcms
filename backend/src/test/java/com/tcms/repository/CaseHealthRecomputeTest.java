@@ -1233,7 +1233,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         void noExecutionsAtAll() {
             recomputeFor(ACME);
             assertThat(lastResultOf(NEVER))
-                    .isEqualTo(new StoredLastResult(null, null, null, true));
+                    .isEqualTo(new StoredLastResult(null, null, null, null, true));
         }
 
         @Test
@@ -1245,7 +1245,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // run" this slice was fixing because it is not obviously wrong on the screen.
             recomputeFor(ACME);
             assertThat(lastResultOf(PLANNED))
-                    .isEqualTo(new StoredLastResult(null, null, null, true));
+                    .isEqualTo(new StoredLastResult(null, null, null, null, true));
         }
 
         @Test
@@ -1258,6 +1258,14 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
                             + "status, which a client may rename to \"Environment down\"")
                     .isEqualTo("BLOCKED");
             assertThat(stored.releaseVersion()).isEqualTo("4.2.0");
+            // V72 — the fourth column of one fact, joined through the execution's run. The NAME,
+            // deliberately not the id: the contract declares a string, a configuration is unique by
+            // name within a project, and storing the id would put a join into CaseSummaries on
+            // every page of the case grid to recover something this row can carry.
+            assertThat(stored.configurationName())
+                    .as("every run has exactly one configuration — configuration_id is a NOT NULL "
+                            + "foreign key — so this is never null on a case that HAS a last result")
+                    .isNotBlank();
             assertThat(stored.executedAt()).isNotNull();
             assertThat(stored.neverExecuted()).isFalse();
         }
@@ -1331,7 +1339,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             // run's verdict on the case forever — and it would leave never_executed correct, so
             // the two would disagree on one grid row.
             assertThat(lastResultOf(RECENT))
-                    .isEqualTo(new StoredLastResult(null, null, null, true));
+                    .isEqualTo(new StoredLastResult(null, null, null, null, true));
         }
     }
 
@@ -3588,7 +3596,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         try (Connection connection = appConnection(companyId);
                 PreparedStatement statement = connection.prepareStatement("""
                         SELECT last_status_kind, last_executed_at, last_release_version,
-                               never_executed
+                               last_configuration_name, never_executed
                           FROM case_health WHERE case_id = CAST(? AS uuid)
                         """)) {
             statement.setString(1, caseId.toString());
@@ -3601,6 +3609,7 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
                         rows.getString("last_status_kind"),
                         at == null ? null : at.toInstant(),
                         rows.getString("last_release_version"),
+                        rows.getString("last_configuration_name"),
                         rows.getBoolean("never_executed"));
             }
         } catch (SQLException e) {
@@ -3616,6 +3625,10 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
      * assert one without the other would make forgetting easy.
      */
     private record StoredLastResult(
-            String kind, Instant executedAt, String releaseVersion, boolean neverExecuted) {
+            String kind,
+            Instant executedAt,
+            String releaseVersion,
+            String configurationName,
+            boolean neverExecuted) {
     }
 }

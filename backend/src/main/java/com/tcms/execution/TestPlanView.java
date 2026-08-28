@@ -20,12 +20,28 @@ import java.util.UUID;
  * assemblers, is the thing that makes a list row and a detail page disagree about a plan's status
  * three slices later.
  *
- * @param passRate <strong>null, always, in this slice.</strong> It is an aggregate over the plan's
- *                 runs, which is the statistics endpoint this slice does not implement — and the
- *                 contract marks it nullable precisely so "not computed" has a spelling. A plan with
- *                 no executions genuinely has no pass rate; 0 would read as total failure.
- * @param coverage null for the same reason. Coverage needs a denominator that spans
- *                 {@code repository} and {@code reporting}.
+ * @param passRate <s><strong>null, always, in this slice.</strong> It is an aggregate over the
+ *                 plan's runs, which is the statistics endpoint this slice does not implement — and
+ *                 the contract marks it nullable precisely so "not computed" has a spelling.</s>
+ *                 → <strong>written since 005 S5</strong>, by {@link PlanListStatistics} in one
+ *                 batched pass over the page rather than by running the statistics endpoint per row.
+ *                 Percentage 0-100 over the plan's scope under {@link AggregationPolicy#LATEST} —
+ *                 the list has nowhere to state a policy, so it states one fixed reading rather than
+ *                 varying invisibly, which is that class's whole argument.
+ *                 <p>What survives unchanged is the nullability and its meaning: a plan with no
+ *                 executions genuinely has no pass rate, and {@code 0} would read as total failure.
+ * @param coverage <s>null for the same reason. Coverage needs a denominator that spans
+ *                 {@code repository} and {@code reporting}.</s> → the denominator is the plan's own
+ *                 scope, which {@link CaseFacts} has expanded since M2 and neither of those modules
+ *                 is needed for. Null for an empty scope, where the denominator is zero.
+ * @param exitCriteriaMet how many of {@link #exitCriteria} are currently met, and
+ * @param exitCriteriaTotal how many the plan declares — "2 of 3" on the list row (005 N2). The
+ *                 <em>count</em>, not the criteria themselves, which this record already carries in
+ *                 full: the number is what a list row has space for. Computed in the same batched
+ *                 pass as {@code passRate}, because splitting it would be two passes over one
+ *                 dataset. A criterion this pass cannot evaluate counts as not met — "2 of 3" has no
+ *                 spelling for "and one we did not check", and {@link CriterionView#met} keeps the
+ *                 three-valued answer for the detail, which is where a reader goes to see which.
  * @param caseCount <strong>not</strong> null, and not the number of scope items: a scope item that
  *                 names a folder means the folder and everything beneath it. See
  *                 {@link CaseFacts#caseCountsByPlan}.
@@ -51,6 +67,8 @@ public record TestPlanView(
         long caseCount,
         Double passRate,
         Double coverage,
+        int exitCriteriaMet,
+        int exitCriteriaTotal,
         String description,
         List<CriterionView> entryCriteria,
         List<CriterionView> exitCriteria,

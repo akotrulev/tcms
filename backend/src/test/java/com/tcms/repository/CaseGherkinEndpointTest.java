@@ -414,6 +414,228 @@ class CaseGherkinEndpointTest extends IntegrationTestBase {
     }
 
     @Nested
+    @DisplayName("the refusal names its line, structured")
+    class RefusalLines {
+
+        // 003 C4: under D1 the author has no row editor to fall back to, so the sentence has to
+        // land ON the line it names — and a client regexing the number out of `errors.text` would
+        // be parsing prose this server is free to reword. `Problem.line` is what makes that
+        // structural, and these arms are what stop it being null for want of a throw site.
+
+        @Test
+        @DisplayName("a syntax error carries the parser's own line")
+        void aSyntaxErrorCarriesItsLine() throws Exception {
+            JsonNode problem = json.readTree(parse(ENGINEER, ACME_BANKING, """
+                    Feature: F
+                      Scenario: S
+                        Given a captured payment
+                      this line is not anything
+                    """));
+
+            assertThat(problem.get("line").asInt())
+                    .as("the same 4 the sentence names — one Location read twice, never a number "
+                            + "parsed back out of the prose")
+                    .isEqualTo(4);
+        }
+
+        @Test
+        @DisplayName("an Outline carries the Outline's line")
+        void anOutlineCarriesItsLine() throws Exception {
+            JsonNode problem = json.readTree(parse(ENGINEER, ACME_BANKING, """
+                    Feature: F
+
+                      Scenario Outline: a template
+                        Given a balance of <amount>
+
+                        Examples:
+                          | amount |
+                          | 10     |
+                    """));
+
+            assertThat(problem.get("line").asInt()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("two scenarios point at the SECOND one — the line to cut from")
+        void manyScenariosPointAtTheSurplus() throws Exception {
+            // Not the first. The first scenario is the one the author is keeping, and marking it
+            // would say "this is the problem" about the half of the paste that is fine.
+            JsonNode problem = json.readTree(parse(ENGINEER, ACME_BANKING, """
+                    Feature: F
+                      Scenario: A
+                        Given a captured payment
+                      Scenario: B
+                        Given a second payment
+                    """));
+
+            assertThat(problem.get("line").asInt()).isEqualTo(4);
+        }
+
+        @Test
+        @DisplayName("an empty paste sends no line at all")
+        void anEmptyPasteSendsNoLine() throws Exception {
+            // Null, and omitted by @JsonInclude(NON_NULL). A paste with nothing that parses as a
+            // step has no line to point at — the remedy is to write something, anywhere — and a
+            // fabricated 1 would put a marker on a line the author has no reason to look at.
+            JsonNode problem = json.readTree(parse(ENGINEER, ACME_BANKING, "# nothing\n"));
+
+            assertThat(problem.get("type").asText()).isEqualTo("gherkin-empty");
+            assertThat(problem.has("line")).isFalse();
+        }
+
+        @Test
+        @DisplayName("the 413 sends no line either")
+        void theSizeRefusalSendsNoLine() throws Exception {
+            MvcResult result = mvc.perform(MockMvcRequestBuilders
+                            .post(parsePath(ACME_BANKING))
+                            .header("Authorization", "Bearer " + tokenFor(ENGINEER, ACME))
+                            .contentType(MediaType.TEXT_PLAIN)
+                            .content("Given a step\n".repeat(30_000)))
+                    .andReturn();
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(413);
+            assertThat(json.readTree(result.getResponse().getContentAsString()).has("line"))
+                    .as("the refusal is about the whole body; no line in it is the problem")
+                    .isFalse();
+        }
+    }
+
+    // =====================================================================
+    // POST .../cases/render-gherkin  — 003 Phase 2
+    // =====================================================================
+
+    @Nested
+    @DisplayName("rendering a case the editor has not saved")
+    class Rendering {
+
+        @Test
+        @DisplayName("the Feature line is the suite's name, resolved server-side")
+        void theFeatureNameComesFromTheSuite() throws Exception {
+            // 003 C3's trap: the `Feature:` line renders the SUITE NAME, which the editor does not
+            // hold and must not be asked for — a client that sent it could make the render disagree
+            // with the export by editing one string.
+            String text = render(ENGINEER, ACME_BANKING, """
+                    {"title": "A refund lands", "suiteId": "%s", "stepFormat": "GHERKIN",
+                     "priority": "MEDIUM", "automationStatus": "MANUAL",
+                     "steps": [{"keyword": "GIVEN", "action": "a captured payment"}]}
+                    """.formatted(SUITE));
+
+            assertThat(text).startsWith("Feature: Refunds\n");
+            assertThat(text).contains("  Scenario: A refund lands\n");
+            assertThat(text).contains("    Given a captured payment\n");
+        }
+
+        @Test
+        @DisplayName("an unfiled case still renders — the header is bare, not an error")
+        void anUnfiledCaseRenders() throws Exception {
+            String text = render(ENGINEER, ACME_BANKING, """
+                    {"title": "Nowhere in particular", "stepFormat": "GHERKIN",
+                     "priority": "MEDIUM", "automationStatus": "MANUAL",
+                     "steps": [{"keyword": "GIVEN", "action": "a captured payment"}]}
+                    """);
+
+            assertThat(text).startsWith("Feature: \n");
+        }
+
+        @Test
+        @DisplayName("preconditions render as Background, resolved from the library")
+        void preconditionsBecomeBackground() throws Exception {
+            // D6: the text carries the case's OWN preconditions, and the editor sends ids. The
+            // bodies are the library's, which is the second thing this endpoint resolves.
+            String text = render(ENGINEER, ACME_BANKING, """
+                    {"title": "A refund lands", "suiteId": "%s", "stepFormat": "GHERKIN",
+                     "priority": "MEDIUM", "automationStatus": "MANUAL",
+                     "preconditions": [{"conditionId": "%s"}],
+                     "steps": [{"keyword": "GIVEN", "action": "a captured payment"}]}
+                    """.formatted(SUITE, PRECONDITION));
+
+            assertThat(text).contains("  Background:\n");
+            assertThat(text).contains("    Given the operator is signed in\n");
+        }
+
+        @Test
+        @DisplayName("render → parse → render is stable")
+        void theRenderSurvivesTheRoundTrip() throws Exception {
+            // The contract's own claim for this path, and the reason it is asserted here rather
+            // than trusted: `everyConstructSurvivesTheRoundTrip` pins the SAVED render, and this
+            // endpoint is a second entry into the same renderer.
+            String once = render(ENGINEER, ACME_BANKING, """
+                    {"title": "A refund lands", "suiteId": "%s", "stepFormat": "GHERKIN",
+                     "priority": "MEDIUM", "automationStatus": "MANUAL",
+                     "steps": [{"keyword": "GIVEN", "action": "a captured payment"},
+                               {"keyword": "THEN", "action": "the balance falls",
+                                "expectedResult": "the balance falls by 100"}]}
+                    """.formatted(SUITE));
+
+            JsonNode parsed = json.readTree(parse(ENGINEER, ACME_BANKING, once));
+            assertThat(parsed.get("title").asText()).isEqualTo("A refund lands");
+            assertThat(parsed.get("steps")).hasSize(2);
+            assertThat(parsed.get("steps").get(1).get("expectedResult").asText())
+                    .isEqualTo("the balance falls by 100");
+        }
+
+        @Test
+        @DisplayName("a member with no grant on the project gets 404, not a render")
+        void theGateIsProjectVisibility() throws Exception {
+            // The READ gate and no write permission, exactly as the paste has: it stores nothing.
+            MvcResult result = mvc.perform(MockMvcRequestBuilders
+                            .post(renderPath(ACME_BANKING))
+                            .header("Authorization", "Bearer " + tokenFor(NO_GRANT, ACME))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"title": "T", "stepFormat": "GHERKIN", "priority": "MEDIUM",
+                                     "automationStatus": "MANUAL", "steps": []}
+                                    """))
+                    .andReturn();
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(404);
+            assertThat(result.getResponse().getContentAsString()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a rendered document over the cap is a 413, same slug as the paste")
+        void anOversizedRenderIsA413() throws Exception {
+            StringBuilder steps = new StringBuilder();
+            for (int i = 0; i < 20_000; i++) {
+                steps.append(i == 0 ? "" : ",")
+                        .append("{\"keyword\": \"GIVEN\", \"action\": \"a captured payment ")
+                        .append(i).append("\"}");
+            }
+
+            MvcResult result = mvc.perform(MockMvcRequestBuilders
+                            .post(renderPath(ACME_BANKING))
+                            .header("Authorization", "Bearer " + tokenFor(ENGINEER, ACME))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"title": "Large", "stepFormat": "GHERKIN",
+                                     "priority": "MEDIUM", "automationStatus": "MANUAL",
+                                     "steps": [%s]}
+                                    """.formatted(steps)))
+                    .andReturn();
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(413);
+            assertThat(json.readTree(result.getResponse().getContentAsString())
+                    .get("type").asText())
+                    .isEqualTo("payload-too-large");
+        }
+
+        @Test
+        @DisplayName("a text/plain body is a 415 — this operation reads JSON")
+        void aTextBodyIsA415() throws Exception {
+            // The mirror of the paste's arm one nested class up, and the same reasoning: without
+            // `consumes`, Spring would bind something.
+            MvcResult result = mvc.perform(MockMvcRequestBuilders
+                            .post(renderPath(ACME_BANKING))
+                            .header("Authorization", "Bearer " + tokenFor(ENGINEER, ACME))
+                            .contentType(MediaType.TEXT_PLAIN)
+                            .content("Given a captured payment"))
+                    .andReturn();
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(415);
+        }
+    }
+
+    @Nested
     @DisplayName("the two halves agree")
     class RoundTrip {
 
@@ -463,6 +685,27 @@ class CaseGherkinEndpointTest extends IntegrationTestBase {
                         .contentType(MediaType.TEXT_PLAIN)
                         .content(text))
                 .andReturn().getResponse().getContentAsString();
+    }
+
+    /** The render endpoint's body, whichever status it came with. */
+    private String render(UUID userId, UUID projectId, String body) throws Exception {
+        MvcResult result = mvc.perform(MockMvcRequestBuilders
+                        .post(renderPath(projectId))
+                        .header("Authorization", "Bearer " + tokenFor(userId, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andReturn();
+
+        assertThat(result.getResponse().getStatus())
+                .as("the render answered %s: %s",
+                        result.getResponse().getStatus(),
+                        result.getResponse().getContentAsString())
+                .isEqualTo(200);
+        return result.getResponse().getContentAsString();
+    }
+
+    private static String renderPath(UUID projectId) {
+        return "/api/v1/projects/" + projectId + "/cases/render-gherkin";
     }
 
     private static String parsePath(UUID projectId) {

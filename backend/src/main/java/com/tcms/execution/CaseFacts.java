@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -548,6 +549,100 @@ class CaseFacts {
                     (String) row[6]));
         }
         return List.copyOf(scoped);
+    }
+
+    /**
+     * The live cases each of several plans covers, as ids — {@link #caseIdsInPlanScope} batched.
+     *
+     * <p>The <strong>fifth</strong> caller of {@link #scopeMatch()}, and here for the reason the
+     * other four are: the plan list's pass rate and coverage are denominated on the same expansion
+     * the list's own {@code caseCount} is counted from, so a row reading "40 cases · 50%" cannot be
+     * describing two different sets of cases.
+     *
+     * <p>Batched rather than looped for {@link #caseCountsByPlan}'s reason — this serves a page, and
+     * one query per plan is the shape {@link PlanService} declined to build the statistics with in
+     * the first place.
+     *
+     * @return plan id → its case ids. A plan with an empty scope is <strong>absent</strong> rather
+     *         than mapped to an empty set, which is the same shape every grouped read here has; the
+     *         caller reads it through {@code getOrDefault}.
+     */
+    Map<UUID, Set<UUID>> caseIdsByPlans(UUID projectId, Collection<UUID> planIds) {
+        if (planIds.isEmpty()) {
+            return Map.of();
+        }
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery("""
+                        SELECT DISTINCT i.plan_id, c.id
+                        FROM plan_scope_item i
+                        LEFT JOIN suite s ON s.id = i.suite_id AND s.deleted_at IS NULL
+                        JOIN test_case c
+                          ON c.project_id = :projectId
+                         AND c.deleted_at IS NULL
+                         AND %s
+                        WHERE i.plan_id IN (:planIds)
+                        """.formatted(scopeMatch()))
+                .setParameter("projectId", projectId)
+                .setParameter("planIds", planIds)
+                .getResultList();
+
+        Map<UUID, Set<UUID>> byPlan = new HashMap<>();
+        for (Object[] row : rows) {
+            byPlan.computeIfAbsent((UUID) row[0], id -> new HashSet<>()).add((UUID) row[1]);
+        }
+        return byPlan;
+    }
+
+    /**
+     * The project's live plans whose scope holds a case that is <strong>not</strong>
+     * {@code APPROVED} — the runs §6g's gating rule would refuse (005 N7, the {@code execution} half
+     * of the {@code ReviewImpactSource} SPI).
+     *
+     * <p>{@link #unapprovedCases} asked the same question of a run's <em>materialised</em> case set,
+     * at the moment somebody creates one. This asks it of every plan at once, before anybody has
+     * tried — which is the whole point of a blast radius: the settings screen is where the gate is
+     * switched on, and "4 plans would stop being runnable" is the sentence that turns an abstract
+     * toggle into a decision.
+     *
+     * <p>The predicate is the same {@code <> 'APPROVED'} and it is the same reading for the same
+     * reason ({@link #unapprovedCases}): refusing everything that is not the one approved state is
+     * what cannot silently widen when the ladder grows a fifth value.
+     *
+     * <p>{@code EXISTS} rather than a count: one offending case is the whole answer, and the caller
+     * names plans rather than cases — "3 plans" is not actionable, which is why
+     * {@code ReviewImpact.plansBlockedFromRunning} carries keys and names.
+     *
+     * <p>Archived plans are excluded with deleted ones. An archived plan is out of the working list
+     * by {@code V65}'s own argument, and nobody is about to run it — counting it would inflate the
+     * warning with plans whose being blocked costs nothing.
+     *
+     * @return {@code [planId, key, name]} per blocked plan, ordered by {@code key_seq} so the
+     *         screen's list is the plan list's order
+     */
+    List<Object[]> plansBlockedByUnapprovedCases(UUID projectId) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery("""
+                        SELECT p.id, p.key, p.name
+                        FROM test_plan p
+                        WHERE p.project_id = :projectId
+                          AND p.deleted_at IS NULL
+                          AND p.archived_at IS NULL
+                          AND EXISTS (
+                              SELECT 1
+                                FROM plan_scope_item i
+                                LEFT JOIN suite s ON s.id = i.suite_id AND s.deleted_at IS NULL
+                                JOIN test_case c
+                                  ON c.project_id = :projectId
+                                 AND c.deleted_at IS NULL
+                                 AND %s
+                               WHERE i.plan_id = p.id
+                                 AND c.lifecycle_status <> 'APPROVED')
+                        ORDER BY p.key_seq
+                        """.formatted(scopeMatch()))
+                .setParameter("projectId", projectId)
+                .getResultList();
+        return List.copyOf(rows);
     }
 
     /**

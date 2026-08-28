@@ -110,6 +110,82 @@ public class SuiteMembership {
     }
 
     /**
+     * The same union <strong>split into its three arms</strong> — {@code Suite.filedCount},
+     * {@code addedCount} and {@code taggedCount} (005 S1).
+     *
+     * <h2>One query, not three, and not a second predicate</h2>
+     *
+     * <p>The arms are counted by {@code FILTER} clauses over the <em>same</em> join
+     * {@link #countsBySuite} unions, so an arm cannot select a case the union does not — which is
+     * the whole class of defect this class exists to prevent, arriving one level down. Three
+     * separate queries would each carry their own copy of "live case in this project", and the
+     * first one to learn about a new exclusion would silently disagree with the other two.
+     *
+     * <p><strong>They do not sum to the count beside them, and that is the design.</strong> A case
+     * filed here and also carrying one of the suite's tags is in two arms and in the union once; the
+     * contract says so on the field, and a client that renders them as a total is rendering a number
+     * that is wrong for every suite whose arms overlap. The union is served alongside precisely so
+     * nobody has to add these up to get it.
+     *
+     * <p>{@code addedCount} is <strong>not</strong> here: it is the length of {@code caseIds}, which
+     * the caller already loads for the same response, and counting it a second time in SQL would be
+     * two answers to one question — {@code SuiteService.render} takes the list's own size.
+     *
+     * @return suite id → {@link Arms}. A suite with no members at all is absent rather than zero,
+     *         exactly as {@link #countsBySuite} leaves it; the caller renders the default.
+     */
+    @Transactional(readOnly = true)
+    Map<UUID, Arms> armsBySuite(UUID companyId, UUID projectId) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery("""
+                        SELECT s.id,
+                               COUNT(DISTINCT c.id) FILTER (WHERE c.suite_id = s.id),
+                               COUNT(DISTINCT c.id) FILTER (
+                                   WHERE EXISTS (SELECT 1 FROM suite_tag_rule r
+                                                   JOIN case_tag t
+                                                     ON t.tag = r.tag AND t.case_id = c.id
+                                                  WHERE r.suite_id = s.id))
+                          FROM suite s
+                          JOIN test_case c
+                            ON c.company_id = s.company_id
+                           AND c.project_id = s.project_id
+                           AND c.deleted_at IS NULL
+                           AND ( c.suite_id = s.id
+                              OR EXISTS (SELECT 1 FROM suite_case m
+                                          WHERE m.suite_id = s.id AND m.case_id = c.id)
+                              OR EXISTS (SELECT 1 FROM suite_tag_rule r
+                                           JOIN case_tag t ON t.tag = r.tag AND t.case_id = c.id
+                                          WHERE r.suite_id = s.id) )
+                         WHERE s.company_id = :companyId
+                           AND s.project_id = :projectId
+                           AND s.deleted_at IS NULL
+                         GROUP BY s.id
+                        """)
+                .setParameter("companyId", companyId)
+                .setParameter("projectId", projectId)
+                .getResultList();
+
+        Map<UUID, Arms> arms = new HashMap<>();
+        for (Object[] row : rows) {
+            arms.put((UUID) row[0], new Arms(
+                    ((Number) row[1]).longValue(), ((Number) row[2]).longValue()));
+        }
+        return arms;
+    }
+
+    /**
+     * Two of a suite's three membership arms — the two only SQL can answer.
+     *
+     * @param filed  cases whose {@code suite_id} is this suite
+     * @param tagged live cases matching any of the suite's tag rules, however many of them match
+     */
+    record Arms(long filed, long tagged) {
+
+        /** The normal answer for a suite nobody has filed, added or tagged anything into. */
+        static final Arms NONE = new Arms(0, 0);
+    }
+
+    /**
      * Every live case in one suite, by the whole union — the set a run scoped on that suite covers,
      * and the set the case grid's {@code suiteId} filter selects.
      *

@@ -152,6 +152,9 @@ class DocPageEndpointTest extends IntegrationTestBase {
     @Autowired
     private TransactionTemplate tx;
 
+    @Autowired
+    private DocReviewImpact reviewImpact;
+
     @BeforeEach
     void seed() throws SQLException {
         Instant now = Instant.now();
@@ -323,6 +326,33 @@ class DocPageEndpointTest extends IntegrationTestBase {
             assertThat(setStatus(ENGINEER, ACME_BANKING, id, "PUBLISHED").getResponse().getStatus())
                     .isEqualTo(200);
             assertThat(statusOf(ACME, id)).isEqualTo("PUBLISHED");
+        }
+
+        @Test
+        @DisplayName("the review impact counts DRAFT pages, and only those (005 N7)")
+        void draftPagesAreTheReviewImpactCount() throws Exception {
+            // The `documentation` half of the ReviewImpactSource SPI. The endpoint's own fold is
+            // pinned by ReviewImpactEndpointTest; what only this class can assert is the NUMBER,
+            // because the pages have to be created through the endpoint that creates them.
+            int before = draftPages(ACME_BANKING);
+
+            UUID draft = idOf(create(ENGINEER, ACME_BANKING, page("Still being written", null)));
+            UUID published = idOf(create(ENGINEER, ACME_BANKING, page("Ready", null)));
+            assertThat(setStatus(LEAD, ACME_BANKING, published, "PUBLISHED")
+                    .getResponse().getStatus()).isEqualTo(200);
+            UUID archived = idOf(create(ENGINEER, ACME_BANKING, page("Retired", null)));
+            assertThat(setStatus(LEAD, ACME_BANKING, archived, "ARCHIVED")
+                    .getResponse().getStatus()).isEqualTo(200);
+
+            assertThat(draftPages(ACME_BANKING))
+                    .as("ARCHIVED is a third state and is not a draft: counting a retired page as "
+                            + "review work tells a lead they have pages to get through that nobody "
+                            + "intends to publish")
+                    .isEqualTo(before + 1);
+            assertThat(draft).isNotNull();
+
+            // A sibling project's drafts are not this project's work.
+            assertThat(draftPages(ACME_LOCKED)).isNotEqualTo(before + 1);
         }
 
         @Test
@@ -1778,6 +1808,13 @@ class DocPageEndpointTest extends IntegrationTestBase {
                         .get("/api/v1/projects/" + projectId + "/doc-pages/" + pageId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyOf(userId))))
                 .andReturn();
+    }
+
+    /** {@link DocReviewImpact}'s answer, read in a company scope and a transaction of its own. */
+    private int draftPages(UUID projectId) {
+        try (var ignored = CompanyContext.open(ACME)) {
+            return tx.execute(status -> reviewImpact.draftDocPages(projectId));
+        }
     }
 
     private MvcResult create(UUID userId, UUID projectId, String payload) throws Exception {

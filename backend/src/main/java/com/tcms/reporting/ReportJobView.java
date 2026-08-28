@@ -41,6 +41,18 @@ import java.util.UUID;
  * gate, and a route keyed by artifact would have to prove the artifact's project through the job
  * anyway ({@link ReportJobRepository#findByArtifact}).
  *
+ * @param sizeBytes the rendered artifact's size, or <strong>null when there is no artifact</strong>
+ *     — a job that has not completed, one that failed, and one whose bytes have gone missing from
+ *     the store. Joined here (005 S1) so a list of jobs can say "2.4 MB" without a call per row, and
+ *     named with its unit after {@code Artifact.sizeBytes} rather than as a bare {@code size}: a
+ *     number called "size" beside a report is as readable as pages, rows or bytes, and only one of
+ *     those is true.
+ *     <p>Read from the <em>store</em> and not from a column, which is a decision rather than an
+ *     omission. {@code report_artifact} has no size and adding one would have meant a backfill no
+ *     migration can perform — Flyway runs as {@code tcms_owner}, which holds no {@code BYPASSRLS},
+ *     so an {@code UPDATE} over a forced-RLS table reports a confident zero rows ({@code V45} §4).
+ *     Every already-completed job would have served null for ever, on exactly the rows this field
+ *     exists to describe. One {@code stat} per row answers all of them.
  * @param modelUrl the serialized {@link ReportModel} — written for every job, so the on-screen view
  *     and the export are one model rendered twice rather than two computations that can disagree
  *     (plan §6e). Null in exactly the states that have no stored model, so a client that follows the
@@ -54,9 +66,21 @@ public record ReportJobView(
         Instant requestedAt,
         String downloadUrl,
         String modelUrl,
-        String error) {
+        String error,
+        Long sizeBytes) {
 
+    /**
+     * A job with no size resolved — every caller that is not the job list or the poll.
+     *
+     * <p>Null rather than a lookup, and the two callers that <em>can</em> answer pass it in. The
+     * accept (202) is the interesting one: nothing has been rendered yet by construction, so a size
+     * would be null however hard it were sought.
+     */
     static ReportJobView of(ReportJob job) {
+        return of(job, null);
+    }
+
+    static ReportJobView of(ReportJob job, Long sizeBytes) {
         return new ReportJobView(
                 job.getId(),
                 job.getType(),
@@ -65,7 +89,8 @@ public record ReportJobView(
                 job.getRequestedAt(),
                 contentUrl(job.getProjectId(), job.getArtifactId()),
                 modelUrl(job),
-                job.getError());
+                job.getError(),
+                sizeBytes);
     }
 
     /**

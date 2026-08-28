@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import com.tcms.project.StatusKind;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Tuple;
@@ -124,6 +125,111 @@ class DashboardTallies {
                     .put((LifecycleStatus) row.get(1), (Long) row.get(2));
         }
         return counts;
+    }
+
+    /**
+     * Case counts grouped by classification value and <strong>the outcome of the case's last
+     * execution</strong> — the by-last-run bars (005 N3).
+     *
+     * <h2>A different segmentation, not a different panel</h2>
+     *
+     * <p>{@link #byClassification} splits a Feature's cases by where they are in <em>authoring</em>;
+     * this splits the same cases by what happened when they were last <em>run</em>. Both are needed
+     * and neither substitutes: a feature can be fully approved and entirely failing.
+     *
+     * <p>Read from {@code case_health}, which is the same row {@code TestCaseSummary.lastResult}
+     * is served from, so a bar and the grid it opens cannot disagree about a case's last result. It
+     * is also why this is a stored-column read rather than a join into {@code execution}: the module
+     * boundary that made {@code V45} a read model has not moved.
+     *
+     * <h2>Two queries, because the absent row is the interesting segment</h2>
+     *
+     * <p>A case that has never been executed has {@code last_status_kind} null — or no
+     * {@code case_health} row at all, which is the state of every case in a project the recompute
+     * has not reached. Both are the same fact and both must land in the {@code NEVER_RUN} segment,
+     * and neither is reachable by grouping on a column that is not there. So the kinds are counted
+     * by an inner join and the <em>total</em> per value is counted separately; the caller subtracts.
+     *
+     * <p>Deriving it the other way — an outer join with a {@code COALESCE} — is one query and it
+     * needs {@code case_health} joined as an unrelated entity through Criteria, which builds an
+     * inner join and silently drops exactly the cases this segment is about. The subtraction is the
+     * arrangement in which the absent row cannot go missing.
+     *
+     * @return value id → kind → count, holding <strong>only</strong> the cases with a recorded last
+     *         result. {@link #totalsByClassification} answers the denominator.
+     */
+    Map<UUID, Map<String, Long>> byClassificationAndLastRun(
+            CaseQuery request, CaseScope scope, List<UUID> valueIds) {
+
+        if (valueIds.isEmpty()) {
+            return Map.of();
+        }
+
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Tuple> query = cb.createTupleQuery();
+        Root<CaseClassification> classification = query.from(CaseClassification.class);
+
+        Subquery<UUID> matching = query.subquery(UUID.class);
+        Root<TestCase> cases = matching.from(TestCase.class);
+        matching.select(cases.get("id"))
+                .where(CaseSpecifications.where(request, scope, cases, matching, cb));
+
+        Root<CaseHealth> health = query.from(CaseHealth.class);
+        Path<StatusKind> kind = health.get("lastStatusKind");
+
+        query.multiselect(classification.get("valueId"), kind, cb.count(classification))
+                .where(cb.and(
+                        cb.equal(health.get("caseId"), classification.get("caseId")),
+                        classification.get("caseId").in(matching),
+                        classification.get("valueId").in(valueIds),
+                        // The predicate that makes this an inner join over RECORDED results only. A
+                        // row exists for every case the recompute has seen, executed or not.
+                        cb.isNotNull(kind)))
+                .groupBy(classification.get("valueId"), kind);
+
+        Map<UUID, Map<String, Long>> counts = new LinkedHashMap<>();
+        for (Tuple row : entityManager.createQuery(query).getResultList()) {
+            counts.computeIfAbsent((UUID) row.get(0), id -> new LinkedHashMap<>())
+                    .put(((StatusKind) row.get(1)).name(), (Long) row.get(2));
+        }
+        return counts;
+    }
+
+    /**
+     * How many cases each classification value holds, over the same predicate — the denominator
+     * {@link #byClassificationAndLastRun} needs and deliberately does not compute itself.
+     *
+     * <p>Kept separate rather than derived by summing {@link #byClassification}, which would give
+     * the same number today and stop doing so the first time a case has a lifecycle status the
+     * other query filters. One predicate, two groupings, no arithmetic between them.
+     */
+    Map<UUID, Long> totalsByClassification(
+            CaseQuery request, CaseScope scope, List<UUID> valueIds) {
+
+        if (valueIds.isEmpty()) {
+            return Map.of();
+        }
+
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Tuple> query = cb.createTupleQuery();
+        Root<CaseClassification> classification = query.from(CaseClassification.class);
+
+        Subquery<UUID> matching = query.subquery(UUID.class);
+        Root<TestCase> cases = matching.from(TestCase.class);
+        matching.select(cases.get("id"))
+                .where(CaseSpecifications.where(request, scope, cases, matching, cb));
+
+        query.multiselect(classification.get("valueId"), cb.count(classification))
+                .where(cb.and(
+                        classification.get("caseId").in(matching),
+                        classification.get("valueId").in(valueIds)))
+                .groupBy(classification.get("valueId"));
+
+        Map<UUID, Long> totals = new LinkedHashMap<>();
+        for (Tuple row : entityManager.createQuery(query).getResultList()) {
+            totals.put((UUID) row.get(0), (Long) row.get(1));
+        }
+        return totals;
     }
 
     /**

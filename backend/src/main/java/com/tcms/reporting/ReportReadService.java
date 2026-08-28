@@ -4,7 +4,10 @@ import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
 import com.tcms.storage.ReportStore;
 import com.tcms.storage.StoredBlob;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -113,7 +116,49 @@ class ReportReadService {
     Outcome<ReportJobView> poll(UUID userId, UUID projectId, UUID jobId) {
         return gate(projects.readGranted(userId, projectId, VIEW_REPORT,
                 project -> jobs.findByIdAndProjectId(jobId, project.getId())
-                        .map(ReportJobView::of)));
+                        .map(job -> ReportJobView.of(job, sizesOf(List.of(job)).get(job.getId())))));
+    }
+
+    /**
+     * The stored size of each of these jobs' artifacts — {@code ReportJob.sizeBytes} (005 S1).
+     *
+     * <p><strong>One query for the page</strong>, then one {@code stat} per job that has an
+     * artifact. The query is the rule this module already follows; the {@code stat} is not a query
+     * at all and acquires no handle ({@code ReportStore#size}'s own note), which is why the artifact
+     * row is the thing worth batching and the filesystem call is not.
+     *
+     * <p>A job with no artifact contributes no entry, and neither does one whose artifact row or
+     * bytes have gone missing. The caller serves null for all three, which is what the contract
+     * declares for a job that has not completed — a vanished file degrades to "size unknown" rather
+     * than to a 500 on a list.
+     */
+    private Map<UUID, Long> sizesOf(List<ReportJob> rows) {
+        Map<UUID, UUID> artifactByJob = new LinkedHashMap<>();
+        for (ReportJob job : rows) {
+            if (job.getArtifactId() != null) {
+                artifactByJob.put(job.getId(), job.getArtifactId());
+            }
+        }
+        if (artifactByJob.isEmpty()) {
+            // An empty collection bound into SQL `IN ()` is a syntax error, and a project whose
+            // jobs are all still pending is an ordinary project rather than an edge case.
+            return Map.of();
+        }
+
+        Map<UUID, String> keys = new HashMap<>();
+        for (ReportArtifact artifact : artifacts.findAllById(artifactByJob.values())) {
+            keys.put(artifact.getId(), artifact.getStorageKey());
+        }
+
+        Map<UUID, Long> sizes = new HashMap<>();
+        for (Map.Entry<UUID, UUID> entry : artifactByJob.entrySet()) {
+            String key = keys.get(entry.getValue());
+            if (key == null) {
+                continue;
+            }
+            store.size(key).ifPresent(size -> sizes.put(entry.getKey(), size));
+        }
+        return sizes;
     }
 
     /**
@@ -134,11 +179,16 @@ class ReportReadService {
      */
     @Transactional(readOnly = true)
     Outcome<List<ReportJobView>> list(UUID userId, UUID projectId) {
-        return gate(projects.readGranted(userId, projectId, VIEW_REPORT,
-                project -> Optional.of(
-                        jobs.findTop100ByProjectIdOrderByRequestedAtDesc(project.getId()).stream()
-                                .map(ReportJobView::of)
-                                .toList())));
+        return gate(projects.readGranted(userId, projectId, VIEW_REPORT, project -> {
+            List<ReportJob> rows =
+                    jobs.findTop100ByProjectIdOrderByRequestedAtDesc(project.getId());
+            // Resolved once for the whole page and then read per row — the opposite of calling
+            // sizesOf inside the map, which would be one artifact query per job.
+            Map<UUID, Long> sizes = sizesOf(rows);
+            return Optional.of(rows.stream()
+                    .map(job -> ReportJobView.of(job, sizes.get(job.getId())))
+                    .toList());
+        }));
     }
 
     /**

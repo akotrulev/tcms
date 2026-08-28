@@ -133,7 +133,9 @@ final class GherkinScenarios {
         }
         if (!direct.errors().isEmpty()) {
             throw new GherkinSyntaxException(
-                    GherkinSyntaxException.Reason.SYNTAX, sentence(direct.errors().get(0)));
+                    GherkinSyntaxException.Reason.SYNTAX,
+                    sentence(direct.errors().get(0)),
+                    lineOf(direct.errors().get(0)));
         }
         throw new GherkinSyntaxException(GherkinSyntaxException.Reason.EMPTY, "No steps found");
     }
@@ -173,7 +175,9 @@ final class GherkinScenarios {
 
         if (!attempt.errors().isEmpty()) {
             throw new GherkinSyntaxException(
-                    GherkinSyntaxException.Reason.SYNTAX, sentence(attempt.errors().get(0)));
+                    GherkinSyntaxException.Reason.SYNTAX,
+                    sentence(attempt.errors().get(0)),
+                    lineOf(attempt.errors().get(0)));
         }
         Feature feature = attempt.feature();
         if (feature == null) {
@@ -382,13 +386,19 @@ final class GherkinScenarios {
             if (isOutline(dialect, scenario)) {
                 throw new GherkinSyntaxException(GherkinSyntaxException.Reason.OUTLINE,
                         "Line " + scenario.getLocation().getLine() + ": Scenario Outline is not "
-                                + "supported yet — expand the examples into separate scenarios");
+                                + "supported yet — expand the examples into separate scenarios",
+                        scenario.getLocation().getLine());
             }
         }
         if (scenarios.size() > 1) {
+            // The SECOND scenario's line, not the first's: the first one is the scenario the author
+            // is keeping, and pointing the editor's marker at it would say "this is the problem"
+            // about the half of the paste that is fine. The line to cut from is where the surplus
+            // starts.
             throw new GherkinSyntaxException(GherkinSyntaxException.Reason.MANY_SCENARIOS,
                     "This text holds " + scenarios.size()
-                            + " scenarios; paste one, or import the file");
+                            + " scenarios; paste one, or import the file",
+                    scenarios.get(1).getLocation().getLine());
         }
 
         Scenario scenario = scenarios.get(0);
@@ -623,6 +633,51 @@ final class GherkinScenarios {
                 view.objective(),
                 view.steps().stream().map(GherkinScenarios::toInput).toList(),
                 bodies(view.postconditions()));
+    }
+
+    /**
+     * The <strong>unsaved</strong> case as canonical {@code .feature} text — 003 Phase 2's
+     * {@code POST …/cases/render-gherkin}.
+     *
+     * <p>{@link #render(TestCaseDetailView)}'s twin, over the shape the editor holds rather than
+     * over a stored case, and it goes through the same {@link #document} so what the Write surface
+     * shows is byte-for-byte what {@code GET …/feature} will serve once the case is saved. Two
+     * renderers would have been the version of this that drifts by a blank line and makes the
+     * editor's preview a lie about the export.
+     *
+     * <p>Three things the request cannot answer for itself, and the caller resolves each:
+     *
+     * <ul>
+     *   <li>{@code featureName} — the suite's name, looked up from {@code suiteId} server-side. Null
+     *       for an unfiled case, and null is where the saved render falls back to the case key; an
+     *       <em>unsaved</em> case has no key, so the header renders bare. That is the one respect in
+     *       which this cannot be byte-identical to the saved render, and it resolves itself on the
+     *       first save.</li>
+     *   <li>{@code preconditions} / {@code postconditions} — bodies, resolved from the library ids
+     *       the request carries. The request's <em>own</em> attachments only: 003 D6 renders
+     *       {@code Background:} from what the author is editing and shows the inherited count in the
+     *       rail instead, so an inherited condition here would put a step in the text that the
+     *       author cannot edit out of it.</li>
+     * </ul>
+     */
+    static String renderInput(
+            String featureName,
+            CaseUpdateRequest request,
+            List<List<String>> preconditions,
+            List<List<String>> postconditions) {
+
+        return document(
+                featureName,
+                // Declared on the request but refused by the edit (see CaseUpdateRequest), so the
+                // editor does not normally hold any. Rendered when a caller does send them rather
+                // than dropped, because dropping would make this render disagree with the saved
+                // one for every case that carries an automation tag.
+                request.automationTags() == null ? List.of() : request.automationTags(),
+                preconditions,
+                request.title(),
+                request.objective(),
+                request.steps() == null ? List.of() : request.steps(),
+                postconditions);
     }
 
     /** The same render over a parse result — what makes the round trip assertable. */
@@ -879,6 +934,17 @@ final class GherkinScenarios {
      * end user reads. It is stripped and recomposed rather than passed through, so the sentence
      * beside the paste box is the one the SPA can put a line number badge on.
      */
+    /**
+     * The 1-based line of a parse error, or null when the library reported none.
+     *
+     * <p>Read off the same {@link Location} {@link #sentence} composes its prose from, so the number
+     * beside the text and the number inside the sentence cannot disagree — which they would the
+     * moment either was derived from the other by parsing.
+     */
+    private static Integer lineOf(ParseError error) {
+        return error.getSource().getLocation().map(Location::getLine).orElse(null);
+    }
+
     private static String sentence(ParseError error) {
         String message = error.getMessage();
         int close = message.indexOf("): ");

@@ -277,7 +277,8 @@ class SuiteEndpointTest extends IntegrationTestBase {
         void requiredFieldsArePresent() throws Exception {
             JsonNode suite = byName(treeAs(LEAD, ACME, ACME_BANKING), "Refunds");
 
-            assertThat(List.of("id", "key", "name", "caseCount", "lifecycleStatus",
+            assertThat(List.of("id", "key", "name", "caseCount", "filedCount", "addedCount",
+                    "taggedCount", "lifecycleStatus",
                     "preconditions", "postconditions", "lockVersion"))
                     .allSatisfy(field -> assertThat(suite.has(field))
                             .as("Suite.%s is required by openapi.yaml", field)
@@ -378,6 +379,55 @@ class SuiteEndpointTest extends IntegrationTestBase {
                     .as("the filed arm is unchanged — being claimed by another suite does not "
                             + "remove a case from the folder it is filed in")
                     .isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("the three arms are counted separately, and they do NOT sum to caseCount")
+        void theArmsAreCountedSeparately() throws Exception {
+            // 005 S1. `caseCount` cannot explain itself: a suite reading "2 cases" with no way to
+            // see which arm they arrive through is a collection nobody can reason about.
+            List<JsonNode> tree = treeAs(LEAD, ACME, ACME_BANKING);
+            JsonNode payments = byName(tree, "Payments");
+
+            assertThat(payments.get("filedCount").asLong())
+                    .as("Payments has nothing FILED in it — that is the fixture's whole point")
+                    .isZero();
+            assertThat(payments.get("addedCount").asLong())
+                    .as("addedCount IS the length of caseIds, by definition — deriving it any "
+                            + "other way would be two answers to one question on one screen")
+                    .isEqualTo(payments.get("caseIds").size())
+                    .isEqualTo(1);
+            assertThat(payments.get("taggedCount").asLong()).isEqualTo(2);
+
+            assertThat(payments.get("filedCount").asLong()
+                            + payments.get("addedCount").asLong()
+                            + payments.get("taggedCount").asLong())
+                    .as("THE assertion: the added case is tagged too, so the arms overlap and "
+                            + "3 != 2. A client that renders them as a total renders a number that "
+                            + "is wrong for every suite whose arms overlap.")
+                    .isEqualTo(3)
+                    .isNotEqualTo(payments.get("caseCount").asLong());
+        }
+
+        @Test
+        @DisplayName("a suite with only filed cases reports them once, in the filed arm alone")
+        void theFiledArmStandsAlone() throws Exception {
+            JsonNode refunds = byName(treeAs(LEAD, ACME, ACME_BANKING), "Refunds");
+
+            assertThat(refunds.get("filedCount").asLong()).isEqualTo(3);
+            assertThat(refunds.get("addedCount").asLong()).isZero();
+            assertThat(refunds.get("taggedCount").asLong()).isZero();
+        }
+
+        @Test
+        @DisplayName("a tag rule does not resurrect a soft-deleted case in the TAGGED arm either")
+        void deletedCasesAreNotCountedInTheTaggedArm() throws Exception {
+            // The same predicate as the union's, because it IS the union's — the arms are FILTER
+            // clauses over one join rather than three queries that would each carry their own copy
+            // of "live case in this project".
+            assertThat(byName(treeAs(LEAD, ACME, ACME_BANKING), "Checkout").get("taggedCount")
+                    .asLong())
+                    .isZero();
         }
 
         @Test
