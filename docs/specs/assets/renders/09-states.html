@@ -1,0 +1,154 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renders · States, errors &amp; help</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap">
+<link rel="stylesheet" href="tcms.css">
+<style>
+  .matrix{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+  .mcell{border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--paper);display:flex;flex-direction:column}
+  .mcell > .h{padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);display:flex;align-items:center;gap:8px}
+  .mcell > .h .t{margin-left:auto;color:var(--ink-4);letter-spacing:0;text-transform:none;font-size:10px}
+  .mcell > .b{padding:14px;min-height:196px;display:flex;flex-direction:column}
+  .rowsk{display:flex;gap:12px;align-items:center;padding:7px 0}
+  .toast{display:flex;gap:11px;align-items:flex-start;background:var(--ground);border:1px solid var(--line-2);border-left:3px solid var(--steel);border-radius:var(--r);padding:11px 13px;box-shadow:var(--e3);font-size:13px;line-height:1.5;max-width:400px}
+  .toast.bad{border-left-color:var(--failed)}
+  .toast.warn{border-left-color:var(--blocked)}
+  .toast svg{width:15px;height:15px;flex:none;margin-top:1px;color:var(--ink-3)}
+  .toast .b{flex:1;color:var(--ink-2)}
+  .toast .b b{color:var(--ink);font-weight:550;display:block;margin-bottom:2px}
+  .toast .x{color:var(--ink-4);font-size:14px;line-height:1}
+</style>
+
+<div class="wrap">
+<div class="head">
+  <p class="eyebrow">Family 9 of 9 · proposal, nothing implemented</p>
+  <h1>States, errors &amp; help</h1>
+  <p>Not screens — the states every screen in the other eight families passes through. The product already centralises this: one place turns an error into copy, one place raises a notification, one component owns the loading/loaded/failed/empty/stale matrix. What the redesign changes is what those five states <em>say</em>, and the rule underneath is that <b>a failed read must never be able to render as an empty one</b>.</p>
+  <a class="back" href="index.html">← all families</a>
+</div>
+
+<!-- ============================================ A · the matrix ============================================ -->
+<div class="cap"><b>A · The five states</b><span>one data region, drawn five times · every table, panel and figure in the product inherits these</span><code>components/DataRegion.tsx</code></div>
+
+<div class="matrix">
+  <div class="mcell"><div class="h">1 · Loading<span class="t">first read</span></div><div class="b">
+    <div class="rowsk"><span class="skel" style="width:64px"></span><span class="skel" style="flex:1"></span><span class="skel" style="width:52px"></span></div>
+    <div class="rowsk"><span class="skel" style="width:64px"></span><span class="skel" style="flex:1"></span><span class="skel" style="width:52px"></span></div>
+    <div class="rowsk"><span class="skel" style="width:64px"></span><span class="skel" style="flex:1"></span><span class="skel" style="width:52px"></span></div>
+    <div class="rowsk" style="opacity:.5"><span class="skel" style="width:64px"></span><span class="skel" style="flex:1"></span><span class="skel" style="width:52px"></span></div>
+    <p class="quiet" style="margin-top:auto;padding-top:12px">Skeleton rows at the real row height, so nothing shifts when the data lands.<span style="display:block;margin-top:4px;font-family:var(--mono);font-size:10.5px">no spinner under 400 ms · UX#19 · UX#78</span></p>
+  </div></div>
+
+  <div class="mcell"><div class="h">2 · Loaded<span class="t">the only happy one</span></div><div class="b">
+    <table class="tbl" style="font-size:12px"><tbody>
+      <tr><td class="k"><span class="id" style="font-size:11.5px">TC-194</span></td><td class="t">Refunded twice</td><td class="r"><span class="badge passed" style="font-size:10.5px">Healthy</span></td></tr>
+      <tr><td class="k"><span class="id" style="font-size:11.5px">TC-193</span></td><td class="t">Partial refund</td><td class="r"><span class="badge passed" style="font-size:10.5px">Healthy</span></td></tr>
+      <tr><td class="k"><span class="id" style="font-size:11.5px">TC-188</span></td><td class="t">Refund settled</td><td class="r"><span class="badge failed" style="font-size:10.5px">Failing</span></td></tr>
+    </tbody></table>
+    <p class="quiet" style="margin-top:auto;padding-top:12px">Nothing extra. The chrome that announced the other four states is gone.</p>
+  </div></div>
+
+  <div class="mcell"><div class="h">3 · Empty<span class="t">and it knows why</span></div><div class="b">
+    <div style="margin:auto;text-align:center;padding:6px">
+      <svg style="width:26px;height:26px;color:var(--ink-4);margin-bottom:10px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <h3 style="margin:0 0 6px;font-size:14px;color:var(--ink-2)">No cases match</h3>
+      <p class="quiet" style="margin-bottom:11px">1 284 cases exist. Three filters are hiding all of them.</p>
+      <div style="display:flex;gap:5px;justify-content:center;flex-wrap:wrap"><button class="chip on" style="font-size:11px">Approved <span class="x">×</span></button><button class="chip on" style="font-size:11px">Not automated <span class="x">×</span></button><button class="chip on" style="font-size:11px">Owner: me <span class="x">×</span></button></div>
+      <button class="btn sm ghost" style="margin-top:10px">Clear all three</button>
+    </div>
+  </div></div>
+
+  <div class="mcell"><div class="h">4 · Failed<span class="t">never mistakable for empty</span></div><div class="b">
+    <div style="margin:auto;text-align:center;padding:6px">
+      <svg style="width:26px;height:26px;color:var(--failed);margin-bottom:10px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16v.01"/></svg>
+      <h3 style="margin:0 0 6px;font-size:14px;color:var(--ink-2)">This list could not be loaded</h3>
+      <p class="quiet" style="margin-bottom:12px">The server answered, but not with a case list. Nothing is lost — the data is on the server, this screen could not read it.</p>
+      <div style="display:flex;gap:7px;justify-content:center"><button class="btn sm primary">Try again</button><button class="btn sm ghost">Details</button></div>
+      <p class="quiet" style="margin-top:11px;font-family:var(--mono);font-size:10.5px">ref 8c31f0 · 14:07:22</p>
+    </div>
+  </div></div>
+
+  <div class="mcell"><div class="h">5 · Stale<span class="t">old data, honestly labelled</span></div><div class="b">
+    <div class="banner warn" style="margin-bottom:10px;font-size:12px;padding:8px 11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Showing data from <b>14:02</b>. The last refresh failed.</span></div>
+    <table class="tbl" style="font-size:12px;opacity:.62"><tbody>
+      <tr><td class="k"><span class="id" style="font-size:11.5px">TC-194</span></td><td class="t">Refunded twice</td><td class="r"><span class="badge passed" style="font-size:10.5px">Healthy</span></td></tr>
+      <tr><td class="k"><span class="id" style="font-size:11.5px">TC-193</span></td><td class="t">Partial refund</td><td class="r"><span class="badge passed" style="font-size:10.5px">Healthy</span></td></tr>
+    </tbody></table>
+    <p class="quiet" style="margin-top:auto;padding-top:10px">Kept and dimmed, not blanked. Old numbers a reader knows are old beat no numbers.</p>
+  </div></div>
+
+  <div class="mcell"><div class="h">6 · Refused<span class="t">the sixth, and it is not an error</span></div><div class="b">
+    <div style="margin:auto;text-align:center;padding:6px">
+      <svg style="width:26px;height:26px;color:var(--ink-4);margin-bottom:10px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>
+      <h3 style="margin:0 0 6px;font-size:14px;color:var(--ink-2)">Not shown to you</h3>
+      <p class="quiet">Reading the audit trail needs <span class="id" style="font-size:11px">audit:view</span>. <b style="color:var(--ink-3);font-weight:500">M. Kalcheva</b> and <b style="color:var(--ink-3);font-weight:500">R. Dimitrov</b> can grant it.</p>
+    </div>
+  </div></div>
+</div>
+
+<div class="notes">
+  <div class="note"><h4>Failed and empty are drawn to be unmistakable</h4><p>Different icon, different colour, different verb, different offer. A 200 with the wrong shape reading as <em>no results</em> is the quietest data-loss bug a client can have, and it is what the <code style="font-family:var(--mono);font-size:12px">tcmsFaults.drift()</code> switch exists to prove.</p></div>
+  <div class="note"><h4>Empty counts what the filters hid</h4><p><em>1 284 cases exist. Three filters are hiding all of them.</em> With the filters listed and removable in place. An empty state that does not name its cause sends the reader hunting.<span class="cite">UX#79 · UX#90</span></p></div>
+  <div class="note"><h4>Refused is a sixth state, not a failure</h4><p>Neutral colour, no retry. Retrying a permission you do not hold is not a recovery path, and drawing it in red teaches people the product is broken when it is working exactly as configured.</p></div>
+  <div class="note"><h4>Every failure carries a reference</h4><p>Six hex characters and a timestamp, in mono, quiet. It costs nothing and it is the difference between a bug report and a description of a feeling.</p></div>
+</div>
+
+<!-- ============================================ B · notifications ============================================ -->
+<div class="cap"><b>B · Notifications</b><span>the three the app raises, and where the session-recovery one differs</span><code>app/queryClient.ts · lib/describeError.ts</code></div>
+<div class="frame"><div class="app bare"><div class="stage" style="min-height:290px;padding:26px 30px;gap:14px;display:flex;flex-direction:column;align-items:flex-end;background:var(--paper)">
+  <div class="toast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.5l4.5 4.5L19 7"/></svg><span class="b"><b>Saved TC-194 as version 7</b>3 cases that cite refunds.md §4.2 now show <em>Linked spec changed</em>.</span><span class="x">×</span></div>
+  <div class="toast warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="b"><b>Still trying — the server is busy</b>Retrying in 12 s. Your edits are held; nothing has been lost.</span><span class="x">×</span></div>
+  <div class="toast bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16v.01"/></svg><span class="b"><b>Could not save TC-194</b>Say why this case cannot be automated — the field is on the rail, marked. <a href="#">Take me there</a><span style="display:block;margin-top:5px;font-family:var(--mono);font-size:10.5px;color:var(--ink-4)">ref 8c31f0</span></span><span class="x">×</span></div>
+  <div class="toast" style="border-left-color:var(--steel)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg><span class="b"><b>Your session was renewed</b>You were signed back in without losing the page. Nothing was resubmitted.</span><span class="x">×</span></div>
+  <p class="quiet" style="align-self:flex-start;margin-top:auto;max-width:74ch">Bottom-right, stacked newest-last, 3–5 s auto-dismiss for the first — <b style="color:var(--ink-3);font-weight:500">but never for a failure</b>. A message a person must act on does not disappear on a timer.<span style="display:block;margin-top:5px;font-family:var(--mono);font-size:11px">UX#82 · UX#33 · UX#44 role=alert</span></p>
+</div></div></div>
+
+<!-- ============================================ C · not found + help ============================================ -->
+<div class="cap"><b>C · Page not found &amp; Help</b><span>the two utility routes — one apologises usefully, the other is the only long-form reading in the app</span><code>NotFoundPage.tsx · HelpPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage" style="min-height:280px">
+  <div class="top"><span class="crumb">Test cases &nbsp;/&nbsp; <b class="faint">TC-9999</b></span></div>
+  <div class="state">
+    <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9.5 14.5l5-5M14.5 14.5l-5-5"/></svg>
+    <h3>There is no TC-9999 in Reflex Payments</h3>
+    <p>The highest case key in this project is <span class="id">TC-1284</span>. If you followed a link from another project, the same number there is a different case — keys are per project.</p>
+    <div class="acts"><button class="btn primary">Search every project for 9999</button><button class="btn ghost">Back to test cases</button></div>
+  </div>
+</div></div></div>
+
+<div class="frame" style="margin-top:16px"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb"><b>Help</b></span><span class="sp"></span><span class="fld" style="min-width:200px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><span class="ph">Search help</span></span></div>
+  <div class="split left">
+    <aside class="side l"><div class="sec"><h3>Contents</h3><div class="tree">
+      <div class="r on">What a suite actually is</div><div class="r">Writing a case as a document</div><div class="r">Gherkin this instance understands</div>
+      <div class="r">Preconditions and postconditions</div><div class="r">How health signals are computed</div><div class="r">How flakiness is computed</div>
+      <div class="r">Getting CI results in</div><div class="r">Roles and what each can do</div><div class="r">Keyboard shortcuts</div>
+    </div></div></aside>
+    <div class="pane doc" style="padding:28px 34px">
+      <h2 class="dtitle" style="font-size:22px">What a suite actually is</h2>
+      <div class="rule" style="max-width:70ch;margin:16px 0 18px"></div>
+      <div class="prose">
+        <p>A suite is <b style="color:var(--ink);font-weight:550">flat</b>. It is a named collection whose members arrive by three routes, and it is not a folder in a tree — there is no nesting, and a case can belong to many suites at once.</p>
+        <div class="hbars" style="margin:0 0 16px;max-width:56ch">
+          <div class="hb"><span class="l">Filed</span><span class="t"><i style="width:64%"></i></span><span class="n">94</span></div>
+          <div class="hb"><span class="l">Added</span><span class="t"><i style="width:22%"></i></span><span class="n">32</span></div>
+          <div class="hb"><span class="l">Tagged</span><span class="t"><i style="width:14%"></i></span><span class="n">20</span></div>
+        </div>
+        <p><b style="color:var(--ink);font-weight:550">Filed</b> is the case's home suite, set when it is written. <b style="color:var(--ink);font-weight:550">Added</b> means somebody put it here by hand. <b style="color:var(--ink);font-weight:550">Tagged</b> means the suite has a tag rule and the case carries the tag — so tagged membership changes when the case's tags do, without anybody touching the suite.</p>
+        <div class="banner steel" style="max-width:70ch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8v.01"/></svg><span>This is why a suite's count can change without an edit, and why <b>Refunds</b> shows 146 while only 94 cases name it as home.</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="s">Help is the same document surface as a case and a doc page — 70ch, same gutter, same rule. It is written <b>in the product</b>, not linked to a wiki.</span></div>
+</div></div></div>
+
+<div class="notes">
+  <div class="note"><h4>404 names the actual bound</h4><p><em>The highest case key in this project is TC-1284</em>, plus the fact that keys are per project — which is the real cause of most of these. A generic <em>page not found</em> teaches nothing about a system with per-project keys.</p></div>
+  <div class="note"><h4>Help is a fourth document surface</h4><p>Same measure, same gutter, same rule as a case, a doc page and a proposal. And it uses the product's own chart components to explain the product, which keeps it honest — the diagram cannot drift from the thing.</p></div>
+  <div class="note"><h4>Failures never auto-dismiss</h4><p>Success can go on a timer. A message carrying a required action, a reference or an unsaved edit stays until it is dismissed by a person.<span class="cite">UX#82</span></p></div>
+  <div class="note"><h4>The error notification points at the field</h4><p><em>Say why this case cannot be automated — the field is on the rail, marked</em>, with a link that focuses it. A toast that names a validation failure without a route to it is a description of a problem.</p></div>
+</div>
+
+</div>
+<script src="shell.js"></script>

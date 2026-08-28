@@ -1,0 +1,86 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TCMS renders · all families</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap">
+<link rel="stylesheet" href="tcms.css">
+<style>
+  .fam{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;margin-bottom:34px}
+  .f{display:block;text-decoration:none;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;color:inherit}
+  .f:hover{border-color:var(--steel-line);background:linear-gradient(180deg,rgb(107 168 196/6%),transparent)}
+  .f .n{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);margin-bottom:7px}
+  .f h3{margin:0 0 6px;font-size:16px;font-weight:600;letter-spacing:-.015em;color:var(--ink)}
+  .f p{margin:0 0 11px;font-size:12.5px;color:var(--ink-3);line-height:1.5}
+  .f .pgs{font-family:var(--mono);font-size:10.5px;color:var(--ink-4);line-height:1.7;border-top:1px solid var(--line);padding-top:9px}
+  .f .cnt{float:right;font-family:var(--mono);font-size:11px;color:var(--ink-4)}
+  .f.done{border-color:rgb(126 200 160/22%)}
+  .f.done .n{color:var(--passed)}
+</style>
+
+<div class="wrap">
+<div class="head">
+  <p class="eyebrow">Proposal · nothing implemented · 2026-08-28</p>
+  <h1>The whole product, in one design language</h1>
+  <p>The case-authoring redesign settled a direction on one screen. These nine renders carry it across the other forty-two, grouped by what the screen is <em>for</em> rather than by where it lives in the rail — because the same shape serves ten index tables, and drawing it ten times would have hidden that.</p>
+  <p style="font-size:13.5px;color:var(--ink-3)">The written rules are in <a href="../../2026-08-28-design-language.md">the design-language spec</a>. The kit these pages share is <a href="tcms.css">tcms.css</a> and <a href="shell.js">shell.js</a>. Open any file in a browser; nothing here needs a server.</p>
+</div>
+
+<div class="cap"><b>Where this came from</b><span>the render that set the direction</span></div>
+<div class="fam" style="grid-template-columns:minmax(0,1fr)">
+  <a class="f done" href="../case-authoring-redesign.html">
+    <span class="cnt">1 page</span>
+    <div class="n">Origin · already agreed</div>
+    <h3>The case is a document, not a record</h3>
+    <p>The procedure becomes the page, the schema retreats to a rail you can operate, and the step corpus arrives while you write. Everything below inherits its palette, its measure, its gutter and its footer.</p>
+    <div class="pgs">CaseEditorPage.tsx &nbsp;·&nbsp; specs: <b style="color:var(--ink-3)">2026-08-28-case-authoring-redesign.md</b>, <b style="color:var(--ink-3)">2026-08-28-case-authoring-rail.md</b></div>
+  </a>
+</div>
+
+<div class="cap"><b>The nine families</b><span>42 pages · every one drawn</span></div>
+<div class="fam">
+  <a class="f" href="01-index-tables.html"><span class="cnt">10 pages</span><div class="n">Family 1</div><h3>Index &amp; table surfaces</h3>
+    <p>Find the row and leave. One table skeleton, filters as removable chips, proportion before number, and an em dash that means <em>no value</em> rather than zero.</p>
+    <div class="pgs">CaseList · CaseSearch · RunList · PlanList · Proposals · Reports · Ingestions · RunSchedule · Artifacts · Projects</div></a>
+
+  <a class="f" href="02-record-as-document.html"><span class="cnt">7 pages</span><div class="n">Family 2</div><h3>The record, read as a document</h3>
+    <p>Nine titled panels become the rendered procedure and a rail. Every read screen names the version that ran, and the report preview is the one surface that stays light.</p>
+    <div class="pgs">CaseDetail · RunDetail · IngestionJob · Proposal · CaseHistory · SuiteHistory · ReportView</div></a>
+
+  <a class="f" href="03-execution.html"><span class="cnt">1 page</span><div class="n">Family 3</div><h3>Execution</h3>
+    <p>The screen the product exists to serve. Number keys for verdicts, the current step at full ink, the failure panel in place of a dialog, and <em>last time</em> on screen before it is needed.</p>
+    <div class="pgs">ExecutionPage</div></a>
+
+  <a class="f" href="04-board-and-people.html"><span class="cnt">4 pages</span><div class="n">Family 4</div><h3>Board &amp; people</h3>
+    <p>The only drag surface, so the only one where WCAG 2.2's drag rule bites. And the one matrix, which must say which of three arms produced each cell.</p>
+    <div class="pgs">Board · MyWork · TeamBoard · OrgChart</div></a>
+
+  <a class="f" href="05-authoring.html"><span class="cnt">3 pages</span><div class="n">Family 5</div><h3>Authoring beyond the case</h3>
+    <p>Documentation was already a document and never looked like one. Import is a review before commit: it shows the diff, never deletes, and its button counts what it will do.</p>
+    <div class="pgs">Docs · DocPageEditor · FeatureImport</div></a>
+
+  <a class="f" href="06-analytics.html"><span class="cnt">2 pages</span><div class="n">Family 6</div><h3>Analytics</h3>
+    <p>Built by procedure, not by eye. The palette validator killed one token pair outright and proved the product cannot have a categorical palette — so every figure is one series or a status stack.</p>
+    <div class="pgs">Dashboard · PlanStatistics</div></a>
+
+  <a class="f" href="07-settings-admin.html"><span class="cnt">9 pages</span><div class="n">Family 7</div><h3>Settings &amp; administration</h3>
+    <p>Every setting states its blast radius against live data. Every refusal names a person who can grant it. Revoked and expired rows stay on screen, dimmed.</p>
+    <div class="pgs">Review · Classification · Notifications · ProjectAccess · Teams · ApiTokens · SsoProviders · AuditLog · AccountSecurity</div></a>
+
+  <a class="f" href="08-threshold.html"><span class="cnt">3 pages</span><div class="n">Family 8</div><h3>The threshold</h3>
+    <p>No rail, no project, no session. More identity than anywhere inside, fewer controls than anywhere inside, and the email decides the sign-in method before a password is asked for.</p>
+    <div class="pgs">Login · AcceptInvitation · SsoCallback</div></a>
+
+  <a class="f" href="09-states.html"><span class="cnt">3 pages + the matrix</span><div class="n">Family 9</div><h3>States, errors &amp; help</h3>
+    <p>Six states, not five — refused is its own, and it is not an error. A failed read must never be able to render as an empty one, and no failure auto-dismisses.</p>
+    <div class="pgs">NotFound · Help · (DataRegion, notifications, refusals — inherited by all 42)</div></a>
+</div>
+
+<div class="notes">
+  <div class="note"><h4>Grouped by job, not by rail position</h4><p>Ten screens are the same table with different columns. A file per page would have drawn that skeleton ten times and let the ten drift; a file per family draws it once and shows the nine variations against it.</p></div>
+  <div class="note"><h4>Nothing here has been driven in a browser</h4><p>Same caveat the case render carries. These are HTML written to communicate a direction — not evidence that any of it survives real content lengths, 1280px, or a fifty-step case.</p></div>
+  <div class="note"><h4>Two findings are real defects, not proposals</h4><p>The <em>skipped</em>/<em>untested</em> colour pair fails at 10.7 ΔE for full colour vision, and the product's accents cannot form a 3-series palette (2.5 ΔE under deuteranopia). Both were computed, and both are fixed in the kit.</p></div>
+  <div class="note"><h4>The kit is a render kit, not the product's CSS</h4><p><code style="font-family:var(--mono);font-size:12px">tcms.css</code> exists to draw these. The app's tokens live in <code style="font-family:var(--mono);font-size:12px">frontend/src/index.css</code> and <code style="font-family:var(--mono);font-size:12px">theme.ts</code>; the two agree on palette and family so the port is a mapping, not a translation.</p></div>
+</div>
+
+</div>

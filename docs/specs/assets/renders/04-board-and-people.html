@@ -1,0 +1,190 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renders · Board &amp; people</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap">
+<link rel="stylesheet" href="tcms.css">
+<style>
+  .cols{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;padding:16px 22px;flex:1;min-height:0;align-items:start}
+  .col{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;min-height:0}
+  .col > h4{margin:0;padding:10px 12px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .col > h4 .c{margin-left:auto;font-family:var(--mono);color:var(--ink-4);letter-spacing:0}
+  .col.blocked > h4{color:var(--blocked)}
+  .stack{padding:9px;display:flex;flex-direction:column;gap:8px;overflow:auto}
+  .wi{background:var(--paper);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 11px;font-size:13px;line-height:1.45;cursor:grab}
+  .wi:hover{border-color:var(--line-2)}
+  .wi .h{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+  .wi .h .id{font-size:11px;color:var(--ink-4)}
+  .wi .h .sp{flex:1}
+  .wi .t{color:var(--ink);font-weight:450;display:block;margin-bottom:8px}
+  .wi .m{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink-4);flex-wrap:wrap}
+  .wi .av{width:20px;height:20px;border-radius:50%;background:var(--steel-dim);color:var(--steel);display:grid;place-items:center;font-size:9px;font-weight:600;font-family:var(--mono)}
+  .wi .m .od{color:var(--failed)}
+  .wi.drop{border-style:dashed;border-color:var(--steel-line);background:var(--steel-dim);height:52px}
+  .cell{display:grid;place-items:center;height:30px;border-radius:var(--r-sm);font-size:11px;font-family:var(--mono)}
+  .cell.d{background:var(--steel-dim);color:var(--steel);border:1px solid var(--steel-line)}
+  .cell.t{background:rgb(126 200 160/12%);color:var(--passed);border:1px solid rgb(126 200 160/26%)}
+  .cell.i{background:rgb(255 255 255/4%);color:var(--ink-3);border:1px solid var(--line)}
+  .cell.n{color:var(--ink-4)}
+  .mtx{width:100%;border-collapse:separate;border-spacing:5px;font-size:12px}
+  .mtx th{font-weight:500;color:var(--ink-3);font-size:11px;text-align:left;padding:0 4px 4px}
+  .mtx th.v{writing-mode:vertical-rl;transform:rotate(180deg);height:88px;white-space:nowrap;text-align:right;padding:0 0 6px}
+  .mtx td.who{color:var(--ink-2);white-space:nowrap;padding-right:8px}
+</style>
+
+<div class="wrap">
+<div class="head">
+  <p class="eyebrow">Family 4 of 9 · proposal, nothing implemented</p>
+  <h1>Board &amp; people</h1>
+  <p>Four screens about <em>who is doing what</em>. The board is the only drag surface in the product, so it is also the only place WCAG 2.2's drag rule bites: every move a pointer can make, a keyboard must make too. The org chart is the only matrix, and it must say which of three arms a cell came from or it under-reports the exact staffing shape it exists to encourage.</p>
+  <a class="back" href="index.html">← all families</a>
+</div>
+
+<!-- ============================================ A · Board ============================================ -->
+<div class="cap"><b>A · Board</b><span>five columns, in the spec's order, with the one that means trouble marked</span><code>BoardPage.tsx</code></div>
+
+<div class="frame">
+  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="u">tcms.local / reflex / board</span></div>
+  <div class="app">
+    <nav class="rail" data-rail="board"></nav>
+    <div class="stage">
+      <div class="top">
+        <span class="crumb"><b>Board</b></span>
+        <span class="sp"></span>
+        <span class="lens"><b class="on">Everyone</b><b>Assigned to me</b></span>
+        <button class="btn ghost">Team ▾</button>
+        <button class="btn primary">New work item</button>
+      </div>
+      <div class="filters">
+        <span class="fld" style="min-width:200px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><span class="ph">Filter 23 items</span></span>
+        <button class="chip on">Overdue <span class="x">×</span></button>
+        <button class="chip">Assignee</button><button class="chip">Linked to a case</button><button class="chip">Due this week</button>
+        <span class="sp"></span>
+        <span class="faint" style="font-size:12px"><b class="num" style="color:var(--ink-2)">23</b> items · <b class="num" style="color:var(--failed)">4</b> overdue</span>
+      </div>
+
+      <div class="cols">
+        <div class="col"><h4>To do <span class="c">7</span></h4><div class="stack">
+          <div class="wi"><div class="h"><span class="id">W-141</span><span class="sp"></span><span class="badge plain" style="font-size:10.5px">High</span></div><span class="t">Write refund-boundary cases from refunds.md §4.3</span><div class="m"><span class="av">DP</span><span>D. Petrov</span><span>·</span><span>Due Fri</span></div></div>
+          <div class="wi"><div class="h"><span class="id">W-146</span><span class="sp"></span></div><span class="t">Triage the 6 unmatched CI tests</span><div class="m"><span class="av" style="background:rgb(255 255 255/6%);color:var(--ink-3)">?</span><span>Unassigned</span><span>·</span><span class="od">2 days overdue</span></div></div>
+          <div class="wi"><div class="h"><span class="id">W-149</span><span class="sp"></span></div><span class="t">Deprecate the 14 cases nobody has run in a year</span><div class="m"><span class="av">MK</span><span>M. Kalcheva</span><span>·</span><span>linked to 14 cases</span></div></div>
+        </div></div>
+
+        <div class="col"><h4>In progress <span class="c">5</span></h4><div class="stack">
+          <div class="wi"><div class="h"><span class="id">W-132</span><span class="sp"></span><span class="badge plain" style="font-size:10.5px">Critical</span></div><span class="t">Execute Refunds regression, pass 3</span><div class="m"><span class="av">MK</span><span>M. Kalcheva</span><span>·</span><span>linked to <span class="id" style="font-size:10.5px">R-2211</span></span></div></div>
+          <div class="wi"><div class="h"><span class="id">W-138</span><span class="sp"></span></div><span class="t">Automate TC-181 and TC-190</span><div class="m"><span class="av">DP</span><span>D. Petrov</span><span>·</span><span class="od">1 day overdue</span></div></div>
+          <div class="wi drop"></div>
+        </div></div>
+
+        <div class="col blocked"><h4>Blocked <span class="c">3</span></h4><div class="stack">
+          <div class="wi" style="border-color:rgb(224 185 95/26%)"><div class="h"><span class="id">W-127</span><span class="sp"></span><span class="badge blocked" style="font-size:10.5px">Blocked</span></div><span class="t">Verify SEPA payout cutoff behaviour</span><div class="m"><span class="av">AI</span><span>A. Ivanov</span></div><p class="quiet" style="margin-top:7px;padding-top:7px;border-top:1px solid var(--line)">Sandbox gateway is down. Raised with platform 3 days ago.</p></div>
+          <div class="wi" style="border-color:rgb(224 185 95/26%)"><div class="h"><span class="id">W-119</span><span class="sp"></span><span class="badge blocked" style="font-size:10.5px">Blocked</span></div><span class="t">Sign off the Q3 compliance plan</span><div class="m"><span class="av">MK</span><span>M. Kalcheva</span><span>·</span><span class="od">9 days overdue</span></div><p class="quiet" style="margin-top:7px;padding-top:7px;border-top:1px solid var(--line)">Waiting on legal. No date.</p></div>
+        </div></div>
+
+        <div class="col"><h4>In review <span class="c">4</span></h4><div class="stack">
+          <div class="wi"><div class="h"><span class="id">W-121</span><span class="sp"></span></div><span class="t">Refund reason-code cases</span><div class="m"><span class="av">DP</span><span>D. Petrov</span><span>·</span><span>2 reviewers</span></div></div>
+          <div class="wi"><div class="h"><span class="id">W-115</span><span class="sp"></span></div><span class="t">Ledger export coverage</span><div class="m"><span class="av">AI</span><span>A. Ivanov</span><span>·</span><span>1 of 2 approvals</span></div></div>
+        </div></div>
+
+        <div class="col"><h4>Done <span class="c">4</span></h4><div class="stack" style="opacity:.62">
+          <div class="wi"><div class="h"><span class="id">W-108</span><span class="sp"></span></div><span class="t">Import the checkout .feature files</span><div class="m"><span class="av">MK</span><span>M. Kalcheva</span><span>·</span><span>Closed Tue</span></div></div>
+          <div class="wi"><div class="h"><span class="id">W-104</span><span class="sp"></span></div><span class="t">Bind PayoutsIT to real cases</span><div class="m"><span class="av">DP</span><span>D. Petrov</span><span>·</span><span>Closed Mon</span></div></div>
+        </div></div>
+      </div>
+
+      <div class="foot"><span class="s">Dragging <b>W-138</b> · drop to move, or press <b>Esc</b> to cancel</span><span class="keys">Space lift &nbsp; ←→ column &nbsp; ↑↓ position &nbsp; Space drop</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note"><h4>Every drag has a keyboard twin</h4><p><b>Space</b> lifts a card, arrows move it, <b>Space</b> drops it, <b>Esc</b> cancels — and the footer says so while a card is lifted, so it is discoverable rather than documented. WCAG 2.2 AA requires a single-pointer alternative; a keyboard path is the stronger answer.<span class="cite">UX#103 · UX#41</span></p></div>
+  <div class="note"><h4>Blocked earns colour; Done loses it</h4><p>One column is tinted, because one column is a question for a human. Done drops to 62% opacity — present for counting, quiet for scanning.<span class="was">Was: five identical columns, so the eye had to read all five to find the trouble.</span></p></div>
+  <div class="note"><h4>A blocked card says why, on the card</h4><p>Two lines under a rule. The reason is the only thing a blocked item is <em>for</em>; putting it behind a click made the column a list of names.</p></div>
+  <div class="note"><h4>Overdue is a word in red, not a red card</h4><p>Colour alone would fail a greyscale print and a colour-blind reader, and a whole red card would drown the card's own priority chip.<span class="cite">UX#37</span></p></div>
+</div>
+
+<!-- ============================================ B · My work / Team board ============================================ -->
+<div class="cap"><b>B · My work</b><span>the same board, one filter pre-applied — so it is the same component, with a different empty state</span><code>MyWorkPage.tsx · TeamBoardPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb"><b>My work</b></span><span class="sp"></span><span class="faint" style="font-size:12px">Across every project you can read</span><button class="btn ghost">Open the project board</button></div>
+  <div class="cols" style="grid-template-columns:repeat(5,minmax(0,1fr))">
+    <div class="col"><h4>To do <span class="c">2</span></h4><div class="stack">
+      <div class="wi"><div class="h"><span class="id">W-149</span><span class="sp"></span><span class="faint" style="font-size:10.5px">Reflex</span></div><span class="t">Deprecate the 14 cases nobody has run in a year</span><div class="m"><span>linked to 14 cases</span></div></div>
+      <div class="wi"><div class="h"><span class="id">W-88</span><span class="sp"></span><span class="faint" style="font-size:10.5px">Halo</span></div><span class="t">Review the onboarding suite split</span><div class="m"><span>Due Mon</span></div></div>
+    </div></div>
+    <div class="col"><h4>In progress <span class="c">1</span></h4><div class="stack">
+      <div class="wi"><div class="h"><span class="id">W-132</span><span class="sp"></span><span class="faint" style="font-size:10.5px">Reflex</span></div><span class="t">Execute Refunds regression, pass 3</span><div class="m"><span>linked to <span class="id" style="font-size:10.5px">R-2211</span></span></div></div>
+    </div></div>
+    <div class="col blocked"><h4>Blocked <span class="c">1</span></h4><div class="stack">
+      <div class="wi" style="border-color:rgb(224 185 95/26%)"><div class="h"><span class="id">W-119</span><span class="sp"></span><span class="faint" style="font-size:10.5px">Reflex</span></div><span class="t">Sign off the Q3 compliance plan</span><div class="m"><span class="od">9 days overdue</span></div><p class="quiet" style="margin-top:7px;padding-top:7px;border-top:1px solid var(--line)">Waiting on legal. No date.</p></div>
+    </div></div>
+    <div class="col"><h4>In review <span class="c">0</span></h4><div class="stack"><p class="quiet" style="padding:10px 3px">Nothing of yours is waiting on a reviewer.</p></div></div>
+    <div class="col"><h4>Done <span class="c">6</span></h4><div class="stack" style="opacity:.62"><p class="quiet" style="padding:10px 3px">6 closed in the last 30 days.</p></div></div>
+  </div>
+  <div class="foot"><span class="s"><b>My work</b> crosses projects; the project board does not. That is the only difference, and it is why the cards here carry a project tag.</span></div>
+</div></div></div>
+
+<div class="frame" style="margin-top:16px"><div class="app bare"><div class="stage" style="min-height:270px">
+  <div class="top"><span class="crumb">Board &nbsp;/&nbsp; <b>Payments QA</b></span><span class="sp"></span><button class="btn ghost">Team ▾</button></div>
+  <div class="state">
+    <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="14" rx="1.5"/></svg>
+    <h3>Nothing on this team's board</h3>
+    <p><b style="color:var(--ink-2);font-weight:550">Payments QA</b> has 4 members and no open work items in this project. Items appear here when they are assigned to a member of the team.</p>
+    <div class="acts"><button class="btn ghost">See the team</button><button class="btn ghost">Open the whole board</button></div>
+  </div>
+</div></div></div>
+
+<!-- ============================================ C · Org chart ============================================ -->
+<div class="cap"><b>C · Org chart</b><span>the one matrix — and every cell says which of three arms put it there</span><code>OrgChartPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb"><b>Org chart</b></span><span class="sp"></span><span class="lens"><b class="on">People and projects</b><b>Teams</b><b>Gaps</b></span></div>
+  <div class="split wide-side">
+    <div class="pane" style="padding:20px 22px;overflow:auto">
+      <table class="mtx">
+        <thead><tr><th></th><th class="v">Reflex Payments</th><th class="v">Halo Onboarding</th><th class="v">Meridian Console</th><th class="v">Atlas Ledger</th></tr></thead>
+        <tbody>
+          <tr><td class="who">M. Kalcheva <span class="faint">· Test Lead</span></td><td><span class="cell d">Lead</span></td><td><span class="cell t">Lead</span></td><td><span class="cell i">Engineer</span></td><td><span class="cell n">—</span></td></tr>
+          <tr><td class="who">D. Petrov <span class="faint">· Test Engineer</span></td><td><span class="cell d">Engineer</span></td><td><span class="cell t">Engineer</span></td><td><span class="cell n">—</span></td><td><span class="cell n">—</span></td></tr>
+          <tr><td class="who">A. Ivanov <span class="faint">· Test Engineer</span></td><td><span class="cell t">Engineer</span></td><td><span class="cell n">—</span></td><td><span class="cell n">—</span></td><td><span class="cell i">Viewer</span></td></tr>
+          <tr><td class="who">S. Georgieva <span class="faint">· Viewer</span></td><td><span class="cell i">Viewer</span></td><td><span class="cell i">Viewer</span></td><td><span class="cell i">Viewer</span></td><td><span class="cell i">Viewer</span></td></tr>
+          <tr><td class="who">ci-writer <span class="faint">· token</span></td><td><span class="cell d">Automation</span></td><td><span class="cell d">Automation</span></td><td><span class="cell n">—</span></td><td><span class="cell n">—</span></td></tr>
+        </tbody>
+      </table>
+      <div style="display:flex;gap:16px;margin-top:20px;font-size:12px;color:var(--ink-3);flex-wrap:wrap">
+        <span style="display:flex;gap:7px;align-items:center"><span class="cell d" style="width:26px;height:18px"></span>Direct grant</span>
+        <span style="display:flex;gap:7px;align-items:center"><span class="cell t" style="width:26px;height:18px"></span>Through a team</span>
+        <span style="display:flex;gap:7px;align-items:center"><span class="cell i" style="width:26px;height:18px"></span>Company-wide default</span>
+        <span style="display:flex;gap:7px;align-items:center"><span class="cell n" style="width:26px;height:18px;border:1px dashed var(--line)"></span>No access</span>
+      </div>
+      <p class="quiet" style="margin-top:14px;max-width:74ch">A Company Admin produces no cell at all and appears on the person instead — authority over the company is not a default for its projects.</p>
+    </div>
+    <aside class="side">
+      <div class="sec"><h3>Teams <span class="c">3</span></h3>
+        <div class="tree">
+          <div class="r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 19a6 6 0 0112 0M15 19a5 5 0 017-4.5"/></svg>Payments QA<span class="c">4</span></div>
+          <div class="r d1 faint">M. Kalcheva · D. Petrov</div>
+          <div class="r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 19a6 6 0 0112 0M15 19a5 5 0 017-4.5"/></svg>Onboarding QA<span class="c">3</span></div>
+          <div class="r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 19a6 6 0 0112 0M15 19a5 5 0 017-4.5"/></svg>Platform<span class="c">2</span></div>
+        </div>
+      </div>
+      <div class="sec"><h3>Gaps <span class="c">3</span></h3>
+        <div class="banner warn" style="margin-bottom:9px;font-size:12.5px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v5M12 17.5v.01"/><path d="M10.3 3.9L2.6 17.4A2 2 0 004.3 20.4h15.4a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg><span><b>Atlas Ledger</b> has no Test Lead. Nobody can approve a plan there.</span></div>
+        <div class="banner warn" style="margin-bottom:9px;font-size:12.5px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v5M12 17.5v.01"/><path d="M10.3 3.9L2.6 17.4A2 2 0 004.3 20.4h15.4a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg><span><b>Meridian Console</b> is staffed by one engineer, held company-wide rather than granted.</span></div>
+        <p class="quiet">A gap is computed from the role catalogue, not typed in. It disappears when the grant exists.</p>
+      </div>
+    </aside>
+  </div>
+  <div class="foot"><span class="s">Access is two gates: company membership, then an explicit project grant. This chart is the second gate, drawn.</span></div>
+</div></div></div>
+
+<div class="notes">
+  <div class="note"><h4>Three arms, three fills</h4><p>A matrix built the obvious way — the grants that <em>name</em> a project — draws direct and team grants identically and omits company-wide defaults entirely. Three fills and a legend are the whole reason this chart is worth having.</p></div>
+  <div class="note"><h4>Gaps are the point of the screen</h4><p>An org chart that only shows what exists is a directory. The gaps panel names what is missing and what it costs — <em>nobody can approve a plan there</em> — and is derived from the catalogue rather than curated.</p></div>
+  <div class="note"><h4>The empty team board names the team</h4><p><em>Payments QA has 4 members and no open work items in this project.</em> Two facts, so the reader can tell "wrong team" from "nothing to do".<span class="cite">UX#79 · UX#90</span></p></div>
+  <div class="note"><h4>Vertical column heads, not truncation</h4><p>Project names are distinguishing names and must stay whole. Rotating the head is the cheapest way to keep four long names complete at 1280px.<span class="cite">UX#113</span></p></div>
+</div>
+
+</div>
+<script src="shell.js"></script>

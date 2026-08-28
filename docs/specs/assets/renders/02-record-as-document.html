@@ -1,0 +1,262 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renders · The record as a document</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap">
+<link rel="stylesheet" href="tcms.css">
+
+<div class="wrap">
+<div class="head">
+  <p class="eyebrow">Family 2 of 9 · proposal, nothing implemented</p>
+  <h1>The record, read as a document</h1>
+  <p>Seven read surfaces. The case editor's thesis — <em>a test case is a document</em> — only holds if the screen you land on <b>reads</b> it as one: the same procedure, the same order, the same colour, minus the caret. So the detail page stops being nine titled panels of label/value pairs and becomes the rendered document with the schema in the rail, and the six screens beside it inherit that shape.</p>
+  <a class="back" href="index.html">← all families</a>
+</div>
+
+<!-- ============================================ A · Case detail ============================================ -->
+<div class="cap"><b>A · Test case</b><span>the read view of what the editor writes — nine panels become one document and a rail</span><code>CaseDetailPage.tsx</code></div>
+
+<div class="frame">
+  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="u">tcms.local / reflex / cases / TC-194</span></div>
+  <div class="app">
+    <nav class="rail" data-rail="cases"></nav>
+    <div class="stage">
+      <div class="top">
+        <span class="crumb">Test cases &nbsp;/&nbsp; Refunds &nbsp;/&nbsp; <b>TC-194</b></span>
+        <span class="sp"></span>
+        <span class="lens"><b class="on">Case</b><b>History</b><span style="width:1px;background:var(--line);margin:3px 4px"></span><b>Gherkin</b></span>
+        <button class="btn ghost">Run this case</button>
+        <button class="btn ghost">Edit</button>
+        <button class="btn ghost" style="padding:6px 9px">···</button>
+      </div>
+
+      <div class="split wide-side">
+        <div class="pane doc">
+          <div class="tagline" style="margin-bottom:18px">
+            <span class="tag">@smoke</span><span class="tag">@regression</span><span class="tag">@payments</span>
+            <span class="tag k">@suite:refunds</span><span class="tag k">@automated</span>
+          </div>
+          <h2 class="dtitle">A settled payment cannot be refunded twice</h2>
+          <p class="dwhy"><span class="lab">Why this exists</span>Prove the ledger rejects a second refund against a payment that has already been fully refunded — the double-credit path found in incident&nbsp;INC-4471.</p>
+
+          <div class="banner" style="max-width:74ch;margin-bottom:20px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg><span><b>2 preconditions inherited from Refunds</b> run before step 1 — a merchant account exists, and the refund window is open. <a href="#">See them</a></span></div>
+
+          <div class="proc">
+            <div class="ln"><span class="g">1</span><span class="t"><span class="kw g">Given</span>a settled payment of 100.00 EUR exists</span></div>
+            <div class="ln"><span class="g">2</span><span class="t"><span class="kw w">When</span>the operator refunds it in full</span></div>
+            <div class="ln"><span class="g">3</span><span class="t"><span class="kw t">Then</span>the refund is accepted and the balance falls to 0.00</span></div>
+            <div class="ln"><span class="g">4</span><span class="t"><span class="kw a">And</span>a second refund of the same payment is rejected<div class="blk"><span class="h">|</span> attempt <span class="h">|</span> outcome           <span class="h">|</span><br><span class="h">|</span> 1st     <span class="h">|</span> accepted          <span class="h">|</span><br><span class="h">|</span> 2nd     <span class="h">|</span> ALREADY_REFUNDED  <span class="h">|</span></div></span></div>
+            <div class="ln"><span class="g">5</span><span class="t"><span class="kw a">And</span>the customer balance is unchanged</span></div>
+          </div>
+
+          <div class="rule" style="max-width:74ch"></div>
+          <div style="max-width:74ch;display:grid;grid-template-columns:1fr 1fr;gap:20px">
+            <div>
+              <label class="f">Postconditions</label>
+              <p class="quiet" style="font-size:13px;color:var(--ink-2)">The test merchant's balance is reset · The refund ledger entry is voided</p>
+            </div>
+            <div>
+              <label class="f">Expected result, per step <span class="faint">· legacy</span></label>
+              <p class="quiet">Steps 3–5 carry no per-step expected result. <b style="color:var(--ink-3);font-weight:500">Then</b> is the assertion. Older cases that stored one still show it beside the step, here and in the runner.</p>
+            </div>
+          </div>
+        </div>
+
+        <aside class="side">
+          <div class="sec">
+            <h3>Summary</h3>
+            <div class="kv"><span class="k">Suite</span><span class="v">Refunds</span></div>
+            <div class="kv"><span class="k">Status</span><span class="v"><span class="badge plain">Approved</span></span></div>
+            <div class="kv"><span class="k">Priority</span><span class="v">Medium</span></div>
+            <div class="kv"><span class="k">Automation</span><span class="v"><span class="id" style="font-size:11.5px">RefundsIT#doubleRefund</span></span></div>
+            <div class="kv"><span class="k">Estimated</span><span class="v num">90s</span></div>
+            <div class="kv"><span class="k">Owner</span><span class="v">M. Kalcheva</span></div>
+            <div class="kv"><span class="k">Updated</span><span class="v faint">Today 14:02 · v7</span></div>
+          </div>
+
+          <div class="sec">
+            <h3>Last result <span class="c">8 runs</span></h3>
+            <div class="rline" style="margin-bottom:10px"><span class="rbar" style="flex:1"><i class="p" style="width:75%"></i><i class="f" style="width:25%"></i></span><span class="n">6 / 2</span></div>
+            <div class="kv"><span class="k">Latest</span><span class="v"><span class="badge failed">Failed</span></span></div>
+            <div class="kv"><span class="k">In</span><span class="v"><span class="id" style="font-size:11.5px">R-2209</span></span></div>
+            <div class="kv"><span class="k">By</span><span class="v faint">ci-linux · yesterday</span></div>
+            <div class="banner bad" style="margin-top:10px;font-size:12.5px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16v.01"/></svg><span>Failed at step&nbsp;4 twice in the last five runs. <a href="#" style="color:var(--failed)">Flakiness</a></span></div>
+          </div>
+
+          <div class="sec">
+            <h3>Traceability</h3>
+            <div class="kv"><span class="k">Verifies</span><span class="v"><span class="id" style="font-size:11.5px">REQ-2210</span></span></div>
+            <div class="kv"><span class="k">Defects</span><span class="v"><span class="id" style="font-size:11.5px">INC-4471</span></span></div>
+            <div class="kv"><span class="k">Documented in</span><span class="v" style="font-size:12.5px">Refunds §4.2</span></div>
+          </div>
+
+          <div class="sec">
+            <h3>Classification</h3>
+            <p class="quiet">This project has no test types, levels or features defined, so there is nothing to show. <a href="#">Define them</a> if you want to group cases by area.</p>
+          </div>
+        </aside>
+      </div>
+
+      <div class="foot"><span class="s">Version <b>7</b> · created by D. Petrov 4 months ago · last approved by M. Kalcheva today</span><span class="keys">E edit &nbsp; R run &nbsp; ⌘K commands</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note"><h4>Read and write are the same document</h4><p>Same title size, same gutter, same keyword colours, same 74ch measure as the editor. Pressing <em>Edit</em> lands the caret in text that has not moved a pixel.<span class="was">Was: nine titled panels — What this proves, Steps, Preconditions, Postconditions, Classification, Automation, Ownership, Traceability, Last result — each a box, most of them label/value pairs.</span></p></div>
+  <div class="note"><h4>Three prose fields, one survivor</h4><p><em>Objective</em> becomes <b>Why this exists</b> and is the only prose above the rule. <em>Description</em> is gone; <em>Expected outcome</em> is gone because <b>Then</b> is it. Both collisions the editor removed are removed here too, or the two screens disagree about what a case is.</p></div>
+  <div class="note"><h4>Inherited preconditions are a banner, not a panel</h4><p>What matters is that two things run before step 1, and that they came from the suite. A titled panel listing them made the reader scroll past the procedure to reach it.</p></div>
+  <div class="note"><h4>Empty classification, one sentence</h4><p>Identical copy to the editor's rail. A project that has never configured a vocabulary is told once, in the same words, in both places.</p></div>
+</div>
+
+<!-- ============================================ B · Run detail ============================================ -->
+<div class="cap"><b>B · Run detail</b><span>the document here is the result log; the rail is what the run was</span><code>RunDetailPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb">Test runs &nbsp;/&nbsp; <b>R-2209</b></span><span class="sp"></span><button class="btn ghost">Clone this run</button><button class="btn ghost">Export</button><button class="btn primary">Continue executing</button></div>
+  <div class="title-row"><div><h1>Checkout smoke, release candidate</h1><p>90 cases · <span class="id">ci-linux / rc</span> · release <span class="id">2026.8.4-rc1</span> · ingested from JUnit yesterday 22:04</p></div><span class="sp"></span>
+    <div style="text-align:right"><div class="rline" style="justify-content:flex-end"><span class="rbar" style="width:200px;height:8px"><i class="p" style="width:71%"></i><i class="f" style="width:22%"></i><i class="b" style="width:7%"></i></span></div>
+    <div style="margin-top:7px;display:flex;gap:12px;justify-content:flex-end;font-size:12px"><span style="color:var(--passed)"><b class="num">64</b> passed</span><span style="color:var(--failed)"><b class="num">20</b> failed</span><span style="color:var(--blocked)"><b class="num">6</b> blocked</span></div></div>
+  </div>
+  <div class="filters" style="margin-top:14px"><button class="chip on">Failed <span class="x">×</span></button><button class="chip">Blocked</button><button class="chip">Passed</button><button class="chip">Has defects</button><span class="sp"></span><span class="faint" style="font-size:12px"><b class="num" style="color:var(--ink-2)">20</b> of 90 executions</span></div>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th style="width:96px">Case</th><th>Result</th><th style="width:170px">Executed by</th><th style="width:112px" class="r">Duration</th><th style="width:150px">Defects</th></tr></thead>
+    <tbody>
+      <tr><td><span class="id">TC-188</span></td><td><span class="badge failed" style="margin-right:9px">Failed</span><span class="t">Refund a settled payment</span><span class="sub">Failed at step 4 · <span class="id">AssertionError: expected ALREADY_REFUNDED but was ACCEPTED</span></span></td><td>ci-linux <span class="faint">· ingested</span></td><td class="r num">4.2 s</td><td><span class="id">INC-4471</span></td></tr>
+      <tr><td><span class="id">TC-194</span></td><td><span class="badge failed" style="margin-right:9px">Failed</span><span class="t">A settled payment cannot be refunded twice</span><span class="sub">Failed at step 4 · timeout after 30 s</span></td><td>ci-linux <span class="faint">· ingested</span></td><td class="r num">30.0 s</td><td class="dash">—</td></tr>
+      <tr><td><span class="id">TC-207</span></td><td><span class="badge blocked" style="margin-right:9px">Blocked</span><span class="t">Checkout with a saved card</span><span class="sub">Environment refused — the sandbox gateway was down</span></td><td>A. Ivanov <span class="faint">· manual</span></td><td class="r num">12 s</td><td class="dash">—</td></tr>
+    </tbody>
+  </table></div>
+  <div class="banner steel" style="margin:14px 22px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8v.01"/></svg><span>Each row names <b>the case version this execution ran against</b>, not today's. Opening <span class="id">TC-188</span> from here shows v6 — the text the tester actually saw.</span></div>
+</div></div></div>
+
+<!-- ============================================ C · Ingestion job ============================================ -->
+<div class="cap"><b>C · Ingestion job</b><span>the screen a person opens asking "why did my CI results not show up"</span><code>IngestionJobPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb">CI ingestion &nbsp;/&nbsp; <b>Yesterday 22:04</b></span><span class="sp"></span><button class="btn ghost">Raw payload</button><button class="btn ghost">Re-apply</button></div>
+  <div class="title-row"><div><h1>84 of 90 reported tests found a case</h1><p>JUnit XML · 312 KB · posted by token <span class="id">ci-writer</span> · applied to run <span class="id">R-2209</span></p></div></div>
+  <div style="padding:16px 22px 0"><div class="banner warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v5M12 17.5v.01"/><path d="M10.3 3.9L2.6 17.4A2 2 0 004.3 20.4h15.4a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg><span><b>6 reported tests matched nothing.</b> Their results were not recorded. Bind one to a case and every future report using that name lands automatically — binding costs <span class="id">case:edit</span>.</span></div></div>
+  <div class="tbl-wrap" style="margin-top:14px"><table class="tbl">
+    <thead><tr><th>Reported test</th><th style="width:170px">Case</th><th style="width:120px">Reported</th><th style="width:190px">Confirmed</th><th style="width:110px"></th></tr></thead>
+    <tbody>
+      <tr><td><span class="id">RefundsIT#doubleRefund</span></td><td><span class="id">TC-194</span></td><td><span class="badge failed">Failed</span></td><td class="faint">By automation key</td><td></td></tr>
+      <tr><td><span class="id">CheckoutIT#savedCard</span></td><td><span class="id">TC-207</span></td><td><span class="badge passed">Passed</span></td><td class="faint">By automation key</td><td></td></tr>
+      <tr><td><span class="id">LedgerIT#exportReasonCodes</span></td><td class="faint">— no case</td><td><span class="badge passed">Passed</span></td><td class="faint">Not recorded</td><td><button class="btn sm ghost">Bind</button></td></tr>
+      <tr><td><span class="id">PayoutsIT#sepaCutoff</span></td><td class="faint">— no case</td><td><span class="badge failed">Failed</span></td><td class="faint">Not recorded</td><td><button class="btn sm ghost">Bind</button></td></tr>
+    </tbody>
+  </table></div>
+</div></div></div>
+
+<!-- ============================================ D · Proposal ============================================ -->
+<div class="cap"><b>D · Generated case, one</b><span>a decision screen: the document on the left, the evidence for it beside, the verdict last</span><code>ProposalPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb">Generated cases &nbsp;/&nbsp; <b>Waiting</b> &nbsp;/&nbsp; 1 of 6</span><span class="sp"></span><button class="btn ghost">← Previous</button><button class="btn ghost">Next →</button></div>
+  <div class="split wide-side">
+    <div class="pane doc">
+      <div class="banner steel" style="max-width:74ch;margin-bottom:20px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.4z"/></svg><span><b>Generated, not written.</b> Filed by token <span class="id">ci-generator</span> from <span class="id">refunds.md</span> today at 06:40. It is not in the repository until you accept it.</span></div>
+      <div class="tagline" style="margin-bottom:16px"><span class="tag k">@suite:refunds</span><span class="faint" style="font-size:12px">suggested</span></div>
+      <h2 class="dtitle">A refund exceeding the captured amount is rejected</h2>
+      <p class="dwhy"><span class="lab">Why this exists</span>The spec states a refund may never exceed what was captured; nothing in the repository tests the boundary.</p>
+      <div class="rule" style="max-width:74ch"></div>
+      <div class="proc">
+        <div class="ln"><span class="g">1</span><span class="t"><span class="kw g">Given</span>a captured payment of 40.00 EUR</span></div>
+        <div class="ln"><span class="g">2</span><span class="t"><span class="kw w">When</span>the operator requests a refund of 50.00 EUR</span></div>
+        <div class="ln"><span class="g">3</span><span class="t"><span class="kw t">Then</span>the request is rejected with <span class="id">AMOUNT_EXCEEDS_CAPTURE</span></span></div>
+        <div class="ln"><span class="g">4</span><span class="t"><span class="kw a">And</span>the captured amount is unchanged</span></div>
+        <div class="ln"><span class="g">5</span><span class="t"><span class="kw a">And</span>no ledger entry is written</span></div>
+      </div>
+    </div>
+    <aside class="side">
+      <div class="sec"><h3>Grounding evidence <span class="c">2</span></h3>
+        <div class="blk" style="display:block;white-space:normal;font-family:var(--sans);font-size:12.5px;margin-bottom:9px">“A refund request MUST be rejected if its amount exceeds the captured amount of the payment.”<span style="display:block;margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--ink-4)">refunds.md §4.2</span></div>
+        <div class="blk" style="display:block;white-space:normal;font-family:var(--sans);font-size:12.5px">“Partial refunds accumulate; the sum may not exceed the capture.”<span style="display:block;margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--ink-4)">refunds.md §4.3</span></div>
+      </div>
+      <div class="sec"><h3>Already in the repository?</h3>
+        <p class="quiet" style="margin-bottom:9px">Nearest existing cases, by step overlap:</p>
+        <div class="kv"><span class="k"><span class="id">TC-193</span> Partial refund…</span><span class="v faint num">3 shared</span></div>
+        <div class="kv"><span class="k"><span class="id">TC-181</span> Unsettled auth…</span><span class="v faint num">2 shared</span></div>
+      </div>
+      <div class="sec"><h3>Your decision</h3>
+        <button class="btn primary" style="width:100%;justify-content:center;margin-bottom:8px">Accept — file it in Refunds</button>
+        <button class="btn ghost" style="width:100%;justify-content:center;margin-bottom:12px">Accept and open the editor</button>
+        <label class="f">Why are you rejecting it? (optional)</label>
+        <span class="fld wide" style="min-height:56px;align-items:flex-start"><span class="ph">Duplicate of TC-193, wrong boundary…</span></span>
+        <button class="btn ghost danger" style="width:100%;justify-content:center;margin-top:8px">Reject</button>
+      </div>
+    </aside>
+  </div>
+</div></div></div>
+
+<!-- ============================================ E · Histories ============================================ -->
+<div class="cap"><b>E · Case history</b><span>one column of events, mono stamps in the gutter — the shape both history screens take</span><code>CaseHistoryPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb">Test cases &nbsp;/&nbsp; <b>TC-194</b> &nbsp;/&nbsp; History</span><span class="sp"></span><span class="lens"><b>Case</b><b class="on">History</b><span style="width:1px;background:var(--line);margin:3px 4px"></span><b>Gherkin</b></span></div>
+  <div class="split wide-side">
+    <div class="pane" style="padding:22px 26px;overflow:auto">
+      <h3 style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:0 0 16px">Timeline</h3>
+      <div class="tl">
+        <div class="e hi"><span class="when">Today 14:02</span><span class="mark"></span><span class="body"><b>M. Kalcheva</b> edited the procedure <span class="badge plain" style="margin-left:6px">v7</span><span class="d">Step 4 gained an example table · step 5 rewritten</span></span></div>
+        <div class="e"><span class="when">Yesterday 22:04</span><span class="mark"></span><span class="body">Executed in <b>R-2209</b> — <span class="badge failed">Failed</span> at step 4<span class="d">Ingested from CI · ran against v6</span></span></div>
+        <div class="e"><span class="when">3 days ago</span><span class="mark"></span><span class="body">Executed in <b>R-2205</b> — <span class="badge passed">Passed</span><span class="d">Ingested from CI · ran against v6</span></span></div>
+        <div class="e"><span class="when">4 days ago</span><span class="mark"></span><span class="body"><b>M. Kalcheva</b> approved it <span class="badge plain" style="margin-left:6px">v6</span><span class="d">Draft → In review → Approved, in one sitting</span></span></div>
+        <div class="e"><span class="when">4 days ago</span><span class="mark"></span><span class="body"><b>D. Petrov</b> set automation to <b>Automated</b><span class="d">Key <span class="id">RefundsIT#doubleRefund</span></span></span></div>
+        <div class="e"><span class="when">4 months ago</span><span class="mark"></span><span class="body"><b>D. Petrov</b> created it <span class="badge plain" style="margin-left:6px">v1</span><span class="d">From incident INC-4471</span></span></div>
+      </div>
+    </div>
+    <aside class="side">
+      <div class="sec"><h3>Execution history <span class="c">8 runs</span></h3>
+        <div class="spark" style="margin-bottom:11px">
+          <i class="hi" style="height:100%"></i><i class="hi" style="height:100%"></i><i style="height:26%;background:var(--failed)"></i><i class="hi" style="height:100%"></i><i class="hi" style="height:100%"></i><i class="hi" style="height:100%"></i><i style="height:26%;background:var(--failed)"></i><i style="height:26%;background:var(--failed)"></i>
+        </div>
+        <div class="kv"><span class="k">Passed</span><span class="v num">6</span></div>
+        <div class="kv"><span class="k">Failed</span><span class="v num" style="color:var(--failed)">2</span></div>
+        <div class="kv"><span class="k">Flakiness</span><span class="v"><span class="badge blocked">Flaky · 25%</span></span></div>
+        <p class="quiet" style="margin-top:10px">Two of the last five runs disagreed on the same version. That is the definition this instance uses — <a href="#">how flakiness is computed</a>.</p>
+      </div>
+      <div class="sec"><h3>Versions</h3>
+        <div class="kv ctl"><span class="k">v7 <span class="faint">today</span></span><span class="v faint">current</span></div>
+        <div class="kv ctl"><span class="k">v6 <span class="faint">4 days ago</span></span><span class="v faint">compare ›</span></div>
+        <div class="kv ctl"><span class="k">v5 <span class="faint">2 weeks ago</span></span><span class="v faint">compare ›</span></div>
+      </div>
+    </aside>
+  </div>
+</div></div></div>
+
+<div class="cap"><b>F · Suite history &amp; G · Report view</b><span>the same timeline at suite scope, and the one surface that is a rendered file</span><code>SuiteHistoryPage.tsx · ReportViewPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb">Test cases &nbsp;/&nbsp; Refunds &nbsp;/&nbsp; <b>History</b></span><span class="sp"></span><span class="faint" style="font-size:12px">146 cases · 12 suite versions</span></div>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th style="width:150px" class="sortable">Executed</th><th>Run</th><th style="width:120px">Suite version</th><th style="width:160px">Configuration</th><th style="width:124px">Release</th><th style="width:190px">Result</th></tr></thead>
+    <tbody>
+      <tr><td class="num faint">Yesterday 22:04</td><td class="t">Checkout smoke, RC <span class="id faint">R-2209</span></td><td><span class="id">v12</span></td><td>ci-linux / rc</td><td><span class="id">2026.8.4-rc1</span></td><td><span class="rline"><span class="rbar" style="width:96px"><i class="p" style="width:71%"></i><i class="f" style="width:22%"></i><i class="b" style="width:7%"></i></span><span class="n">64/20/6</span></span></td></tr>
+      <tr><td class="num faint">Today 01:17</td><td class="t">Nightly <span class="id faint">R-2210</span></td><td><span class="id">v12</span></td><td>ci-linux / nightly</td><td><span class="id">2026.8.3</span></td><td><span class="rline"><span class="rbar" style="width:96px"><i class="p" style="width:94%"></i><i class="f" style="width:6%"></i></span><span class="n">287/18</span></span></td></tr>
+      <tr style="opacity:.5"><td class="num faint">2 weeks ago</td><td class="t faint">Run deleted <span class="badge plain" style="margin-left:6px">withdrawn</span></td><td><span class="id">v11</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+    </tbody>
+  </table></div>
+  <div class="foot"><span class="s">A deleted run keeps its row at reduced weight. Removing it would make a suite look better than its history was.</span></div>
+</div></div></div>
+
+<div class="frame" style="margin-top:16px"><div class="app bare"><div class="stage" style="min-height:340px">
+  <div class="top"><span class="crumb">Reports &nbsp;/&nbsp; <b>2026.8 release readiness</b></span><span class="sp"></span><button class="btn ghost">Regenerate</button><button class="btn primary">Download PDF · 1.4 MB</button></div>
+  <div style="flex:1;display:grid;place-items:center;padding:26px;background:var(--field)">
+    <div style="width:min(560px,100%);background:#f6f7f9;border-radius:4px;box-shadow:var(--e3);padding:34px 40px;color:#1b2a41;font-size:12px;line-height:1.6">
+      <div style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#5b6b80">Reflex Payments · run summary</div>
+      <div style="font-size:19px;font-weight:620;letter-spacing:-.02em;margin:6px 0 3px">2026.8 release readiness</div>
+      <div style="color:#5b6b80;margin-bottom:16px">Run R-2210 · 305 cases · generated today 07:02</div>
+      <div style="height:1px;background:#dde3ea;margin-bottom:14px"></div>
+      <div style="display:flex;gap:22px;margin-bottom:14px"><div><div style="font-size:22px;font-weight:600;color:#2e7d5b">287</div><div style="color:#5b6b80;font-size:10px">PASSED</div></div><div><div style="font-size:22px;font-weight:600;color:#c0392b">18</div><div style="color:#5b6b80;font-size:10px">FAILED</div></div><div><div style="font-size:22px;font-weight:600">94.1%</div><div style="color:#5b6b80;font-size:10px">PASS RATE</div></div></div>
+      <div style="height:7px;border-radius:4px;overflow:hidden;display:flex;background:#eef1f5"><i style="width:94%;background:#2e7d5b"></i><i style="width:6%;background:#c0392b"></i></div>
+    </div>
+  </div>
+  <div class="foot"><span class="s">A report is a <b>file</b>, and the preview says so — a light page on a recessed ground, at its own proportions. It is the one surface in the product that is not dark, because the artifact it shows is going to be printed and mailed.</span></div>
+</div></div></div>
+
+<div class="notes">
+  <div class="note"><h4>One timeline, three screens</h4><p>Case history, suite history and the audit trail share a mono gutter, a 7px dot and a rule between events. The eye learns it once.</p></div>
+  <div class="note"><h4>Every read screen names its version</h4><p>Run rows, history rows and executions all say <em>which version ran</em>. Showing today's text beside yesterday's verdict is the quietest way a test-management tool can lie.</p></div>
+  <div class="note"><h4>The proposal's verdict comes last</h4><p>Document, then evidence, then decision — top to bottom in the reading order. Accept sits under the excerpts it is a judgement about, not in the toolbar.<span class="cite">UX#35 · UX#92</span></p></div>
+  <div class="note"><h4>The report preview stays light</h4><p>The one deliberate break in the palette. A PDF preview drawn dark misrepresents the thing being downloaded, and the ground behind it is <em>--field</em> so it reads as a document in a viewer.</p></div>
+</div>
+
+</div>
+<script src="shell.js"></script>

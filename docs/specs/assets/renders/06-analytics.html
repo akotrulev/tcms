@@ -1,0 +1,229 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renders · Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap">
+<link rel="stylesheet" href="tcms.css">
+<style>
+  .grid{display:grid;gap:14px;padding:16px 22px}
+  .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .g2{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)}
+  .fig{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-width:0}
+  .fig > h3{margin:0 0 3px;font-size:13px;font-weight:600;color:var(--ink);letter-spacing:-.01em}
+  .fig > .sub{margin:0 0 13px;font-size:12px;color:var(--ink-4)}
+  .fig > .sub b{color:var(--ink-3);font-weight:500}
+  .hero{font-family:var(--mono);font-size:34px;font-weight:500;letter-spacing:-.03em;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums}
+  .hero .u{font-size:15px;color:var(--ink-3);margin-left:3px}
+  /* small multiples — one series each, so no categorical palette is needed at all */
+  .sm{display:grid;grid-template-columns:88px 1fr 46px;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)}
+  .sm:last-child{border-bottom:0}
+  .sm .l{font-size:12.5px;color:var(--ink-2)}
+  .sm .n{font-family:var(--mono);font-size:13px;color:var(--ink);text-align:right;font-variant-numeric:tabular-nums}
+  .bars{display:flex;align-items:flex-end;gap:2px;height:34px}
+  .bars i{flex:1;background:var(--steel);border-radius:2px 2px 0 0;min-height:2px;display:block;opacity:.75}
+  .bars i.hi{opacity:1}
+  .bars.q i{background:var(--ink-3);opacity:.5}
+  /* one-series line with a crosshair — the only line chart in the product */
+  .lc{position:relative;height:150px;margin:4px 0 0}
+  .lc svg{width:100%;height:100%;display:block;overflow:visible}
+  .lc .gridln{stroke:var(--line);stroke-width:1}
+  .lc .ln{fill:none;stroke:var(--steel);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+  .lc .ar{fill:url(#fade)}
+  .lc .pt{fill:var(--steel);stroke:var(--panel);stroke-width:2}
+  .lc .cross{stroke:var(--line-2);stroke-width:1;stroke-dasharray:3 3}
+  .lc .ax{font-family:var(--mono);font-size:9.5px;fill:var(--ink-4)}
+  .tip{position:absolute;background:var(--ground);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:7px 10px;font-size:12px;box-shadow:var(--e3);white-space:nowrap;pointer-events:none}
+  .tip .h{font-family:var(--mono);font-size:10.5px;color:var(--ink-4);margin-bottom:3px}
+  .tip .v{color:var(--ink);display:flex;align-items:center;gap:7px}
+  .tip .v .sw2{width:8px;height:8px;border-radius:2px;background:var(--steel)}
+  .lg{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-3);margin-top:11px}
+  .lg span{display:flex;align-items:center;gap:6px}
+  .lg i{width:9px;height:9px;border-radius:2px;display:block}
+  .att{display:flex;align-items:flex-start;gap:11px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .att:last-child{border-bottom:0}
+  .att .n{font-family:var(--mono);font-size:16px;color:var(--ink);min-width:34px;text-align:right;font-variant-numeric:tabular-nums}
+  .att .b{flex:1;color:var(--ink-2);line-height:1.45}
+  .att .b .d{display:block;font-size:12px;color:var(--ink-4);margin-top:2px}
+  .att.bad .n{color:var(--failed)} .att.warn .n{color:var(--blocked)}
+</style>
+
+<div class="wrap">
+<div class="head">
+  <p class="eyebrow">Family 6 of 9 · proposal, nothing implemented</p>
+  <h1>Analytics</h1>
+  <p>Two screens of numbers, built by the <code style="font-family:var(--mono);font-size:13px">dataviz</code> procedure rather than by eye — form first, colour last, and the palette run through the validator instead of judged. That run produced two decisions that changed the drawings: <b>this product has no categorical palette</b>, and <b>untested stopped being a fill</b>.</p>
+  <a class="back" href="index.html">← all families</a>
+</div>
+
+<div class="banner steel" style="max-width:100ch;margin-bottom:8px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8v.01"/></svg><span><b>What the validator found.</b> <code style="font-family:var(--mono);font-size:12px">--color-skipped</code> and <code style="font-family:var(--mono);font-size:12px">--color-untested</code> sit <b>10.7 ΔE</b> apart in OKLab — a hard fail for full colour vision, before CVD is considered. Re-stepping either was the wrong fix: <em>untested is the absence of a result</em>, so it became the empty track. The four remaining fills pass at 9.4 ΔE deutan / 17.3 normal. Separately, steel + orchid + periwinkle failed at <b>2.5 ΔE deutan</b> — the product's own accents cannot serve as a series set, which is why <em>Activity</em> below is small multiples and not a stacked chart.</span></div>
+
+<!-- ============================================ A · Dashboard ============================================ -->
+<div class="cap"><b>A · Project overview</b><span>six figures, and every number on it is a link to the rows behind it</span><code>DashboardPage.tsx</code></div>
+
+<div class="frame">
+  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="u">tcms.local / reflex</span></div>
+  <div class="app">
+    <nav class="rail" data-rail="overview"></nav>
+    <div class="stage">
+      <div class="top">
+        <span class="crumb"><b>Reflex Payments</b></span>
+        <span class="sp"></span>
+        <span class="fld"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>Last 30 days</span>
+        <span class="fld"><span class="ph">All suites</span></span>
+        <button class="btn ghost">Export</button>
+      </div>
+
+      <div class="grid g3" style="padding-bottom:0">
+        <div class="fig">
+          <h3>Authoring status</h3><p class="sub">1 284 cases · <b>86%</b> approved</p>
+          <div class="rline" style="margin-bottom:12px"><span class="rbar" style="flex:1;height:8px"><i class="p" style="width:86%"></i><i class="b" style="width:9%"></i><i class="s" style="width:5%"></i></span></div>
+          <div class="hbars">
+            <div class="hb"><span class="l">Approved</span><span class="t"><i class="p" style="width:86%"></i></span><span class="n">1 104</span></div>
+            <div class="hb"><span class="l">In review</span><span class="t"><i class="b" style="width:9%"></i></span><span class="n">116</span></div>
+            <div class="hb"><span class="l">Draft</span><span class="t"><i class="s" style="width:5%"></i></span><span class="n">64</span></div>
+          </div>
+        </div>
+
+        <div class="fig">
+          <h3>Automation coverage</h3><p class="sub">of approved cases</p>
+          <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px"><span class="hero">64<span class="u">%</span></span><span class="badge passed" style="margin-bottom:4px">+6 pts</span></div>
+          <div class="hbars">
+            <div class="hb"><span class="l">Automated</span><span class="t"><i class="p" style="width:64%"></i></span><span class="n">706</span></div>
+            <div class="hb"><span class="l">Not automated</span><span class="t"><i style="width:28%"></i></span><span class="n">309</span></div>
+            <div class="hb"><span class="l">Not automatable</span><span class="t"><i class="u" style="width:8%"></i></span><span class="n">89</span></div>
+          </div>
+        </div>
+
+        <div class="fig">
+          <h3>Activity</h3><p class="sub">last 30 days · three series, three rows</p>
+          <div class="sm"><span class="l">Created</span><span class="bars"><i style="height:20%"></i><i style="height:44%"></i><i style="height:30%"></i><i style="height:70%"></i><i style="height:52%"></i><i class="hi" style="height:100%"></i><i style="height:38%"></i><i style="height:22%"></i><i style="height:60%"></i><i style="height:44%"></i></span><span class="n">148</span></div>
+          <div class="sm"><span class="l">Modified</span><span class="bars"><i style="height:60%"></i><i style="height:74%"></i><i style="height:52%"></i><i style="height:88%"></i><i class="hi" style="height:100%"></i><i style="height:70%"></i><i style="height:64%"></i><i style="height:40%"></i><i style="height:82%"></i><i style="height:56%"></i></span><span class="n">612</span></div>
+          <div class="sm"><span class="l">Archived</span><span class="bars q"><i style="height:12%"></i><i style="height:0"></i><i style="height:30%"></i><i style="height:8%"></i><i style="height:0"></i><i style="height:22%"></i><i style="height:0"></i><i style="height:0"></i><i style="height:44%"></i><i style="height:10%"></i></span><span class="n">31</span></div>
+          <p class="quiet" style="margin-top:11px">Three one-series rows sharing an x-axis, not one chart with three colours — the three hues that would have carried it are 2.5 ΔE apart under deuteranopia.</p>
+        </div>
+      </div>
+
+      <div class="grid g2" style="padding-top:14px">
+        <div class="fig">
+          <h3>By feature</h3><p class="sub">approved cases, and how their last run went</p>
+          <div class="hbars">
+            <div class="hb"><span class="l">Checkout</span><span class="t"><i class="p" style="width:74%"></i><i class="f" style="width:9%"></i><i class="b" style="width:4%"></i></span><span class="n">312</span></div>
+            <div class="hb"><span class="l">Ledger</span><span class="t"><i class="p" style="width:88%"></i><i class="f" style="width:3%"></i></span><span class="n">208</span></div>
+            <div class="hb"><span class="l">Onboarding</span><span class="t"><i class="p" style="width:41%"></i><i class="f" style="width:2%"></i></span><span class="n">184</span></div>
+            <div class="hb"><span class="l">Refunds</span><span class="t"><i class="p" style="width:62%"></i><i class="f" style="width:14%"></i><i class="b" style="width:5%"></i></span><span class="n">146</span></div>
+            <div class="hb"><span class="l">Payouts</span><span class="t"><i class="p" style="width:29%"></i><i class="f" style="width:6%"></i></span><span class="n">97</span></div>
+            <div class="hb"><span class="l faint">Unfiled</span><span class="t"><i class="p" style="width:11%"></i></span><span class="n">337</span></div>
+          </div>
+          <div class="lg"><span><i style="background:var(--passed)"></i>Passed</span><span><i style="background:var(--failed)"></i>Failed</span><span><i style="background:var(--blocked)"></i>Blocked</span><span><i style="background:var(--field);border:1px solid var(--line)"></i>Never run</span></div>
+          <p class="quiet" style="margin-top:9px"><b style="color:var(--ink-3);font-weight:500">Unfiled</b> is the largest bar and the emptiest — 337 approved cases no suite claims.</p>
+        </div>
+
+        <div class="fig">
+          <h3>Needs attention</h3><p class="sub">computed from the health catalogue, not curated</p>
+          <div class="att bad"><span class="n">14</span><span class="b">Failing repeatedly<span class="d">Disagreed with themselves in 3 of the last 5 runs</span></span></div>
+          <div class="att warn"><span class="n">31</span><span class="b">Approved before their last edit<span class="d">Changed after approval and never re-read</span></span></div>
+          <div class="att warn"><span class="n">9</span><span class="b">Linked spec changed<span class="d">The documentation they cite moved under them</span></span></div>
+          <div class="att"><span class="n">337</span><span class="b">Not linked to any spec<span class="d">Nothing in Documentation claims them</span></span></div>
+          <div class="att"><span class="n">62</span><span class="b">Not run in 90 days<span class="d">Approved, automated, and silent</span></span></div>
+        </div>
+      </div>
+
+      <div class="foot"><span class="s">Every figure here is a filter on a table. Clicking <b>14</b> opens the case list filtered to <em>Failing repeatedly</em>, and the URL carries it.</span><span class="keys">⌘K commands</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note"><h4>No categorical palette, by design</h4><p>Every figure in the product is either one series (magnitude, in steel) or a status stack (reserved colours). The validator is what settled it — the accents that would have carried a 3-series chart are indistinguishable under deuteranopia — and the form heuristic agreed independently.</p></div>
+  <div class="note"><h4>Untested is the empty track</h4><p>A fill that means <em>nothing happened</em> was competing with a fill that means <em>somebody chose to skip this</em>, and losing. The track shows the same magnitude and cannot be confused with a result.</p></div>
+  <div class="note"><h4>Needs attention is a count and a sentence</h4><p><em>14 · Failing repeatedly · disagreed with themselves in 3 of the last 5 runs.</em> A health signal whose name you have to look up is a signal nobody acts on.</p></div>
+  <div class="note"><h4>No pie, no donut, no gauge</h4><p>Proportion is a stacked bar you can compare down a column. Three donuts side by side cannot be compared at all, which is the reason they keep getting drawn.<span class="cite">anti-patterns · form heuristic</span></p></div>
+</div>
+
+<!-- ============================================ B · Plan statistics ============================================ -->
+<div class="cap"><b>B · Plan statistics</b><span>the one line chart in the product, and the panel that answers "why is this plan not done"</span><code>PlanStatisticsPage.tsx</code></div>
+
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb">Test plans &nbsp;/&nbsp; <b>2026.8 release readiness</b></span><span class="sp"></span><span class="badge blocked">In progress</span><button class="btn ghost">Return to draft</button><button class="btn primary">Approve plan</button></div>
+  <div class="title-row"><div><h1>2026.8 release readiness</h1><p>418 cases in scope · milestone <b style="color:var(--ink-2);font-weight:500">2026.8 GA, 12 Sep</b> · 3 runs · owned by M. Kalcheva</p></div></div>
+
+  <div class="grid g2" style="padding-top:16px">
+    <div class="fig">
+      <h3>Pass rate over the plan's runs</h3><p class="sub">one series · each point is a completed run</p>
+      <div class="lc">
+        <svg viewBox="0 0 520 150" preserveAspectRatio="none">
+          <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#6ba8c4" stop-opacity=".22"/><stop offset="100%" stop-color="#6ba8c4" stop-opacity="0"/></linearGradient></defs>
+          <line class="gridln" x1="0" y1="10" x2="520" y2="10"/><line class="gridln" x1="0" y1="55" x2="520" y2="55"/>
+          <line class="gridln" x1="0" y1="100" x2="520" y2="100"/><line class="gridln" x1="0" y1="130" x2="520" y2="130"/>
+          <path class="ar" d="M20 96 L140 74 L260 40 L380 58 L500 22 L500 130 L20 130 Z"/>
+          <path class="ln" d="M20 96 L140 74 L260 40 L380 58 L500 22"/>
+          <line class="cross" x1="380" y1="0" x2="380" y2="130"/>
+          <circle class="pt" cx="20" cy="96" r="4"/><circle class="pt" cx="140" cy="74" r="4"/><circle class="pt" cx="260" cy="40" r="4"/>
+          <circle class="pt" cx="380" cy="58" r="5.5"/><circle class="pt" cx="500" cy="22" r="4"/>
+        </svg>
+        <div class="tip" style="left:44%;top:6px"><div class="h">R-2209 · yesterday 22:04</div><div class="v"><span class="sw2"></span>Pass rate <b class="num" style="margin-left:2px">88.4%</b></div><div class="h" style="margin:4px 0 0">64 passed · 20 failed · 6 blocked</div></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-4);margin-top:6px"><span>R-2188</span><span>R-2195</span><span>R-2203</span><span>R-2209</span><span>R-2210</span></div>
+      <p class="quiet" style="margin-top:10px">Y axis starts at <b style="color:var(--ink-3);font-weight:500">0</b>, not at 80. A truncated axis turns a 6-point recovery into a cliff.</p>
+    </div>
+
+    <div class="fig">
+      <h3>What's blocking this plan</h3><p class="sub">3 exit criteria · <b>2 met</b></p>
+      <div class="att"><span class="n" style="color:var(--passed)">✓</span><span class="b">Pass rate at least 90%<span class="d">94.1% in the latest run — met</span></span></div>
+      <div class="att"><span class="n" style="color:var(--passed)">✓</span><span class="b">No critical case unexecuted<span class="d">All 48 executed — met</span></span></div>
+      <div class="att bad"><span class="n">✕</span><span class="b">No open critical defect<span class="d"><span class="id">INC-4471</span> is open and linked to 2 failing cases</span></span></div>
+      <div class="banner warn" style="margin-top:12px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v5M12 17.5v.01"/><path d="M10.3 3.9L2.6 17.4A2 2 0 004.3 20.4h15.4a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg><span><b>Approve</b> is available and will record that you approved with one criterion unmet. It is a judgement, not a lock — but it is written down.</span></div>
+    </div>
+  </div>
+
+  <div class="grid g3" style="padding-top:0">
+    <div class="fig">
+      <h3>By suite</h3><p class="sub">418 in scope</p>
+      <div class="hbars">
+        <div class="hb"><span class="l">Checkout</span><span class="t"><i class="p" style="width:82%"></i><i class="f" style="width:6%"></i></span><span class="n">150</span></div>
+        <div class="hb"><span class="l">Refunds</span><span class="t"><i class="p" style="width:64%"></i><i class="f" style="width:12%"></i><i class="b" style="width:4%"></i></span><span class="n">146</span></div>
+        <div class="hb"><span class="l">Ledger</span><span class="t"><i class="p" style="width:91%"></i><i class="f" style="width:2%"></i></span><span class="n">122</span></div>
+      </div>
+    </div>
+    <div class="fig">
+      <h3>By configuration</h3><p class="sub">3 configurations</p>
+      <div class="hbars">
+        <div class="hb"><span class="l">ci-linux</span><span class="t"><i class="p" style="width:94%"></i><i class="f" style="width:6%"></i></span><span class="n">305</span></div>
+        <div class="hb"><span class="l">chrome-eu</span><span class="t"><i class="p" style="width:52%"></i><i class="f" style="width:8%"></i></span><span class="n">150</span></div>
+        <div class="hb"><span class="l">firefox-eu</span><span class="t"><i class="p" style="width:18%"></i></span><span class="n">44</span></div>
+      </div>
+    </div>
+    <div class="fig">
+      <h3>Still to execute</h3><p class="sub">against the latest run</p>
+      <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:12px"><span class="hero">60</span><span class="mut" style="font-size:13px">of 418</span></div>
+      <div class="att"><span class="n">38</span><span class="b">Never attempted in any run<span class="d">Mostly Payouts and Onboarding</span></span></div>
+      <div class="att warn"><span class="n">16</span><span class="b">Blocked and not retried<span class="d">Sandbox gateway</span></span></div>
+      <div class="att"><span class="n">6</span><span class="b">Skipped by a tester<span class="d">All carry a reason</span></span></div>
+    </div>
+  </div>
+
+  <div class="grid g2" style="padding-top:0">
+    <div class="fig"><h3>Scope</h3><p class="sub">how the 418 were chosen</p>
+      <div class="kv"><span class="k">Suites</span><span class="v">Checkout · Refunds · Ledger</span></div>
+      <div class="kv"><span class="k">Tags</span><span class="v"><span class="tag">@regression</span></span></div>
+      <div class="kv"><span class="k">Priority at least</span><span class="v">Medium</span></div>
+      <div class="kv"><span class="k">Named individually</span><span class="v num">12</span></div>
+    </div>
+    <div class="fig"><h3>Out of scope</h3><p class="sub">and why — stated, not implied</p>
+      <p class="quiet" style="font-size:12.5px;color:var(--ink-2);line-height:1.6">Payouts is excluded for 2026.8: the SEPA cutoff work ships in 2026.9 and testing it against this release would record failures against a feature that is not in it. <span class="faint">— M. Kalcheva, 3 weeks ago</span></p>
+    </div>
+  </div>
+
+  <div class="foot"><span class="s">A plan is a <b>scope decision plus its evidence</b>. Out of scope is prose because the reason is the artifact — a list of excluded ids says nothing a reader can check.</span></div>
+</div></div></div>
+
+<div class="notes">
+  <div class="note"><h4>The line chart has a crosshair by default</h4><p>Not on request. An SVG chart in a browser <em>is</em> interactive; shipping one without a hover layer wastes the medium and forces the reader to estimate against gridlines.<span class="cite">interaction · hover layer</span></p></div>
+  <div class="note"><h4>One series, so no legend box</h4><p>The title names it. A legend for a single line is chrome that says what the heading already said.</p></div>
+  <div class="note"><h4>The axis starts at zero and says so</h4><p>Five runs between 78% and 94% look like a collapse and a recovery on a truncated axis. The sentence under the chart is there because a reader cannot see an axis choice that was made for them.</p></div>
+  <div class="note"><h4>Approve is not disabled by an unmet criterion</h4><p>It is available, and the banner says what approving will record. Blocking the button would have moved the decision into a spreadsheet; recording it keeps it here.<span class="cite">UX#31 · disable-don't-hide</span></p></div>
+</div>
+
+</div>
+<script src="shell.js"></script>

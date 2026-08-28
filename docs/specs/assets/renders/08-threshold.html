@@ -1,0 +1,146 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renders · The threshold</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap">
+<link rel="stylesheet" href="tcms.css">
+<style>
+  .thr{display:grid;grid-template-columns:minmax(0,1fr) 380px;min-height:520px}
+  .thr .story{background:linear-gradient(150deg,#0c1119,#11161e 55%,#0e1a20);padding:44px 46px;display:flex;flex-direction:column;justify-content:space-between;border-right:1px solid var(--line)}
+  .thr .story .mk{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--steel)}
+  .thr .story h2{font-size:26px;font-weight:620;letter-spacing:-.022em;line-height:1.25;margin:0 0 12px;max-width:22ch;text-wrap:balance}
+  .thr .story p{margin:0;color:var(--ink-3);font-size:14px;line-height:1.6;max-width:44ch}
+  .thr .form{background:var(--panel);padding:44px 36px;display:flex;flex-direction:column;justify-content:center}
+  .thr .form h3{margin:0 0 5px;font-size:19px;font-weight:600;letter-spacing:-.015em}
+  .thr .form .lead{margin:0 0 24px;font-size:13px;color:var(--ink-3)}
+  .row{margin-bottom:15px}
+  .or{display:flex;align-items:center;gap:11px;margin:20px 0;color:var(--ink-4);font-size:11.5px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase}
+  .or .l{flex:1;height:1px;background:var(--line)}
+  .soc{display:flex;flex-direction:column;gap:8px}
+  .soc button{justify-content:center}
+  .meter{display:flex;gap:3px;margin-top:7px}
+  .meter i{flex:1;height:3px;border-radius:2px;background:var(--line-2)}
+  .meter i.on{background:var(--passed)}
+  .req{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink-4);margin-top:5px}
+  .req.ok{color:var(--passed)}
+  .req svg{width:11px;height:11px}
+</style>
+
+<div class="wrap">
+<div class="head">
+  <p class="eyebrow">Family 8 of 9 · proposal, nothing implemented</p>
+  <h1>The threshold</h1>
+  <p>Three screens with no rail, no project, and no session — the only place a stranger meets this product. They carry more visual identity than anything inside the app, because they are the one moment where the instance gets to say what it is, and less interaction, because every extra control here is a control somebody must operate before they can do anything at all.</p>
+  <a class="back" href="index.html">← all families</a>
+</div>
+
+<!-- ============================================ A · Sign in ============================================ -->
+<div class="cap"><b>A · Sign in</b><span>and the SSO discovery that fires on the email, before a password is ever asked for</span><code>LoginPage.tsx</code></div>
+
+<div class="frame">
+  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="u">tcms.local / sign-in</span></div>
+  <div class="thr">
+    <div class="story">
+      <span class="mk">TCMS</span>
+      <div>
+        <h2>Every case is a document, and every result is evidence.</h2>
+        <p>A self-hosted test case management system. Write the procedure in the words your team already uses, run it, and keep what happened — with the version that ran, the person who ran it, and the defect it found.</p>
+      </div>
+      <p class="quiet" style="font-family:var(--mono);font-size:11px">acme.tcms.internal · v2026.8.3</p>
+    </div>
+    <div class="form">
+      <h3>Sign in</h3>
+      <p class="lead">Use your work address.</p>
+      <div class="row">
+        <label class="f">Email</label>
+        <span class="fld wide focus" style="min-height:38px"><span style="color:var(--ink)">mira.kalcheva@acme.test</span><span class="cursor"></span></span>
+      </div>
+      <div class="banner steel" style="margin-bottom:15px;font-size:12.5px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg><span><b>acme.test</b> signs in through Acme Okta. You will not need a password.</span></div>
+      <button class="btn primary" style="width:100%;justify-content:center;min-height:38px">Continue with Acme Okta</button>
+      <div class="or"><span class="l"></span>or<span class="l"></span></div>
+      <div class="soc">
+        <button class="btn ghost">Continue with GitHub</button>
+        <button class="btn ghost">Continue with GitLab</button>
+        <button class="btn ghost">Continue with Google</button>
+      </div>
+      <p class="quiet" style="margin-top:20px;text-align:center">No account here? An administrator has to invite you — <b style="color:var(--ink-3);font-weight:500">this instance has no sign-up.</b></p>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note"><h4>The email decides the method</h4><p>Type the address, and the page discovers whether its domain is claimed. Showing a password field to somebody whose company uses Okta is a dead end they cannot diagnose.<span class="cite">UX#107 · accessible authentication</span></p></div>
+  <div class="note"><h4>"This instance has no sign-up" is said, not implied</h4><p>A missing link is a puzzle. One sentence naming what actually happens — an administrator invites you — is the difference between a support ticket and none.</p></div>
+  <div class="note"><h4>The left panel is the only marketing in the product</h4><p>It says what the tool is for in two sentences, and it carries the instance hostname and version, so a person landing on the wrong internal URL can tell.</p></div>
+  <div class="note"><h4>Keep me signed in is on the password path only</h4><p>It appears with the password field, not before one is known to be needed. A checkbox for a flow that will not happen is noise at the exact moment noise costs most.</p></div>
+</div>
+
+<!-- ============================================ B · Password path + invitation ============================================ -->
+<div class="cap"><b>B · The password path, and a refused sign-in</b><span>what the same screen is for a domain with no provider</span></div>
+<div class="frame"><div class="thr" style="min-height:420px">
+  <div class="story"><span class="mk">TCMS</span><div><h2>Every case is a document, and every result is evidence.</h2></div><p class="quiet" style="font-family:var(--mono);font-size:11px">acme.tcms.internal · v2026.8.3</p></div>
+  <div class="form">
+    <h3>Sign in</h3><p class="lead">Use your work address.</p>
+    <div class="row"><label class="f">Email</label><span class="fld wide" style="min-height:38px"><span style="color:var(--ink)">d.petrov@contractor.test</span></span></div>
+    <div class="row"><label class="f">Password</label><span class="fld wide focus" style="min-height:38px"><span style="color:var(--ink)">••••••••••</span><span class="sp" style="flex:1"></span><span class="faint" style="font-size:11.5px">Show</span></span>
+      <p class="err"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16v.01"/></svg><span>That email and password do not match an account here. <b>2 attempts left</b> before this address is locked for 15 minutes.</span></p>
+    </div>
+    <div class="row" style="display:flex;align-items:center;gap:9px"><span class="sw on"></span><span style="font-size:13px;color:var(--ink-2)">Keep me signed in</span></div>
+    <button class="btn primary" style="width:100%;justify-content:center;min-height:38px">Sign in</button>
+    <p class="quiet" style="margin-top:16px;text-align:center"><a href="#">Forgot your password?</a></p>
+  </div>
+</div></div>
+
+<div class="cap"><b>C · Accept your invitation</b><span>the only screen in the product that creates an account, and it says who invited you</span><code>AcceptInvitationPage.tsx</code></div>
+<div class="frame"><div class="thr" style="min-height:480px">
+  <div class="story">
+    <span class="mk">TCMS</span>
+    <div>
+      <h2>Mira Kalcheva invited you to Acme.</h2>
+      <p>You will join as a <b style="color:var(--ink-2);font-weight:550">Test Engineer</b>, with access to <b style="color:var(--ink-2);font-weight:550">Reflex Payments</b> and <b style="color:var(--ink-2);font-weight:550">Halo Onboarding</b>. That means you can write cases, run them and record results — and you cannot approve a plan.</p>
+    </div>
+    <p class="quiet" style="font-family:var(--mono);font-size:11px">This link expires in 6 days · acme.tcms.internal</p>
+  </div>
+  <div class="form">
+    <h3>Set your password</h3>
+    <p class="lead">Signing in as <span class="id" style="font-size:12.5px">d.petrov@acme.test</span></p>
+    <div class="row"><label class="f">Password</label><span class="fld wide focus" style="min-height:38px"><span style="color:var(--ink)">•••••••••••••••</span><span class="sp" style="flex:1"></span><span class="faint" style="font-size:11.5px">Hide</span></span>
+      <div class="meter"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+      <div class="req ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12.5l4.5 4.5L19 7"/></svg>At least 12 characters</div>
+      <div class="req ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12.5l4.5 4.5L19 7"/></svg>Not a password seen in a known breach</div>
+    </div>
+    <div class="row"><label class="f">Confirm password</label><span class="fld wide" style="min-height:38px"><span style="color:var(--ink)">•••••••••••••••</span></span></div>
+    <button class="btn primary" style="width:100%;justify-content:center;min-height:38px">Create the account and sign in</button>
+    <p class="quiet" style="margin-top:16px;text-align:center">Your address is at a domain claimed by Acme Okta, so you may <a href="#">use single sign-on instead</a> and skip this.</p>
+  </div>
+</div></div>
+
+<div class="cap"><b>D · Signing in through a provider</b><span>the redirect landing — and the one where it goes wrong</span><code>SsoCallbackPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage" style="min-height:230px;background:var(--ground)">
+  <div class="state" style="padding-top:56px">
+    <div style="display:flex;gap:5px;justify-content:center;margin-bottom:18px"><span class="skel" style="width:9px;height:9px;border-radius:50%"></span><span class="skel" style="width:9px;height:9px;border-radius:50%"></span><span class="skel" style="width:9px;height:9px;border-radius:50%"></span></div>
+    <h3>Signing you in through Acme Okta</h3>
+    <p>Checking the response and finding your company. This takes a second or two.</p>
+  </div>
+</div></div></div>
+
+<div class="frame" style="margin-top:16px"><div class="app bare"><div class="stage" style="min-height:290px;background:var(--ground)">
+  <div class="state" style="padding-top:44px">
+    <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" style="color:var(--failed)"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16v.01"/></svg>
+    <h3>Acme Okta signed you in, but no account here matches</h3>
+    <p>The provider returned <span class="id">d.petrov@acme.test</span>. That address is not a member of any company on this instance, and single sign-on does not create accounts — an administrator has to invite you first.</p>
+    <div class="acts"><button class="btn primary">Back to sign in</button><button class="btn ghost">Try a different account</button></div>
+    <p class="quiet" style="margin-top:18px;font-family:var(--mono);font-size:11px">Reference <span style="color:var(--ink-3)">sso-4f21c8</span> — quote it if you ask an administrator.</p>
+  </div>
+</div></div></div>
+
+<div class="notes">
+  <div class="note"><h4>The invitation says what the role can do</h4><p>Not just <em>Test Engineer</em>. <em>You can write cases, run them and record results — and you cannot approve a plan.</em> The one moment a person will read a permission description is the moment they are granted one.</p></div>
+  <div class="note"><h4>Password rules are checks that tick, not a paragraph</h4><p>Two requirements, each turning green as it is met, with a strength meter beside them. A wall of rules under a field is read once, by nobody.<span class="cite">UX#55 · UX#59</span></p></div>
+  <div class="note"><h4>The failed callback says what the provider returned</h4><p>The address, the reason no account matched, that SSO never creates accounts, and a reference to quote. Four facts, because this is the failure a person cannot debug from their side.<span class="cite">UX#80</span></p></div>
+  <div class="note"><h4>Lockout is counted out loud</h4><p><em>2 attempts left before this address is locked for 15 minutes.</em> A silent lockout looks like a broken product; a counted one looks like a policy.</p></div>
+</div>
+
+</div>
+<script src="shell.js"></script>

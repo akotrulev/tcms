@@ -1,0 +1,222 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renders · Authoring beyond the case</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap">
+<link rel="stylesheet" href="tcms.css">
+<style>
+  /* the block gutter — the doc editor's one new component */
+  .blkrow{display:grid;grid-template-columns:22px 1fr;gap:12px;position:relative;padding:3px 0}
+  .blkrow .gut{display:flex;flex-direction:column;align-items:center;gap:3px;padding-top:6px;opacity:.35}
+  .blkrow:hover .gut{opacity:1}
+  .blkrow .gut .h{color:var(--ink-4);font-size:13px;line-height:1;cursor:grab}
+  .blkrow .gut .ty{font-family:var(--mono);font-size:9px;color:var(--ink-4);letter-spacing:.04em;text-transform:uppercase}
+  .blkrow.on{background:var(--steel-dim);margin:0 -14px;padding:3px 14px;border-radius:var(--r-sm);box-shadow:inset 2px 0 0 var(--steel)}
+  .ins{display:flex;align-items:center;gap:9px;padding:6px 0;color:var(--ink-4);font-size:12px}
+  .ins .l{flex:1;height:1px;background:var(--line)}
+  .ins .b{border:1px dashed var(--line-2);border-radius:var(--r-sm);padding:2px 9px;font-family:var(--mono);font-size:11px}
+  .fileln{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:var(--r-sm);font-size:12.5px;color:var(--ink-2)}
+  .fileln:hover{background:rgb(255 255 255/4%)}
+  .fileln.on{background:var(--steel-dim);color:var(--ink)}
+  .fileln .n{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-4)}
+  .fileln svg{width:13px;height:13px;color:var(--ink-4);flex:none}
+  .scn{border:1px solid var(--line);border-radius:var(--r);margin-bottom:10px;overflow:hidden;background:var(--panel)}
+  .scn .hd{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line);font-size:13px}
+  .scn .hd .t{color:var(--ink);font-weight:450;flex:1}
+  .scn .bd{padding:10px 12px;font-size:13.5px;line-height:1.7}
+  .scn.skip{opacity:.5}
+</style>
+
+<div class="wrap">
+<div class="head">
+  <p class="eyebrow">Family 5 of 9 · proposal, nothing implemented</p>
+  <h1>Authoring beyond the case</h1>
+  <p>Three screens that write something other than a case. Documentation was already a document and never looked like one; feature import is a <em>review before commit</em> — the same shape as the generated-case queue, at file scale. All three borrow the case editor's measure, gutter and footer, because a person who has learned to write a case here has learned all four surfaces.</p>
+  <a class="back" href="index.html">← all families</a>
+</div>
+
+<!-- ============================================ A · Documentation ============================================ -->
+<div class="cap"><b>A · Documentation</b><span>a page tree, a reading column, and the tested/not-tested signal that is the reason this module exists</span><code>DocsPage.tsx</code></div>
+
+<div class="frame">
+  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="u">tcms.local / reflex / docs / refunds</span></div>
+  <div class="app">
+    <nav class="rail" data-rail="docs"></nav>
+    <div class="stage">
+      <div class="top">
+        <span class="crumb">Documentation &nbsp;/&nbsp; Payments &nbsp;/&nbsp; <b>Refunds</b></span>
+        <span class="sp"></span>
+        <span class="badge plain">Published</span>
+        <button class="btn ghost">Unpublish</button>
+        <button class="btn ghost">Edit</button>
+        <button class="btn primary">New page</button>
+      </div>
+      <div class="split three">
+        <aside class="side l">
+          <div class="sec">
+            <span class="fld wide" style="margin-bottom:11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><span class="ph">Filter 37 pages</span></span>
+            <div class="tree">
+              <div class="r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6"/></svg>Payments<span class="c">12</span></div>
+              <div class="r d1 on">Refunds</div>
+              <div class="r d1">Captures</div>
+              <div class="r d1">Disputes <span class="c" style="color:var(--blocked)">!</span></div>
+              <div class="r d1 faint">Payouts <span class="c">draft</span></div>
+              <div class="r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6"/></svg>Onboarding<span class="c">9</span></div>
+              <div class="r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6"/></svg>Ledger<span class="c">16</span></div>
+            </div>
+          </div>
+        </aside>
+
+        <div class="pane doc" style="padding:28px 34px">
+          <div class="tagline" style="margin-bottom:16px"><span class="tag k">@spec</span><span class="tag">@payments</span></div>
+          <h2 class="dtitle">Refunds</h2>
+          <p class="dwhy" style="margin-bottom:20px"><span class="lab">Space · Payments</span>Published by M. Kalcheva 4 days ago · version 8 · 11 cases link to this page</p>
+          <div class="rule" style="max-width:70ch;margin:0 0 20px"></div>
+          <div class="prose">
+            <h2 style="margin-top:0">4. Amount rules</h2>
+            <p><b style="color:var(--ink);font-weight:550">4.2</b> A refund request MUST be rejected if its amount exceeds the captured amount of the payment. The rejection carries <code>AMOUNT_EXCEEDS_CAPTURE</code> and writes no ledger entry.</p>
+            <div style="display:flex;gap:8px;align-items:center;margin:-6px 0 16px"><span class="badge passed">Tested</span><span class="faint" style="font-size:12px">by <span class="id" style="font-size:11.5px">TC-193</span>, <span class="id" style="font-size:11.5px">TC-194</span> · last run passed</span></div>
+            <p><b style="color:var(--ink);font-weight:550">4.3</b> Partial refunds accumulate. The sum of all refunds against one payment may not exceed its capture, and a request that would cross the line is rejected in full rather than truncated.</p>
+            <div style="display:flex;gap:8px;align-items:center;margin:-6px 0 16px"><span class="badge blocked">Not tested</span><span class="faint" style="font-size:12px">no case links to this paragraph</span><button class="btn sm ghost">Write one</button></div>
+            <h2>5. Timing</h2>
+            <p>A refund may be issued while the refund window is open. The window closes 180 days after capture; after that the request is rejected with <code>WINDOW_CLOSED</code>.</p>
+            <div style="display:flex;gap:8px;align-items:center;margin:-6px 0 16px"><span class="badge failed">Failing</span><span class="faint" style="font-size:12px">by <span class="id" style="font-size:11.5px">TC-188</span> · failed in <span class="id" style="font-size:11.5px">R-2209</span></span></div>
+          </div>
+        </div>
+
+        <aside class="side">
+          <div class="sec"><h3>Coverage <span class="c">3 of 4</span></h3>
+            <div class="rline" style="margin-bottom:12px"><span class="rbar" style="flex:1"><i class="p" style="width:50%"></i><i class="f" style="width:25%"></i><i class="u" style="width:25%"></i></span></div>
+            <div class="kv"><span class="k">Tested and passing</span><span class="v num">2</span></div>
+            <div class="kv"><span class="k">Tested and failing</span><span class="v num" style="color:var(--failed)">1</span></div>
+            <div class="kv"><span class="k">Not tested</span><span class="v num" style="color:var(--blocked)">1</span></div>
+          </div>
+          <div class="sec"><h3>Cases linked here <span class="c">11</span></h3>
+            <div class="kv ctl"><span class="k"><span class="id" style="font-size:11.5px">TC-193</span> Partial refund…</span><span class="v"><span class="badge passed" style="padding:1px 6px"></span></span></div>
+            <div class="kv ctl"><span class="k"><span class="id" style="font-size:11.5px">TC-194</span> Refunded twice</span><span class="v"><span class="badge passed" style="padding:1px 6px"></span></span></div>
+            <div class="kv ctl"><span class="k"><span class="id" style="font-size:11.5px">TC-188</span> Refund a settled…</span><span class="v"><span class="badge failed" style="padding:1px 6px"></span></span></div>
+            <p class="quiet" style="margin-top:9px">Editing §4.2 marks all three <em>Linked spec changed</em> until someone re-reads them.</p>
+          </div>
+          <div class="sec"><h3>History</h3>
+            <div class="kv"><span class="k">v8 published</span><span class="v faint">4 days ago</span></div>
+            <div class="kv"><span class="k">v7 draft</span><span class="v faint">5 days ago</span></div>
+          </div>
+        </aside>
+      </div>
+      <div class="foot"><span class="s">A spec page is the only place in the product where <b>Not tested</b> is a defect — that is what documentation is here <em>for</em>.</span><span class="keys">E edit &nbsp; ⌘K commands</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note"><h4>Coverage is per paragraph, not per page</h4><p>The chip sits under the clause it judges, so a reader learns which sentence is untested without leaving the sentence. A page-level percentage would have averaged the one gap away.<span class="was">Was: a <em>Not tested</em> label on the page, and a separate panel of links.</span></p></div>
+  <div class="note"><h4>The reading column keeps the 70ch measure</h4><p>Same as the case document, one ch narrower for prose. A documentation module at full window width is a wall.<span class="cite">UX#73 · UX#21</span></p></div>
+  <div class="note"><h4>Draft pages stay in the tree, dimmed</h4><p><em>Payouts · draft</em> is visible to anyone who can read the space. Hiding drafts made people write the same page twice.</p></div>
+  <div class="note"><h4>Write one is on the gap</h4><p>The untested clause carries the button that fixes it, and it opens the case editor pre-seeded with the paragraph as the objective. The gap and its remedy are never more than one click apart.<span class="cite">UX#80</span></p></div>
+</div>
+
+<!-- ============================================ B · Doc page editor ============================================ -->
+<div class="cap"><b>B · Editing a page</b><span>blocks get a gutter, not a toolbar each — the case editor's move, applied to a block model</span><code>DocPageEditorPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb">Documentation &nbsp;/&nbsp; Payments &nbsp;/&nbsp; <b>Refunds</b> &nbsp;/&nbsp; Edit</span><span class="sp"></span><span class="lens"><b class="on">Write</b><b>Preview</b></span><button class="btn ghost">Discard</button><button class="btn primary">Save · v9</button></div>
+  <div class="split">
+    <div class="pane doc" style="padding:28px 34px">
+      <span class="fld wide" style="border:0;background:none;padding:0;font-size:24px;font-weight:620;letter-spacing:-.02em;color:var(--ink);margin-bottom:20px">Refunds</span>
+      <div class="rule" style="max-width:70ch;margin:0 0 12px"></div>
+      <div class="prose" style="max-width:70ch">
+        <div class="blkrow"><span class="gut"><span class="h">⠿</span><span class="ty">H2</span></span><h2 style="margin:0 0 6px">4. Amount rules</h2></div>
+        <div class="blkrow"><span class="gut"><span class="h">⠿</span><span class="ty">P</span></span><p style="margin:0 0 6px"><b style="color:var(--ink);font-weight:550">4.2</b> A refund request MUST be rejected if its amount exceeds the captured amount of the payment.</p></div>
+        <div class="blkrow on"><span class="gut"><span class="h">⠿</span><span class="ty">Code</span></span><div class="blk" style="display:block;margin:0">AMOUNT_EXCEEDS_CAPTURE<span class="cursor"></span></div></div>
+        <div class="ins"><span class="l"></span><span class="b">+ heading</span><span class="b">+ paragraph</span><span class="b">+ list</span><span class="b">+ code</span><span class="b">+ table</span><span class="b">+ image</span><span class="l"></span></div>
+        <div class="blkrow"><span class="gut"><span class="h">⠿</span><span class="ty">Table</span></span><div class="blk" style="display:block;margin:0"><span class="h">|</span> code                    <span class="h">|</span> when                  <span class="h">|</span><br><span class="h">|</span> AMOUNT_EXCEEDS_CAPTURE  <span class="h">|</span> refund &gt; capture      <span class="h">|</span><br><span class="h">|</span> WINDOW_CLOSED           <span class="h">|</span> 180 days after capture<span class="h">|</span></div></div>
+      </div>
+    </div>
+    <aside class="side">
+      <div class="sec"><h3>This block</h3>
+        <div class="kv ctl"><span class="k">Type</span><span class="v">Code <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></span></div>
+        <div class="kv ctl"><span class="k">Language</span><span class="v">Plain <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></span></div>
+        <div style="display:flex;gap:6px;margin-top:10px"><button class="btn sm ghost" style="flex:1;justify-content:center">↑ Up</button><button class="btn sm ghost" style="flex:1;justify-content:center">↓ Down</button><button class="btn sm ghost danger">Remove</button></div>
+      </div>
+      <div class="sec"><h3>What links here <span class="c">11 cases</span></h3>
+        <div class="banner warn" style="font-size:12.5px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v5M12 17.5v.01"/><path d="M10.3 3.9L2.6 17.4A2 2 0 004.3 20.4h15.4a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg><span>Saving marks <b>3 cases</b> that cite §4.2 as <em>Linked spec changed</em>. They stay approved; they gain a health signal.</span></div>
+      </div>
+      <div class="sec"><h3>Publishing</h3>
+        <div class="kv"><span class="k">Currently</span><span class="v"><span class="badge plain">Published · v8</span></span></div>
+        <p class="quiet">Saving creates draft v9. Readers keep seeing v8 until you publish.</p>
+        <button class="btn ghost sm" style="width:100%;justify-content:center;margin-top:9px">Save and publish</button>
+      </div>
+    </aside>
+  </div>
+  <div class="foot"><span class="s">Backup saved <b>16:41</b> · 14 blocks</span><span class="keys">⌘↵ save &nbsp; ⌥↑↓ move block &nbsp; ⌘⌫ remove &nbsp; / insert</span></div>
+</div></div></div>
+
+<!-- ============================================ C · Feature import ============================================ -->
+<div class="cap"><b>C · Import feature files</b><span>a review before commit: files left, what will happen centre, what it costs right</span><code>FeatureImportPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb">Test cases &nbsp;/&nbsp; <b>Import feature files</b></span><span class="sp"></span><span class="faint" style="font-size:12px">Nothing is written until you import</span><button class="btn ghost">Cancel</button><button class="btn primary">Import 14 scenarios</button></div>
+  <div class="split three">
+    <aside class="side l">
+      <div class="sec"><h3>Files <span class="c">3</span></h3>
+        <div class="fileln on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3v5h5"/><path d="M19 8v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2h7z"/></svg>refunds.feature<span class="n">6</span></div>
+        <div class="fileln"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3v5h5"/><path d="M19 8v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2h7z"/></svg>captures.feature<span class="n">5</span></div>
+        <div class="fileln"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3v5h5"/><path d="M19 8v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2h7z"/></svg>payouts.feature<span class="n">4</span></div>
+        <button class="btn sm ghost" style="width:100%;justify-content:center;margin-top:10px">Choose a folder</button>
+      </div>
+      <div class="sec"><h3>Options</h3>
+        <div class="kv"><span class="k" style="max-width:170px;line-height:1.4">Match a suite by <b style="color:var(--ink-2);font-weight:500">Feature:</b> name</span><span class="sw on"></span></div>
+        <div class="kv"><span class="k" style="max-width:170px;line-height:1.4">Turn <b style="color:var(--ink-2);font-weight:500">Background:</b> into preconditions</span><span class="sw on"></span></div>
+        <div class="kv"><span class="k" style="max-width:170px;line-height:1.4">Update cases already imported from these files</span><span class="sw"></span></div>
+      </div>
+    </aside>
+
+    <div class="pane" style="padding:16px 20px;overflow:auto">
+      <div class="banner steel" style="margin-bottom:14px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8v.01"/></svg><span><b>refunds.feature</b> → suite <b>Refunds</b>, matched by the <span class="id">Feature:</span> line. Its <span class="id">Background:</span> becomes 2 preconditions shared by all 6 scenarios.</span></div>
+
+      <div class="scn"><div class="hd"><span class="badge steel">New</span><span class="t">A settled payment cannot be refunded twice</span><span class="faint" style="font-size:11.5px">5 steps</span></div>
+        <div class="bd proc" style="max-width:none">
+          <div class="ln"><span class="g">1</span><span class="t"><span class="kw g">Given</span>a settled payment of 100.00 EUR exists</span></div>
+          <div class="ln"><span class="g">2</span><span class="t"><span class="kw w">When</span>the operator refunds it in full</span></div>
+          <div class="ln"><span class="g">3</span><span class="t"><span class="kw t">Then</span>the refund is accepted and the balance falls to 0.00</span></div>
+        </div>
+      </div>
+
+      <div class="scn"><div class="hd"><span class="badge blocked">Updates <span class="id" style="font-size:11px">TC-193</span></span><span class="t">Partial refund leaves the remainder capturable</span><span class="faint" style="font-size:11.5px">4 steps · 2 changed</span></div>
+        <div class="bd proc" style="max-width:none">
+          <div class="ln"><span class="g">2</span><span class="t"><span class="kw w">When</span><span style="text-decoration:line-through;color:var(--ink-4)">the operator refunds 40.00</span> <span style="color:var(--given)">the operator refunds 40.00 EUR</span></span></div>
+          <div class="ln"><span class="g">4</span><span class="t"><span class="kw a">And</span><span style="color:var(--given)">the remainder may still be captured</span> <span class="faint">— new</span></span></div>
+        </div>
+      </div>
+
+      <div class="scn skip"><div class="hd"><span class="badge plain">Unchanged</span><span class="t">Refunding an unsettled authorisation is refused</span><span class="faint" style="font-size:11.5px">matches <span class="id" style="font-size:11px">TC-181</span> exactly</span></div></div>
+    </div>
+
+    <aside class="side">
+      <div class="sec"><h3>What this import does</h3>
+        <div class="kv"><span class="k">New cases</span><span class="v num" style="color:var(--steel)">9</span></div>
+        <div class="kv"><span class="k">Cases updated</span><span class="v num" style="color:var(--blocked)">3</span></div>
+        <div class="kv"><span class="k">Unchanged</span><span class="v num">2</span></div>
+        <div class="kv"><span class="k">Suites touched</span><span class="v num">3</span></div>
+        <div class="kv"><span class="k">Preconditions created</span><span class="v num">2</span></div>
+      </div>
+      <div class="sec"><h3>Cases these files do not name <span class="c">4</span></h3>
+        <p class="quiet" style="margin-bottom:10px">Four cases in <b style="color:var(--ink-3);font-weight:500">Refunds</b> came from an earlier import of these files and no longer appear in them.</p>
+        <div class="kv"><span class="k"><span class="id" style="font-size:11.5px">TC-176</span> Disputed refund</span><span class="v faint">kept</span></div>
+        <div class="kv"><span class="k"><span class="id" style="font-size:11.5px">TC-172</span> Reason codes</span><span class="v faint">kept</span></div>
+        <p class="quiet" style="margin-top:9px">Import never deletes. Deprecate them yourself if the repo dropped them on purpose.</p>
+      </div>
+      <div class="sec" style="border-bottom:0"><button class="btn primary" style="width:100%;justify-content:center">Import 14 scenarios</button><p class="quiet" style="margin-top:9px;text-align:center">Creates 9, updates 3, leaves 2 alone.</p></div>
+    </aside>
+  </div>
+  <div class="foot"><span class="s">Round-tripping is lossless in both directions — the same parse that reads these files renders them back.</span></div>
+</div></div></div>
+
+<div class="notes">
+  <div class="note"><h4>The import shows the diff, not the count</h4><p>Struck-through old text beside the new, per changed step. A summary saying <em>3 updated</em> asks the reader to trust; a diff lets them check.</p></div>
+  <div class="note"><h4>Import never deletes, and says so twice</h4><p>Once as a panel naming the orphans, once as a sentence under it. A destructive default hidden in a toggle is the failure this panel exists to prevent.<span class="cite">UX#35</span></p></div>
+  <div class="note"><h4>The button counts what it will do</h4><p><em>Import 14 scenarios</em>, with <em>creates 9, updates 3, leaves 2 alone</em> beneath. A verb with no quantity is the same button whether it writes nothing or rewrites a suite.</p></div>
+  <div class="note"><h4>Blocks are a gutter, not a floating toolbar</h4><p>Drag handle and type label at 35% until hover. The insert row appears between blocks on hover — the same idea as the case editor's caret completion: the affordance arrives where the work is.</p></div>
+</div>
+
+</div>
+<script src="shell.js"></script>

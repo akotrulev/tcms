@@ -1,0 +1,296 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renders · Index & table surfaces</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap">
+<link rel="stylesheet" href="tcms.css">
+
+<div class="wrap">
+<div class="head">
+  <p class="eyebrow">Family 1 of 9 · proposal, nothing implemented</p>
+  <h1>Index &amp; table surfaces</h1>
+  <p>Ten screens whose job is <em>find the row and leave</em>. The case-authoring render's rule — the subject of the page is the page — makes the table the whole stage: filters in one strip above it, no card wrapping it, no page heading repeating what the rail already highlighted. Every count is a link to its rows, every aggregate shows proportion before it shows a number, and a filtered-to-nothing table says which filter did it.</p>
+  <a class="back" href="index.html">← all families</a>
+</div>
+
+<!-- ============================================ A · Test cases ============================================ -->
+<div class="cap"><b>A · Test cases</b><span>the one full-shell frame; every other render below crops to the stage</span><code>CaseListPage.tsx</code></div>
+
+<div class="frame">
+  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="u">tcms.local / reflex / cases</span></div>
+  <div class="app">
+    <nav class="rail" data-rail="cases"></nav>
+    <div class="stage">
+      <div class="top">
+        <span class="crumb"><b>Test cases</b></span>
+        <span class="sp"></span>
+        <button class="btn ghost">Import .feature</button>
+        <button class="btn primary">New test case</button>
+      </div>
+      <div class="filters">
+        <span class="fld" style="min-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><span class="ph">Filter 1 284 cases</span></span>
+        <button class="chip on">Status · Approved <span class="x">×</span></button>
+        <button class="chip on">Automation · Not automated <span class="x">×</span></button>
+        <button class="chip">Priority</button>
+        <button class="chip">Owner</button>
+        <button class="chip">Health</button>
+        <span class="sp"></span>
+        <span class="faint" style="font-size:12px">Showing <b class="num" style="color:var(--ink-2)">86</b> of 1 284</span>
+        <a class="clear" href="#">Clear filters</a>
+      </div>
+
+      <div class="bulk">
+        <b class="num">12 selected</b>
+        <span class="sp"></span>
+        <button class="btn sm ghost">Set owner</button>
+        <button class="btn sm ghost">Set priority</button>
+        <button class="btn sm ghost">Add to suite</button>
+        <button class="btn sm ghost">Add tags</button>
+        <button class="btn sm danger">Deprecate</button>
+      </div>
+
+      <div class="split left" style="border-top:1px solid var(--line)">
+        <aside class="side l">
+          <div class="sec">
+            <h3>Suites <span class="c">18</span></h3>
+            <div class="tree">
+              <div class="r on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>All cases<span class="c">1 284</span></div>
+              <div class="r d1">Checkout<span class="c">312</span></div>
+              <div class="r d1">Refunds<span class="c">146</span></div>
+              <div class="r d1">Ledger<span class="c">208</span></div>
+              <div class="r d1">Payouts<span class="c">97</span></div>
+              <div class="r d1">Onboarding<span class="c">184</span></div>
+              <div class="r d1 faint">Unfiled<span class="c">337</span></div>
+            </div>
+            <p class="quiet" style="margin-top:12px">A suite is flat — filed, added and tagged members, not a folder. <a href="#">How suites collect cases</a></p>
+          </div>
+        </aside>
+
+        <div class="pane">
+          <div class="tbl-wrap">
+            <table class="tbl" style="min-width:1380px">
+              <thead><tr>
+                <th style="width:34px"><span class="faint">☑</span></th>
+                <th style="width:92px">Key</th><th style="min-width:300px">Title</th>
+                <th style="width:120px">Suite</th><th style="width:104px">Status</th>
+                <th style="width:88px">Priority</th><th style="width:126px">Automation</th>
+                <th style="width:150px">Last result</th><th style="width:96px">Health</th>
+                <th style="width:132px">Owner</th><th style="width:118px" class="sortable">Updated</th>
+              </tr></thead>
+              <tbody>
+                <tr class="sel"><td class="faint">☑</td><td><span class="id">TC-194</span></td><td class="t">A settled payment cannot be refunded twice</td><td>Refunds</td><td><span class="badge plain">Approved</span></td><td>Medium</td><td><span class="badge plain">Automated</span></td>
+                  <td><span class="rline"><span class="rbar" style="width:56px"><i class="p" style="width:88%"></i><i class="f" style="width:12%"></i></span><span class="n">7/8</span></span></td>
+                  <td><span class="badge blocked">Flaky</span></td><td>M. Kalcheva</td><td class="num faint">14:02</td></tr>
+                <tr class="sel"><td class="faint">☑</td><td><span class="id">TC-193</span></td><td class="t">Partial refund leaves the remainder capturable</td><td>Refunds</td><td><span class="badge plain">Approved</span></td><td>High</td><td><span class="badge plain">Not automated</span></td>
+                  <td><span class="rline"><span class="rbar" style="width:56px"><i class="p" style="width:100%"></i></span><span class="n">4/4</span></span></td>
+                  <td><span class="badge passed">Healthy</span></td><td>M. Kalcheva</td><td class="num faint">Yesterday</td></tr>
+                <tr><td class="faint">☐</td><td><span class="id">TC-188</span></td><td class="t">Refund a settled payment<span class="sub">Last run failed on <span class="id">nightly-eu</span> · 2 defects linked</span></td><td>Refunds</td><td><span class="badge plain">Approved</span></td><td>Critical</td><td><span class="badge plain">Automated</span></td>
+                  <td><span class="rline"><span class="rbar" style="width:56px"><i class="p" style="width:40%"></i><i class="f" style="width:60%"></i></span><span class="n">2/5</span></span></td>
+                  <td><span class="badge failed">Failing</span></td><td>D. Petrov</td><td class="num faint">2 days ago</td></tr>
+                <tr><td class="faint">☐</td><td><span class="id">TC-181</span></td><td class="t">Refunding an unsettled authorisation is refused</td><td>Refunds</td><td><span class="badge plain">In review</span></td><td>Medium</td><td><span class="badge plain">Not automatable</span></td>
+                  <td><span class="dash">—</span></td><td><span class="badge untested">Never run</span></td><td class="dash">—</td><td class="num faint">4 days ago</td></tr>
+                <tr><td class="faint">☐</td><td><span class="id">TC-176</span></td><td class="t">A refund against a disputed payment is held for review</td><td>Refunds</td><td><span class="badge plain">Draft</span></td><td>Low</td><td><span class="badge plain">Not automated</span></td>
+                  <td><span class="dash">—</span></td><td><span class="badge untested">Never run</span></td><td>A. Ivanov</td><td class="num faint">6 days ago</td></tr>
+                <tr><td class="faint">☐</td><td><span class="id">TC-172</span></td><td class="t">Refund reason codes round-trip to the ledger export</td><td>Ledger</td><td><span class="badge plain">Approved</span></td><td>Medium</td><td><span class="badge plain">Automated</span></td>
+                  <td><span class="rline"><span class="rbar" style="width:56px"><i class="p" style="width:100%"></i></span><span class="n">9/9</span></span></td>
+                  <td><span class="badge passed">Healthy</span></td><td>D. Petrov</td><td class="num faint">1 week ago</td></tr>
+                <tr><td class="faint">☐</td><td><span class="id">TC-165</span></td><td class="t">Refund webhooks retry with an idempotency key</td><td>Refunds</td><td><span class="badge plain">Approved</span></td><td>High</td><td><span class="badge plain">Automated</span></td>
+                  <td><span class="rline"><span class="rbar" style="width:56px"><i class="p" style="width:80%"></i><i class="b" style="width:20%"></i></span><span class="n">4/5</span></span></td>
+                  <td><span class="badge retest">Stale</span></td><td>M. Kalcheva</td><td class="num faint">2 weeks ago</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="foot">
+            <span class="s"><b>86</b> cases · 12 selected · sorted by <b>Updated, newest first</b></span>
+            <span class="keys">⌘K commands &nbsp; / filter &nbsp; ⇧click range</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note"><h4>The table is the page</h4><p>No card, no panel, no <em>"Test cases"</em> heading repeating the rail's active item. The filter strip and the footer are the only chrome, and both say something the table cannot.<span class="was">Was: a PageHeader block, then a Paper, then the grid — three borders before the first row.</span></p></div>
+  <div class="note"><h4>Filters are chips you can see and remove</h4><p>Applied filters render as removable chips with a live <em>86 of 1 284</em>, so a table that looks empty always names what emptied it. Real buttons with focus rings, not clickable divs.<span class="cite">UX#117 · UX#115 · UX#90</span></p></div>
+  <div class="note"><h4>Proportion before number</h4><p>Last result is a 56px bar and <em>7/8</em>, not a percentage. Two identical percentages over different denominators was a real defect on the run screens; a bar cannot tell that lie.</p></div>
+  <div class="note"><h4>Em dash means "no value", never zero</h4><p>A case that never ran shows <em>—</em> and <em>Never run</em>, not <em>0%</em>. Health is a word beside its colour, so the column survives a colour-blind reader and a greyscale screenshot.<span class="cite">UX#37</span></p></div>
+</div>
+
+<!-- ============================================ B · Search cases ============================================ -->
+<div class="cap"><b>B · Search cases</b><span>the cross-project one — the only table where Project is a column</span><code>CaseSearchPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb"><b>Search cases</b></span><span class="sp"></span><span class="faint" style="font-size:12px">Across the 4 projects you can read</span></div>
+  <div style="padding:22px 22px 0;max-width:760px">
+    <span class="fld wide focus" style="min-height:40px;font-size:14px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><span style="color:var(--ink)">idempotency key</span><span class="cursor"></span></span>
+    <div class="filters" style="padding:12px 0;border:0">
+      <button class="chip on">Project · Reflex Payments <span class="x">×</span></button>
+      <button class="chip">Status</button><button class="chip">Automation</button><button class="chip">Priority</button>
+      <span class="sp"></span><span class="faint" style="font-size:12px"><b class="num" style="color:var(--ink-2)">23</b> hits in 41 ms</span>
+    </div>
+  </div>
+  <div class="tbl-wrap" style="padding:0 8px">
+    <table class="tbl">
+      <thead><tr><th style="width:96px">Case</th><th>Title</th><th style="width:190px">Project</th><th style="width:104px">Status</th><th style="width:126px">Automation</th><th style="width:88px">Priority</th><th style="width:132px">Updated</th></tr></thead>
+      <tbody>
+        <tr><td><span class="id">TC-165</span></td><td class="t">Refund webhooks retry with an <em style="font-style:normal;color:var(--steel);background:var(--steel-dim);border-radius:3px;padding:0 3px">idempotency key</em></td><td>Reflex Payments</td><td><span class="badge plain">Approved</span></td><td><span class="badge plain">Automated</span></td><td>High</td><td class="num faint">2 weeks ago</td></tr>
+        <tr><td><span class="id">TC-402</span></td><td class="t">Duplicate POST with the same <em style="font-style:normal;color:var(--steel);background:var(--steel-dim);border-radius:3px;padding:0 3px">idempotency key</em> returns the first response</td><td>Reflex Payments</td><td><span class="badge plain">Approved</span></td><td><span class="badge plain">Automated</span></td><td>Critical</td><td class="num faint">3 weeks ago</td></tr>
+        <tr><td><span class="id">TC-417</span></td><td class="t">An expired <em style="font-style:normal;color:var(--steel);background:var(--steel-dim);border-radius:3px;padding:0 3px">idempotency key</em> is treated as a new request</td><td>Reflex Payments</td><td><span class="badge plain">In review</span></td><td><span class="badge plain">Not automated</span></td><td>Medium</td><td class="num faint">1 month ago</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="foot"><span class="s">Search reaches only the projects you hold a grant on — <b>4 of 9</b> in this company.</span></div>
+</div></div></div>
+
+<!-- ============================================ C · Test runs ============================================ -->
+<div class="cap"><b>C · Test runs</b><span>every pass over a plan, manual or ingested from CI</span><code>RunListPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb"><b>Test runs</b></span><span class="sp"></span><button class="btn ghost">Schedules</button><button class="btn primary">Start a run</button></div>
+  <div class="filters"><button class="chip on">In progress <span class="x">×</span></button><button class="chip">Configuration</button><button class="chip">Release</button><button class="chip">Source</button><span class="sp"></span><span class="faint" style="font-size:12px"><b class="num" style="color:var(--ink-2)">6</b> of 412</span></div>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Run</th><th style="width:112px">Status</th><th style="width:160px">Configuration</th><th style="width:124px">Release</th><th style="width:190px">Result</th><th style="width:86px" class="r">Cases</th><th style="width:132px" class="sortable">Started</th></tr></thead>
+    <tbody>
+      <tr><td class="t">Refunds regression, pass 3<span class="sub"><span class="id">R-2211</span> · started by M. Kalcheva · manual</span></td><td><span class="badge blocked">In progress</span></td><td>chrome-eu / staging</td><td><span class="id">2026.8.3</span></td>
+        <td><span class="rline"><span class="rbar" style="width:96px"><i class="p" style="width:52%"></i><i class="f" style="width:8%"></i><i class="u" style="width:40%"></i></span><span class="n">78 / 12 / 60</span></span></td><td class="r num">150</td><td class="num faint">09:12</td></tr>
+      <tr><td class="t">Nightly, ledger + payouts<span class="sub"><span class="id">R-2210</span> · ingested from <span class="id">junit</span> · GitHub Actions #4471</span></td><td><span class="badge passed">Complete</span></td><td>ci-linux / nightly</td><td><span class="id">2026.8.3</span></td>
+        <td><span class="rline"><span class="rbar" style="width:96px"><i class="p" style="width:94%"></i><i class="f" style="width:6%"></i></span><span class="n">287 / 18</span></span></td><td class="r num">305</td><td class="num faint">01:17</td></tr>
+      <tr><td class="t">Checkout smoke, release candidate<span class="sub"><span class="id">R-2209</span> · ingested from <span class="id">junit</span></span></td><td><span class="badge failed">Complete</span></td><td>ci-linux / rc</td><td><span class="id">2026.8.4-rc1</span></td>
+        <td><span class="rline"><span class="rbar" style="width:96px"><i class="p" style="width:71%"></i><i class="f" style="width:22%"></i><i class="b" style="width:7%"></i></span><span class="n">64 / 20 / 6</span></span></td><td class="r num">90</td><td class="num faint">Yesterday</td></tr>
+      <tr><td class="t">Onboarding exploratory<span class="sub"><span class="id">R-2207</span> · started by A. Ivanov · manual</span></td><td><span class="badge skipped">Abandoned</span></td><td>firefox-eu / staging</td><td class="dash">—</td>
+        <td><span class="rline"><span class="rbar" style="width:96px"><i class="p" style="width:18%"></i><i class="u" style="width:82%"></i></span><span class="n">8 / 0 / 36</span></span></td><td class="r num">44</td><td class="num faint">3 days ago</td></tr>
+    </tbody>
+  </table></div>
+  <div class="foot"><span class="s">A run's <b>Result</b> counts executions, not cases — a case retried twice contributes twice, which is why the bar and the case count disagree.</span></div>
+</div></div></div>
+
+<!-- ============================================ D · Test plans ============================================ -->
+<div class="cap"><b>D · Test plans</b><span>and the two columns that are an em dash on every row today</span><code>PlanListPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb"><b>Test plans</b></span><span class="sp"></span><span class="fld sm"><span class="sw"></span>Show archived</span><button class="btn primary">New plan</button></div>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Plan</th><th style="width:110px">Status</th><th style="width:170px">Milestone</th><th style="width:78px" class="r">Cases</th><th style="width:98px" class="r">Pass rate</th><th style="width:98px" class="r">Coverage</th><th style="width:210px">Exit criteria</th><th style="width:52px"></th></tr></thead>
+    <tbody>
+      <tr><td class="t">2026.8 release readiness<span class="sub">Owned by M. Kalcheva · 3 runs</span></td><td><span class="badge blocked">In progress</span></td><td>2026.8 GA · <span class="faint">12 Sep</span></td><td class="r num">418</td><td class="r num">91.2%</td><td class="r num">86%</td>
+        <td><span class="rline"><span class="rbar" style="width:74px"><i class="p" style="width:66%"></i><i class="u" style="width:34%"></i></span><span class="n">2 of 3</span></span></td><td class="r faint">›</td></tr>
+      <tr><td class="t">Payouts hardening<span class="sub">Owned by D. Petrov · 1 run</span></td><td><span class="badge retest">In review</span></td><td class="dash">—</td><td class="r num">97</td><td class="r dash">—</td><td class="r dash">—</td>
+        <td><span class="faint">Not set</span></td><td class="r faint">›</td></tr>
+      <tr><td class="t">Q3 compliance sweep<span class="sub">Owned by A. Ivanov · no runs yet</span></td><td><span class="badge plain">Draft</span></td><td>Audit · <span class="faint">30 Sep</span></td><td class="r num">64</td><td class="r dash">—</td><td class="r dash">—</td>
+        <td><span class="rline"><span class="rbar" style="width:74px"><i class="u" style="width:100%"></i></span><span class="n">0 of 2</span></span></td><td class="r faint">›</td></tr>
+    </tbody>
+  </table></div>
+  <div class="banner warn" style="margin:14px 22px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v5M12 17.5v.01"/><path d="M10.3 3.9L2.6 17.4A2 2 0 004.3 20.4h15.4a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg><span><b>Pass rate and Coverage are an em dash on every row.</b> The server does not compute them for a plan yet — the columns stay because the table is built for the scan they enable, and the dash says <em>not computed</em> rather than <em>zero</em>. <a href="#">The one open backend follow-on</a>.</span></div>
+</div></div></div>
+
+<!-- ============================================ E · Generated cases ============================================ -->
+<div class="cap"><b>E · Generated cases</b><span>a review queue, so the tabs carry counts and the default is what needs you</span><code>ProposalsPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb"><b>Generated cases</b></span><span class="sp"></span><span class="faint" style="font-size:12px">Filed by API tokens, not typed by a person</span></div>
+  <div class="filters" style="gap:0;padding-bottom:0">
+    <span class="lens" style="background:none;padding:0;gap:14px">
+      <b class="on" style="border-radius:0;background:none;box-shadow:none;border-bottom:2px solid var(--steel);color:var(--ink);padding:8px 2px 9px">Waiting <span class="badge steel" style="margin-left:6px">6</span></b>
+      <b style="border-radius:0;padding:8px 2px 9px">Accepted <span class="faint num" style="margin-left:6px">124</span></b>
+      <b style="border-radius:0;padding:8px 2px 9px">Rejected <span class="faint num" style="margin-left:6px">31</span></b>
+    </span>
+  </div>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Proposed case</th><th style="width:260px">Grounding</th><th style="width:80px" class="r">Steps</th><th style="width:220px">Filed by</th><th style="width:150px" class="sortable">Filed</th></tr></thead>
+    <tbody>
+      <tr><td class="t">A refund exceeding the captured amount is rejected<span class="sub">Suggested suite · Refunds</span></td><td><span class="id">refunds.md</span> §4.2 <span class="faint">· 2 excerpts</span></td><td class="r num">5</td><td>ci-generator <span class="faint">· token owned by D. Petrov</span></td><td class="num faint">Today 06:40</td></tr>
+      <tr><td class="t">Refund of a fully-disputed payment holds funds<span class="sub">Suggested suite · Refunds</span></td><td><span class="id">disputes.md</span> §2 <span class="faint">· 1 excerpt</span></td><td class="r num">4</td><td>ci-generator <span class="faint">· token owned by D. Petrov</span></td><td class="num faint">Today 06:40</td></tr>
+      <tr><td class="t">Ledger export includes the refund reason code<span class="sub">No suite suggested</span></td><td class="faint">No grounding cited</td><td class="r num">3</td><td>spec-reader <span class="faint">· token owned by M. Kalcheva</span></td><td class="num faint">Yesterday</td></tr>
+    </tbody>
+  </table></div>
+  <div class="foot"><span class="s">Accepting files a real case and records who accepted it. Nothing here is in the repository until someone does.</span></div>
+</div></div></div>
+
+<!-- ============================================ F · Reports, CI ingestion ============================================ -->
+<div class="cap"><b>F · Reports</b><span>and, below it, CI ingestion — two tables about jobs, drawn the same way on purpose</span><code>ReportsPage.tsx · IngestionsPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb"><b>Reports</b></span><span class="sp"></span><button class="btn primary">Generate a report</button></div>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Report</th><th style="width:200px">Kind</th><th style="width:120px">State</th><th style="width:118px" class="r">Size</th><th style="width:150px">Generated</th><th style="width:120px"></th></tr></thead>
+    <tbody>
+      <tr><td class="t">2026.8 release readiness — run summary<span class="sub">Over run <span class="id">R-2210</span></span></td><td>Run summary · <span class="id">PDF</span></td><td><span class="badge passed">Ready</span></td><td class="r num">1.4 MB</td><td class="num faint">Today 07:02</td><td><button class="btn sm ghost">Download</button></td></tr>
+      <tr><td class="t">Refunds coverage by feature<span class="sub">Over plan <span class="id">P-31</span></span></td><td>Coverage · <span class="id">CSV</span></td><td><span class="badge blocked">Generating</span></td><td class="r dash">—</td><td class="num faint">Started 07:18</td><td><button class="btn sm ghost off">Download</button></td></tr>
+      <tr><td class="t">Q2 audit extract<span class="sub">Over the whole project</span></td><td>Audit extract · <span class="id">CSV</span></td><td><span class="badge failed">Failed</span></td><td class="r dash">—</td><td class="num faint">3 days ago</td><td><button class="btn sm ghost">Why</button></td></tr>
+    </tbody>
+  </table></div>
+</div></div></div>
+
+<div class="frame" style="margin-top:16px"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb"><b>CI ingestion</b></span><span class="sp"></span><span class="faint" style="font-size:12px">Results arriving by another door</span></div>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th style="width:170px" class="sortable">Posted</th><th style="width:130px">Format</th><th style="width:120px">State</th><th style="width:108px" class="r">Matched</th><th style="width:126px" class="r">Unmatched</th><th>Run</th></tr></thead>
+    <tbody>
+      <tr><td class="num faint">Today 01:17</td><td>JUnit XML</td><td><span class="badge passed">Applied</span></td><td class="r num">303</td><td class="r num">2</td><td class="t">Nightly, ledger + payouts <span class="id faint">R-2210</span></td></tr>
+      <tr><td class="num faint">Yesterday 22:04</td><td>JUnit XML</td><td><span class="badge blocked">Partly applied</span></td><td class="r num">84</td><td class="r num" style="color:var(--blocked)">6</td><td class="t">Checkout smoke <span class="id faint">R-2209</span></td></tr>
+      <tr><td class="num faint">Yesterday 19:30</td><td>Cucumber JSON</td><td><span class="badge failed">Refused</span></td><td class="r dash">—</td><td class="r dash">—</td><td class="faint">No run — the payload named a project this token cannot write</td></tr>
+    </tbody>
+  </table></div>
+  <div class="foot"><span class="s"><b>Unmatched</b> is a link, not a number: it opens the tests the report named that no case claims.</span></div>
+</div></div></div>
+
+<!-- ============================================ G · Run schedules ============================================ -->
+<div class="cap"><b>G · Run schedules</b><span>the only index whose rows have an on/off, so the switch is the first column</span><code>RunSchedulePage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb">Test runs&nbsp; / &nbsp;<b>Schedules</b></span><span class="sp"></span><span class="fld"><span class="sw on"></span>Only active</span><button class="btn primary">New schedule</button></div>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th style="width:60px">Active</th><th>Name</th><th style="width:230px">Cadence</th><th style="width:150px">Next run</th><th style="width:170px">Last run</th><th style="width:150px">Owner</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sw on"></span></td><td class="t">Nightly regression<span class="sub">Tags to run · <span class="tag">@regression</span> <span class="tag">@ledger</span></span></td><td>Every day at 01:00 <span class="faint">Europe/Sofia</span></td><td class="num">In 10 h 42 m</td><td><span class="badge passed">Complete</span> <span class="faint num">01:17</span></td><td>M. Kalcheva</td></tr>
+      <tr><td><span class="sw on"></span></td><td class="t">Release-candidate smoke<span class="sub">Tags to run · <span class="tag">@smoke</span></span></td><td>Weekdays at 07:00 <span class="faint">Europe/Sofia</span></td><td class="num">Tomorrow 07:00</td><td><span class="badge failed">Complete</span> <span class="faint num">Yesterday</span></td><td>D. Petrov</td></tr>
+      <tr style="opacity:.55"><td><span class="sw"></span></td><td class="t">Weekly payouts sweep<span class="sub">Paused 8 days ago by A. Ivanov</span></td><td>Sundays at 03:00 <span class="faint">UTC</span></td><td class="dash">—</td><td><span class="badge passed">Complete</span> <span class="faint num">8 days ago</span></td><td>A. Ivanov</td></tr>
+    </tbody>
+  </table></div>
+  <div class="foot"><span class="s">A paused schedule stays in the table at reduced weight with the reason and the date — <b>disable, don't hide</b>. Its next run is an em dash, not a stale time.</span></div>
+</div></div></div>
+
+<!-- ============================================ H · Artifacts, Projects ============================================ -->
+<div class="cap"><b>H · Artifacts &amp; Projects</b><span>the two short ones — a table that is nearly always empty, and a picker that is not a table at all</span><code>ArtifactsPage.tsx · ProjectsPage.tsx</code></div>
+<div class="frame"><div class="app bare"><div class="stage" style="min-height:250px">
+  <div class="top"><span class="crumb"><b>Artifacts</b></span><span class="sp"></span><span class="badge plain">Project scope only</span></div>
+  <div class="state">
+    <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 12l9 5 9-5M3 16l9 5 9-5"/></svg>
+    <h3>No artifacts in this project</h3>
+    <p>Artifacts are the files a run leaves behind — screenshots, logs, HAR captures. They arrive attached to an execution or an ingested report; there is nothing to upload here.</p>
+    <div class="acts"><button class="btn ghost">See the runs that produce them</button></div>
+  </div>
+</div></div></div>
+
+<div class="frame" style="margin-top:16px"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb"><b>Projects</b></span><span class="sp"></span><span class="fld"><span class="sw"></span>Show archived</span></div>
+  <div style="padding:20px 22px 26px">
+    <p class="quiet" style="font-size:13px;margin-bottom:16px">Pick a project to work in. A project is a whole client product — <em>Payments</em> is a feature inside one, never a project of its own.</p>
+    <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(288px,1fr))">
+      <div class="card" style="border-color:var(--steel-line);background:linear-gradient(180deg,rgb(107 168 196/6%),transparent)">
+        <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><b style="font-size:15px;letter-spacing:-.015em">Reflex Payments</b><span class="id faint">reflex</span><span class="sp" style="flex:1"></span><span class="badge steel">Current</span></div>
+        <div class="hbars"><div class="hb"><span class="l">Cases</span><span class="t"><i style="width:100%"></i></span><span class="n">1 284</span></div>
+        <div class="hb"><span class="l">Automated</span><span class="t"><i class="p" style="width:64%"></i></span><span class="n">64%</span></div>
+        <div class="hb"><span class="l">Last run</span><span class="t"><i class="p" style="width:94%"></i><i class="f" style="width:6%"></i></span><span class="n">01:17</span></div></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><b style="font-size:15px;letter-spacing:-.015em">Halo Onboarding</b><span class="id faint">halo</span></div>
+        <div class="hbars"><div class="hb"><span class="l">Cases</span><span class="t"><i style="width:48%"></i></span><span class="n">613</span></div>
+        <div class="hb"><span class="l">Automated</span><span class="t"><i class="p" style="width:31%"></i></span><span class="n">31%</span></div>
+        <div class="hb"><span class="l">Last run</span><span class="t"><i class="p" style="width:100%"></i></span><span class="n">3 d ago</span></div></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><b style="font-size:15px;letter-spacing:-.015em">Meridian Console</b><span class="id faint">meridian</span></div>
+        <div class="hbars"><div class="hb"><span class="l">Cases</span><span class="t"><i style="width:15%"></i></span><span class="n">194</span></div>
+        <div class="hb"><span class="l">Automated</span><span class="t"><i class="u" style="width:0%"></i></span><span class="n">0%</span></div>
+        <div class="hb"><span class="l">Last run</span><span class="t"><i class="u" style="width:100%"></i></span><span class="n">Never</span></div></div>
+      </div>
+    </div>
+  </div>
+</div></div></div>
+
+<div class="notes">
+  <div class="note"><h4>Nine tables, one skeleton</h4><p>Sticky mono column heads, 10px row padding, hover at 2.5% white, one sort arrow. A person who learns to read the cases table has learned all nine.</p></div>
+  <div class="note"><h4>The subtitle line carries the second fact</h4><p>Rather than a twelfth column, the row's own cell carries a quiet second line — who started a run, which token filed a proposal, why a schedule is paused. It wraps; a column would have truncated.<span class="cite">UX#113 · UX#111</span></p></div>
+  <div class="note"><h4>Empty is a sentence about the product</h4><p>Artifacts says what an artifact <em>is</em> and where they come from, because the honest answer to <em>"no artifacts"</em> is that you cannot make one here.<span class="cite">UX#79</span></p></div>
+  <div class="note"><h4>Projects is a picker, not a grid</h4><p>Three numbers per card, each a bar you can compare down the column. A table of three rows and three columns would have been a table for the sake of one.</p></div>
+</div>
+
+</div>
+<script src="shell.js"></script>

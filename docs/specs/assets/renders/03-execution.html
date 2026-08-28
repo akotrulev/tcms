@@ -1,0 +1,206 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renders · Execution</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap">
+<link rel="stylesheet" href="tcms.css">
+<style>
+  /* step verdict gutter — the one component that exists only here */
+  .sln{display:grid;grid-template-columns:26px 26px 1fr;gap:12px;padding:7px 0;border-radius:var(--r-sm)}
+  .sln .vm{width:20px;height:20px;border-radius:50%;border:1px solid var(--line-2);display:grid;place-items:center;margin-top:2px}
+  .sln .vm svg{width:11px;height:11px;color:var(--ink-4)}
+  .sln.pass .vm{border-color:rgb(126 200 160/40%);background:rgb(126 200 160/12%)} .sln.pass .vm svg{color:var(--passed)}
+  .sln.fail .vm{border-color:rgb(224 117 104/45%);background:rgb(224 117 104/14%)} .sln.fail .vm svg{color:var(--failed)}
+  .sln.here{background:var(--steel-dim);margin:0 -12px;padding:7px 12px;box-shadow:inset 2px 0 0 var(--steel)}
+  .sln .exp{display:block;font-size:12.5px;color:var(--ink-4);margin-top:3px}
+  .sln .exp b{color:var(--ink-3);font-weight:500;font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;margin-right:6px}
+  .verdicts{display:flex;gap:7px}
+  .vb{flex:1;border:1px solid var(--line);border-radius:var(--r);padding:9px 6px;text-align:center;font-size:12.5px;font-weight:500;color:var(--ink-2);cursor:pointer;background:none;font-family:var(--sans)}
+  .vb .k{display:block;font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:3px}
+  .vb:hover{border-color:var(--line-2);background:rgb(255 255 255/4%)}
+  .vb.p.on{border-color:rgb(126 200 160/45%);background:rgb(126 200 160/13%);color:var(--passed)}
+  .vb.f.on{border-color:rgb(224 117 104/45%);background:rgb(224 117 104/13%);color:var(--failed)}
+  .queue .q{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:var(--r-sm);font-size:12.5px;color:var(--ink-3);cursor:pointer}
+  .queue .q:hover{background:rgb(255 255 255/4%)}
+  .queue .q.on{background:var(--steel-dim);color:var(--ink)}
+  .queue .q .d{width:7px;height:7px;border-radius:50%;background:var(--untested);flex:none}
+  .queue .q .d.p{background:var(--passed)} .queue .q .d.f{background:var(--failed)} .queue .q .d.b{background:var(--blocked)}
+  .queue .q .n{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-4)}
+</style>
+
+<div class="wrap">
+<div class="head">
+  <p class="eyebrow">Family 3 of 9 · proposal, nothing implemented</p>
+  <h1>Execution</h1>
+  <p>One screen, and the one the product exists to serve. A tester holds a device in one hand, reads a step, does it, and says what happened — so the procedure gets the reading width the editor gave it, the verdict is one keystroke, and everything that is not the current step gets out of the way. This is the second route (after the case document) where the icon rail collapses.</p>
+  <a class="back" href="index.html">← all families</a>
+</div>
+
+<!-- ============================================ A · mid-execution ============================================ -->
+<div class="cap"><b>A · Mid-execution</b><span>step 3 of 5, three steps already recorded, the queue on the left</span><code>ExecutionPage.tsx</code></div>
+
+<div class="frame">
+  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="u">tcms.local / reflex / runs / R-2211 / execute / TC-194</span></div>
+  <div class="app mini-rail">
+    <nav class="mini" data-rail="runs"></nav>
+    <div class="stage">
+      <div class="top">
+        <span class="crumb">Test runs &nbsp;/&nbsp; <b>R-2211</b> &nbsp;/&nbsp; Refunds regression, pass 3</span>
+        <span class="sp"></span>
+        <span class="faint" style="font-size:12px">Case <b class="num" style="color:var(--ink-2)">78</b> of 150 · <b class="num" style="color:var(--ink-2)">27 m</b> elapsed</span>
+        <span class="lens"><b class="on">Focus</b><b>Split</b></span>
+        <button class="btn ghost">Pause run</button>
+      </div>
+
+      <div class="split three">
+        <aside class="side l">
+          <div class="sec">
+            <h3>This run <span class="c">78 / 150</span></h3>
+            <div class="rline" style="margin-bottom:12px"><span class="rbar" style="flex:1"><i class="p" style="width:52%"></i><i class="f" style="width:8%"></i><i class="u" style="width:40%"></i></span></div>
+            <div class="queue">
+              <div class="q"><span class="d p"></span>TC-181 Unsettled auth<span class="n">1m 12s</span></div>
+              <div class="q"><span class="d f"></span>TC-188 Refund a settled…<span class="n">3m 04s</span></div>
+              <div class="q"><span class="d b"></span>TC-190 Refund window<span class="n">22s</span></div>
+              <div class="q on"><span class="d"></span>TC-194 Refunded twice<span class="n">01:41</span></div>
+              <div class="q"><span class="d"></span>TC-196 Reason codes</div>
+              <div class="q"><span class="d"></span>TC-201 Ledger export</div>
+              <div class="q"><span class="d"></span>TC-203 Partial then full</div>
+            </div>
+          </div>
+          <div class="sec">
+            <h3>Assignment</h3>
+            <div class="kv"><span class="k">Assigned to</span><span class="v">You</span></div>
+            <div class="kv"><span class="k">Configuration</span><span class="v" style="font-size:12.5px">chrome-eu / staging</span></div>
+            <div class="kv"><span class="k">Release</span><span class="v"><span class="id" style="font-size:11.5px">2026.8.3</span></span></div>
+          </div>
+        </aside>
+
+        <div class="pane doc" style="padding:24px 30px">
+          <div class="banner" style="max-width:74ch;margin-bottom:20px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg><span><b>Before you start:</b> a merchant account exists · the refund window is open. <span class="faint">2 preconditions inherited from Refunds</span></span></div>
+
+          <h2 class="dtitle" style="font-size:21px">A settled payment cannot be refunded twice</h2>
+          <p class="dwhy" style="margin-bottom:18px"><span class="lab">Why this exists</span>Prove the ledger rejects a second refund against a payment already fully refunded — incident&nbsp;INC-4471.</p>
+          <div class="rule" style="max-width:74ch;margin:0 0 8px"></div>
+
+          <div class="proc" style="font-size:15px">
+            <div class="sln pass"><span class="vm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span><span class="g" style="font-family:var(--mono);font-size:11px;color:var(--ink-4);text-align:right;padding-top:4px">1</span><span class="t"><span class="kw g">Given</span>a settled payment of 100.00 EUR exists</span></div>
+            <div class="sln pass"><span class="vm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span><span class="g" style="font-family:var(--mono);font-size:11px;color:var(--ink-4);text-align:right;padding-top:4px">2</span><span class="t"><span class="kw w">When</span>the operator refunds it in full</span></div>
+            <div class="sln here"><span class="vm"></span><span class="g" style="font-family:var(--mono);font-size:11px;color:var(--steel);text-align:right;padding-top:4px">3</span><span class="t"><span class="kw t">Then</span>the refund is accepted and the balance falls to 0.00</span></div>
+            <div class="sln"><span class="vm"></span><span class="g" style="font-family:var(--mono);font-size:11px;color:var(--ink-4);text-align:right;padding-top:4px">4</span><span class="t" style="color:var(--ink-3)"><span class="kw a">And</span>a second refund of the same payment is rejected<div class="blk"><span class="h">|</span> attempt <span class="h">|</span> outcome           <span class="h">|</span><br><span class="h">|</span> 1st     <span class="h">|</span> accepted          <span class="h">|</span><br><span class="h">|</span> 2nd     <span class="h">|</span> ALREADY_REFUNDED  <span class="h">|</span></div></span></div>
+            <div class="sln"><span class="vm"></span><span class="g" style="font-family:var(--mono);font-size:11px;color:var(--ink-4);text-align:right;padding-top:4px">5</span><span class="t" style="color:var(--ink-3)"><span class="kw a">And</span>the customer balance is unchanged</span></div>
+          </div>
+        </div>
+
+        <aside class="side">
+          <div class="sec">
+            <h3>Record the result</h3>
+            <div class="verdicts" style="margin-bottom:10px">
+              <button class="vb p">Passed<span class="k">1</span></button>
+              <button class="vb f">Failed<span class="k">2</span></button>
+              <button class="vb">Blocked<span class="k">3</span></button>
+              <button class="vb">Skipped<span class="k">4</span></button>
+            </div>
+            <p class="quiet" style="margin-bottom:12px">Records step 3 and moves to step 4. Recording on the last step closes the case and opens the next in the queue.</p>
+            <label class="f">How long it took</label>
+            <span class="fld wide"><span class="num" style="color:var(--ink)">101</span><span class="faint">seconds</span><span class="sp" style="flex:1"></span><span class="badge plain">Running</span></span>
+            <p class="help">Counting since you opened the case. Overwrite it if you were interrupted.</p>
+          </div>
+          <div class="sec">
+            <h3>Notes</h3>
+            <span class="fld wide" style="min-height:64px;align-items:flex-start"><span class="ph">Anything the next person should know</span></span>
+            <button class="btn ghost sm" style="width:100%;justify-content:center;margin-top:9px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M4 18l5-4 4 3 3-2 4 3"/></svg>Attach a screenshot</button>
+          </div>
+          <div class="sec">
+            <h3>Last time</h3>
+            <div class="kv"><span class="k">In <span class="id" style="font-size:11.5px">R-2209</span></span><span class="v"><span class="badge failed">Failed</span></span></div>
+            <p class="quiet">Failed at <b style="color:var(--ink-3);font-weight:500">step 4</b> — <span class="id">timeout after 30 s</span>. Flaky: 2 of the last 5 runs disagreed.</p>
+          </div>
+        </aside>
+      </div>
+
+      <div class="foot"><span class="s">Recorded <b>3 of 5 steps</b> · autosaved 8 s ago</span><span class="keys">1–4 verdict &nbsp; ↑↓ step &nbsp; N next case &nbsp; ⌘↵ finish case</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note"><h4>The verdict is a number key</h4><p><b>1</b> passed, <b>2</b> failed, <b>3</b> blocked, <b>4</b> skipped — printed on the buttons, not hidden in a help page. A tester with a phone in one hand records a step without finding a target.<span class="cite">ui-reasoning · Productivity Tool · keyboard-shortcuts is must_have</span></p></div>
+  <div class="note"><h4>Steps ahead are dimmed, not hidden</h4><p>The current step is the only one at full ink and it carries a 2px steel edge. The rest stay legible, because a tester reads ahead to know what is coming.<span class="was">Was: every step at equal weight in a table, with the current one marked by a radio.</span></p></div>
+  <div class="note"><h4>"Last time" is on screen before it is needed</h4><p>What this case did in the previous run, and where it broke, sits in the rail at rest. A tester who hits the same failure knows within a second whether it is news.</p></div>
+  <div class="note"><h4>The timer is a field, not a stopwatch you must stop</h4><p>It counts from the moment the case opened and is editable in place. <em>How long it took (seconds)</em> asked a person to remember; this asks them only to correct it.</p></div>
+</div>
+
+<!-- ============================================ B · failure capture ============================================ -->
+<div class="cap"><b>B · The failure</b><span>what "2" opens — the only modal-ish moment, and it is a rail section, not a dialog</span></div>
+<div class="frame"><div class="app bare"><div class="stage">
+  <div class="top"><span class="crumb">Test runs &nbsp;/&nbsp; <b>R-2211</b> &nbsp;/&nbsp; TC-194 · step 4</span><span class="sp"></span><span class="faint" style="font-size:12px">Case 78 of 150</span></div>
+  <div class="split three">
+    <aside class="side l"><div class="sec"><h3>This run <span class="c">78 / 150</span></h3><div class="queue">
+      <div class="q"><span class="d p"></span>TC-181 Unsettled auth</div><div class="q"><span class="d f"></span>TC-188 Refund a settled…</div>
+      <div class="q on"><span class="d f"></span>TC-194 Refunded twice</div><div class="q"><span class="d"></span>TC-196 Reason codes</div></div></div></aside>
+    <div class="pane doc" style="padding:24px 30px">
+      <h2 class="dtitle" style="font-size:21px">A settled payment cannot be refunded twice</h2>
+      <div class="rule" style="max-width:74ch;margin:14px 0 8px"></div>
+      <div class="proc" style="font-size:15px">
+        <div class="sln pass"><span class="vm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span><span style="font-family:var(--mono);font-size:11px;color:var(--ink-4);text-align:right;padding-top:4px">1</span><span class="t"><span class="kw g">Given</span>a settled payment of 100.00 EUR exists</span></div>
+        <div class="sln pass"><span class="vm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span><span style="font-family:var(--mono);font-size:11px;color:var(--ink-4);text-align:right;padding-top:4px">2</span><span class="t"><span class="kw w">When</span>the operator refunds it in full</span></div>
+        <div class="sln pass"><span class="vm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span><span style="font-family:var(--mono);font-size:11px;color:var(--ink-4);text-align:right;padding-top:4px">3</span><span class="t"><span class="kw t">Then</span>the refund is accepted and the balance falls to 0.00</span></div>
+        <div class="sln fail here" style="box-shadow:inset 2px 0 0 var(--failed);background:rgb(224 117 104/8%)"><span class="vm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18"/></svg></span><span style="font-family:var(--mono);font-size:11px;color:var(--failed);text-align:right;padding-top:4px">4</span><span class="t"><span class="kw a">And</span>a second refund of the same payment is rejected<div class="blk"><span class="h">|</span> attempt <span class="h">|</span> outcome           <span class="h">|</span><br><span class="h">|</span> 1st     <span class="h">|</span> accepted          <span class="h">|</span><br><span class="h">|</span> 2nd     <span class="h">|</span> ALREADY_REFUNDED  <span class="h">|</span></div></span></div>
+        <div class="sln"><span class="vm"></span><span style="font-family:var(--mono);font-size:11px;color:var(--ink-4);text-align:right;padding-top:4px">5</span><span class="t" style="color:var(--ink-3)"><span class="kw a">And</span>the customer balance is unchanged</span></div>
+      </div>
+    </div>
+    <aside class="side" style="border-left-color:rgb(224 117 104/26%)">
+      <div class="sec" style="background:rgb(224 117 104/6%)">
+        <h3 style="color:var(--failed)">Failed at step 4</h3>
+        <div class="verdicts" style="margin-bottom:12px"><button class="vb p">Passed<span class="k">1</span></button><button class="vb f on">Failed<span class="k">2</span></button><button class="vb">Blocked<span class="k">3</span></button><button class="vb">Skipped<span class="k">4</span></button></div>
+        <label class="f">What actually happened</label>
+        <span class="fld wide focus" style="min-height:74px;align-items:flex-start;line-height:1.6"><span style="color:var(--ink)">Second refund was accepted. Balance went to −100.00 and a credit entry appeared in the ledger.<span class="cursor"></span></span></span>
+        <p class="err"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16v.01"/></svg><span>A failure needs a description. This is what the next person reads, and what a defect is filed from.</span></p>
+      </div>
+      <div class="sec">
+        <h3>Evidence</h3>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <span style="width:64px;height:44px;border-radius:var(--r-sm);background:var(--field);border:1px solid var(--line)"></span>
+          <span style="width:64px;height:44px;border-radius:var(--r-sm);background:var(--field);border:1px dashed var(--line-2);display:grid;place-items:center;color:var(--ink-4);font-size:18px">+</span>
+        </div>
+        <p class="quiet"><span class="id">ledger-after.png</span> · 214 KB. Paste from the clipboard, or drop a file anywhere on this panel.</p>
+      </div>
+      <div class="sec">
+        <h3>Link a defect</h3>
+        <span class="fld wide"><span class="ph">Search or paste an issue URL</span></span>
+        <div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap"><button class="chip on">INC-4471 <span class="x">×</span></button><button class="chip add">+ file a new one</button></div>
+        <p class="quiet" style="margin-top:9px">TCMS links out; it does not track defects. <a href="#">Where these go</a></p>
+      </div>
+      <div class="sec" style="border-bottom:0"><button class="btn primary" style="width:100%;justify-content:center">Record and go to TC-196</button></div>
+    </aside>
+  </div>
+  <div class="foot"><span class="s">Recording a failure keeps the run open. Nothing here is submitted until <b>Record</b>.</span><span class="keys">⌘V paste evidence &nbsp; ⌘↵ record</span></div>
+</div></div></div>
+
+<!-- ============================================ C · run complete ============================================ -->
+<div class="cap"><b>C · The end of the queue</b><span>what the runner shows when there is nothing left to execute</span></div>
+<div class="frame"><div class="app bare"><div class="stage" style="min-height:330px">
+  <div class="top"><span class="crumb">Test runs &nbsp;/&nbsp; <b>R-2211</b></span><span class="sp"></span><button class="btn ghost">Reopen the run</button><button class="btn primary">Finish and summarise</button></div>
+  <div class="state" style="max-width:64ch">
+    <div class="rline" style="justify-content:center;margin-bottom:16px"><span class="rbar" style="width:280px;height:9px"><i class="p" style="width:82%"></i><i class="f" style="width:11%"></i><i class="b" style="width:7%"></i></span></div>
+    <h3 style="font-size:19px;color:var(--ink)">150 of 150 executed, in 3 h 12 m</h3>
+    <p>123 passed · 17 failed · 10 blocked. Eleven failures name a defect; six do not, and those are the ones the next person will have to reconstruct.</p>
+    <div class="acts">
+      <button class="btn primary">Finish and summarise</button>
+      <button class="btn ghost">Review the 6 failures with no defect</button>
+      <button class="btn ghost">Clone into a re-test run</button>
+    </div>
+  </div>
+  <div class="foot"><span class="s">Finishing writes the run's verdict and stops the clock. A finished run can still be cloned, never edited.</span></div>
+</div></div></div>
+
+<div class="notes">
+  <div class="note"><h4>The failure panel is not a dialog</h4><p>It replaces the rail's recording section in place, so the step it is about stays on screen and the tester can re-read it while typing. A modal would have covered the evidence.<span class="cite">UX#55 · error near the problem</span></p></div>
+  <div class="note"><h4>A failure without a description is refused, and says so</h4><p>The refusal is inline, above the button, in the field it is about — the rule §258 left behind: a refusal path that cannot be seen is no refusal path.</p></div>
+  <div class="note"><h4>The exit offers the next real action</h4><p>Not just <em>Finish</em>. <em>Review the 6 failures with no defect</em> is the thing a lead actually does next, and it is on screen at the moment it is cheapest to do.<span class="cite">UX#80</span></p></div>
+  <div class="note"><h4>Focus and Split are the two layouts, and they persist</h4><p>Focus is drawn here. Split puts the queue and the case side by side for a lead sweeping many short cases. The choice is remembered per person, not per run.</p></div>
+</div>
+
+</div>
+<script src="shell.js"></script>
