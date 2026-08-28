@@ -29,7 +29,7 @@ import {
 import type { TestRun } from '../../api/types';
 import { PermissionGate } from '../../components/PermissionGate';
 import { describeError } from '../../lib/describeError';
-import { formatCount } from '../../lib/format';
+import { plural } from '../../lib/format';
 
 /**
  * Starting a run — **the affordance that materialises a checklist**.
@@ -415,7 +415,7 @@ export function RunCreateDialog({
                       {plan.key} · {plan.name}
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      {formatCount(plan.caseCount)} cases
+                      {plural(plan.caseCount, 'case')}
                     </Typography>
                   </Stack>
                 </MenuItem>
@@ -497,7 +497,7 @@ export function RunCreateDialog({
                           <Typography variant="body2">{option}</Typography>
                           {usage && (
                             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                              {formatCount(usage.caseCount)} cases
+                              {plural(usage.caseCount, 'case')}
                             </Typography>
                           )}
                         </Stack>

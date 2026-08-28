@@ -21,7 +21,7 @@ import { useCreatePlan, useSuites } from '../../api/queries';
 import type { TestPlan } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
 import { describeError } from '../../lib/describeError';
-import { formatCount } from '../../lib/format';
+import { plural } from '../../lib/format';
 
 /**
  * Creating a test plan — the first half of what unblocks the product's own execution loop.
@@ -243,7 +243,7 @@ export function PlanCreateDialog({
                         <Identifier variant="muted">{suite.key}</Identifier>
                         <Typography variant="body2">{suite.name}</Typography>
                         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                          {formatCount(suite.caseCount)} cases
+                          {plural(suite.caseCount, 'case')}
                         </Typography>
                       </Stack>
                     }

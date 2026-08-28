@@ -3,6 +3,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import type { TestExecutionSummary } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
 import { QuarantineChip } from '../../components/StatusChip';
+import { plural } from '../../lib/format';
 import { statusLabels } from '../../lib/labels';
 import { orderedQueue } from './queueOrder';
 
@@ -73,7 +74,7 @@ export function ExecutionQueue({
         <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid="Execution.Queue.Position">
           {position >= 0
             ? `Case ${position + 1} of ${ordered.length}`
-            : `${ordered.length} cases in this run`}
+            : `${plural(ordered.length, 'case')} in this run`}
         </Typography>
       </Box>
 

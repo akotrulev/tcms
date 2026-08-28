@@ -7,7 +7,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { StatusChip } from '../../components/StatusChip';
-import { formatCount, formatDateTime, formatDuration, formatPercent, formatRatio, percentOf } from '../../lib/format';
+import { formatCount, formatDateTime, formatDuration, formatPercent, formatRatio, percentOf, plural } from '../../lib/format';
 
 /**
  * Execution history for one case (plan §6p).
@@ -110,7 +110,7 @@ function HistoryBody({
         <Stack direction="row" sx={{ gap: 4, flexWrap: 'wrap', mb: 1.5 }}>
           <Metric
             value={formatPercent(percentOf(summary.passed, summary.executions))}
-            label={`passed, of ${formatCount(summary.executions)} executions`}
+            label={`passed, of ${plural(summary.executions, 'execution')}`}
           />
           <Metric value={formatCount(summary.failed)} label="failed" />
           {summary.flakinessScore !== null && summary.flakinessScore !== undefined && (

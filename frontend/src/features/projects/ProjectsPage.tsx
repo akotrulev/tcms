@@ -6,7 +6,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
-import { formatCount } from '../../lib/format';
+import { formatCount, pluralNoun } from '../../lib/format';
 import { ProjectCreateDialog } from './ProjectCreateDialog';
 
 /**
@@ -132,7 +132,8 @@ export function ProjectsPage() {
                   </Typography>
                   <Stack direction="row" sx={{ gap: 2 }}>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      <Identifier variant="muted">{formatCount(project.caseCount)}</Identifier> cases
+                      <Identifier variant="muted">{formatCount(project.caseCount)}</Identifier>{' '}
+                      {pluralNoun(project.caseCount, 'case')}
                     </Typography>
                     {/* myRole is null when the caller reaches this project through a
                         COMPANY-scope grant, which is the contract's stated meaning and not a

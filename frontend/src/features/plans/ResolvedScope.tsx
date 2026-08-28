@@ -2,7 +2,7 @@ import { Alert, Box, Skeleton, Stack, Typography } from '@mui/material';
 import { useReferencedCases, type CaseReference } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { formatCount } from '../../lib/format';
+import { formatCount, plural } from '../../lib/format';
 import { resolveReferences, type ReferenceRead } from '../../lib/planScope';
 import type { GroupId } from './planDraft';
 
@@ -93,7 +93,7 @@ export function ResolvedScope({
             'What these references would catch — including the ones not saved yet. Nothing is in the plan until you press Save.'
           : 'The cases these references catch right now, recomputed on every read.'}
         {namedCaseCount > 0
-          && ` The ${formatCount(namedCaseCount)} cases named directly above are not repeated here.`}
+          && ` The ${plural(namedCaseCount, 'case')} named directly above are not repeated here.`}
       </Typography>
 
       <DataRegion
@@ -124,7 +124,7 @@ export function ResolvedScope({
                 sx={{ py: 0, my: 0.5 }}
                 data-testid={`${testId}.Truncated`}
               >
-                {cut.label} resolves to {formatCount(cut.total)} cases — the first{' '}
+                {cut.label} resolves to {plural(cut.total, 'case')} — the first{' '}
                 {formatCount(cut.shown)} are listed.
               </Alert>
             ))}

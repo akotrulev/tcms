@@ -51,6 +51,7 @@ export function createAppQueryClient(handlers: QueryClientHandlers): QueryClient
 
         handlers.notify.error({
           message: described.body,
+          title: described.title,
           code: described.code,
           correlationId: described.correlationId,
           region: typeof query.meta?.region === 'string' ? query.meta.region : undefined,
@@ -84,6 +85,7 @@ export function createAppQueryClient(handlers: QueryClientHandlers): QueryClient
 
         handlers.notify.error({
           message: described.body,
+          title: described.title,
           code: described.code,
           correlationId: described.correlationId,
         });

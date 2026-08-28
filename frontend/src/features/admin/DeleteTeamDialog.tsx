@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { ApiError } from '../../api/client';
 import { useDeleteTeam } from '../../api/queries';
 import type { Team } from '../../api/types';
+import { plural } from '../../lib/format';
 import { describeError } from '../../lib/describeError';
 
 /**
@@ -95,7 +96,7 @@ export function DeleteTeamDialog({
           <DialogContentText>
             The team is removed from the org chart.{' '}
             {team.members.length > 0
-              ? `Its ${team.members.length === 1 ? 'member' : `${team.members.length} members`} stay in the company and lose nothing — being in a team grants nothing on its own.`
+              ? `Its ${plural(team.members.length, 'member')} stay in the company and lose nothing — being in a team grants nothing on its own.`
               : 'Nobody is in it.'}
           </DialogContentText>
         </Stack>

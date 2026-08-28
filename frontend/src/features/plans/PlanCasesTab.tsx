@@ -25,7 +25,7 @@ import type { TestCaseSummary, TestPlan } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Panel } from '../../components/PageHeader';
-import { formatCount } from '../../lib/format';
+import { plural } from '../../lib/format';
 import { ResolvedScope } from './ResolvedScope';
 import {
   addReference,
@@ -150,7 +150,7 @@ export function PlanCasesTab({
       actions={
         <Tooltip title="A case can be named directly in one section and arrive through a suite or a tag in another, so the sections' counts add up to more than the plan's total.">
           <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid="PlanCases.Total">
-            {formatCount(plan.caseCount)} cases in scope
+            {plural(plan.caseCount, 'case')} in scope
           </Typography>
         </Tooltip>
       }
@@ -360,7 +360,7 @@ function GroupCard({
 
           {count !== null && (
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              {formatCount(count)} cases
+              {plural(count, 'case')}
             </Typography>
           )}
 

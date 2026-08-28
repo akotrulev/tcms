@@ -4,7 +4,7 @@ import type { CaseStatus, StepResult, TestExecutionSummary, TestRunDetail } from
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { Panel } from '../../components/PageHeader';
-import { formatCount } from '../../lib/format';
+import { formatCount, plural } from '../../lib/format';
 import { runFailures, stepOutcome } from '../../lib/results';
 import { CaseKeyLink, ExecuteCaseLink } from './ExecutionRowLinks';
 
@@ -245,7 +245,7 @@ function FailedCaseRow({
         ) : (
           <Stack sx={{ gap: 0.5 }}>
             <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid={`${StepRowTestId}.Counts`}>
-              {formatCount(outcome.failed.length)} of {formatCount(outcome.totalCount)} steps failed
+              {formatCount(outcome.failed.length)} of {plural(outcome.totalCount, 'step')} failed
               {outcome.unmarkedCount > 0 && ` · ${formatCount(outcome.unmarkedCount)} not marked`}
             </Typography>
             {outcome.failed.map((step) => (

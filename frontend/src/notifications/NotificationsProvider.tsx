@@ -43,6 +43,7 @@ interface Entry {
   id: string;
   kind: 'error' | 'prompt';
   message: string;
+  title: string | null;
   /** Grouping cause — the HTTP status or error name. Entries sharing one roll up together. */
   code: string;
   region: string | null;
@@ -100,6 +101,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
           id,
           kind: 'error',
           message: input.message,
+          title: input.title ?? null,
           code,
           region,
           correlationId: input.correlationId ?? null,
@@ -120,6 +122,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         id: input.id,
         kind: 'prompt',
         message: input.message,
+        title: null,
         // Prompts never roll up with anything — a unique cause keyed on the id.
         code: `prompt:${input.id}`,
         region: null,
@@ -227,6 +230,8 @@ interface Group {
   kind: 'error' | 'prompt';
   /** The message to show for the group as a whole. */
   message: string;
+  /** Null when the group's entries disagree, or when no caller supplied one. */
+  title: string | null;
   entries: Entry[];
   /** Total occurrences across the group, so a rolled-up group still reports its volume. */
   count: number;
@@ -257,9 +262,13 @@ function groupByCause(entries: Entry[]): Group[] {
   return [...byCause.entries()].map(([key, group]) => {
     const count = group.reduce((sum, entry) => sum + entry.count, 0);
     const messages = new Set(group.map((entry) => entry.message));
+    const titles = new Set(group.map((entry) => entry.title));
     return {
       key,
       kind: group[0]!.kind,
+      // A rolled-up group only keeps the headline its entries agree on; a shared cause with two
+      // different titles has no single true headline, and the generic one is the honest answer.
+      title: titles.size === 1 ? group[0]!.title : null,
       // One distinct message across the group reads correctly as-is. Several different ones
       // must not be concatenated into a paragraph — state the shared cause instead, and let
       // the inline region states say which parts are affected.
@@ -309,7 +318,7 @@ function NotificationCard({ group, onDismiss }: { group: Group; onDismiss: (id: 
       }
     >
       <AlertTitle sx={{ fontSize: '0.8125rem', fontWeight: 600, mb: 0.25 }}>
-        {isPrompt ? 'Update available' : "Something didn't load"}
+        {isPrompt ? 'Update available' : (group.title ?? "Couldn't load this")}
       </AlertTitle>
 
       <Typography variant="body2">{group.message}</Typography>

@@ -60,7 +60,7 @@ import { DenominatorToggle, PassRateSummary, ResultBar, ResultCountsCell } from 
 import { criterionColor, criterionState, type Denominator } from '../../lib/results';
 import { StatusChip } from '../../components/StatusChip';
 import { describeError } from '../../lib/describeError';
-import { formatComputedAt, formatCount, formatDateTime, formatPercent } from '../../lib/format';
+import { formatComputedAt, formatCount, formatDateTime, formatPercent, plural } from '../../lib/format';
 import {
   aggregationHelp,
   aggregationLabels,
@@ -440,7 +440,7 @@ function SaveReport({ outcome, onDismiss }: { outcome: SaveOutcome; onDismiss: (
     return (
       <Alert severity="success" onClose={onDismiss} data-testid="PlanStats.SaveReport">
         Plan saved
-        {outcome.created.length > 0 && ` — ${formatCount(outcome.created.length)} cases created (${created})`}.
+        {outcome.created.length > 0 && ` — ${plural(outcome.created.length, 'case')} created (${created})`}.
       </Alert>
     );
   }
@@ -456,7 +456,7 @@ function SaveReport({ outcome, onDismiss }: { outcome: SaveOutcome; onDismiss: (
           {outcome.created.length > 0 && (
             <>
               {' '}
-              {formatCount(outcome.created.length)} cases were created before this failed
+              {plural(outcome.created.length, 'case')} were created before this failed
               ({created}) — they are in the project but not in this plan. Pressing Save again
               will not create them a second time.
             </>
@@ -466,7 +466,7 @@ function SaveReport({ outcome, onDismiss }: { outcome: SaveOutcome; onDismiss: (
         <>
           {describeError(outcome.error).body} Stopped at “{outcome.failedTitle}”.
           {outcome.created.length > 0
-            && ` ${formatCount(outcome.created.length)} cases before it were created (${created}).`}
+            && ` ${plural(outcome.created.length, 'case')} before it were created (${created}).`}
         </>
       )}
     </Alert>
@@ -763,7 +763,7 @@ function StatisticsBody({
             Not executed yet
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            This plan has {formatCount(data.counts.total)} cases in scope and no results. Start a run
+            This plan has {plural(data.counts.total, 'case')} in scope and no results. Start a run
             to begin recording them.
           </Typography>
         </Panel>

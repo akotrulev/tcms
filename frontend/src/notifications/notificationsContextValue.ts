@@ -11,6 +11,12 @@ export interface NotifyErrorInput {
    * the categorization happens in `describeError`, and this surface only renders the result.
    */
   message: string;
+  /**
+   * The headline `describeError` already computed for this failure. Omitted only by callers
+   * that have no described error; the surface falls back to its generic title then. Passing it
+   * is what keeps a session-expiry from being announced as "Couldn't load this".
+   */
+  title?: string;
   /** Which part of the app failed. Feeds the dedupe key and the rolled-up summary. */
   region?: string;
   /** Ties the notification to the server-side log entry. Rendered, copyable. */

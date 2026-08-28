@@ -223,10 +223,23 @@ export function formatCount(n: number | null | undefined): string {
  * the only consumer. A second consumer is the moment this file's own header applies — one canonical
  * format per data type, defined once — so it moved here rather than being copied, `formatCount`'s
  * neighbour for the same reason: both turn a number into the words beside it.
+ *
+ * The number goes through `formatCount` because the call sites this replaced were already correct
+ * about separators and wrong about the noun — `${formatCount(n)} cases` reads **"1 cases"**. Fixing
+ * the noun must not lose the separator, so one function now owns both halves.
  */
 export function plural(n: number, noun: string): string {
-  if (n === 1) return `1 ${noun}`;
-  return `${n} ${noun}${/(?:s|x|z|ch|sh)$/.test(noun) ? 'es' : 's'}`;
+  return `${formatCount(n)} ${pluralNoun(n, noun)}`;
+}
+
+/**
+ * The noun half of `plural`, for the call sites that render the number themselves — the projects
+ * list and the dashboard both wrap the count in `<Identifier>`, so they cannot take the whole
+ * string. The inflection rule lives in one place; only its packaging differs.
+ */
+export function pluralNoun(n: number, noun: string): string {
+  if (n === 1) return noun;
+  return `${noun}${/(?:s|x|z|ch|sh)$/.test(noun) ? 'es' : 's'}`;
 }
 
 /**

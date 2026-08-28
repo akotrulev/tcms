@@ -11,7 +11,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
-import { formatCount, formatDateTime, formatPercent } from '../../lib/format';
+import { formatCount, formatDateTime, formatPercent, plural, pluralNoun } from '../../lib/format';
 import { automationLabels, healthLabels, labelForKey, lifecycleLabels } from '../../lib/labels';
 import { lifecycleVar, severityVar } from '../../lib/statusColors';
 
@@ -43,7 +43,8 @@ export function DashboardPage() {
             <>
               <Identifier variant="strong">{project.data.key}</Identifier>
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                <Identifier variant="muted">{formatCount(project.data.caseCount)}</Identifier> cases
+                <Identifier variant="muted">{formatCount(project.data.caseCount)}</Identifier>{' '}
+                {pluralNoun(project.data.caseCount, 'case')}
               </Typography>
               {/* Omitted rather than empty when myRole is null — see ProjectsPage for why a
                   COMPANY-scope grant legitimately has no per-project role name. */}
@@ -426,7 +427,7 @@ function BreakdownList({
                     component={RouterLink}
                     to={tileHref(casesPath, segment.filter)}
                     data-testid={`${testId}.Segment.${segment.key}`}
-                    aria-label={`${row.label}, ${segmentLabel}: ${segment.count} cases`}
+                    aria-label={`${row.label}, ${segmentLabel}: ${plural(segment.count, 'case')}`}
                     sx={{
                       flex: segment.count,
                       // A status this build has never heard of gets the muted grey rather than

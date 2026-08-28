@@ -17,7 +17,7 @@ import { z } from 'zod';
 import type { CaseConditionRef, Condition, Suite } from '../../api/types';
 import { ApiError } from '../../api/client';
 import { Identifier } from '../../components/Identifier';
-import { formatCount } from '../../lib/format';
+import { formatCount, plural } from '../../lib/format';
 import { useCreateSuite, useDeleteSuite, useProjectTags, useRenameSuite } from '../../api/queries';
 import { describeError } from '../../lib/describeError';
 import { ConditionEditDialog } from './ConditionEditDialog';
@@ -399,7 +399,7 @@ function SuiteFormDialog({
               <Alert severity="warning" data-testid={`${TestIdPrefix}.DeclineWarning`}>
                 {abandonedDeclines === 1
                   ? 'One case has opted out of a condition you are removing. That opt-out is deleted with it, and re-attaching the condition does not bring it back.'
-                  : `${abandonedDeclines} cases have opted out of conditions you are removing. Those opt-outs are deleted with them, and re-attaching the conditions does not bring them back.`}
+                  : `${plural(abandonedDeclines, 'case')} have opted out of conditions you are removing. Those opt-outs are deleted with them, and re-attaching the conditions does not bring them back.`}
               </Alert>
             )}
           </Stack>

@@ -25,7 +25,7 @@ import { Identifier } from '../../components/Identifier';
 import { PermissionGate } from '../../components/PermissionGate';
 import { copyOf } from '../../lib/clone';
 import { describeError } from '../../lib/describeError';
-import { formatCount } from '../../lib/format';
+import { plural } from '../../lib/format';
 
 /**
  * Cloning a test run (§129 phase 3) — *"run this again against the new build"*, the highest-value
@@ -410,7 +410,7 @@ export function RunCloneDialog({
               would otherwise learn from a short checklist.
             */}
             <DialogContentText variant="caption">
-              The copy covers the same {formatCount(caseCount)} cases as this run, every one
+              The copy covers the same {plural(caseCount, 'case')} as this run, every one
               untested. Results, evidence, defect links and the run’s own timings stay with{' '}
               <Identifier variant="muted">{run.key}</Identifier>. Cases added to those folders since
               this run started are not picked up — a run records the checklist it was given.

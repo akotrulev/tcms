@@ -26,7 +26,7 @@ import { DataRegion, GridSkeleton } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { ScrollX } from '../../components/ScrollX';
-import { formatAge, formatCount, formatDateTime } from '../../lib/format';
+import { formatAge, formatCount, formatDateTime, plural } from '../../lib/format';
 import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
 import { auditActionLabel, auditTargetTypeLabel } from '../../lib/labels';
 import { useAuditFilters } from './useAuditFilters';
@@ -310,7 +310,7 @@ function GroupRow({ group }: { group: AuditGroup }) {
         </TableCell>
         <TableCell>
           <Typography variant="body2" data-testid="Audit.Group.Targets">
-            {targets} items
+            {plural(targets, 'item')}
           </Typography>
         </TableCell>
       </TableRow>
@@ -431,7 +431,7 @@ function Targets({ ids }: { ids: string[] }) {
   }
   return (
     <Typography variant="body2" data-testid="Audit.Row.Target">
-      {ids.length} items
+      {plural(ids.length, 'item')}
     </Typography>
   );
 }

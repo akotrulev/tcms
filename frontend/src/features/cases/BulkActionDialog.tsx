@@ -34,7 +34,7 @@ import {
   useSuites,
 } from '../../api/queries';
 import { describeError } from '../../lib/describeError';
-import { formatCount } from '../../lib/format';
+import { formatCount, plural } from '../../lib/format';
 
 /**
  * Bulk edits are **preview, then commit**.
@@ -568,7 +568,7 @@ export function BulkActionDialog({
           title={!preview ? 'Preview the changes first' : undefined}
           data-testid={`${TestIdPrefix}.Confirm`}
         >
-          {preview ? `Apply to ${formatCount(preview.changed.length)} cases` : 'Apply'}
+          {preview ? `Apply to ${plural(preview.changed.length, 'case')}` : 'Apply'}
         </Button>
       </DialogActions>
     </Dialog>

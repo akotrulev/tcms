@@ -369,6 +369,9 @@ function EnumFilter({
             (value as string[]).map((key) => labels[key] ?? key).join(', ') || 'Any',
           displayEmpty: true,
         },
+        // `displayEmpty` renders "Any" while the selection is empty, but the label only shrinks
+        // off a non-empty *value* — so it stayed over the text and the control read "Anyomation".
+        inputLabel: { shrink: true },
         htmlInput: { 'data-testid': testId },
       }}
     >
