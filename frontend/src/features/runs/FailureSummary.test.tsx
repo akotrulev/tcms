@@ -63,6 +63,8 @@ function summary(
 function run(executions: TestExecutionSummary[], notRun = 0): TestRunDetail {
   return {
     id: RUN,
+    // Null, the honest default: a scheduled or ingested run has no actor (B1 / 005 S1).
+    createdBy: null,
     key: 'TR-4',
     name: 'Regression 4.4.0',
     planId: null,

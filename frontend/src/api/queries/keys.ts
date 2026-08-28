@@ -81,6 +81,17 @@ export const keys = {
    */
   stepSuggestions: (p: string, q: string) => ['projects', p, 'step-suggestions', q] as const,
   /**
+   * The same corpus **unnarrowed** — the case editor's standing panel (003 Phase 1).
+   *
+   * A key of its own rather than `stepSuggestions(p, '')`, and the two must not collapse into one.
+   * They are read under different rules: the completion above fires per fragment as the author
+   * types and is gated on there being one, while this is a browsing surface mounted **once per
+   * page** and asks for the whole list. Sharing a key would make the panel's answer the cache
+   * entry an empty completion then reads, which is the read `useStepSuggestions`'s `enabled` gate
+   * exists to prevent — and it would put the panel's list into a popup under somebody's caret.
+   */
+  stepCorpus: (p: string) => ['projects', p, 'step-corpus'] as const,
+  /**
    * A subject's reviews. Keyed by the subject *type* as well as its id, because the id spaces are
    * independent — a case and a suite may in principle carry the same uuid, and a key that dropped
    * the type would serve one artifact's review trail for another.

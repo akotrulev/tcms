@@ -38,6 +38,8 @@ const PROJECT = '11111111-1111-1111-1111-111111111111'
 const aJob = (over: Partial<ReportJob> = {}): ReportJob => {
   const row: ReportJob = {
     jobId: 'job-1',
+    // Null until the artifact exists — B1 added it so a download can say how big it is (005 S1).
+    sizeBytes: null,
     type: 'run_summary',
     status: 'COMPLETED',
     format: 'HTML',

@@ -33,6 +33,8 @@ const PROJECT = '11111111-1111-1111-1111-111111111111'
 function sourceRun(over: Partial<TestRun> = {}): TestRun {
   return {
     id: 'run-1',
+    // Null, the honest default: a scheduled or ingested run has no actor (B1 / 005 S1).
+    createdBy: null,
     key: 'TR-7',
     name: 'Regression 4.3.0',
     planId: null,

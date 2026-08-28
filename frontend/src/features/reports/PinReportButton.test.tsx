@@ -27,6 +27,8 @@ import { PinReportButton } from './PinReportButton'
 
 const completed: ReportJob = {
   jobId: 'job-9',
+  // B1's new member (005 S1) — how big the artifact is, or null before one exists.
+  sizeBytes: 4096,
   type: 'run_summary',
   status: 'COMPLETED',
   format: 'MD',

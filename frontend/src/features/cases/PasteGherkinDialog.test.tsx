@@ -196,7 +196,7 @@ describe('PasteGherkinDialog — applying', () => {
     const user = await pasteAndRead()
     await user.click(await screen.findByTestId('PasteGherkin.Append'))
 
-    expect(onApply).toHaveBeenCalledWith(result, 'APPEND')
+    expect(onApply).toHaveBeenCalledWith(result, 'APPEND', expect.stringContaining('Given'))
   })
 
   it('reports Replace distinctly, because it is the one that discards step ids', async () => {
@@ -207,7 +207,7 @@ describe('PasteGherkinDialog — applying', () => {
     const user = await pasteAndRead()
     await user.click(await screen.findByTestId('PasteGherkin.Replace'))
 
-    expect(onApply).toHaveBeenCalledWith(result, 'REPLACE')
+    expect(onApply).toHaveBeenCalledWith(result, 'REPLACE', expect.stringContaining('Given'))
   })
 
   it('offers neither until something has been read', () => {

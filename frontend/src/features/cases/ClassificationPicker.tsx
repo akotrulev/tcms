@@ -1,4 +1,5 @@
 import {
+  Box,
   Checkbox,
   FormControl,
   FormControlLabel,
@@ -46,6 +47,20 @@ import { inputTestId } from '../../lib/muiTestIds';
  * still checks under that; this is the layer that makes the rule feel like a shape rather than a
  * rejection.
  *
+ * ## An empty vocabulary renders NO control (003 Phase 1, finding 3)
+ *
+ * ~~An empty Feature tree renders its name and *"Nothing to choose from yet — this vocabulary is
+ * empty"*.~~ → **superseded by 003 Phase 1.** A freshly provisioned project has four dimensions and
+ * no values in any of them, so the old treatment drew four labelled controls that could not be
+ * used, one caption each, in a 320px rail — four copies of one fact, and four affordances for
+ * nothing. A dimension with no values now renders nothing at all, and the page is told which ones
+ * they were through {@link ClassificationPicker}'s `emptyNotice` slot, so **one** sentence and
+ * **one** link to Classification stand for all of them together.
+ *
+ * The slot rather than the sentence: the picker is a control and does not know the route to
+ * project settings, and a link rendered from here would be the second place this app decides where
+ * Classification lives. It reports the fact; the page says what to do about it.
+ *
  * ## Parents are selectable
  *
  * The Feature tree offers a parent exactly as it offers a leaf. The editor previously rendered
@@ -61,6 +76,7 @@ export function ClassificationPicker({
   onChange,
   disabled,
   testIdPrefix,
+  emptyNotice,
 }: {
   dimensions: ClassificationDimension[];
   /** Every selected value id across all dimensions — the flat shape the contract takes. */
@@ -68,8 +84,26 @@ export function ClassificationPicker({
   onChange: (next: string[]) => void;
   disabled?: boolean;
   testIdPrefix: string;
+  /**
+   * What to say about the dimensions this project has configured **no values for**, rendered once
+   * under whatever controls remain.
+   *
+   * A render prop taking the empty dimensions, not a boolean and not a node: the page composes the
+   * sentence — it is the side that knows where Classification lives and may name the dimensions —
+   * while the picker keeps the one thing it knows, which is *which* of them are empty. Called only
+   * when there is at least one, so a caller need not check.
+   */
+  emptyNotice?: (empty: ClassificationDimension[]) => React.ReactNode;
 }) {
   const chosen = useMemo(() => new Set(selected), [selected]);
+  /*
+    Split rather than filtered in place, because both halves are rendered: the usable dimensions
+    become controls and the empty ones become the caller's one notice. Deriving the second list at
+    the render site instead would put the same `values.length === 0` test in two files, and the
+    copy that drifts is whichever is edited second.
+  */
+  const usable = dimensions.filter((dimension) => dimension.values.length > 0);
+  const empty = dimensions.filter((dimension) => dimension.values.length === 0);
 
   /**
    * Replaces this dimension's selection while leaving every other dimension's alone.
@@ -98,7 +132,7 @@ export function ClassificationPicker({
 
   return (
     <Stack sx={{ gap: 2.5 }} data-testid={`${testIdPrefix}.Classification`}>
-      {dimensions.map((dimension) => (
+      {usable.map((dimension) => (
         <DimensionControl
           key={dimension.id}
           dimension={dimension}
@@ -109,6 +143,9 @@ export function ClassificationPicker({
           onToggle={(valueId, on) => toggle(dimension, valueId, on)}
         />
       ))}
+      {empty.length > 0 && emptyNotice ? (
+        <Box data-testid={`${testIdPrefix}.Classification.EmptyNotice`}>{emptyNotice(empty)}</Box>
+      ) : null}
     </Stack>
   );
 }
@@ -131,22 +168,12 @@ function DimensionControl({
   const tree = useMemo(() => buildValueTree(dimension.values), [dimension.values]);
   const testId = `${testIdPrefix}.Dimension.${dimension.key}`;
 
-  // An empty Feature tree is the NORMAL state of a freshly seeded project, not an error — the
-  // contract says so where it documents `values`. Saying so beats an empty select that reads as a
-  // failed load, and beats hiding the dimension, which would make the absence indistinguishable
-  // from the project not having the dimension at all.
-  if (dimension.values.length === 0) {
-    return (
-      <Stack sx={{ gap: 0.5 }} data-testid={testId}>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          {dimension.name}
-        </Typography>
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          Nothing to choose from yet — this vocabulary is empty.
-        </Typography>
-      </Stack>
-    );
-  }
+  /*
+    ~~An empty vocabulary says so here.~~ → 003 Phase 1: an empty dimension never reaches this
+    component, because `ClassificationPicker` above does not render one. The caption it used to
+    draw is the caller's one notice now — see that component's header for why four of them in a
+    320px rail was the defect and not the absence.
+  */
 
   // A flat SINGLE dimension is a select rather than a radio group: Test Type and Test Level have
   // eight and seven values, and a column of radios that tall drowns out the fields around it. The

@@ -1,5 +1,11 @@
 /**
- * Where a finished drag of a step row lands (§94).
+ * Where a finished drag lands — a step row (§94), and since §003 a condition row only.
+ *
+ * **003 named this file for deletion with the step machinery, and it is kept.** The step list it
+ * was written for is gone, but `ConditionsPanel` has imported `resolveStepMove` since §95 and
+ * reorders the case's conditions with it — deleting the module would have taken a working drag off
+ * a surface 003 never mentions. The name is now one word wrong and is left alone: renaming it
+ * would rewrite every citation of it for no behaviour, and the header above says what it is.
  *
  * ## Why this is a module and not four lines inside `onDragEnd`
  *

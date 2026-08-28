@@ -30,6 +30,9 @@ const dashboard = (partial: Partial<RepositoryDashboard>): RepositoryDashboard =
     healthComputedAt: null,
     byFeature: [],
     byOwner: [],
+    // 005 N3's third segmentation — by the outcome of each case's last execution. Empty
+    // here: these files are about the tiles, not the breakdown (B1).
+    byLastRun: [],
     automationCoverage: {
       automated: 0,
       toBeAutomated: 0,

@@ -2,88 +2,61 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SnackbarProvider } from 'notistack'
 import { Route, Routes } from 'react-router-dom'
-import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
 import { api } from '../../api/client'
-import type { Condition, PermissionKey, StepSuggestion, Suite, TagUsage, TestCase } from '../../api/types'
+import type {
+  ClassificationDimension,
+  Condition,
+  GherkinParseResult,
+  PermissionKey,
+  StepSuggestion,
+  Suite,
+  TestCase,
+  TestCaseSummary,
+} from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
-import { aCase, aStep } from '../../test/fixtures'
+import { aCase, aCaseSummary, aStep } from '../../test/fixtures'
 import { heldPermissions } from '../../test/permissions'
 import { CaseEditorPage } from './CaseEditorPage'
 import { newCaseDraftKey } from './useNewCaseDraft'
 
 /**
- * The step editor — **the case editor's first test file**, added with §94's rework of it.
+ * The case editor around the document — **rewritten with the surface it tests** (§003 Phase 1+2).
  *
- * The screen had none through eight slices, and the three behaviours this slice adds are all of
- * the kind neither `tsc` nor oxlint can see:
+ * ## What left this file, and where its subject went
  *
- *   1. **Auto-append.** Typing in the last row adds the next one. There is no Add button any more,
- *      so if this stops working there is no way to write a second step and nothing on screen says
- *      so.
- *   2. **Trim, then drop.** The blank trailing row is submitted with the form and must never reach
- *      the API. A whitespace-only step is accepted by the server, renders as an empty numbered
- *      line forever, and asks a tester to perform nothing.
- *   3. **A pick fills all three fields.** Completing the action alone would leave exactly the two
- *      fields that distinguish two similar steps blank — the divergence the corpus exists to stop.
+ * Forty-four tests drove a step-row editor: auto-append, the ▲▼ reorder path, the drag handle, the
+ * keyword select, the per-row completion, the three data modalities. That surface is deleted, so
+ * those tests are not ported — a test of a control nobody can reach is a green assertion about
+ * nothing. What they were *about* survives in three places, and none of it is untested:
  *
- * The refine that pairs with (1) — "at least one step" counting non-empty rows — is proved in
- * `CaseSchema.test.ts`, where it can be asked directly. What is asserted here is that the editor
- * surfaces it rather than saving.
- *
- * Drag-to-reorder is asserted through the ▲▼ path and `steps.move`; driving a real pointer drag in
- * jsdom proves the library works, not that this screen wired it up.
- */
-
-/**
- * **This file's own per-test budget, 60 s against the suite's 30 s.**
- *
- * It is the slowest file in the suite by a wide margin — **44 tests, 397 s on the `tcms-lab`
- * runner** against 108 s on a MacBook — and that 3.7× is what turns a 4 s test into a timeout. It
- * has now reddened master twice in one evening on *different* tests inside it (runs 31899541092 and
- * 31905976838), always *Test timed out*, never an assertion.
- *
- * Raised here rather than in `vitest.config.ts` because the other 106 files do not have this
- * problem and should keep failing at 30 s. That config's own comment records the global number
- * being raised twice for this cause and warns the next person that it is a symptom — which is why
- * the cheap remedies were measured before this line was written, rather than after:
- *
- * | Lever | Effect |
+ * | Was proved by | Is proved by |
  * |---|---|
- * | `userEvent.setup({ delay: null })` on all 34 setups | 108 s → 98 s |
- * | every `user.type` replaced by `click` + `paste` | 108 s → 95 s, and 2 tag tests break |
- * | — | |
- * | one render of the editor | ~1.0 s |
- * | one keystroke into a step's action field | ~190 ms, of which **React commits are ~16 ms** |
- * | one keystroke into the plain Title field | ~30 ms, of which React commits are <1 ms |
- * | `api.get` calls while typing | **zero** |
+ * | trim-then-drop, "at least one step", the four per-row rules | `CaseSchema.test.ts` and `casePayload.test.ts`, which ask them directly |
+ * | the corpus completing an action | `CaseDocument.test.tsx` (under the caret) and this file (the standing panel) |
+ * | the three data spellings | `gherkinText.test.ts` per construct, and the server's parser |
  *
- * So the config's recorded remedy — *"`paste` or a direct change event would assert the same thing
- * in a fraction of the time"* — **is not one, and neither is the page's render cost.** Under 10% of
- * a keystroke is React. The rest is jsdom event dispatch and userEvent's per-key bookkeeping
- * through the deep MUI Autocomplete the step field is built on, and nothing in this file's control
- * moves it.
+ * What this file keeps is the editor's own behaviour: the blank state's three starts, the standing
+ * corpus, the rail as controls, the classification branch, and the two things that were never
+ * about steps at all — the draft buffer and §187/§194's declines.
  *
- * What this budget does NOT cover is the runner being oversubscribed, which is the other reading of
- * that 3.7×: `shanks` is a 6-core box also hosting the Remote Control sessions. If the timeout
- * moves to a file that is *not* this one, that is the answer, and the fix is capping vitest's
- * worker count rather than raising another number.
+ * The per-test budget stays raised for the reason `vitest.config.ts` records: this file renders a
+ * whole editor per test and the runner is a shared six-core box.
  */
 vi.setConfig({ testTimeout: 60_000 })
 
 const PROJECT = 'p1'
 
-/*
-  Declared as `Suite[]` and NOT cast — §79's rule, which the three fixtures below it have stated
-  since §79 and this one broke until §196. The `as Suite` that used to close each element is what
-  let six required fields go missing ten lines above the first statement of the rule.
-*/
 const suites: Suite[] = [
   {
     id: 'suite-1',
     key: 'TS-1',
     name: 'Refunds',
+    filedCount: 3,
+    addedCount: 0,
+    taggedCount: 0,
     caseCount: 3,
     tagRules: [],
     caseIds: [],
@@ -94,24 +67,11 @@ const suites: Suite[] = [
   },
 ]
 
-/*
-  Declared as `StepSuggestion[]` and NOT cast — §79's rule. A field added to the contract has to be
-  one build error here rather than a page of runtime failures with zero type errors.
-*/
 const corpus: StepSuggestion[] = [
-  {
-    action: 'Refund the payment',
-    testData: '120.00 EUR',
-    expectedResult: 'The refund is accepted',
-    useCount: 41,
-  },
+  { action: 'Refund the payment', testData: '120.00 EUR', expectedResult: 'The refund is accepted', useCount: 41 },
   { action: 'Refund it twice', testData: null, expectedResult: null, useCount: 2 },
 ]
 
-/*
-  Declared as `Condition[]` and NOT cast — §79's rule again. §95 added two required fields to this
-  shape, and the whole point is that the next one is a build error here.
-*/
 const library: Condition[] = [
   {
     id: 'cond-1',
@@ -122,76 +82,77 @@ const library: Condition[] = [
     suiteUsageCount: 3,
     lockVersion: 2,
   },
+]
+
+const emptyDimensions: ClassificationDimension[] = [
+  { id: 'd1', key: 'test_type', name: 'Test Type', cardinality: 'SINGLE', hierarchical: false, locked: true, values: [] },
+  { id: 'd2', key: 'feature', name: 'Feature', cardinality: 'MULTI', hierarchical: true, locked: false, values: [] },
+]
+
+const oneFullDimension: ClassificationDimension[] = [
   {
-    id: 'cond-2',
-    title: 'Navigate to Billing',
-    type: 'PRE',
-    body: ['Open the account menu'],
-    usageCount: 0,
-    suiteUsageCount: 0,
-    lockVersion: 0,
+    id: 'd1',
+    key: 'test_type',
+    name: 'Test Type',
+    cardinality: 'SINGLE',
+    hierarchical: false,
+    locked: true,
+    values: [{ id: 'cv-1', parentId: null, name: 'Functional', path: 'Functional', color: null }],
   },
+  { id: 'd2', key: 'feature', name: 'Feature', cardinality: 'MULTI', hierarchical: true, locked: false, values: [] },
 ]
 
-/**
- * `GET /projects/{id}/tags` — most-used first, which is the order the picker must preserve.
- *
- * Declared as `TagUsage[]` and not cast, §79's rule: a field added to the shape is a build error
- * here rather than a fixture that quietly disagrees with the contract.
- */
-const projectTags: TagUsage[] = [
-  { tag: 'smoke', caseCount: 9 },
-  { tag: 'smoke-extended', caseCount: 2 },
-  { tag: 'regression', caseCount: 4 },
-]
+const recentCase: TestCaseSummary = aCaseSummary({
+  id: 'c-recent',
+  key: 'TC-9',
+  title: 'The most recently edited case',
+  updatedAt: '2026-08-27T12:00:00Z',
+})
 
-/**
- * A case as `GET …/cases/{id}` serves it — **one complete body for the whole file** (§196).
- *
- * The three fixtures that used to stand in for a loaded case each spelled out the fields their own
- * describe block reads and closed with `as unknown as TestCase`, so between them they were missing
- * ten, fourteen and thirty-four required fields. None of that was visible: the cast is the third
- * statement of §79's rule in this file being contradicted by the file itself.
- *
- * Everything a test actually asserts on is passed as an override, so a reader still sees the
- * distinguishing values at the call site. What is here is the ordinary answer for every other
- * field — and it is what a required field added to `TestCase` now collides with, in one place.
- *
- * **§197 moved the other thirty fields to `test/fixtures.ts`.** What is left is what this file
- * means by *a saved case* — a case filed in a suite, saved once — over the contract's own least
- * interesting body. The four write stubs below (`{ id: 'c9', key: 'TC-9', currentVersionNo: 1 }`
- * and friends) now go through it too: a response body is a `TestCase` whether a test reads two of
- * its fields or twenty.
- */
-function loadedCase(over: Partial<TestCase> = {}): TestCase {
-  return aCase({
-    title: 'A saved case',
-    suiteId: 'suite-1',
-    suiteName: 'Refunds',
-    severity: 'MEDIUM',
-    updatedAt: '2026-08-01T12:00:00Z',
-    lockVersion: 1,
+const RECENT_FEATURE = 'Feature: Refunds\n\n  Scenario: The most recently edited case\n    Given a payment\n'
+
+function parsed(over: Partial<GherkinParseResult> = {}): GherkinParseResult {
+  return {
+    title: 'Double refund',
+    objective: null,
+    tags: [],
+    background: [],
+    steps: [
+      { id: null, keyword: 'GIVEN', action: 'a settled payment', testData: null, expectedResult: null, docString: null, dataTable: null },
+    ],
     ...over,
-  })
+  }
 }
 
-function mockReads(permissions: PermissionKey[] = ['case:create']) {
-  vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+type Reads = {
+  permissions?: PermissionKey[]
+  dimensions?: ClassificationDimension[]
+  corpusRows?: StepSuggestion[]
+  cases?: TestCaseSummary[]
+  theCase?: TestCase
+}
+
+function mockReads({
+  permissions = ['case:create', 'case:edit', 'library:manage'],
+  dimensions = oneFullDimension,
+  corpusRows = corpus,
+  cases = [recentCase],
+  theCase,
+}: Reads = {}) {
+  return vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions, {}, PROJECT)
-    if (path.includes('/step-suggestions')) return corpus
+    if (path.includes('/step-suggestions')) return corpusRows
     if (path.includes('/conditions')) return library
     if (path.includes('/suites')) return suites
-    if (path.includes('/classification')) return []
-    if (path.includes('/tags')) return projectTags
+    if (path.includes('/classification')) return dimensions
+    if (path.includes('/tags')) return []
+    if (path.includes('/draft')) return null
+    if (theCase && path.match(/\/cases\/[^/?]+$/)) return theCase
+    if (path.includes('/cases')) return { items: cases, page: 0, size: 1, total: cases.length }
     return []
   }) as never)
 }
 
-/*
-  Two providers the shared harness deliberately does not carry, stubbed the way
-  `DocPageEditorPage.test.tsx` stubs them: the editor registers unsaved work (which throws without
-  the session-recovery context, by design) and announces its save through notistack.
-*/
 const sessionRecovery = {
   reportUnauthorized: () => {},
   registerUnsavedWork: () => () => {},
@@ -199,9 +160,9 @@ const sessionRecovery = {
   registerReauthHandler: () => () => {},
 }
 
-function renderEditor() {
+function renderNew(search = '') {
   return render(
-    <TestProviders client={createTestQueryClient()} route={`/projects/${PROJECT}/cases/new`}>
+    <TestProviders client={createTestQueryClient()} route={`/projects/${PROJECT}/cases/new${search}`}>
       <SessionRecoveryContext.Provider value={sessionRecovery}>
         <SnackbarProvider>
           <Routes>
@@ -213,835 +174,271 @@ function renderEditor() {
   )
 }
 
-const actionFields = () => screen.getAllByTestId('CaseEditor.Steps.Field.Action')
-
-/**
- * Fills in everything a create needs except the steps, and waits out the permission gate.
- *
- * The barrier is the Submit button becoming enabled: `useCan` is fail-closed while
- * `/me/permissions` is pending (§66), so a click landing before it resolves does nothing and the
- * assertion that follows fails for a reason that has nothing to do with the test.
- */
-async function fillHeader(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByTestId('CaseEditor.Field.Title'), 'Double refund')
-
-  const suite = screen.getByTestId('CaseEditor.Field.Suite')
-  await user.click(within(suite.closest('.MuiInputBase-root') as HTMLElement).getByRole('combobox'))
-  await user.click(await screen.findByRole('option', { name: /refunds/i }))
-
-  await waitFor(() => expect(screen.getByTestId('CaseEditor.Submit')).toBeEnabled())
+function renderEdit(caseId: string) {
+  return render(
+    <TestProviders client={createTestQueryClient()} route={`/projects/${PROJECT}/cases/${caseId}/edit`}>
+      <SessionRecoveryContext.Provider value={sessionRecovery}>
+        <SnackbarProvider>
+          <Routes>
+            <Route path="/projects/:projectId/cases/:caseId/edit" element={<CaseEditorPage mode="edit" />} />
+          </Routes>
+        </SnackbarProvider>
+      </SessionRecoveryContext.Provider>
+    </TestProviders>,
+  )
 }
 
-describe('CaseEditorPage — the step list', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks()
-  })
+beforeEach(() => {
+  vi.restoreAllMocks()
+  window.localStorage.clear()
+})
 
-  it('opens a new case on one blank step row, not on nothing', () => {
+describe('the blank state — the three starts (003 Phase 1)', () => {
+  it('offers all three on create', async () => {
     mockReads()
-    renderEditor()
-    // Before §94 a new case rendered ZERO rows and the Add button was the only way to a first
-    // step — an editor whose primary content was one click away from existing.
-    expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(1)
+    renderNew()
+
+    expect(await screen.findByTestId('CaseEditor.Start.Write')).toBeInTheDocument()
+    expect(screen.getByTestId('CaseEditor.Start.FromCase')).toBeInTheDocument()
+    expect(screen.getByTestId('CaseEditor.Start.Paste')).toBeInTheDocument()
   })
 
-  it('has no Add step button — the blank last row is the affordance', () => {
-    mockReads()
-    renderEditor()
-    expect(screen.queryByTestId('CaseEditor.Steps.AddButton')).not.toBeInTheDocument()
+  it('offers none of them on edit — there is already a case on screen to overwrite', async () => {
+    mockReads({ theCase: aCase({ id: 'c1', steps: [aStep({ action: 'A step' })] }) })
+    vi.spyOn(api, 'postForText').mockResolvedValue('Feature: Refunds\n\n  Scenario: X\n' as never)
+    renderEdit('c1')
+
+    await screen.findByTestId('CaseEditor.Document.Text')
+    expect(screen.queryByTestId('CaseEditor.Starts')).not.toBeInTheDocument()
   })
 
-  it('appends a row when the last row is typed into, and appends exactly one', async () => {
+  it('Start from a case copies the TEXT of the most recently edited one', async () => {
     const user = userEvent.setup()
     mockReads()
-    renderEditor()
+    const getText = vi.spyOn(api, 'getText').mockResolvedValue(RECENT_FEATURE as never)
+    renderNew()
 
-    await user.type(actionFields()[0], 'Refund')
-    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(2))
+    await user.click(await screen.findByTestId('CaseEditor.Start.FromCase'))
 
-    // Six more characters into the row that is no longer last must not append six more rows.
-    await user.type(actionFields()[0], ' it')
-    expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(2)
-
-    await user.type(actionFields()[1], 'Check the balance')
-    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(3))
+    await waitFor(() => expect(getText).toHaveBeenCalled())
+    expect(getText.mock.calls[0][0]).toBe(`/projects/${PROJECT}/cases/c-recent/feature`)
+    // The `Feature:` line is chrome, so what lands in the document is the body below it.
+    await waitFor(() =>
+      expect(screen.getByTestId('CaseEditor.Document.Text')).toHaveValue(
+        '  Scenario: The most recently edited case\n    Given a payment\n',
+      ),
+    )
   })
 
-  it('does not append on whitespace — spaces are not a step', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    renderEditor()
-
-    await user.type(actionFields()[0], '   ')
-    expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(1)
+  it('disables Start from a case when the project has none, rather than hiding it', async () => {
+    mockReads({ cases: [] })
+    renderNew()
+    expect(await screen.findByTestId('CaseEditor.Start.FromCase')).toBeDisabled()
   })
 
-  it('keeps a blank row available after the last one is removed', async () => {
+  it('opens the paste dialog from the start, not only from the panel button', async () => {
     const user = userEvent.setup()
     mockReads()
-    renderEditor()
+    renderNew()
 
-    await user.type(actionFields()[0], 'Refund')
-    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(2))
-
-    // Removing the trailing blank row would otherwise leave no way to write another step at all.
-    await user.click(screen.getAllByTestId('CaseEditor.Steps.Remove')[1])
-    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(2))
+    await user.click(await screen.findByTestId('CaseEditor.Start.Paste'))
+    expect(await screen.findByTestId('PasteGherkin.Title')).toBeInTheDocument()
   })
 })
 
-describe('CaseEditorPage — reordering', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks()
+describe('the standing corpus panel (003 Phase 1)', () => {
+  it('lists the project’s steps with their use count, ranked as the server ranked them', async () => {
+    mockReads()
+    renderNew()
+
+    const steps = await screen.findAllByTestId('CaseEditor.Corpus.Step')
+    expect(steps[0]).toHaveTextContent('Refund the payment')
+    expect(steps[0]).toHaveTextContent('41 cases')
   })
 
-  it('keeps the ▲▼ buttons after the drag handle arrives, and they still move a step', async () => {
+  it('inserts a step into the document on click', async () => {
     const user = userEvent.setup()
     mockReads()
-    renderEditor()
+    renderNew()
 
-    await user.type(actionFields()[0], 'First')
-    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(2))
-    await user.type(actionFields()[1], 'Second')
-    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(3))
-
-    // The keyboard and screen-reader path. §94 added a pointer gesture beside them and did not
-    // replace them, which is the kind of thing a later slice deletes as redundant.
-    await user.click(screen.getAllByTestId('CaseEditor.Steps.MoveDown')[0])
-
-    await waitFor(() => expect(actionFields()[0]).toHaveValue('Second'))
-    expect(actionFields()[1]).toHaveValue('First')
+    await user.click((await screen.findAllByTestId('CaseEditor.Corpus.Step'))[0])
+    expect(screen.getByTestId('CaseEditor.Document.Text')).toHaveValue('  Given Refund the payment')
   })
 
-  it('gives every row a labelled drag handle', () => {
-    mockReads()
-    renderEditor()
-    // Named rather than merely present: an icon-only control with no accessible name is announced
-    // as "button", which on a list of them says nothing about which step it moves.
-    expect(screen.getByLabelText('Reorder step 1')).toBeInTheDocument()
-    expect(screen.getAllByTestId('CaseEditor.Steps.DragHandle')).toHaveLength(1)
+  it('reads the corpus ONCE per page, not once per step', async () => {
+    const user = userEvent.setup()
+    const get = mockReads()
+    renderNew()
+
+    await screen.findAllByTestId('CaseEditor.Corpus.Step')
+    await user.click((await screen.findAllByTestId('CaseEditor.Corpus.Step'))[0])
+    await user.click((await screen.findAllByTestId('CaseEditor.Corpus.Step'))[1])
+
+    /*
+      The whole reason `useStepCorpus` is a second hook with a second key: the completion's
+      `enabled: q.trim().length > 0` gate is what stops eight mounted rows firing eight reads of a
+      thousand-row list, and relaxing it would have been the cheap way to get this panel.
+    */
+    const corpusReads = get.mock.calls.filter((call) => String(call[0]).includes('/step-suggestions'))
+    expect(corpusReads).toHaveLength(1)
+    expect(String(corpusReads[0][0])).toBe(`/projects/${PROJECT}/step-suggestions`)
+  })
+
+  it('says the list fills itself, rather than showing an empty box', async () => {
+    mockReads({ corpusRows: [] })
+    renderNew()
+    expect(await screen.findByTestId('CaseEditor.Corpus.Region.Empty')).toHaveTextContent(
+      /fills itself/i,
+    )
   })
 })
 
-describe('CaseEditorPage — what reaches the API', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks()
+describe('classification, when the vocabularies are empty (finding 3)', () => {
+  it('renders NO control at all when every dimension is empty, and says where to configure them', async () => {
+    mockReads({ dimensions: emptyDimensions })
+    renderNew()
+
+    const absent = await screen.findByTestId('CaseEditor.Classification.Absent')
+    expect(absent).toHaveTextContent('Nothing configured, nothing shown.')
+    expect(within(absent).getByRole('link', { name: /set up classification/i })).toBeInTheDocument()
+    // Not four labelled controls that cannot be used, and not four copies of one sentence.
+    expect(screen.queryByTestId('CaseEditor.Dimension.test_type')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('CaseEditor.Dimension.feature')).not.toBeInTheDocument()
   })
 
-  it('trims every step and drops the rows that are empty once trimmed', async () => {
+  it('renders the dimensions that have values, and ONE notice for those that do not', async () => {
+    mockReads({ dimensions: oneFullDimension })
+    renderNew()
+
+    expect(await screen.findByTestId('CaseEditor.Dimension.test_type')).toBeInTheDocument()
+    expect(screen.queryByTestId('CaseEditor.Dimension.feature')).not.toBeInTheDocument()
+    expect(screen.getByTestId('CaseEditor.Classification.EmptyNotice')).toHaveTextContent('Feature')
+  })
+})
+
+describe('the rail', () => {
+  it('is present on the blank state, with the suite carried from the list', async () => {
+    // UX#106 *Redundant Entry*: `/cases/new` used to be navigated to with no suite even when one
+    // was selected, so the author picked Refunds again from a list of forty.
+    mockReads()
+    renderNew('?suiteId=suite-1')
+
+    await waitFor(() => expect(screen.getByTestId('CaseEditor.Field.Suite')).toHaveTextContent('Refunds'))
+  })
+
+  it('is seven rows of real controls with native roles, not clickable divs (UX#117)', async () => {
+    mockReads()
+    renderNew()
+
+    const rail = await screen.findByTestId('CaseEditor.Rail')
+    // Suite, Priority and Automation are comboboxes; Duration is a spinbutton. Postconditions is
+    // the conditions panel, and Classification is a select. Every one of them is Tab-reachable.
+    expect(within(rail).getAllByRole('combobox').length).toBeGreaterThanOrEqual(3)
+    expect(within(rail).getByTestId('CaseEditor.Field.EstimatedDuration')).toHaveAttribute('type', 'number')
+    expect(within(rail).getByTestId('CaseEditor.Postconditions')).toBeInTheDocument()
+    expect(within(rail).getByTestId('CaseEditor.Preconditions')).toBeInTheDocument()
+  })
+
+  it('shows the automation disclosure only when the status makes it meaningful', async () => {
     const user = userEvent.setup()
     mockReads()
-    const post = vi
-      .spyOn(api, 'post')
-      .mockResolvedValue(loadedCase({ currentVersionNo: 1 }))
-    renderEditor()
+    renderNew()
 
-    await fillHeader(user)
-    await user.type(actionFields()[0], '  Refund the payment  ')
-    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(2))
-    // A row typed into and cleared again: whitespace, and it must not reach the API either.
-    await user.type(actionFields()[1], '   ')
+    await screen.findByTestId('CaseEditor.Rail')
+    expect(screen.queryByTestId('CaseEditor.Field.AutomationKey')).not.toBeInTheDocument()
 
+    const status = screen.getByTestId('CaseEditor.Field.AutomationStatus')
+    await user.click(within(status.closest('.MuiInputBase-root') as HTMLElement).getByRole('combobox'))
+    await user.click(await screen.findByRole('option', { name: /^automated$/i }))
+
+    expect(await screen.findByTestId('CaseEditor.Field.AutomationKey')).toBeInTheDocument()
+  })
+})
+
+describe('what reaches the API', () => {
+  it('mirrors priority into severity — PATCH is a merge, and dropping it would leave it stale', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    vi.spyOn(api, 'postText').mockResolvedValue(parsed() as never)
+    const post = vi.spyOn(api, 'post').mockResolvedValue(aCase({ id: 'c9', key: 'TC-9' }) as never)
+    renderNew()
+
+    const area = await screen.findByTestId('CaseEditor.Document.Text')
+    await user.click(area)
+    await user.paste('  Scenario: Double refund\n    Given a settled payment')
+    await user.tab()
+
+    await waitFor(() => expect(screen.getByTestId('CaseEditor.Submit')).toBeEnabled())
     await user.click(screen.getByTestId('CaseEditor.Submit'))
-
     await waitFor(() => expect(post).toHaveBeenCalled())
-    const body = post.mock.calls[0][1] as { steps: { action: string }[] }
-    // The whole array, not `toContainEqual`: the assertion is that the two other rows are ABSENT,
-    // which a per-element check cannot express.
-    expect(body.steps).toHaveLength(1)
-    expect(body.steps[0].action).toBe('Refund the payment')
+
+    const body = post.mock.calls[0][1] as Record<string, unknown>
+    expect(body.severity).toBe(body.priority)
+    expect(body.title).toBe('Double refund')
   })
 
-  it('refuses to save a case whose only step is the blank row', async () => {
+  it('refuses a case with nothing written in it, and does not post', async () => {
     const user = userEvent.setup()
     mockReads()
-    const post = vi.spyOn(api, 'post').mockResolvedValue(loadedCase() as never)
-    renderEditor()
+    const post = vi.spyOn(api, 'post').mockResolvedValue(aCase() as never)
+    renderNew()
 
-    await fillHeader(user)
+    await screen.findByTestId('CaseEditor.Rail')
     await user.click(screen.getByTestId('CaseEditor.Submit'))
 
-    // The defect auto-append introduces: `steps.length` is 1 on a form nobody has written a step
-    // into, so the old refine passed and the case saved clean with a success toast.
-    expect(await screen.findByTestId('CaseEditor.Steps.Error')).toHaveTextContent(/at least one step/i)
+    expect(await screen.findByTestId('CaseEditor.ErrorSummary')).toHaveTextContent('Add at least one step.')
     expect(post).not.toHaveBeenCalled()
   })
 })
 
-describe('CaseEditorPage — tags and the unfiled case (§96)', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  it('sends the tags it was given, trimmed and de-duplicated', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    const post = vi
-      .spyOn(api, 'post')
-      .mockResolvedValue(loadedCase({ currentVersionNo: 1 }))
-    renderEditor()
-
-    await fillHeader(user)
-    await user.type(actionFields()[0], 'Refund the payment')
-
-    const tags = screen.getByTestId('CaseEditor.Field.Tags')
-    await user.type(tags, 'smoke{Enter}  smoke  {Enter}regression{Enter}')
-
-    // VISIBLE, not merely held. The first draft of this control replaced MUI's `slotProps` in
-    // order to add a testid, which drops the `input.startAdornment` the chips live in: every tag
-    // was in the form, was sent on save, and never appeared on screen — so an author types a tag,
-    // sees nothing, and types it again. The payload assertion below passed against that.
-    expect(await screen.findByText('smoke')).toBeVisible()
-    expect(screen.getByText('regression')).toBeVisible()
-
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    await waitFor(() => expect(post).toHaveBeenCalled())
-    const body = post.mock.calls[0][1] as { tags: string[] }
-    // The whole array: `smoke` typed twice is one chip, because case_tag's key says a tag list is
-    // a set — a duplicate is the same request, not a mistake to report.
-    expect(body.tags).toEqual(['smoke', 'regression'])
-  })
-
-  it('suggests the tags the project already uses, and still takes an unlisted one', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    const post = vi
-      .spyOn(api, 'post')
-      .mockResolvedValue(loadedCase({ currentVersionNo: 1 }))
-    renderEditor()
-
-    await fillHeader(user)
-    await user.type(actionFields()[0], 'Refund the payment')
-
-    // Typing FILTERS the served list rather than replacing it — both `smoke` tags match `smo`,
-    // and the endpoint's most-used-first order is what decides which is offered first.
-    await user.type(screen.getByTestId('CaseEditor.Field.Tags'), 'smo')
-    expect(await screen.findByRole('option', { name: 'smoke' })).toBeVisible()
-    expect(screen.getByRole('option', { name: 'smoke-extended' })).toBeVisible()
-    // `regression` is in the project but does not match what was typed.
-    expect(screen.queryByRole('option', { name: 'regression' })).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('option', { name: 'smoke' }))
-
-    /*
-      A PICKER'S LIST AND NEVER A VALIDATOR'S. `case_tag` is free text, so a tag no case carries
-      yet must still be typeable — otherwise the first use of any new tag is impossible and the
-      vocabulary is closed, which is precisely what this endpoint is not.
-    */
-    await user.type(screen.getByTestId('CaseEditor.Field.Tags'), 'brand-new-tag{Enter}')
-
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    await waitFor(() => expect(post).toHaveBeenCalled())
-    const body = post.mock.calls[0][1] as { tags: string[] }
-    expect(body.tags).toEqual(['smoke', 'brand-new-tag'])
-  })
-
-  it('does not offer a tag this case already carries', async () => {
-    // Re-picking one is a no-op the de-duplicating `Set` swallows in silence, which reads as a
-    // dead menu row: the author clicks it, nothing happens, and nothing says why.
-    const user = userEvent.setup()
-    mockReads()
-    renderEditor()
-
-    await fillHeader(user)
-    await user.type(screen.getByTestId('CaseEditor.Field.Tags'), 'smo')
-    await user.click(await screen.findByRole('option', { name: 'smoke' }))
-
-    await user.type(screen.getByTestId('CaseEditor.Field.Tags'), 'smo')
-
-    expect(await screen.findByRole('option', { name: 'smoke-extended' })).toBeVisible()
-    expect(screen.queryByRole('option', { name: 'smoke' })).not.toBeInTheDocument()
-  })
-
-  it('sends an EMPTY tag list rather than omitting it', async () => {
-    // The server reads absent as "leave them alone", so a case whose last tag was removed would
-    // keep it — a removal that reports success and does nothing.
-    const user = userEvent.setup()
-    mockReads()
-    const post = vi
-      .spyOn(api, 'post')
-      .mockResolvedValue(loadedCase({ currentVersionNo: 1 }))
-    renderEditor()
-
-    await fillHeader(user)
-    await user.type(actionFields()[0], 'Refund the payment')
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    await waitFor(() => expect(post).toHaveBeenCalled())
-    const body = post.mock.calls[0][1] as Record<string, unknown>
-    expect(body.tags).toEqual([])
-  })
-
-  it('saves with no suite at all, sending null rather than an empty string', async () => {
-    // '' is a 400 on a uuid field, so the mapping is not cosmetic. And the form must not require
-    // a suite any more: a case may be written before anybody has decided where it goes.
-    const user = userEvent.setup()
-    mockReads()
-    const post = vi
-      .spyOn(api, 'post')
-      .mockResolvedValue(loadedCase({ currentVersionNo: 1 }))
-    renderEditor()
-
-    await user.type(screen.getByTestId('CaseEditor.Field.Title'), 'Unfiled for now')
-    await user.type(actionFields()[0], 'Refund the payment')
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    await waitFor(() => expect(post).toHaveBeenCalled())
-    const body = post.mock.calls[0][1] as Record<string, unknown>
-    expect(body.suiteId).toBeNull()
-  })
-})
-
-describe('CaseEditorPage — completing from the project corpus', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  /**
-   * Pick a suggestion by its action text, re-finding the row on every attempt.
-   *
-   * The debounce is 250ms of *real* time and `userEvent` types a character at a time, so a machine
-   * under full-suite load runs several debounce rounds for one `type()` — 'Refund', 'Refund i',
-   * 'Refund it'. Each round is a new query key, so `suggestions.data` is `undefined` until it
-   * resolves, the popup renders no rows, and the `<li>` a `findAllByTestId` handed back a moment
-   * earlier is detached. Clicking a detached node fires nothing and the field keeps the typed text
-   * — which is exactly how this file failed in CI on 2026-08-13, and only ever under load.
-   *
-   * Capturing the row and clicking it therefore has to be one retried step, not two awaited ones.
-   * A pick is idempotent, so a retry after a click that did land is harmless.
-   */
-  async function pickSuggestion(user: ReturnType<typeof userEvent.setup>, action: string) {
-    await waitFor(async () => {
-      const row = screen
-        .queryAllByTestId('CaseEditor.Steps.Suggestion')
-        .find((option) => option.textContent?.includes(action))
-      expect(row).toBeDefined()
-      await user.click(row!)
-      expect(actionFields()[0]).toHaveValue(action)
-    })
-  }
-
-  it('asks for suggestions only once there is a fragment to narrow with', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    renderEditor()
-
-    const asked = () =>
-      vi.mocked(api.get).mock.calls.filter(([path]) => String(path).includes('/step-suggestions'))
-
-    // An eight-step case would otherwise fire eight reads of the whole corpus on mount, and open a
-    // popup over a field nobody has touched.
-    expect(asked()).toHaveLength(0)
-
-    await user.type(actionFields()[0], 'Refund')
-    await waitFor(() => expect(asked().length).toBeGreaterThan(0))
-    // Debounced: one request for six keystrokes, not six.
-    expect(asked().length).toBeLessThan(3)
-  })
-
-  it('fills action, test data AND expected result from one pick', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    renderEditor()
-
-    await user.type(actionFields()[0], 'Refund')
-    await pickSuggestion(user, 'Refund the payment')
-
-    expect(screen.getAllByTestId('CaseEditor.Steps.Field.TestData')[0]).toHaveValue('120.00 EUR')
-    expect(screen.getAllByTestId('CaseEditor.Steps.Field.ExpectedResult')[0]).toHaveValue(
-      'The refund is accepted',
-    )
-  })
-
-  it('clears the fields a suggestion has no value for, rather than leaving the previous ones', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    renderEditor()
-
-    await user.type(screen.getAllByTestId('CaseEditor.Steps.Field.TestData')[0], 'stale')
-    await user.type(actionFields()[0], 'Refund it')
-
-    await pickSuggestion(user, 'Refund it twice')
-
-    // `testData: null` on the suggestion means the step has none — leaving the author's previous
-    // value behind would attach it to a step it was never written for.
-    expect(screen.getAllByTestId('CaseEditor.Steps.Field.TestData')[0]).toHaveValue('')
-  })
-})
-
-/**
- * The conditions panels (§95).
- *
- * What these exist to catch, none of it visible to `tsc` or the linter:
- *
- *   1. **An inherited condition being submitted as the case's own.** The folder's conditions render
- *      in this panel, and an own row and an inherited row look almost identical. Seeding one into
- *      the form would attach the folder's condition *directly* to the case on the first save —
- *      permanently, invisibly, and on every case anybody edits.
- *   2. **The two lists sent as absent instead of empty.** The server reads absent as "leave the
- *      attachments alone", so detaching the last condition would report success and change nothing.
- *   3. **The impact warning missing before an edit that rewrites every case using the entry.**
- */
-describe('CaseEditorPage — conditions', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  it('offers the project library, and drops an entry once it is attached', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    renderEditor()
-
-    const attach = await screen.findByTestId('CaseEditor.Preconditions.Attach')
-    await user.click(attach)
-    expect(await screen.findByRole('option', { name: /log in as standard user/i })).toBeVisible()
-
-    await user.click(screen.getByRole('option', { name: /log in as standard user/i }))
-
-    // Attaching the same entry twice in one list is a row with no meaning and the server collapses
-    // it silently. Removing it from the picker is the honest version: the mistake is unavailable.
-    await user.click(screen.getByTestId('CaseEditor.Preconditions.Attach'))
-    await waitFor(() =>
-      expect(screen.queryByRole('option', { name: /log in as standard user/i })).not.toBeInTheDocument(),
-    )
-  })
-
-  it('sends the attached ids as objects, and sends an EMPTY list rather than omitting it', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    const post = vi.spyOn(api, 'post').mockResolvedValue(loadedCase({ id: 'c9', key: 'TC-9', currentVersionNo: 1 }) as never)
-    renderEditor()
-
-    await fillHeader(user)
-    await user.type(actionFields()[0], 'Refund the payment')
-
-    await user.click(screen.getByTestId('CaseEditor.Preconditions.Attach'))
-    await user.click(await screen.findByRole('option', { name: /log in as standard user/i }))
-
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    await waitFor(() => expect(post).toHaveBeenCalled())
-    const body = post.mock.calls[0][1] as {
-      preconditions: { conditionId: string }[]
-      postconditions: unknown[]
-    }
-    expect(body.preconditions).toEqual([{ conditionId: 'cond-1' }])
-    // Present and empty, never absent — the distinction the server acts on.
-    expect(body.postconditions).toEqual([])
-  })
-
-  it('reorders through the ▲▼ path, which is the keyboard and screen-reader route', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    const post = vi.spyOn(api, 'post').mockResolvedValue(loadedCase({ id: 'c9', key: 'TC-9', currentVersionNo: 1 }) as never)
-    renderEditor()
-
-    await fillHeader(user)
-    await user.type(actionFields()[0], 'Refund the payment')
-
-    await user.click(screen.getByTestId('CaseEditor.Preconditions.Attach'))
-    await user.click(await screen.findByRole('option', { name: /log in as standard user/i }))
-    await user.click(screen.getByTestId('CaseEditor.Preconditions.Attach'))
-    await user.click(await screen.findByRole('option', { name: /navigate to billing/i }))
-
-    // Move the second one up. Order IS the content here — a condition list is a procedure.
-    const up = screen.getAllByTestId('CaseEditor.Preconditions.Up')
-    await user.click(up[1])
-
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-    await waitFor(() => expect(post).toHaveBeenCalled())
-
-    const body = post.mock.calls[0][1] as { preconditions: { conditionId: string }[] }
-    expect(body.preconditions).toEqual([{ conditionId: 'cond-2' }, { conditionId: 'cond-1' }])
-  })
-
-  it('detaching removes it from the payload', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    const post = vi.spyOn(api, 'post').mockResolvedValue(loadedCase({ id: 'c9', key: 'TC-9', currentVersionNo: 1 }) as never)
-    renderEditor()
-
-    await fillHeader(user)
-    await user.type(actionFields()[0], 'Refund the payment')
-
-    await user.click(screen.getByTestId('CaseEditor.Preconditions.Attach'))
-    await user.click(await screen.findByRole('option', { name: /log in as standard user/i }))
-    await user.click(screen.getByTestId('CaseEditor.Preconditions.Remove'))
-
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-    await waitFor(() => expect(post).toHaveBeenCalled())
-
-    expect((post.mock.calls[0][1] as { preconditions: unknown[] }).preconditions).toEqual([])
-  })
-
-  it('states the blast radius BEFORE an edit, naming the object and both counts', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    renderEditor()
-
-    await user.click(await screen.findByTestId('CaseEditor.Preconditions.Attach'))
-    await user.click(await screen.findByRole('option', { name: /log in as standard user/i }))
-    await user.click(screen.getByTestId('CaseEditor.Preconditions.Edit'))
-
-    const impact = await screen.findByTestId('CaseEditor.Condition.Impact')
-    // Names the object (ui-rules §4), and keeps the two counts apart: 4 + 3 = 7 must not appear.
-    expect(impact).toHaveTextContent('Log in as standard user')
-    expect(impact).toHaveTextContent('Used by 4 cases')
-    expect(impact).toHaveTextContent('3 suites')
-    expect(impact).not.toHaveTextContent('7')
-
-    // Verb-labeled and naming the consequence, not a neutral "Save".
-    expect(screen.getByTestId('CaseEditor.Condition.Save')).toHaveTextContent('Change everywhere')
-  })
-
-  it('creating a condition attaches it to the list it was created from', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    vi.spyOn(api, 'post').mockImplementation((async (path: string) => {
-      if (path.includes('/conditions')) {
-        return {
-          id: 'cond-new',
-          title: 'Seed a captured payment',
-          type: 'PRE',
-          body: ['Insert it'],
-          usageCount: 0,
-          suiteUsageCount: 0,
-          lockVersion: 0,
-        }
-      }
-      return { id: 'c9', key: 'TC-9', currentVersionNo: 1 }
-    }) as never)
-    renderEditor()
-
-    await user.click(await screen.findByTestId('CaseEditor.Preconditions.Create'))
-    await user.type(screen.getByTestId('CaseEditor.Condition.Title'), 'Seed a captured payment')
-    await user.type(screen.getByTestId('CaseEditor.Condition.Body'), 'Insert it')
-    await user.click(screen.getByTestId('CaseEditor.Condition.Save'))
-
-    // Leaving the author to find it in the picker they just left is the workflow defect —
-    // they asked for a condition HERE.
-    expect(await screen.findByText('Seed a captured payment')).toBeVisible()
-  })
-})
-
-/**
- * The autosave buffer's screen half (§128).
- *
- * The editor is rendered in **edit** mode here, unlike everything above it, because the buffer's
- * primary key is a foreign key to `test_case` — a case being created has nothing to key a draft on,
- * so the New Case form has no autosave at all and that is asserted rather than assumed.
- *
- * What these cover that no gate can:
- *
- *   1. **The offer names who typed it.** There is ONE buffer per case, so the draft may be a
- *      colleague's, and restoring it silently publishes their half-finished sentence under your
- *      name.
- *   2. **A stale draft says so and is still offered.** Advisory, never enforcing.
- *   3. **Restore replaces the whole form**, not the fields the draft happens to carry — a hybrid of
- *      draft and saved case is neither, and the author cannot tell it from either.
- *   4. **Discard removes the row**, so the same rejected draft is not re-offered on the next mount.
- */
-describe('the draft buffer', () => {
-  const EXISTING_CASE = 'c-42'
-
-  const savedCase = loadedCase({
-    id: EXISTING_CASE,
-    key: 'TC-42',
-    keySeq: 42,
-    title: 'The saved title',
-    objective: 'What the server has stored',
-    steps: [
-      aStep({ action: 'A saved step' }),
-    ],
-    lockVersion: 3,
-    currentVersionNo: 2,
-  })
-
-  /** A buffered draft, as `GET …/draft` serves it. */
-  function draft(overrides: Record<string, unknown> = {}) {
-    return {
-      lockVersion: 3,
-      stale: false,
-      updatedAt: new Date(Date.now() - 60_000).toISOString(),
-      // No `updatedBy` — it left the contract with `V64` (audit D1). The row is keyed on the
-      // reader, so the field could only ever have answered "you".
-      content: {
-        title: 'The unsaved title',
-        suiteId: 'suite-1',
-        objective: 'What the author was still writing',
-        steps: [{ id: null, action: 'A drafted step', testData: null, expectedResult: null }],
-        stepFormat: 'STRUCTURED',
-        priority: 'MEDIUM',
-        automationStatus: 'MANUAL',
-        classificationValueIds: [],
-        preconditions: [],
-        postconditions: [],
-        tags: [],
-      },
-      ...overrides,
-    }
-  }
-
-  /** `mockReads`, plus the case and its draft. `null` for the draft is the 204 — no unsaved work. */
-  function mockEditReads(theDraft: unknown) {
-    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
-      if (path.startsWith('/me/permissions')) return heldPermissions(['case:edit'], {}, PROJECT)
-      if (path.includes('/draft')) return theDraft
-      if (path.includes('/step-suggestions')) return corpus
-      if (path.includes('/conditions')) return library
-      if (path.includes('/suites')) return suites
-      if (path.includes('/classification')) return []
-      if (path.includes('/tags')) return projectTags
-      if (path.includes(`/cases/${EXISTING_CASE}`)) return savedCase
-      return []
-    }) as never)
-  }
-
-  function renderEditMode() {
-    return render(
-      <TestProviders
-        client={createTestQueryClient()}
-        route={`/projects/${PROJECT}/cases/${EXISTING_CASE}/edit`}
-      >
-        <SessionRecoveryContext.Provider value={sessionRecovery}>
-          <SnackbarProvider>
-            <Routes>
-              <Route
-                path="/projects/:projectId/cases/:caseId/edit"
-                element={<CaseEditorPage mode="edit" />}
-              />
-            </Routes>
-          </SnackbarProvider>
-        </SessionRecoveryContext.Provider>
-      </TestProviders>,
-    )
-  }
-
-  it('offers the buffered draft as YOURS', async () => {
-    // ~~The 1:1 primary key's cost, on screen: there is one buffer per case, so the draft on offer
-    // may be a colleague's and restoring it without saying so publishes their half-finished
-    // sentence under your name.~~ → V64 (audit D1) keys the row on the reader, so the offer is
-    // always your own work and the banner says so. The disclosure this test used to assert
-    // (`E. Engineer`) described a hazard the schema no longer has.
-    mockEditReads(draft())
-    renderEditMode()
-
-    const prompt = await screen.findByTestId('CaseEditor.DraftPrompt')
-    expect(prompt).toHaveTextContent(/your unsaved changes/i)
-    expect(prompt).toHaveTextContent(/without saving/i)
-  })
-
-  it('warns when the draft is stale, and still offers it', async () => {
-    // Advisory, never enforcing: the words are the author's, and dropping them would be the
-    // product deciding that somebody else's edit invalidates your sentence. Since V64 this is the
-    // ONLY thing a colleague's save does to your buffer — it used to delete it outright.
-    mockEditReads(draft({ stale: true }))
-    renderEditMode()
-
-    const prompt = await screen.findByTestId('CaseEditor.DraftPrompt')
-    expect(prompt).toHaveTextContent(/has been saved since this draft was written/i)
-    expect(within(prompt).getByTestId('CaseEditor.DraftRestore')).toBeEnabled()
-  })
-
-  it('shows no prompt when there is no buffered draft', async () => {
-    // The ordinary state of almost every case. A 204 is `null` here, and it must read as loaded —
-    // not as a failure, and not as a decision the author has to make.
-    mockEditReads(null)
-    renderEditMode()
-
-    expect(await screen.findByTestId('CaseEditor.Field.Title')).toHaveValue('The saved title')
-    expect(screen.queryByTestId('CaseEditor.DraftPrompt')).not.toBeInTheDocument()
-  })
-
-  it('restoring replaces the form with the draft', async () => {
-    const user = userEvent.setup()
-    mockEditReads(draft())
-    renderEditMode()
-
-    await user.click(await screen.findByTestId('CaseEditor.DraftRestore'))
-
-    expect(screen.getByTestId('CaseEditor.Field.Title')).toHaveValue('The unsaved title')
-    // The WHOLE form, not the fields the draft happened to carry: a hybrid of draft and saved case
-    // is neither, and the author cannot tell it apart from either.
-    expect(screen.getByTestId('CaseEditor.Field.Objective')).toHaveValue(
-      'What the author was still writing',
-    )
-    expect(actionFields()[0]).toHaveValue('A drafted step')
-    // The offer is answered, so it goes.
-    expect(screen.queryByTestId('CaseEditor.DraftPrompt')).not.toBeInTheDocument()
-  })
-
-  it('restoring leaves the form dirty, so Save stays available', async () => {
-    // `reset` clears the dirty flag by default, which would disable Save on the restored content
-    // and switch the autosave off — on the one screen where both must be running.
-    const user = userEvent.setup()
-    mockEditReads(draft())
-    renderEditMode()
-
-    await user.click(await screen.findByTestId('CaseEditor.DraftRestore'))
-
-    await waitFor(() => expect(screen.getByTestId('CaseEditor.Submit')).toBeEnabled())
-  })
-
-  it('discarding deletes the row, so the same draft is not re-offered', async () => {
-    // Keeping it would re-offer a draft the author has already refused — and the autosave is about
-    // to overwrite it anyway, so leaving it would be a promise to keep something we are replacing.
-    const user = userEvent.setup()
-    mockEditReads(draft())
-    const del = vi.spyOn(api, 'del').mockResolvedValue(undefined as never)
-    renderEditMode()
-
-    await user.click(await screen.findByTestId('CaseEditor.DraftDiscard'))
-
-    expect(del).toHaveBeenCalledWith(
-      expect.stringContaining(`/cases/${EXISTING_CASE}/draft`),
-    )
-    expect(screen.queryByTestId('CaseEditor.DraftPrompt')).not.toBeInTheDocument()
-    // The saved case is still what the form holds — discarding a draft is not discarding the case.
-    expect(screen.getByTestId('CaseEditor.Field.Title')).toHaveValue('The saved title')
-  })
-
-  it('the CREATE form asks the SERVER for no draft', async () => {
-    // Still true, and still for the reason §128 gave: the buffer's key is a foreign key to
-    // `test_case`, so there is nothing to key a SERVER row on until the case exists. V64 re-keyed
-    // that table on the person and did not change this — what create mode was missing is a case
-    // id, not an owner. Its buffer is the browser's (`useNewCaseDraft`), tested below.
-    mockReads()
-    renderEditor()
-
-    await screen.findByTestId('CaseEditor.Field.Title')
-    const paths = vi.mocked(api.get).mock.calls.map(([path]) => path)
-    expect(paths.some((path) => String(path).includes('/draft'))).toBe(false)
-  })
-})
-
-/**
- * The New Case form's browser-side buffer — **D1's second half** (audit
- * `docs/audits/2026-08-15-flow-review-and-improvements.md`).
- *
- * §128 shipped the edit-mode buffer and stated the hole: create mode had none, so closing a tab on
- * a half-written case lost every word of it. These pin the properties that make the replacement
- * worth having, none of which `tsc` can see:
- *
- *   1. **What was typed comes back**, through the same restore banner edit mode uses.
- *   2. **A successful create clears it**, or the next visit to New Case offers a copy of a case
- *      that now exists — and a REFUSED create does not, which is the path where the work matters.
- *   3. **The key is per project.** A single global key would offer another client's half-written
- *      case: the tenancy boundary breached in the one place no server check can see it, because
- *      nothing was ever sent to a server.
- *   4. **A discard is honoured**, so a refused offer is not re-made.
- */
 describe('the New Case draft buffer (D1)', () => {
-  beforeEach(() => {
-    window.localStorage.clear()
-  })
-
-  /** What `useNewCaseDraft` stores — written directly, which is what a previous session leaves. */
-  function buffer(content: Record<string, unknown>, projectId = PROJECT) {
-    window.localStorage.setItem(
-      newCaseDraftKey(projectId),
-      JSON.stringify({ updatedAt: new Date(Date.now() - 60_000).toISOString(), content }),
-    )
+  const buffered = {
+    updatedAt: '2026-08-27T09:00:00Z',
+    content: { title: 'Half written', priority: 'HIGH', steps: [] },
   }
 
-  const TYPED = {
-    title: 'A case somebody was still writing',
-    suiteId: 'suite-1',
-    objective: 'Half a sentence',
-    steps: [{ id: null, action: 'A drafted step', testData: null, expectedResult: null }],
-    stepFormat: 'STRUCTURED',
-    priority: 'MEDIUM',
-    automationStatus: 'MANUAL',
-    classificationValueIds: [],
-    preconditions: [],
-    postconditions: [],
-    tags: [],
-  }
-
-  it('offers what the last session typed, and restoring puts it back in the form', async () => {
+  it('offers what the last session typed, and restoring puts it back', async () => {
     const user = userEvent.setup()
-    buffer(TYPED)
     mockReads()
-    renderEditor()
+    window.localStorage.setItem(newCaseDraftKey(PROJECT), JSON.stringify(buffered))
+    renderNew()
 
     await user.click(await screen.findByTestId('CaseEditor.DraftRestore'))
-
-    expect(screen.getByTestId('CaseEditor.Field.Title')).toHaveValue(
-      'A case somebody was still writing',
-    )
-    expect(actionFields()[0]).toHaveValue('A drafted step')
+    await waitFor(() => expect(screen.getByTestId('CaseEditor.Field.Priority')).toHaveTextContent('High'))
   })
 
   it('never offers a draft buffered under another project', async () => {
-    buffer(TYPED, 'a-different-project')
     mockReads()
-    renderEditor()
+    window.localStorage.setItem(newCaseDraftKey('other-project'), JSON.stringify(buffered))
+    renderNew()
 
-    await screen.findByTestId('CaseEditor.Field.Title')
+    await screen.findByTestId('CaseEditor.Rail')
     expect(screen.queryByTestId('CaseEditor.DraftPrompt')).not.toBeInTheDocument()
   })
 
   it('discarding it means it is not offered again', async () => {
     const user = userEvent.setup()
-    buffer(TYPED)
     mockReads()
-    renderEditor()
+    window.localStorage.setItem(newCaseDraftKey(PROJECT), JSON.stringify(buffered))
+    renderNew()
 
     await user.click(await screen.findByTestId('CaseEditor.DraftDiscard'))
-
-    expect(screen.queryByTestId('CaseEditor.DraftPrompt')).not.toBeInTheDocument()
     expect(window.localStorage.getItem(newCaseDraftKey(PROJECT))).toBeNull()
-  })
-
-  it('a successful create clears the buffer', async () => {
-    // "And clears the row" — V1's clause about the server buffer, applied to the browser's.
-    const user = userEvent.setup()
-    buffer(TYPED)
-    mockReads()
-    vi.spyOn(api, 'post').mockResolvedValue(
-      loadedCase({ id: 'c-new', key: 'TC-99', keySeq: 99, title: 'Created' }) as never,
-    )
-    renderEditor()
-
-    await user.click(await screen.findByTestId('CaseEditor.DraftRestore'))
-    await waitFor(() => expect(screen.getByTestId('CaseEditor.Submit')).toBeEnabled())
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    await waitFor(() => expect(window.localStorage.getItem(newCaseDraftKey(PROJECT))).toBeNull())
+    expect(screen.queryByTestId('CaseEditor.DraftPrompt')).not.toBeInTheDocument()
   })
 })
 
-/**
- * The opt-out toggle (§187) — §6f's "not this one", on an inherited condition.
- *
- * What these exist to catch, none of it visible to `tsc` or the linter:
- *
- *   1. **A declined row that disappears from the panel when it is declined.** The toggle lives
- *      beside the inherited marker; remove the row and the only control that can put the rule back
- *      goes with it, so the action is one-way from the one screen that offers it. That was the
- *      server's state before this slice, one layer down, which is what makes it the likely mistake
- *      rather than a hypothetical one.
- *   2. **`declinedConditionIds` sent as absent instead of empty.** The server reads absent as
- *      "leave the declines alone", so switching the last rule back on would report success and
- *      change nothing — `postconditions`' defect (§95) on a field added ninety sections later.
- *   3. **Two Controllers over one array.** Both panels write into the same field; if each bound its
- *      own, the second to fire would overwrite the first's toggle with a value read before it.
- */
-describe('CaseEditorPage — declining an inherited condition (§187)', () => {
+describe('declining an inherited condition (§187) and moving the case (§194)', () => {
   const CASE_ID = 'c-187'
 
-  /** SECOND is attached at the folder; the case declines nothing yet. */
-  const inheritedCase = loadedCase({
+  const inheritedCase = aCase({
     id: CASE_ID,
     key: 'TC-187',
     keySeq: 187,
     title: 'Log in with a bad password',
-    suiteName: 'Payments',
-    steps: [
-      aStep({ action: 'Open the login page' }),
-    ],
+    suiteId: 'suite-1',
+    suiteName: 'Refunds',
+    steps: [aStep({ id: 'st-1', keyword: 'GIVEN', action: 'Open the login page' })],
     preconditions: [
       {
         id: 'attach-1',
@@ -1051,7 +448,7 @@ describe('CaseEditorPage — declining an inherited condition (§187)', () => {
         body: ['Open the application'],
         inline: false,
         inherited: true,
-        inheritedFrom: 'Payments',
+        inheritedFrom: 'Refunds',
         declineCount: 0,
       },
     ],
@@ -1059,678 +456,61 @@ describe('CaseEditorPage — declining an inherited condition (§187)', () => {
     currentVersionNo: 2,
   })
 
-  /** The same case with the attachment already declined — what a reload serves after a save. */
-  const declinedCase: TestCase = {
-    ...inheritedCase,
-    preconditions: [],
-    declinedPreconditions: inheritedCase.preconditions,
-  }
-
-  function mockDeclineReads(theCase: TestCase) {
-    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
-      if (path.startsWith('/me/permissions')) return heldPermissions(['case:edit'], {}, PROJECT)
-      if (path.includes('/draft')) return null
-      if (path.includes('/step-suggestions')) return corpus
-      if (path.includes('/conditions')) return library
-      if (path.includes('/suites')) return suites
-      if (path.includes('/classification')) return []
-      if (path.includes('/tags')) return projectTags
-      if (path.includes(`/cases/${CASE_ID}`)) return theCase
-      return []
-    }) as never)
-  }
-
-  function renderDeclineEditor() {
-    return render(
-      <TestProviders
-        client={createTestQueryClient()}
-        route={`/projects/${PROJECT}/cases/${CASE_ID}/edit`}
-      >
-        <SessionRecoveryContext.Provider value={sessionRecovery}>
-          <SnackbarProvider>
-            <Routes>
-              <Route
-                path="/projects/:projectId/cases/:caseId/edit"
-                element={<CaseEditorPage mode="edit" />}
-              />
-            </Routes>
-          </SnackbarProvider>
-        </SessionRecoveryContext.Provider>
-      </TestProviders>,
-    )
-  }
-
   const toggle = () => screen.getByRole('switch', { name: /applies to this case/i })
 
-  beforeEach(() => {
-    vi.restoreAllMocks()
-  })
+  function renderIt(theCase: TestCase = inheritedCase) {
+    mockReads({ theCase })
+    vi.spyOn(api, 'postForText').mockResolvedValue(
+      'Feature: Refunds\n\n  Scenario: Log in with a bad password\n    Given Open the login page\n' as never,
+    )
+    return renderEdit(CASE_ID)
+  }
 
-  it('renders a declined row STILL IN THE PANEL, switched off — not removed from it', async () => {
-    // The server serves it on `declinedPreconditions`, which the editor unions onto the inherited
-    // group. If it did not, the row would be absent from the one screen that can restore it.
-    mockDeclineReads(declinedCase)
-    renderDeclineEditor()
-
-    const row = await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
-    expect(row).toHaveAttribute('data-declined', 'true')
-    expect(row).toHaveTextContent('Log in as standard user')
-    expect(toggle()).not.toBeChecked()
-  })
-
-  it('an inherited condition that is NOT declined shows the switch on', async () => {
-    mockDeclineReads(inheritedCase)
-    renderDeclineEditor()
-
-    const row = await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
-    expect(row).toHaveAttribute('data-declined', 'false')
+  it('renders the inherited row in the rail with its switch on, and it is not an attachment editor', async () => {
+    renderIt()
+    // The case's OWN preconditions are the `Background:` block now; what stays here is the half
+    // the text cannot say — see 003 D6 decision (a).
+    expect(await screen.findByTestId('CaseEditor.Preconditions.Row')).toHaveTextContent(
+      'Log in as standard user',
+    )
     expect(toggle()).toBeChecked()
   })
 
   it('sends the ATTACHMENT id, never the library condition id', async () => {
-    // The distinction the whole table rests on: "Log in" attached at two folders is two
-    // attachments, and declining one must leave the other in force. The server refuses a
-    // conditionId here with a field error, so getting this wrong is a 400 rather than a silent
-    // over-decline — but the 400 lands on a save the author will read as broken.
     const user = userEvent.setup()
-    mockDeclineReads(inheritedCase)
-    const patch = vi.spyOn(api, 'patch').mockResolvedValue(loadedCase({ id: CASE_ID, currentVersionNo: 3 }) as never)
-    renderDeclineEditor()
+    renderIt()
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue(inheritedCase as never)
 
-    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
-    await user.click(toggle())
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    await waitFor(() => expect(patch).toHaveBeenCalled())
-    const body = patch.mock.calls[0][1] as { declinedConditionIds: string[] }
-    expect(body.declinedConditionIds).toEqual(['attach-1'])
-  })
-
-  it('sends an EMPTY array when the last decline is switched back on, never omits the field', async () => {
-    // Absent means "leave the declines alone", so omitting it would make un-declining a save that
-    // reports success and restores nothing. §95's `postconditions` defect, one field over.
-    const user = userEvent.setup()
-    mockDeclineReads(declinedCase)
-    const patch = vi.spyOn(api, 'patch').mockResolvedValue(loadedCase({ id: CASE_ID, currentVersionNo: 3 }) as never)
-    renderDeclineEditor()
-
-    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
-    await user.click(toggle())
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    await waitFor(() => expect(patch).toHaveBeenCalled())
-    const body = patch.mock.calls[0][1] as { declinedConditionIds: string[] }
-    expect(body.declinedConditionIds).toEqual([])
-  })
-
-  it('a save that touches nothing else still carries the declines it was served', async () => {
-    // The form sends the whole editable set on every save, so a title fix must not read as an
-    // instruction to switch every declined rule back on.
-    const user = userEvent.setup()
-    mockDeclineReads(declinedCase)
-    const patch = vi.spyOn(api, 'patch').mockResolvedValue(loadedCase({ id: CASE_ID, currentVersionNo: 3 }) as never)
-    renderDeclineEditor()
-
-    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
-    await user.type(screen.getByTestId('CaseEditor.Field.Title'), '!')
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    await waitFor(() => expect(patch).toHaveBeenCalled())
-    const body = patch.mock.calls[0][1] as { declinedConditionIds: string[] }
-    expect(body.declinedConditionIds).toEqual(['attach-1'])
-  })
-
-  it('declining does NOT seed the folder condition into the case as its own', async () => {
-    // The failure this panel's whole design guards against, now reachable through a new control:
-    // a decline that also attached the folder's condition directly to the case would turn "not
-    // this one" into "this one for ever, unlinked from the folder".
-    const user = userEvent.setup()
-    mockDeclineReads(inheritedCase)
-    const patch = vi.spyOn(api, 'patch').mockResolvedValue(loadedCase({ id: CASE_ID, currentVersionNo: 3 }) as never)
-    renderDeclineEditor()
-
-    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
-    await user.click(toggle())
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    await waitFor(() => expect(patch).toHaveBeenCalled())
-    const body = patch.mock.calls[0][1] as { preconditions: unknown[] }
-    expect(body.preconditions).toEqual([])
-  })
-})
-
-/**
- * The move the editor used to make quietly (§194) — §193's item, on the single-case path.
- *
- * §192 made relocation the one operation in the product that ends a stored decision, and §193 gave
- * the bulk action a preview and a record of it. `PATCH /cases/{id}` ends declines by exactly the
- * same rule and said nothing about it on either side of the save. Worse than nothing, in fact:
- *
- *   1. **The inherited group is the folder the case is filed in NOW.** `inheritedPre` is built from
- *      the loaded case, so moving the Suite picker leaves a panel full of the departing folder's
- *      rules with live switches on them. `CaseEdit.normalizeDeclines` intersects the submitted set
- *      with what the DESTINATION imposes, and since §98 two folders share no attachment — so a
- *      decline toggled here is accepted by validation and dropped by the same request. A control
- *      whose effect the save silently discards is the defect; the alert is the smaller half.
- *   2. **The snackbar is the only record that survives the navigation** on the next line, exactly
- *      as `CaseListPage`'s is for the bulk path.
- *
- * The two halves are deliberately built from different things and the last test here is what pins
- * it: the alert PREDICTS from §98's flatness, the snackbar MEASURES what the response no longer
- * carries. Give the server an answer that kept the decline and the alert still warns while the
- * snackbar reports nothing — which is what "measured" has to mean.
- */
-describe('CaseEditorPage — moving a case out of the folder it declines (§194)', () => {
-  const CASE_ID = 'c-194'
-
-  const moveSuites: Suite[] = [
-    suites[0],
-    {
-      id: 'suite-2',
-      key: 'TS-2',
-      name: 'Chargebacks',
-      caseCount: 1,
-      tagRules: [],
-      caseIds: [],
-      lifecycleStatus: 'DRAFT',
-      preconditions: [],
-      postconditions: [],
-      lockVersion: 1,
-    },
-  ]
-
-  /** The declined row, as the server serves it: on `declinedPreconditions`, not `preconditions`. */
-  const declinedRow = {
-    id: 'attach-1',
-    position: 0,
-    conditionId: 'cond-1',
-    title: 'Log in as standard user',
-    body: ['Open the application'],
-    inline: false,
-    inherited: true,
-    inheritedFrom: 'Refunds',
-    declineCount: 0,
-  }
-
-  /** Filed in Refunds, declining the one rule Refunds imposes. */
-  const declining = loadedCase({
-    id: CASE_ID,
-    key: 'TC-194',
-    keySeq: 194,
-    title: 'Log in with a bad password',
-    steps: [
-      aStep({ action: 'Open the login page' }),
-    ],
-    declinedPreconditions: [declinedRow],
-    lockVersion: 3,
-    currentVersionNo: 2,
-  })
-
-  /** The same case with the rule in force — a move costs it nothing. */
-  const notDeclining: TestCase = {
-    ...declining,
-    preconditions: [declinedRow],
-    declinedPreconditions: [],
-  }
-
-  function mockMoveReads(theCase: TestCase) {
-    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
-      if (path.startsWith('/me/permissions')) return heldPermissions(['case:edit'], {}, PROJECT)
-      if (path.includes('/draft')) return null
-      if (path.includes('/step-suggestions')) return corpus
-      if (path.includes('/conditions')) return library
-      if (path.includes('/suites')) return moveSuites
-      if (path.includes('/classification')) return []
-      if (path.includes('/tags')) return projectTags
-      if (path.includes(`/cases/${CASE_ID}`)) return theCase
-      return []
-    }) as never)
-  }
-
-  function renderMoveEditor() {
-    return render(
-      <TestProviders
-        client={createTestQueryClient()}
-        route={`/projects/${PROJECT}/cases/${CASE_ID}/edit`}
-      >
-        <SessionRecoveryContext.Provider value={sessionRecovery}>
-          <SnackbarProvider>
-            <Routes>
-              <Route
-                path="/projects/:projectId/cases/:caseId/edit"
-                element={<CaseEditorPage mode="edit" />}
-              />
-            </Routes>
-          </SnackbarProvider>
-        </SessionRecoveryContext.Provider>
-      </TestProviders>,
-    )
-  }
-
-  /** Drives the Placement picker to `name` — the MUI Select path `fillHeader` uses. */
-  async function pickSuite(user: ReturnType<typeof userEvent.setup>, name: RegExp) {
-    const field = screen.getByTestId('CaseEditor.Field.Suite')
-    await user.click(within(field.closest('.MuiInputBase-root') as HTMLElement).getByRole('combobox'))
-    await user.click(await screen.findByRole('option', { name }))
-  }
-
-  const alert = () => screen.queryByTestId('CaseEditor.Conditions.EndingDeclines')
-  const toggle = () => screen.getByRole('switch', { name: /applies to this case/i })
-
-  beforeEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  it('says nothing until the picker moves — the case is still where it was', async () => {
-    mockMoveReads(declining)
-    renderMoveEditor()
-
-    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
-    expect(alert()).not.toBeInTheDocument()
-    // And the toggle is the ordinary, working control it has been since §187.
-    expect(toggle()).toBeEnabled()
-  })
-
-  it('NAMES the exception the move will end, once the picker has moved', async () => {
-    // A count alone would leave the author to work out which of the rules on screen they are about
-    // to lose — `BulkResultView`'s "a bare `affected: 38` cannot be rendered as a preview" (§6f),
-    // applied to a list the editor already holds the titles for.
-    const user = userEvent.setup()
-    mockMoveReads(declining)
-    renderMoveEditor()
-
-    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
-    await pickSuite(user, /chargebacks/i)
-
-    const banner = await screen.findByTestId('CaseEditor.Conditions.EndingDeclines')
-    expect(banner).toHaveTextContent('Moving this case ends 1 condition exception')
-    expect(banner).toHaveTextContent('Log in as standard user')
-    expect(banner).toHaveTextContent(/will not bring it back/i)
-  })
-
-  it('a move that costs nothing says nothing — the event is the DECLINE ending, not the move', async () => {
-    const user = userEvent.setup()
-    mockMoveReads(notDeclining)
-    renderMoveEditor()
-
-    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
-    await pickSuite(user, /chargebacks/i)
-
-    await waitFor(() => expect(screen.getByTestId('CaseEditor.Field.Suite')).toHaveTextContent(/chargebacks/i))
-    expect(alert()).not.toBeInTheDocument()
-  })
-
-  it('withdraws the warning when the picker goes back — it is a preview, not a latch', async () => {
-    const user = userEvent.setup()
-    mockMoveReads(declining)
-    renderMoveEditor()
-
-    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
-    await pickSuite(user, /chargebacks/i)
-    await screen.findByTestId('CaseEditor.Conditions.EndingDeclines')
-
-    await pickSuite(user, /refunds/i)
-    await waitFor(() => expect(alert()).not.toBeInTheDocument())
-    expect(toggle()).toBeEnabled()
-  })
-
-  it('DISABLES the decline toggle while the move is pending, rather than accepting a discarded act', async () => {
-    // The defect this slice is mostly about. The rows below the picker belong to the folder being
-    // left; `normalizeDeclines` bounds the submitted set by the DESTINATION's attachments, which
-    // share nothing with them (§98), so a switch flipped here changes the request and not the case.
-    const user = userEvent.setup()
-    mockMoveReads(declining)
-    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ ...declining, currentVersionNo: 3 } as never)
-    renderMoveEditor()
-
-    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
-    await pickSuite(user, /chargebacks/i)
-
-    await waitFor(() => expect(toggle()).toBeDisabled())
-    // Asserted through the REQUEST, not the attribute alone: `disabled` is how the browser is asked
-    // to swallow the click, and what matters is that the set the save carries is the one the author
-    // last chose while the case was still in Refunds.
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-    await waitFor(() => expect(patch).toHaveBeenCalled())
-    const body = patch.mock.calls[0][1] as { declinedConditionIds: string[] }
-    expect(body.declinedConditionIds).toEqual(['attach-1'])
-  })
-
-  it('reports the cost on the way out, as a warning and in one composed snackbar', async () => {
-    // The only record that survives the navigate() on the next line — `CaseListPage`'s treatment of
-    // the same event (§193), on the path that has no dialog to close.
-    const user = userEvent.setup()
-    mockMoveReads(declining)
-    vi.spyOn(api, 'patch').mockResolvedValue({
-      ...declining,
-      suiteId: 'suite-2',
-      currentVersionNo: 3,
-      declinedPreconditions: [],
-      declinedPostconditions: [],
-    } as never)
-    renderMoveEditor()
-
-    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
-    await pickSuite(user, /chargebacks/i)
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    expect(await screen.findByText(/Saved TC-194 as v3 · the move ended 1 condition exception/)).toBeInTheDocument()
-  })
-
-  it('reports NOTHING when the response kept the decline — the snackbar is measured, not predicted', async () => {
-    // What makes the two halves different instruments. The alert predicts from §98's flatness; this
-    // reads what the saved case no longer carries. Hand back a server that kept the row and the
-    // record stays true while the prediction is the thing that was wrong — the right way round, and
-    // the reason `CaseConditions#ancestry`'s "a widening is a decision with a slice behind it" has
-    // somewhere to land.
-    const user = userEvent.setup()
-    mockMoveReads(declining)
-    vi.spyOn(api, 'patch').mockResolvedValue({
-      ...declining,
-      suiteId: 'suite-2',
-      currentVersionNo: 3,
-      declinedPreconditions: [declinedRow],
-      declinedPostconditions: [],
-    } as never)
-    renderMoveEditor()
-
-    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
-    await pickSuite(user, /chargebacks/i)
-    await screen.findByTestId('CaseEditor.Conditions.EndingDeclines')
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    expect(await screen.findByText('Saved TC-194 as v3')).toBeInTheDocument()
-    expect(screen.queryByText(/the move ended/)).not.toBeInTheDocument()
-  })
-
-  it('a save that does not move the case never asks the question', async () => {
-    // The gate on the subtraction. Without it a response served by anything less than the whole
-    // contract shape would read as "the server dropped every decline" on an ordinary title fix.
-    const user = userEvent.setup()
-    mockMoveReads(declining)
-    vi.spyOn(api, 'patch').mockResolvedValue({ ...declining, currentVersionNo: 3 } as never)
-    renderMoveEditor()
-
-    await screen.findByTestId('CaseEditor.Preconditions.Inherited.Item')
-    await user.type(screen.getByTestId('CaseEditor.Field.Title'), '!')
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    expect(await screen.findByText('Saved TC-194 as v3')).toBeInTheDocument()
-    expect(screen.queryByText(/the move ended/)).not.toBeInTheDocument()
-  })
-})
-
-/**
- * The lens, the keyword column and the paste dialog (§255).
- *
- * **The first arm is the whole slice.** Until §255 the two lenses were two storages: switching to
- * Gherkin mounted a textarea and `toCasePayload` sent `steps: []`, so the next Save deleted every
- * row and every step id a `step_result` anchors to — 200, success toast, evidence orphaned. The
- * test that would have caught it is "toggle the lens and the rows are still there", which is why it
- * is written first and why it asserts the PAYLOAD as well as the screen: a form that still renders
- * the rows while sending none of them is the same defect one layer down.
- */
-describe('CaseEditorPage — the one format (§256)', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  it('selects Given on the first row and And on the next, without opening the menu', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    renderEditor()
-
-    const keywordValue = (index: number) =>
-      screen.getAllByTestId('CaseEditor.Steps.Field.Keyword')[index].textContent
-
-    expect(keywordValue(0)).toBe('Given')
-
-    await user.type(actionFields()[0], 'a settled payment')
-    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(2))
-    expect(keywordValue(1)).toBe('And')
-
-    await user.type(actionFields()[1], 'the refund is requested twice')
-    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(3))
-    expect(keywordValue(2)).toBe('And')
-  })
-
-  it('mounts a keyword select on every row, with no format control to reach first', async () => {
-    mockReads()
-    renderEditor()
-
-    expect(screen.getAllByTestId('CaseEditor.Steps.Field.Keyword')).toHaveLength(1)
-    expect(screen.queryByTestId('CaseEditor.Steps.AddKeyword')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('CaseEditor.StepFormat.GHERKIN')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('CaseEditor.StepFormat.STRUCTURED')).not.toBeInTheDocument()
-  })
-
-  /*
-    KEPT FROM §255, which is the point of keeping it. That slice's defect was a form that rendered
-    the rows while sending none of them, and removing the toggle is not a licence to stop asserting
-    the payload — this arm is what says the rows still travel, now with the keyword nobody typed.
-  */
-  it('sends GHERKIN and the rows, with the keyword it selected', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    const post = vi.spyOn(api, 'post').mockResolvedValue(
-      loadedCase({ id: 'c9', key: 'TC-9', stepFormat: 'GHERKIN' }) as never,
-    )
-    renderEditor()
-
-    await user.type(actionFields()[0], 'Refund it')
-    await fillHeader(user)
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    await waitFor(() => expect(post).toHaveBeenCalled())
-    const payload = post.mock.calls[0][1] as { stepFormat: string; steps: { keyword: string }[] }
-    expect(payload.stepFormat).toBe('GHERKIN')
-    expect(payload.steps).toHaveLength(1)
-    expect(payload.steps[0].keyword).toBe('GIVEN')
-  })
-
-  it('opens a pre-§256 case with the keywords proposed, and does not call that a change', async () => {
-    const legacy = loadedCase({
-      id: 'c7',
-      key: 'TC-7',
-      stepFormat: 'STRUCTURED',
-      steps: [
-        { id: 's1', position: 1, keyword: null, action: 'a settled payment', testData: null, expectedResult: null, docString: null, dataTable: null },
-        { id: 's2', position: 2, keyword: null, action: 'the ledger refuses it', testData: null, expectedResult: 'Refused', docString: null, dataTable: null },
-      ],
-    })
-    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
-      if (path.startsWith('/me/permissions')) return heldPermissions(['case:edit'], {}, PROJECT)
-      if (path.includes('/draft')) return null
-      if (path.includes('/step-suggestions')) return corpus
-      if (path.includes('/conditions')) return library
-      if (path.includes('/suites')) return suites
-      if (path.includes('/classification')) return []
-      if (path.includes('/tags')) return projectTags
-      if (path.includes('/cases/c7')) return legacy
-      return []
-    }) as never)
-
-    render(
-      <TestProviders client={createTestQueryClient()} route={`/projects/${PROJECT}/cases/c7/edit`}>
-        <SessionRecoveryContext.Provider value={sessionRecovery}>
-          <SnackbarProvider>
-            <Routes>
-              <Route
-                path="/projects/:projectId/cases/:caseId/edit"
-                element={<CaseEditorPage mode="edit" />}
-              />
-            </Routes>
-          </SnackbarProvider>
-        </SessionRecoveryContext.Provider>
-      </TestProviders>,
-    )
-
-    const keywords = await screen.findAllByTestId('CaseEditor.Steps.Field.Keyword')
-    expect(keywords[0].textContent).toBe('Given')
-    expect(keywords[1].textContent).toBe('Then')
-    // The proposal is not an edit: Save stays disabled until the author actually changes something.
-    expect(screen.getByTestId('CaseEditor.Submit')).toBeDisabled()
-  })
-
-  it('refuses a first step of And/But, in the server’s words', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    const post = vi.spyOn(api, 'post')
-    renderEditor()
-
-    await user.type(actionFields()[0], 'Refund it')
-    const keyword = screen.getAllByTestId('CaseEditor.Steps.Field.Keyword')[0]
-    await user.click(within(keyword.closest('.MuiInputBase-root') as HTMLElement).getByRole('combobox'))
-    await user.click(await screen.findByRole('option', { name: 'And' }))
-
-    await fillHeader(user)
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    expect(await screen.findByText('The first step cannot be And/But.')).toBeInTheDocument()
-    expect(post).not.toHaveBeenCalled()
-  })
-})
-
-describe('CaseEditorPage — pasting a scenario (§255)', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  const scenario = {
-    title: 'A settled payment cannot be refunded twice',
-    objective: 'Prove the ledger refuses the second refund.',
-    tags: ['refunds'],
-    background: [],
-    steps: [
-      { id: null, keyword: 'GIVEN' as const, action: 'a settled payment', testData: null, expectedResult: null, docString: null, dataTable: null },
-      { id: null, keyword: 'THEN' as const, action: 'the second refund is refused', testData: null, expectedResult: null, docString: null, dataTable: null },
-    ],
-  }
-
-  async function paste(mode: 'Append' | 'Replace') {
-    const user = userEvent.setup()
-    vi.spyOn(api, 'postText').mockResolvedValue(scenario as never)
-    renderEditor()
-
-    await user.click(screen.getByTestId('CaseEditor.Steps.Paste'))
-    await user.click(screen.getByTestId('PasteGherkin.Text'))
-    await user.paste('Given a settled payment')
-    await user.click(screen.getByTestId('PasteGherkin.Parse'))
-    await user.click(await screen.findByTestId(`PasteGherkin.${mode}`))
-    return user
-  }
-
-  it('lands the parsed rows in the editor', async () => {
-    mockReads()
-    await paste('Replace')
-
-    // Two rows plus the trailing blank, which IS the way to add a step (§94) and has to survive
-    // a paste like every other operation on the list.
-    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(3))
-    expect(actionFields()[0]).toHaveValue('a settled payment')
-  })
-
-  it('fills a blank title and merges the tags, rather than replacing what is there', async () => {
-    mockReads()
-    await paste('Replace')
-
-    await waitFor(() => expect(screen.getByTestId('CaseEditor.Field.Title')).toHaveValue(scenario.title))
-    expect(screen.getByTestId('CaseEditor.Field.Objective')).toHaveValue(scenario.objective)
-  })
-
-  it('appends without touching the rows already written', async () => {
-    mockReads()
-    const user = userEvent.setup()
-    vi.spyOn(api, 'postText').mockResolvedValue(scenario as never)
-    renderEditor()
-
-    await user.type(actionFields()[0], 'A step I wrote')
-    await user.click(screen.getByTestId('CaseEditor.Steps.Paste'))
-    await user.click(screen.getByTestId('PasteGherkin.Text'))
-    await user.paste('Given a settled payment')
-    await user.click(screen.getByTestId('PasteGherkin.Parse'))
-    await user.click(await screen.findByTestId('PasteGherkin.Append'))
-
-    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(4))
-    expect(actionFields()[0]).toHaveValue('A step I wrote')
-    expect(actionFields()[1]).toHaveValue('a settled payment')
-  })
-})
-
-/**
- * The summary a refused submit puts at the top of the form.
- *
- * Before it, a refused submit ran no code at all: `handleSubmit` had no invalid handler, so what
- * the author experienced was a Save button that did nothing. The inline error was there, on a
- * field that on this screen — five panels and two columns tall — is routinely off screen. These
- * assert the three things that make the summary worth its space: that it appears only after the
- * author has asked to save, that it NAMES what is wrong rather than counting it, and that its
- * links move focus to the control.
- */
-describe('CaseEditorPage — the refused submit', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  it('says nothing until a submit has actually been refused', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    renderEditor()
-
-    // The title is required and empty, and blurring it raises the inline error — the summary is
-    // still silent, because nothing has been asked of the form yet.
-    await user.click(screen.getByTestId('CaseEditor.Field.Title'))
-    await user.tab()
-
-    expect(screen.queryByTestId('CaseEditor.ErrorSummary')).not.toBeInTheDocument()
-  })
-
-  it('names every refusal, and does not post', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    const post = vi.spyOn(api, 'post')
-    renderEditor()
-
+    await user.click(await screen.findByRole('switch', { name: /applies to this case/i }))
     await waitFor(() => expect(screen.getByTestId('CaseEditor.Submit')).toBeEnabled())
     await user.click(screen.getByTestId('CaseEditor.Submit'))
 
-    const summary = await screen.findByTestId('CaseEditor.ErrorSummary')
-    // Both refusals of an untouched form: no title, and no step with anything in it.
-    expect(within(summary).getByText('Title')).toBeInTheDocument()
-    expect(within(summary).getByText('Steps')).toBeInTheDocument()
-    expect(post).not.toHaveBeenCalled()
+    await waitFor(() => expect(patch).toHaveBeenCalled())
+    const body = patch.mock.calls[0][1] as { declinedConditionIds: string[] }
+    // `attach-1`, not `cond-1`: the same entry attached at two folders is two attachments, and
+    // declining one must leave the other in force.
+    expect(body.declinedConditionIds).toEqual(['attach-1'])
   })
 
-  it('moves focus to the field a line names', async () => {
+  it('NAMES the exception a pending move will end, and withdraws it when the picker goes back', async () => {
     const user = userEvent.setup()
-    mockReads()
-    renderEditor()
+    renderIt({ ...inheritedCase, preconditions: [], declinedPreconditions: inheritedCase.preconditions })
 
-    await waitFor(() => expect(screen.getByTestId('CaseEditor.Submit')).toBeEnabled())
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
+    await screen.findByTestId('CaseEditor.Preconditions.Row')
+    expect(screen.queryByTestId('CaseEditor.Conditions.EndingDeclines')).not.toBeInTheDocument()
 
-    const summary = await screen.findByTestId('CaseEditor.ErrorSummary')
-    await user.click(within(summary).getByText('Title'))
+    const suite = screen.getByTestId('CaseEditor.Field.Suite')
+    await user.click(within(suite.closest('.MuiInputBase-root') as HTMLElement).getByRole('combobox'))
+    await user.click(await screen.findByRole('option', { name: /not filed/i }))
 
-    expect(screen.getByTestId('CaseEditor.Field.Title')).toHaveFocus()
-  })
+    const warning = await screen.findByTestId('CaseEditor.Conditions.EndingDeclines')
+    expect(warning).toHaveTextContent('Log in as standard user')
 
-  it('drops a line as its refusal is answered, rather than waiting to be dismissed', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    renderEditor()
-
-    await waitFor(() => expect(screen.getByTestId('CaseEditor.Submit')).toBeEnabled())
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-    expect(await screen.findByTestId('CaseEditor.ErrorSummary')).toBeInTheDocument()
-
-    // The title only — the step list is still empty, so the summary stays and loses one line.
-    // The rows are read off `errors`, so there is nothing to dismiss and nothing to clear.
-    await user.type(screen.getByTestId('CaseEditor.Field.Title'), 'Double refund')
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
-
-    const summary = await screen.findByTestId('CaseEditor.ErrorSummary')
-    await waitFor(() => expect(within(summary).queryByText('Title')).not.toBeInTheDocument())
-    expect(within(summary).getByText('Steps')).toBeInTheDocument()
+    await user.click(within(suite.closest('.MuiInputBase-root') as HTMLElement).getByRole('combobox'))
+    await user.click(await screen.findByRole('option', { name: /refunds/i }))
+    // A preview, not a latch.
+    await waitFor(() =>
+      expect(screen.queryByTestId('CaseEditor.Conditions.EndingDeclines')).not.toBeInTheDocument(),
+    )
   })
 })

@@ -1,58 +1,29 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers';
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import {
   Alert,
   AlertTitle,
-  Autocomplete,
   Box,
   Button,
-  IconButton,
+  Collapse,
+  Divider,
   Link,
   MenuItem,
   Stack,
+  Switch,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
-import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { useSnackbar } from 'notistack';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
-import {
-  Controller,
-  useFieldArray,
-  useForm,
-  type Control,
-  type FieldErrors,
-  type FieldPath,
-  type UseFormSetFocus,
-} from 'react-hook-form';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useCan } from '../../auth/useCan';
+import { Controller, useForm, type FieldErrors, type FieldPath, type UseFormSetFocus } from 'react-hook-form';
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import {
   CaseSchema,
-  STEP_KEYWORDS,
   fromCasePayload,
-  isBlankStep,
   liveSteps,
   nextKeyword,
   prefilledKeywords,
@@ -60,23 +31,28 @@ import {
   type CaseInput,
 } from './caseSchema';
 import { PasteGherkinDialog } from './PasteGherkinDialog';
-import { StepDataCell } from './StepDataCell';
+import { CaseDocument, type DocumentRefusal } from './CaseDocument';
+import { sectionLine, splitFeatureLine } from './gherkinText';
+import { caseTextKey, clearCaseText, readCaseText, writeCaseText } from './caseTextBuffer';
 import { CaseDraftStatus } from './CaseDraftStatus';
 import { useNewCaseDraft } from './useNewCaseDraft';
 import type { CaseDraft } from '../../api/types';
 import { ClassificationPicker } from './ClassificationPicker';
 import { ConditionEditDialog } from './ConditionEditDialog';
 import { ConditionsPanel } from './ConditionsPanel';
-import { resolveStepMove } from './stepReorder';
 import {
   useCase,
   useCaseDraft,
+  useCaseFeature,
+  useCases,
   useClassification,
   useCreateCase,
+  useCreateCondition,
   useDiscardCaseDraft,
-  useProjectTags,
+  useParseGherkin,
+  useRenderGherkin,
   useSaveCaseDraft,
-  useStepSuggestions,
+  useStepCorpus,
   useSuites,
   useUpdateCase,
 } from '../../api/queries';
@@ -87,7 +63,7 @@ import { PermissionGate } from '../../components/PermissionGate';
 import { NEW_CASE_DEFAULTS } from '../../lib/caseDefaults';
 import { formatAge, plural } from '../../lib/format';
 import { useDebouncedValue } from '../../lib/useDebouncedValue';
-import { automationLabels, priorityLabels, stepKeywordLabels } from '../../lib/labels';
+import { automationLabels, priorityLabels } from '../../lib/labels';
 import { selectTestId } from '../../lib/muiTestIds';
 import type {
   CaseConditionRef,
@@ -98,47 +74,40 @@ import type {
 } from '../../api/types';
 
 /**
- * Case authoring form.
+ * Case authoring — **one surface, and it is text** (003 D1).
  *
- * The schema it binds lives in `./caseSchema` rather than here. It used to be module-private in
- * this file, which is exactly why its four cross-field refinements went untested through Phase 4
- * (§36) and were still an open follow-up in §37 — a rule nothing can import is a rule only a human
- * can check. Moving it out, rather than exporting it from here, keeps this file a component module
- * and Fast Refresh working.
+ * ## What this file stopped being
+ *
+ * ~~A two-column form whose main column was a list of step rows: a keyword select, an action field
+ * with its own completion, a data cell with three modalities and a drag handle, per row.~~ →
+ * **retired in §003 Phase 2.** `SortableStep`, `StepActionField`, `StepKeywordCell`,
+ * `StepDataCell.tsx`, `stepReorder.ts` and the drag-and-drop sensors are deleted, and with them
+ * roughly half of this file. `@dnd-kit` stays a dependency — the board uses it — and the three
+ * step-data modalities survive **as text**: a doc string is `"""`, a table is `|…|`, and
+ * `testData` is the `# data:` comment the renderer already emits.
+ *
+ * What is honestly lost is written down rather than left to be discovered: an author who does not
+ * write Gherkin loses their editor in one release, with no fallback if the document surface
+ * disappoints at real content length. 003 records that as the trade D1 accepts.
+ *
+ * ## What it kept, and what the text is authoritative over
+ *
+ * The header, the commit bar, the draft machinery and the rail. The document carries **five** of
+ * the sixteen case fields — title, objective, tags, steps and the case's own preconditions — so a
+ * commit from text is a **merge over those five and never a form replace** (003 C3). The other
+ * eleven live in the rail and in the two prose fields below the document, and no parse may touch
+ * them. `Feature:` renders the *suite's* name and is therefore chrome: parsing it back into
+ * `suiteId` would let a rename move the case out of its folder.
+ *
+ * ## The one parser is still the server's
+ *
+ * Committing means posting the text to `POST …/cases/parse-gherkin` and using what the server
+ * read; seeding means posting the payload to `POST …/cases/render-gherkin` and showing what the
+ * server wrote. `gherkinText.ts` colours the text and numbers its lines and commits nothing — see
+ * its header, and the amendment it made to `featureFiles.ts`'s standing rule.
  */
 
 const TestIdPrefix = 'CaseEditor';
-
-/**
- * The row the author types into to get the next one.
- *
- * One of these is appended after the last row the moment somebody writes in it, so the list always
- * ends in a blank invitation and adding a step is never a button press. Two consequences that are
- * not obvious and are both handled elsewhere in this slice: the form is submitted with the blank
- * row still on it (so the submit trims and drops it), and "at least one step" can no longer be
- * `steps.length` (so `CaseSchema` counts `liveSteps`).
- */
-const blankStep = (keyword: string) => ({
-  action: '',
-  // `null` on the two block arguments is "this row is not in that mode" rather than "empty" — see
-  // `StepDataCell`'s header. `keyword` is no longer '' here: §256 makes the row arrive with the
-  // one `nextKeyword` proposes, because a row minted without a keyword is a row this form's own
-  // validation then refuses.
-  keyword,
-  testData: '',
-  expectedResult: '',
-  docString: null,
-  dataTable: null,
-});
-
-/**
- * `useFieldArray.append` focuses the new row's first field by default.
- *
- * That is right for a button somebody pressed and wrong for every append in this file: the row is
- * appended *while the author is typing in the row above it*, so the default would move the caret
- * out of the sentence being written on the first keystroke of every step.
- */
-const NO_FOCUS = { shouldFocus: false } as const;
 
 /**
  * The name every field answers to when something other than the field itself has to name it.
@@ -146,7 +115,6 @@ const NO_FOCUS = { shouldFocus: false } as const;
  * One map rather than a label written at the control and re-typed in the summary: the two would
  * drift the first time a field was renamed, and a summary that names a field the form does not
  * have is worse than no summary — it sends the author looking for a control that is not there.
- * Keyed by the form path, so a new field is a compile error here the moment it is required.
  */
 const FIELD_LABELS: Partial<Record<keyof CaseInput, string>> = {
   title: 'Title',
@@ -163,18 +131,20 @@ const FIELD_LABELS: Partial<Record<keyof CaseInput, string>> = {
   changeComment: 'Change note',
 };
 
-/** The four parts of a step row that can each carry an error of their own. */
-const STEP_PARTS = ['keyword', 'action', 'testData', 'expectedResult'] as const;
+/** The fields the document carries (003 C3) — named in a summary, never linked from one. */
+const TEXT_CARRIED = new Set<keyof CaseInput>(['title', 'objective', 'tags']);
 
-type SummaryRow = { field: FieldPath<CaseInput>; label: string; message: string };
+type SummaryRow = { field: FieldPath<CaseInput> | null; label: string; message: string };
 
 /**
  * Every refusal on the form, flattened, in the order the fields appear on screen.
  *
- * The step list contributes twice and the two are different things: `errors.steps.root` is a rule
- * about the LIST ("add at least one step"), and `errors.steps[i]` is a rule about one row. RHF
- * keeps them in one place — the array carries a `root` property — which is exactly the shape that
- * made the list-level message render nothing at all for a whole slice (see the panel's own note).
+ * ~~The step list contributes twice — a rule about the LIST and a rule about one row.~~ → under D1
+ * there are no rows on screen, so every step rule collapses into **one** line about the document.
+ * A per-row message would name a control the author cannot see: the row it is about is a sentence
+ * in a textarea, and `setFocus('steps.3.action')` has nothing to focus. Its `field` is therefore
+ * null and the line is a statement rather than a link — the document is one control and it is
+ * already on screen.
  */
 function summarizeErrors(errors: FieldErrors<CaseInput>): SummaryRow[] {
   const rows: SummaryRow[] = [];
@@ -182,26 +152,33 @@ function summarizeErrors(errors: FieldErrors<CaseInput>): SummaryRow[] {
   for (const [name, label] of Object.entries(FIELD_LABELS)) {
     const message = errors[name as keyof CaseInput]?.message;
     if (typeof message === 'string') {
-      rows.push({ field: name as FieldPath<CaseInput>, label, message });
+      /*
+        A refusal about a field the TEXT carries has no control to move focus to — `title`,
+        `objective` and `tags` are lines in the document now. It is still named, because the author
+        has to know what is wrong, but it is not a link: a link that focuses nothing reads as the
+        summary being broken rather than as the field being somewhere else.
+      */
+      const focusable = !TEXT_CARRIED.has(name as keyof CaseInput);
+      rows.push({ field: focusable ? (name as FieldPath<CaseInput>) : null, label, message });
     }
   }
 
   const steps = errors.steps;
   const listLevel = steps?.root?.message ?? steps?.message;
   if (typeof listLevel === 'string') {
-    rows.push({ field: 'steps.0.action', label: 'Steps', message: listLevel });
+    rows.push({ field: null, label: 'Steps', message: listLevel });
   }
   if (Array.isArray(steps)) {
-    steps.forEach((row, index) => {
+    // Every row-level message, de-duplicated: the schema's per-row rules quote the server's
+    // wording, and four rows failing the same rule is one thing to fix, not four lines.
+    const seen = new Set<string>();
+    steps.forEach((row) => {
       if (!row) return;
-      for (const part of STEP_PARTS) {
+      for (const part of ['keyword', 'action', 'testData', 'expectedResult'] as const) {
         const message = row[part]?.message;
-        if (typeof message === 'string') {
-          rows.push({
-            field: `steps.${index}.${part}` as FieldPath<CaseInput>,
-            label: `Step ${index + 1}`,
-            message,
-          });
+        if (typeof message === 'string' && !seen.has(message)) {
+          seen.add(message);
+          rows.push({ field: null, label: 'Steps', message });
         }
       }
     });
@@ -213,19 +190,13 @@ function summarizeErrors(errors: FieldErrors<CaseInput>): SummaryRow[] {
 /**
  * What a refused submit says, and where it says it.
  *
- * ## Why inline errors were not enough
- *
- * Inline errors are necessary and this does not replace them. But this form is two columns and
- * five panels tall, and the field a refused submit is about is routinely off screen — so what the
- * author actually experienced was a Save button that did nothing. WCAG 2.2's answer, and the one
- * used here: one focusable region at the top of the form, one line per refusal, each line moving
- * focus to the control it names.
- *
- * ## Focused on mount, and remounted per attempt
+ * Inline errors are necessary and this does not replace them. But the field a refused submit is
+ * about is routinely off screen — so what the author actually experienced was a Save button that
+ * did nothing. WCAG 2.2's answer, and the one used here: one focusable region at the top of the
+ * form, one line per refusal, each line moving focus to the control it names when there is one.
  *
  * The caller keys this on `submitCount`, so a second refused submit is a second mount and focus
- * lands here again. Focus is taken only after a submit the author asked for — never on blur, which
- * would drag the caret out of the sentence being written.
+ * lands here again.
  */
 function ErrorSummary({
   rows,
@@ -258,286 +229,30 @@ function ErrorSummary({
       </AlertTitle>
       <Box component="ul" sx={{ pl: 2.5, my: 0 }}>
         {rows.map((row) => (
-          <Typography component="li" variant="body2" key={`${row.field}:${row.message}`}>
-            <Link
-              component="button"
-              type="button"
-              underline="always"
-              color="inherit"
-              onClick={() => setFocus(row.field, { shouldSelect: true })}
-              data-testid={`${testId}.Item`}
-              sx={{ font: 'inherit', textAlign: 'left' }}
-            >
-              {row.label}
-            </Link>
+          <Typography component="li" variant="body2" key={`${row.label}:${row.message}`}>
+            {row.field ? (
+              <Link
+                component="button"
+                type="button"
+                underline="always"
+                color="inherit"
+                onClick={() => setFocus(row.field as FieldPath<CaseInput>, { shouldSelect: true })}
+                data-testid={`${testId}.Item`}
+                sx={{ font: 'inherit', textAlign: 'left' }}
+              >
+                {row.label}
+              </Link>
+            ) : (
+              <Box component="span" sx={{ fontWeight: 600 }} data-testid={`${testId}.Item`}>
+                {row.label}
+              </Box>
+            )}
             {' — '}
             {row.message}
           </Typography>
         ))}
       </Box>
     </Alert>
-  );
-}
-
-/**
- * One draggable step row — the wrapper, not the row's content (§94).
- *
- * A render prop rather than a component holding the row's JSX: the row is three fields, a shared
- * chip, three buttons and their comments, and moving all of it into a second component would have
- * made a reordering change look like a rewrite of the step editor in the diff. This is the whole
- * of what `useSortable` needs, and the row stays where it was.
- *
- * `id` is react-hook-form's field id, not the step's server id: a step created in this session has
- * no server id at all, and `useSortable` needs one for every row from the moment it renders.
- */
-function SortableStep({
-  id,
-  children,
-}: {
-  id: string;
-  children: (handle: {
-    attributes: ReturnType<typeof useSortable>['attributes'];
-    listeners: ReturnType<typeof useSortable>['listeners'];
-  }) => ReactNode;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-
-  return (
-    <Box
-      ref={setNodeRef}
-      data-testid={`${TestIdPrefix}.Steps.Row`}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      sx={{
-        p: 1.5,
-        borderRadius: 1,
-        /*
-          A SUNKEN row inside a raised panel, rather than a bordered box inside a bordered box.
-          The old treatment gave every step a full 1px frame nested inside the panel's own, so a
-          six-step case drew thirteen rectangles and the eye had to work out which of them meant
-          anything. Fill separates the rows at a fraction of the visual weight, and it leaves the
-          border free to carry the one thing that IS a state: the row being dragged.
-        */
-        /*
-          `background.default`, through the PALETTE, not `var(--color-surface-sunken)` through the
-          raw token — which is the same two hexes and rendered the row WHITE in dark mode. That
-          token had no component consumer anywhere in `src/` before this line, so whatever is wrong
-          with it had never been on screen; every raw-var call site that does work reads a status or
-          feedback colour, never a surface. The palette is what the other 130 files use and what MUI
-          rewrites per colour scheme, so it cannot disagree with the panel it sits inside.
-        */
-        bgcolor: isDragging ? 'background.paper' : 'background.default',
-        borderLeft: '2px solid',
-        borderColor: isDragging ? 'primary.main' : 'transparent',
-        boxShadow: isDragging ? 3 : 0,
-        opacity: isDragging ? 0.85 : 1,
-        zIndex: isDragging ? 1 : undefined,
-        position: 'relative',
-        // The row's own controls recede until the row is under the pointer or holds focus. Opacity
-        // rather than display, and never below 0.55: a control nobody can see is a control that is
-        // not there, and the ▲▼▮ buttons are the keyboard path for reordering.
-        '&:hover .stepTools, &:focus-within .stepTools': { opacity: 1 },
-      }}
-    >
-      {children({ attributes, listeners })}
-    </Box>
-  );
-}
-
-/**
- * One step's action, completing from the project's own step corpus (§94).
- *
- * ## Why this is a component rather than JSX in the row loop
- *
- * It owns a hook. Each row searches for what its own author is typing, and a hook cannot be called
- * inside `steps.fields.map`. The debounce state has to be per row for the same reason — one shared
- * fragment would make every row's popup show the answer to the row being typed in.
- *
- * ## Copy, never reference
- *
- * A pick fills the three fields and creates no link, and the corpus carries no ids at all, so it
- * cannot accidentally become a reference. Since §239 it is the ONLY step-reuse affordance: the
- * shared-step library beside it, which set `sharedStepId` and claimed the step tracked a library
- * entry, was retired because nothing ever resolved the entry — see the module header.
- */
-function StepActionField({
-  projectId,
-  control,
-  index,
-  error,
-  hint,
-  onType,
-  onPick,
-}: {
-  projectId: string;
-  control: Control<CaseInput>;
-  index: number;
-  error: string | undefined;
-  /**
-   * Whether to say where the suggestions come from.
-   *
-   * True on the first row only. The sentence is a property of the FIELD, not of this row, so
-   * repeating it under all ten of them is ten copies of one fact and ten lines of height — and it
-   * is the height that matters, because it is what turns a list of steps into a list of captions.
-   */
-  hint: boolean;
-  /** Every change to the text, before the debounce — the auto-append hangs off this. */
-  onType: (value: string) => void;
-  onPick: (suggestion: StepSuggestion) => void;
-}) {
-  const [typed, setTyped] = useState('');
-
-  /*
-    The debounce. A request per keystroke would be one per character of every step in the case,
-    against an endpoint that scans the project's whole step corpus — and with a 3s typeahead
-    budget, most of them would still be in flight when their answer stopped being wanted.
-
-    250ms rather than the filter bar's 300ms: this popup opens under the caret and a third of a
-    second there reads as the field being slow, where the case grid is refilling below the fold.
-  */
-  const fragment = useDebouncedValue(typed, 250);
-
-  const suggestions = useStepSuggestions(projectId, fragment);
-  /*
-    A failed or timed-out corpus read renders as no suggestions and nothing else. Deliberate: the
-    field is a plain text input that happens to complete, the author can write the step by hand,
-    and an error banner over an editor because an *optional* enrichment failed would be the
-    critical-vs-optional rule broken in the direction that costs the most. The query client's
-    global handler still reports it.
-  */
-  const options = suggestions.data ?? [];
-
-  return (
-    <Controller
-      control={control}
-      name={`steps.${index}.action`}
-      render={({ field }) => (
-        <Autocomplete
-          freeSolo
-          options={options}
-          /*
-            `value` is pinned to null and the text lives in the form. Letting MUI hold a value too
-            would put the same sentence in two places — the form's copy is what is submitted and
-            validated, and the two would drift the moment a pick was followed by an edit.
-          */
-          value={null}
-          inputValue={field.value ?? ''}
-          // The server has already narrowed by the fragment; MUI's client-side filter would then
-          // narrow the answer AGAIN against the same text and drop every suggestion whose action
-          // matches on a word the input does not start with.
-          filterOptions={(rows) => rows}
-          getOptionLabel={(option) => (typeof option === 'string' ? option : option.action)}
-          onInputChange={(_event, value, reason) => {
-            // `reset` is MUI's own write-back — on mount, and after a pick. Taking it would
-            // overwrite the value we just set with MUI's idea of the label, and on mount would
-            // clear the action of every step in an edit form.
-            if (reason === 'reset') return;
-            field.onChange(value);
-            setTyped(value);
-            onType(value);
-          }}
-          onChange={(_event, value) => {
-            // A string here is the free-solo commit of what is already in the field (Enter with no
-            // highlighted option); only an object is a pick from the corpus.
-            if (value && typeof value !== 'string') onPick(value);
-          }}
-          renderOption={(props, option) => {
-            const { key, ...rest } = props as typeof props & { key: string };
-            return (
-              <li key={key} {...rest} data-testid={`${TestIdPrefix}.Steps.Suggestion`}>
-                <Stack sx={{ gap: 0.25, py: 0.5, minWidth: 0 }}>
-                  <Stack direction="row" sx={{ gap: 1, alignItems: 'baseline' }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {option.action}
-                    </Typography>
-                    {/* The ranking signal, shown rather than only sorted by — "used by 41 cases"
-                        is what tells an author they are about to write the project's twenty-first
-                        wording of a step it already has. */}
-                    <Identifier variant="muted">
-                      {option.useCount} case{option.useCount === 1 ? '' : 's'}
-                    </Identifier>
-                  </Stack>
-                  {(option.testData || option.expectedResult) && (
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      {[option.testData, option.expectedResult].filter(Boolean).join(' → ')}
-                    </Typography>
-                  )}
-                </Stack>
-              </li>
-            );
-          }}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Action"
-              required
-              fullWidth
-              multiline
-              error={!!error}
-              helperText={error ?? (hint ? 'Suggestions come from steps this project already uses.' : undefined)}
-              onBlur={field.onBlur}
-              slotProps={{
-                ...params.slotProps,
-                htmlInput: {
-                  ...params.slotProps.htmlInput,
-                  'data-testid': `${TestIdPrefix}.Steps.Field.Action`,
-                },
-                formHelperText: { role: error ? 'alert' : undefined },
-              }}
-            />
-          )}
-        />
-      )}
-    />
-  );
-}
-
-/**
- * One step's Gherkin keyword.
- *
- * ~~In the `STRUCTURED` lens the select is shown when the row has a keyword and offered when it
- * does not, via an *Add keyword* button whose per-row state cannot live in `steps.fields.map`.~~
- * → **superseded in §256.** There is one format, so the select is always mounted, `None` is not on
- * the menu, and the row arrives with `nextKeyword`'s proposal already selected — the author opens
- * this only to disagree with it. `CaseEditor.Steps.AddKeyword` went with the button; it was a
- * locator as well as a control.
- */
-function StepKeywordCell({
-  control,
-  index,
-  error,
-}: {
-  control: Control<CaseInput>;
-  index: number;
-  error: string | undefined;
-}) {
-  return (
-    <Controller
-      control={control}
-      name={`steps.${index}.keyword`}
-      render={({ field }) => (
-        <TextField
-          select
-          label="Keyword"
-          size="small"
-          sx={{ minWidth: 112, flexShrink: 0, width: { xs: '100%', md: 112 } }}
-          value={field.value}
-          onChange={field.onChange}
-          onBlur={field.onBlur}
-          error={!!error}
-          helperText={error}
-          slotProps={{
-            select: { SelectDisplayProps: selectTestId(`${TestIdPrefix}.Steps.Field.Keyword`) },
-            formHelperText: { role: error ? 'alert' : undefined },
-          }}
-        >
-          {STEP_KEYWORDS.map((keyword) => (
-            <MenuItem key={keyword} value={keyword}>
-              {stepKeywordLabels[keyword]}
-            </MenuItem>
-          ))}
-        </TextField>
-      )}
-    />
   );
 }
 
@@ -569,6 +284,93 @@ function ownConditionIds(refs: readonly CaseConditionRef[] | undefined): string[
     .map((ref) => ref.conditionId as string);
 }
 
+
+/**
+ * The three ways to start a case that does not exist yet (003 Phase 1).
+ *
+ * ## Its own component, because of the read it makes
+ *
+ * *Start from a case* needs the project's most recently edited case, which is a list read. Held in
+ * the editor it would fire on the **edit** route too, where the offer is not made and the answer
+ * is not used — a request per case anybody opens, for nothing. A child rendered only on the blank
+ * state asks the question only where it is asked.
+ *
+ * ## It copies TEXT, not fields
+ *
+ * `GET …/cases/{id}/feature` is the canonical rendering of a saved case, from the one renderer. So
+ * the start hands the editor a document, and the commit on the first blur is what turns it into
+ * this case's own title, tags and steps. Copying the fields instead would need this component to
+ * know what a case is, and would leave the document showing something the form disagreed with.
+ *
+ * Nothing is linked: the corpus rule, one level up. A copy carries no reference, so editing this
+ * case later cannot change the one it was started from.
+ */
+function CaseStarts({
+  projectId,
+  onWrite,
+  onPaste,
+  onText,
+}: {
+  projectId: string;
+  onWrite: () => void;
+  onPaste: () => void;
+  onText: (text: string) => void;
+}) {
+  const [fromId, setFromId] = useState<string | null>(null);
+  // One row, most recently updated — the smallest answer that can name a case.
+  const recent = useCases(projectId, { size: 1 }, 'updatedAt,desc');
+  const recentCase = recent.data?.items[0];
+  const copied = useCaseFeature(projectId, fromId ?? undefined);
+
+  /*
+    Delivered once. `onText` is a new function on every render of the parent, so an effect that
+    only watched the data would hand the same text over again on the next render — overwriting
+    whatever the author had typed since, with no event that could explain it.
+  */
+  const delivered = useRef(false);
+  const text = copied.data;
+  useEffect(() => {
+    if (text === undefined || delivered.current) return;
+    delivered.current = true;
+    onText(text);
+  }, [text, onText]);
+
+  return (
+    <Panel title="Start" testId={`${TestIdPrefix}.Starts`}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1.5 }}>
+        <Button variant="contained" onClick={onWrite} data-testid={`${TestIdPrefix}.Start.Write`}>
+          Write it
+        </Button>
+        <Tooltip
+          title={
+            recentCase
+              ? `Copies the text of ${recentCase.key} — nothing is linked.`
+              : 'This project has no case to copy yet.'
+          }
+        >
+          <Box component="span">
+            <Button
+              variant="outlined"
+              disabled={!recentCase}
+              onClick={() => recentCase && setFromId(recentCase.id)}
+              data-testid={`${TestIdPrefix}.Start.FromCase`}
+            >
+              Start from a case
+            </Button>
+          </Box>
+        </Tooltip>
+        <Button variant="outlined" onClick={onPaste} data-testid={`${TestIdPrefix}.Start.Paste`}>
+          Paste a .feature
+        </Button>
+      </Stack>
+    </Panel>
+  );
+}
+
+/** Two ordered lists of Background lines, compared as the author would compare them. */
+const sameLines = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((line, index) => line === b[index]);
+
 function CaseEditorForm({
   mode,
   projectId,
@@ -580,63 +382,42 @@ function CaseEditorForm({
 }) {
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
+  const [searchParams] = useSearchParams();
   const suites = useSuites(projectId);
   const dimensions = useClassification(projectId);
-  /*
-    The tags this project's cases already carry — a SUGGESTION source, never a vocabulary.
-
-    Optional by construction: the control is `freeSolo`, so a failed or still-loading read leaves an
-    empty option list and the author types the tag exactly as they did before. That is the whole
-    reason this is not gated on `isSuccess` — a picker that refused unlisted tags could never accept
-    the first use of a new one, which is what `case_tag` being free text means.
-  */
-  const projectTags = useProjectTags(projectId);
+  const gate = useCan(projectId);
 
   /*
-    Which panel the condition dialog is for, and whether it is creating or editing. One piece of
-    state rather than two booleans and a nullable entry: "open for editing X" and "open to create a
-    PRE" are the two shapes it has, and separate flags make a third — open, editing nothing,
-    for no kind — representable.
+    The suite the reader was standing in when they pressed New case — UX#106, carried as a query
+    parameter by `CaseListPage`. A DEFAULT for the picker and not a decision: it is prefilled and
+    changeable, which is what makes carrying it safe. Read once, into the form's defaults, so
+    editing the picker and then re-rendering does not put it back.
   */
+  const carriedSuiteId = mode === 'create' ? (searchParams.get('suiteId') ?? '') : '';
+
   const [conditionDialog, setConditionDialog] = useState<{
     kind: 'PRE' | 'POST';
     condition: Condition | null;
   } | null>(null);
 
   /*
-    Entries created in this editor session, so a row can render the moment it is attached.
-
-    The library lists are cached per search term, so invalidating them does not make the new entry
-    resolvable synchronously — and the row in between would render the author's own condition as
-    "Unknown condition" on the screen they just created it from. Not server state in a client store:
-    these are handed to the panel as a rendering fallback and the query remains the source.
+    Entries created in this editor session, so a row can render the moment it is attached — and, in
+    this slice, so a `Background:` line committed a moment ago can be compared against the text on
+    the next commit without waiting for the library's cached lists to refetch.
   */
   const [createdConditions, setCreatedConditions] = useState<Condition[]>([]);
 
   /** Whether the paste dialog is open. Rendered only while it is, so it seeds fresh every time. */
   const [pasting, setPasting] = useState(false);
 
-  /**
-   * Whether a submit has been refused yet.
-   *
-   * The summary is shown only after the author has asked to save. Before that, the form is
-   * half-filled by definition and a running list of everything still missing is an accusation
-   * rather than help — `mode: 'onBlur'` already marks a field the author has left.
-   */
+  /** Whether a submit has been refused yet — the summary is shown only after one has. */
   const [showSummary, setShowSummary] = useState(false);
 
   /*
-    The folder's conditions, rendered read-only beside the case's own. Filtered here rather than in
-    the panel so the panel takes exactly what it renders and nothing that needs interpreting.
-
-    DECLINED ROWS ARE CONCATENATED ON (§187), and the order is deliberate. The server serves the two
-    lists separately because `preconditions` is the procedure a run pins, so the union has to be made
-    somewhere — and it is made HERE, once per response, rather than inside the panel as the toggle is
-    used. Recomputing it on every toggle would reorder the list under the author's cursor: a row they
-    just switched off would jump to the end of the group, which reads as the control having deleted
-    it. Declined rows sit last because their §6f position is resolved over the suite chain
-    server-side, and interleaving them would be the second implementation of that order the shared
-    layer exists to prevent.
+    The folder's conditions, rendered read-only beside the case's own, with the DECLINED ROWS
+    CONCATENATED ON (§187). Computed here rather than in the panel so the panel takes exactly what
+    it renders, and computed once per response rather than per toggle — recomputing would reorder
+    the list under the author's cursor.
   */
   const inheritedPre = [
     ...(existing?.preconditions ?? []).filter((ref) => ref.inherited),
@@ -649,6 +430,9 @@ function CaseEditorForm({
 
   const createCase = useCreateCase(projectId);
   const updateCase = useUpdateCase(projectId, existing?.id ?? '');
+  const createCondition = useCreateCondition(projectId);
+  const parse = useParseGherkin(projectId);
+  const render = useRenderGherkin(projectId);
 
   const {
     control,
@@ -666,15 +450,11 @@ function CaseEditorForm({
     mode: 'onBlur',
     defaultValues: {
       title: existing?.title ?? '',
-      // '' is UNFILED, not "missing" (§96) — see caseSchema. `?? ''` therefore covers both a new
-      // case and an existing one filed nowhere, and the submit maps '' back to null.
-      suiteId: existing?.suiteId ?? '',
+      // '' is UNFILED, not "missing" (§96) — see caseSchema. The submit maps '' back to null.
+      suiteId: existing?.suiteId ?? carriedSuiteId,
       objective: existing?.objective ?? '',
       description: existing?.description ?? '',
       expectedOutcome: existing?.expectedOutcome ?? '',
-      // The three §144 fields default from `NEW_CASE_DEFAULTS`, which the plan tab's title-only
-      // create sends verbatim: two screens author a case from nothing, and one answer to what it
-      // says before the author does (§199).
       priority: existing?.priority ?? NEW_CASE_DEFAULTS.priority,
       automationStatus: existing?.automationStatus ?? NEW_CASE_DEFAULTS.automationStatus,
       automationKey: existing?.automationKey ?? '',
@@ -683,106 +463,135 @@ function CaseEditorForm({
         existing?.estimatedDurationSec === null || existing?.estimatedDurationSec === undefined
           ? ''
           : String(existing.estimatedDurationSec),
-      /*
-        Pinned, not carried: §256 leaves one format, so a pre-§256 `STRUCTURED` case saved from
-        this editor is saved as what it now is — a scenario whose every row carries a keyword. The
-        field is still sent because `TestCaseInput` requires it, and `NEW_CASE_DEFAULTS` is still
-        the one place the value is written so the plan tab's title-only create agrees with it.
-      */
       stepFormat: NEW_CASE_DEFAULTS.stepFormat,
-      // The case's steps, plus the trailing blank row — on a new case that IS the whole list, which
-      // is why the editor no longer opens on nothing at all. Before §94 a new case rendered zero
-      // step rows and the only way to get one was the Add button.
       /*
-        `prefilledKeywords` runs on LOAD since §256, not only on a toggle that no longer exists.
-
-        A case authored before §256 has keyword-less rows, and with R1 now unconditional it would
-        open already invalid and refuse to save until the author filled a select on every row for a
-        change they did not make. Filling on load proposes the answer instead. It does NOT mark the
-        form dirty: nothing has been edited, Save stays disabled, and the proposal reaches the
-        server only on a save the author asked for.
+        The rows the case was served with. They are no longer edited as rows — the document is —
+        but they are still what a save sends and what `render-gherkin` is seeded from, and a case
+        opened and saved with the text untouched must send back exactly what it arrived with.
       */
-      steps: prefilledKeywords([
-        ...(existing?.steps ?? []).map((step) => ({
+      steps: prefilledKeywords(
+        (existing?.steps ?? []).map((step) => ({
           id: step.id,
-          // The contract's null becomes the form's '' — MUI's Select and `caseSchema.keyword`.
           keyword: step.keyword ?? '',
           action: step.action,
           testData: step.testData ?? '',
           expectedResult: step.expectedResult ?? '',
-          // NOT `?? ''`: null is the mode here, so defaulting it would open every step in
-          // doc-string mode with an empty block — see `StepDataCell`.
           docString: step.docString,
           dataTable: step.dataTable,
         })),
-        blankStep(''),
-      ]).map((step, index, rows) =>
-        // The trailing blank row is the one `prefilledKeywords` deliberately skips, so it gets the
-        // proposal here — it is the row the author is about to type into.
-        index === rows.length - 1 ? { ...step, keyword: nextKeyword(rows.slice(0, -1)) } : step,
       ),
-      // The ids the server served, which are the case's live assignments only — a value retired
-      // since it was chosen is absent here AND absent from the payload we send back, and the server
-      // deliberately does not read that absence as an instruction to delete it. See
-      // `TestCaseInput.classificationValueIds` in the contract for the whole rule.
       classificationValueIds: existing?.classificationValueIds ?? [],
-      // OWN attachments only — `inherited` rows are the folder's and are shown, not edited, here.
-      // Seeding one would attach the folder's condition directly to the case on the first save,
-      // permanently, and the two render almost identically so nobody would see it happen. An
-      // inline row carries no `conditionId` and is dropped for the same reason the server refuses
-      // one: nothing can render it.
       preconditionIds: ownConditionIds(existing?.preconditions),
       postconditionIds: ownConditionIds(existing?.postconditions),
-      // The attachment ids the server says this case declines (§187) — BOTH kinds in one array,
-      // because an attachment id already determines its kind. Seeded from the two dedicated
-      // response fields rather than from `preconditions`, which by construction never contains a
-      // declined row: that is the whole reason those fields exist.
       declinedConditionIds: [
         ...(existing?.declinedPreconditions ?? []).map((ref) => ref.id),
         ...(existing?.declinedPostconditions ?? []).map((ref) => ref.id),
       ],
-      // Served on TestCaseSummary and therefore on TestCase — the editor could not author them
-      // until §96 and the update endpoint refused them, so this is the field's first binding.
       tags: existing?.tags ?? [],
       changeComment: '',
     },
   });
 
   /*
-    Tells the app this surface is holding work that a navigation or reload would destroy.
+    ======================== THE WRITE SURFACE'S STATE (003 Phase 2) ========================
 
-    Both automatic recoveries consult it: the deploy-skew handler prompts instead of reloading,
-    and the session ladder shows the in-place re-auth dialog rather than falling through to a
-    redirect. A dirty editor is precisely the case where a well-meaning automatic recovery does
-    the most damage.
+    `documentText` is the raw text, exactly as typed, and it is the source of truth for the five
+    fields C3 names. It is NEVER re-rendered from parsed state per keystroke — that is what jumps
+    the caret, and it is also what makes a half-typed line disappear as it is being written.
+
+    `committedText` is the last text the server successfully parsed. It is what makes "commit on
+    blur" idempotent: blurring a document nobody changed must not post the parser a request, and
+    Save must know whether what is on screen has been read yet.
   */
-  useUnsavedWork(isDirty && !isSubmitting, mode === 'edit' ? 'an edited test case' : 'a new test case');
-
-  const steps = useFieldArray({ control, name: 'steps' });
+  const [documentText, setDocumentText] = useState('');
+  const [committedText, setCommittedText] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<DocumentRefusal | null>(null);
+  const [seeded, setSeeded] = useState(false);
+  /** Which start the author chose on a new case, or null while the three are still offered. */
+  const [started, setStarted] = useState<'WRITE' | 'CASE' | 'PASTE' | null>(null);
 
   /**
-   * The list always ends in a blank row, and this is the guard that keeps it true.
+   * A case with **zero step rows and a stored `gherkinSource`** — the population §255 left behind
+   * and `002-` is named as the deleter of.
    *
-   * With the Add button gone, the blank last row IS the way to add a step — so an author who
-   * removes it has no way to write another one and no control on screen that says so. Every
-   * operation that can leave the list without one calls this: the remove button, and the shared
-   * step insert below.
+   * Under the Fields lens those cases were editable as rows. Under D1 the only editor is one that
+   * parses, so the honest answer is a refusal: the surface renders the stored blob **read-only**
+   * and Save is refused until an operator round-trips it. It is never silently reparsed into rows
+   * on somebody's first edit — a reparse is a rewrite of content nobody asked to change, under a
+   * success toast.
    *
-   * Read through `getValues` rather than `steps.fields`, which is a render-time snapshot: inside
-   * the click handler that just removed a row it still contains the row that is gone.
+   * D5 clears lab and prod, so no case on our two boxes reaches this arm. It stays because this is
+   * a self-hosted product and an operator's instance is not reachable by a `DELETE` run against
+   * ours — which is why it is proved by a unit test and nothing else.
    */
-  const ensureTrailingBlank = () => {
-    const rows = getValues('steps');
-    const last = rows.at(-1);
-    if (!last || !isBlankStep(last)) steps.append(blankStep(nextKeyword(rows)), NO_FOCUS);
-  };
+  const migrationBlocked =
+    mode === 'edit' && !!existing?.gherkinSource && (existing.steps ?? []).length === 0;
+
+  const canManageLibrary = gate.can('library:manage');
+
+  /** Where the raw text is buffered — one key per case, `new` included. See `caseTextBuffer`. */
+  const textKey = caseTextKey(projectId, existing?.id ?? null);
+  const [bufferedText] = useState(() => readCaseText(textKey));
+
+  /*
+    The buffer is written from a DEBOUNCED copy of the text rather than on every keystroke: the
+    value is small, but `localStorage.setItem` is synchronous and this is the one control in the
+    app somebody types a paragraph into. One second is well inside the window a crash is measured
+    in and well outside the window a keystroke is.
+  */
+  const settledText = useDebouncedValue(documentText, 1000);
+  useEffect(() => {
+    if (!seeded) return;
+    writeCaseText(textKey, settledText);
+  }, [seeded, settledText, textKey]);
+
+  /*
+    SEEDING THE DOCUMENT — once, and only in edit mode.
+
+    A new case starts empty, on the `Given / When / Then` ghost text: there is nothing to render,
+    and posting an empty payload to `render-gherkin` to be told so would be a round trip for a
+    blank box. An existing case is rendered by the server, through the one renderer, so what is on
+    screen is byte-for-byte what a save produces (003 C1/D2).
+
+    The `Feature:` line is lifted out into chrome — see `splitFeatureLine` and 003 C3.
+  */
+  const renderText = render.mutateAsync;
+  useEffect(() => {
+    if (seeded || mode !== 'edit' || !existing) return;
+    setSeeded(true);
+    if (migrationBlocked) {
+      setDocumentText(existing.gherkinSource ?? '');
+      return;
+    }
+    void renderText(toCasePayload(getValues()))
+      .then((text) => {
+        setDocumentText(splitFeatureLine(text).body);
+        setCommittedText(splitFeatureLine(text).body);
+      })
+      .catch(() => {
+        /*
+          A failed render leaves the document EMPTY and says so through the mutation's own error
+          below, rather than seeding it with something invented. Seeding a guess would make the
+          first blur commit that guess over the case's real steps.
+        */
+      });
+  }, [seeded, mode, existing, migrationBlocked, renderText, getValues]);
+
+  useEffect(() => {
+    if (mode !== 'create' || seeded) return;
+    setSeeded(true);
+  }, [mode, seeded]);
+
+  /** The standing corpus — one mount per page, its own key, its own hook. See `useStepCorpus`. */
+  const corpus = useStepCorpus(projectId);
+
+  useUnsavedWork(isDirty && !isSubmitting, mode === 'edit' ? 'an edited test case' : 'a new test case');
 
   /**
    * Attaches a library condition to the case and makes it renderable at once.
    *
-   * Shared by the conditions dialog and the paste dialog's *Create precondition and attach*,
-   * because both create an entry the picker's cached lists cannot resolve yet — a second copy is
-   * how one of the two ends up showing "Unknown condition" on the screen it was created from.
+   * Shared by the conditions dialog and the commit's Background handling, because both create an
+   * entry the picker's cached lists cannot resolve yet.
    */
   const attachCondition = (created: Condition, kind: 'PRE' | 'POST') => {
     setCreatedConditions((current) => [...current, created]);
@@ -790,31 +599,149 @@ function CaseEditorForm({
     setValue(field, [...getValues(field), created.id], { shouldDirty: true });
   };
 
+  /** Every condition title this editor can resolve — the case's own, plus what it just created. */
+  const titleById = new Map<string, string>();
+  for (const ref of existing?.preconditions ?? []) {
+    if (ref.conditionId) titleById.set(ref.conditionId, ref.title);
+  }
+  for (const condition of createdConditions) titleById.set(condition.id, condition.title);
+
+  const automationStatus = watch('automationStatus');
+  const suiteId = watch('suiteId');
+  const movingFolder = mode === 'edit' && !!existing && (existing.suiteId ?? '') !== suiteId;
+
+  /** The `Feature:` chrome — the suite's name, live off the picker, or the key of a filed-nowhere case. */
+  const featureName =
+    (suites.data ?? []).find((suite) => suite.id === suiteId)?.name ?? existing?.key ?? null;
+
   /**
-   * A parsed scenario into the form (§255).
+   * The text, read by the server, merged into the form — **five fields, and never a sixth.**
    *
-   * ## Append keeps ids, Replace does not, and the dialog says so
+   * ## The merge, field by field (003 C3)
    *
-   * Appending leaves every existing row — and therefore every step id, which is what a
-   * `step_result` anchors to — untouched. Replacing discards them, which is a legitimate thing to
-   * want on a case being rewritten and is why the dialog's Replace button carries the warning.
-   * Either way the trailing blank row is re-established, because it IS the way to add a step (§94).
+   * | Field | Rule |
+   * |---|---|
+   * | `steps` | always replaced — they are what the text *is* |
+   * | `tags` | always replaced, so deleting an `@tag` line deletes the tag |
+   * | `title`, `objective` | replaced **only when the text declares a `Scenario:` block**, which is what `result.title` being non-null means. A bare step list — what a paste of loose steps produces — carries neither, and blanking somebody's title because they pasted four lines is a loss nothing on screen would report |
+   * | `preconditionIds` | replaced from the `Background:` block, through the library |
    *
-   * ## The lens follows the paste, and only when the paste says so
+   * Nothing else is touched, ever. `suiteId`, `priority`, `severity`, `ownerId`,
+   * `lifecycleStatus`, `automationStatus`, `automationKey`, `notAutomatableReason`,
+   * `estimatedDurationSec`, `classificationValueIds`, `postconditionIds`, `description` and
+   * `expectedOutcome` are the rail's and the two prose fields', and a parse that reached them
+   * would be §255's rule broken — *a toggle between two representations of one thing may not
+   * delete the thing* — with no second representation to recover from.
    *
-   * Text that parsed with keywords is a scenario, so the editor switches to the Gherkin lens rather
-   * than leaving the author to notice a toggle. A bare step list parses to rows with **no** keyword
-   * (`*` in Gherkin's own spelling), and switching on that would put the form straight into a state
-   * its own validation refuses.
+   * ## Refusals never touch the text
    *
-   * ## Title, objective and tags are filled, never overwritten
-   *
-   * A paste is an import into a form somebody may already have filled in. Tags merge — they are a
-   * set and the file's are as real as the author's — while the title and the objective are written
-   * only into a field that is blank: replacing a sentence somebody typed with one out of a file is
-   * a loss nothing on screen would report.
+   * Every failure path here returns `false` and sets `refusal`. Not one of them writes
+   * `documentText`. That is 003 C4's first clause and it is the reason this function reads the
+   * text as an argument rather than from state.
    */
-  const applyParsedScenario = (result: GherkinParseResult, mode: 'APPEND' | 'REPLACE') => {
+  const commit = async (text: string): Promise<boolean> => {
+    if (migrationBlocked) {
+      setRefusal({
+        message:
+          "This case's scenario is still stored as text rather than as steps, so it cannot be "
+          + 'edited here. Ask your operator to run migrate-gherkin-source; nothing is changed '
+          + 'until they do.',
+        line: null,
+      });
+      return false;
+    }
+    if (text === committedText && !refusal) return true;
+    if (text.trim().length === 0) {
+      /*
+        AN EMPTY DOCUMENT ON AN EDIT THAT HAS NOT BEEN SEEDED IS NOT AN EMPTY CASE — it is a
+        document that has not arrived yet. `committedText` is null exactly then, and treating the
+        blank textarea as authoritative would replace the case's steps with nothing on a save that
+        raced the server's render. The refusal for a render that actually failed is the alert above
+        the document; this is the arm for the seconds before it lands.
+      */
+      if (mode === 'edit' && committedText === null) return true;
+      // Otherwise an empty document is not a refusal either — it is a case nobody has written yet,
+      // and the schema's "Add at least one step" is the sentence that belongs to it, on Save.
+      setRefusal(null);
+      setCommittedText(text);
+      setValue('steps', [], { shouldDirty: true });
+      return true;
+    }
+
+    let result: GherkinParseResult;
+    try {
+      result = await parse.mutateAsync(text);
+    } catch (error) {
+      /*
+        The server's own sentence, quoted, on the line `Problem.line` names. `errors.text` is where
+        the four refusals put the sentence; `detail` is the fallback for anything else that got
+        this far. The line is READ, never regexed out of the English — see `ApiError.line`.
+      */
+      setRefusal(
+        error instanceof ApiError
+          ? { message: error.fieldErrors?.text?.join(' ') ?? error.detail, line: error.line }
+          : { message: 'The scenario could not be read. Check your connection and try again.', line: null },
+      );
+      return false;
+    }
+
+    /*
+      THE `Background:` BLOCK IS THIS CASE'S OWN PRECONDITIONS (003 D6, decision (a)).
+
+      A Background step is a row in the project's condition library, created through
+      `library:manage` — so under D6 an author who may write cases but not manage the library
+      cannot type a `Background:` line, in a surface where typing is the only interaction. The
+      refusal therefore lands AT THE LINE and names the permission, rather than at Save; and for a
+      caller without the grant the block is read-only chrome rather than an invitation.
+    */
+    const wanted = result.background.map((entry) => entry.title);
+    const current = getValues('preconditionIds').map((id) => titleById.get(id) ?? '');
+    if (!sameLines(wanted, current)) {
+      if (!canManageLibrary) {
+        setRefusal({
+          message:
+            'A Background: step becomes a precondition in this project’s library, which needs the '
+            + 'library:manage permission. Ask a project admin for it, or put the line back as it '
+            + 'was — nothing else in this case is blocked by it.',
+          line: sectionLine(text, 'Background'),
+          permission: 'library:manage',
+        });
+        return false;
+      }
+
+      const ids: string[] = [];
+      try {
+        for (const entry of result.background) {
+          // An entry whose title this editor already resolves is REUSED rather than created a
+          // second time: re-committing a document nobody changed must not add a duplicate library
+          // row per blur.
+          const known = [...titleById.entries()].find(([, title]) => title === entry.title)?.[0];
+          if (known) {
+            ids.push(known);
+            continue;
+          }
+          const created = await createCondition.mutateAsync({
+            title: entry.title,
+            type: 'PRE',
+            body: entry.body,
+          });
+          setCreatedConditions((all) => [...all, created]);
+          titleById.set(created.id, created.title);
+          ids.push(created.id);
+        }
+      } catch (error) {
+        setRefusal({
+          message:
+            error instanceof ApiError
+              ? error.detail
+              : 'The Background steps could not be saved to the library. Nothing was changed.',
+          line: sectionLine(text, 'Background'),
+        });
+        return false;
+      }
+      setValue('preconditionIds', ids, { shouldDirty: true });
+    }
+
     const rows = result.steps.map((step) => ({
       id: null,
       keyword: step.keyword ?? '',
@@ -824,117 +751,32 @@ function CaseEditorForm({
       docString: step.docString ?? null,
       dataTable: step.dataTable ?? null,
     }));
-    const kept = mode === 'REPLACE' ? [] : liveSteps(getValues('steps'));
-    /*
-      `prefilledKeywords` over the merged list, because §256 refuses a keyword-less row and a bare
-      step list parses to exactly that (`*` in Gherkin's own spelling). Before §256 this branch
-      instead switched the lens when the paste HAD keywords; there is no lens to switch now, and
-      the paste that needs help is the one WITHOUT them.
-    */
-    const merged = prefilledKeywords([...kept, ...rows]);
-    steps.replace([...merged, blankStep(nextKeyword(merged))]);
-    if (result.title && !getValues('title').trim()) {
+    setValue('steps', prefilledKeywords(rows), { shouldDirty: true });
+    setValue('tags', result.tags, { shouldDirty: true });
+    if (result.title !== null) {
       setValue('title', result.title, { shouldDirty: true });
-    }
-    if (result.objective && !(getValues('objective') ?? '').trim()) {
       setValue('objective', result.objective, { shouldDirty: true });
     }
-    if (result.tags.length > 0) {
-      setValue('tags', [...new Set([...getValues('tags'), ...result.tags])], { shouldDirty: true });
-    }
+
+    setCommittedText(text);
+    setRefusal(null);
+    return true;
   };
-
-  /*
-    Pointer + keyboard, and the pointer one needs the 5px constraint: without it a click on the
-    handle is a zero-distance drag, so the button swallows the click and nothing else on the row
-    can be reached by a pointer that started there. The keyboard sensor makes the handle itself
-    operable (Space to lift, arrows to move) — the ▲▼ buttons remain the simpler keyboard path, and
-    a focusable handle that did nothing on Space would be worse than no handle.
-  */
-  const dragSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
-
-  /**
-   * A finished drag becomes the same `steps.move` the ▲▼ buttons call.
-   *
-   * The decision of where it lands — including the three ways a drag ends in nothing — is
-   * `resolveStepMove`'s, so that it can be tested without driving a pointer through jsdom.
-   */
-  const onStepDragEnd = ({ active, over }: DragEndEvent) => {
-    const move = resolveStepMove(
-      steps.fields.map((field) => field.id),
-      active.id,
-      over?.id,
-    );
-    if (move) steps.move(move.from, move.to);
-  };
-
-  const automationStatus = watch('automationStatus');
-
-  /*
-    ================== The move this screen used to make quietly (§194) ==================
-
-    True while the Suite picker names a folder the case is not in yet — the editor's one preview
-    moment, and the analogue of the bulk dialog's dry run (§193). Until Save, the case is still
-    where it was and the Conditions panel below is still telling the truth; what has already been
-    decided is that every exception it holds ends.
-
-    `?? ''` on both sides, matching the picker's own encoding: '' is UNFILED and not "missing"
-    (§96), so a case filed nowhere compares equal to itself instead of reading as a move on mount.
-
-    THE PREDICTION THIS MAKES IS BOUNDED BY §98, and that is written down rather than assumed. A
-    move ends every stored decline because a decline names a `suite_condition` row, a suite is flat,
-    and two folders therefore share no attachment — `CaseConditions#ancestry` says a widening of
-    inheritance "is a decision with a slice behind it", and this is one of the places such a slice
-    has to come. The snackbar on the way out does NOT share the assumption: it reads what the saved
-    case no longer carries. So the record of what happened stays true under a widening while the
-    warning becomes the thing to fix, which is the right way round for the two to fail.
-  */
-  const movingFolder = mode === 'edit' && !!existing && (existing.suiteId ?? '') !== watch('suiteId');
 
   /*
     ============================ The autosave buffer (§128, D1) ============================
 
-    `test_case_draft` is a real table with a real writer, so the editor stops being a screen that
-    loses everything when a tab closes.
-
-    TWO BUFFERS, one per mode, behind one banner and one status line:
-
-      * EDIT — the server's, keyed `(case_id, user_id)` since `V64` (audit D1). It is yours, a
-        colleague's save no longer clears it, and what their save does instead is set `stale`.
-      * CREATE — the browser's. `test_case_draft.case_id` is a foreign key to `test_case`, so a case
-        being created still has nothing to key a server row on; §128 stated that and stopped there,
-        leaving the New Case form lossy. `useNewCaseDraft`'s header says why a `localStorage` buffer
-        is the right shape here rather than a smaller version of the server one.
-
-    The two share `useCaseAutosave`, the restore banner and `toCasePayload`/`fromCasePayload` — the
-    same argument that put the mapping in `caseSchema` in the first place. A second copy of the
-    restore flow for create mode is how a field wired into one buffer and forgotten in the other
-    comes back empty.
+    TWO BUFFERS, one per mode, behind one banner and one status line — the server's for an edit,
+    the browser's for a create. Both hold `toCasePayload`'s output; the RAW TEXT is buffered
+    beside them by `caseTextBuffer`, because the interesting document is the one that does not
+    parse and there is no payload for such a document (003 C4).
   */
   const draftQuery = useCaseDraft(projectId, mode === 'edit' ? existing?.id : undefined);
   const saveDraft = useSaveCaseDraft(projectId, existing?.id ?? '');
   const discardDraft = useDiscardCaseDraft(projectId, existing?.id ?? '');
   const newCaseDraft = useNewCaseDraft(projectId, mode === 'create');
 
-  /*
-    Whether the restore offer has been answered. `false` until the author accepts or dismisses it —
-    and it also becomes true on its own the moment the query resolves to no draft, which is the
-    ordinary case and must not require a decision nobody was asked for.
-
-    THIS GATES THE AUTOSAVE, and `useCaseAutosave`'s header spells out the five-step sequence that
-    happens without it: the first keystroke overwrites the very draft the editor is about to offer,
-    so the user is shown a restore prompt for work that no longer exists, and accepting it hands
-    back what they had already saved. Nothing errors. Nothing is logged.
-  */
   const [restoreDecided, setRestoreDecided] = useState(false);
-  /*
-    One offer, from whichever buffer this mode has. The create-mode draft carries no `lockVersion`
-    and is never `stale` — there is no saved case for it to be stale against, which is the one real
-    difference between the two and is expressed here rather than by a second banner.
-  */
   const offeredDraft:
     | { updatedAt: string; stale: boolean; content: CaseDraft['content'] }
     | null =
@@ -947,111 +789,70 @@ function CaseEditorForm({
           }
         : null
       : (draftQuery.data ?? null);
-  const promptOpen = !restoreDecided && offeredDraft !== null;
-  // The browser's buffer is read synchronously on mount, so create mode has nothing to wait for.
+  /*
+    The offer is made when EITHER buffer has something, and the text buffer alone is enough.
+
+    That arm is the one C4 is about: an author typing a scenario that does not parse yet has not
+    dirtied the form — nothing has been committed — so no payload draft was ever written. Their
+    work exists only as text, and offering nothing would lose exactly the work that is hardest to
+    retype.
+  */
+  const promptOpen = !restoreDecided && (offeredDraft !== null || bufferedText !== null);
   const draftSettled = mode === 'create' || draftQuery.isSuccess || draftQuery.isError;
 
-  /*
-    A failed draft read resolves the gate too, and that is a deliberate call rather than an
-    oversight. The alternative is an editor whose autosave never starts because one GET failed —
-    silently, since there is nothing on screen that could say so — which trades a small risk of
-    overwriting a draft we could not read for a certainty of buffering nothing at all for the rest
-    of the session. The status line below still reports what the buffer is doing.
-  */
   const autosaveEnabled =
-    (mode === 'create' || !!existing) &&
-    draftSettled &&
-    !promptOpen &&
-    isDirty &&
-    !isSubmitting;
+    (mode === 'create' || !!existing) && draftSettled && !promptOpen && isDirty && !isSubmitting;
 
-  /*
-    The autosave's whole-form subscription lives in `CaseDraftStatus`, NOT here — `const values =
-    watch()` on this component re-rendered the entire editor on every keystroke (21 renders for 20
-    characters, ~215 ms each), which is what pushed this screen's tests past vitest's per-test
-    budget on CI. That file's header has the measurements.
-  */
   const saveDraftContent = (content: Record<string, unknown>) =>
     mode === 'create'
       ? newCaseDraft.save(content)
       : saveDraft.mutateAsync({ lockVersion: existing?.lockVersion ?? 0, content });
 
   /**
-   * Puts the buffered draft back into the form.
+   * Puts the buffered work back — the payload into the form, and the raw text into the document.
    *
-   * `reset` rather than field-by-field `setValue`, because the draft is the whole form: setting
-   * the fields it carries would leave the fields it does not at whatever the saved case said,
-   * producing a hybrid that is neither the draft nor the case and that the author cannot tell
-   * apart from either.
+   * `keepDefaultValues`, and it is NOT `keepDirty`: the offer is answered on mount, before the
+   * author has typed, so `keepDirty` would preserve a dirty flag that currently stands at false —
+   * Save disabled with "Nothing has changed yet" on a form full of unsaved work.
    *
-   * `keepDefaultValues`, and it is NOT `keepDirty` — which was the first draft of this line and is
-   * the wrong option in a way that reads as right. `keepDirty` preserves the dirty *flag* as it
-   * currently stands, and at this moment it stands at **false**: the offer is answered on mount,
-   * before the author has typed anything. So the restored draft would land in a form the editor
-   * considers pristine — Save disabled with "Nothing has changed yet" on a form full of unsaved
-   * work, and the autosave gated off with it.
-   *
-   * `keepDefaultValues` keeps the *saved case* as the baseline and re-evaluates dirtiness against
-   * it, which is the question actually being asked: the restored draft differs from what the server
-   * has stored, so it is dirty, and it stops being dirty if the author edits it back.
+   * The text is restored **uncommitted** (`committedText` is left alone), which is the point: it
+   * may not parse, and the next blur or Save is what finds that out and says which line.
    */
   const restoreDraft = () => {
     if (offeredDraft) reset(fromCasePayload(offeredDraft.content), { keepDefaultValues: true });
+    if (bufferedText) setDocumentText(bufferedText.text);
+    if (mode === 'create') setStarted('WRITE');
     setRestoreDecided(true);
   };
 
   const dismissDraft = () => {
-    // Discards the row as well as the offer. Keeping it would re-offer the same draft on the next
-    // mount, after the author has already said no — and the autosave is about to overwrite it
-    // anyway, so leaving it would be a promise to keep something we are about to replace.
     if (mode === 'create') newCaseDraft.discard();
-    else discardDraft.mutate();
+    else if (offeredDraft) discardDraft.mutate();
+    clearCaseText(textKey);
     setRestoreDecided(true);
   };
 
-  const onSubmit = handleSubmit(async (data) => {
-    // `toCasePayload` is caseSchema's, shared with the autosave below. Two hand-written copies of
-    // this mapping is how a field wired into Save and forgotten in the buffer restores as empty —
-    // see the function's header.
+  const onValid = handleSubmit(async (data) => {
     const payload = toCasePayload(data);
 
     try {
       if (mode === 'edit' && existing) {
-        // The version we read is sent back, so a concurrent save is rejected rather than
-        // silently overwritten.
         const saved = await updateCase.mutateAsync({ ...payload, lockVersion: existing.lockVersion });
 
         /*
           §194. The declines this save asked to keep that the saved case does not carry — MEASURED
-          off the response, not predicted from the move. The form binds the complete set on every
-          save, and the response's two declined lists are what survived; the difference is what the
-          request ended. Read off `data` rather than `payload`, which is a `Record<string, unknown>`
-          — the deduplication `toCasePayload` applies to the same field is a property of the set
-          difference here rather than a second copy of the rule.
-
-          Gated on the folder having actually changed, because that is the only operation §192 lets
-          end one, and because a response served by anything less than the whole contract shape
-          would otherwise read as "the server dropped them all". The gate decides whether the
-          question is asked; the response still answers it.
-
-          THE HOLE, stated rather than left to be found: both sides of this subtraction are what a
-          list shows, and a decline whose library entry was retired is on no list (§187). Such a
-          row ends with the move like any other and is counted by neither term. It is §193's LD-4
-          hole arriving on the other path, and closing it needs the server to say what it ended —
-          which is exactly the field the bulk result now has and this endpoint does not.
+          off the response, not predicted from the move.
         */
         const kept = new Set(
           [...(saved.declinedPreconditions ?? []), ...(saved.declinedPostconditions ?? [])]
             .map((ref) => ref.id),
         );
         const ended =
-          mode === 'edit' && (existing.suiteId ?? '') !== data.suiteId
+          (existing.suiteId ?? '') !== data.suiteId
             ? [...new Set(data.declinedConditionIds)].filter((id) => !kept.has(id))
             : [];
 
-        // One snackbar, composed — `CaseListPage`'s treatment of the same event (§193), and not a
-        // success whatever the save otherwise did. It is the only record of it that survives the
-        // navigation on the next line.
+        clearCaseText(textKey);
         enqueueSnackbar(
           ended.length
             ? `Saved ${saved.key} as v${saved.currentVersionNo}`
@@ -1062,18 +863,12 @@ function CaseEditorForm({
         navigate(`/projects/${projectId}/cases/${saved.id}`);
       } else {
         const created = await createCase.mutateAsync(payload);
-        // The browser buffer's "and clears the row" (D1) — the same clause V1 writes about the
-        // server one, and it fires for the same reason: a buffer that survived its own create would
-        // offer, on the next visit to New Case, a copy of a case that now exists. AFTER the await,
-        // so a refused create keeps the work rather than clearing it on the way to an error.
         newCaseDraft.discard();
+        clearCaseText(textKey);
         enqueueSnackbar(`Created ${created.key}`, { variant: 'success' });
         navigate(`/projects/${projectId}/cases/${created.id}`);
       }
     } catch (error) {
-      // Field-keyed server errors land on their fields; only genuinely non-field failures
-      // become a banner. A "Something went wrong" message over a form the server told us
-      // how to fix is a wasted round trip for the user.
       if (error instanceof ApiError && error.hasFieldErrors) {
         const entries = Object.entries(error.fieldErrors ?? {});
         for (const [field, messages] of entries) {
@@ -1087,24 +882,38 @@ function CaseEditorForm({
         type: 'server',
         message:
           error instanceof ApiError
-            ? error.status === 409
-              ? error.detail
-              : error.detail
+            ? error.detail
             : "Couldn't save the case. Check your connection and try again.",
       });
     }
-  },
-  /*
-    THE SECOND ARGUMENT, and it is the whole of the refused-submit story.
+  }, () => setShowSummary(true));
 
-    Without it a refused submit ran no code at all: the button did nothing, the offending field was
-    typically off screen in a panel the author had not scrolled to, and nothing said so. `showSummary`
-    latches on the first refusal and stays on — the summary's rows are read from `errors`, so it
-    empties itself as the author fixes them rather than needing to be dismissed.
-  */
-  () => setShowSummary(true));
+  /**
+   * Save commits the text first, and **is refused while it does not parse** (003 C4).
+   *
+   * It does not save a partial parse and it does not silently keep the last good `steps`: a
+   * refusal returns before `handleSubmit` runs at all, so the payload the server would have been
+   * sent is never built. The sentence names the line, beside the text, where the author is
+   * looking.
+   */
+  const onSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!(await commit(documentText))) {
+      setShowSummary(true);
+      return;
+    }
+    await onValid();
+  };
 
   const summaryRows = summarizeErrors(errors);
+  const inheritedPreCount = inheritedPre.length;
+
+  /** Where a corpus pick lands: one more step line at the end of the document. */
+  const insertFromCorpus = (suggestion: StepSuggestion) => {
+    const keyword = nextKeyword(liveSteps(getValues('steps'))) === 'GIVEN' ? 'Given' : 'And';
+    const line = `  ${keyword} ${suggestion.action}`;
+    setDocumentText((current) => (current.trim().length === 0 ? line : `${current.replace(/\n+$/, '')}\n${line}`));
+  };
 
   return (
     <Box component="form" onSubmit={onSubmit} noValidate aria-busy={isSubmitting} data-testid={`${TestIdPrefix}.Form`}>
@@ -1128,28 +937,9 @@ function CaseEditorForm({
             </Tooltip>
           )
         }
-        /*
-          NO ACTIONS SLOT, and this page is the deliberate exception to the app's header-actions
-          convention. Everywhere else the primary action sits beside the title because the page is
-          about one object and fits on a screen. This one is a form five panels tall whose author
-          finishes at the BOTTOM of a step list of unbounded length — a Save that only exists above
-          the fold is a Save they have to scroll back to, past the work they were checking. It
-          moved into the sticky commit bar at the foot of the form, once, so there is still exactly
-          one `CaseEditor.Submit` on the screen.
-        */
       />
 
-      {/*
-        The restore offer (§128). Rendered as a banner above the form rather than as a modal,
-        deliberately: a modal on mount would block the author from reading the case underneath, and
-        the decision it asks for is one that only makes sense next to what is currently on screen —
-        "restore this instead of that".
-
-        `severity="info"`, not `warning`: nothing is wrong. There is unsaved work, which is good
-        news, and a warning icon on a screen about somebody's own writing reads as a problem with
-        it.
-      */}
-      {promptOpen && offeredDraft && (
+      {promptOpen && (
         <Alert
           severity="info"
           sx={{ mb: 2 }}
@@ -1170,16 +960,18 @@ function CaseEditorForm({
             </Stack>
           }
         >
-          <AlertTitle>Your unsaved changes from {formatAge(offeredDraft.updatedAt)}</AlertTitle>
-          {/*
-            ~~WHO typed it, and this is not decoration: there is ONE buffer per case, so the draft
-            on offer may be a colleague's.~~ → V64 (audit D1) keys the row on the reader, so it is
-            always yours and `updatedBy` left the contract with the hazard it disclosed. What a
-            colleague's save produces is the `stale` sentence below — which is the one that was
-            doing the work all along.
-          */}
+          <AlertTitle>
+            Your unsaved changes from {formatAge((offeredDraft ?? bufferedText)?.updatedAt ?? '')}
+          </AlertTitle>
           You left work on this case without saving it.
-          {offeredDraft.stale && (
+          {bufferedText && !offeredDraft && (
+            <>
+              {' '}
+              {/* The text-only arm: work that never parsed, so no payload was ever buffered. */}
+              <strong>It had not been read as a scenario yet, so it comes back exactly as typed.</strong>
+            </>
+          )}
+          {offeredDraft?.stale && (
             <>
               {' '}
               <strong>
@@ -1197,11 +989,6 @@ function CaseEditorForm({
         </Alert>
       )}
 
-      {/*
-        Keyed on the attempt, so a second refused submit re-mounts it and focus lands here again —
-        see the component's header. `errors.root` above is the server's refusal and stays separate:
-        it names something the author cannot fix by editing a field.
-      */}
       {showSummary && summaryRows.length > 0 && (
         <ErrorSummary
           key={submitCount}
@@ -1214,64 +1001,95 @@ function CaseEditorForm({
       <Stack direction={{ xs: 'column', lg: 'row' }} sx={{ gap: 2.5, alignItems: 'flex-start' }}>
         <Stack sx={{ gap: 2.5, flex: 1, minWidth: 0, width: '100%' }}>
           {/*
-            "What this proves" — the SAME words the read view uses (`CaseDetail.Summary`). It was
-            "What this case proves" here and "What this proves" there, which is design-audit
-            finding 19: the two most-used views of the core entity renaming a panel between read
-            and write. One name, and the reader learns it once.
+            THE THREE STARTS (003 Phase 1) — on create, and not on edit.
+
+            An empty editor is not a blank page problem the author should have to solve alone, and
+            the render draws three answers to it. On an EDIT there is already a case on screen, so
+            offering to start from something else would be offering to overwrite it.
           */}
-          <Panel title="What this proves" testId={`${TestIdPrefix}.Summary`}>
-            {/*
-              MEASURE, not width. Four full-bleed prose fields on a 1900px monitor put ~180
-              characters on a line, which is more than twice the readable maximum — and the panel
-              was four of them stacked, so the one required field on this screen looked like the
-              first of four equal obligations. Capped, and the two fields that answer the same
-              question from opposite ends (what we are checking / what should then be true) sit
-              side by side where they can be read against each other.
-            */}
+          {mode === 'create' && started === null && !promptOpen && (
+            <CaseStarts
+              projectId={projectId}
+              onWrite={() => setStarted('WRITE')}
+              onPaste={() => {
+                setStarted('PASTE');
+                setPasting(true);
+              }}
+              onText={(text) => {
+                setStarted('CASE');
+                setDocumentText(splitFeatureLine(text).body);
+              }}
+            />
+          )}
+
+          <Panel
+            title="The case"
+            testId={`${TestIdPrefix}.Document.Panel`}
+            actions={
+              <Button
+                size="small"
+                onClick={() => setPasting(true)}
+                data-testid={`${TestIdPrefix}.Steps.Paste`}
+              >
+                Paste Gherkin
+              </Button>
+            }
+          >
+            <Box>
+              {migrationBlocked && (
+                <Alert severity="warning" sx={{ mb: 2 }} data-testid={`${TestIdPrefix}.NotMigrated`}>
+                  <AlertTitle>Not yet migrated</AlertTitle>
+                  This case&rsquo;s scenario is still stored as text, so it cannot be edited here and
+                  cannot be saved. Ask your operator to run{' '}
+                  <Identifier>migrate-gherkin-source</Identifier>. Nothing below has been changed.
+                </Alert>
+              )}
+              {render.isError && (
+                <Alert severity="error" sx={{ mb: 2 }} data-testid={`${TestIdPrefix}.RenderFailed`}>
+                  The case could not be rendered as text. Reload before editing — saving now would
+                  write an empty scenario over it.
+                </Alert>
+              )}
+              <CaseDocument
+                projectId={projectId}
+                text={documentText}
+                onTextChange={setDocumentText}
+                onCommit={() => void commit(documentText)}
+                refusal={refusal}
+                featureName={featureName}
+                inheritedPreconditionCount={inheritedPreCount}
+                readOnly={migrationBlocked}
+                testIdPrefix={TestIdPrefix}
+              />
+            </Box>
+          </Panel>
+
+          {/*
+            THE TWO FIELDS THE TEXT DOES NOT CARRY AND THE RAIL DOES NOT PLACE.
+
+            003's *Fields that must find a home* table settles eleven fields; `description` and
+            `expectedOutcome` are not among them, and they are not in the five the text represents
+            either. Dropping them would make two persisted fields uneditable in the only case
+            editor there is — a silent narrowing of the product, not a simplification. They are
+            prose, so they sit in the narrative column under the document rather than in a 320px
+            rail that holds only short enumerable values.
+          */}
+          <Panel title="Notes" testId={`${TestIdPrefix}.Notes`}>
             <Stack sx={{ gap: 2, maxWidth: 920 }}>
               <TextField
-                label="Title"
-                required
+                label="Expected outcome"
                 fullWidth
-                error={!!errors.title}
-                helperText={errors.title?.message ?? 'One sentence stating what is verified.'}
-                slotProps={{
-                  htmlInput: { 'data-testid': `${TestIdPrefix}.Field.Title` },
-                  formHelperText: { role: errors.title ? 'alert' : undefined },
-                }}
-                {...register('title')}
+                multiline
+                minRows={2}
+                helperText="The case-level outcome, alongside the per-step expected results."
+                slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Field.ExpectedOutcome` } }}
+                {...register('expectedOutcome')}
               />
-              <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 2 }}>
-                <TextField
-                  label="Objective"
-                  fullWidth
-                  multiline
-                  minRows={2}
-                  sx={{ flex: 1, minWidth: 0 }}
-                  error={!!errors.objective}
-                  helperText={errors.objective?.message ?? 'Why this case exists.'}
-                  slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Field.Objective` } }}
-                  {...register('objective')}
-                />
-                <TextField
-                  label="Expected outcome"
-                  fullWidth
-                  multiline
-                  minRows={2}
-                  sx={{ flex: 1, minWidth: 0 }}
-                  helperText="The case-level outcome, alongside the per-step expected results."
-                  slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Field.ExpectedOutcome` } }}
-                  {...register('expectedOutcome')}
-                />
-              </Stack>
               <TextField
                 label="Description"
                 fullWidth
                 multiline
                 minRows={2}
-                // Last and narrowest of the three, because it is the only one of them nothing reads
-                // in a hurry: the grid shows the title, a run shows the objective and the outcome.
-                sx={{ maxWidth: 680 }}
                 helperText="Optional background — anything a reader needs that the steps assume."
                 slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Field.Description` } }}
                 {...register('description')}
@@ -1279,437 +1097,42 @@ function CaseEditorForm({
             </Stack>
           </Panel>
 
-          {/*
-            ~~Conditions sit between Classification and Automation deliberately.~~ → they sat in
-            the RAIL, and the argument was about their neighbours rather than about the column.
-            The reasoning it gave is the reason they are here now: they are part of what the case
-            IS to a person running it — the setup they must have done before the first step — so
-            they belong in the narrative column, above the procedure that assumes them, not in the
-            metadata rail beside it. The rail was also where the tallest content on the screen had
-            collected: four unrelated concerns in 320px next to a main column that ended halfway
-            down the page.
-          */}
-          <Panel title="Conditions" testId={`${TestIdPrefix}.Conditions`}>
-            {/*
-              The decline toggle is bound through its OWN Controller wrapping both panels, rather
-              than through each panel's. `declinedConditionIds` is one array carrying both kinds
-              (an attachment id determines its kind), so two Controllers over one field would be
-              two independent copies of it — and the last panel to fire would overwrite the other
-              panel's toggles with a value it read before they happened.
-            */}
-            <Controller
-              control={control}
-              name="declinedConditionIds"
-              render={({ field: declines }) => {
-                const toggle = (attachmentId: string, next: boolean) =>
-                  declines.onChange(
-                    next
-                      ? [...declines.value, attachmentId]
-                      : declines.value.filter((id: string) => id !== attachmentId),
-                  );
-
-                /*
-                  The rows the pending move will end (§194) — resolved from what is already on
-                  screen, which is why they can be NAMED. `inheritedPre`/`inheritedPost` carry the
-                  title the panel renders; a count on its own would leave the author to work out
-                  which of four rules they are about to lose.
-
-                  Here rather than in either panel: one array carries both kinds, so a per-panel
-                  alert would state the same event twice on a case declining one precondition and
-                  one postcondition, and each copy would name half of it.
-                */
-                const ending = movingFolder
-                  ? [...inheritedPre, ...inheritedPost].filter((ref) =>
-                      declines.value.includes(ref.id),
-                    )
-                  : [];
-
-                return (
-                  <Stack sx={{ gap: 3 }}>
-                    {/*
-                      `warning`, on the same grounds §193 raised the bulk preview's alert to it: a
-                      skip is something the operation will not do, and this is something it will
-                      do that nobody asked for. The consequence sentence is the one the dialog
-                      uses, because it is the same consequence.
-                    */}
-                    {ending.length > 0 && (
-                      <Alert
-                        severity="warning"
-                        data-testid={`${TestIdPrefix}.Conditions.EndingDeclines`}
-                      >
-                        <AlertTitle>
-                          Moving this case ends {plural(ending.length, 'condition exception')}
-                        </AlertTitle>
-                        <Typography variant="body2">
-                          A folder&rsquo;s rule can only be declined by a case filed in that
-                          folder, so {ending.length === 1 ? 'this exception' : 'these exceptions'}
-                          {' '}end with the move. Moving it back will not bring
-                          {ending.length === 1 ? ' it' : ' them'} back.
-                        </Typography>
-                        <Box component="ul" sx={{ pl: 3, my: 1 }}>
-                          {ending.map((ref) => (
-                            <Typography component="li" variant="body2" key={ref.id}>
-                              {ref.title}
-                              {ref.inheritedFrom ? ` — from ${ref.inheritedFrom}` : null}
-                            </Typography>
-                          ))}
-                        </Box>
-                      </Alert>
-                    )}
-                    <Controller
-                      control={control}
-                      name="preconditionIds"
-                      render={({ field }) => (
-                        <ConditionsPanel
-                          kind="PRE"
-                          projectId={projectId}
-                          testId={`${TestIdPrefix}.Preconditions`}
-                          value={field.value}
-                          inherited={inheritedPre}
-                          declined={declines.value}
-                          leavingFolder={movingFolder}
-                          onToggleDecline={toggle}
-                          onChange={field.onChange}
-                          known={createdConditions}
-                          onCreate={() => setConditionDialog({ kind: 'PRE', condition: null })}
-                          onEdit={(condition) => setConditionDialog({ kind: 'PRE', condition })}
-                        />
-                      )}
-                    />
-                    <Controller
-                      control={control}
-                      name="postconditionIds"
-                      render={({ field }) => (
-                        <ConditionsPanel
-                          kind="POST"
-                          projectId={projectId}
-                          testId={`${TestIdPrefix}.Postconditions`}
-                          value={field.value}
-                          inherited={inheritedPost}
-                          declined={declines.value}
-                          leavingFolder={movingFolder}
-                          onToggleDecline={toggle}
-                          onChange={field.onChange}
-                          known={createdConditions}
-                          onCreate={() => setConditionDialog({ kind: 'POST', condition: null })}
-                          onEdit={(condition) => setConditionDialog({ kind: 'POST', condition })}
-                        />
-                      )}
-                    />
-                  </Stack>
-                );
-              }}
-            />
-          </Panel>
-
-          <Panel
-            title="Steps"
-            testId={`${TestIdPrefix}.Steps`}
-            actions={
-              <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
-                <Button
-                  size="small"
-                  onClick={() => setPasting(true)}
-                  data-testid={`${TestIdPrefix}.Steps.Paste`}
-                >
-                  Paste Gherkin
-                </Button>
-              </Stack>
-            }
-          >
-            {/*
-              ONE EDITOR, ONE FORMAT (§256). §255 made both lenses the same rows; this slice
-              removed the toggle that chose between them, because what it chose was whether the
-              keyword was required — and the keyword is now proposed on every row as it is started
-              (`nextKeyword`), so the permissive side of that choice only ever produced a row the
-              form refused. `CaseEditor.StepFormat.*` went with it.
-            */}
-            <Stack sx={{ gap: 2 }}>
-                {/*
-                  `root?.message` as well as `message`, and the first of the two is the one that
-                  fires. A refinement whose `path` is a FIELD ARRAY lands on `errors.steps.root` —
-                  RHF keeps `errors.steps` itself as the per-row array and reserves `.root` for an
-                  error about the list as a whole. Read only as `errors.steps.message`, "add at
-                  least one step" was computed, blocked the submit, and rendered NOTHING: the form
-                  simply did not respond to the button. Both are read because the server's field
-                  errors are mapped onto `steps` by `setError`, which does write `.message`.
-                */}
-                {(errors.steps?.root?.message ?? errors.steps?.message) && (
-                  <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.Steps.Error`}>
-                    {errors.steps.root?.message ?? errors.steps.message}
-                  </Alert>
-                )}
-
-                <DndContext
-                  sensors={dragSensors}
-                  collisionDetection={closestCenter}
-                  // Restricted to the vertical axis: the list is one column, so horizontal
-                  // movement is a drag drifting away from the drop it means rather than a
-                  // gesture with a meaning of its own.
-                  modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-                  onDragEnd={onStepDragEnd}
-                >
-                  <SortableContext
-                    items={steps.fields.map((field) => field.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <Stack sx={{ gap: 2 }}>
-                {steps.fields.map((field, index) => (
-                  <SortableStep key={field.id} id={field.id}>
-                    {(handle) => (
-                      <>
-                    {/*
-                      ONE LINE for the row's identity, its keyword and its sentence.
-
-                      These used to be two: a full-width strip carrying the handle, "Step 1", the
-                      keyword select and three buttons, and then the action underneath it. That is
-                      ~48px of chrome per step before a word is read, and on a ten-step case it is
-                      half the panel. The action is the row — everything else is an adjunct to it,
-                      so everything else sits on its line.
-                    */}
-                    <Stack
-                      direction={{ xs: 'column', md: 'row' }}
-                      sx={{ alignItems: { md: 'flex-start' }, gap: 1 }}
-                    >
-                      <Stack
-                        direction="row"
-                        sx={{ alignItems: 'center', gap: 0.5, flexShrink: 0, pt: { md: 1 } }}
-                      >
-                      {/*
-                        The drag handle, and it is a handle rather than the whole row being
-                        draggable: every row is three text fields, and a draggable row makes
-                        selecting a word inside one of them start a drag instead.
-                      */}
-                      <Tooltip title="Drag to reorder. The arrows do the same thing from the keyboard.">
-                        <IconButton
-                          size="small"
-                          disableRipple
-                          {...handle.attributes}
-                          {...handle.listeners}
-                          aria-label={`Reorder step ${index + 1}`}
-                          data-testid={`${TestIdPrefix}.Steps.DragHandle`}
-                          sx={{ cursor: 'grab', touchAction: 'none' }}
-                        >
-                          <DragIndicatorIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Identifier variant="muted">{index + 1}</Identifier>
-                      </Stack>
-                      <StepKeywordCell
-                        control={control}
-                        index={index}
-                        error={errors.steps?.[index]?.keyword?.message}
-                      />
-                      <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
-                        <StepActionField
-                          projectId={projectId}
-                          control={control}
-                          index={index}
-                          error={errors.steps?.[index]?.action?.message}
-                          /* The corpus sentence is the same on every row — said once, on the first. */
-                          hint={index === 0}
-                          /*
-                            Typing in the LAST row appends the next one, so the list always ends in a
-                            blank invitation. Guarded on being last rather than on "this row was
-                            empty a moment ago": one keystroke makes this row non-last, so the next
-                            keystroke cannot append a second time, and a paste appends exactly once.
-                          */
-                          onType={(value) => {
-                            if (index === steps.fields.length - 1 && value.trim().length > 0) {
-                              steps.append(blankStep(nextKeyword(getValues('steps'))), NO_FOCUS);
-                            }
-                          }}
-                          /*
-                            A pick fills all three fields, which is the whole point of the corpus
-                            carrying the triple: completing the action alone would leave exactly the
-                            two fields that distinguish two similar steps blank, and the author would
-                            fill them from memory.
-
-                            `shouldDirty` on all three, so picking into an untouched edit form enables
-                            Save — without it the change is on screen and the button says nothing has
-                            changed yet.
-                          */
-                          onPick={(suggestion) => {
-                            /*
-                              ONE write, at `steps.${index}` — the name the data cell's `Controller`
-                              below subscribes to. Three writes to the sibling paths do not reach it,
-                              and the corpus triple is a STRUCTURED step, so a pick onto a row that is
-                              currently holding a doc string or a table has to clear the other two:
-                              `test_step` allows at most one of the three (`V69`'s `num_nonnulls`
-                              check), and three sibling writes leave a row the server refuses.
-                            */
-                            setValue(
-                              `steps.${index}`,
-                              {
-                                ...getValues(`steps.${index}`),
-                                action: suggestion.action,
-                                testData: suggestion.testData ?? '',
-                                docString: null,
-                                dataTable: null,
-                              },
-                              { shouldDirty: true },
-                            );
-                            // And `expectedResult` on its OWN exact path: it is an uncontrolled
-                            // `register` input, whose DOM value `setValue` writes through the ref it
-                            // holds for that name — a write to the parent object updates the form
-                            // state and leaves the box on screen empty.
-                            setValue(`steps.${index}.expectedResult`, suggestion.expectedResult ?? '', {
-                              shouldDirty: true,
-                            });
-                            if (index === steps.fields.length - 1) {
-                              steps.append(blankStep(nextKeyword(getValues('steps'))), NO_FOCUS);
-                            }
-                          }}
-                        />
-                      </Box>
-                      <Stack
-                        direction="row"
-                        className="stepTools"
-                        sx={{
-                          flexShrink: 0,
-                          pt: { md: 0.5 },
-                          opacity: 0.55,
-                          transition: 'opacity 150ms',
-                        }}
-                      >
-                      {/*
-                        Reordering is safe because a step keeps its stable id: results and
-                        evidence anchor to the id, not the position, so moving a step never
-                        reassigns the evidence attached to it. True of the drag handle above
-                        as well — both end in the same `steps.move`.
-
-                        KEPT after §94 added the drag, not superseded by it. These are the
-                        keyboard and screen-reader path, they are the only way to move a step by
-                        exactly one place deliberately, and they work on a touch screen where a
-                        long-press drag inside a scrolling form is a fight.
-                      */}
-                      <IconButton
-                        size="small"
-                        disabled={index === 0}
-                        onClick={() => steps.move(index, index - 1)}
-                        aria-label={`Move step ${index + 1} up`}
-                        data-testid={`${TestIdPrefix}.Steps.MoveUp`}
-                      >
-                        <ArrowUpwardIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        disabled={index === steps.fields.length - 1}
-                        onClick={() => steps.move(index, index + 1)}
-                        aria-label={`Move step ${index + 1} down`}
-                        data-testid={`${TestIdPrefix}.Steps.MoveDown`}
-                      >
-                        <ArrowDownwardIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => {
-                          steps.remove(index);
-                          // Removing the last row would otherwise leave no blank one, and with the
-                          // Add button gone there would be no way back to writing a step.
-                          ensureTrailingBlank();
-                        }}
-                        aria-label={`Remove step ${index + 1}`}
-                        data-testid={`${TestIdPrefix}.Steps.Remove`}
-                      >
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
-                      </Stack>
-                    </Stack>
-
-                    <Stack sx={{ gap: 1.5, mt: 1 }}>
-                      {/*
-                        Bottom-aligned, not top-aligned. The left cell carries its mode switch
-                        ABOVE its field, so aligning the two columns by their tops put the data
-                        input a switch's height below the expected-result input beside it — two
-                        boxes holding the same kind of thing, drawn on two different lines.
-                        Aligning by the bottom lines the two inputs up in every mode.
-                      */}
-                      <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1.5, alignItems: { sm: 'flex-end' } }}>
-                        {/*
-                          The three data spellings behind one control (§255) — `Controller` rather
-                          than `register` because the cell writes three fields at once when the
-                          mode changes, which is exactly what makes the "at most one of them" rule
-                          unreachable rather than merely refused.
-                        */}
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Controller
-                            control={control}
-                            name={`steps.${index}`}
-                            render={({ field }) => (
-                              <StepDataCell
-                                index={index}
-                                testIdPrefix={TestIdPrefix}
-                                value={{
-                                  testData: field.value.testData ?? '',
-                                  docString: field.value.docString,
-                                  dataTable: field.value.dataTable,
-                                }}
-                                onChange={(next) => field.onChange({ ...field.value, ...next })}
-                                error={errors.steps?.[index]?.testData?.message}
-                              />
-                            )}
-                          />
-                        </Box>
-                        <TextField
-                          label="Expected result"
-                          fullWidth
-                          multiline
-                          sx={{ flex: 1 }}
-                          slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Steps.Field.ExpectedResult` } }}
-                          {...register(`steps.${index}.expectedResult`)}
-                        />
-                      </Stack>
-                    </Stack>
-                      </>
-                    )}
-                  </SortableStep>
-                ))}
-                    </Stack>
-                  </SortableContext>
-                </DndContext>
-
-                {/*
-                  This panel has NO buttons under the list, and both absences are decisions.
-
-                  "Add step" went in §94: the last row is always blank and typing into it appends
-                  the next one, so a button that adds an eighth empty row to a list already ending
-                  in one is an affordance for something that has already happened.
-                  `CaseEditor.Steps.AddButton` is gone with it — a locator, not just a control, so
-                  anything driving this screen looks for the blank row instead.
-
-                  "Insert shared step" went in §239, and `CaseEditor.Steps.InsertSharedButton` with
-                  it. Step reuse is the corpus in the action field: it needs nobody to populate it,
-                  and a pick copies text into THIS case. The library it replaced was the other
-                  mechanism half-built — the picker wrote the entry's title into `action` and set a
-                  reference nothing on any read path ever resolved.
-                */}
-            </Stack>
-          </Panel>
-
           {mode === 'edit' && (
             <Panel title="Change note" testId={`${TestIdPrefix}.ChangeComment`}>
-              <TextField
-                label="What changed, and why"
-                fullWidth
-                multiline
-                minRows={2}
-                // Deliberately optional: mandatory comments produce a thousand entries
-                // reading "update", which is worse than none because they look informative.
-                helperText="Optional. It appears on the version timeline, so make it worth reading."
-                slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Field.ChangeComment` } }}
-                {...register('changeComment')}
-              />
+              <Box>
+                <TextField
+                  label="What changed, and why"
+                  fullWidth
+                  multiline
+                  minRows={2}
+                  helperText="Optional. It appears on the version timeline, so make it worth reading."
+                  slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Field.ChangeComment` } }}
+                  {...register('changeComment')}
+                />
+              </Box>
             </Panel>
           )}
         </Stack>
 
         {/*
-          The rail is METADATA ONLY since Conditions left it: where the case is filed, how it is
-          classified, and how it is executed. All of it is set-once-and-forget, none of it grows
-          with the case, and none of it is what the author came here to write — which is why it can
-          be pinned. `flex-start` on the row above is what makes `sticky` work at all here; a
-          stretched flex child has no room to move within.
+          ===================================== THE RAIL =====================================
+
+          Seven rows — Suite, Priority, Automation, Duration, Preconditions, Postconditions,
+          Classification — and **every one of them is a real focusable control with a native
+          role.** The render called it "a read-only summary you click to change" and drew the rows
+          as `div.kv` spans; that is UX#117 *Compact Control Semantics* (Critical, *"don't use a
+          clickable div"*) with UX#62 and UX#114 beside it, and the failure it produces is the
+          `NOT_AUTOMATABLE` refusal landing on a field inside something the author reads as a
+          summary. `ui-reasoning.csv` row 16 makes keyboard operability a must_have for a
+          productivity tool, and a rail nobody can Tab into fails that outright.
+
+          Row count is not the constraint; VALUE WIDTH is. Only short enumerable values sit on the
+          face — the automation key, the condition lists and the classification chips render as a
+          count plus a disclosure.
+
+          It is present on the BLANK STATE too, with defaults and the Suite prefilled from context
+          (frame B draws no rail; a new case still needs a suite). And it collapses **on this route
+          only** — `position: sticky` here, not a global chrome change.
         */}
         <Box
           sx={{
@@ -1720,122 +1143,49 @@ function CaseEditorForm({
           }}
         >
           <Stack sx={{ gap: 2.5 }}>
-            <Panel title="Placement" testId={`${TestIdPrefix}.Placement`}>
-              <Controller
-                control={control}
-                name="suiteId"
-                render={({ field, fieldState }) => (
-                  <TextField
-                    select
-                    label="Suite"
-                    fullWidth
-                    value={field.value}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                    error={!!fieldState.error}
-                    helperText={
-                      fieldState.error?.message ??
-                      (field.value
-                        ? undefined
-                        : 'Unfiled. It still appears in the grid, and any suite whose tags it carries.')
-                    }
-                    slotProps={{
-                      select: { native: false, SelectDisplayProps: selectTestId(`${TestIdPrefix}.Field.Suite`) },
-                      formHelperText: { role: fieldState.error ? 'alert' : undefined },
-                    }}
-                  >
-                    {/*
-                      An explicit choice rather than an empty first row (§96). A suite is a
-                      resolvable collection now — a case reaches one by being filed, by being added
-                      to it, or by carrying its tags — so "nowhere" is a real answer and not a
-                      field somebody forgot. A blank option reads as the latter, which is exactly
-                      the impression this slice exists to remove.
-                    */}
-                    <MenuItem value="">
-                      <Box component="span" sx={{ color: 'text.secondary' }}>
-                        Not filed
-                      </Box>
-                    </MenuItem>
-                    {/*
-                      No indentation any more (§98): the depth came from `suite.path`, and a flat
-                      suite has no depth to draw. What is left is a plain list of names, sorted the
-                      same way the rail sorts them so the picker and the rail read alike.
-                    */}
-                    {[...(suites.data ?? [])]
-                      .sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key))
-                      .map((suite) => (
-                        <MenuItem key={suite.id} value={suite.id}>
-                          {suite.name}
-                        </MenuItem>
-                      ))}
-                  </TextField>
-                )}
-              />
-              <Controller
-                control={control}
-                name="tags"
-                render={({ field, fieldState }) => (
-                  <Autocomplete
-                    multiple
-                    freeSolo
-                    /*
-                      The tags already in use, most-used first — `GET /projects/{id}/tags`.
-
-                      ~~No options list.~~ → **suggested since the tag-reuse slice.** The原 note
-                      original note said a curated vocabulary is what left `shared_step` empty, and that is
-                      still true and still the reason this list is DERIVED: a tag appears here
-                      because a case carries it, so it cannot disagree with the grid, and nobody has
-                      to populate it. `freeSolo` stays, so an unlisted tag is still typeable — the
-                      endpoint is a picker's list and never a validator's.
-
-                      `filterSelectedOptions` keeps a tag already on this case out of the dropdown;
-                      re-picking it is a no-op the `Set` below would swallow silently, which reads
-                      as a dead menu row.
-                    */
-                    options={(projectTags.data ?? []).map((usage) => usage.tag)}
-                    filterSelectedOptions
-                    value={field.value}
-                    onChange={(_event, value) =>
-                      // Trimmed and de-duplicated as they are entered, because `case_tag`'s key
-                      // says a tag list is a set: `smoke` typed twice is one chip, not an error
-                      // about a chip the author cannot see twice.
-                      field.onChange([
-                        ...new Set(value.map((tag) => tag.trim()).filter((tag) => tag !== '')),
-                      ])
-                    }
-                    onBlur={field.onBlur}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Tags"
-                        error={!!fieldState.error}
-                        helperText={
-                          fieldState.error?.message ??
-                          'Press Enter after each. A suite claiming one of these holds this case.'
-                        }
-                        slotProps={{
-                          // `...params.slotProps` FIRST, and this is not tidiness. MUI puts the
-                          // selected chips in `slotProps.input.startAdornment` and the field's ref
-                          // and ARIA wiring in `slotProps.htmlInput`; an object that merely adds a
-                          // testid REPLACES the lot, so every tag is held by the form, sent on
-                          // save, and invisible on screen — the author types it, sees nothing, and
-                          // types it again. Both gates were green when this was wrong.
-                          ...params.slotProps,
-                          htmlInput: {
-                            ...params.slotProps?.htmlInput,
-                            'data-testid': `${TestIdPrefix}.Field.Tags`,
-                          },
-                          formHelperText: { role: fieldState.error ? 'alert' : undefined },
-                        }}
-                      />
-                    )}
-                  />
-                )}
-              />
-            </Panel>
-
-            <Panel title="Classification" testId={`${TestIdPrefix}.Classification`}>
+            <Panel title="This case" testId={`${TestIdPrefix}.Rail`}>
               <Stack sx={{ gap: 2 }}>
+                <Controller
+                  control={control}
+                  name="suiteId"
+                  render={({ field, fieldState }) => (
+                    <TextField
+                      select
+                      label="Suite"
+                      fullWidth
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      error={!!fieldState.error}
+                      helperText={
+                        fieldState.error?.message ??
+                        (field.value
+                          ? undefined
+                          : 'Unfiled. It still appears in the grid, and any suite whose tags it carries.')
+                      }
+                      slotProps={{
+                        select: { native: false, SelectDisplayProps: selectTestId(`${TestIdPrefix}.Field.Suite`) },
+                        formHelperText: { role: fieldState.error ? 'alert' : undefined },
+                      }}
+                    >
+                      {/* An explicit choice rather than an empty first row (§96): "nowhere" is a
+                          real answer, and a blank option reads as a field somebody forgot. */}
+                      <MenuItem value="">
+                        <Box component="span" sx={{ color: 'text.secondary' }}>
+                          Not filed
+                        </Box>
+                      </MenuItem>
+                      {[...(suites.data ?? [])]
+                        .sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key))
+                        .map((suite) => (
+                          <MenuItem key={suite.id} value={suite.id}>
+                            {suite.name}
+                          </MenuItem>
+                        ))}
+                    </TextField>
+                  )}
+                />
+
                 <Controller
                   control={control}
                   name="priority"
@@ -1846,6 +1196,9 @@ function CaseEditorForm({
                       fullWidth
                       value={field.value}
                       onChange={field.onChange}
+                      // `severity` keeps its `severity: data.priority` mirror in the payload —
+                      // dropping it would leave the stored value stale, because PATCH is a merge.
+                      helperText="Also recorded as the case's severity."
                       slotProps={{
                         select: { SelectDisplayProps: selectTestId(`${TestIdPrefix}.Field.Priority`) },
                       }}
@@ -1858,67 +1211,18 @@ function CaseEditorForm({
                     </TextField>
                   )}
                 />
-                <TextField
-                  label="Estimated duration (seconds)"
-                  type="number"
-                  fullWidth
-                  error={!!errors.estimatedDurationSec}
-                  helperText={errors.estimatedDurationSec?.message}
-                  slotProps={{
-                    htmlInput: { 'data-testid': `${TestIdPrefix}.Field.EstimatedDuration`, min: 0 },
-                    formHelperText: { role: errors.estimatedDurationSec ? 'alert' : undefined },
-                  }}
-                  {...register('estimatedDurationSec')}
-                />
-                {/*
-                  Every dimension the project offers, editable — Test Type, Test Level, Execution
-                  Phase and the Feature tree. This was read-only for the whole life of the module,
-                  on the stated grounds that a flat select "would let someone set a parent where a
-                  leaf is required": there is no leaf-only rule anywhere in the specs, and the real
-                  reason a select is wrong is that it loses the parentage. Hence a tree.
 
-                  The control renders from `cardinality` and `hierarchical` rather than from the
-                  dimension key, so a client that adds a fifth dimension gets a usable control
-                  without this file changing.
-                */}
-                <Controller
-                  control={control}
-                  name="classificationValueIds"
-                  render={({ field }) => (
-                    <DataRegion
-                      state={dimensions}
-                      // No `isEmpty`: a project with no dimensions is the picker's own message, not
-                      // DataRegion's empty state. The distinction matters because the empty state
-                      // offers a call to action and there is nothing here for the author to do.
-                      // The region is scoped to this panel rather than the form, so a failed
-                      // vocabulary read leaves the rest of the editor saveable — classification is
-                      // optional, and blocking the whole editor on it would turn one outage into
-                      // "you cannot edit test cases".
-                      testId={`${TestIdPrefix}.ClassificationRegion`}
-                    >
-                      {(loaded) => (
-                        <ClassificationPicker
-                          dimensions={loaded}
-                          selected={field.value}
-                          onChange={field.onChange}
-                          testIdPrefix={TestIdPrefix}
-                        />
-                      )}
-                    </DataRegion>
-                  )}
-                />
-              </Stack>
-            </Panel>
-
-            <Panel title="Automation" testId={`${TestIdPrefix}.Automation`}>
-              <Stack sx={{ gap: 2 }}>
+                {/* AUTOMATION IS A CONTROL, NOT A BADGE: it is required on every save and it gates
+                    two child fields, which is exactly what a badge cannot express. Its two
+                    children sit in its disclosure rather than in rows of their own — an unbounded
+                    identifier cannot render whole on a 280px face. */}
                 <Controller
                   control={control}
                   name="automationStatus"
                   render={({ field }) => (
                     <TextField
                       select
-                      label="Automation status"
+                      label="Automation"
                       fullWidth
                       value={field.value}
                       onChange={field.onChange}
@@ -1934,48 +1238,296 @@ function CaseEditorForm({
                     </TextField>
                   )}
                 />
+                <Collapse in={automationStatus === 'AUTOMATED' || automationStatus === 'NOT_AUTOMATABLE'}>
+                  <Stack sx={{ gap: 2 }}>
+                    {automationStatus === 'AUTOMATED' && (
+                      <TextField
+                        label="Automated test"
+                        fullWidth
+                        error={!!errors.automationKey}
+                        helperText={
+                          errors.automationKey?.message ??
+                          'Fully-qualified test method. Ingested results match on this.'
+                        }
+                        slotProps={{
+                          htmlInput: {
+                            'data-testid': `${TestIdPrefix}.Field.AutomationKey`,
+                            style: { fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' },
+                          },
+                          formHelperText: { role: errors.automationKey ? 'alert' : undefined },
+                        }}
+                        {...register('automationKey')}
+                      />
+                    )}
+                    {automationStatus === 'NOT_AUTOMATABLE' && (
+                      <TextField
+                        label="Why it can't be automated"
+                        fullWidth
+                        multiline
+                        minRows={2}
+                        error={!!errors.notAutomatableReason}
+                        helperText={
+                          errors.notAutomatableReason?.message ??
+                          'Recorded so the automation-coverage figure stays honest.'
+                        }
+                        slotProps={{
+                          htmlInput: { 'data-testid': `${TestIdPrefix}.Field.NotAutomatableReason` },
+                          formHelperText: { role: errors.notAutomatableReason ? 'alert' : undefined },
+                        }}
+                        {...register('notAutomatableReason')}
+                      />
+                    )}
+                  </Stack>
+                </Collapse>
 
-                {/* These two fields appear only when their status makes them meaningful, and
-                    each is required by the schema in exactly that case. */}
-                {automationStatus === 'AUTOMATED' && (
-                  <TextField
-                    label="Automated test"
-                    fullWidth
-                    error={!!errors.automationKey}
-                    helperText={
-                      errors.automationKey?.message ??
-                      'Fully-qualified test method. Ingested results match on this.'
-                    }
-                    slotProps={{
-                      htmlInput: {
-                        'data-testid': `${TestIdPrefix}.Field.AutomationKey`,
-                        style: { fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' },
-                      },
-                      formHelperText: { role: errors.automationKey ? 'alert' : undefined },
-                    }}
-                    {...register('automationKey')}
-                  />
-                )}
+                <TextField
+                  label="Duration (seconds)"
+                  type="number"
+                  fullWidth
+                  error={!!errors.estimatedDurationSec}
+                  helperText={errors.estimatedDurationSec?.message}
+                  slotProps={{
+                    htmlInput: { 'data-testid': `${TestIdPrefix}.Field.EstimatedDuration`, min: 0 },
+                    formHelperText: { role: errors.estimatedDurationSec ? 'alert' : undefined },
+                  }}
+                  {...register('estimatedDurationSec')}
+                />
 
-                {automationStatus === 'NOT_AUTOMATABLE' && (
-                  <TextField
-                    label="Why it can't be automated"
-                    fullWidth
-                    multiline
-                    minRows={2}
-                    error={!!errors.notAutomatableReason}
-                    helperText={
-                      errors.notAutomatableReason?.message ??
-                      'Recorded so the automation-coverage figure stays honest.'
-                    }
-                    slotProps={{
-                      htmlInput: { 'data-testid': `${TestIdPrefix}.Field.NotAutomatableReason` },
-                      formHelperText: { role: errors.notAutomatableReason ? 'alert' : undefined },
-                    }}
-                    {...register('notAutomatableReason')}
-                  />
-                )}
+                <Divider />
+
+                {/*
+                  PRECONDITIONS — a read-only inherited count, because the case's OWN preconditions
+                  are the `Background:` block in the document now (003 D6, decision (a)).
+
+                  What stays here is the half the text cannot say: the folder's conditions, which
+                  reach this case by inheritance and are rendered identically to its own by
+                  `bodies()`, so putting them in the block would make deleting a line ambiguous
+                  between detaching an own condition and DECLINING an inherited one. The count
+                  links to what is missing from the rendered `.feature`.
+
+                  §187's opt-out toggle survives inside the disclosure. 003 retires this row as an
+                  *editor of attachments*; it says nothing about declines, and dropping them would
+                  delete a shipped feature on the way past.
+                */}
+                <Controller
+                  control={control}
+                  name="declinedConditionIds"
+                  render={({ field: declines }) => {
+                    const toggle = (attachmentId: string, next: boolean) =>
+                      declines.onChange(
+                        next
+                          ? [...declines.value, attachmentId]
+                          : declines.value.filter((id: string) => id !== attachmentId),
+                      );
+
+                    /*
+                      The rows the pending move will end (§194) — resolved from what is on screen,
+                      which is why they can be NAMED. Here rather than in either group: one array
+                      carries both kinds, so a per-group alert would state the same event twice and
+                      each copy would name half of it.
+                    */
+                    const ending = movingFolder
+                      ? [...inheritedPre, ...inheritedPost].filter((ref) => declines.value.includes(ref.id))
+                      : [];
+
+                    return (
+                      <Stack sx={{ gap: 2 }}>
+                        {ending.length > 0 && (
+                          <Alert severity="warning" data-testid={`${TestIdPrefix}.Conditions.EndingDeclines`}>
+                            <AlertTitle>
+                              Moving this case ends {plural(ending.length, 'condition exception')}
+                            </AlertTitle>
+                            <Typography variant="body2">
+                              A folder&rsquo;s rule can only be declined by a case filed in that
+                              folder, so {ending.length === 1 ? 'this exception' : 'these exceptions'}
+                              {' '}end with the move. Moving it back will not bring
+                              {ending.length === 1 ? ' it' : ' them'} back.
+                            </Typography>
+                            <Box component="ul" sx={{ pl: 3, my: 1 }}>
+                              {ending.map((ref) => (
+                                <Typography component="li" variant="body2" key={ref.id}>
+                                  {ref.title}
+                                  {ref.inheritedFrom ? ` — from ${ref.inheritedFrom}` : null}
+                                </Typography>
+                              ))}
+                            </Box>
+                          </Alert>
+                        )}
+
+                        <Box data-testid={`${TestIdPrefix}.Preconditions`}>
+                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            Preconditions
+                          </Typography>
+                          <Typography variant="body2">
+                            {inheritedPreCount === 0
+                              ? 'None inherited. Write this case’s own setup as a Background: block.'
+                              : `${plural(inheritedPreCount, 'inherited precondition')} — not shown in the text above.`}
+                          </Typography>
+                          {inheritedPre.map((ref) => (
+                            <Stack
+                              key={ref.id}
+                              direction="row"
+                              sx={{ alignItems: 'center', gap: 1, mt: 0.5 }}
+                              data-testid={`${TestIdPrefix}.Preconditions.Row`}
+                            >
+                              <Switch
+                                size="small"
+                                checked={!declines.value.includes(ref.id)}
+                                disabled={movingFolder}
+                                onChange={(event) => toggle(ref.id, !event.target.checked)}
+                                // The panel's own wording, verbatim: the two switches mean the
+                                // same thing and a reader meets both on this screen.
+                                inputProps={{ 'aria-label': `Applies to this case: ${ref.title}` }}
+                              />
+                              <Typography variant="body2" sx={{ minWidth: 0 }}>
+                                {ref.title}
+                                {ref.inheritedFrom ? (
+                                  <Identifier variant="muted"> from {ref.inheritedFrom}</Identifier>
+                                ) : null}
+                              </Typography>
+                            </Stack>
+                          ))}
+                          {existing && (
+                            <Link
+                              component={RouterLink}
+                              to={`/projects/${projectId}/cases/${existing.id}`}
+                              variant="caption"
+                              data-testid={`${TestIdPrefix}.Preconditions.Link`}
+                            >
+                              See the whole procedure, inherited setup included
+                            </Link>
+                          )}
+                        </Box>
+
+                        <Divider />
+
+                        {/* POSTCONDITIONS — new, and the render draws no such row. Gherkin emits
+                            them as comments the parser reads back as nothing by design, so the
+                            text can never author them; this is the only place they can live. */}
+                        <Controller
+                          control={control}
+                          name="postconditionIds"
+                          render={({ field }) => (
+                            <ConditionsPanel
+                              kind="POST"
+                              projectId={projectId}
+                              testId={`${TestIdPrefix}.Postconditions`}
+                              value={field.value}
+                              inherited={inheritedPost}
+                              declined={declines.value}
+                              leavingFolder={movingFolder}
+                              onToggleDecline={toggle}
+                              onChange={field.onChange}
+                              known={createdConditions}
+                              onCreate={() => setConditionDialog({ kind: 'POST', condition: null })}
+                              onEdit={(condition) => setConditionDialog({ kind: 'POST', condition })}
+                            />
+                          )}
+                        />
+                      </Stack>
+                    );
+                  }}
+                />
+
+                {/*
+                  CLASSIFICATION — **absent entirely when every vocabulary is empty** (finding 3).
+
+                  Not a labelled control with nothing in it, and not four of them: a freshly
+                  provisioned project has four dimensions and no values, and the row is worth its
+                  space only when there is something to choose. The one sentence and the one link
+                  are the picker's `emptyNotice`, owned here because this is the side that knows
+                  where Classification lives.
+                */}
+                <Controller
+                  control={control}
+                  name="classificationValueIds"
+                  render={({ field }) => (
+                    <DataRegion state={dimensions} testId={`${TestIdPrefix}.ClassificationRegion`}>
+                      {(loaded) =>
+                        loaded.length === 0 || loaded.every((dimension) => dimension.values.length === 0) ? (
+                          <Box data-testid={`${TestIdPrefix}.Classification.Absent`}>
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                              Nothing configured, nothing shown.{' '}
+                              <Link component={RouterLink} to={`/projects/${projectId}/settings/classification`}>
+                                Set up Classification
+                              </Link>{' '}
+                              to classify cases here.
+                            </Typography>
+                          </Box>
+                        ) : (
+                          <>
+                            <Divider sx={{ mb: 2 }} />
+                            <ClassificationPicker
+                              dimensions={loaded}
+                              selected={field.value}
+                              onChange={field.onChange}
+                              testIdPrefix={TestIdPrefix}
+                              emptyNotice={(empty) => (
+                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                  {empty.map((dimension) => dimension.name).join(', ')}{' '}
+                                  {empty.length === 1 ? 'has' : 'have'} no values yet.{' '}
+                                  <Link
+                                    component={RouterLink}
+                                    to={`/projects/${projectId}/settings/classification`}
+                                  >
+                                    Set up Classification
+                                  </Link>
+                                </Typography>
+                              )}
+                            />
+                          </>
+                        )
+                      }
+                    </DataRegion>
+                  )}
+                />
               </Stack>
+            </Panel>
+
+            {/*
+              THE STANDING CORPUS (003 Phase 1) — *steps this project uses*, ranked by use count,
+              insert on click.
+
+              ONE MOUNT PER PAGE, on its own key and its own hook: `useStepSuggestions`'s
+              `enabled: q.trim().length > 0` gate is untouched, because the read this panel makes
+              is precisely the one that gate refuses and the reason it refuses it — eight mounted
+              rows firing eight reads of a thousand-row list — does not apply to a panel there is
+              one of.
+            */}
+            <Panel title="Steps this project uses" testId={`${TestIdPrefix}.Corpus`}>
+              <Box sx={{ maxHeight: 320, overflowY: 'auto' }}>
+                <DataRegion
+                  state={corpus}
+                  testId={`${TestIdPrefix}.Corpus.Region`}
+                  isEmpty={(rows) => rows.length === 0}
+                  empty={{
+                    title: 'No steps yet',
+                    body: 'This list fills itself from the steps your cases already contain — nobody has to populate it.',
+                  }}
+                >
+                  {(rows) => (
+                    <Stack sx={{ gap: 0.5 }}>
+                      {rows.map((row) => (
+                        <Button
+                          key={row.action}
+                          size="small"
+                          onClick={() => insertFromCorpus(row)}
+                          data-testid={`${TestIdPrefix}.Corpus.Step`}
+                          sx={{ justifyContent: 'space-between', textAlign: 'left', textTransform: 'none' }}
+                        >
+                          <Box component="span" sx={{ minWidth: 0 }}>
+                            {row.action}
+                          </Box>
+                          {/* The ranking signal, shown rather than only sorted by. */}
+                          <Identifier variant="muted">
+                            {row.useCount} case{row.useCount === 1 ? '' : 's'}
+                          </Identifier>
+                        </Button>
+                      ))}
+                    </Stack>
+                  )}
+                </DataRegion>
+              </Box>
             </Panel>
 
             {mode === 'edit' && (
@@ -1991,16 +1543,8 @@ function CaseEditorForm({
       </Stack>
 
       {/*
-        THE COMMIT BAR — the form's one Save, pinned to the bottom of the viewport.
-
-        It carries the buffer's status line as well as the two buttons, and that pairing is the
-        point rather than a saving of space: "Backup saved 14:02 — this is not the case itself, use
-        Save changes to publish your work" is a sentence about a button, and it used to sit at the
-        top of the form naming a control the author had scrolled a thousand pixels past. Now it
-        sits beside it.
-
-        `background.paper` and a top rule, because it overlaps content it must stay legible over —
-        a translucent bar here would put the last step row's text through the button labels.
+        THE COMMIT BAR — the form's one Save, pinned to the bottom of the viewport, carrying the
+        buffer's status line beside the button that sentence names.
       */}
       <Box
         data-testid={`${TestIdPrefix}.CommitBar`}
@@ -2020,8 +1564,6 @@ function CaseEditorForm({
           bgcolor: 'background.paper',
         }}
       >
-        {/* What the buffer is doing. Its own component so the subscription it needs does not
-            re-render the editor — see `CaseDraftStatus`. */}
         <Box sx={{ flex: 1, minWidth: 200 }}>
           <CaseDraftStatus
             control={control}
@@ -2041,20 +1583,19 @@ function CaseEditorForm({
         >
           Cancel
         </Button>
-        {/*
-          Gated as well as its entry points, because the entry points are not the only way in:
-          /cases/new and /cases/:id/edit are real URLs, so a bookmark, a shared link or the
-          back button lands here without passing the New-case button. Gating only the button
-          that navigates here would make the permission look enforced while leaving the form
-          fully usable up to the 403.
-        */}
         <PermissionGate projectId={projectId} permission={mode === 'edit' ? 'case:edit' : 'case:create'}>
           {({ allowed }) => (
             <Button
               type="submit"
               variant="contained"
-              disabled={!allowed || isSubmitting || (mode === 'edit' && !isDirty)}
-              title={allowed && mode === 'edit' && !isDirty ? 'Nothing has changed yet' : undefined}
+              disabled={!allowed || isSubmitting || migrationBlocked || (mode === 'edit' && !isDirty)}
+              title={
+                migrationBlocked
+                  ? 'This case has not been migrated yet — see the note above the text.'
+                  : allowed && mode === 'edit' && !isDirty
+                    ? 'Nothing has changed yet'
+                    : undefined
+              }
               data-testid={`${TestIdPrefix}.Submit`}
             >
               {isSubmitting ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Create case'}
@@ -2063,12 +1604,6 @@ function CaseEditorForm({
         </PermissionGate>
       </Box>
 
-      {/*
-        Keyed on the entry (or 'new'), which is what makes the dialog's own state reset between
-        opens: it seeds its fields from props in `useState`, so without a key, editing one
-        condition and then another would show the first one's text in the second one's form.
-        Rendered only when open for the same reason — there is no cache here to preserve.
-      */}
       {conditionDialog && (
         <ConditionEditDialog
           key={conditionDialog.condition?.id ?? 'new'}
@@ -2077,27 +1612,38 @@ function CaseEditorForm({
           condition={conditionDialog.condition}
           defaultType={conditionDialog.kind}
           onClose={() => setConditionDialog(null)}
-          // Attached to the list it was created from. Creating an entry and leaving the author to
-          // find it in the picker they just left is the kind of half-finished flow `ui-rules`
-          // calls a workflow defect — they asked for a condition HERE.
           onCreated={(created) => attachCondition(created, conditionDialog.kind)}
         />
       )}
 
       {/*
-        Mounted only while open, so every paste starts from an empty box rather than from the
-        previous one's text and its result — the same reason the condition dialog above is keyed.
+        The paste dialog, PROMOTED OUT OF ITS BUTTON (003 Phase 1): it is one of the three starts
+        as well as an action on the panel, so it is mounted by whichever opened it and seeds fresh
+        every time.
+
+        Under D1 the paste lands as TEXT rather than as rows — the text is the source of truth, so
+        putting the parsed rows into the form and leaving the document showing something else
+        would be two representations of one case disagreeing on screen.
       */}
       {pasting && (
         <PasteGherkinDialog
           projectId={projectId}
           open
-          onClose={() => setPasting(false)}
-          onApply={applyParsedScenario}
-          // A Background step becomes a PRE condition and nothing else: the import model says so
-          // (amendment AM1), and there is no Gherkin construct that means "postcondition".
+          onClose={() => {
+            setPasting(false);
+            if (started === 'PASTE' && documentText.trim().length === 0) setStarted(null);
+          }}
+          onApply={(_result, applyMode, text) => {
+            const body = splitFeatureLine(text).body;
+            setDocumentText((current) =>
+              applyMode === 'REPLACE' || current.trim().length === 0
+                ? body
+                : `${current.replace(/\n+$/, '')}\n${body}`,
+            );
+            setStarted('WRITE');
+          }}
           onConditionCreated={(created) => attachCondition(created, 'PRE')}
-          hasSteps={liveSteps(getValues('steps')).length > 0}
+          hasSteps={documentText.trim().length > 0}
         />
       )}
     </Box>

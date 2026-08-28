@@ -350,6 +350,41 @@ export function useParseGherkin(projectId: string) {
 }
 
 /**
+ * The case the editor is holding, as the `.feature` text it would save as (003 C1/D2) —
+ * `POST .../cases/render-gherkin`.
+ *
+ * ## Why `useCaseFeature` could not do this job
+ *
+ * `GET .../cases/{caseId}/feature` is keyed on a saved id and answers the **last saved** text. The
+ * Write surface has neither: *New test case* has no id at all, and an edited case's text is the
+ * one being written rather than the one on the server. So the body is what the editor already
+ * holds — the same `TestCaseInput` a save sends — and the server renders it through the one
+ * renderer, which is what makes the text on screen byte-for-byte what a save would produce. A
+ * second renderer in the SPA is what `featureFiles.ts` forbids.
+ *
+ * ## A mutation for a pure function, `useParseGherkin`'s reason exactly
+ *
+ * Nothing is created. It is a mutation because the *act* is the point — it runs when the editor
+ * opens and after a commit — and because a query keyed on a whole case payload would fill the
+ * cache with an entry per keystroke.
+ *
+ * ## `postForText`, and `handled`
+ *
+ * JSON in, `text/plain` out; `api.post` would hand `res.json()` a `.feature` file. `handled`
+ * because the editor renders the failure in place: the text is the editing surface, so a toast in
+ * the corner about it would be a notification about the thing filling the screen.
+ */
+export function useRenderGherkin(projectId: string) {
+  return useMutation({
+    mutationFn: (input: Record<string, unknown>) =>
+      api.postForText(`${base(projectId)}/cases/render-gherkin`, input, {
+        timeoutMs: TIMEOUTS.interactive,
+      }),
+    meta: { handled: true },
+  });
+}
+
+/**
  * Plans — and in `APPLY`, executes — an import of `.feature` files (§255).
  *
  * `POST .../feature-imports`. One endpoint, two modes, **one response shape**: `PREVIEW` answers

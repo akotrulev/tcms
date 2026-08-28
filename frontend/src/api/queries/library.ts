@@ -64,10 +64,16 @@ export function useConditions(
  *
  * ## `enabled` on a non-blank fragment
  *
- * The endpoint answers the whole corpus for a blank `q`, and the editor deliberately does not ask
- * for it. A step row is not a browsing surface: mounting an eight-step case would fire eight reads
- * of a thousand-row list nobody has asked a question of yet, and the answer would open a popup
- * over a field the author has not touched. Suggestions appear once there is something to narrow.
+ * The endpoint answers the whole corpus for a blank `q`, and this hook deliberately does not ask
+ * for it. A completion is not a browsing surface: mounting an eight-step case would fire eight
+ * reads of a thousand-row list nobody has asked a question of yet, and the answer would open a
+ * popup over a field the author has not touched. Suggestions appear once there is something to
+ * narrow.
+ *
+ * **The gate stays, and {@link useStepCorpus} below is why it can.** 003 Phase 1 wanted the
+ * unnarrowed list for the editor's standing corpus panel, which is exactly the read this gate
+ * refuses — so it is a second hook with a second key and **one mount per page**, rather than a
+ * relaxation here. Named in place so the next reader does not conclude the rule was forgotten.
  */
 export function useStepSuggestions(projectId: string, q: string): UseQueryResult<StepSuggestion[]> {
   return useQuery({
@@ -84,6 +90,40 @@ export function useStepSuggestions(projectId: string, q: string): UseQueryResult
       the list remounts on an append, a move and a delete — re-fires the read the author is
       currently reading the answer to.
     */
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * The project's whole step corpus, unnarrowed — the case editor's standing panel (003 Phase 1).
+ *
+ * ## Why this is a second hook rather than `useStepSuggestions(projectId, '')`
+ *
+ * `useStepSuggestions` is gated on a non-blank fragment and that gate is load-bearing (its header
+ * says why). The panel wants precisely the read the gate refuses: *"steps this project uses"*,
+ * ranked by use count, offered before anybody has typed. The two differ in mount count as well as
+ * in narrowing — one per page here against one per completion there — so they are two hooks over
+ * one endpoint rather than one hook with a flag.
+ *
+ * ## No backend work, and no `limit` invented for it
+ *
+ * A blank `q` is already this list: `StepSuggestionQuery` normalizes blank to `null`, `needle()`
+ * answers `'%'`, the service caps at its own `MAX_SUGGESTIONS = 50`, and
+ * `TestStepRepository`'s ordering is `COUNT(DISTINCT caseId) DESC, action ASC` — which is *ranked
+ * by use count*. The contract declares no `limit` parameter and this does not send one.
+ *
+ * `staleTime` matches the completion's for the same reason: the corpus moves when somebody saves a
+ * case, not between two keystrokes, and the panel must not re-read on every re-render of an editor
+ * that re-renders on every keystroke.
+ */
+export function useStepCorpus(projectId: string): UseQueryResult<StepSuggestion[]> {
+  return useQuery({
+    queryKey: keys.stepCorpus(projectId),
+    queryFn: ({ signal }) =>
+      api.get<StepSuggestion[]>(`${base(projectId)}/step-suggestions`, {
+        signal,
+        timeoutMs: TIMEOUTS.typeahead,
+      }),
     staleTime: 60_000,
   });
 }

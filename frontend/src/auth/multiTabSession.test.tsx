@@ -36,6 +36,7 @@ const alice: CurrentUser = {
   email: 'alice@acme.test',
   displayName: 'Alice',
   isSystemAdmin: false,
+  hasPassword: true,
   teams: [],
 }
 

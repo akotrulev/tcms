@@ -68,6 +68,9 @@ export function TestProviders({
     displayName: 'Test user',
     email: 'test-user@example.test',
     isSystemAdmin: false,
+    // True, like the fixture: an account that reached a screen has a way in, and the
+    // "set a password" branch (005 S9a) is the exception that passes its own.
+    hasPassword: true,
     teams: [],
   }
   const session: AuthValue = {

@@ -50,7 +50,22 @@ export function CaseListPage() {
   const [selection, setSelection] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
 
-  const selectedSuite = suites.data?.find((s) => s.id === filters.suiteId);
+  const selectedSuite = suites.data?.find((s) => s.id === filters.suiteId)
+
+  /*
+    Where *New case* goes, carrying the suite the reader is standing in — UX#106 *Redundant
+    Entry*, and a live defect until 003 Phase 1: both entry points navigated to a bare
+    `/cases/new`, so somebody who had just filtered to Refunds opened a blank editor and picked
+    Refunds again from a list of forty.
+
+    A query parameter rather than route state, for the reason filter state is in the URL
+    everywhere else in this app: the editor is a real address a reader may bookmark or reopen, and
+    route state does not survive either. The editor treats it as a **default for the picker**, not
+    as a decision — it is prefilled and changeable, which is what makes carrying it safe.
+  */
+  const newCasePath = `/projects/${projectId}/cases/new${
+    filters.suiteId ? `?suiteId=${encodeURIComponent(filters.suiteId)}` : ''
+  }`;
 
   return (
     <Box>
@@ -95,7 +110,7 @@ export function CaseListPage() {
                   variant="contained"
                   startIcon={<AddIcon />}
                   disabled={!allowed}
-                  onClick={() => navigate(`/projects/${projectId}/cases/new`)}
+                  onClick={() => navigate(newCasePath)}
                   data-testid="Cases.NewCaseButton"
                 >
                   New case
@@ -244,7 +259,7 @@ export function CaseListPage() {
                               variant="contained"
                               size="small"
                               disabled={!allowed}
-                              onClick={() => navigate(`/projects/${projectId}/cases/new`)}
+                              onClick={() => navigate(newCasePath)}
                               data-testid="Cases.List.Empty.NewCaseButton"
                             >
                               New case

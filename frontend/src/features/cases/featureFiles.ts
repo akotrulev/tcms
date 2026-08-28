@@ -18,6 +18,14 @@
  * parser is `GherkinScenarios` on the server (plan §6a rule 3), and `POST …/cases/parse-gherkin`
  * exists precisely so the SPA does not grow a second one. See the function's own header for what
  * that costs.
+ *
+ * **→ amended by §003: a non-authoritative colouring scanner is allowed; a parser whose output is
+ * committed is not.** The Write surface (003 C2) needs keyword, docstring and table *spans* to
+ * colour text and to number the lines a refusal names, and no round trip can answer that per
+ * keystroke. `features/cases/gherkinText.ts` is that scanner and its header states its own
+ * limits: it commits nothing, it decides nothing, and what a save sends is still whatever
+ * `parse-gherkin` read. The rule above is kept rather than rewritten, because the reasoning it
+ * records is what makes the amendment narrow — see the working agreement on superseded decisions.
  */
 
 /** The caps, mirroring `FeatureImportService.MAX_*`. Exported so the test drives the real numbers. */

@@ -65,6 +65,16 @@ export class ApiError extends Error {
    * date) and parsed at the point of use by `retryAfterMs`.
    */
   readonly retryAfter: string | null;
+  /**
+   * `Problem.line` — the 1-based line of a posted text the refusal is about (005 S1).
+   *
+   * Null on everything except the four gherkin refusals, which is what makes it worth carrying at
+   * all: 003 C4 makes the parse refusal the case editor's whole product, and the sentence has to
+   * land **on the line it names**. The alternative the contract's own description rules out is the
+   * SPA regexing a number out of `detail`'s English — which is a parser for prose, in a client,
+   * against a string the server is free to reword.
+   */
+  readonly line: number | null;
 
   constructor(
     status: number,
@@ -73,6 +83,7 @@ export class ApiError extends Error {
     correlationId: string | null = null,
     retryAfter: string | null = null,
     title: string | null = null,
+    line: number | null = null,
   ) {
     super(detail);
     this.name = 'ApiError';
@@ -82,6 +93,7 @@ export class ApiError extends Error {
     this.fieldErrors = fieldErrors;
     this.correlationId = correlationId;
     this.retryAfter = retryAfter;
+    this.line = line;
   }
 
   /** True when the server rejected individual fields, so a form can land them per input. */
@@ -231,10 +243,14 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
     let detail = res.statusText || `The request failed (HTTP ${res.status}).`;
     let fieldErrors: Record<string, string[]> | null = null;
     let title: string | null = null;
+    let line: number | null = null;
     try {
       const body = await res.json();
       detail = body.detail ?? body.title ?? detail;
       title = typeof body.title === 'string' ? body.title : null;
+      // Read, never derived. A body that omits it — every refusal that is not about a text, and
+      // any server older than 005 S1 — leaves this null, and the caller anchors nothing.
+      line = typeof body.line === 'number' && Number.isFinite(body.line) ? body.line : null;
       if (body.errors && typeof body.errors === 'object') {
         fieldErrors = body.errors as Record<string, string[]>;
       }
@@ -248,6 +264,7 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
       res.headers.get('x-correlation-id'),
       res.headers.get('retry-after'),
       title,
+      line,
     );
   }
 
@@ -302,6 +319,21 @@ export const api = {
       { method: 'POST', body: text, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
       options,
     ),
+  /**
+   * A POST whose **request is JSON and whose success body is a document** — today only
+   * `POST .../cases/render-gherkin` (003 C1/D2).
+   *
+   * The mirror image of `postText` above, and a third verb rather than an option on either,
+   * because the two ends are independent: this one serializes the body the way `post` does and
+   * reads the response the way `getText` does. Spelling it as `post` would hand `res.json()` a
+   * `.feature` file and fail with a `SyntaxError` under the editor — the exact failure
+   * `useCaseFeature`'s header records for the read side.
+   */
+  postForText: (path: string, body: unknown, options?: RequestOptions) =>
+    request<string>(path, { method: 'POST', body: JSON.stringify(body ?? {}) }, {
+      ...options,
+      responseType: 'text',
+    }),
   /**
    * A GET whose **success body is a document** — today only `GET .../cases/{caseId}/feature`.
    *

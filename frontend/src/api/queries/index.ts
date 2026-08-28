@@ -85,6 +85,7 @@ export {
   useUnlinkCaseExternal,
   useSaveCaseDraft,
   useReferencedCases,
+  useRenderGherkin,
   useUpdateCase,
   useCaseSearch,
   isSearchable,
@@ -99,6 +100,7 @@ export {
 export {
   useConditions,
   useCreateCondition,
+  useStepCorpus,
   useStepSuggestions,
   useUpdateCondition,
 } from './library';

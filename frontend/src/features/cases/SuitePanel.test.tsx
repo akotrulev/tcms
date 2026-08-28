@@ -29,6 +29,10 @@ const aSuiteRow = (over: Partial<Suite> = {}): Suite => {
     id: 'suite-1',
     key: 'TS-1',
     name: 'Payments',
+    // B1's three arms (005 S1). Zero each — this file is about the panel, not membership.
+    filedCount: 0,
+    addedCount: 0,
+    taggedCount: 0,
     tagRules: [],
     caseIds: [],
     caseCount: 12,

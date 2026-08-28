@@ -67,8 +67,15 @@ export function PasteGherkinDialog({
    *
    * The whole result rather than just the rows: the editor decides what to do with the title, the
    * objective and the tags, because it is the only side that knows what is already in those fields.
+   *
+   * **And the raw text beside it (§003).** Under D1 the editor's surface *is* text, so what it
+   * needs from a paste is the paste — the parsed result is what proves the text is readable and
+   * what fills the summary above. Handing over only the rows would have the editor render a
+   * document it re-derived from them, which is a second renderer in the SPA and the thing
+   * `featureFiles.ts` forbids. The two are handed over together because the dialog is the only
+   * place that holds both.
    */
-  onApply: (result: GherkinParseResult, mode: 'APPEND' | 'REPLACE') => void;
+  onApply: (result: GherkinParseResult, mode: 'APPEND' | 'REPLACE', text: string) => void;
   /** A precondition created from a Background step — the editor attaches it to the case. */
   onConditionCreated: (condition: Condition) => void;
   /** Whether the form already holds a step, which is what makes Replace a destructive choice. */
@@ -281,7 +288,7 @@ export function PasteGherkinDialog({
         */}
         <Button
           onClick={() => {
-            if (result) onApply(result, 'APPEND');
+            if (result) onApply(result, 'APPEND', text);
             close();
           }}
           disabled={!result}
@@ -292,7 +299,7 @@ export function PasteGherkinDialog({
         </Button>
         <Button
           onClick={() => {
-            if (result) onApply(result, 'REPLACE');
+            if (result) onApply(result, 'REPLACE', text);
             close();
           }}
           disabled={!result}

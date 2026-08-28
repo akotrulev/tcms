@@ -52,7 +52,11 @@ const PHASE: ClassificationDimension = {
   ],
 }
 
-function renderPicker(selected: string[], dimensions = [TEST_TYPE, FEATURE, PHASE]) {
+function renderPicker(
+  selected: string[],
+  dimensions = [TEST_TYPE, FEATURE, PHASE],
+  emptyNotice?: (empty: ClassificationDimension[]) => React.ReactNode,
+) {
   const onChange = vi.fn()
   render(
     <ClassificationPicker
@@ -60,6 +64,7 @@ function renderPicker(selected: string[], dimensions = [TEST_TYPE, FEATURE, PHAS
       selected={selected}
       onChange={onChange}
       testIdPrefix="Editor"
+      emptyNotice={emptyNotice}
     />,
   )
   return onChange
@@ -146,12 +151,58 @@ describe('ClassificationPicker', () => {
     expect(screen.getByTestId('Editor.Dimension.execution_phase.v-regression')).not.toBeChecked()
   })
 
-  it('says an empty vocabulary is empty rather than rendering a dead control', () => {
-    // The normal state of a freshly seeded project, which the contract says outright. An empty
-    // select reads as a failed load, and hiding the dimension makes "no values yet"
-    // indistinguishable from "this project has no Feature dimension".
+  /*
+    ~~An empty vocabulary says so, per dimension.~~ → **003 Phase 1, finding 3.** A freshly
+    provisioned project has four dimensions and no values in any of them, so the old treatment drew
+    four labelled controls nobody could use and four copies of one sentence, in a 320px rail. An
+    empty dimension now renders nothing, and the page says the one thing worth saying.
+  */
+  it('renders NO control for an empty vocabulary', () => {
     renderPicker([], [{ ...FEATURE, values: [] }])
+    expect(screen.queryByTestId('Editor.Dimension.feature')).not.toBeInTheDocument()
+  })
 
-    expect(screen.getByText(/this vocabulary is empty/i)).toBeInTheDocument()
+  it('renders nothing at all when EVERY dimension is empty, and hands them to the notice together', () => {
+    const empties: ClassificationDimension[] = []
+    renderPicker(
+      [],
+      [
+        { ...TEST_TYPE, values: [] },
+        { ...FEATURE, values: [] },
+        { ...PHASE, values: [] },
+      ],
+      (empty) => {
+        empties.push(...empty)
+        return <span>Nothing configured, nothing shown.</span>
+      },
+    )
+
+    expect(screen.queryByTestId('Editor.Dimension.test_type')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('Editor.Dimension.feature')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('Editor.Dimension.execution_phase')).not.toBeInTheDocument()
+    // ONE notice for all three, which is the whole point of the slot taking the list.
+    expect(screen.getAllByText('Nothing configured, nothing shown.')).toHaveLength(1)
+    expect(empties.map((dimension) => dimension.key)).toEqual([
+      'test_type',
+      'feature',
+      'execution_phase',
+    ])
+  })
+
+  it('renders the dimensions that have values and names only the ones that do not', () => {
+    renderPicker(
+      [],
+      [TEST_TYPE, { ...FEATURE, values: [] }, PHASE],
+      (empty) => <span>{empty.map((dimension) => dimension.name).join(', ')} has no values yet.</span>,
+    )
+
+    expect(screen.getByTestId('Editor.Dimension.test_type')).toBeInTheDocument()
+    expect(screen.getByTestId('Editor.Dimension.execution_phase')).toBeInTheDocument()
+    expect(screen.getByText('Feature has no values yet.')).toBeInTheDocument()
+  })
+
+  it('renders no notice at all when every dimension has values', () => {
+    renderPicker([], [TEST_TYPE, PHASE], () => <span>should not appear</span>)
+    expect(screen.queryByTestId('Editor.Classification.EmptyNotice')).not.toBeInTheDocument()
   })
 })

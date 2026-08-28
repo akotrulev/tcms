@@ -42,6 +42,8 @@ function settings(overrides: Partial<ProjectSettings> = {}): ProjectSettings {
     reviewEnabledCase: false,
     reviewEnabledSuite: false,
     reviewEnabledPlan: false,
+    // B1's fourth subject (005 S9b). Off — this file is not about doc review.
+    reviewEnabledDoc: false,
     requiredPeerReviews: 0,
     authorMayApproveOwnWork: false,
     editAfterApproval: 'RETAIN',

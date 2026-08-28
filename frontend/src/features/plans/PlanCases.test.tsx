@@ -45,6 +45,9 @@ function planBody(overrides: Partial<TestPlan> = {}): TestPlan {
     caseCount: 12,
     passRate: null,
     coverage: null,
+    // Zero of zero — a plan with no exit criteria, which is the ordinary state (B1 / 005 S5).
+    exitCriteriaMet: 0,
+    exitCriteriaTotal: 0,
     description: null,
     entryCriteria: [],
     exitCriteria: [],

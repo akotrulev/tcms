@@ -103,6 +103,9 @@ export function projectSettings(overrides: Partial<ProjectSettings> = {}): Proje
     reviewEnabledCase: false,
     reviewEnabledSuite: false,
     reviewEnabledPlan: false,
+    // B1's fourth review subject (005 S9b). `false` like its three siblings — off is the state
+    // most screens are tested in, and it is what a freshly provisioned project carries.
+    reviewEnabledDoc: false,
     requiredPeerReviews: 1,
     authorMayApproveOwnWork: false,
     editAfterApproval: 'RETAIN',
@@ -231,6 +234,12 @@ export function aSuite(overrides: Partial<Suite> = {}): Suite {
     id: 's1',
     key: 'TS-1',
     name: 'A suite',
+    // The three arms a suite resolves through (B1 / 005 S1), each zero and summing to `caseCount`:
+    // a suite is filed ∪ added ∪ tagged, and a fixture that filled one of them would make every
+    // test that never mentions membership assert against a suite that has some.
+    filedCount: 0,
+    addedCount: 0,
+    taggedCount: 0,
     caseCount: 0,
     tagRules: [],
     caseIds: [],
@@ -254,6 +263,10 @@ export function aPlanSummary(overrides: Partial<TestPlanSummary> = {}): TestPlan
     caseCount: 0,
     passRate: null,
     coverage: null,
+    // Zero of zero, not "none met": a plan with no exit criteria is the ordinary state and both
+    // numbers are counts rather than a nullable ratio (B1 / 005 S5).
+    exitCriteriaMet: 0,
+    exitCriteriaTotal: 0,
     ...overrides,
   }
 }
@@ -299,6 +312,9 @@ export function aConfiguration(overrides: Partial<Configuration> = {}): Configur
 export function aRun(overrides: Partial<TestRun> = {}): TestRun {
   return {
     id: 'r1',
+    // Null is a real answer here and the honest default: a scheduled run and an ingested one have
+    // no actor at all, which is what `TestRun.createdBy` being nullable records (B1 / 005 S1).
+    createdBy: null,
     key: 'TR-1',
     name: 'A run',
     planId: null,
@@ -436,6 +452,9 @@ export function aRoleAssignment(overrides: Partial<RoleAssignment> = {}): RoleAs
     projectId: null,
     projectName: null,
     grantedAt: AT,
+    // Null is a real answer: a grant written by `provision-company` or by a directory sync has no
+    // human actor, which is what `RoleAssignment.grantedBy` being nullable records (B1 / 005 S1).
+    grantedBy: null,
     ...overrides,
   }
 }
@@ -605,6 +624,9 @@ export function aCurrentUser(overrides: Partial<CurrentUser> = {}): CurrentUser 
     email: 'user@acme.test',
     displayName: 'A. User',
     isSystemAdmin: false,
+    // True, because an account reached through `provision-company`'s invitation has one. The
+    // account-security page's "set a password" branch is the exception and passes its own (005 S9a).
+    hasPassword: true,
     teams: [],
     ...overrides,
   }

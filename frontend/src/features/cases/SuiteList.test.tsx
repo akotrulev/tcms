@@ -37,6 +37,9 @@ const suite = (id: string, name: string, caseCount: number): Suite => ({
   id,
   key: `TS-${id}`,
   name,
+  filedCount: caseCount,
+  addedCount: 0,
+  taggedCount: 0,
   tagRules: [],
   caseIds: [],
   /** The wire meaning, and since §98 the only meaning: what this suite resolves to. */

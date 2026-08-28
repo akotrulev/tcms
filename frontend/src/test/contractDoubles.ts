@@ -66,6 +66,7 @@ const METHODS: Record<string, string> = {
   upload: 'post',
   postText: 'post',
   getText: 'get',
+  postForText: 'post',
 }
 
 /**
@@ -75,10 +76,11 @@ const METHODS: Record<string, string> = {
  * does take a body there and it is a `FormData`, which `requestBodyOf` reports as multipart and this
  * seam therefore never walks.
  */
-const SENDS_A_BODY = new Set(['post', 'patch', 'put', 'upload'])
+const SENDS_A_BODY = new Set(['post', 'patch', 'put', 'upload', 'postForText'])
 
 /**
- * The verbs whose **success body is a document** rather than JSON (§255).
+ * The verbs whose **success body is a document** rather than JSON (§255, and `postForText` since
+ * 003 C1's `render-gherkin`).
  *
  * `responseSchemaOf` answers `undefined` for such an operation — correctly, since the contract
  * declares `text/plain` and no schema — and the report it would otherwise produce ("declares no
@@ -86,8 +88,12 @@ const SENDS_A_BODY = new Set(['post', 'patch', 'put', 'upload'])
  * What is still asked is the question that can fail: the URL must resolve to a declared path (the
  * check above this one), and the double must serve **text**. A double answering `.feature` with an
  * object is a test whose component would receive something the endpoint cannot send.
+ *
+ * `postForText` is in both this set and {@link SENDS_A_BODY}, which no other verb is: it is the one
+ * operation whose request is JSON the contract describes and whose response is a document it
+ * cannot. Both halves are therefore checked, each by the rule that applies to it.
  */
-const SERVES_TEXT = new Set(['getText'])
+const SERVES_TEXT = new Set(['getText', 'postForText'])
 
 export interface Served {
   verb: string
