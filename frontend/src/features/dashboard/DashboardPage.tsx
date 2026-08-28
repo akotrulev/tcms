@@ -498,7 +498,7 @@ function AutomationCoverage({
                 sx={{
                   width: `${(row.count / Math.max(total, 1)) * 100}%`,
                   height: '100%',
-                  bgcolor: row.key === 'AUTOMATED' ? 'var(--color-success)' : 'var(--color-skipped)',
+                  bgcolor: row.key === 'AUTOMATED' ? 'var(--color-viz-1)' : 'var(--color-viz-2)',
                 }}
               />
             </Box>
@@ -532,8 +532,8 @@ function ActivityChart({ activity }: { activity: RepositoryDashboard['recentActi
     <Box>
       <Stack direction="row" sx={{ gap: 2, mb: 1.5 }}>
         {[
-          { label: 'Created', color: 'var(--color-info)' },
-          { label: 'Modified', color: 'var(--color-skipped)' },
+          { label: 'Created', color: 'var(--color-viz-1)' },
+          { label: 'Modified', color: 'var(--color-viz-2)' },
         ].map((series) => (
           <Stack key={series.label} direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
             <Box aria-hidden="true" sx={{ width: 10, height: 10, borderRadius: 0.25, bgcolor: series.color }} />
@@ -561,8 +561,8 @@ function ActivityChart({ activity }: { activity: RepositoryDashboard['recentActi
                 passes because the mock fixture has activity on most days, so a chart that was
                 always wrong looked like a chart with data in it.
               */}
-              <Box sx={{ flex: 1, height: `${(day.created / max) * 100}%`, bgcolor: 'var(--color-info)', minHeight: '1px' }} />
-              <Box sx={{ flex: 1, height: `${(day.modified / max) * 100}%`, bgcolor: 'var(--color-skipped)', minHeight: '1px' }} />
+              <Box sx={{ flex: 1, height: `${(day.created / max) * 100}%`, bgcolor: 'var(--color-viz-1)', minHeight: '1px' }} />
+              <Box sx={{ flex: 1, height: `${(day.modified / max) * 100}%`, bgcolor: 'var(--color-viz-2)', minHeight: '1px' }} />
             </Stack>
           </Tooltip>
         ))}

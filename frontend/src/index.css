@@ -46,6 +46,23 @@
   --color-danger: #c0392b;
   --color-info: #2e6e8e;
 
+  /* --- data visualisation: chart series, and nothing else ---
+     Status colour is reserved. Charts had been borrowing it — the activity chart's two series
+     were `--color-info` and `--color-skipped`, so "modified" was painted in the token that means
+     a test was skipped. A categorical HUE cannot be added here: green, red, amber, purple and
+     blue are all spoken for, and every candidate pair measured below the ΔE 15 normal-vision
+     floor against one of them (amber vs any orange came out at 4.0). So this tier is ONE
+     analytic hue at two steps — disjoint from status by chroma rather than by hue, which is
+     also what the file's own thesis asks for: status owns the saturation budget. */
+  --color-viz-1: #33566f;
+  --color-viz-2: #8aa6bd;
+
+  /* --- progress: a JOB's own lifecycle, never the outcome of what it ran --- */
+  /* A finished run is not a passing run. `--color-passed` on a COMPLETED chip put a green
+     badge on a run with a 0% pass rate, which is the outcome tier answering a question it
+     was never asked. Settled slate says "closed" and claims nothing about the result. */
+  --color-progress-done: #4b5b73;
+
   /* --- lifecycle --- */
   --color-draft: #8593a5;
   --color-in-review: #b7791f;
@@ -122,6 +139,11 @@
   --color-warning: #d9a441;
   --color-danger: #e07568;
   --color-info: #6ba8c4;
+
+  --color-viz-1: #93abc2;
+  --color-viz-2: #526e8a;
+
+  --color-progress-done: #93a3ba;
 
   --color-draft: #6b7a8d;
   --color-in-review: #d9a441;

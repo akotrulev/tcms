@@ -352,11 +352,18 @@ export const proposalVerdictColors = {
   UNVERIFIED: 'var(--color-draft)',
 } as const satisfies Record<ProposalVerdict, string>;
 
-/** Beside the labels, so a status cannot be worded in one place and coloured in another. */
+/**
+ * Beside the labels, so a status cannot be worded in one place and coloured in another.
+ *
+ * `COMPLETED` draws from the progress tier, not the outcome tier. It was `--color-passed`, which
+ * put a green chip on a run whose result bar was entirely red and whose pass rate was 0% — the
+ * colour answered "did the tests pass" when the column asks "has the run finished". `NOT_STARTED`
+ * and `IN_PROGRESS` were already non-outcome tones and are unchanged.
+ */
 export const runStatusColors = {
   NOT_STARTED: 'var(--color-draft)',
   IN_PROGRESS: 'var(--color-info)',
-  COMPLETED: 'var(--color-passed)',
+  COMPLETED: 'var(--color-progress-done)',
   ABORTED: 'var(--color-failed)',
 } as const satisfies Record<RunStatus, string>;
 
@@ -379,7 +386,7 @@ export const reportJobStatusLabels = {
 export const reportJobStatusColors = {
   PENDING: 'var(--color-draft)',
   RUNNING: 'var(--color-info)',
-  COMPLETED: 'var(--color-passed)',
+  COMPLETED: 'var(--color-progress-done)',
   FAILED: 'var(--color-failed)',
 } as const satisfies Record<ReportJobStatus, string>;
 
