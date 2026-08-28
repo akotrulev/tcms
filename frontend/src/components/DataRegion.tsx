@@ -1,5 +1,6 @@
-import { Alert, AlertTitle, Box, Button, Skeleton, Stack, Typography } from '@mui/material';
+import { Alert, AlertTitle, Box, Button, Link, Skeleton, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import { isAbort } from '../api/client';
 import { describeError } from '../lib/describeError';
 import { RegionErrorBoundary } from './ErrorBoundaries';
@@ -65,16 +66,41 @@ export function DataRegion<T>({
 
   // First load failed, and there is nothing to fall back to.
   if (genuinelyFailed && data === undefined) {
-    const { title, body, correlationId, retryable } = describeError(error);
+    const { title, body, correlationId, retryable, isRefused } = describeError(error);
     // A retry is offered only where it could plausibly succeed. A 403 or 404 will fail the
     // same way on the next click, and a button that never works is worse than no button.
     const showRetry = !!refetch && retryable;
     return (
-      <Alert severity="error" data-testid={`${testId}.Error`} sx={{ my: 1 }}>
+      <Alert
+        severity={isRefused ? 'warning' : 'error'}
+        data-testid={`${testId}.Error`}
+        sx={{ my: 1 }}
+      >
         <AlertTitle sx={{ fontSize: '0.875rem', fontWeight: 600 }}>{title}</AlertTitle>
-        <Typography variant="body2" sx={{ mb: showRetry ? 1.5 : 0 }}>
+        <Typography variant="body2" sx={{ mb: showRetry || isRefused ? 1.5 : 0 }}>
           {body}
         </Typography>
+        {/*
+          The Refused state's way out (005 C1b). `describeError` has already named the permission
+          and said to ask a Company Admin; this is the link that lets them find one.
+
+          **The org chart and nothing more specific.** C1b dropped the endpoint that would have
+          answered "who can grant this here", so there is no named individual to offer — and the
+          chart is a screen every member may open, which already discloses a company's
+          administrators on `OrgChartPerson.companyRoles`. It is rendered as its own affordance
+          rather than woven into the sentence so the notification stack, which shows the same copy
+          with no link, is not showing a sentence with a hole in it.
+
+          A `.Refused` testid of its own: the difference between this and any other failed region
+          is the whole of 005 C1, and asserting on the alert alone cannot see it.
+        */}
+        {isRefused && (
+          <Typography variant="body2" data-testid={`${testId}.Refused`}>
+            <Link component={RouterLink} to="/org-chart">
+              Find a Company Admin on the org chart
+            </Link>
+          </Typography>
+        )}
         {showRetry && (
           <Button size="small" variant="outlined" color="error" onClick={refetch} data-testid={`${testId}.Retry`}>
             Try again

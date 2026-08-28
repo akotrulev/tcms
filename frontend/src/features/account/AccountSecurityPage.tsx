@@ -9,16 +9,23 @@ import {
   DialogTitle,
   Skeleton,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
+  useChangeMyPassword,
+  useCurrentUser,
   useMySocialIdentities,
+  useSignOutOtherSessions,
   useSocialProviders,
   useStartSocialLink,
   useUnlinkSocialIdentity,
 } from '../../api/queries';
+import { ApiError } from '../../api/client';
+import { useAuth } from '../../auth/useAuth';
+import { Panel } from '../../components/PageHeader';
 import type { SocialIdentity, SocialProvider } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { describeError } from '../../lib/describeError';
@@ -50,6 +57,17 @@ import { socialProviderLabels } from '../../lib/labels';
  * Linking POSTs for a URL and then hands the whole browser to it — a top-level navigation
  * cannot carry the Authorization header, so the authenticated step is the POST and the
  * navigation that follows holds only the single-use `state`.
+ *
+ * ## The password and the sign-out (005 S9a) — and the list that is deliberately not here
+ *
+ * Two panels below the providers, and both are about the credential rather than the session: one
+ * sets or changes the password, the other ends every *other* session of this account.
+ *
+ * **There is no session list, and there will not be one** (005 N12). Nothing in this product
+ * records sessions — the token is stateless by an argued decision, and `/auth/logout` says so — so
+ * a list would be an invention rather than a view, and every row on it would be a claim nothing
+ * behind it could support. All-or-nothing is what the mechanism *is*: the one revocation this
+ * product has is bumping the account's `pv` epoch, which invalidates every session at once.
  */
 const TestIdPrefix = 'AccountSecurity';
 
@@ -141,6 +159,9 @@ export function AccountSecurityPage() {
           </DataRegion>
         )}
       </DataRegion>
+
+      <PasswordPanel />
+      <SignOutOthersPanel />
 
       <UnlinkIdentityDialog
         provider={confirming}
@@ -295,5 +316,199 @@ function UnlinkIdentityDialog({
         </Button>
       </DialogActions>
     </Dialog>
+  );
+}
+
+/**
+ * Setting or changing this account's password (005 S9a).
+ *
+ * ## One panel, two intents, told apart by `CurrentUser.hasPassword`
+ *
+ * An account with no password **sets** one and sends `currentPassword: null` — the state a person
+ * who joined through SSO is in, and the one that closes the impossible half of the
+ * "unlink your last credential" refusal: until this existed, somebody with one social identity and
+ * no password was told to "set a password or link another provider first" by a product that gave
+ * them no way to set a password.
+ *
+ * An account with one **changes** it and must send the current one. Possession of a session is not
+ * possession of the credential, and a walked-away-from laptop must not be enough to lock its owner
+ * out of their own account.
+ *
+ * ## Nothing is signed out
+ *
+ * Changing a password bumps no epoch. Somebody rotating a password on a schedule should not be
+ * signed out of their phone for it — that is the panel below, which says so on its own terms.
+ */
+function PasswordPanel() {
+  const me = useCurrentUser();
+  const change = useChangeMyPassword();
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [done, setDone] = useState(false);
+
+  const hasPassword = me.data?.hasPassword ?? true;
+  const fieldErrors = change.error instanceof ApiError ? change.error.fieldErrors : null;
+
+  const submit = () => {
+    setDone(false);
+    change.mutate(
+      { currentPassword: hasPassword ? currentPassword : null, newPassword },
+      {
+        onSuccess: () => {
+          setCurrentPassword('');
+          setNewPassword('');
+          setDone(true);
+        },
+      },
+    );
+  };
+
+  return (
+    <Panel title={hasPassword ? 'Change your password' : 'Set a password'} testId={`${TestIdPrefix}.Password`}>
+      <Stack sx={{ gap: 2, p: 2 }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          {hasPassword
+            ? 'Your other sessions keep working — sign them out below if you want them gone.'
+            : 'You signed in without one. Setting a password gives you a way in that does not depend on a provider.'}
+        </Typography>
+        {hasPassword && (
+          <TextField
+            label="Current password"
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            error={!!fieldErrors?.currentPassword}
+            helperText={fieldErrors?.currentPassword?.join(' ')}
+            slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.CurrentPassword` } }}
+          />
+        )}
+        <TextField
+          label="New password"
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          error={!!fieldErrors?.newPassword}
+          helperText={
+            fieldErrors?.newPassword?.join(' ') ?? 'At least 12 characters.'
+          }
+          slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.NewPassword` } }}
+        />
+        {change.isError && !fieldErrors && (
+          <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.PasswordError`}>
+            {describeError(change.error).body}
+          </Alert>
+        )}
+        {done && (
+          <Alert severity="success" data-testid={`${TestIdPrefix}.PasswordSaved`}>
+            Your password is set. Nothing was signed out.
+          </Alert>
+        )}
+        <Box>
+          <Button
+            variant="contained"
+            disabled={change.isPending || newPassword.length < 12 || (hasPassword && currentPassword === '')}
+            onClick={submit}
+            data-testid={`${TestIdPrefix}.SavePassword`}
+          >
+            {hasPassword ? 'Change password' : 'Set password'}
+          </Button>
+        </Box>
+      </Stack>
+    </Panel>
+  );
+}
+
+/**
+ * Ending every other session of this account (005 S9a, N12).
+ *
+ * **The caller's own token dies too, and that is why this answers a body rather than a 204.** The
+ * epoch invalidates every session at once, the caller's included, so the response carries a fresh
+ * `AuthResult` and this panel hands it to `adoptSession` — keeping one writer of `tcms.token`, the
+ * same discipline the directory sign-in follows. A screen that ignored the body would sign the
+ * reader out one request after they pressed "sign out everywhere else", which is the exact defect
+ * the contract's 200 exists to prevent.
+ *
+ * No list of what is about to end, and no count: see this file's header.
+ */
+function SignOutOthersPanel() {
+  const signOutOthers = useSignOutOtherSessions();
+  const { adoptSession } = useAuth();
+  const [confirming, setConfirming] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const run = () => {
+    setDone(false);
+    signOutOthers.mutate(undefined, {
+      onSuccess: (result) => {
+        // Adopted, not merely stored: the provider is the one writer of the token, and it also
+        // refreshes the session's user. Failing to adopt would leave this tab holding a token the
+        // epoch has already invalidated.
+        void adoptSession(result.token).then(() => {
+          setConfirming(false);
+          setDone(true);
+        });
+      },
+    });
+  };
+
+  return (
+    <Panel title="Sign out everywhere else" testId={`${TestIdPrefix}.SignOutOthers`}>
+      <Stack sx={{ gap: 2, p: 2, alignItems: 'flex-start' }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          Ends every other session of this account — every browser, every device. This one keeps
+          working. There is no list of them: nothing here records sessions, so ending all of them at
+          once is the only thing this product can honestly offer.
+        </Typography>
+        {signOutOthers.isError && (
+          <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.SignOutOthersError`}>
+            {describeError(signOutOthers.error).body}
+          </Alert>
+        )}
+        {done && (
+          <Alert severity="success" data-testid={`${TestIdPrefix}.SignedOutOthers`}>
+            Every other session is now signed out. This one carried on with a new token.
+          </Alert>
+        )}
+        <Button
+          variant="outlined"
+          color="error"
+          disabled={signOutOthers.isPending}
+          onClick={() => setConfirming(true)}
+          data-testid={`${TestIdPrefix}.SignOutOthersOpen`}
+        >
+          Sign out other sessions
+        </Button>
+      </Stack>
+
+      <Dialog
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        fullWidth
+        maxWidth="xs"
+        data-testid={`${TestIdPrefix}.SignOutOthersDialog`}
+      >
+        <DialogTitle>Sign out every other session?</DialogTitle>
+        <DialogContent>
+          <DialogContentText variant="body2">
+            Anyone signed in as you anywhere else will have to sign in again. Nothing you have
+            typed here is affected.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirming(false)} data-testid={`${TestIdPrefix}.SignOutOthersCancel`}>
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={signOutOthers.isPending}
+            onClick={run}
+            data-testid={`${TestIdPrefix}.SignOutOthersConfirm`}
+          >
+            Sign them out
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Panel>
   );
 }

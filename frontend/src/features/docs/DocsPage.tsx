@@ -40,6 +40,7 @@ import {
 } from '../../api/queries';
 import { AttachmentsPanel } from '../../components/AttachmentList';
 import { DocBlockBody } from '../../components/DocBlockBody';
+import { ReviewPanel } from '../review/ReviewPanel';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
@@ -306,6 +307,23 @@ export function DocsPage() {
                     intendedCase={intended.data ?? null}
                   />
                   <PageAttachments page={data} projectId={projectId} />
+                  {/*
+                    §6g's reviewer apparatus, now that a page is a reviewable subject (005 S9b).
+                    Below the attachments for the same reason a case's sits below its steps: it is
+                    about the page rather than part of it.
+
+                    Mounted unconditionally — `ReviewPanel` renders **nothing** when
+                    `reviewEnabledDoc` is off, which is §6g's "a project that never turns it on
+                    should see no extra UI at all" enforced in one place rather than at each of the
+                    four call sites. `currentVersionNo` is passed so the panel can say the page has
+                    moved on since the reviewer was asked.
+                  */}
+                  <ReviewPanel
+                    projectId={projectId}
+                    subjectType="DOC"
+                    subjectId={data.id}
+                    currentVersionNo={data.currentVersionNo}
+                  />
                 </Stack>
               )}
             </DataRegion>

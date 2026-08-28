@@ -1,6 +1,7 @@
 import { Alert, Chip, Stack, Typography } from '@mui/material';
-import type { OrgChart } from '../../api/types';
+import type { OrgChart, OrgChartGap } from '../../api/types';
 import { formatCount } from '../../lib/format';
+import { permissionLabels } from '../../lib/permissions';
 
 /**
  * The vacancies — **the reason somebody opens an org chart in the first place** (plan §6k).
@@ -17,6 +18,18 @@ import { formatCount } from '../../lib/format';
  * That clipping is also why the third gap's wording is careful. "No assignment on any project you
  * can open" is the true claim; "no assignments" would be a claim about the company that this
  * reader's document cannot support.
+ *
+ * ## The fourth gap is the server's, and it is the only one that could not be derived here (005 S6)
+ *
+ * *"Which permissions does no active member of this project hold?"* cannot be computed from the
+ * document above: the chart names **roles**, and which permissions a role carries is the catalogue
+ * and §A3's matrix, which this client deliberately does not hold a second copy of — it checks
+ * permissions, never role names. So `OrgChart.gaps` is computed server-side and rendered here.
+ *
+ * It is grouped **by project**, because that is the unit somebody acts on: "nobody on Payments can
+ * approve a case" is a staffing decision, and the same fact spread across a list of permissions is
+ * not. Every key in the catalogue is a candidate, so a key this build cannot label renders as its
+ * own text rather than being dropped — a gap the client is too old to name is still a gap.
  */
 export function OrgChartGaps({ chart }: { chart: OrgChart }) {
   const inNoTeam = chart.people.filter((person) => person.teams.length === 0);
@@ -25,11 +38,18 @@ export function OrgChartGaps({ chart }: { chart: OrgChart }) {
     (person) => person.projects.length === 0 && person.companyRoles.length === 0,
   );
 
-  if (inNoTeam.length === 0 && withoutALead.length === 0 && withNoCell.length === 0) {
+  const gapsByProject = groupGaps(chart);
+
+  if (
+    inNoTeam.length === 0
+    && withoutALead.length === 0
+    && withNoCell.length === 0
+    && gapsByProject.length === 0
+  ) {
     return (
       <Alert severity="success" data-testid="OrgChart.Gaps.None">
-        Everybody is in a team, every team has a lead, and everybody has a role on at least one
-        project you can open.
+        Everybody is in a team, every team has a lead, everybody has a role on at least one project
+        you can open, and every project has somebody who can do each thing.
       </Alert>
     );
   }
@@ -54,6 +74,24 @@ export function OrgChartGaps({ chart }: { chart: OrgChart }) {
         count={withNoCell.length}
         labels={withNoCell.map((person) => person.displayName)}
       />
+      {/*
+        One section per project with an uncovered permission, rather than one flat list: the
+        remedy is per project — grant somebody a role there — and a flat list would make the
+        reader group it themselves before they could act on any of it.
+
+        Rendered only where there IS a gap, unlike the three above, which show their zero. Those
+        three are questions with a standing answer worth seeing; this one is a list of projects,
+        and a row per healthy project would bury the unhealthy ones in it.
+      */}
+      {gapsByProject.map(({ projectId, projectName, permissions }) => (
+        <Gap
+          key={projectId}
+          testId="OrgChart.Gaps.Uncovered"
+          title={`Nobody on ${projectName} can`}
+          count={permissions.length}
+          labels={permissions.map(labelForPermission)}
+        />
+      ))}
     </Stack>
   );
 }
@@ -92,4 +130,35 @@ function Gap({
       )}
     </Stack>
   );
+}
+
+/**
+ * `OrgChart.gaps` regrouped by project, in the chart's own column order.
+ *
+ * The order matters more than it looks: the matrix above renders projects in `chart.projects`
+ * order, and a panel that listed them alphabetically would have the reader hunting between two
+ * orderings of the same set. A gap naming a project the document does not carry is skipped — it
+ * cannot be labelled, and a section headed by a uuid is worse than one absent.
+ */
+function groupGaps(
+  chart: OrgChart,
+): { projectId: string; projectName: string; permissions: OrgChartGap[] }[] {
+  return chart.projects
+    .map((project) => ({
+      projectId: project.id,
+      projectName: project.name,
+      permissions: chart.gaps.filter((gap) => gap.projectId === project.id),
+    }))
+    .filter((group) => group.permissions.length > 0);
+}
+
+/**
+ * A catalogue key as the verb phrase this product uses everywhere else for it.
+ *
+ * Falls back to the raw key rather than dropping the entry: the contract's own description says
+ * every key in the catalogue is a candidate, so a client older than the server must still render
+ * the gap — legibly if it can, verbatim if it cannot.
+ */
+function labelForPermission(gap: OrgChartGap): string {
+  return (permissionLabels as Record<string, string>)[gap.permission] ?? gap.permission;
 }

@@ -5,6 +5,7 @@ import type {
   DashboardTile,
   LifecycleStatus,
   RepositoryDashboard,
+  StatusKind,
 } from '../../api/types';
 import { useDashboard, useProject, useSetProjectArchived } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
@@ -12,8 +13,14 @@ import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { formatCount, formatDateTime, formatPercent, plural, pluralNoun } from '../../lib/format';
-import { automationLabels, healthLabels, labelForKey, lifecycleLabels } from '../../lib/labels';
-import { lifecycleVar, severityVar } from '../../lib/statusColors';
+import {
+  automationLabels,
+  healthLabels,
+  labelForKey,
+  lastRunLabels,
+  lifecycleLabels,
+} from '../../lib/labels';
+import { lifecycleVar, severityVar, statusVar } from '../../lib/statusColors';
 
 /**
  * Repository status dashboard (plan §6o).
@@ -195,6 +202,31 @@ function DashboardBody({ data, projectId }: { data: RepositoryDashboard; project
         </Box>
       </Stack>
 
+      {/*
+        The third breakdown (005 N3/S8) — one bar per Feature split by **the outcome of each case's
+        last execution**, which is a different question from the two above and the reason it is a
+        panel of its own rather than a toggle on "By feature": those split by authoring status
+        (is this case written and approved), this splits by result (does it pass). A control that
+        swapped between them would make one panel answer two questions and hide whichever the
+        reader was not looking at.
+
+        The last result here is the one `TestCaseSummary.lastResult` shows, read from the same
+        `case_health` row, so the bar and the grid it drills into cannot disagree.
+      */}
+      <Panel title="By last run" testId="Dashboard.ByLastRun">
+        <BreakdownList
+          rows={data.byLastRun}
+          casesPath={casesPath}
+          testId="Dashboard.ByLastRun"
+          segmentLabels={lastRunLabels}
+          // `NEVER_RUN` is not a `StatusKind`, so `statusVar` has no entry for it and the muted
+          // grey is correct rather than a fallback: "no result" is the absence the other seven
+          // colours are the presence of.
+          segmentColor={(key) => statusVar[key as StatusKind] ?? 'var(--color-text-muted)'}
+          emptyMessage="No case has a feature and a recorded result yet."
+        />
+      </Panel>
+
       <Panel title="Automation coverage" testId="Dashboard.Automation">
         <AutomationCoverage coverage={data.automationCoverage} casesPath={casesPath} />
       </Panel>
@@ -371,11 +403,25 @@ function BreakdownList({
   casesPath,
   testId,
   emptyMessage,
+  segmentLabels = lifecycleLabels,
+  segmentColor = (key) => lifecycleVar[key as LifecycleStatus] ?? 'var(--color-text-muted)',
 }: {
   rows: DashboardBreakdown[];
   casesPath: string;
   testId: string;
   emptyMessage: string;
+  /**
+   * How a segment key becomes a word — defaulted to the authoring lifecycle, which is what the two
+   * original breakdowns split by.
+   *
+   * Parameterized for 005 S8's third breakdown, whose segments are execution outcomes and the
+   * literal `NEVER_RUN`. **A second component would have been the wrong answer**: the bar, the
+   * proportional widths, the drill-through and the accessible names are identical, and what differs
+   * is one vocabulary — which is a parameter, not a screen.
+   */
+  segmentLabels?: Record<string, string>;
+  /** The colour half of the same swap. See `lib/statusColors.ts` for why these are token names. */
+  segmentColor?: (key: string) => string;
 }) {
   /*
     A breakdown with no rows renders an empty bordered box — a panel with a heading and nothing
@@ -417,7 +463,7 @@ function BreakdownList({
                 // §180: a segment's key is a LifecycleStatus, and both its words and its colour
                 // come from this side now. `row.label` above is the opposite case and stays as it
                 // arrives — a feature path or a person's name is data only the server can resolve.
-                const segmentLabel = labelForKey(lifecycleLabels, segment.key);
+                const segmentLabel = labelForKey(segmentLabels, segment.key);
                 return (
                 <Tooltip
                   key={segment.key}
@@ -433,7 +479,7 @@ function BreakdownList({
                       // A status this build has never heard of gets the muted grey rather than
                       // `undefined`, which paints a transparent — invisible, still clickable —
                       // slice of a bar.
-                      bgcolor: lifecycleVar[segment.key as LifecycleStatus] ?? 'var(--color-text-muted)',
+                      bgcolor: segmentColor(segment.key),
                       display: 'block',
                       minWidth: 2,
                       '&:hover': { filter: 'brightness(1.15)' },

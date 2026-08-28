@@ -1,10 +1,11 @@
-import { Box, Button, Stack, Typography } from '@mui/material';
+import { Box, Button, Stack, Tooltip, Typography } from '@mui/material';
 import HistoryIcon from '@mui/icons-material/History';
 import { Link as RouterLink } from 'react-router-dom';
 import type { Suite } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
 import { Panel } from '../../components/PageHeader';
 import { LifecycleChip } from '../../components/StatusChip';
+import { formatCount } from '../../lib/format';
 import { ReviewPanel } from '../review/ReviewPanel';
 
 /**
@@ -59,9 +60,24 @@ export function SuitePanel({ projectId, suite }: { projectId: string; suite: Sui
             across suites, so "12 cases" beside a project total nobody can reconcile is the
             subtraction the contract's own description warns about.
           */}
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {suite.caseCount} {suite.caseCount === 1 ? 'case' : 'cases'} filed, added or tagged here
-          </Typography>
+          {/*
+            And the three arms, separately (005 S1). `caseCount` is the size of the union — the
+            arms overlap, so they do not add up to it and the sentence must not invite the
+            subtraction — and until they were served, "filed, added or tagged" named three
+            mechanisms while showing one number for all of them. A reader deciding whether a suite
+            is a filing structure or a saved query cannot tell from the union alone.
+          */}
+          <Tooltip
+            title={`${formatCount(suite.filedCount)} filed · ${formatCount(suite.addedCount)} added · ${formatCount(suite.taggedCount)} matched by tag. They overlap, so they do not add up to ${formatCount(suite.caseCount)}.`}
+          >
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.secondary' }}
+              data-testid="Cases.SuitePanel.CaseCount"
+            >
+              {suite.caseCount} {suite.caseCount === 1 ? 'case' : 'cases'} filed, added or tagged here
+            </Typography>
+          </Tooltip>
           <Box sx={{ flex: 1 }} />
           <Button
             component={RouterLink}

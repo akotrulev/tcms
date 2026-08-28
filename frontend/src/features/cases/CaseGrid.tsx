@@ -159,7 +159,18 @@ export function CaseGrid({
       renderCell: ({ row }) =>
         row.lastResult?.statusKind ? (
           <Tooltip
-            title={`${formatDateTime(row.lastResult.executedAt)}${
+            /*
+              The configuration is named (005 S1), and it is the field that makes this line mean
+              something: "Failed 3 days ago" is a fact about a case, "Failed 3 days ago on Chrome"
+              is a fact somebody can act on — and the same case may be green on the next
+              configuration. Never null on the wire; every run has one.
+
+              ~~And a count of linked defects.~~ → **dropped (005 §6, item 10).** The count is not
+              on this summary and putting it there means a join per row for a number that answers
+              nothing on its own: two linked defects on a passing case is not worse than one, and
+              the case's own screen has the list.
+            */
+            title={`${formatDateTime(row.lastResult.executedAt)} · ${row.lastResult.configurationName}${
               row.lastResult.releaseVersion ? ` · release ${row.lastResult.releaseVersion}` : ''
             }`}
           >

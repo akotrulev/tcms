@@ -112,6 +112,12 @@ export function useSetProjectArchived(
  * `staleTime` matches the other per-project vocabularies: staffing changes on the timescale of
  * onboarding, not of a page view, and a picker that refetches every time it opens flashes an
  * empty select for no reason.
+ *
+ * **The gate moved on 2026-08-28 (005 Q2): `project:read`, not `project:manage`.** Who is on a
+ * project is not a secret from the company — the org chart already serves exactly that fact,
+ * company-wide, on `OrgChartAssignment` — so the endpoint was refusing something a shipped endpoint
+ * already told everybody. Every *write* on the path keeps `project:manage`. The second consumer is
+ * the Access & roles page, which can now show its members to a reader who cannot staff them.
  */
 export function useProjectMembers(
   projectId: string,

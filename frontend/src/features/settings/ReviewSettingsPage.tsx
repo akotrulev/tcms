@@ -6,6 +6,7 @@ import {
   FormControl,
   FormControlLabel,
   FormHelperText,
+  Link as MuiLink,
   MenuItem,
   Select,
   Stack,
@@ -14,14 +15,19 @@ import {
   Typography,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { useProject, useProjectSettings, useUpdateProjectSettings } from '../../api/queries';
-import type { EditAfterApproval, ProjectSettings } from '../../api/types';
+import { Link as RouterLink, useParams } from 'react-router-dom';
+import {
+  useProject,
+  useProjectSettings,
+  useReviewImpact,
+  useUpdateProjectSettings,
+} from '../../api/queries';
+import type { EditAfterApproval, ProjectSettings, ReviewImpact } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { describeError } from '../../lib/describeError';
-import { formatDateTime } from '../../lib/format';
+import { formatCount, formatDateTime } from '../../lib/format';
 import { editAfterApprovalDescriptions, editAfterApprovalLabels } from '../../lib/labels';
 import { inputTestId, selectTestId } from '../../lib/muiTestIds';
 
@@ -375,6 +381,17 @@ function ReviewSettingsForm({
         )}
       </Panel>
 
+      {/*
+        The blast radius (005 N7/S7) — what a change here would land on, read at the moment the
+        screen opened.
+
+        Last, below the three panels rather than above them: it is not a control and it is not the
+        decision, it is the consequence, and a reader arrives to change a setting rather than to
+        read a report. It is offered only to somebody who can change something, because it costs
+        the write key — see `useReviewImpact`.
+      */}
+      {canEdit && <BlastRadius projectId={projectId} />}
+
       {save.isError && (
         <Alert severity="error" data-testid="ReviewSettings.Error">
           {/*
@@ -420,6 +437,116 @@ function ReviewSettingsForm({
               }`
             : 'Never changed'}
         </Typography>
+      </Stack>
+    </Stack>
+  );
+}
+
+/**
+ * What is in flight right now, and what a change to these settings would land on (005 N7/S7).
+ *
+ * ## Why it is a panel of counts and one list of names
+ *
+ * Five of the six numbers are counts because a count is the whole answer: *"eleven cases are in
+ * review"* tells an administrator that turning review off for cases is not a free action. The
+ * sixth is **named**, and that is the decision the plan records: "3 plans" is not something anybody
+ * can act on and "Q3 compliance sweep" is — those are the runs that would be refused while
+ * `requireApprovedCaseForRun` is on, and the remedy is per plan.
+ *
+ * ## Its failure is inline and does not stop anybody saving
+ *
+ * A policy is editable whether or not we could count what it would touch. So this region renders
+ * its own failure and the form above it goes on working — the counts are context for a decision,
+ * never a precondition of one.
+ *
+ * The counts span every module in the product (`documentation`'s drafts, `execution`'s blocked
+ * plans), which is why they are one server-side read rather than six the client would assemble:
+ * `project` cannot reach those modules, and the SPA doing the join would be the client holding an
+ * architecture the backend explicitly does not.
+ */
+function BlastRadius({ projectId }: { projectId: string }) {
+  const impact = useReviewImpact(projectId, true);
+
+  return (
+    <Panel title="What this would land on" testId="ReviewSettings.Impact">
+      <DataRegion
+        testId="ReviewSettings.Impact.Region"
+        state={{ ...impact, refetch: () => void impact.refetch() }}
+      >
+        {(counts) => (
+          <Stack sx={{ gap: 2 }}>
+            <Stack direction="row" sx={{ gap: 3, flexWrap: 'wrap' }}>
+              {(
+                [
+                  ['casesInReview', 'Cases in review'],
+                  ['suitesInReview', 'Suites in review'],
+                  ['plansInReview', 'Plans in review'],
+                  ['docsInReview', 'Pages in review'],
+                  ['awaitingFinalApproval', 'Waiting on final approval'],
+                  ['draftDocPages', 'Draft pages'],
+                ] as const
+              ).map(([field, label]) => (
+                <Stack key={field} sx={{ gap: 0.25 }} data-testid={`ReviewSettings.Impact.${field}`}>
+                  <Typography variant="h4" component="p">
+                    {formatCount(counts[field] as number)}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    {label}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+
+            <BlockedPlans projectId={projectId} plans={counts.plansBlockedFromRunning} />
+          </Stack>
+        )}
+      </DataRegion>
+    </Panel>
+  );
+}
+
+/**
+ * The plans a run would currently be refused for — named, and linked.
+ *
+ * Empty is the good state and says so rather than rendering nothing: a section that disappears
+ * when it is healthy makes the panel's shape change under the reader, and "nothing is blocked" is
+ * worth being able to see the answer to.
+ */
+function BlockedPlans({
+  projectId,
+  plans,
+}: {
+  projectId: string;
+  plans: ReviewImpact['plansBlockedFromRunning'];
+}) {
+  if (plans.length === 0) {
+    return (
+      <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid="ReviewSettings.Impact.NoBlockedPlans">
+        No plan is currently blocked from running.
+      </Typography>
+    );
+  }
+  return (
+    <Stack sx={{ gap: 0.75 }} data-testid="ReviewSettings.Impact.BlockedPlans">
+      <Typography variant="subtitle2">
+        Plans a run would be refused for ({formatCount(plans.length)})
+      </Typography>
+      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+        Their scope holds a case that is not approved, and “only approved test cases can go into a
+        run” is on.
+      </Typography>
+      <Stack sx={{ gap: 0.25 }}>
+        {plans.map((plan) => (
+          <MuiLink
+            key={plan.planId}
+            component={RouterLink}
+            to={`/projects/${projectId}/plans/${plan.planId}`}
+            variant="body2"
+            data-testid="ReviewSettings.Impact.BlockedPlan"
+          >
+            {plan.key} — {plan.name}
+          </MuiLink>
+        ))}
       </Stack>
     </Stack>
   );

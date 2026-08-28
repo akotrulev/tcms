@@ -16,6 +16,11 @@ type Op = operations;
 
 // auth & identity
 export type AuthResult = S['AuthResult'];
+/**
+ * Setting or changing your own password (005 S9a) — told apart by `CurrentUser.hasPassword`, with
+ * `currentPassword` null only on an account that has none.
+ */
+export type PasswordChangeInput = S['PasswordChangeInput'];
 export type CurrentUser = S['CurrentUser'];
 export type InvitationPreview = S['InvitationPreview'];
 export type UserRef = S['UserRef'];
@@ -32,6 +37,14 @@ export type OrgChart = S['OrgChart'];
 export type OrgChartPerson = S['OrgChartPerson'];
 export type OrgChartProject = S['OrgChartProject'];
 export type OrgChartAssignment = S['OrgChartAssignment'];
+/**
+ * A permission **no active member of a project holds** (005 N6/S6) — the fourth gap, and the only
+ * one the client cannot derive from the document it is already reading.
+ *
+ * Its `permission` is an unconstrained string rather than a `PermissionKey`, deliberately: the
+ * server's catalogue is the authority, so a key this build cannot label renders as its own text.
+ */
+export type OrgChartGap = S['OrgChartGap'];
 export type AssignmentVia = OrgChartAssignment['via'];
 export type Role = S['Role'];
 export type RoleAssignment = S['RoleAssignment'];
@@ -203,6 +216,14 @@ export type ReviewState = S['ReviewState'];
 export type ProjectSettings = S['ProjectSettings'];
 export type ProjectSettingsUpdate = S['ProjectSettingsUpdate'];
 export type EditAfterApproval = S['EditAfterApproval'];
+/**
+ * What changing the review policy would land on (005 N7/S7) — the blast radius beside the `PUT`.
+ *
+ * Costs `project:settings`, the **write** key, unlike the settings read itself: the counts are a
+ * fact about the team's backlog rather than about how the project behaves, and the only reader
+ * with a reason for them is the one about to change the policy.
+ */
+export type ReviewImpact = S['ReviewImpact'];
 /**
  * What a participation says. Read off `ReviewParticipation` rather than the *input* schema, for the
  * reason `CriterionMetric` gives one module over and in the opposite direction: the input declares
@@ -504,6 +525,43 @@ export type NotificationDeliveryStatus = S['NotificationDeliveryStatus'];
  * on this union is therefore a lookup that may miss, which is why `labels.ts` gives that column a
  * fallback and the subscription controls do not need one.
  */
+// tracker integration (004) — the binding a project files through, and the credential a person
+// connects with. Two different things with two different owners, which is the whole of D2.
+export type TrackerProvider = S['TrackerProvider'];
+export type TrackerBinding = S['TrackerBinding'];
+export type TrackerBindingInput = S['TrackerBindingInput'];
+export type TrackerBindingPatch = S['TrackerBindingPatch'];
+export type TrackerConnectedMember = S['TrackerConnectedMember'];
+export type TrackerConnectionState = S['TrackerConnectionState'];
+/**
+ * One person's connection to one host — **theirs**, served to nobody else, and carrying no
+ * property that could hold the credential.
+ */
+export type TrackerIdentity = S['TrackerIdentity'];
+/**
+ * The connect shape. `secret` is required here, unlike {@link NotificationChannelInput}'s
+ * absent-means-unchanged: a `POST` to this path always sets one, and rotation is a second `POST`.
+ */
+export type TrackerIdentityInput = S['TrackerIdentityInput'];
+export type TrackerConnectionCheck = S['TrackerConnectionCheck'];
+/**
+ * An issue **as fetched this request with the viewer's own credential** (D15). Never stored, never
+ * cached across users. Its `key` and `title` are today's and are not written anywhere.
+ */
+export type TrackerIssue = S['TrackerIssue'];
+export type TrackerIssueStatusCategory = S['TrackerIssueStatusCategory'];
+export type TrackerIssueAvailability = S['TrackerIssueAvailability'];
+export type TrackerIssueSearch = S['TrackerIssueSearch'];
+export type TrackerIssueLookup = S['TrackerIssueLookup'];
+export type TrackerIssueCreateInput = S['TrackerIssueCreateInput'];
+export type TrackerIssueCreated = S['TrackerIssueCreated'];
+/**
+ * A tracker issue linked to a case — the stored row, with **no key, no title and no status**
+ * (D5/D17). The chip fetches those live, or renders the provider and the stable id.
+ */
+export type IssueLink = S['IssueLink'];
+export type IssueLinkInput = S['IssueLinkInput'];
+
 export type NotificationEventType = S['NotificationEventType'];
 
 // external identity (§222) — the issuers a company authenticates its own people against

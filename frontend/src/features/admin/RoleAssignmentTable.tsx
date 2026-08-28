@@ -162,6 +162,24 @@ export function RoleAssignmentTable({
                   </TableCell>
                   <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
                     {formatDateTime(assignment.grantedAt)}
+                    {/*
+                      Who made the grant (005 S1) — stored since M0 and served since 2026-08-28, so
+                      this is a wire addition and not a new fact.
+
+                      Beside the date rather than in a column of its own: the two are one answer to
+                      one question — *how did this person come to hold this here* — and a grant with
+                      a date and no author is the half of it that cannot be followed up.
+
+                      **Null is ordinary and renders as nothing**, never as "unknown": the
+                      provisioning command writes grants with no person behind them, and so does a
+                      granter whose account no longer resolves. A row that said "granted by unknown"
+                      would invite somebody to go looking for one.
+                    */}
+                    {assignment.grantedBy && (
+                      <Box component="span" sx={{ display: 'block' }} data-testid={`${testId}.Row.GrantedBy`}>
+                        by {assignment.grantedBy.displayName}
+                      </Box>
+                    )}
                     {rowErrors[assignment.id] && (
                       <Alert
                         severity="error"

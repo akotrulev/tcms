@@ -98,7 +98,7 @@ export function RunSchedulePage() {
           { label: 'Runs', to: `/projects/${projectId}/runs` },
           { label: 'Schedules' },
         ]}
-        subtitle="A standing request for a run — what to ask for, and when. The runs a schedule creates are ordinary runs; nobody is recorded as having created them, because nobody did."
+        subtitle="A standing request for a run — what to ask for, and when. The runs a schedule creates are ordinary runs; nobody is recorded as having created them, because nobody did. Each schedule fires with the grants of the person it is listed against, checked at the moment it fires."
         actions={
           <PermissionGate projectId={projectId} permission="run:create">
             {({ allowed, reason }) => (
@@ -175,7 +175,16 @@ export function RunSchedulePage() {
                   <TableCell>Cadence</TableCell>
                   <TableCell>Next run</TableCell>
                   <TableCell>Last run</TableCell>
-                  <TableCell>Owner</TableCell>
+                  {/*
+                    ~~"Owner"~~ → **"Fires as" (005 §6, item 11).** The design change asked for this
+                    column to be drawn against `updatedAt` / `updatedBy` — who last changed the
+                    schedule — and **the contract carries neither**: `RunSchedule` has `createdAt`,
+                    `createdBy` and `createdByName` and nothing else about who touched it. So the
+                    honest half of the change is applied and the other half is not invented: the
+                    column says what the value IS — the authority every fire is gated as, re-checked
+                    each time — rather than "owner", which reads as a person to ask and is not.
+                  */}
+                  <TableCell>Fires as</TableCell>
                   <TableCell />
                 </TableRow>
               </TableHead>

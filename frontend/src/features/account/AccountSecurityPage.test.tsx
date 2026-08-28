@@ -7,7 +7,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
 import type { SocialIdentityList, SocialProvider } from '../../api/types'
 import { theme } from '../../app/theme'
+import { AuthContext, type AuthValue } from '../../auth/authContextValue'
 import {
+  anAuthResult,
+  aCurrentUser,
   aSocialIdentity,
   aSocialIdentityList,
   aSocialProviderList,
@@ -23,16 +26,22 @@ import { AccountSecurityPage } from './AccountSecurityPage'
  * and the `#linked=` acknowledgement behind router state.
  */
 
+/** Spy on the session adoption, which is the whole of what the sign-out panel owes the app. */
+let adoptSession = vi.fn(async () => aCurrentUser())
+
 function renderSecurity({
   providers = ['GITHUB', 'GITLAB', 'GOOGLE'] as SocialProvider[],
   identities = aSocialIdentityList(),
   path = '/account/security',
   state = null as Record<string, unknown> | null,
+  hasPassword = true,
 }: {
   providers?: SocialProvider[]
   identities?: SocialIdentityList
   path?: string
   state?: Record<string, unknown> | null
+  /** Which of the password panel's two intents this render is in. */
+  hasPassword?: boolean
 } = {}) {
   vi.spyOn(api, 'get').mockImplementation((p) => {
     if (/^\/auth\/social\/providers$/.test(p)) {
@@ -41,10 +50,29 @@ function renderSecurity({
     if (/^\/me\/social-identities$/.test(p)) {
       return Promise.resolve(identities)
     }
+    // 005 S9a: the password panel reads `hasPassword` off the session user to decide whether it is
+    // SETTING a password or CHANGING one, which are two different requests.
+    if (/^\/me$/.test(p)) {
+      return Promise.resolve(aCurrentUser({ hasPassword }))
+    }
     throw new Error(`unmocked read: ${p}`)
   })
+  /*
+    The session, which this page needs since 005 S9a: "sign out everywhere else" answers a fresh
+    token and the panel hands it to `adoptSession`, keeping one writer of `tcms.token`. A stub is
+    enough — what the tests assert is that the call is made, not what the provider does with it.
+  */
+  const user = aCurrentUser({ hasPassword })
+  const session: AuthValue = {
+    user,
+    status: 'ready',
+    login: async () => user,
+    adoptSession,
+    logout: () => {},
+  }
   return render(
     <ThemeProvider theme={theme}>
+      <AuthContext value={session}>
       <QueryClientProvider client={createTestQueryClient()}>
         <MemoryRouter initialEntries={[{ pathname: path.split('?')[0], search: path.split('?')[1] ? `?${path.split('?')[1]}` : '', state }]}>
           <Routes>
@@ -53,6 +81,7 @@ function renderSecurity({
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>
+      </AuthContext>
     </ThemeProvider>,
   )
 }
@@ -60,6 +89,7 @@ function renderSecurity({
 describe('AccountSecurityPage', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    adoptSession = vi.fn(async () => aCurrentUser())
   })
 
   it('renders a row per configured provider — linked ones dated with Unlink, others with Link', async () => {
@@ -195,5 +225,79 @@ describe('AccountSecurityPage', () => {
 
     const empty = await screen.findByTestId('AccountSecurity.Providers.Empty')
     expect(empty).toHaveTextContent(/no social sign-in providers configured/i)
+  })
+})
+
+/**
+ * The password and the sign-out (005 S9a, N12).
+ *
+ * The assertion that matters most is an absence: **there is no session list, and there is not
+ * going to be one.** Nothing in this product records sessions, so a list would be an invention;
+ * this file pins that so a later "completeness" pass has to read the reason before adding one.
+ */
+describe('AccountSecurityPage — the credential (005 S9a)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('asks for the current password when the account has one', async () => {
+    renderSecurity({ hasPassword: true })
+    expect(await screen.findByTestId('AccountSecurity.CurrentPassword')).toBeInTheDocument()
+  })
+
+  it('sets a password with no current one, for an account that has none', async () => {
+    // The state somebody who joined through SSO is in — and the one that closes the impossible
+    // half of the "unlink your last credential" refusal, which told them to set a password the
+    // product gave them no way to set.
+    const post = vi.spyOn(api, 'post').mockResolvedValue(undefined as never)
+    renderSecurity({ hasPassword: false })
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('AccountSecurity.CurrentPassword')).not.toBeInTheDocument(),
+    )
+    await userEvent.type(screen.getByTestId('AccountSecurity.NewPassword'), 'correct horse battery')
+    await userEvent.click(screen.getByTestId('AccountSecurity.SavePassword'))
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/me/password', {
+        currentPassword: null,
+        newPassword: 'correct horse battery',
+      }),
+    )
+  })
+
+  it('lands the server’s refusal on the field it names', async () => {
+    // The 400 keys on `errors.currentPassword` deliberately — a 401 would trip the SPA's
+    // session-recovery path for a typo.
+    drivingAFailedWrite()
+    vi.spyOn(api, 'post').mockRejectedValue(
+      new ApiError(400, 'wrong', { currentPassword: ['That is not your current password.'] }),
+    )
+    renderSecurity({ hasPassword: true })
+
+    await userEvent.type(await screen.findByTestId('AccountSecurity.CurrentPassword'), 'nope')
+    await userEvent.type(screen.getByTestId('AccountSecurity.NewPassword'), 'correct horse battery')
+    await userEvent.click(screen.getByTestId('AccountSecurity.SavePassword'))
+
+    expect(await screen.findByText('That is not your current password.')).toBeInTheDocument()
+  })
+
+  it('adopts the fresh token when it signs the other sessions out', async () => {
+    // The epoch kills the caller's own token too, which is why this endpoint answers a body. A
+    // screen that ignored it would sign the reader out one request after they asked not to be.
+    const result = anAuthResult()
+    vi.spyOn(api, 'post').mockResolvedValue(result as never)
+    renderSecurity()
+
+    await userEvent.click(await screen.findByTestId('AccountSecurity.SignOutOthersOpen'))
+    await userEvent.click(screen.getByTestId('AccountSecurity.SignOutOthersConfirm'))
+
+    await waitFor(() => expect(adoptSession).toHaveBeenCalledWith(result.token))
+  })
+
+  it('shows no list of sessions anywhere on the page (N12)', async () => {
+    renderSecurity()
+    await screen.findByTestId('AccountSecurity.SignOutOthersOpen')
+    expect(screen.queryByTestId('AccountSecurity.Sessions')).not.toBeInTheDocument()
   })
 })

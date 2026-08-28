@@ -223,3 +223,36 @@ export function groupByArea(
   }
   return [...groups].map(([area, list]) => ({ area, label: areaLabels[area], permissions: list }));
 }
+
+/**
+ * How a refusal names the permission it is about — `Problem.permission` and `Problem.scope`
+ * (005 C1a/C1b), turned into the one sentence the Refused state shows.
+ *
+ * **Labelled from this catalogue, never from a role name.** The 403 says which *key* was missing;
+ * which roles happen to hold it is a different question, answered on the org chart, and a client
+ * that mapped one to the other would be holding a second copy of §A3.
+ *
+ * Three degradations, all of which happen in practice and none of which may crash a screen:
+ *
+ *   - **`permission` is null** — most refusals still omit it, so the sentence falls back to the
+ *     shape it had before the member existed and says nothing it cannot support.
+ *   - **the key is not in this catalogue** — a server ahead of this build. It renders as its own
+ *     text (`case:approve`), which is worse copy than a label and far better than a dropped
+ *     sentence or the word `undefined`.
+ *   - **`scope` is null or unrecognized** — the "where" clause is simply omitted.
+ */
+export function refusalSentence(permission: string | null, scope: string | null): string {
+  const where =
+    scope === 'PROJECT'
+      ? ' on this project'
+      : scope === 'COMPANY'
+        ? ' in this company'
+        : scope === 'SYSTEM'
+          ? ' on this instance'
+          : '';
+  if (permission === null) {
+    return `You do not have the permission this needs${where}.`;
+  }
+  const label = (permissionLabels as Record<string, string>)[permission] ?? permission;
+  return `You do not have permission to ${label}${where}.`;
+}

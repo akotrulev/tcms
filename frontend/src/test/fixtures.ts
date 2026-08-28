@@ -38,12 +38,14 @@ import type {
   FeatureImportPlan,
   IdentityProvider,
   InvitationPreview,
+  IssueLink,
   NotificationChannel,
   NotificationDelivery,
   NotificationSubscription,
   PlanStatistics,
   Project,
   ProjectSettings,
+  ReviewImpact,
   SocialIdentity,
   SocialIdentityList,
   SocialProviderList,
@@ -58,6 +60,10 @@ import type {
   RoleAssignment,
   Suite,
   Team,
+  TrackerBinding,
+  TrackerConnectedMember,
+  TrackerIdentity,
+  TrackerIssue,
   User,
   UserInvitation,
   UserRef,
@@ -505,6 +511,115 @@ export function anOrgChartPerson(overrides: Partial<OrgChartPerson> = {}): OrgCh
  */
 export function anOrgChart(overrides: Partial<OrgChart> = {}): OrgChart {
   return { teams: [], people: [], projects: [], gaps: [], ...overrides }
+}
+
+// ---- tracker integration (004) ----
+
+/**
+ * A project's binding. Non-secret by construction — there is no field on this shape that could
+ * carry a credential, which is the half of D2 the fixtures can hold.
+ */
+export function aTrackerBinding(overrides: Partial<TrackerBinding> = {}): TrackerBinding {
+  return {
+    id: 'tb1',
+    projectId: 'p1',
+    provider: 'JIRA_CLOUD',
+    baseUrl: 'https://acme.atlassian.test',
+    externalProject: 'PAY',
+    config: {},
+    isDefault: true,
+    enabled: true,
+    createdAt: AT,
+    updatedAt: AT,
+    lockVersion: 0,
+    ...overrides,
+  }
+}
+
+/**
+ * One person's connection, **theirs**.
+ *
+ * `secretHint` and `accountId` default to null, which is the least interesting body — and, on this
+ * shape, the safest default for a fixture to have: a test asserting that a screen does not leak a
+ * hint must set one deliberately, or it is asserting against a body that never had one.
+ */
+export function aTrackerIdentity(overrides: Partial<TrackerIdentity> = {}): TrackerIdentity {
+  return {
+    id: 'ti1',
+    provider: 'JIRA_CLOUD',
+    baseUrl: 'https://acme.atlassian.test',
+    authMethod: 'PAT',
+    secretHint: null,
+    accountId: null,
+    expiresAt: null,
+    lastError: null,
+    lastCheckedAt: null,
+    enabled: true,
+    createdAt: AT,
+    updatedAt: AT,
+    ...overrides,
+  }
+}
+
+/** A row of the D19 list — a person, and a state per bound host. Nothing else exists on it. */
+export function aTrackerConnectedMember(
+  overrides: Partial<TrackerConnectedMember> = {},
+): TrackerConnectedMember {
+  return { user: aUserRef(), hosts: [], ...overrides }
+}
+
+/**
+ * An issue **as fetched this request**. Everything on it is live: the key is today's, the title and
+ * status were read with one person's credential, and none of it is stored anywhere.
+ */
+export function aTrackerIssue(overrides: Partial<TrackerIssue> = {}): TrackerIssue {
+  return {
+    provider: 'JIRA_CLOUD',
+    id: '10042',
+    key: 'PAY-991',
+    title: 'An issue',
+    statusCategory: 'TODO',
+    statusName: 'To Do',
+    url: 'https://acme.atlassian.test/browse/PAY-991',
+    bindingId: 'tb1',
+    ...overrides,
+  }
+}
+
+/**
+ * A stored link — **no key, no title, no status** (D5/D17), which is the whole shape of the
+ * decision and the reason a chip has to fetch or degrade.
+ *
+ * The default `url` names a key (`PAY-991`) that the default `issueId` (`10042`) does not
+ * mention, deliberately: the id-only test asserts the chip renders the id and never the URL's key,
+ * and a fixture whose two halves agreed could not tell the two apart.
+ */
+export function anIssueLink(overrides: Partial<IssueLink> = {}): IssueLink {
+  return {
+    id: 'il1',
+    provider: 'JIRA_CLOUD',
+    host: 'https://acme.atlassian.test',
+    issueId: '10042',
+    url: 'https://acme.atlassian.test/browse/PAY-991',
+    bindingId: 'tb1',
+    createdAt: AT,
+    createdBy: null,
+    ...overrides,
+  }
+}
+
+/** What a change to the review policy would land on (005 S7). All zero, nothing named. */
+export function aReviewImpact(overrides: Partial<ReviewImpact> = {}): ReviewImpact {
+  return {
+    casesInReview: 0,
+    suitesInReview: 0,
+    plansInReview: 0,
+    docsInReview: 0,
+    awaitingFinalApproval: 0,
+    draftDocPages: 0,
+    plansBlockedFromRunning: [],
+    ...overrides,
+  }
 }
 
 export function aDocPageSummary(overrides: Partial<DocPageSummary> = {}): DocPageSummary {

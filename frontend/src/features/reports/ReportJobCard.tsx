@@ -3,7 +3,7 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { Link as RouterLink } from 'react-router-dom';
 import { isJobFinished } from '../../api/queries';
 import type { ReportJob } from '../../api/types';
-import { formatDateTime } from '../../lib/format';
+import { formatBytes, formatDateTime } from '../../lib/format';
 import {
   humanize,
   reportFormatLabels,
@@ -101,6 +101,22 @@ function JobBody({ job, projectId }: { job: ReportJob; projectId: string }) {
           data-testid={`${TestId}.RequestedAt`}
         >
           {formatDateTime(job.requestedAt)}
+          {/*
+            The rendered artifact's size (005 S1) — `Artifact.sizeBytes`, joined onto the job so a
+            list of them can say "2.4 MB" without a call per row.
+
+            Beside the timestamp rather than in a column: it is a property of the download, and the
+            one decision it informs — is this worth opening on a phone — is made at the moment
+            somebody looks at the button. Null until COMPLETED and null for ever on a FAILED one,
+            on the same terms as `downloadUrl`, so it simply does not render rather than showing a
+            zero that would claim an empty file.
+          */}
+          {job.sizeBytes !== null && (
+            <Box component="span" data-testid={`${TestId}.Size`}>
+              {' · '}
+              {formatBytes(job.sizeBytes)}
+            </Box>
+          )}
         </Typography>
         <Box sx={{ flex: 1 }} />
         {running && <CircularProgress size={14} data-testid={`${TestId}.Spinner`} />}

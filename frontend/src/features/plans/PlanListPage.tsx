@@ -308,14 +308,43 @@ function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string })
                 <TableCell align="right">
                   <Identifier>{formatCount(plan.caseCount)}</Identifier>
                 </TableCell>
+                {/*
+                  Both are nullable and the two nulls are different claims (005 S5), which is why
+                  each carries its own tooltip rather than sharing one em dash with no explanation:
+
+                    - `passRate === null` — nothing in scope has a result. A plan nobody has run has
+                      no pass rate, and `0` would say every case failed.
+                    - `coverage === null` — the scope is empty, so the denominator is zero.
+
+                  `formatPercent` renders both as an em dash, which is right for the cell; the
+                  tooltip is what stops the em dash reading as "we could not load this".
+                */}
                 <TableCell align="right">
-                  <Identifier>{formatPercent(plan.passRate)}</Identifier>
+                  <Tooltip title={plan.passRate === null ? 'Nothing in this plan has been run yet.' : ''}>
+                    <span>
+                      <Identifier>{formatPercent(plan.passRate)}</Identifier>
+                    </span>
+                  </Tooltip>
                 </TableCell>
                 <TableCell align="right">
-                  <Identifier>{formatPercent(plan.coverage)}</Identifier>
+                  <Tooltip title={plan.coverage === null ? 'This plan’s scope is empty.' : ''}>
+                    <span>
+                      <Identifier>{formatPercent(plan.coverage)}</Identifier>
+                    </span>
+                  </Tooltip>
                 </TableCell>
                 <TableCell>
-                  <CriteriaStrip criteria={plan.exitCriteria ?? []} testId="Plans.Row.ExitCriteria" />
+                  {/*
+                    The counts come from the summary (005 S5) and the marks from the criteria: the
+                    server evaluates the gates in one batched pass over the page, but does not say
+                    per criterion which one passed — so the sentence is authoritative and the marks
+                    stay honestly grey.
+                  */}
+                  <CriteriaStrip
+                    criteria={plan.exitCriteria ?? []}
+                    summary={{ met: plan.exitCriteriaMet, total: plan.exitCriteriaTotal }}
+                    testId="Plans.Row.ExitCriteria"
+                  />
                 </TableCell>
                 <TableCell align="right">
                   <ArchiveToggle projectId={projectId} plan={plan} />

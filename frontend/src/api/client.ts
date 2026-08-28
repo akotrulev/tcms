@@ -75,6 +75,26 @@ export class ApiError extends Error {
    * against a string the server is free to reword.
    */
   readonly line: number | null;
+  /**
+   * `Problem.permission` — the catalogue key the refusal is about (005 C1a).
+   *
+   * The Refused state's whole subject: a 403 that says "ask a project lead" and nothing else
+   * leaves the reader with no request to make, while "you need `case:approve`" — labelled from the
+   * same catalogue `GET /me/permissions` is labelled from — is a sentence they can take to an
+   * administrator. Read as an unconstrained string rather than a `PermissionKey`: the server's
+   * catalogue is the authority and a key this client cannot label must still render as its own
+   * text, never be dropped.
+   *
+   * **Null on most refusals today**, and every consumer must degrade rather than crash: the
+   * envelope carries the member, but the backend sites that fill it in land progressively.
+   */
+  readonly permission: string | null;
+  /**
+   * `Problem.scope` — where the permission would have to be held: `SYSTEM` · `COMPANY` · `PROJECT`.
+   *
+   * It changes who to ask, which is the actionable half. Null whenever `permission` is.
+   */
+  readonly scope: string | null;
 
   constructor(
     status: number,
@@ -84,6 +104,8 @@ export class ApiError extends Error {
     retryAfter: string | null = null,
     title: string | null = null,
     line: number | null = null,
+    permission: string | null = null,
+    scope: string | null = null,
   ) {
     super(detail);
     this.name = 'ApiError';
@@ -94,6 +116,8 @@ export class ApiError extends Error {
     this.correlationId = correlationId;
     this.retryAfter = retryAfter;
     this.line = line;
+    this.permission = permission;
+    this.scope = scope;
   }
 
   /** True when the server rejected individual fields, so a form can land them per input. */
@@ -205,7 +229,12 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
   try {
     // The dev fault seam. `import.meta.env.DEV` is a literal so Rollup drops the branch — and
     // `lib/devFaults` with it — from a production build; see that module's header.
-    const faulted = import.meta.env.DEV ? maybeFault(path, signal) : null;
+    // The method travels with the path because the tracker arm needs it: `POST …/tracker/issues`
+    // (filing) and `GET …/tracker/issues` (the typeahead) are one path with two contracts, and the
+    // fault has to answer the right one — a 502 problem for the first, a degraded 200 for the second.
+    const faulted = import.meta.env.DEV
+      ? maybeFault(path, signal, (init.method as string | undefined) ?? 'GET')
+      : null;
     res = await (
       faulted ??
       fetch(`${BASE}${path}`, {
@@ -244,6 +273,8 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
     let fieldErrors: Record<string, string[]> | null = null;
     let title: string | null = null;
     let line: number | null = null;
+    let permission: string | null = null;
+    let scope: string | null = null;
     try {
       const body = await res.json();
       detail = body.detail ?? body.title ?? detail;
@@ -251,6 +282,11 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
       // Read, never derived. A body that omits it — every refusal that is not about a text, and
       // any server older than 005 S1 — leaves this null, and the caller anchors nothing.
       line = typeof body.line === 'number' && Number.isFinite(body.line) ? body.line : null;
+      // Same rule as `line`, and the same reason it is a typeof check rather than a cast: the two
+      // members are optional in the contract, so a refusal that omits them must leave nulls here
+      // and not the string "undefined" inside a sentence.
+      permission = typeof body.permission === 'string' ? body.permission : null;
+      scope = typeof body.scope === 'string' ? body.scope : null;
       if (body.errors && typeof body.errors === 'object') {
         fieldErrors = body.errors as Record<string, string[]>;
       }
@@ -265,6 +301,8 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
       res.headers.get('retry-after'),
       title,
       line,
+      permission,
+      scope,
     );
   }
 

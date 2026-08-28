@@ -28,12 +28,14 @@ export { base, keys } from './keys';
 
 export {
   useAcceptInvitation,
+  useChangeMyPassword,
   useCurrentUser,
   useDirectoryLogin,
   useInvitationPreview,
   useMyCompanyPermissions,
   useMyPermissions,
   useMySocialIdentities,
+  useSignOutOtherSessions,
   useSocialProviders,
   useSsoProviders,
   useStartSocialLink,
@@ -109,6 +111,7 @@ export {
   useAssignReviewer,
   useProjectSettings,
   useRecordReviewVerdict,
+  useReviewImpact,
   useReviews,
   useSetReviewCommentResolution,
   useUnassignReviewer,
@@ -181,6 +184,23 @@ export {
   useUnlinkPlanDocument,
   useUpdateDocPage,
 } from './documentation';
+export {
+  useConnectTracker,
+  useCreateIssueLink,
+  useCreateTrackerBinding,
+  useCreateTrackerIssue,
+  useDeleteIssueLink,
+  useDeleteTrackerBinding,
+  useDisconnectTracker,
+  useIssueLinks,
+  useMyTrackerIdentities,
+  useTestTrackerIdentity,
+  useTrackerBindings,
+  useTrackerConnectedMembers,
+  useTrackerIssue,
+  useTrackerIssueSearch,
+  useUpdateTrackerBinding,
+} from './tracker';
 export {
   useCreateNotificationChannel,
   useDeleteNotificationChannel,

@@ -180,7 +180,10 @@ const healthHelp: Record<HealthSignal, string> = {
   // it started firing.
   CONDITION_DRIFT: 'A shared condition this case relies on has changed since the case was last saved.',
   NEVER_EXECUTED: 'This case has never been run.',
-  LONG_UNEXECUTED: 'This case has not been executed in over 90 days.',
+  // The threshold is configurable per deployment (005 §5), so the tooltip names the fact and not
+  // a number this build cannot know. See `healthLabels`.
+  LONG_UNEXECUTED:
+    'This case has not been run for a long time. How long counts as a long time is configured for this instance.',
   STALE_AUTOMATION: 'Marked automated, but no automated result has arrived recently.',
   UNDECLARED_AUTOMATION:
     'CI has posted results for this case recently, but its automation status says it is not automated — so automation coverage does not count it.',
@@ -191,7 +194,25 @@ const healthHelp: Record<HealthSignal, string> = {
   // read off one set of rows, so a case whose only link points into a deleted page says "not linked"
   // in both places.
   UNLINKED: 'This case is not linked to any documentation, so nothing traces it to a requirement.',
-  FAILING_REPEATEDLY: 'This case has failed in several consecutive runs.',
+  /*
+    ~~'This case has failed in several consecutive runs.'~~ → rewritten 2026-08-28 against the
+    predicate itself (005 §5.4), because "several consecutive runs" is wrong in two ways that matter.
+
+    `ExecutionSource.recomputeFailingRepeatedly` takes the case's most recent results in
+    `execution_fact` — a window of 3 by default, `tcms.reporting.failing-repeatedly-window` — and
+    raises the signal only if **every one of them** is `FAILED`, comparing the count to the window
+    SIZE rather than to the rows found. So:
+
+      - it is `FAILED`, not "did not pass": three `BLOCKED` results in a row raise nothing;
+      - it is a count of executions, not a period — there is no "recently";
+      - it spans every run, plan and configuration in the project, so it is not "in this run";
+      - a case with fewer results than the window never raises it, however badly it did.
+
+    Wording that is true: *"failed the last N times it ran"*. The number is left unstated for
+    `LONG_UNEXECUTED`'s reason — the window is configurable and this client is not told it.
+  */
+  FAILING_REPEATEDLY:
+    'Every one of this case’s most recent results was a failure — across every run and configuration in this project, not just this one.',
   // Rewritten in §182, the slice that gave this signal a derivation — the fourth tooltip in this
   // map corrected by the slice that made its signal capable of appearing, after §158's, §178's and
   // §181's. Four for four, which is no longer a run of coincidences: copy for a signal nothing can

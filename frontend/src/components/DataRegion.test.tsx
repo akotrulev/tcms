@@ -2,6 +2,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, TimeoutError } from '../api/client'
 import { theme } from '../app/theme'
@@ -30,6 +31,9 @@ const state = (partial: Partial<DataRegionState<Rows>>): DataRegionState<Rows> =
 
 function renderRegion(regionState: DataRegionState<Rows>, extra?: Partial<Parameters<typeof DataRegion<Rows>>[0]>) {
   return render(
+    // The router is here for the Refused state's way out (005 C1b), which is a `RouterLink` to the
+    // org chart — the only thing in this component that needs one.
+    <MemoryRouter>
     <ThemeProvider theme={theme}>
       <DataRegion<Rows>
         testId="Cases"
@@ -45,7 +49,8 @@ function renderRegion(regionState: DataRegionState<Rows>, extra?: Partial<Parame
           </ul>
         )}
       </DataRegion>
-    </ThemeProvider>,
+    </ThemeProvider>
+    </MemoryRouter>,
   )
 }
 
@@ -318,5 +323,40 @@ describe('DataRegion', () => {
       expect(screen.getByTestId('Cases.RenderError')).toBeInTheDocument()
       consoleError.mockRestore()
     })
+  })
+})
+
+/**
+ * The Refused state (005 C1).
+ *
+ * It is asserted on `DataRegion` rather than on one screen because that is where family 9's
+ * inheritance happens: this component draws the refusal on all 42 screens, so a regression here is
+ * every screen's.
+ */
+describe('the Refused state', () => {
+  const refusal = () =>
+    new ApiError(403, 'refused', null, null, null, null, null, 'case:approve', 'PROJECT')
+
+  it('names the permission the reader is missing', () => {
+    renderRegion(state({ isError: true, error: refusal() }))
+    expect(screen.getByTestId('Cases.Error')).toHaveTextContent('approve test cases')
+  })
+
+  it('offers the org chart as the way to find somebody who can grant it', () => {
+    renderRegion(state({ isError: true, error: refusal() }))
+    expect(screen.getByTestId('Cases.Refused')).toBeInTheDocument()
+  })
+
+  it('offers no way out on a failure that is not a refusal', () => {
+    // The link is specific to the one failure a reader can act on. A 500 has nobody to ask.
+    renderRegion(state({ isError: true, error: new ApiError(500, 'boom') }))
+    expect(screen.queryByTestId('Cases.Refused')).not.toBeInTheDocument()
+  })
+
+  it('still renders when the refusal named no permission', () => {
+    // Most backend sites send `permission: null` today. A null must degrade, never crash.
+    renderRegion(state({ isError: true, error: new ApiError(403, 'refused') }))
+    expect(screen.getByTestId('Cases.Refused')).toBeInTheDocument()
+    expect(screen.getByTestId('Cases.Error')).not.toHaveTextContent('undefined')
   })
 })

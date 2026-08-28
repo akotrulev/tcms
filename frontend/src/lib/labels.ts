@@ -42,6 +42,10 @@ import type {
   RunStatus,
   SocialProvider,
   StatusKind,
+  TrackerConnectionState,
+  TrackerIssueAvailability,
+  TrackerIssueStatusCategory,
+  TrackerProvider,
   StepFormat,
   StepKeyword,
   SuiteActionKind,
@@ -211,6 +215,24 @@ export const statusLabels = {
   // two words for one status on two screens.
   WIP: 'WIP',
 } as const satisfies Record<StatusKind, string>;
+
+/**
+ * The dashboard's by-last-run segmentation (005 N3/S8) — the seven outcomes, plus the eighth thing
+ * a case's last result can be: **there isn't one**.
+ *
+ * `NEVER_RUN` is not a `StatusKind` and must not be folded into `UNTESTED`, which is a recorded
+ * verdict somebody entered. A case nobody has ever executed and a case somebody marked Untested are
+ * different facts about different work, and a segmentation that merged them would put the two
+ * populations a repository dashboard exists to tell apart into one bar.
+ *
+ * A partial map with `labelForKey`'s fallback rather than a `satisfies` one: the server sends a
+ * `StatusKind` **or** the literal, so the key type on the wire is `string` and there is no union to
+ * be exhaustive against. The `statusLabels` spread is what keeps the seven from being a second copy.
+ */
+export const lastRunLabels: Record<string, string> = {
+  ...statusLabels,
+  NEVER_RUN: 'Never run',
+};
 
 /**
  * The run lifecycle, in the reader's words.
@@ -490,6 +512,9 @@ export const reviewSubjectLabels = {
   CASE: 'case',
   SUITE: 'suite',
   PLAN: 'plan',
+  // The fourth (005 S9b). "page" rather than "doc" or "documentation page": the panel's sentences
+  // read "This page has never been submitted for review", and the reader is looking at one.
+  DOC: 'page',
 } as const satisfies Record<ReviewSubjectType, string>;
 
 /**
@@ -676,7 +701,12 @@ export const healthLabels = {
   STALE_APPROVAL: 'Approved before its last edit',
   CONDITION_DRIFT: 'Shared condition changed',
   NEVER_EXECUTED: 'Never executed',
-  LONG_UNEXECUTED: 'Not run in 90 days',
+  // ~~'Not run in 90 days'~~ → **'Not run recently' (005 §5/§6, item 13).** Ninety days is a
+  // `Duration` an operator can tune (`tcms.case-health.long-unexecuted`), so the old label was a
+  // number this client had no way of knowing and no way of being told: serving the configured
+  // threshold would mean a config-disclosure endpoint for one adverb. The reworded label is true
+  // on every deployment; the precise line is the operator's to know.
+  LONG_UNEXECUTED: 'Not run recently',
   STALE_AUTOMATION: 'Automation stopped reporting',
   UNLINKED: 'Not linked to any spec',
   FAILING_REPEATEDLY: 'Failing repeatedly',
@@ -997,3 +1027,83 @@ export const auditTargetTypeLabels: Record<string, string> = {
 export function auditTargetTypeLabel(targetType: string): string {
   return auditTargetTypeLabels[targetType] ?? humanize(targetType);
 }
+
+// ------------------------------------------------------------------ tracker (004) ----
+
+/**
+ * The two trackers this product speaks to, in the words their own users use.
+ *
+ * `satisfies Record<TrackerProvider, string>` for this catalogue's usual reason — a third adapter
+ * is a compile error here until somebody decides how to say it out loud, rather than a binding
+ * whose provider column renders `JIRA_DC` at a person.
+ */
+export const trackerProviderLabels = {
+  JIRA_CLOUD: 'Jira Cloud',
+  JIRA_DC: 'Jira Data Center',
+  AZURE_DEVOPS: 'Azure DevOps',
+} as const satisfies Record<TrackerProvider, string>;
+
+/**
+ * A tracker's status, reduced to the **category** and never to its own status name.
+ *
+ * This is the map 004 Phase 2 requires be keyed on the category: a project's status names are
+ * free text, per-project and unbounded — "Ready for QA", "Pending triage", "На проверке" — so a
+ * `satisfies Record<Union, string>` over *those* is not a thing that can exist, and a colour table
+ * keyed on them would be a permanent list of the statuses somebody happened to have configured
+ * the week it was written. The tracker tells us which of three buckets a status is in; that is
+ * what is bounded, and that is what is coloured.
+ *
+ * The chip still shows `statusName` as the *word* — it is what the reader recognises — and takes
+ * only its colour from here. Two different questions, and conflating them is what makes an
+ * unbounded enum look bounded.
+ */
+export const trackerStatusCategoryLabels = {
+  TODO: 'To do',
+  IN_PROGRESS: 'In progress',
+  DONE: 'Done',
+} as const satisfies Record<TrackerIssueStatusCategory, string>;
+
+/** MUI chip colours for the three categories. Not a status palette: three buckets, three weights. */
+export const trackerStatusCategoryColors = {
+  TODO: 'default',
+  IN_PROGRESS: 'info',
+  DONE: 'success',
+} as const satisfies Record<TrackerIssueStatusCategory, 'default' | 'info' | 'success'>;
+
+/**
+ * Whether a person on this project can use the integration, per bound host (004 D19).
+ *
+ * **Three states and no fourth**, which is the decision rather than the vocabulary: the list is
+ * scoped to answering *"why can nobody on this team file defects?"* and may not show the
+ * credential, the hint, the account id, the scopes, the expiry or the text of the last error.
+ * `Needs attention` is the whole of what a colleague may learn; the sentence explaining it belongs
+ * on the affected person's own account page, where the credential is theirs to read about.
+ */
+export const trackerConnectionStateLabels = {
+  CONNECTED: 'Connected',
+  NEEDS_ATTENTION: 'Needs attention',
+  NOT_CONNECTED: 'Not connected',
+} as const satisfies Record<TrackerConnectionState, string>;
+
+/** The same three, as chip colours. */
+export const trackerConnectionStateColors = {
+  CONNECTED: 'success',
+  NEEDS_ATTENTION: 'warning',
+  NOT_CONNECTED: 'default',
+} as const satisfies Record<TrackerConnectionState, 'success' | 'warning' | 'default'>;
+
+/**
+ * Why a chip is showing the id instead of the issue (004 D16/D17) — one sentence per reason.
+ *
+ * `NOT_CONNECTED` and `UNAVAILABLE` are deliberately **different sentences over the same visible
+ * chip**: D16 makes *no access* and *bad token* render identically to the reader (the tracker's
+ * refusal is not ours to interpret), but "you have not connected" is a thing the reader can fix in
+ * one click and "the tracker did not answer" is not. Telling them apart in the tooltip is the
+ * whole of the difference, and it is why `tcmsFaults.tracker('403')` has an arm of its own.
+ */
+export const trackerUnavailableReasons = {
+  AVAILABLE: '',
+  NOT_CONNECTED: 'Connect your tracker account to see this issue\u2019s title and status.',
+  UNAVAILABLE:
+    'The tracker did not answer, or it will not show you this issue. The link still works.',
+} as const satisfies Record<TrackerIssueAvailability, string>;

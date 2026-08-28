@@ -901,6 +901,23 @@ function ExecutionForm({
             executionId={execution.id}
             defects={execution.defects}
             frozen={frozen}
+            /*
+              What a filed defect would say (004 Phase 3), composed here because this is the screen
+              that knows it. Omitted while the run is still loading rather than filled with
+              placeholders: a defect report naming an empty environment is worse than a button that
+              appears a beat late.
+            */
+            filing={
+              run.data && {
+                caseKey: execution.caseKey,
+                caseTitle: execution.caseTitle,
+                runName: run.data.name,
+                environment: run.data.configuration?.name ?? null,
+                releaseVersion: execution.releaseVersion ?? run.data.releaseVersion,
+                verdict: execution.status?.name ?? null,
+                failedStep: firstUnpassedStep(execution, statuses),
+              }
+            }
           />
         </Stack>
 
@@ -1279,4 +1296,23 @@ function StepRow({
       </Stack>
     </Box>
   );
+}
+
+/**
+ * The first step whose recorded status is not a pass — what a filed defect is about (004 Phase 3).
+ *
+ * Resolved through the project's status vocabulary rather than by name: a status is a project's
+ * own row and only its `kind` is bounded, so matching on the word "Failed" would find nothing in a
+ * project that calls it something else. `null` when nothing was recorded per step, which is
+ * ordinary — a tester may record one verdict for the whole case — and the description then simply
+ * omits the line rather than guessing at one.
+ */
+function firstUnpassedStep(execution: TestExecution, statuses: CaseStatus[]): string | null {
+  const kindOf = (statusId: string | null) =>
+    statusId ? (statuses.find((s) => s.id === statusId)?.kind ?? null) : null;
+  const step = (execution.steps ?? []).find((s) => {
+    const kind = kindOf(s.statusId ?? null);
+    return kind !== null && kind !== 'PASSED' && kind !== 'UNTESTED';
+  });
+  return step ? `step ${step.position} — ${step.action}` : null;
 }

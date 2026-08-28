@@ -4,6 +4,7 @@ import { api, qs } from '../client';
 import type {
   AuthResult,
   CurrentUser,
+  PasswordChangeInput,
   EffectivePermissions,
   InvitationPreview,
   SocialIdentityList,
@@ -202,6 +203,55 @@ export function useDirectoryLogin(): UseMutationResult<
   return useMutation({
     mutationFn: ({ providerId, ...credentials }) =>
       api.post<AuthResult>(`/auth/ldap/${encodeURIComponent(providerId)}/login`, credentials),
+    meta: { handled: true },
+  });
+}
+
+/**
+ * Sets or changes the calling account's own password (005 S9a, N12).
+ *
+ * **Two intents, one endpoint**, told apart by `CurrentUser.hasPassword`: an account with none
+ * *sets* one and sends `currentPassword: null`; an account with one *changes* it and must send the
+ * current one, because possession of a session is not possession of the credential and a
+ * walked-away-from laptop must not be enough to lock its owner out.
+ *
+ * **The current session survives, and every other one does too.** A password change bumps nothing;
+ * signing the other devices out is {@link useSignOutOtherSessions}, which says so on its own terms.
+ * Coupling them would sign somebody out of their phone for rotating a password on a schedule.
+ *
+ * `meta: { handled: true }`: the 400 lands on `errors.currentPassword` and the 422 on
+ * `errors.newPassword`, both beside the input they are about. It answers 204, so nothing is written
+ * back — except `keys.me`, because `hasPassword` has just changed and the form's own shape depends
+ * on it.
+ */
+export function useChangeMyPassword(): UseMutationResult<void, Error, PasswordChangeInput> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PasswordChangeInput) => api.post<void>('/me/password', input),
+    meta: { handled: true },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.me }),
+  });
+}
+
+/**
+ * Ends **every other session** of this account (005 S9a).
+ *
+ * The one revocation this product has: sessions are stateless, so what is bumped is the account's
+ * `pv` epoch, which invalidates all of them at once — *including the caller's own*. Which is why
+ * this answers `200` with a fresh `AuthResult` rather than `204`: the caller's token is dead the
+ * moment the epoch moves, and a bodiless answer would sign them out one request after they pressed
+ * "sign out everywhere else".
+ *
+ * **So the caller must adopt the body.** The page hands it to `adoptSession`, keeping one writer of
+ * `tcms.token`, exactly as `useDirectoryLogin` does. A screen that ignores the response here breaks
+ * its own session on the next request, which is a defect this hook cannot prevent on its own.
+ *
+ * There is deliberately **no session list** (005 N12): nothing records sessions, so all-or-nothing
+ * is what the mechanism is, and a list would be an invention rather than a view.
+ */
+export function useSignOutOtherSessions(): UseMutationResult<AuthResult, Error, void> {
+  return useMutation({
+    mutationFn: () => api.post<AuthResult>('/me/sign-out-others'),
     meta: { handled: true },
   });
 }

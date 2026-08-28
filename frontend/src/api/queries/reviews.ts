@@ -5,6 +5,7 @@ import type {
   ProjectSettings,
   ProjectSettingsUpdate,
   Review,
+  ReviewImpact,
   ReviewSubjectType,
 } from '../types';
 import { base, keys } from './keys';
@@ -49,6 +50,33 @@ export function useUpdateProjectSettings(projectId: string) {
     meta: { handled: true },
     onSuccess: () =>
       client.invalidateQueries({ queryKey: keys.projectSettings(projectId) }),
+  });
+}
+
+/**
+ * What a change to the review policy would land on (005 N7/S7) — the blast radius beside the form.
+ *
+ * **Costs `project:settings`, the write key**, unlike {@link useProjectSettings} beside it, so it
+ * takes an `enabled` the caller drives from the gate: the counts say how much unfinished review
+ * work the project holds, which is a fact about the team's backlog rather than about how the
+ * project behaves, and the only reader with a reason to ask is the one about to change the policy.
+ * A reader without the key sees the settings read-only and no panel — not a refusal.
+ *
+ * `staleTime: 0` for the reason the endpoint's own description gives: the point is the number now.
+ * `meta: { handled: true }` because the panel renders its own failure inline, beside a form that
+ * still works — a policy is editable whether or not we could count what it would touch.
+ */
+export function useReviewImpact(
+  projectId: string,
+  enabled: boolean,
+): UseQueryResult<ReviewImpact> {
+  return useQuery({
+    queryKey: keys.reviewImpact(projectId),
+    queryFn: ({ signal }) =>
+      api.get<ReviewImpact>(`${base(projectId)}/settings/review-impact`, { signal }),
+    enabled: enabled && !!projectId,
+    staleTime: 0,
+    meta: { handled: true },
   });
 }
 

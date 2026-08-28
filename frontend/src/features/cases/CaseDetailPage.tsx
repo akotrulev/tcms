@@ -59,6 +59,7 @@ import { CaseDeleteDialog } from './CaseDeleteDialog';
 import { ReviewPanel } from '../review/ReviewPanel';
 import { CaseVersionPanel } from './CaseVersionPanel';
 import { ExternalLinkDialog } from './ExternalLinkDialog';
+import { IssueLinksPanel } from './IssueLinksPanel';
 import { FlakePanel } from './FlakePanel';
 import { StepDataView } from './StepDataCell';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusChip } from '../../components/StatusChip';
@@ -377,6 +378,14 @@ export function CaseDetailPage() {
                   projectId={projectId}
                   caseId={caseId}
                 />
+
+                {/*
+                  004 Phase 3's issue links, below traceability and deliberately not inside it: that
+                  panel is about what this case COVERS, and this is about what is wrong with the
+                  thing it covers. The two have different lifetimes and one list would call a closed
+                  bug and a requirement both "related".
+                */}
+                <IssueLinksPanel projectId={projectId} caseId={caseId} />
               </Stack>
 
               {/* Metadata sidebar. */}

@@ -170,3 +170,82 @@ describe('DefectPanel', () => {
     )
   })
 })
+
+/**
+ * Filing a defect from a failed step (004 Phase 3).
+ *
+ * The one behaviour worth a test of its own is the third reason the control can be unavailable:
+ * **the caller has connected no tracker**. Permissions cannot express it — filing happens with the
+ * caller's own credential, so somebody holding every key in the catalogue still cannot file — and
+ * a button that opens a dialog which then reports a 409 teaches them the product is broken rather
+ * than that they have a connection to make.
+ */
+describe('DefectPanel — filing (004 Phase 3)', () => {
+  const filing = {
+    caseKey: 'TC-1',
+    caseTitle: 'Refund rounds to the cent',
+    runName: 'Regression 12',
+    environment: 'Chrome',
+    releaseVersion: '2.4.0',
+    verdict: 'Failed',
+    failedStep: 'step 3 — apply the refund',
+  }
+
+  function renderFiling(identities: unknown[], frozen = false) {
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path.startsWith('/me/permissions')) return heldPermissions(['defect:create'])
+      if (path === '/me/tracker-identities') return identities
+      throw new Error(`unmocked read: ${path}`)
+    }) as never)
+
+    return render(
+      <TestProviders
+        client={createTestQueryClient()}
+        route={`/projects/${PROJECT}/runs/r1/executions/x1`}
+        userId={CALLER}
+      >
+        <DefectPanel
+          projectId={PROJECT}
+          runId="r1"
+          executionId="x1"
+          defects={[]}
+          frozen={frozen}
+          filing={filing}
+        />
+      </TestProviders>,
+    )
+  }
+
+  it('offers filing to a connected caller', async () => {
+    renderFiling([{ id: 'ti1' }])
+    await waitFor(() => expect(screen.getByTestId('Execution.Defects.File')).toBeEnabled())
+  })
+
+  it('disables filing with a way out when the caller has connected nothing', async () => {
+    renderFiling([])
+    await waitFor(() => expect(screen.getByTestId('Execution.Defects.File')).toBeDisabled())
+    // Hidden-with-a-reason, not hidden: the reason is actionable and the action is beside it.
+    expect(screen.getByTestId('Execution.Defects.Connect')).toBeInTheDocument()
+  })
+
+  it('freezes filing on a closed run, exactly as linking is frozen', async () => {
+    renderFiling([{ id: 'ti1' }], true)
+    await waitFor(() => expect(screen.getByTestId('Execution.Defects.File')).toBeDisabled())
+    // No connect prompt on a frozen run: reopening it is the remedy, not connecting.
+    expect(screen.queryByTestId('Execution.Defects.Connect')).not.toBeInTheDocument()
+  })
+
+  it('pre-fills the description from the execution, composed client-side', async () => {
+    // What a defect report says is a product decision this SPA makes visibly, not a template
+    // buried in an adapter — so the content is asserted here rather than trusted to the server.
+    renderFiling([{ id: 'ti1' }])
+    await waitFor(() => expect(screen.getByTestId('Execution.Defects.File')).toBeEnabled())
+    await userEvent.click(screen.getByTestId('Execution.Defects.File'))
+
+    const description = await screen.findByTestId('Execution.Defects.FileDescription')
+    expect((description as HTMLTextAreaElement).value).toContain('TC-1')
+    expect((description as HTMLTextAreaElement).value).toContain('Regression 12')
+    expect((description as HTMLTextAreaElement).value).toContain('Chrome')
+    expect((description as HTMLTextAreaElement).value).toContain('step 3 — apply the refund')
+  })
+})

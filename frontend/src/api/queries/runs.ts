@@ -351,13 +351,30 @@ export function useDeleteEvidence(projectId: string, runId: string, executionId:
 export interface DefectLinkInput {
   externalKey: string;
   url: string;
+  /**
+   * The binding the issue was filed through, when it was filed through `POST …/tracker/issues`
+   * (004, *The creation seam*). The server resolves it to the provider that binding names and
+   * writes **that** into `defect_link.provider` — the first truthful writer the column has had.
+   *
+   * **Not optional decoration.** `V62`'s unique index has `provider` in its key: a follow-up that
+   * omits this writes an `EXTERNAL` row, the outbox backstop writes a `JIRA_CLOUD` row for the same
+   * issue, the index does not collide, and the run screen shows the defect twice with both rows
+   * looking correct. Absent is right only for a link a person made by hand, where `EXTERNAL` is
+   * what actually happened.
+   */
+  bindingId?: string | null;
 }
 
 /**
  * Links this result to a defect in somebody else's tracker.
  *
- * <p>No `provider` field: the server writes `EXTERNAL` and refuses to take a caller's word for a
- * tracker it cannot reach (`V62`). Both the run detail and the case history render these links, so
+ * <p>~~No `provider` field: the server writes `EXTERNAL` and refuses to take a caller's word for a
+ * tracker it cannot reach (`V62`).~~ → amended by 004: still no `provider`, and now a `bindingId`,
+ * which is not the same concession. The caller does not name a tracker; it names a **binding this
+ * project owns**, and the server reads the provider off that. What was refused was taking a
+ * caller's word for a system it cannot reach, and this is a row it can.
+ *
+ * <p>Both the run detail and the case history render these links, so
  * both are invalidated — the execution alone would leave the run's table showing the old set.
  */
 export function useLinkDefect(projectId: string, runId: string, executionId: string) {

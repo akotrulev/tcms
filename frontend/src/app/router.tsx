@@ -127,6 +127,11 @@ const AccountSecurityPage = lazy(() =>
     default: m.AccountSecurityPage,
   })),
 );
+const TrackerConnectionsPage = lazy(() =>
+  import('../features/account/TrackerConnectionsPage').then((m) => ({
+    default: m.TrackerConnectionsPage,
+  })),
+);
 const ClassificationSettingsPage = lazy(() =>
   import('../features/settings/ClassificationSettingsPage').then((m) => ({
     default: m.ClassificationSettingsPage,
@@ -135,6 +140,11 @@ const ClassificationSettingsPage = lazy(() =>
 const ReviewSettingsPage = lazy(() =>
   import('../features/settings/ReviewSettingsPage').then((m) => ({
     default: m.ReviewSettingsPage,
+  })),
+);
+const TrackerSettingsPage = lazy(() =>
+  import('../features/settings/TrackerSettingsPage').then((m) => ({
+    default: m.TrackerSettingsPage,
   })),
 );
 const NotificationSettingsPage = lazy(() =>
@@ -278,6 +288,21 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <AccountSecurityPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            The caller's own tracker credentials (004 D2) — beside `/account/security` and under the
+            same reasoning: a credential belongs to a person, not to a project, so a project segment
+            in this URL would be an arbitrary one and would suggest connecting again per project.
+            Plural, because one account connects to as many hosts as its projects are bound to.
+          */}
+          <Route
+            path="/account/trackers"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <TrackerConnectionsPage />
               </Suspense>
             }
           />
@@ -592,6 +617,24 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <NotificationSettingsPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            The fourth (004 Phase 1) — which tracker this project links and files into, and who on
+            the team has connected to it. Routed for everybody for the reason above: the reads cost
+            `integration:manage`, and a contributor who pastes this link gets the page and the
+            sentence rather than a redirect nobody can explain.
+
+            The credential itself is deliberately NOT here. It is a person's, and it lives at
+            `/account/trackers`.
+          */}
+          <Route
+            path="/projects/:projectId/settings/trackers"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <TrackerSettingsPage />
               </Suspense>
             }
           />

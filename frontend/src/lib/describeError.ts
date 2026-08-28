@@ -11,6 +11,7 @@
  */
 
 import { ApiError, TimeoutError } from '../api/client';
+import { refusalSentence } from './permissions';
 
 export interface DescribedError {
   title: string;
@@ -31,7 +32,23 @@ export interface DescribedError {
    * render the not-found screen, which has a way out, rather than an error panel that does not.
    */
   isAddressWrong: boolean;
+  /**
+   * The **Refused** state (005 C1) — a 403, as opposed to every other failure.
+   *
+   * Carried as its own flag rather than left for consumers to re-derive from `code === '403'`,
+   * because two surfaces render it differently: the region names the permission and offers the
+   * org chart, and the notification stack does not (a corner toast is not where somebody goes to
+   * find an administrator). One predicate, two renderings.
+   */
+  isRefused: boolean;
+  /** `Problem.permission`, verbatim — null on a refusal that did not name one, and on every non-403. */
+  permission: string | null;
+  /** `Problem.scope` — `SYSTEM` · `COMPANY` · `PROJECT`. Null whenever `permission` is. */
+  scope: string | null;
 }
+
+/** The five members every non-refusal shares, so each branch below states only what it decides. */
+const NOT_REFUSED = { isRefused: false, permission: null, scope: null } as const;
 
 /**
  * `ProblemErrorAttributes` on the server words these for an API *caller* — "Check the request
@@ -58,6 +75,7 @@ export function describeError(error: unknown): DescribedError {
       // The one failure where retrying is genuinely likely to work.
       retryable: true,
       isAuth: false,
+      ...NOT_REFUSED,
       isAddressWrong: false,
     };
   }
@@ -72,16 +90,40 @@ export function describeError(error: unknown): DescribedError {
         body: 'Sign in again to continue — nothing you have typed has been lost.',
         retryable: false,
         isAuth: true,
+        ...NOT_REFUSED,
         isAddressWrong: false,
       };
     }
     if (error.status === 403) {
+      /*
+        The Refused state (005 C1a/C1b).
+
+        ~~"Ask a project lead to grant you the permission this view needs."~~ → superseded
+        2026-08-28. Two things were wrong with it and both are the same mistake: it named neither
+        the permission nor anybody who can actually grant one. A project lead is a guess — several
+        of the keys that raise a 403 here are COMPANY scope, which no project lead holds — and
+        "the permission this view needs" is a sentence the reader cannot repeat to anyone.
+
+        So the copy now names the permission, from `Problem.permission` and the catalogue in
+        `lib/permissions.ts`, and says **Ask a Company Admin**. Not a named person: 005 C1b dropped
+        the "who can grant this here" endpoint that would have found one, and the org chart — which
+        every member may open, and which already discloses who holds what — is where the reader
+        goes to find them. `DataRegion` renders that as an actual link; here it is only a sentence,
+        because the notification stack shows this same copy in a corner toast that is not a place
+        to go looking for an administrator.
+
+        Every clause degrades on its own: an absent `permission` loses the key and keeps the ask,
+        an absent `scope` loses the where and keeps both.
+      */
       return {
         ...shared,
         title: "You don't have access to this",
-        body: 'Ask a project lead to grant you the permission this view needs.',
+        body: `${refusalSentence(error.permission, error.scope)} Ask a Company Admin to grant it.`,
         retryable: false,
         isAuth: false,
+        isRefused: true,
+        permission: error.permission,
+        scope: error.scope,
         isAddressWrong: false,
       };
     }
@@ -110,6 +152,7 @@ export function describeError(error: unknown): DescribedError {
         body: 'It may have been deleted, or it may be in a project you cannot open.',
         retryable: false,
         isAuth: false,
+        ...NOT_REFUSED,
         isAddressWrong: true,
       };
     }
@@ -137,6 +180,7 @@ export function describeError(error: unknown): DescribedError {
           body: error.detail,
           retryable: false,
           isAuth: false,
+          ...NOT_REFUSED,
           isAddressWrong: false,
         };
       }
@@ -146,6 +190,7 @@ export function describeError(error: unknown): DescribedError {
         body: 'This was updated while you were working on it. Reload to see their version.',
         retryable: false,
         isAuth: false,
+        ...NOT_REFUSED,
         isAddressWrong: false,
       };
     }
@@ -156,6 +201,7 @@ export function describeError(error: unknown): DescribedError {
         body: 'The server asked us to slow down. It will retry shortly.',
         retryable: true,
         isAuth: false,
+        ...NOT_REFUSED,
         isAddressWrong: false,
       };
     }
@@ -166,6 +212,7 @@ export function describeError(error: unknown): DescribedError {
         body: 'The server ran into a problem. Try again in a moment.',
         retryable: true,
         isAuth: false,
+        ...NOT_REFUSED,
         isAddressWrong: false,
       };
     }
@@ -183,6 +230,7 @@ export function describeError(error: unknown): DescribedError {
         body: 'That address is not one this app can open. It may be mistyped, or a link that has gone stale.',
         retryable: false,
         isAuth: false,
+        ...NOT_REFUSED,
         isAddressWrong: true,
       };
     }
@@ -195,6 +243,7 @@ export function describeError(error: unknown): DescribedError {
       body: error.detail,
       retryable: false,
       isAuth: false,
+      ...NOT_REFUSED,
       isAddressWrong: false,
     };
   }
@@ -208,6 +257,7 @@ export function describeError(error: unknown): DescribedError {
     code: error instanceof Error ? error.name : 'unknown',
     retryable: true,
     isAuth: false,
+    ...NOT_REFUSED,
     isAddressWrong: false,
   };
 }

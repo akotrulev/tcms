@@ -23,6 +23,14 @@ export const keys = {
   project: (id: string) => ['projects', id] as const,
   classification: (p: string) => ['projects', p, 'classification'] as const,
   projectSettings: (p: string) => ['projects', p, 'settings'] as const,
+  /**
+   * What changing the review policy would land on (005 S7).
+   *
+   * Under `projectSettings`' prefix so a saved policy refreshes it — the counts move the moment the
+   * gate they describe does — and **read fresh every time the screen opens**, because the whole
+   * point of the panel is the number *now*.
+   */
+  reviewImpact: (p: string) => ['projects', p, 'settings', 'review-impact'] as const,
   statuses: (p: string) => ['projects', p, 'statuses'] as const,
   projectMembers: (p: string) => ['projects', p, 'members'] as const,
   /**
@@ -244,6 +252,70 @@ export const keys = {
    */
   notificationDeliveries: (p: string, id: string) =>
     ['projects', p, 'notification-channels', id, 'deliveries'] as const,
+  /**
+   * The project's tracker bindings (004 Phase 1), and one of them.
+   *
+   * Two keys, `notificationChannels`' pair and for its reason rather than a shape difference:
+   * `GET …/bindings/{id}` serves exactly what the list serves, but the list is **refused** for a
+   * caller without `integration:manage`, so a detail read served out of an entry that never
+   * populated would be indistinguishable from a binding that does not exist.
+   */
+  /**
+   * Everything under this project's tracker sub-resource, as a prefix (§250's rule).
+   *
+   * A binding write moves three different reads — the list, the connected-members states (the set
+   * of bound hosts just changed) and every issue previewed through it — so the invalidation needs
+   * the prefix on its own rather than three call sites naming three keys.
+   */
+  trackerRoot: (p: string) => ['projects', p, 'tracker'] as const,
+  trackerBindings: (p: string) => ['projects', p, 'tracker', 'bindings'] as const,
+  trackerBinding: (p: string, id: string) => ['projects', p, 'tracker', 'bindings', id] as const,
+  /**
+   * Who on this project has connected to the hosts its bindings name (004 D19).
+   *
+   * Under the project's `tracker` prefix, so deleting or adding a binding — which changes the set
+   * of hosts every row is scored against — refreshes it with no hook naming this key.
+   */
+  trackerConnectedMembers: (p: string) => ['projects', p, 'tracker', 'connected-members'] as const,
+  /**
+   * The caller's **own** tracker connections (004 D2). No project segment: an identity is a
+   * person's credential for a host, and every project bound to that host uses the same one.
+   *
+   * Under `['me', …]` beside `mySocialIdentities`, which is the same kind of thing — a personal
+   * credential, self-service, gated on being the caller and nothing else.
+   */
+  myTrackerIdentities: ['me', 'tracker-identities'] as const,
+  /**
+   * A tracker issue typeahead, keyed by the binding **and** the term.
+   *
+   * The binding is in the key because 004 D17(c) makes it part of the issue's identity: two
+   * bindings to different hosts may hold the same numeric id, and they are different issues. The
+   * term is in the key for every search key's reason — the answer to `PAY-9` must not land in the
+   * list showing `PAY-99`.
+   */
+  trackerIssues: (p: string, bindingId: string, q: string) =>
+    ['projects', p, 'tracker', 'issues', bindingId, { q }] as const,
+  /**
+   * One issue, **as fetched with this viewer's credential** (004 D15).
+   *
+   * The client cache is per session and therefore already per user, which is what makes a key
+   * without a user segment correct here — and it is worth saying, because the *server's* cache is
+   * not: `TrackerCache` keys on `(userId, bindingId, issueId)` and 004's leak test is about that
+   * one. The rule travels with the data, not with this factory.
+   *
+   * `bindingId` leads the id for `trackerIssues`' reason: the id alone is not an identity.
+   */
+  trackerIssue: (p: string, bindingId: string, issueId: string) =>
+    ['projects', p, 'tracker', 'issues', bindingId, issueId] as const,
+  /**
+   * A case's links out to tracker issues (004 Phase 3) — the `EXTERNAL_ISSUE` `doc_link` rows.
+   *
+   * Under `keys.case`'s prefix, so a case write refreshes them, and **separate from
+   * `keys.caseFeature`/`caseDraft` rather than folded into the case document**: the rows are
+   * served by their own endpoint and a link added does not change the case's own version.
+   */
+  issueLinks: (p: string, caseId: string) =>
+    ['projects', p, 'cases', caseId, 'issue-links'] as const,
   users: ['users'] as const,
   teams: ['teams'] as const,
   /**

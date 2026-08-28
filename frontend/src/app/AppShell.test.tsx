@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { api } from '../api/client'
-import type { Project } from '../api/types'
+import type { PermissionKey, Project } from '../api/types'
 import { heldPermissions } from '../test/permissions'
 import { createTestQueryClient } from '../test/queryClient'
 import { TestProviders } from '../test/TestProviders'
@@ -49,14 +49,15 @@ const project = (id: string, key: string, name: string): Project => ({
 
 const PROJECTS = [project(OLB, 'OLB', 'Online Banking'), project(MOB, 'MOB', 'Mobile App')]
 
-function renderShell(route: string) {
+function renderShell(route: string, permissions: PermissionKey[] = []) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path === '/projects') return PROJECTS
-    // The rail reads permissions since §242, to decide whether the two audit entries exist at all.
+    // The rail reads permissions since §242, to decide whether the two audit entries exist at all
+    // — and, since 005 C2, the three credential entries as well.
     // Answered with the real shape rather than by the `[]` fallback below, which is an array where
     // the contract declares an object — the contract double catches it, and the failure reads as a
     // navigation defect rather than as a missing arm.
-    if (path.startsWith('/me/permissions')) return heldPermissions([])
+    if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     return []
   }) as typeof api.get)
 
@@ -163,5 +164,49 @@ describe('AppShell navigation', () => {
     // nothing about the toggle.
     expect(drawer.getByTestId('Nav.Link.Allprojects')).toHaveAttribute('href', '/')
     expect(drawer.queryByTestId('Nav.CollapseToggle')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * The credential entries (005 C2, decided).
+ *
+ * Five comments in `AppShell.tsx` argue that hiding a rail entry tells a lie about the **product**
+ * — "this instance has no CI credentials" — which is worse than telling the truth about the
+ * reader's access, and those comments are still right for `Review` and `Access & roles`. They are
+ * outweighed for exactly the three entries here, because those pages have **no read-only view at
+ * all**: the reads themselves cost the key, so what a caller without it gets is a whole screen
+ * whose only content is a refusal.
+ *
+ * So this file pins the rule in both directions, which is the part a one-sided test would miss.
+ */
+describe('AppShell — the credential entries (005 C2)', () => {
+  it('lists them for a caller who can open the pages they lead to', async () => {
+    renderShell(`/projects/${OLB}/cases`, ['integration:manage', 'token:issue', 'company:idp'])
+    await railReady()
+
+    expect(rail().getByRole('link', { name: 'Notifications' })).toBeInTheDocument()
+    expect(rail().getByRole('link', { name: 'Issue tracker' })).toBeInTheDocument()
+    expect(rail().getByRole('link', { name: 'API tokens' })).toBeInTheDocument()
+    expect(rail().getByRole('link', { name: 'Single sign-on' })).toBeInTheDocument()
+  })
+
+  it('un-lists them for a caller who cannot', async () => {
+    renderShell(`/projects/${OLB}/cases`, ['case:read'])
+    await railReady()
+
+    expect(rail().queryByRole('link', { name: 'Notifications' })).not.toBeInTheDocument()
+    expect(rail().queryByRole('link', { name: 'Issue tracker' })).not.toBeInTheDocument()
+    expect(rail().queryByRole('link', { name: 'API tokens' })).not.toBeInTheDocument()
+    expect(rail().queryByRole('link', { name: 'Single sign-on' })).not.toBeInTheDocument()
+  })
+
+  it('keeps listing the entries whose pages ARE readable without the write key', async () => {
+    // The rule is whether the page can be READ, not whether it can be written. Both of these
+    // render read-only for a caller without `project:settings` / `project:members`, so both stay.
+    renderShell(`/projects/${OLB}/cases`, ['case:read'])
+    await railReady()
+
+    expect(rail().getByRole('link', { name: 'Review' })).toBeInTheDocument()
+    expect(rail().getByRole('link', { name: 'Access & roles' })).toBeInTheDocument()
   })
 })

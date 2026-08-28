@@ -39,6 +39,7 @@ import InventoryOutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined';
 import LoginOutlinedIcon from '@mui/icons-material/LoginOutlined';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
+import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -191,9 +192,43 @@ interface AuditReach {
   company: boolean;
 }
 
+/**
+ * The three **credential** entries, and whether this reader may open the page each one leads to
+ * (005 C2, decided).
+ *
+ * ~~Family 7's second governing rule: a rail entry the caller can see leads to a page they can
+ * read — so every entry here is listed for everybody, and the page explains its own refusal.~~ →
+ * **superseded 2026-08-28: the rule is now conditional.** The three pages named here are the ones
+ * where the argument the comments below make — that hiding an entry lies about the *product* —
+ * is outweighed, because the page has **no read-only view at all**: the reads themselves cost
+ * `integration:manage` / `token:issue` / `company:idp`, so what a caller without the key gets is a
+ * whole screen that exists only to refuse them. `Audit trail` already worked this way, at the
+ * product owner's direction, and the reasoning generalises to credentials: a standing entry into
+ * a page whose entire content is withheld is an invitation to ask for exactly what the key exists
+ * to refuse.
+ *
+ * The old reasoning is kept above rather than deleted because it is still right everywhere else in
+ * this rail — `Review` and `Access & roles` are listed for everybody precisely because both render
+ * read-only for a caller without the write key. **The test is whether the page can be read, not
+ * whether it can be written.**
+ *
+ * `Project access` (`Access & roles`) is the fourth screen and it moves the *other* way: 005 Q2
+ * relaxed `GET /projects/{id}/members` to `project:read`, so the page became readable and the
+ * entry is listed *because* of that — the same rule applied correctly.
+ */
+interface CredentialReach {
+  /** `integration:manage` — the project's notification channels **and** its tracker bindings. */
+  integrations: boolean;
+  /** `token:issue` — the company's API tokens. */
+  tokens: boolean;
+  /** `company:idp` — single sign-on. */
+  sso: boolean;
+}
+
 function projectNav(
   projectId: string,
   audit: AuditReach,
+  credentials: CredentialReach,
 ): { heading: string; items: NavItem[] }[] {
   const p = `/projects/${projectId}`;
   return [
@@ -296,22 +331,37 @@ function projectNav(
           icon: <RateReviewOutlinedIcon fontSize="small" />,
         },
         /*
-          §218's channels. Ungated like every item in this rail — and here the argument the entry
-          above makes has to be made differently, because the page it leads to shows a contributor
-          nothing at all: the reads cost `integration:manage`, so there is no read-only view to fall
-          back on.
+          §218's channels. ~~Ungated like every item in this rail — a rail with no Notifications
+          entry tells a test engineer that this instance cannot send notifications, which is a lie
+          about the product rather than about their access.~~ → **superseded 2026-08-28 (005 C2):
+          gated on `integration:manage` and un-listed without it.**
 
-          Hiding it is still wrong, and more clearly so. A rail with no Notifications entry tells a
-          test engineer that this instance cannot send notifications, which is a lie about the
-          product rather than about their access; the entry plus a sentence naming who can configure
-          it tells them the truth and what to ask for. That is §31's disable-don't-hide applied to
-          the one case where the *data* is what is withheld.
+          The sentence above already conceded the thing that reverses it — "there is no read-only
+          view to fall back on" — and that is exactly the condition `CredentialReach` now turns on.
+          The entry led to a screen whose whole content is a refusal.
         */
-        {
-          label: 'Notifications',
-          to: `${p}/settings/notifications`,
-          icon: <NotificationsNoneOutlinedIcon fontSize="small" />,
-        },
+        ...(credentials.integrations
+          ? [
+              {
+                label: 'Notifications',
+                to: `${p}/settings/notifications`,
+                icon: <NotificationsNoneOutlinedIcon fontSize="small" />,
+              },
+              /*
+                004 Phase 1's bindings, beside Notifications because they are the same module, the
+                same key and the same argument: the reads cost `integration:manage`, so there is no
+                read-only view and the entry is listed only for a caller who has one.
+
+                A person's own tracker credential is NOT here — it is in the account menu, because
+                it is not scoped by the project switcher this rail sits under.
+              */
+              {
+                label: 'Issue tracker',
+                to: `${p}/settings/trackers`,
+                icon: <BugReportOutlinedIcon fontSize="small" />,
+              },
+            ]
+          : []),
         // The project trail (§242). Gated on `project:audit` and HIDDEN without it — see
         // AuditReach above for why this pair breaks the rail's rule on purpose.
         ...(audit.project
@@ -359,20 +409,25 @@ function projectNav(
           Company, beside Teams & roles, for the same reason that one is here: a token belongs to
           the company, and switching projects does not change the list.
 
-          **Shown to everyone, not gated.** Every other item in this rail leads to a screen a
-          member can read; this one leads to a screen that tells a non-administrator the list is
-          not theirs to see. That is §31's rule at rail altitude — hiding it would teach a Test
-          Lead that this product has no CI credentials, which is the same lie a filtered-to-empty
-          list would have told, and the screen itself already says who to ask.
+          ~~**Shown to everyone, not gated** — hiding it would teach a Test Lead that this product
+          has no CI credentials.~~ → **superseded 2026-08-28 (005 C2): gated on `token:issue`.**
+          `ApiTokenService` argues that the *read* is refused rather than narrowed, because an empty
+          array would be a claim about the company told to somebody who may not ask; an entry into
+          that refusal is the same claim one click earlier.
         */
-        { label: 'API tokens', to: '/admin/tokens', icon: <KeyOutlinedIcon fontSize="small" /> },
+        ...(credentials.tokens
+          ? [{ label: 'API tokens', to: '/admin/tokens', icon: <KeyOutlinedIcon fontSize="small" /> }]
+          : []),
         /*
-          Company, beside the two above, and **ungated for the same reason they are**: the screen
-          renders its own refusal naming who can configure a provider, which is
-          `NotificationSettingsPage`'s precedent and what makes a pasted link behave the same for
-          everybody. Hiding it would teach a Test Lead this product has no single sign-on at all.
+          ~~Ungated for the same reason the two above are.~~ → **superseded 2026-08-28 (005 C2):
+          gated on `company:idp`.** This one is the strongest of the three: a readable SSO page
+          would disclose issuer URLs, client ids and claimed email domains — reconnaissance for
+          whoever is trying to get in — which is why `IdentityProviderService` treats them as the
+          module's strictest credentials and why no read-only view was ever going to exist here.
         */
-        { label: 'Single sign-on', to: '/admin/sso', icon: <LoginOutlinedIcon fontSize="small" /> },
+        ...(credentials.sso
+          ? [{ label: 'Single sign-on', to: '/admin/sso', icon: <LoginOutlinedIcon fontSize="small" /> }]
+          : []),
         // The company trail (§242). Gated on `audit:view` and HIDDEN without it — the pair to the
         // project entry above, and the same deliberate exception.
         ...(audit.company
@@ -552,10 +607,24 @@ function RailContent({
   const projectGate = useCan(activeProjectId);
   const companyGate = useCanInCompany();
   const groups = activeProjectId
-    ? projectNav(activeProjectId, {
-        project: projectGate.can('project:audit'),
-        company: companyGate.can('audit:view'),
-      })
+    ? projectNav(
+        activeProjectId,
+        {
+          project: projectGate.can('project:audit'),
+          company: companyGate.can('audit:view'),
+        },
+        /*
+          The three credential entries (005 C2). Read from the same two warm gates, so this costs
+          no request — and read through `can()`, which falls OPEN when `/me/permissions` itself
+          failed: an entry wrongly shown leads to a page that refuses, while an entry wrongly
+          hidden takes an administrator's own screens away with nothing on screen to say why.
+        */
+        {
+          integrations: projectGate.can('integration:manage'),
+          tokens: companyGate.can('token:issue'),
+          sso: companyGate.can('company:idp'),
+        },
+      )
     : [];
 
   return (
@@ -961,6 +1030,27 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
             <ShieldOutlinedIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText slotProps={{ primary: { variant: 'body2' } }}>Security</ListItemText>
+        </MenuItem>
+        {/*
+          The account's own tracker credentials (004 D2) — beside Security, self-service, no gate.
+
+          **Not in the rail**, and that is the D2 inversion made visible: everything in the rail is
+          scoped by the project switcher, and a tracker connection is not — one credential serves
+          every project bound to that host. Putting it under `Project` would teach exactly the
+          per-project reading the plan inverted the model to avoid.
+        */}
+        <MenuItem
+          component={RouterLink}
+          to="/account/trackers"
+          onClick={() => setAnchor(null)}
+          data-testid="TopBar.TrackersLink"
+        >
+          <ListItemIcon>
+            <BugReportOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText slotProps={{ primary: { variant: 'body2' } }}>
+            Tracker connections
+          </ListItemText>
         </MenuItem>
         {/*
           The user guide (§252). Beside Security rather than in the rail: the rail's every item is

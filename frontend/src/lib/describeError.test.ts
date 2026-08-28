@@ -251,3 +251,59 @@ describe('a wrong address is told apart from a failure', () => {
     expect(described.body).toBe('A run cannot start with no cases in scope.');
   });
 });
+
+/**
+ * The Refused state (005 C1a/C1b) — the one failure whose whole value is naming a thing the reader
+ * can go and ask for.
+ *
+ * Every assertion here is about degradation as much as about the happy path: `permission` and
+ * `scope` are optional on the wire, most backend sites still send them null, and the copy has to
+ * lose a clause rather than a sentence when they do.
+ */
+describe('describeError — the Refused state', () => {
+  const refusal = (permission: string | null, scope: string | null) =>
+    new ApiError(403, 'refused', null, null, null, null, null, permission, scope);
+
+  it('names the permission from the catalogue, not the raw key', () => {
+    const described = describeError(refusal('case:approve', 'PROJECT'));
+    expect(described.body).toContain('approve test cases');
+    expect(described.body).toContain('on this project');
+  });
+
+  it('says to ask a Company Admin — never a named person, and never a project lead', () => {
+    // C1b dropped the "who can grant this here" endpoint, so there is no individual to name. And
+    // several keys that refuse here are COMPANY scope, which no project lead holds.
+    const described = describeError(refusal('token:issue', 'COMPANY'));
+    expect(described.body).toContain('Ask a Company Admin');
+    expect(described.body).not.toContain('project lead');
+  });
+
+  it('renders an unknown key as its own text rather than dropping the sentence', () => {
+    // A server ahead of this build. The key is worse copy than a label and far better than the
+    // word "undefined" inside a sentence.
+    expect(describeError(refusal('future:thing', 'PROJECT')).body).toContain('future:thing');
+  });
+
+  it('degrades to a sentence with no key when the refusal named none', () => {
+    // The common case until B7: `Problem.permission` is optional and most sites still omit it.
+    const described = describeError(refusal(null, null));
+    expect(described.isRefused).toBe(true);
+    expect(described.body).toContain('Ask a Company Admin');
+    expect(described.body).not.toContain('undefined');
+  });
+
+  it('drops only the "where" clause when the scope is missing', () => {
+    const described = describeError(refusal('case:approve', null));
+    expect(described.body).toContain('approve test cases');
+    expect(described.body).not.toContain('on this project');
+  });
+
+  it.each([
+    ['a 404', apiError(404)],
+    ['a 500', apiError(500)],
+    ['a 409', apiError(409)],
+  ])('does not mark %s as refused', (_label, error) => {
+    expect(describeError(error).isRefused).toBe(false);
+    expect(describeError(error).permission).toBeNull();
+  });
+});

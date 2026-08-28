@@ -3,11 +3,11 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { PermissionKey, ProjectSettings } from '../../api/types'
+import type { PermissionKey, ProjectSettings, ReviewImpact } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
-import { aProject } from '../../test/fixtures'
+import { aProject, aReviewImpact } from '../../test/fixtures'
 import { ReviewSettingsPage } from './ReviewSettingsPage'
 
 /**
@@ -60,9 +60,17 @@ function settings(overrides: Partial<ProjectSettings> = {}): ProjectSettings {
   each of those was one build error in one place rather than a page of runtime failures with zero
   type errors.
 */
-function mockReads(current: ProjectSettings, permissions: PermissionKey[] = ['project:settings']) {
+function mockReads(
+  current: ProjectSettings,
+  permissions: PermissionKey[] = ['project:settings'],
+  impact: ReviewImpact = aReviewImpact(),
+) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions, {}, PROJECT)
+    // Before the `/settings` arm below, which is a prefix of this path and would otherwise serve
+    // the policy where the blast radius was asked for — a shape mismatch the contract check
+    // catches, but only after the region has already rendered something wrong.
+    if (path.endsWith('/settings/review-impact')) return impact
     if (path.includes('/settings')) return current
     if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
     return []
@@ -199,5 +207,53 @@ describe('ReviewSettingsPage', () => {
     // Paired with the enabling assertions above, or this passes with no gate at all (§66).
     await waitFor(() => expect(gate).toBeDisabled())
     expect(screen.getByTestId('ReviewSettings.Save')).toBeDisabled()
+  })
+})
+
+/**
+ * The blast radius (005 N7/S7) — what a change to this policy would land on.
+ *
+ * Two properties are pinned here and both are decisions rather than layout: it is offered only to
+ * somebody who could actually change something (it costs the **write** key), and the blocked plans
+ * are **named** — "3 plans" is not something an administrator can act on and "Q3 compliance sweep"
+ * is.
+ */
+describe('ReviewSettingsPage — the blast radius (005 S7)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('shows the counts to somebody who can change the policy', async () => {
+    mockReads(settings(), ['project:settings'], aReviewImpact({ casesInReview: 11 }))
+    renderPage()
+
+    expect(await screen.findByTestId('ReviewSettings.Impact.casesInReview')).toHaveTextContent('11')
+  })
+
+  it('is not shown to a reader who can only see the policy', async () => {
+    // The settings GET is gated on visibility and this read on `project:settings`. A reader
+    // without the write key sees the policy read-only and no panel — not a refusal.
+    mockReads(settings(), ['case:read'])
+    renderPage()
+
+    await screen.findByTestId('ReviewSettings.Form')
+    expect(screen.queryByTestId('ReviewSettings.Impact')).not.toBeInTheDocument()
+  })
+
+  it('names the plans a run would be refused for', async () => {
+    mockReads(settings(), ['project:settings'], aReviewImpact({
+      plansBlockedFromRunning: [{ planId: 'pl1', key: 'TP-7', name: 'Q3 compliance sweep' }],
+    }))
+    renderPage()
+
+    expect(await screen.findByTestId('ReviewSettings.Impact.BlockedPlan')).toHaveTextContent(
+      'Q3 compliance sweep',
+    )
+  })
+
+  it('says nothing is blocked rather than rendering an empty section', async () => {
+    mockReads(settings(), ['project:settings'])
+    renderPage()
+    expect(await screen.findByTestId('ReviewSettings.Impact.NoBlockedPlans')).toBeInTheDocument()
   })
 })

@@ -78,6 +78,25 @@ export function RunDetailPage() {
                   {run.data.configuration.name}
                 </Typography>
               )}
+              {/*
+                Who opened the run (005 S1) — stored since M0 and served since 2026-08-28, so this
+                is a wire addition rather than a new fact.
+
+                **Null is a statement, not a gap**, and there are two of them: a `SCHEDULED` run has
+                no creator because nobody created it (the schedule fired), and a creator whose
+                account no longer resolves reads the same way. Both render as nothing rather than
+                as "Unknown", which would send somebody looking for a person — the run's `source`
+                beside it is where the first of the two is actually answered.
+              */}
+              {run.data.createdBy && (
+                <Typography
+                  variant="body2"
+                  sx={{ color: 'text.secondary' }}
+                  data-testid="RunDetail.CreatedBy"
+                >
+                  Opened by {run.data.createdBy.displayName}
+                </Typography>
+              )}
               {run.data.releaseVersion && (
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                   Release <Identifier variant="muted">{run.data.releaseVersion}</Identifier>

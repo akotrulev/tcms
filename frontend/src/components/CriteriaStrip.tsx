@@ -18,6 +18,19 @@ import { criterionColor, criterionState, criterionStateLabel } from '../lib/resu
  * screen that DOES evaluate (the statistics page, and §97's Plan tab when it lands) shows the
  * same marks in green and red with no change here.
  *
+ * <h3>~~`met` is null on every criterion this component sees on the list~~ → not any more (005 S5)</h3>
+ *
+ * `TestPlanSummary` now carries `exitCriteriaMet` and `exitCriteriaTotal`, batched server-side
+ * over the whole page of plans rather than by running the statistics endpoint once per row — which
+ * is what made the old claim true and is exactly what the batched writer avoids. The per-criterion
+ * `met` flags are **still null on the list**, so the marks stay grey and the strip does not pretend
+ * to know *which* gate passed; what the counts add is the one sentence a lead was scanning for.
+ *
+ * Hence `summary`: when a caller has authoritative counts it passes them, and they win over the
+ * per-criterion derivation. The paragraph above is kept rather than deleted because the mistake it
+ * records — a chip claiming "All met" over data nothing evaluated — is the reason this component
+ * exists, and the fix is that the counts are now *computed*, not that the caution was wrong.
+ *
  * <h3>Colour is not the only signal</h3>
  *
  * Two carriers besides colour, because a 14×4px mark can hold no label:
@@ -37,9 +50,19 @@ const TestIdPrefix = 'CriteriaStrip';
 export function CriteriaStrip({
   criteria,
   emptyLabel = 'None set',
+  summary: authoritative,
   testId,
 }: {
   criteria: Criterion[];
+  /**
+   * Counts the **server** evaluated (005 S5), when the caller has them.
+   *
+   * Takes precedence over the per-criterion derivation below, which cannot see them: on the plan
+   * list every `Criterion.met` is null, so the derivation can only say "not evaluated" while the
+   * server has just told the caller that four of five passed. Absent on a screen with no such
+   * counts, where the derivation is the only answer there is.
+   */
+  summary?: { met: number; total: number };
   /**
    * What a plan with no criteria reads as. Defaulted rather than required so the two call sites
    * cannot drift into "None" and "None set" — `ui-rules`' one-name-one-concept, in miniature.
@@ -69,8 +92,15 @@ export function CriteriaStrip({
     nobody has run. `evaluated === 0` is the common case on this endpoint today, so the sentence
     that distinguishes them is the one most readers will actually see.
   */
-  const summary =
-    evaluated === 0
+  const summary = authoritative
+    /*
+      The server's counts, when the caller has them. `total` is the plan's declared criteria and
+      `met` how many currently pass, so "0 of 3 met" here is a real measurement and NOT the
+      ambiguity the three-way sentence below exists to break — the ambiguity was between measured
+      and unmeasured, and these are measured.
+    */
+    ? `${authoritative.met} of ${authoritative.total} met`
+    : evaluated === 0
       ? `${criteria.length} not evaluated`
       : evaluated === criteria.length
         ? `${met} of ${criteria.length} met`

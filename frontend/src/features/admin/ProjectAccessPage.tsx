@@ -1,7 +1,7 @@
 import { Alert, Box, Button, Stack, Typography } from '@mui/material';
 import { useMemo, useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
-import { useProject, useRoleAssignments, useRoles, useTeams } from '../../api/queries';
+import { useProject, useProjectMembers, useRoleAssignments, useRoles, useTeams } from '../../api/queries';
 import type { RoleAssignment } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { PageHeader, Panel } from '../../components/PageHeader';
@@ -71,6 +71,9 @@ export function ProjectAccessPage() {
   const canStaff = useCan(projectId).can('project:members');
 
   const project = useProject(projectId);
+  // Unconditionally enabled, unlike the picker this hook was written for: on this page the list is
+  // the content rather than the contents of a dialog nobody has opened.
+  const members = useProjectMembers(projectId, true);
   const assignments = useRoleAssignments();
   const roles = useRoles();
   // The org chart, for expanding a project's team grants into the people they cover — a
@@ -156,6 +159,48 @@ export function ProjectAccessPage() {
       )}
 
       <Stack sx={{ gap: 3 }}>
+        {/*
+          Who is on this project — readable by **anybody who can open the project** since 005 Q2
+          relaxed `GET /projects/{id}/members` to `project:read`.
+
+          It is first, above the two staffing tables, and it is the reason this screen is worth
+          opening for a reader who cannot staff anybody. Both tables below are filtered by
+          `AdminReach.mayStaff`, so for a Test Engineer they are empty — and the page used to be
+          nothing but two empty tables and a roles reference, to a person who is demonstrably ON
+          this project. This panel is the fact they came for.
+
+          ~~The members read was `project:manage`, which made this impossible.~~ → superseded: the
+          org chart already discloses who is on which project, company-wide, so the endpoint was
+          refusing a fact a shipped endpoint serves. The gate on every write is unchanged.
+        */}
+        <Panel title="On this project" testId="ProjectAccess.Members" dense>
+          <DataRegion
+            testId="ProjectAccess.Members.List"
+            state={{ ...members, refetch: () => void members.refetch() }}
+            isEmpty={(rows) => rows.length === 0}
+            empty={{
+              kind: 'no-records',
+              title: 'Nobody is on this project',
+              /*
+                An honest empty this time, unlike the two tables below: this read is not filtered by
+                what the caller may administer, so zero rows means zero people rather than zero
+                people *you may see*.
+              */
+              body: 'Nobody holds a role here yet — directly, through a team, or across the company.',
+            }}
+          >
+            {(rows) => (
+              <Stack sx={{ gap: 0.5, p: 1.5 }} data-testid="ProjectAccess.Members.Rows">
+                {rows.map((member) => (
+                  <Typography key={member.id} variant="body2" data-testid="ProjectAccess.Members.Row">
+                    {member.displayName}
+                  </Typography>
+                ))}
+              </Stack>
+            )}
+          </DataRegion>
+        </Panel>
+
         {!canStaff && (
           /*
             Said once, at the top, because it frames both tables below and neither of them can say
@@ -163,8 +208,9 @@ export function ProjectAccessPage() {
             rules" to precisely the readers who are governed by them.
           */
           <Alert severity="info" variant="outlined" data-testid="ProjectAccess.ReadOnlyNotice">
-            You can see this project's roles reference, but not who holds what. The staffing lists
-            below are shown to people who can manage access on this project.
+            You can see who is on this project and what each role can do here, but not which role
+            each person holds. The staffing lists below are shown to people who can manage access on
+            this project.
           </Alert>
         )}
 
