@@ -60,6 +60,10 @@ const BY_DECISION: Record<string, string> = {
   'NotificationChannel.secretHint':
     'Four end-anchored characters of a webhook URL (§218). Enough to answer "is this the right ' +
     'webhook", short enough to be useless as one.',
+  'TrackerIdentity.secretHint':
+    "`NotificationChannel.secretHint`'s rule on a person's own tracker token (004 D2): four " +
+    'end-anchored characters, served only to the person whose credential it is, so they can tell ' +
+    'two connections apart. Recognition, never a credential.',
 };
 
 type Node = Record<string, unknown>;

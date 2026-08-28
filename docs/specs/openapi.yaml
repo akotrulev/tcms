@@ -507,10 +507,194 @@ paths:
         '409':
           description: |
             Refused: this identity is the account's only way to sign in (no password and no
-            other linked identity). Set a password or link another provider first.
+            other linked identity). Set a password (`POST /me/password`) or link another
+            provider (`POST /me/social-identities/{provider}`) first.
+
+            Both remedies exist as of 2026-08-28 (005 S9a). Until then the sentence named one
+            that did not — there was no way to set a password on an activated account — which
+            005 §1.5 records as half a defect: a copy error with one impossible half, not a
+            dead end.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
+
+  /me/password:
+    post:
+      operationId: changeMyPassword
+      tags: [auth]
+      summary: Set or change the calling account's password
+      description: |
+        Self-service on your own account, like `/me/social-identities` — no permission key.
+        **A `POST` rather than a `PUT`**, because it is not idempotent in the way a `PUT` promises:
+        the second call with the same body is refused, the `currentPassword` it names having just
+        stopped being current.
+
+        Two intents, one endpoint, told apart by `CurrentUser.hasPassword`: an account with no
+        password **sets** one and sends `currentPassword: null`; an account with one **changes**
+        it and must send the current one — possession of a session is not possession of the
+        credential, and a walked-away-from laptop must not be enough to lock its owner out.
+
+        Setting one closes the impossible half of the `DELETE /me/social-identities/{provider}`
+        refusal (005 §1.5). The rules are `POST /auth/invitations/{token}/accept`'s, verbatim:
+        at least 12 characters, at most 72 bytes (BCrypt's bound, refused rather than truncated).
+
+        **Every other session of this account keeps working.** Changing a password bumps
+        nothing; a person who wants the others gone asks `POST /me/sign-out-others`, which says
+        so on its own terms. Coupling the two would sign somebody out of their phone for
+        rotating a password on a schedule.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordChangeInput' }
+      responses:
+        '204': { description: Stored. The current session is unaffected. }
+        '400':
+          description: |
+            `currentPassword` is wrong, or was null on an account that has one — keyed on
+            `errors.currentPassword`, so the form lands it beside the field. Deliberately not a
+            401: the *session* is fine, and a 401 would trip the SPA's session-recovery path for
+            a typo.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422':
+          description: The new password was not accepted — the invitation accept's rules, keyed on `errors.newPassword`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /me/sign-out-others:
+    post:
+      operationId: signOutOtherSessions
+      tags: [auth]
+      summary: End every other session of the calling account
+      description: |
+        The `pv` epoch (plan §6b), finally reachable by its owner: sessions are stateless and
+        `/auth/logout` says so, so the one revocation this product has is bumping the account's
+        epoch, which invalidates **every** session at once — including the one asking.
+
+        Which is why this answers **200 with a fresh `AuthResult`** rather than 204: the caller's
+        own token is dead the moment the epoch moves, and a 204 would sign them out too, one
+        request after they pressed "sign out everywhere else". The client replaces its session
+        with the body and carries on; every other device gets a 401 on its next request and
+        falls into the ordinary session-recovery path.
+
+        **There is deliberately no session list** (005 N12): nothing records sessions, and the
+        token is stateless by an argued decision. This is all-or-nothing because that is what
+        the mechanism is.
+      responses:
+        '200':
+          description: Every other session is now invalid; here is yours.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/tracker-identities:
+    get:
+      operationId: listMyTrackerIdentities
+      tags: [integration]
+      summary: The tracker accounts the caller has connected
+      description: |
+        **The caller, for the caller** (004 D2): a tracker credential is a personal thing a person
+        gave TCMS for their own use, so no permission key reads or writes here, and no
+        administrator — not a Company Admin, not `integration:manage` — can list, read or test
+        somebody else's. RLS gives company isolation; the service layer adds `user_id = caller`.
+
+        One row per tracker **host** rather than per binding, so one connection serves every
+        project in this company bound to that site. A member of two companies both bound to the
+        same Jira site connects twice — the isolation boundary doing its job, and a real papercut,
+        stated rather than hidden.
+
+        The credential itself is never served. `secretHint` is what replaces it —
+        `NotificationChannel.secretHint`'s rule and shape.
+      responses:
+        '200':
+          description: All connected identities, possibly none.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TrackerIdentity' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: connectTrackerIdentity
+      tags: [integration]
+      summary: Connect a tracker account — or rotate the credential of one already connected
+      description: |
+        **An upsert on `(provider, baseUrl)`**, which is what makes rotation possible without a
+        `PUT`: a second `POST` for a host the caller has already connected replaces the
+        credential and answers `200`; a first one creates and answers `201`. There is nothing
+        else on the row a person would edit, and a `PUT` would need the secret-set-separately
+        shape `NotificationChannelInput` carries for a form that here never has a row to send
+        back.
+
+        `baseUrl` is `https://` only, and it is checked against the `OutboundUrlGuard` **before**
+        anything is stored (004 D10): under per-user credentials, a host that resolves somewhere
+        unintended exfiltrates every connected person's token, not one bot's. Refused with
+        `400` keyed on `errors.baseUrl`.
+
+        Nothing is called on the tracker here. `POST …/{identityId}/test` does that, separately,
+        so a connection can be recorded while the tracker is down.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrackerIdentityInput' }
+      responses:
+        '201':
+          description: Connected.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackerIdentity' }
+        '200':
+          description: The credential of an existing connection was replaced.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackerIdentity' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/tracker-identities/{identityId}:
+    parameters: [{ $ref: '#/components/parameters/TrackerIdentityId' }]
+    delete:
+      operationId: disconnectTrackerIdentity
+      tags: [integration]
+      summary: Disconnect a tracker account
+      description: |
+        The caller's own row only; somebody else's identity id answers `404`, indistinguishably
+        from one that does not exist. Issue links made through this connection **survive** (004
+        D18) — they are the project's traceability record, not the caller's — and degrade to a
+        plain URL on the case they sit on.
+      responses:
+        '204': { description: Disconnected. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /me/tracker-identities/{identityId}/test:
+    parameters: [{ $ref: '#/components/parameters/TrackerIdentityId' }]
+    post:
+      operationId: testTrackerIdentity
+      tags: [integration]
+      summary: Call the tracker once with this credential and record the answer
+      description: |
+        Writes `lastError` and `lastCheckedAt` on the row and returns them. This is the one
+        place the connections page's "Needs attention" comes from — the ERD's sentence, per
+        person: *an expired Jira token that silently stops creating defects, while runs keep
+        passing and failing, is the realistic failure and is invisible otherwise.*
+
+        A tracker refusal is a `200` with `ok: false`, not a `4xx`: the request to *this* API
+        succeeded, and the answer is the fact the caller asked for.
+      responses:
+        '200':
+          description: What the tracker said.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackerConnectionCheck' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ------------------------------------------------------------ projects ----
   /projects:
@@ -831,6 +1015,30 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /projects/{projectId}/settings/review-impact:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [projects]
+      operationId: getReviewImpact
+      summary: What a change to the review settings would land on
+      description: |
+        The blast radius behind the `PUT` beside it (005 N7). **Costs `project:settings`**, the
+        write key, and not the visibility gate the settings `GET` takes: the counts name how
+        much unfinished review work a project holds, which is a fact about the team's backlog
+        rather than about how the project behaves, and the only reader with a reason to ask is
+        the one about to change the policy.
+
+        Read at the moment the screen opens, not cached: the point is the number *now*.
+      responses:
+        '200':
+          description: The counts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewImpact' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /projects/{projectId}/statuses:
     parameters: [{ $ref: '#/components/parameters/ProjectId' }]
     get:
@@ -875,6 +1083,14 @@ paths:
         Ordered by display name. The name is the **membership's**, not the account's
         canonical one (§6u) — the same person is "A. Kotrulev" to one client and "Aleksandar
         (Contractor)" to another.
+
+        **Costs `project:read` and nothing more** (005 Q2, decided 2026-08-28). Who is on a
+        project is not a secret from the company — `GET /org-chart` already serves every
+        person's effective role on every project the caller can open — so a read gated on
+        `project:members` would refuse a fact a shipped endpoint discloses. `project:members`
+        stays the gate on every *write* to project access (`POST` / `DELETE /role-assignments`).
+        The Project access screen therefore renders read-only for a caller without it: the
+        entry is listed *because* the page is readable.
       responses:
         '200':
           description: Members
@@ -1835,6 +2051,10 @@ paths:
             The key is `text`, which is what the paste dialog's textarea is bound to.
             **A parse failure is never a `500`**: the text comes from a person, and being
             unparseable is the ordinary case rather than a fault.
+
+            Since 2026-08-28 (005 C1a) the line the refusal is about is **also** `Problem.line`,
+            structured, so the editor anchors the sentence without parsing the English above.
+            `gherkin-empty` sends null; the other three send the line.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -1853,6 +2073,57 @@ paths:
             The `Content-Type` is not `text/plain`. Written by the container before any handler
             is chosen, so it carries the ordinary `about:blank` type rather than a slug of its
             own.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /projects/{projectId}/cases/render-gherkin:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    post:
+      tags: [repository]
+      operationId: renderGherkin
+      summary: Render a case body the editor holds as the Gherkin text it would become
+      description: |
+        `parse-gherkin`'s inverse, and its twin in every rule: **pure**, nothing created or
+        stored, the same body may be posted any number of times, the **read** gate and no write
+        permission (a caller with no grant gets the same bodiless `404` every read here
+        answers), and the same 256 KiB cap.
+
+        Exists because of 003 C1: an unsaved case has no `GET …/feature` to read, so before this
+        the editor could render the text of a case only after saving it, and the Write surface's
+        whole point is that the text is what is being written. The body is what the editor
+        already holds — a `TestCaseInput` — rendered by `GherkinScenarios.document(...)`, the
+        one renderer `GET …/feature` and the feature export use, so what the editor shows is
+        byte-for-byte what a save would produce. The `Feature:` name resolves from `suiteId`
+        server-side, falling back to the case key, so an unsaved case renders the header a saved
+        one does.
+
+        **Stable under the round trip**: `render(parse(render(x))) == render(x)`, which is the
+        idempotence `everyConstructSurvivesTheRoundTrip` already pins for the feature export.
+      requestBody:
+        required: true
+        description: The case as the editor holds it. At most 256 KiB of UTF-8 once serialized.
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TestCaseInput' }
+      responses:
+        '200':
+          description: The `.feature` text, always in English.
+          content:
+            text/plain:
+              schema: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413':
+          description: |
+            Over 256 KiB. `type` is `payload-too-large` — the same refusal, same slug and same
+            reasoning as `parse-gherkin`'s.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '415':
+          description: The `Content-Type` is not `application/json`. Written by the container, `about:blank`.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -2668,6 +2939,83 @@ paths:
       responses:
         '204':
           description: Removed. No body.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/cases/{caseId}/issue-links:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/CaseId' }
+    get:
+      tags: [repository, integration]
+      operationId: listIssueLinks
+      summary: The tracker issues linked to this case
+      description: |
+        `case:read`. Rows only — provider, host, id, href — and **never a title, key or status**
+        (004 D5/D15/D17): those are fetched live per viewer through `GET …/tracker/issues/{issueId}`,
+        so a person who cannot see the issue in the tracker sees `Jira issue 10042 ↗` and
+        nothing more, and a person who can sees today's key rather than last year's.
+
+        Stored as a `doc_link` of kind `EXTERNAL_ISSUE` (004 D7), read from the case-side
+        mirror. **It changes no derived fact**: an `EXTERNAL_ISSUE` link does not take a case
+        out of `UNLINKED` and cannot go stale (004 D13) — it is an annotation, not a
+        traceability edge.
+      responses:
+        '200':
+          description: Links, oldest first. Empty is ordinary.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/IssueLink' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [repository, integration]
+      operationId: createIssueLink
+      summary: Link a tracker issue to this case
+      description: |
+        `case:edit`. The caller names the binding and the tracker's **id** — from the search
+        beside it, which is the only place a person sees one — and the server records the
+        binding's provider and host with it, so the row survives the binding (004 D18). The
+        `url` is whatever the caller pasted or the search returned; it is a pointer that is
+        allowed to go historical, and **no label is ever derived from it** (004 D17).
+
+        The same `(provider, host, id)` twice on one case is `409`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IssueLinkInput' }
+      responses:
+        '201':
+          description: Linked.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IssueLink' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: This issue is already linked to this case.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /projects/{projectId}/cases/{caseId}/issue-links/{linkId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/CaseId' }
+      - { $ref: '#/components/parameters/IssueLinkId' }
+    delete:
+      tags: [repository, integration]
+      operationId: deleteIssueLink
+      summary: Unlink
+      description: '`case:edit`. Removes the annotation and nothing in the tracker.'
+      responses:
+        '204': { description: Unlinked. }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -6786,6 +7134,295 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  # Issue trackers (Jira Cloud · Jira Data Center · Azure DevOps), 004. Two kinds of row and the
+  # split is the design (004 D2): a BINDING is a project's mapping to a tracker project, configured
+  # once under `integration:manage` and holding no credential; an IDENTITY is one person's own
+  # tracker account, under `/me/tracker-identities`, and every outbound call — search, preview,
+  # creation — is made with the credential of the person whose request it is. Nothing a tracker
+  # says is ever stored (D5/D15): titles, statuses and keys are render-time, per user.
+  /projects/{projectId}/tracker/bindings:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [integration]
+      operationId: listTrackerBindings
+      summary: The tracker projects this project is bound to
+      description: |
+        **Costs `integration:manage`** (IA · CA · TL) — the notification channels' key, because
+        it is the same act: configuring where this project talks to. Non-secret, so an ordinary
+        list; an empty array is a project that has never been bound.
+      responses:
+        '200':
+          description: Bindings, default first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TrackerBinding' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [integration]
+      operationId: createTrackerBinding
+      summary: Bind this project to a tracker project
+      description: |
+        Costs `integration:manage`. Many bindings per project (004 D1) — a TCMS project spanning
+        a Jira project *and* an ADO board is the normal case — with **exactly one default**: the
+        first binding is the default whether or not it says so, and a later `isDefault: true`
+        moves the flag, so there is never zero and never two.
+
+        `baseUrl` is `https://` only and passes the `OutboundUrlGuard` before the row is written
+        (004 D10) — refused with `400` on `errors.baseUrl`. `provider` and `baseUrl` are fixed
+        for the row's life: change them by making a new binding, because identities are keyed to
+        the host and a binding that changed host would silently start using different people's
+        credentials.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrackerBindingInput' }
+      responses:
+        '201':
+          description: Bound.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackerBinding' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: This project is already bound to that tracker project on that host.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /projects/{projectId}/tracker/bindings/{bindingId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/TrackerBindingId' }
+    get:
+      tags: [integration]
+      operationId: getTrackerBinding
+      summary: One binding
+      description: Costs `integration:manage`, like the list.
+      responses:
+        '200':
+          description: The binding
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackerBinding' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [integration]
+      operationId: updateTrackerBinding
+      summary: Change a binding's mapping, default flag or enabled state
+      description: |
+        Costs `integration:manage`. `If-Match` carries the `lockVersion` read; a mismatch is
+        `409`. Absent fields are unchanged — a `PATCH`, because `externalProject`, `config`,
+        `isDefault` and `enabled` are independently editable and none of them is clearable.
+        `provider` and `baseUrl` are not here at all: see the `POST`.
+
+        `isDefault: false` on the current default is refused (`400`) — make another binding
+        the default instead, so the project never has none.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrackerBindingPatch' }
+      responses:
+        '200':
+          description: As it now stands
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackerBinding' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [integration]
+      operationId: deleteTrackerBinding
+      summary: Unbind
+      description: |
+        Costs `integration:manage`. **Issue links made through this binding survive** (004 D18):
+        `doc_link` carries the host, never a `binding_id`, so nothing cascades — the chip on the
+        case stops previewing, keeps its href and says so. Deleting the default promotes the
+        oldest remaining binding, if any.
+      responses:
+        '204': { description: Unbound. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/tracker/connected-members:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [integration]
+      operationId: listTrackerConnectedMembers
+      summary: Who on this project has connected to the trackers it is bound to
+      description: |
+        **Costs `integration:manage`** (004 D19, decided over a stated counter-argument): a lead
+        learns which team members hold a Jira or ADO account, which is personal information
+        those people gave TCMS for their own use. Overridden knowingly, because *"why can nobody
+        on this team file defects?"* is unanswerable without it, and bounded by two rules that
+        are part of the decision rather than implementation detail:
+
+        - **Scoped to the hosts this project's bindings name.** A lead learns nothing about a
+          colleague's connection to a tracker this project is not bound to.
+        - **A state per host and nothing else** — `CONNECTED` · `NEEDS_ATTENTION` ·
+          `NOT_CONNECTED`. Not the hint, not the account id, not the scopes, not the expiry, not
+          the text of the last error, and nothing about what that person can *see* in the
+          tracker. The sentence behind `NEEDS_ATTENTION` belongs on the person's own
+          `/me/tracker-identities` page. A test asserts the body cannot carry any of the five,
+          because the natural implementation reuses `TrackerIdentity` and that view has them all.
+
+        Every project member is listed (the `GET …/members` predicate), so the answer to the
+        question is complete: an absent name would read as "not on the project".
+      responses:
+        '200':
+          description: One row per project member, ordered by display name.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TrackerConnectedMember' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/tracker/issues:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [integration]
+      operationId: searchTrackerIssues
+      summary: Find issues in a bound tracker, as the caller
+      description: |
+        Typeahead for the link and file-a-defect dialogs. **`project:read` plus the caller's
+        own identity** for the binding's host (004 A2 + A3): visibility of the *feature* is
+        project assignment, visibility of the *content* is the viewer's own credential. Made
+        with the caller's credential and cached, if at all, under the caller's id (004 D15).
+
+        **No identity is `200` with `state: NOT_CONNECTED` and an empty list, never a `401`**:
+        the viewer is authenticated to TCMS perfectly well, and a 401 would trip the SPA's
+        session-recovery path for a condition that has nothing to do with their session. A
+        tracker that is down, a token it refuses and a query it cannot answer all come back
+        `UNAVAILABLE` (004 D16) — one state, so the answer is not an oracle for which of those
+        it was.
+
+        `bindingId` defaults to the project's default binding.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+          description: Free text, or a key. Handed to the tracker's own search, scoped by the binding's `config`.
+        - name: bindingId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: The tracker's answer, or the reason there is none.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackerIssueSearch' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [integration]
+      operationId: createTrackerIssue
+      summary: File an issue in the tracker, as the caller
+      description: |
+        **`defect:create` plus the caller's own identity** (004, *The creation seam*). Filed with
+        the caller's credential, so the tracker's reporter is the person who saw the failure —
+        not a bot. Writes the `tracker_issue_creation` ledger row before the call and completes
+        it after, and records the event the outbox uses as the backstop: if the SPA's follow-up
+        `POST …/executions/{executionId}/defects` never arrives, the handler writes the
+        `defect_link` from the event, and the two writes collide on the same index rather than
+        producing a twin — **which is why the follow-up must carry `bindingId`** (see
+        `DefectLinkInput`).
+
+        `Idempotency-Key`, on the same terms as every create: a double-click files one issue.
+        This is the failure people actually hit.
+
+        A caller with no identity for the binding's host is refused `409`, `type:
+        tracker-not-connected` — a create cannot answer "unavailable" the way a read can.
+        A tracker that refuses or is down is `502`, `type: tracker-unavailable`, with the
+        tracker's own message in `detail` where it gave one; the ledger row records it.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrackerIssueCreateInput' }
+      responses:
+        '201':
+          description: Filed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackerIssueCreated' }
+        '200':
+          description: The `Idempotency-Key` had already filed this; here is that issue.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackerIssueCreated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The caller has no connected identity for the binding's host — `type` is `tracker-not-connected`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '502':
+          description: The tracker refused or did not answer — `type` is `tracker-unavailable`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /projects/{projectId}/tracker/issues/{issueId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - name: issueId
+        in: path
+        required: true
+        schema: { type: string }
+        description: |
+          The tracker's **stable id** — Jira's numeric issue id, ADO's work-item id — which is
+          what a link stores (004 D17). Jira also answers to a key here, but a key moves and an
+          id does not, and nothing in this product stores or derives one.
+    get:
+      tags: [integration]
+      operationId: getTrackerIssue
+      summary: One issue, live, as the caller sees it
+      description: |
+        The chip's preview. `project:read` plus the caller's own identity; the same three
+        states as the search, for the same reasons. `bindingId` selects the host; defaults to
+        the project's default binding. Fetched this request and cached only under the caller's
+        id, briefly — **nothing here is written anywhere** (004 D5/D15).
+      parameters:
+        - name: bindingId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: The issue, or the reason it cannot be shown.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackerIssueLookup' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # --------------------------------------------------------------- admin ----
   /users:
     get:
@@ -7867,6 +8504,21 @@ components:
       name: size
       in: query
       schema: { type: integer, default: 50, maximum: 200 }
+    TrackerIdentityId:
+      name: identityId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TrackerBindingId:
+      name: bindingId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IssueLinkId:
+      name: linkId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     IfMatch:
       name: If-Match
       in: header
@@ -8048,9 +8700,11 @@ components:
     # ------------------------------------------------------------ common ---
     Problem:
       type: object
-      # `errors` is the one optional member: `ApiProblem` is serialized NON_NULL, so a 409 or a
-      # 403 omits the key entirely rather than sending an empty object a client could read as
-      # "no fields were wrong". The other four are on every problem this API emits.
+      # ~~`errors` is the one optional member~~ → **2026-08-28 (005 C1a): four optional members —
+      # `errors`, `permission`, `scope` and `line`.** `ApiProblem` is serialized NON_NULL, so a 409
+      # or a 403 omits every key it has nothing to say in, rather than sending an empty object a
+      # client could read as "no fields were wrong". The other four are on every problem this API
+      # emits.
       #
       # A 404 used to be this comment's example and is not one any more (§148): the operational
       # 404 has no body at all, so there is no `Problem` on it to omit a key from. The only 404
@@ -8084,6 +8738,19 @@ components:
       # both the plain and the validation shape, and `theContractsProblemIsThisRecord` pins this
       # property list to `com.tcms.api.Problem`'s components in both directions. Adding a member
       # below without adding it to the record is now a red run rather than a broken client.
+      #
+      # **2026-08-28 (005 C1a): three members added, and the §162–§164 argument reopened once for
+      # all three rather than three times.** §163's claim that `errors` is the *one* optional
+      # member was a claim about what a refusal had earned (§141: a member is earned by what the
+      # caller can do with it). Two things a caller can now do: a 403 whose `permission` and `scope`
+      # are structured lets every screen render the same Refused state — *"needs `case:approve` on
+      # this project — ask a Company Admin"* — without parsing `detail`'s prose, which no two
+      # controllers word alike; and a gherkin refusal whose `line` is structured lets the editor
+      # anchor the sentence to the line it is about (003 C4), which prose-only `Line 4, column 3: …`
+      # could do only by a regex over English. `bothEnvelopesSerializeTheSameKeys` and
+      # `theContractsProblemIsThisRecord` keep pinning the list; they now pin seven names instead
+      # of five. What did NOT change: no member names the request path (§163 stands), and every
+      # refusal is still `application/problem+json`.
       required: [type, title, status, detail]
       properties:
         type: { type: string }
@@ -8102,6 +8769,34 @@ components:
         # writers to publish a value the caller already has), and §141 (a refusal earns its members
         # by what the caller can do with them; `detail` says what to do, `errors` says which field,
         # `instance` says where the caller just was).
+        permission:
+          type: string
+          nullable: true
+          example: 'case:approve'
+          description: |
+            **On a 403 only**: the catalogue key the caller lacks, exactly as the roles spec
+            spells it. Null (omitted) on every other status. The client labels it from the same
+            catalogue it labels `GET /me/permissions` from, and never branches on a role name —
+            which is why this is the *key* and not "the roles that hold it": the Refused state
+            says *what* is missing, and the org chart already says *who* could grant it (005 C1b).
+        scope:
+          type: string
+          nullable: true
+          enum: [SYSTEM, COMPANY, PROJECT, null]
+          description: |
+            **On a 403 only**, beside `permission`: the scope the missing key is evaluated at, so
+            the copy can say *"on this project"* or *"in this company"* rather than guessing from
+            the URL. Null wherever `permission` is.
+        line:
+          type: integer
+          nullable: true
+          description: |
+            **On the four gherkin refusals only** (`gherkin-syntax`, `-outline`, `-many-scenarios`,
+            `-empty` — see `POST …/cases/parse-gherkin` and `…/render-gherkin`): the 1-based line of
+            the pasted text the refusal is about, when there is one. `gherkin-empty` has no line and
+            sends null; so does every refusal that is not about a text. The parser already knows it
+            (`GherkinSyntaxException.Reason.SYNTAX` carries line, column and wording) — this member
+            stops the SPA re-deriving it from `errors.text`'s English.
         errors:
           type: object
           nullable: true
@@ -8514,7 +9209,11 @@ components:
 
     ReviewSubjectType:
       type: string
-      enum: [CASE, SUITE, PLAN]
+      # `DOC` since 2026-08-28 (005 S9b, N8): documentation pages join the three artifacts §6g
+      # named. It costs the 56th catalogue key, `doc:review`, and a `ReviewSubjectDirectory`
+      # implementation in `documentation` — not just an enum member — so a client that sees the
+      # value can rely on `ProjectSettings.reviewEnabledDoc` gating it the way the other three are.
+      enum: [CASE, SUITE, PLAN, DOC]
 
     ReviewState:
       type: string
@@ -8545,6 +9244,7 @@ components:
         - reviewEnabledCase
         - reviewEnabledSuite
         - reviewEnabledPlan
+        - reviewEnabledDoc
         - requiredPeerReviews
         - authorMayApproveOwnWork
         - editAfterApproval
@@ -8561,6 +9261,13 @@ components:
             status the team has used since M1.
         reviewEnabledSuite: { type: boolean, description: §6g's opt-in for suites. Off by default. }
         reviewEnabledPlan: { type: boolean, description: §6g's opt-in for plans. Off by default. }
+        reviewEnabledDoc:
+          type: boolean
+          description: |
+            The opt-in for documentation pages (005 S9b, `V71`). Off by default, like the other
+            three, and gated on the same apparatus: when true a `DOC` review can be opened and
+            `doc:review` verdicts recorded; when false the page renders no panel. Turning it off
+            does not close open `DOC` reviews — the `PUT`'s rule for the other three, unchanged.
         requiredPeerReviews:
           type: integer
           minimum: 0
@@ -8629,10 +9336,56 @@ components:
         reviewEnabledCase: { type: boolean, default: false }
         reviewEnabledSuite: { type: boolean, default: false }
         reviewEnabledPlan: { type: boolean, default: false }
+        reviewEnabledDoc: { type: boolean, default: false }
         requiredPeerReviews: { type: integer, minimum: 0, maximum: 20 }
         authorMayApproveOwnWork: { type: boolean, default: false }
         editAfterApproval: { $ref: '#/components/schemas/EditAfterApproval' }
         requireApprovedCaseForRun: { type: boolean, default: false }
+
+    ReviewImpact:
+      type: object
+      description: |
+        What switching review **off** — or raising `requiredPeerReviews` — would land on (005
+        N7, the Review screen's blast radius). Read by the settings screen before the save, so
+        the administrator sees *"116 cases in review, 7 one approval away, 4 draft pages, and
+        Q3 compliance sweep could not start"* rather than finding out from the team.
+
+        Counts only, and each is served by the module that owns the rows: the review-owned
+        four from `project`, `draftDocPages` from `documentation` and `plansBlockedFromRunning`
+        from `execution`, through the `ReviewSubjectDirectory`-shaped SPI 005 §4 describes —
+        a foundation module may not import a leaf, so the leaf answers a question the
+        foundation declares. Never nullable: a count the SPI cannot answer is a missing
+        implementation, which is a red build, not a null on the wire.
+      required:
+        [casesInReview, suitesInReview, plansInReview, docsInReview, awaitingFinalApproval,
+         draftDocPages, plansBlockedFromRunning]
+      properties:
+        casesInReview: { type: integer, description: Open (`IN_REVIEW`) reviews whose subject is a case. }
+        suitesInReview: { type: integer }
+        plansInReview: { type: integer }
+        docsInReview: { type: integer, description: Open `DOC` reviews. `0` while `reviewEnabledDoc` is off. }
+        awaitingFinalApproval:
+          type: integer
+          description: |
+            Open reviews with at least one `LGTM` from somebody other than the submitter — the
+            ones a raised `requiredPeerReviews` would send back for more.
+        draftDocPages:
+          type: integer
+          description: Documentation pages in `DRAFT` that a `DOC` review would cover. From `documentation`.
+        plansBlockedFromRunning:
+          type: array
+          description: |
+            Plans whose scope holds a case that is not `APPROVED`, while
+            `requireApprovedCaseForRun` is on — the runs that would be refused. Named, because
+            "3 plans" is not something an administrator can act on and "Q3 compliance sweep" is.
+            From `execution`. Empty when the gate is off.
+          items:
+            type: object
+            required: [planId, key, name]
+            properties:
+              planId: { type: string, format: uuid }
+              key: { type: string, example: TP-7 }
+              name: { type: string }
 
     # -------------------------------------------------------------- enums ---
     LifecycleStatus:
@@ -8832,7 +9585,7 @@ components:
         # `required`. The lesson stands wherever a shape is still written inline — it is this
         # schema's outer level, and the entry it was written for no longer exists here.
         - type: object
-          required: [isSystemAdmin, teams]
+          required: [isSystemAdmin, hasPassword, teams]
           properties:
             isSystemAdmin:
               type: boolean
@@ -8840,6 +9593,14 @@ components:
                 Holds a SYSTEM-scope grant. Drives affordances only — every action is
                 independently checked server-side, and code checks permissions rather
                 than role names (plan §6b).
+            hasPassword:
+              type: boolean
+              description: |
+                Whether the account has a password at all (005 S9a). A social- or SSO-only
+                account has none, and the Account security page has to know which of "Set a
+                password" and "Change your password" to draw — and whether
+                `PasswordChangeInput.currentPassword` is required. A boolean and nothing more:
+                no hint, no age, no strength.
             teams:
               type: array
               description: |
@@ -9050,12 +9811,20 @@ components:
       # tree to place it in, so a client neither assembles one nor renders a path. Their absence
       # from a response a client already parses is the point at which a stale build finds out.
       type: object
-      required: [id, key, name, caseCount, tagRules, caseIds, lifecycleStatus, preconditions, postconditions, lockVersion]
+      required: [id, key, name, caseCount, filedCount, addedCount, taggedCount, tagRules, caseIds, lifecycleStatus, preconditions, postconditions, lockVersion]
       properties:
         id: { type: string, format: uuid }
         key: { type: string, example: TS-1 }
         name: { type: string }
         description: { type: string, nullable: true }
+        # The three arms, counted separately (005 S1). `caseCount` is their union and cannot
+        # explain itself: a suite showing "41 cases" with no way to see that 30 are filed, 3 were
+        # added by hand and 8 arrive through `smoke` is a collection nobody can reason about. They
+        # do NOT sum to `caseCount` — a case filed here and also tagged `smoke` is in two arms and
+        # counted once in the union — and a client must render them as arms, never as a total.
+        filedCount: { type: integer, description: Cases whose `suiteId` is this suite. }
+        addedCount: { type: integer, description: The size of `caseIds`. }
+        taggedCount: { type: integer, description: Live cases matching any of `tagRules`. }
         caseCount:
           type: integer
           description: |
@@ -9326,11 +10095,19 @@ components:
           # execution.results_changed event and on the hourly schedule, and the request path reads
           # a table its own module owns. never_executed, long_unexecuted and this are one fact
           # computed by one statement — see V45's header for why they share a row.
-          required: [statusKind, executedAt, releaseVersion]
+          required: [statusKind, executedAt, releaseVersion, configurationName]
           properties:
             statusKind: { $ref: '#/components/schemas/StatusKind' }
             executedAt: { type: string, format: date-time }
             releaseVersion: { type: string, nullable: true }
+            configurationName:
+              type: string
+              description: |
+                The configuration the last result ran under, by name (005 S1). Never null: every
+                run has one (`TestRun.configuration` is required). Already in the join that
+                produces this object, so served rather than left for every client to look up —
+                a "Failed on Chrome, passed on Firefox" line is the whole reason a grid shows a
+                last result.
         updatedAt: { type: string, format: date-time }
 
     TestCase:
@@ -10927,7 +11704,7 @@ components:
     # --------------------------------------------------------- execution ---
     TestPlanSummary:
       type: object
-      required: [id, key, keySeq, name, status, milestoneName, milestoneDate, caseCount, passRate, coverage]
+      required: [id, key, keySeq, name, status, milestoneName, milestoneDate, caseCount, passRate, coverage, exitCriteriaMet, exitCriteriaTotal]
       properties:
         id: { type: string, format: uuid }
         key: { type: string, example: TP-1 }
@@ -10953,10 +11730,33 @@ components:
         # (`PlanStatistics.trend[].passRate` is computed that way server-side); a ratio appears
         # only on flakiness scores, which say so on their own fields.
         #
-        # Both are null on every response in this slice — see TestPlanView. Declaring the unit
-        # now is what stops the day they gain a writer from being the day the plan list lies.
-        passRate: { type: number, nullable: true, description: 'Percentage 0-100. Null until a writer exists.' }
-        coverage: { type: number, nullable: true, description: 'Percentage 0-100. Null until a writer exists.' }
+        # ~~Both are null on every response in this slice — see TestPlanView.~~ → **written since
+        # 2026-08-28 (005 S5)**, by one batched pass over the list's plans rather than a
+        # `PlanStatistics` computation per row. Declaring the unit early is what stopped the day
+        # they gained a writer from being the day the plan list lied.
+        passRate:
+          type: number
+          nullable: true
+          description: |
+            Percentage 0-100, over the plan's latest results per in-scope case, the same
+            aggregation `PlanStatistics.counts` uses. **Null when nothing in scope has a
+            result** — a plan nobody has run has no pass rate, and `0` would say every case
+            failed.
+        coverage:
+          type: number
+          nullable: true
+          description: |
+            Percentage 0-100 — `PlanStatistics.coveragePercent`'s definition. Null for a plan
+            with an empty scope, where the denominator is zero.
+        # "2 of 3" on the list row (005 N2) — the count, not the criteria themselves, which the
+        # detail already serves. Computed in the same batched pass as `passRate`, because splitting
+        # it would be two passes over one dataset.
+        exitCriteriaMet:
+          type: integer
+          description: How many of the plan's `exitCriteria` are currently met. `0` when there are none.
+        exitCriteriaTotal:
+          type: integer
+          description: How many exit criteria the plan declares. `0` is ordinary and renders as "no exit criteria", never as "0 of 0 met".
 
     TestPlan:
       allOf:
@@ -11689,9 +12489,17 @@ components:
 
     TestRun:
       type: object
-      required: [id, key, name, planId, planKey, configuration, status, releaseVersion, buildNumber, commitSha, branch, source, startedAt, completedAt, counts, scopeRequest]
+      required: [id, key, name, planId, planKey, configuration, status, releaseVersion, buildNumber, commitSha, branch, source, createdBy, startedAt, completedAt, counts, scopeRequest]
       properties:
         id: { type: string, format: uuid }
+        createdBy:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+          description: |
+            Who opened the run — stored since M0 and served since 2026-08-28 (005 S1). **Null for
+            a `SCHEDULED` run**, as `source` says, and for a creator who no longer resolves. For
+            a run a CI token opened it is the token's *owner*, the same rule as the audit trail's
+            `actorUserId`.
         key: { type: string, example: TR-1 }
         name: { type: string }
         planId: { type: string, format: uuid, nullable: true }
@@ -12329,13 +13137,30 @@ components:
     DefectLinkInput:
       type: object
       description: |
-        Two fields, and **the absences are the design.** No `provider`, because a caller cannot
-        establish one before the `IssueTracker` port exists and an unverified `JIRA` reads as a
-        deliberate statement rather than as an unfilled column. No `statusCache` or `syncedAt`,
-        because those are a tracker's answers. No `caseId`, because every reader of `defect_link`
-        is execution-scoped and the execution is named by the path.
+        ~~Two fields~~ → three since 2026-08-28 (004), and **the absences are still the design.**
+        No `provider`, because a caller cannot establish one — `bindingId` names the binding the
+        server *called*, and the provider follows from that rather than from a claim. No
+        `statusCache` or `syncedAt`, because those are a tracker's answers, and under per-user
+        credentials one person's answer written into a column everybody reads is a leak (004
+        D14). No `caseId`, because every reader of `defect_link` is execution-scoped and the
+        execution is named by the path.
       required: [externalKey, url]
       properties:
+        bindingId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            **The binding the issue was filed through, when it was filed through
+            `POST …/tracker/issues`** (004, *The creation seam*). The server resolves it to the
+            provider the binding names and writes *that* into `provider`, which is the first
+            truthful writer that column has had (`V73`). Null or absent means "a link a person
+            made by hand" and `provider` stays `EXTERNAL`.
+
+            Not optional decoration: `V62`'s unique index has `provider` in its key. A
+            follow-up that omits this writes an `EXTERNAL` row, the outbox backstop writes a
+            `JIRA_CLOUD` row for the same issue, the index does not collide, and the run screen
+            shows the defect twice with both rows looking correct.
         externalKey:
           type: string
           example: 'PAY-991'
@@ -12491,7 +13316,7 @@ components:
     RepositoryDashboard:
       type: object
       required:
-        [generatedAt, lifecycle, health, healthComputedAt, byFeature, byOwner,
+        [generatedAt, lifecycle, health, healthComputedAt, byFeature, byOwner, byLastRun,
          automationCoverage, recentActivity]
       properties:
         generatedAt: { type: string, format: date-time }
@@ -12509,16 +13334,30 @@ components:
             When these signals were last derived, or **null when they never have been**.
             The two are not the same and must not render the same: an empty `health` array
             with a timestamp means "nothing is wrong", while one with `null` means "nobody
-            has looked". `case_health` is a read model with no writer yet (plan §6o), so
-            this is null in every deployment today — and a "Needs attention" panel that
-            renders empty without saying so is the reassuring-but-false screen §6p exists
-            to prevent.
+            has looked". ~~`case_health` is a read model with no writer yet (plan §6o), so
+            this is null in every deployment today~~ → **stale, struck 2026-08-28 (005 §5.5)**:
+            `repository/CaseHealthRecomputeService` derives ten of the eleven signals and
+            `reporting/ExecutionSource` the eleventh, so a deployment that has run the recompute
+            has a timestamp here. The null is now what it always claimed to be — a project
+            nobody has looked at yet — and a "Needs attention" panel that renders empty without
+            saying so is still the reassuring-but-false screen §6p exists to prevent.
         byFeature:
           type: array
           items: { $ref: '#/components/schemas/DashboardBreakdown' }
         byOwner:
           type: array
           items: { $ref: '#/components/schemas/DashboardBreakdown' }
+        byLastRun:
+          type: array
+          items: { $ref: '#/components/schemas/DashboardBreakdown' }
+          description: |
+            One bar per Feature, split by **the outcome of each case's last execution** (005 N3)
+            — a different segmentation from the two above, which split by authoring status.
+            Segment `key` is a `StatusKind` constant, or the literal `NEVER_RUN` for a case with
+            no result at all; the client labels both from its own catalogue (§180's rule). The
+            last result is the one `TestCaseSummary.lastResult` shows, read from the same
+            `case_health` row, so the bar and the grid cannot disagree. `filter` reproduces the
+            segment on the case list.
         automationCoverage:
           type: object
           required: [automated, toBeAutomated, manual, notAutomatable, coveragePercent]
@@ -12801,9 +13640,18 @@ components:
       # A poller reads `status` to decide whether to keep polling and must not have to null-check
       # the field it polls on, nor guess whether an absent `error` means "no error" or "this server
       # does not send one".
-      required: [jobId, type, status, format, requestedAt, downloadUrl, modelUrl, error]
+      required: [jobId, type, status, format, requestedAt, downloadUrl, modelUrl, error, sizeBytes]
       properties:
         jobId: { type: string, format: uuid }
+        sizeBytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: |
+            The rendered artifact's size — `Artifact.sizeBytes`, joined here (005 S1) so a list of
+            jobs can say "2.4 MB" without a call per row. Null until `COMPLETED`, and null for ever
+            on a `FAILED` one, on the same terms as `downloadUrl`. Named with its unit, like the
+            field it is joined from.
         type:
           type: string
           description: The report that was asked for, echoed back. See the generate operation.
@@ -13927,6 +14775,26 @@ components:
           type: string
           description: The provider's authorization URL; navigate the browser to it.
 
+    PasswordChangeInput:
+      type: object
+      # Both required, one nullable: `currentPassword: null` is a STATEMENT ("this account has no
+      # password, I am setting one") that the server checks against `hasPassword`, where an absent
+      # key would be a form that forgot the field. Refused with 400 on `errors.currentPassword`
+      # when the account has one.
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          nullable: true
+          maxLength: 400
+          description: Null only on an account with no password (`CurrentUser.hasPassword` false).
+        newPassword:
+          type: string
+          format: password
+          minLength: 12
+          description: At least 12 characters and at most 72 bytes — `POST /auth/invitations/{token}/accept`'s rules.
+
     SocialIdentity:
       type: object
       required: [provider, linkedAt]
@@ -14213,7 +15081,7 @@ components:
       # One document, one snapshot. Three queries assembled client-side would render a grid
       # whose axes were read at three different moments — and the matrix cells cannot be
       # derived on the client at all (see GET /org-chart).
-      required: [teams, people, projects]
+      required: [teams, people, projects, gaps]
       properties:
         teams:
           type: array
@@ -14234,6 +15102,30 @@ components:
             count** — an unreachable project and a non-existent one are indistinguishable
             (plan §6t), and a count would be a name-free existence claim about the company's
             portfolio.
+        gaps:
+          type: array
+          items: { $ref: '#/components/schemas/OrgChartGap' }
+          description: |
+            The Gaps panel (005 N6): for each project column, the permission keys **nobody
+            active holds there** — a project where no one can approve a case, close a run or
+            manage members. Computed server-side and only there: the client is forbidden to
+            branch on `roleName`, and "who can approve here" is a question about the catalogue
+            (`role_permission`), not about names. Scoped to the caller's `projects` columns, for
+            the same reason those are. Empty is the ordinary and the good answer.
+
+    OrgChartGap:
+      type: object
+      required: [projectId, permission]
+      properties:
+        projectId: { type: string, format: uuid }
+        permission:
+          type: string
+          example: 'case:approve'
+          description: |
+            The catalogue key no active member holds on this project, as the roles spec spells
+            it. The client labels it from the same table it labels `GET /me/permissions` and
+            `Problem.permission` from. **Every key in the catalogue is a candidate**, so a key
+            the client cannot label still renders as its own text rather than being dropped.
 
     OrgChartProject:
       type: object
@@ -14588,7 +15480,7 @@ components:
 
     RoleAssignment:
       type: object
-      required: [id, role, user, grantedAt]
+      required: [id, role, user, grantedAt, grantedBy]
       properties:
         id: { type: string, format: uuid }
         role: { $ref: '#/components/schemas/Role' }
@@ -14614,6 +15506,13 @@ components:
         projectId: { type: string, format: uuid, nullable: true }
         projectName: { type: string, nullable: true }
         grantedAt: { type: string, format: date-time }
+        grantedBy:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+          description: |
+            Who made the grant. **Stored since M0** (`role_assignment.granted_by`) and served
+            since 2026-08-28 (005 S1) — a wire-only addition. Null for a grant the provisioning
+            command wrote (no person acted) and for a granter who no longer resolves.
 
     RoleAssignmentInput:
       type: object
@@ -14951,6 +15850,329 @@ components:
           type: string
           format: date-time
           description: When the latest attempt ended. A retry updates the row rather than adding one.
+
+    TrackerProvider:
+      type: string
+      # The adapters that exist. Constrained here and on `tracker_binding` — this value SELECTS an
+      # adapter that must exist — and deliberately NOT on `defect_link.provider` or
+      # `IssueLink.provider`, which RECORD what some adapter said and stay free text so a fourth
+      # tracker is an adapter and not a migration (004 D9/D20).
+      enum: [JIRA_CLOUD, JIRA_DC, AZURE_DEVOPS]
+
+    TrackerBinding:
+      type: object
+      description: |
+        One project's mapping to one tracker project (004 D1) — a Jira project key, or an ADO
+        organization + team project. **Holds no credential and has no property that could carry
+        one** (D2): the credential is each person's own `TrackerIdentity`, keyed to this row's
+        host.
+      required:
+        [id, projectId, provider, baseUrl, externalProject, config, isDefault, enabled,
+         createdAt, updatedAt, lockVersion]
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        provider: { $ref: '#/components/schemas/TrackerProvider' }
+        baseUrl:
+          type: string
+          example: 'https://acme.atlassian.net'
+          description: The tracker site. `https://` only. Identities match on `(provider, baseUrl)`.
+        externalProject:
+          type: string
+          example: PAY
+          description: The Jira project key, or ADO's `org/teamProject`.
+        config:
+          type: object
+          additionalProperties: true
+          description: |
+            Per-provider settings the adapter reads — the issue type to file, a default area
+            path, the JQL/WIQL scope clause the search is narrowed by. Free-form here because
+            the keys are the adapter's; each adapter validates its own on the write and refuses
+            with `400` keyed on `errors.config`.
+        isDefault:
+          type: boolean
+          description: Exactly one per project. Where `POST …/tracker/issues` files when no `bindingId` is given.
+        enabled:
+          type: boolean
+          description: A disabled binding is skipped by search, preview and filing, and its links render degraded.
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        lockVersion:
+          type: integer
+          format: int64
+          description: Send it back as `If-Match` on the `PATCH`.
+
+    TrackerBindingInput:
+      type: object
+      required: [provider, baseUrl, externalProject, config, isDefault, enabled]
+      properties:
+        provider: { $ref: '#/components/schemas/TrackerProvider' }
+        baseUrl: { type: string, maxLength: 400 }
+        externalProject: { type: string, minLength: 1, maxLength: 200 }
+        config:
+          type: object
+          additionalProperties: true
+          description: '`{}` is legal; the adapter applies its defaults.'
+        isDefault:
+          type: boolean
+          description: Required, not defaulted — the first binding becomes the default regardless, and a later `true` moves the flag.
+        enabled:
+          type: boolean
+          description: Required, like every switch this API's writers take — a dropped boolean must not silently disable anything.
+
+    TrackerBindingPatch:
+      type: object
+      description: |
+        Every field optional and none clearable; an absent field is unchanged. `provider` and
+        `baseUrl` are deliberately not here — see the `POST`.
+      required: []
+      properties:
+        externalProject: { type: string, minLength: 1, maxLength: 200 }
+        config:
+          type: object
+          additionalProperties: true
+        isDefault: { type: boolean }
+        enabled: { type: boolean }
+
+    TrackerConnectionState:
+      type: string
+      # The whole of what `GET …/tracker/connected-members` may say about a person per host
+      # (004 D19). NEEDS_ATTENTION is "the last test failed or the credential has expired" and
+      # nothing finer — the sentence belongs on the person's own page.
+      enum: [CONNECTED, NEEDS_ATTENTION, NOT_CONNECTED]
+
+    TrackerConnectedMember:
+      type: object
+      required: [user, hosts]
+      properties:
+        user: { $ref: '#/components/schemas/UserRef' }
+        hosts:
+          type: array
+          description: One entry per host this project's bindings name, whether or not the person has connected to it.
+          items:
+            type: object
+            required: [provider, baseUrl, state]
+            properties:
+              provider: { $ref: '#/components/schemas/TrackerProvider' }
+              baseUrl: { type: string }
+              state: { $ref: '#/components/schemas/TrackerConnectionState' }
+
+    TrackerIdentity:
+      type: object
+      description: |
+        One person's connection to one tracker host — **theirs**, served to nobody else.
+        Without the credential, and with no property that could carry it; `secretHint` is the
+        four end-anchored characters `NotificationChannel.secretHint` argues for.
+      required:
+        [id, provider, baseUrl, authMethod, secretHint, accountId, expiresAt, lastError,
+         lastCheckedAt, enabled, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        provider: { $ref: '#/components/schemas/TrackerProvider' }
+        baseUrl: { type: string }
+        authMethod:
+          type: string
+          # `PAT` only in this slice (004 D3): the one mechanism that is entirely user-side on all
+          # three providers — no app registration, no tenant config, no redirect URI. OAuth is a
+          # second value here, not a redesign; the row already carries what it needs.
+          enum: [PAT]
+        secretHint:
+          type: string
+          nullable: true
+          description: The masked credential, end-anchored, four characters. Recognition, never a credential.
+        accountId:
+          type: string
+          nullable: true
+          description: The person's own tracker login — Jira Cloud's Basic auth needs the email beside the token. Null for the providers that do not.
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            When the token dies. **Not optional metadata**: Jira Cloud enforces a one-year
+            maximum, so every Jira Cloud row has a death date by construction, and the
+            connections page shows it on the first screen rather than in a drawer.
+        lastError:
+          type: string
+          nullable: true
+          description: What the tracker said the last time `…/test` — or a real call — failed. Null when the last call succeeded or none has been made.
+        lastCheckedAt: { type: string, format: date-time, nullable: true }
+        enabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    TrackerIdentityInput:
+      type: object
+      required: [provider, baseUrl, authMethod, secret, accountId, expiresAt]
+      properties:
+        provider: { $ref: '#/components/schemas/TrackerProvider' }
+        baseUrl: { type: string, maxLength: 400 }
+        authMethod: { type: string, enum: [PAT] }
+        secret:
+          type: string
+          format: password
+          minLength: 1
+          description: |
+            The PAT / API token, in plaintext, **on the way in only**. Encrypted at rest
+            (`SecretCipher`) and returned by nothing. Required, because a `POST` here always
+            sets one — rotation is a second `POST` for the same host.
+        accountId:
+          type: string
+          nullable: true
+          description: Required for `JIRA_CLOUD` (the email its Basic auth pairs with the token); null otherwise.
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: The expiry the tracker showed when the token was minted, if it showed one. Stored so the page can warn before the token dies.
+
+    TrackerConnectionCheck:
+      type: object
+      required: [ok, checkedAt, error]
+      properties:
+        ok: { type: boolean }
+        checkedAt: { type: string, format: date-time }
+        error:
+          type: string
+          nullable: true
+          description: The tracker's own message when `ok` is false — shown to the person whose credential it is, and to nobody else.
+
+    TrackerIssueStatusCategory:
+      type: string
+      # The CLOSED set a client may colour by (004 Phase 2). Jira's own statusCategory and ADO's
+      # state category map onto it in the adapter; the tracker's free-text status NAME is
+      # `statusName`, per-project and unbounded, and nothing may branch on it.
+      enum: [TODO, IN_PROGRESS, DONE]
+
+    TrackerIssue:
+      type: object
+      description: |
+        An issue **as fetched this request with the viewer's credential**. Never stored, never
+        cached across users, never logged (004 D15).
+      required: [provider, id, key, title, statusCategory, statusName, url, bindingId]
+      properties:
+        provider: { $ref: '#/components/schemas/TrackerProvider' }
+        id:
+          type: string
+          example: '10042'
+          description: The stable id — what a link stores (004 D17).
+        key:
+          type: string
+          example: PAY-991
+          description: The display key, **today's**. Never stored, because it moves.
+        title: { type: string }
+        statusCategory: { $ref: '#/components/schemas/TrackerIssueStatusCategory' }
+        statusName: { type: string, description: The tracker's own status name, display only. }
+        url: { type: string, description: The live browse URL as the tracker gives it. }
+        bindingId: { type: string, format: uuid }
+
+    TrackerIssueAvailability:
+      type: string
+      # Three states, and the middle one is the only distinction the contract draws (004 D16):
+      # NOT_CONNECTED is a fact about the VIEWER — no identity for this host — and earns a call to
+      # action on their own account page. UNAVAILABLE folds "tracker down", "token expired",
+      # "token refused" and "no access to this issue" into one word, so the preview is not an
+      # oracle for what exists in a tracker the viewer cannot read.
+      enum: [AVAILABLE, NOT_CONNECTED, UNAVAILABLE]
+
+    TrackerIssueSearch:
+      type: object
+      required: [state, issues]
+      properties:
+        state: { $ref: '#/components/schemas/TrackerIssueAvailability' }
+        issues:
+          type: array
+          description: Empty unless `state` is `AVAILABLE`; may be empty then too.
+          items: { $ref: '#/components/schemas/TrackerIssue' }
+
+    TrackerIssueLookup:
+      type: object
+      required: [state, issue]
+      properties:
+        state: { $ref: '#/components/schemas/TrackerIssueAvailability' }
+        issue:
+          allOf: [{ $ref: '#/components/schemas/TrackerIssue' }]
+          nullable: true
+          description: Present exactly when `state` is `AVAILABLE`.
+
+    TrackerIssueCreateInput:
+      type: object
+      required: [bindingId, title, description, executionId]
+      properties:
+        bindingId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null files through the project's default binding.
+        title: { type: string, minLength: 1, maxLength: 400 }
+        description:
+          type: string
+          nullable: true
+          description: |
+            The body, composed by the client — for a failed step, the case key, the step, the
+            verdict, the run, the environment and a permalink back. Composed client-side
+            deliberately: what a defect report says is a product decision the SPA makes
+            visibly, not a template buried in an adapter.
+        executionId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The execution this issue is being filed against, when it is. Recorded on the ledger
+            row and carried on the event the outbox backstop uses to write the `defect_link`
+            if the client's own follow-up never arrives. Null when filing from nowhere in
+            particular.
+
+    TrackerIssueCreated:
+      type: object
+      required: [provider, id, key, url, bindingId]
+      properties:
+        provider: { $ref: '#/components/schemas/TrackerProvider' }
+        id: { type: string, description: The stable id, for a link. }
+        key: { type: string, description: The key at creation, for the follow-up `DefectLinkInput.externalKey`. }
+        url: { type: string }
+        bindingId: { type: string, format: uuid, description: The binding actually used, for the follow-up's `bindingId`. }
+
+    IssueLink:
+      type: object
+      description: |
+        A tracker issue linked to a case — the `EXTERNAL_ISSUE` `doc_link` (004 D7), as stored.
+        **No key, no title, no status** (D5/D15/D17): the key is absent because it moves, the
+        title and status because they were fetched with one person's credential. The client
+        renders the live ones through `GET …/tracker/issues/{issueId}` and, when it cannot,
+        `<provider> issue <issueId> ↗` — never anything parsed out of `url`.
+      required: [id, provider, host, issueId, url, bindingId, createdAt, createdBy]
+      properties:
+        id: { type: string, format: uuid }
+        provider:
+          type: string
+          example: JIRA_CLOUD
+          description: Free text, recording what the binding said at link time (D9).
+        host: { type: string, example: 'https://acme.atlassian.net' }
+        issueId: { type: string, example: '10042' }
+        url: { type: string, description: A pointer allowed to go historical. Never a label. }
+        bindingId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Resolved **at read time** by matching `(provider, host)` against the project's
+            current bindings — never stored (D18). Null when no binding matches any more: the
+            chip then keeps its href and stops previewing.
+        createdAt: { type: string, format: date-time }
+        createdBy:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+
+    IssueLinkInput:
+      type: object
+      required: [bindingId, issueId, url]
+      properties:
+        bindingId: { type: string, format: uuid, description: Which binding's provider and host the id belongs to. }
+        issueId: { type: string, minLength: 1, maxLength: 100 }
+        url:
+          type: string
+          description: '`http` or `https` only — `DefectLinkInput.url`''s bound, for the same reason.'
 
     NotificationChannelKind:
       type: string
