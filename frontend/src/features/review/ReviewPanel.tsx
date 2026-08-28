@@ -60,6 +60,9 @@ const reviewEnabledKeys = {
   CASE: 'reviewEnabledCase',
   SUITE: 'reviewEnabledSuite',
   PLAN: 'reviewEnabledPlan',
+  // The fourth §6g opt-in (005 S9b, column added by `V71`). It arrived here as a compile error,
+  // which is the paragraph above doing its job rather than a coincidence worth leaving unremarked.
+  DOC: 'reviewEnabledDoc',
 } satisfies Record<ReviewSubjectType, keyof ProjectSettings>;
 
 /**
@@ -153,11 +156,19 @@ export function ReviewPanel({
   );
 }
 
-/** The permission a peer verdict costs, by subject type — the client half of the server's map. */
+/**
+ * The permission a peer verdict costs, by subject type — the client half of the server's map.
+ *
+ * `satisfies Record<ReviewSubjectType, PermissionKey>` is what made `DOC` a compile error the day
+ * the enum gained it, which is the point of writing it this way: the fourth reviewable artifact
+ * arrived with its own key (`doc:review`, seeded by `V71`) and a map with an `else` branch would
+ * have shipped a panel that refused every verdict on a page and said nothing about why.
+ */
 const REVIEW_PERMISSION = {
   CASE: 'case:review',
   SUITE: 'suite:review',
   PLAN: 'plan:review',
+  DOC: 'doc:review',
 } as const satisfies Record<ReviewSubjectType, PermissionKey>;
 
 function CurrentReview({

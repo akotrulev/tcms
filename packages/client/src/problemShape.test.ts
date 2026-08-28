@@ -49,6 +49,12 @@ const READS: Record<string, keyof TcmsApiError> = {
   status: 'status',
   detail: 'detail',
   errors: 'fieldErrors',
+  // The three 005 C1a / 003 C4 members. `permission` and `scope` keep their contract names because
+  // there is nothing else they could be called here; `line` likewise. Only `errors` is renamed, and
+  // it was renamed before this map existed.
+  permission: 'permission',
+  scope: 'scope',
+  line: 'line',
 };
 
 /**
@@ -63,11 +69,23 @@ const READS: Record<string, keyof TcmsApiError> = {
 const FROM_THE_TRANSPORT = new Set(['status']);
 
 /** A complete refusal document — every property `Problem` declares, with a distinguishable value. */
+/**
+ * One document carrying **every** property `Problem` declares.
+ *
+ * <p>Deliberately over-full, and not a state the product produces: a real refusal carries
+ * `permission` and `scope` on a 403 and `line` on a gherkin parse failure, and this one is a 400
+ * with all three. The subject here is the *transport* — whether each declared property reaches the
+ * error a caller catches — so a fixture split into three realistic documents would test the reading
+ * of three properties and the absence of six.
+ */
 const PROBLEM = {
   type: 'https://tcms.example.com/problems/validation',
   title: 'Validation failed',
   status: 400,
   detail: 'The case could not be saved.',
+  permission: 'case:approve',
+  scope: 'PROJECT',
+  line: 4,
   errors: { gherkinSource: ['must not be blank'] },
 };
 

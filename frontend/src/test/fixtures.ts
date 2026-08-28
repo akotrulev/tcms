@@ -495,8 +495,16 @@ export function anOrgChartPerson(overrides: Partial<OrgChartPerson> = {}): OrgCh
   }
 }
 
+/**
+ * `gaps` defaults to empty rather than being omitted, and the two are different claims.
+ *
+ * It is required on the wire (005 S6) and nullable in neither direction: an org chart with nothing
+ * missing serves `[]`. A factory that left it out would make every chart test drive a shape the
+ * server cannot send, and the Gaps panel's empty state — the one an administrator sees when the
+ * answer is "nobody is missing a grant" — would be the branch nothing exercised.
+ */
 export function anOrgChart(overrides: Partial<OrgChart> = {}): OrgChart {
-  return { teams: [], people: [], projects: [], ...overrides }
+  return { teams: [], people: [], projects: [], gaps: [], ...overrides }
 }
 
 export function aDocPageSummary(overrides: Partial<DocPageSummary> = {}): DocPageSummary {

@@ -1,4 +1,4 @@
-import { Box, Stack, Table, TableBody, TableCell, TableRow, Typography } from '@mui/material';
+import { Box, Stack, Table, TableBody, TableCell, TableRow } from '@mui/material';
 import { ScrollX } from '../../components/ScrollX';
 
 /**

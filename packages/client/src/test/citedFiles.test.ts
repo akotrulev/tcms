@@ -331,6 +331,53 @@ const CITED_BUT_ABSENT_BY_DECISION: Record<string, string> = {
     + 'names it because the deletion is what removed the last legitimate reason for a declared '
     + 'operation to have no handler — which is why that test stopped skipping them. The one comment '
     + 'in `backend/` that names the mock layer and is right about it.',
+
+  /*
+    The six below are one event: `19376dd6` ("Refresh claude files", 2026-08-28) removed the whole
+    historical documentation tree — `docs/audits/`, `docs/agent-context/`, the dated plans and
+    `docs/plans/001-unified-step-model/` — deliberately, leaving `docs/specs/`, `docs/plans/003…006`
+    and `docs/business-model/` as the authorities. Twenty-odd comments across `backend/` and
+    `frontend/` cite one of them.
+
+    THEY ARE ENTERED HERE RATHER THAN STRUCK THROUGH IN THE SOURCES, and the choice is worth stating
+    because it is the opposite of what this map's header prefers. Strikethrough is right when the
+    ARGUMENT is superseded; here every one of these sentences is still live and still correct — the
+    §-numbered reasoning in `FeatureImportService`, the audit finding `DataFreshness` implements, the
+    catalogue `shapes.ts` renders. What has gone is the *document*, not the decision. Editing twenty
+    files to strike a filename would say the reasoning had been reversed, which is exactly the
+    misreading the strikethrough notation exists to prevent.
+
+    Both directions still hold: restoring any of these files fails this map, which is the property
+    that stops an entry outliving its absence.
+  */
+  'docs/plans/001-unified-step-model/':
+    'The directory the three below belonged to, named by this map\'s own comment so the six entries '
+    + 'read as one event rather than six coincidences. Removed in `19376dd6`. It is here because the '
+    + 'directory rule treats a trailing slash as the same claim a filename makes, and this file is in '
+    + 'the corpus it scans — the rule declining to exempt its own prose is the property that keeps it '
+    + 'honest.',
+  'api-surface.md':
+    'Removed with `docs/plans/001-unified-step-model/` in `19376dd6`. The plan it belonged to is '
+    + 'built — the unified step model IS the schema — so the citations are historical attributions '
+    + 'for shapes that now live in `docs/specs/openapi.yaml`, and the sentences around them are '
+    + 'about code that exists.',
+  'data-model.md':
+    'The same document set and the same event — see `api-surface.md`. Cited by the feature-import '
+    + 'and gherkin-backfill files for where the step model was specified before it was built.',
+  'integrations.md':
+    'The same document set and the same event — see `api-surface.md`. Cited for the automation-key '
+    + 'contract, which `AutomationKeyMapping` now holds outright.',
+  'docs/audits/2026-08-15-flow-review-and-improvements.md':
+    'Removed with the whole of `docs/audits/` in `19376dd6`. Its findings are implemented — E2 is '
+    + '`V66`\'s idempotency key, and `DataFreshness` is the freshness half — so the citations name '
+    + 'the origin of a decision rather than a document a reader has to open.',
+  'docs/plans/2026-08-18-unplanned-gaps.md':
+    'Removed with the dated plans in `19376dd6`. Its gaps are closed: run scheduling is `V68` and '
+    + '`RunScheduleEndpointTest` is what checks it, which is the file that cites it.',
+  'docs/plans/2026-08-26-authoring-shape-catalogue.md':
+    'Removed with the dated plans in `19376dd6`. The catalogue it specified is `core/shapes.ts` and '
+    + '`mcp/src/shape.ts`, which are the two files that cite it — the specification became the '
+    + 'implementation, and those two are now the authority on it.',
 };
 
 describe('a file a comment names', () => {

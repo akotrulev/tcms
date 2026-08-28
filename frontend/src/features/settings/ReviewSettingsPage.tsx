@@ -135,7 +135,10 @@ function ReviewSettingsForm({
   const dirty = JSON.stringify(draft) !== serverFingerprint;
 
   const reviewOn =
-    draft.reviewEnabledCase || draft.reviewEnabledSuite || draft.reviewEnabledPlan;
+    draft.reviewEnabledCase ||
+    draft.reviewEnabledSuite ||
+    draft.reviewEnabledPlan ||
+    draft.reviewEnabledDoc;
 
   const gatingOn = draft.requireApprovedCaseForRun;
 
@@ -156,6 +159,7 @@ function ReviewSettingsForm({
             reviewEnabledCase: draft.reviewEnabledCase,
             reviewEnabledSuite: draft.reviewEnabledSuite,
             reviewEnabledPlan: draft.reviewEnabledPlan,
+            reviewEnabledDoc: draft.reviewEnabledDoc,
             requiredPeerReviews: draft.requiredPeerReviews,
             authorMayApproveOwnWork: draft.authorMayApproveOwnWork,
             editAfterApproval: draft.editAfterApproval,
@@ -176,6 +180,7 @@ function ReviewSettingsForm({
               ['reviewEnabledCase', 'Test cases', 'The script is correct, complete and executable — §6g calls this the common case.'],
               ['reviewEnabledSuite', 'Suites', "The suite's composition is right. Reviewing a suite does not approve the cases in it."],
               ['reviewEnabledPlan', 'Test plans', 'Sign-off that this is the right scope to execute for the release.'],
+              ['reviewEnabledDoc', 'Documentation pages', 'The page says what the product does. Reviewing a page does not approve the cases linked to it.'],
             ] as const
           ).map(([field, label, help]) => (
             <FormControlLabel

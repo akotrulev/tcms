@@ -42,6 +42,36 @@ export class TcmsApiError extends Error {
   readonly correlationId: string | null;
   /** `Retry-After` verbatim — delta-seconds *or* an HTTP date. Parsed by {@link retryAfterMs}. */
   readonly retryAfter: string | null;
+  /**
+   * `Problem.permission` — the catalogue key the caller lacks, on a 403 and nowhere else
+   * (005 C1a).
+   *
+   * A `string` rather than a `PermissionKey`: the server's catalogue is the authority, and a key
+   * this build cannot name must still print as its own text rather than be dropped. That is not a
+   * hypothetical — `doc:review` was seeded by `V71` and absent from the generated union for a whole
+   * contract wave, which is the drift this looseness survives.
+   *
+   * **Null on most refusals today.** The envelope carries the member; the backend sites that fill
+   * it in land progressively, so every consumer degrades to prose rather than assuming a key.
+   */
+  readonly permission: string | null;
+  /**
+   * `Problem.scope` — where {@link permission} would have to be held: `SYSTEM`, `COMPANY` or
+   * `PROJECT`. Null wherever `permission` is.
+   *
+   * It is the actionable half rather than a detail: it is what decides *who to ask*, and a CLI that
+   * printed the key without it sends somebody to the wrong administrator.
+   */
+  readonly scope: string | null;
+  /**
+   * `Problem.line` — the 1-based line of a pasted text a refusal is about, on the gherkin parse
+   * family and nowhere else (003 C4).
+   *
+   * Read, never derived. A CLI that regexed a line number out of `detail` would be parsing prose
+   * the server is free to reword, which is the whole reason the member exists on the wire.
+   */
+  readonly line: number | null;
+
   /** The request that was refused, for a message that can name it. */
   readonly method: string;
   readonly path: string;
@@ -56,6 +86,9 @@ export class TcmsApiError extends Error {
     fieldErrors?: Record<string, string[]> | null;
     correlationId?: string | null;
     retryAfter?: string | null;
+    permission?: string | null;
+    scope?: string | null;
+    line?: number | null;
   }) {
     super(init.detail);
     this.name = 'TcmsApiError';
@@ -68,6 +101,9 @@ export class TcmsApiError extends Error {
     this.fieldErrors = init.fieldErrors ?? null;
     this.correlationId = init.correlationId ?? null;
     this.retryAfter = init.retryAfter ?? null;
+    this.permission = init.permission ?? null;
+    this.scope = init.scope ?? null;
+    this.line = init.line ?? null;
   }
 
   /** True when the server rejected individual fields, so a CLI can print them per flag. */

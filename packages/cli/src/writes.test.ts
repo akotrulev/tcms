@@ -318,7 +318,7 @@ describe('case edit', () => {
     const out = recorder();
     const stub = api({
       ...scaffolding(),
-      'GET /suites': { status: 200, body: [{ id: 's-1', key: 'TS-7', name: 'Smoke', caseCount: 1, lifecycleStatus: 'DRAFT', tagRules: [], caseIds: [], preconditions: [], postconditions: [], lockVersion: 1 }] },
+      'GET /suites': { status: 200, body: [{ id: 's-1', key: 'TS-7', name: 'Smoke', caseCount: 1, filedCount: 1, addedCount: 0, taggedCount: 0, lifecycleStatus: 'DRAFT', tagRules: [], caseIds: [], preconditions: [], postconditions: [], lockVersion: 1 }] },
       'PATCH /cases/c-9': { status: 200, body: CASE },
     });
 

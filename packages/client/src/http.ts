@@ -288,6 +288,9 @@ async function problemFrom(response: Response, method: string, path: string): Pr
   let title: string | null = null;
   let type: string | null = null;
   let fieldErrors: Record<string, string[]> | null = null;
+  let permission: string | null = null;
+  let scope: string | null = null;
+  let line: number | null = null;
 
   try {
     const body: unknown = await response.json();
@@ -299,6 +302,15 @@ async function problemFrom(response: Response, method: string, path: string): Pr
       if (typeof problem['type'] === 'string') type = problem['type'];
       if (problem['errors'] && typeof problem['errors'] === 'object') {
         fieldErrors = problem['errors'] as Record<string, string[]>;
+      }
+      // The three members 005 C1a and 003 C4 added. `typeof` rather than a cast for each, and for
+      // the reason the whole function is written this way: they are optional in the contract, so a
+      // refusal that omits them has to leave a null here — a cast would put the string
+      // "undefined" inside somebody's error message.
+      if (typeof problem['permission'] === 'string') permission = problem['permission'];
+      if (typeof problem['scope'] === 'string') scope = problem['scope'];
+      if (typeof problem['line'] === 'number' && Number.isFinite(problem['line'])) {
+        line = problem['line'];
       }
     }
   } catch {
@@ -315,5 +327,8 @@ async function problemFrom(response: Response, method: string, path: string): Pr
     fieldErrors,
     correlationId: response.headers.get('x-correlation-id'),
     retryAfter: response.headers.get('retry-after'),
+    permission,
+    scope,
+    line,
   });
 }

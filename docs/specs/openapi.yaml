@@ -15411,6 +15411,17 @@ components:
         case:comment, defect:create, workitem:manage, library:manage — and three split
         a boundary that was previously wrong (suite:delete out of suite:manage,
         project:audit out of audit:view, case:comment below the review tier).
+
+        **56 since `V71` (2026-08-28), and `doc:review` is the only one added since `V3`
+        seeded the other 55.** It is the fourth `*:review` key, held by the same tier as
+        `plan:review`, and it exists because a documentation page became a reviewable
+        artifact (005 S9b). `V3` derived its role rows from the catalogue *as it stood
+        then*, so a later key needs its own `INSERT` — which is why 006's batching
+        corrected S9b's "no migration" and why this member was missed here for one wave:
+        the seed, the roles spec, `permission-matrix-summary.md`, `README.md` and
+        `lib/permissions.ts` all carried it while this enum did not, and nothing compares
+        this list to the seed. `SeedDataTest.catalogueMatchesTheContract` is what does,
+        from the server side.
       enum:
         # repository
         - 'suite:manage'
@@ -15425,6 +15436,7 @@ components:
         - 'case:review'
         - 'suite:review'
         - 'plan:review'
+        - 'doc:review'
         - 'case:approve'
         - 'suite:approve'
         - 'plan:approve'

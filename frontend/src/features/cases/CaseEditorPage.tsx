@@ -81,8 +81,14 @@ import type {
  * ~~A two-column form whose main column was a list of step rows: a keyword select, an action field
  * with its own completion, a data cell with three modalities and a drag handle, per row.~~ →
  * **retired in §003 Phase 2.** `SortableStep`, `StepActionField`, `StepKeywordCell`,
- * `StepDataCell.tsx`, `stepReorder.ts` and the drag-and-drop sensors are deleted, and with them
- * roughly half of this file. `@dnd-kit` stays a dependency — the board uses it — and the three
+ * `stepReorder.ts` and the drag-and-drop sensors are deleted, and with them roughly half of this
+ * file.
+ *
+ * <p>`StepDataCell.tsx` is the one 003 named that <strong>survives</strong>, and the distinction is
+ * worth keeping straight because the plan's list was about the editing half: the file also exports
+ * `StepDataView`, the read-only renderer for a doc string and a table, and `CaseDetailPage` and
+ * `ExecutionPage` both render steps they are not editing. Deleting the file would have taken the
+ * viewer with the editor. What went is the mode switch and the cell that wrote through it. `@dnd-kit` stays a dependency — the board uses it — and the three
  * step-data modalities survive **as text**: a doc string is `"""`, a table is `|…|`, and
  * `testData` is the `# data:` comment the renderer already emits.
  *
@@ -1377,7 +1383,12 @@ function CaseEditorForm({
                                 onChange={(event) => toggle(ref.id, !event.target.checked)}
                                 // The panel's own wording, verbatim: the two switches mean the
                                 // same thing and a reader meets both on this screen.
-                                inputProps={{ 'aria-label': `Applies to this case: ${ref.title}` }}
+                                //
+                                // `slotProps.input` and not `inputProps`: MUI v9 dropped the
+                                // latter from Switch, and it is the label a screen reader announces
+                                // — so the compile error was standing in for a control that would
+                                // have gone unnamed. `PlanCreateDialog` uses the same form.
+                                slotProps={{ input: { 'aria-label': `Applies to this case: ${ref.title}` } }}
                               />
                               <Typography variant="body2" sx={{ minWidth: 0 }}>
                                 {ref.title}

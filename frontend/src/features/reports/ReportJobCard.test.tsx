@@ -41,6 +41,9 @@ const job = (over: Partial<ReportJob> = {}): ReportJob => {
     status: 'RUNNING',
     format: 'HTML',
     requestedAt: '2026-08-16T09:30:00Z',
+    // Required and nullable since 005 S1. Null is the honest default here: the fixture's base state
+    // is a RUNNING job, and a job that has not finished has written no artifact to have a size.
+    sizeBytes: null,
     downloadUrl: null,
     modelUrl: null,
     error: null,

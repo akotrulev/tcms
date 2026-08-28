@@ -277,6 +277,10 @@ const REPORT_JOB = {
   status: 'PENDING',
   format: 'HTML',
   requestedAt: '2026-08-16T09:30:00Z',
+  // Required and nullable since 005 S1: null until the worker has written the artifact, which is
+  // exactly the state a freshly-queued job is in. Absent is not the same claim as null — it is what
+  // makes a size-aware client print `undefined`.
+  sizeBytes: null,
   downloadUrl: null,
   modelUrl: null,
   error: null,

@@ -50,6 +50,9 @@ const grant = (
   projectId,
   projectName: projectId,
   grantedAt: '2026-01-01T00:00:00Z',
+  // Required and nullable since 005 S1: who made the grant, or null for one nobody made by hand —
+  // the baseline every company member holds, and any grant whose actor has since been offboarded.
+  grantedBy: null,
 })
 
 const squad: Team = {
