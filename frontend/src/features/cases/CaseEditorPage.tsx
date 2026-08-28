@@ -317,7 +317,15 @@ function SortableStep({
           anything. Fill separates the rows at a fraction of the visual weight, and it leaves the
           border free to carry the one thing that IS a state: the row being dragged.
         */
-        bgcolor: isDragging ? 'background.paper' : 'var(--color-surface-sunken)',
+        /*
+          `background.default`, through the PALETTE, not `var(--color-surface-sunken)` through the
+          raw token — which is the same two hexes and rendered the row WHITE in dark mode. That
+          token had no component consumer anywhere in `src/` before this line, so whatever is wrong
+          with it had never been on screen; every raw-var call site that does work reads a status or
+          feedback colour, never a surface. The palette is what the other 130 files use and what MUI
+          rewrites per colour scheme, so it cannot disagree with the panel it sits inside.
+        */
+        bgcolor: isDragging ? 'background.paper' : 'background.default',
         borderLeft: '2px solid',
         borderColor: isDragging ? 'primary.main' : 'transparent',
         boxShadow: isDragging ? 3 : 0,
