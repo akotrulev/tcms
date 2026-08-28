@@ -8,7 +8,7 @@ import { api } from '../../api/client'
 import type { Condition, PermissionKey, StepSuggestion, Suite, TagUsage, TestCase } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
-import { aCase } from '../../test/fixtures'
+import { aCase, aStep } from '../../test/fixtures'
 import { heldPermissions } from '../../test/permissions'
 import { CaseEditorPage } from './CaseEditorPage'
 import { newCaseDraftKey } from './useNewCaseDraft'
@@ -753,7 +753,7 @@ describe('the draft buffer', () => {
     title: 'The saved title',
     objective: 'What the server has stored',
     steps: [
-      { id: 's1', position: 0, keyword: null, action: 'A saved step', testData: null, expectedResult: null },
+      aStep({ action: 'A saved step' }),
     ],
     lockVersion: 3,
     currentVersionNo: 2,
@@ -1040,7 +1040,7 @@ describe('CaseEditorPage — declining an inherited condition (§187)', () => {
     title: 'Log in with a bad password',
     suiteName: 'Payments',
     steps: [
-      { id: 's1', position: 0, keyword: null, action: 'Open the login page', testData: null, expectedResult: null },
+      aStep({ action: 'Open the login page' }),
     ],
     preconditions: [
       {
@@ -1259,7 +1259,7 @@ describe('CaseEditorPage — moving a case out of the folder it declines (§194)
     keySeq: 194,
     title: 'Log in with a bad password',
     steps: [
-      { id: 's1', position: 0, keyword: null, action: 'Open the login page', testData: null, expectedResult: null },
+      aStep({ action: 'Open the login page' }),
     ],
     declinedPreconditions: [declinedRow],
     lockVersion: 3,
@@ -1457,5 +1457,170 @@ describe('CaseEditorPage — moving a case out of the folder it declines (§194)
 
     expect(await screen.findByText('Saved TC-194 as v3')).toBeInTheDocument()
     expect(screen.queryByText(/the move ended/)).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * The lens, the keyword column and the paste dialog (§255).
+ *
+ * **The first arm is the whole slice.** Until §255 the two lenses were two storages: switching to
+ * Gherkin mounted a textarea and `toCasePayload` sent `steps: []`, so the next Save deleted every
+ * row and every step id a `step_result` anchors to — 200, success toast, evidence orphaned. The
+ * test that would have caught it is "toggle the lens and the rows are still there", which is why it
+ * is written first and why it asserts the PAYLOAD as well as the screen: a form that still renders
+ * the rows while sending none of them is the same defect one layer down.
+ */
+describe('CaseEditorPage — the lens (§255)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('keeps every row when the lens is toggled, in both directions', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    renderEditor()
+
+    await user.type(actionFields()[0], 'Refund it')
+    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(2))
+
+    await user.click(screen.getByTestId('CaseEditor.StepFormat.GHERKIN'))
+    expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(2)
+    expect(actionFields()[0]).toHaveValue('Refund it')
+
+    await user.click(screen.getByTestId('CaseEditor.StepFormat.STRUCTURED'))
+    expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(2)
+    expect(actionFields()[0]).toHaveValue('Refund it')
+  })
+
+  it('sends the rows after a switch to Gherkin, where it used to send none', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    const post = vi.spyOn(api, 'post').mockResolvedValue(
+      loadedCase({ id: 'c9', key: 'TC-9', stepFormat: 'GHERKIN' }) as never,
+    )
+    renderEditor()
+
+    await user.type(actionFields()[0], 'Refund it')
+    await user.click(screen.getByTestId('CaseEditor.StepFormat.GHERKIN'))
+    await fillHeader(user)
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    const payload = post.mock.calls[0][1] as { stepFormat: string; steps: { keyword: string }[] }
+    expect(payload.stepFormat).toBe('GHERKIN')
+    expect(payload.steps).toHaveLength(1)
+    // Pre-filled by the toggle: the lens requires a keyword and the author has not been asked yet,
+    // so landing them in a state their own form refuses would be the toggle's other failure mode.
+    expect(payload.steps[0].keyword).toBe('GIVEN')
+  })
+
+  it('shows a keyword select on every row in the Gherkin lens', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    renderEditor()
+
+    expect(screen.queryAllByTestId('CaseEditor.Steps.Field.Keyword')).toHaveLength(0)
+    await user.click(screen.getByTestId('CaseEditor.StepFormat.GHERKIN'))
+
+    expect(screen.getAllByTestId('CaseEditor.Steps.Field.Keyword')).toHaveLength(1)
+  })
+
+  it('offers rather than mounts the keyword in the structured lens', async () => {
+    // A numbered action legitimately has no keyword, so a permanently-mounted "None" select on
+    // every row of every structured case asks a question nobody has.
+    const user = userEvent.setup()
+    mockReads()
+    renderEditor()
+
+    expect(screen.getByTestId('CaseEditor.Steps.AddKeyword')).toBeInTheDocument()
+    await user.click(screen.getByTestId('CaseEditor.Steps.AddKeyword'))
+    expect(screen.getByTestId('CaseEditor.Steps.Field.Keyword')).toBeInTheDocument()
+  })
+
+  it('refuses to save a Gherkin case with a keyword-less row, in the server’s words', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    const post = vi.spyOn(api, 'post')
+    renderEditor()
+
+    await user.type(actionFields()[0], 'Refund it')
+    await user.click(screen.getByTestId('CaseEditor.StepFormat.GHERKIN'))
+    // Clear what the pre-fill proposed, which is the only way to reach the refusal from this screen.
+    const keyword = screen.getAllByTestId('CaseEditor.Steps.Field.Keyword')[0]
+    await user.click(within(keyword.closest('.MuiInputBase-root') as HTMLElement).getByRole('combobox'))
+    await user.click(await screen.findByRole('option', { name: 'And' }))
+
+    await fillHeader(user)
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    expect(await screen.findByText('The first step cannot be And/But.')).toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+  })
+})
+
+describe('CaseEditorPage — pasting a scenario (§255)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const scenario = {
+    title: 'A settled payment cannot be refunded twice',
+    objective: 'Prove the ledger refuses the second refund.',
+    tags: ['refunds'],
+    background: [],
+    steps: [
+      { id: null, keyword: 'GIVEN' as const, action: 'a settled payment', testData: null, expectedResult: null, docString: null, dataTable: null },
+      { id: null, keyword: 'THEN' as const, action: 'the second refund is refused', testData: null, expectedResult: null, docString: null, dataTable: null },
+    ],
+  }
+
+  async function paste(mode: 'Append' | 'Replace') {
+    const user = userEvent.setup()
+    vi.spyOn(api, 'postText').mockResolvedValue(scenario as never)
+    renderEditor()
+
+    await user.click(screen.getByTestId('CaseEditor.Steps.Paste'))
+    await user.click(screen.getByTestId('PasteGherkin.Text'))
+    await user.paste('Given a settled payment')
+    await user.click(screen.getByTestId('PasteGherkin.Parse'))
+    await user.click(await screen.findByTestId(`PasteGherkin.${mode}`))
+    return user
+  }
+
+  it('lands the parsed rows in the editor and switches to the Gherkin lens', async () => {
+    mockReads()
+    await paste('Replace')
+
+    // Two rows plus the trailing blank, which IS the way to add a step (§94) and has to survive
+    // a paste like every other operation on the list.
+    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(3))
+    expect(actionFields()[0]).toHaveValue('a settled payment')
+    expect(screen.getByTestId('CaseEditor.StepFormat.GHERKIN')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('fills a blank title and merges the tags, rather than replacing what is there', async () => {
+    mockReads()
+    await paste('Replace')
+
+    await waitFor(() => expect(screen.getByTestId('CaseEditor.Field.Title')).toHaveValue(scenario.title))
+    expect(screen.getByTestId('CaseEditor.Field.Objective')).toHaveValue(scenario.objective)
+  })
+
+  it('appends without touching the rows already written', async () => {
+    mockReads()
+    const user = userEvent.setup()
+    vi.spyOn(api, 'postText').mockResolvedValue(scenario as never)
+    renderEditor()
+
+    await user.type(actionFields()[0], 'A step I wrote')
+    await user.click(screen.getByTestId('CaseEditor.Steps.Paste'))
+    await user.click(screen.getByTestId('PasteGherkin.Text'))
+    await user.paste('Given a settled payment')
+    await user.click(screen.getByTestId('PasteGherkin.Parse'))
+    await user.click(await screen.findByTestId('PasteGherkin.Append'))
+
+    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(4))
+    expect(actionFields()[0]).toHaveValue('A step I wrote')
+    expect(actionFields()[1]).toHaveValue('a settled payment')
   })
 })

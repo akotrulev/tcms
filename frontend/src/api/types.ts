@@ -110,6 +110,56 @@ export type CaseDraft = S['CaseDraft'];
  */
 export type TestCaseCloneInput = S['TestCaseCloneInput'];
 export type TestStep = S['TestStep'];
+/**
+ * The rows and the Background a pasted scenario would become (§255) — **a suggestion, not a case**.
+ *
+ * `steps` is literally `TestStepInput[]` with every `id` null, so it can be handed to the case
+ * write unchanged; `background` is one entry **per Background step** (amendment AM1), each already
+ * shaped as the `ConditionInput` it would become. Nothing on the server is created by asking.
+ */
+export type GherkinParseResult = S['GherkinParseResult'];
+export type ParsedBackground = S['ParsedBackground'];
+/**
+ * Where an imported case came from — **provenance, never a locator**. The `.feature` file lives in
+ * somebody's automation repository and this instance has never held it, so nothing resolves this
+ * to content: it is what lets a reader answer "why does this case say that".
+ */
+export type ImportedFrom = S['ImportedFrom'];
+
+/**
+ * What an import of `.feature` files would do, or what it just did (§255).
+ *
+ * **The same shape in both modes**, which is the property the import screen is built on: `PREVIEW`
+ * plans and writes nothing, `APPLY` recomputes the identical plan inside its transaction and
+ * executes it, and on a clean run `applied` and the rows' `caseKey`s are the only fields that
+ * move. One component renders both, so a preview cannot describe an outcome the apply does not
+ * produce — there is no second decision procedure for the two to disagree about.
+ */
+export type FeatureImportPlan = S['FeatureImportPlan'];
+export type FeatureImportRequest = S['FeatureImportRequest'];
+export type FeatureFile = S['FeatureFile'];
+/**
+ * One scenario's verdict.
+ *
+ * `reason` is a **fixed sentence from the server**, not a client-side rendering of one: the list is
+ * written out in `openapi.yaml` on this property and clients may match on the strings. It is an
+ * outcome rather than an error, so it is shown verbatim and never routed through
+ * `lib/describeError.ts`, whose whole job is the opposite — turning a failure into copy of ours.
+ *
+ * `preconditions` is already ordered and already resolved by the server: the import-owned titles in
+ * `Background:` order, then the case's human-attached ones. It is per ROW; `FeatureImportPlan.conditions`
+ * is per REQUEST, and re-deriving one from the other is how a row grows conditions from a file it
+ * has nothing to do with.
+ */
+export type ImportRow = S['ImportRow'];
+export type ImportAction = S['ImportRow']['action'];
+export type SuiteAction = S['SuiteAction'];
+export type SuiteActionKind = S['SuiteAction']['action'];
+export type ConditionAction = S['ConditionAction'];
+export type ConditionActionKind = S['ConditionAction']['action'];
+export type ImportOrphan = S['Orphan'];
+export type ImportTotals = S['ImportTotals'];
+export type OnExisting = S['FeatureImportRequest']['onExisting'];
 export type Condition = S['Condition'];
 export type CaseConditionRef = S['CaseConditionRef'];
 export type ConditionInput = S['ConditionInput'];
@@ -517,6 +567,12 @@ export type LifecycleStatus = S['LifecycleStatus'];
 export type AutomationStatus = S['AutomationStatus'];
 export type Priority = S['Priority'];
 export type StepFormat = S['StepFormat'];
+/**
+ * The Gherkin keyword on one step. **Nullable wherever it appears, and the null is the format** —
+ * a numbered action has no Given/When/Then, so the absence is a fact rather than a value somebody
+ * forgot. `lib/labels.ts::stepKeywordLabels` is where a new member becomes a compile error.
+ */
+export type StepKeyword = S['StepKeyword'];
 export type StatusKind = S['StatusKind'];
 export type HealthSignal = S['HealthSignal'];
 /**

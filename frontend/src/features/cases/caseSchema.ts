@@ -24,7 +24,20 @@ import { z } from 'zod';
 
 export const StepSchema = z.object({
   id: z.string().nullable().optional(),
-  keyword: z.string().nullable().optional(),
+  /**
+   * The Gherkin keyword, or `''` for a step that has none (§255).
+   *
+   * **`''` and not `null`**, for `suiteId`'s recorded reason one field over: MUI's `Select` treats
+   * `null` as uncontrolled and logs a warning on every render of every keyword-less row, which is
+   * every row of every structured case. The submit maps `''` back to the `null` the contract calls
+   * a step with no keyword.
+   *
+   * Not a `z.enum` either. The control only offers the five, so a bad value cannot be produced on
+   * screen — but a restored draft is unvalidated by construction and may have been written by an
+   * older build, and a schema that refused one would take the editor's whole form down rather than
+   * letting the server answer with the sentence it has for exactly this (`CaseEdit.keyword`).
+   */
+  keyword: z.string(),
   /**
    * Deliberately NOT `.min(1)` — the emptiness rules moved to the two checks below (§94).
    *
@@ -40,13 +53,27 @@ export const StepSchema = z.object({
   action: z.string(),
   testData: z.string().nullable().optional(),
   expectedResult: z.string().nullable().optional(),
+  /**
+   * Gherkin's `"""` block argument, and **`null` means the row is not in doc-string mode** while
+   * `''` means it is and is empty.
+   *
+   * The distinction is what lets the Data cell's mode be *derived* from the values rather than
+   * held as a fourth field: a mode kept beside the content is a second source of truth about the
+   * same question, and the two disagree the moment a draft is restored from a payload that carries
+   * only the content. `StepDataCell` reads exactly this.
+   */
+  docString: z.string().nullable(),
+  /** Gherkin's `|` table, rows of cells. `null` for a row that is not in table mode — see above. */
+  dataTable: z.array(z.array(z.string())).nullable(),
 });
 
-/** The three authored fields — the shape both emptiness helpers below read. */
+/** The authored fields — the shape both emptiness helpers below read. */
 type StepLike = {
   action?: string | null;
   testData?: string | null;
   expectedResult?: string | null;
+  docString?: string | null;
+  dataTable?: string[][] | null;
 };
 
 const isBlank = (value: string | null | undefined) => (value ?? '').trim().length === 0;
@@ -59,7 +86,14 @@ const isBlank = (value: string | null | undefined) => (value ?? '').trim().lengt
  * `"  "`, and it is what stops such a row satisfying "at least one step".
  */
 export const isBlankStep = (step: StepLike): boolean =>
-  isBlank(step.action) && isBlank(step.testData) && isBlank(step.expectedResult);
+  isBlank(step.action)
+  && isBlank(step.testData)
+  && isBlank(step.expectedResult)
+  // The two block arguments count, and leaving them out would be the §94 defect in a new field:
+  // a row carrying only a doc string would be dropped at submit as empty, so the author's pasted
+  // payload disappears on Save with a success toast over it.
+  && (step.docString ?? null) === null
+  && (step.dataTable ?? null) === null;
 
 /**
  * The rows that are actually steps.
@@ -102,8 +136,13 @@ export const CaseSchema = z
       .string()
       .nullable()
       .refine((value) => !value || /^\d+$/.test(value), 'Enter a whole number of seconds.'),
+    /**
+     * **A lens, not a storage switch, since §255.** Both values are the same rows: `GHERKIN` says
+     * every step carries a keyword and the case renders as a scenario, `STRUCTURED` says the
+     * keywords are optional and it renders as a numbered list. Toggling it therefore changes no
+     * step and loses nothing — see the editor's toggle, which is where that had to be made true.
+     */
     stepFormat: z.enum(['STRUCTURED', 'GHERKIN']),
-    gherkinSource: z.string().nullable(),
     steps: z.array(StepSchema),
     // Every classification value the case should carry, across all four dimensions — Test Type,
     // Test Level, Execution Phase and the project's Feature tree — as one flat array, because that
@@ -172,31 +211,30 @@ export const CaseSchema = z
     tags: z.array(z.string().max(60, 'Keep each tag under 60 characters.')),
     changeComment: z.string().nullable(),
   })
-  // Cross-field rules the server also enforces. Both live in the schema rather than in the
-  // submit handler, so the message lands on the field that caused it.
+  // Cross-field rules the server also enforces. They live in the schema rather than in the submit
+  // handler, so the message lands on the field that caused it.
   //
-  // The first two are stricter than the server's CREATE path since §200, and deliberately so. The
-  // server defers the procedure because the plan's Test cases tab authors a case from a title with
-  // no step field on screen; this editor renders one, so an author here has been asked the question
-  // and an empty answer is an answer. Relaxing it to match would let the one surface built for
-  // writing a case be the surface that saves an empty one. The stub the plan creates is finished
-  // HERE, and this rule is what finishing means.
-  .refine((data) => data.stepFormat !== 'GHERKIN' || !!data.gherkinSource?.trim(), {
-    path: ['gherkinSource'],
-    message: 'Write the scenario, or switch to structured steps.',
-  })
+  // The procedure rule is stricter than the server's CREATE path since §200, and deliberately so.
+  // The server defers the procedure because the plan's Test cases tab authors a case from a title
+  // with no step field on screen; this editor renders one, so an author here has been asked the
+  // question and an empty answer is an answer. Relaxing it to match would let the one surface built
+  // for writing a case be the surface that saves an empty one. The stub the plan creates is
+  // finished HERE, and this rule is what finishing means.
   /*
     NON-EMPTY steps, not `steps.length` — the defect §94's auto-append introduces.
 
-    The editor now keeps a blank row at the end of the list at all times, so `steps.length` is
-    never 0 on a structured case and this rule would pass on a form nobody has written a step
-    into: an empty case would save clean, with a success toast and a version bump. Counting the
-    rows that survive `liveSteps` is the same question asked of the rows that will actually be
-    sent.
+    The editor keeps a blank row at the end of the list at all times, so `steps.length` is never 0
+    and this rule would pass on a form nobody has written a step into: an empty case would save
+    clean, with a success toast and a version bump. Counting the rows that survive `liveSteps` is
+    the same question asked of the rows that will actually be sent.
+
+    UNCONDITIONAL SINCE §255, where it used to exempt `GHERKIN`. A Gherkin case is step rows now, so
+    "or switch to Gherkin" named an escape hatch that no longer exists — and the server's own
+    sentence lost the same clause in the same slice (`CaseEdit`'s `ProcedureRule.REQUIRED`).
   */
-  .refine((data) => data.stepFormat !== 'STRUCTURED' || liveSteps(data.steps).length > 0, {
+  .refine((data) => liveSteps(data.steps).length > 0, {
     path: ['steps'],
-    message: 'Add at least one step, or switch to Gherkin.',
+    message: 'Add at least one step.',
   })
   .refine((data) => data.automationStatus !== 'NOT_AUTOMATABLE' || !!data.notAutomatableReason?.trim(), {
     path: ['notAutomatableReason'],
@@ -207,31 +245,115 @@ export const CaseSchema = z
     message: 'Give the automated test that covers this case, so results can be matched to it.',
   })
   /*
-    "A step needs an action" — what `StepSchema.action.min(1)` used to say, restated as a rule
-    about the row rather than about the field.
+    The per-row rules, in one pass. All four are the server's, quoted verbatim from
+    `CaseEdit.validate` — a message the client composes itself is §149's defect in the other
+    direction: the author fixes the row, saves, and is told the same thing in different words.
 
-    It has to know about its neighbours to be right: the blank trailing row is exempt (it is not a
-    step yet), and a row carrying test data or an expected result is NOT (an author who filled in
-    what they expect and left the action blank has written half a step, and the server refuses it).
-    That is a cross-field question, so it lives here with the other four rather than on the field.
+    They have to know about their neighbours to be right: the blank trailing row is exempt from all
+    of them (it is not a step yet), and R2 is a question about the FIRST live row rather than about
+    index 0, which is not the same row on a form whose first row was cleared.
 
-    Structured only, matching the rule above: a Gherkin case sends no steps at all, and refusing a
-    half-written row in a list that is not submitted would be an error with nothing on screen to
-    fix — the array is not even rendered.
+    UNCONDITIONAL where §200's versions were `STRUCTURED`-only, except R1 and R2 which are the two
+    the lens actually decides. A Gherkin case sends step rows now, so a half-written one in either
+    lens is refused by the server and must be refused here.
   */
   .superRefine((data, ctx) => {
-    if (data.stepFormat !== 'STRUCTURED') return;
-    data.steps.forEach((step, index) => {
-      if (isBlankStep(step)) return;
+    const live = data.steps.map((step, index) => ({ step, index })).filter((row) => !isBlankStep(row.step));
+
+    live.forEach(({ step, index }, position) => {
       if ((step.action ?? '').trim().length === 0) {
+        ctx.addIssue({ code: 'custom', path: ['steps', index, 'action'], message: 'Describe the action.' });
+      }
+
+      // R1/R2 — the lens rules. `CaseEdit.validate` refuses both on `steps`; here they land on the
+      // keyword control of the row they are about, which is the whole reason the schema holds them.
+      if (data.stepFormat === 'GHERKIN') {
+        if (step.keyword === '') {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['steps', index, 'keyword'],
+            message: `Step ${position + 1} needs a keyword.`,
+          });
+        } else if (position === 0 && (step.keyword === 'AND' || step.keyword === 'BUT')) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['steps', index, 'keyword'],
+            message: 'The first step cannot be And/But.',
+          });
+        }
+      }
+
+      /*
+        R3 — one data spelling per step.
+
+        UNREACHABLE THROUGH THIS SCREEN, and kept anyway: `StepDataCell`'s mode switch clears the
+        other two, so nothing an author can do produces a row with both. What can is a restored
+        draft, which is unvalidated by construction and may have been written by a build that
+        modelled the three fields differently. Landed on `testData` because the three share one
+        control and that is the field its helper text is keyed to.
+      */
+      const spellings =
+        ((step.testData ?? '').trim().length > 0 ? 1 : 0)
+        + (step.docString !== null && step.docString !== undefined ? 1 : 0)
+        + (step.dataTable !== null && step.dataTable !== undefined ? 1 : 0);
+      if (spellings > 1) {
         ctx.addIssue({
           code: 'custom',
-          path: ['steps', index, 'action'],
-          message: 'Describe the action.',
+          path: ['steps', index, 'testData'],
+          message: `Step ${position + 1} has more than one data field — keep test data, a doc string, or a table.`,
         });
       }
     });
   });
+
+/**
+ * The five keywords, in the order a scenario reads them — what the keyword select renders from.
+ *
+ * Here rather than in the editor because {@link prefilledKeywords} below is the other consumer and
+ * the two must agree about the vocabulary; `lib/labels.ts::stepKeywordLabels` owns the words.
+ */
+export const STEP_KEYWORDS = ['GIVEN', 'WHEN', 'THEN', 'AND', 'BUT'] as const;
+
+/** One row of the editor's step list, as the form holds it. */
+export type StepRow = CaseInput['steps'][number];
+
+/**
+ * The keywords a `STRUCTURED → GHERKIN` switch proposes — blueprint §2 rule 4.
+ *
+ * ## It only ever FILLS
+ *
+ * A row that already carries a keyword keeps it, and so does the blank trailing row. That is the
+ * half that makes the toggle safe to press twice: pre-filling is a suggestion made once, not a
+ * normalization applied on every render, and a rule that overwrote would silently rewrite an
+ * author's `But` into an `And` the moment they looked at the other lens.
+ *
+ * ## The rule, and why THEN is chosen last-first
+ *
+ * The first live row is the setup (`GIVEN`); the **last** row carrying an expected result is the
+ * assertion (`THEN`), because a case that checks something checks it at the end and the rows before
+ * it that also state an expectation are intermediate observations; everything else is action —
+ * `WHEN` for the first of them and `AND` for the continuations, which is how a scenario is written
+ * and what a `.feature` render has to reproduce.
+ *
+ * Nothing here is a claim about correctness: it is a first draft the author edits. What it must not
+ * do is leave a row without a keyword, because that is the state the form then refuses to save.
+ */
+export function prefilledKeywords(steps: readonly StepRow[]): StepRow[] {
+  const liveIndexes = steps.map((step, index) => ({ step, index })).filter((row) => !isBlankStep(row.step));
+  const lastAsserting = liveIndexes
+    .filter((row) => !isBlank(row.step.expectedResult))
+    .at(-1)?.index;
+
+  let actionsSeen = 0;
+  return steps.map((step, index) => {
+    const position = liveIndexes.findIndex((row) => row.index === index);
+    if (position < 0 || step.keyword !== '') return step;
+    if (position === 0) return { ...step, keyword: 'GIVEN' };
+    if (index === lastAsserting) return { ...step, keyword: 'THEN' };
+    actionsSeen += 1;
+    return { ...step, keyword: actionsSeen === 1 ? 'WHEN' : 'AND' };
+  });
+}
 
 export type CaseInput = z.infer<typeof CaseSchema>;
 
@@ -268,6 +390,10 @@ export function toCasePayload(data: CaseInput): Record<string, unknown> {
       action: step.action.trim(),
       testData: (step.testData ?? '').trim(),
       expectedResult: (step.expectedResult ?? '').trim(),
+      // The two block arguments are NOT trimmed, and the asymmetry is the round trip. Leading
+      // whitespace inside a `"""` block and inside a `|`-cell is content in the Gherkin spec, so
+      // trimming here would make the `.feature` this case renders to differ from the file it was
+      // parsed from — `CaseEdit.normalizeTable` says the same thing from the other end.
     })),
   );
 
@@ -288,17 +414,27 @@ export function toCasePayload(data: CaseInput): Record<string, unknown> {
       data.automationStatus === 'NOT_AUTOMATABLE' ? data.notAutomatableReason || null : null,
     estimatedDurationSec: data.estimatedDurationSec ? Number(data.estimatedDurationSec) : null,
     stepFormat: data.stepFormat,
-    gherkinSource: data.stepFormat === 'GHERKIN' ? data.gherkinSource : null,
-    steps:
-      data.stepFormat === 'STRUCTURED'
-        ? steps.map((step) => ({
-            id: step.id ?? null,
-            keyword: null,
-            action: step.action,
-            testData: step.testData || null,
-            expectedResult: step.expectedResult || null,
-          }))
-        : [],
+    /*
+      THE ROWS ARE SENT IN BOTH LENSES, and that sentence is the whole of §255 on this side.
+
+      Until §255 this read `data.stepFormat === 'STRUCTURED' ? steps : []` — so switching a case to
+      Gherkin and saving deleted every step row, and with them the ids every `step_result` anchors
+      to, with a success toast over it. `gherkinSource` left `TestCaseInput` in the same slice and
+      is deliberately not sent at all: the field is read-only now and a stray one would be ignored.
+    */
+    steps: steps.map((step) => ({
+      id: step.id ?? null,
+      // '' is the form's spelling of "no keyword"; the contract's is null.
+      keyword: step.keyword || null,
+      action: step.action,
+      testData: step.testData || null,
+      expectedResult: step.expectedResult || null,
+      docString: step.docString,
+      // An empty outer array is not a table — `CaseEdit.normalizeTable` reads `[]` as null and the
+      // schema's description refuses it outright, so the two spellings of "no table" are collapsed
+      // into the one the server acts on rather than left to differ by which control produced them.
+      dataTable: step.dataTable && step.dataTable.length > 0 ? step.dataTable : null,
+    })),
     classificationValueIds: data.classificationValueIds,
     // De-duplicated here as well as in the control, because the control is not the only way a value
     // reaches the form — a restored draft is now one of them.
@@ -314,12 +450,34 @@ export function toCasePayload(data: CaseInput): Record<string, unknown> {
 }
 
 /** The blank trailing step row the editor always keeps at the end of the list (§94). */
-const BLANK_ROW = { id: null, keyword: null, action: '', testData: '', expectedResult: '' };
+const BLANK_ROW = {
+  id: null,
+  keyword: '',
+  action: '',
+  testData: '',
+  expectedResult: '',
+  docString: null,
+  dataTable: null,
+};
 
 const str = (value: unknown): string => (typeof value === 'string' ? value : '');
 const nullableStr = (value: unknown): string | null => (typeof value === 'string' ? value : null);
 const strArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+/**
+ * A buffered `dataTable` back into rows of cells, or null.
+ *
+ * Defensive in the same way as every reader around it, and with one extra: a row that is not an
+ * array is **dropped**, not coerced to an empty one, because an empty row in a Gherkin table is a
+ * real row of blank cells and inventing one would renumber every row after it.
+ */
+const table = (value: unknown): string[][] | null =>
+  Array.isArray(value)
+    ? value
+        .filter((row): row is unknown[] => Array.isArray(row))
+        .map((row) => row.map((cell) => (typeof cell === 'string' ? cell : '')))
+    : null;
 
 /** `[{ conditionId }]` on the wire back to the ids the form binds — see `preconditionIds`. */
 const conditionIds = (value: unknown): string[] =>
@@ -370,10 +528,16 @@ export function fromCasePayload(content: unknown): CaseInput {
     .filter((step): step is Record<string, unknown> => !!step && typeof step === 'object')
     .map((step) => ({
       id: typeof step.id === 'string' ? step.id : null,
-      keyword: nullableStr(step.keyword),
+      // `str`, not `nullableStr`: the form's absence is '' — see `StepSchema.keyword`. A draft
+      // written before §255 carries `null` here and reads as "no keyword", which is what it meant.
+      keyword: str(step.keyword),
       action: str(step.action),
       testData: str(step.testData),
       expectedResult: str(step.expectedResult),
+      // `null` is a MODE and not just an absence (see `StepSchema.docString`), so a value of the
+      // wrong type has to read as null rather than as ''. `nullableStr` already does exactly that.
+      docString: nullableStr(step.docString),
+      dataTable: table(step.dataTable),
     }));
 
   return {
@@ -402,7 +566,6 @@ export function fromCasePayload(content: unknown): CaseInput {
     estimatedDurationSec:
       typeof duration === 'number' && Number.isFinite(duration) ? String(duration) : null,
     stepFormat: stepFormat === 'GHERKIN' ? 'GHERKIN' : 'STRUCTURED',
-    gherkinSource: nullableStr(raw.gherkinSource),
     // The trailing blank row — see the header. Without it a restored draft has no way to add a
     // step, because the blank last row IS the add control.
     steps: [...steps, { ...BLANK_ROW }],

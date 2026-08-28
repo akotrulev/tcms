@@ -385,21 +385,61 @@ class CaseDetailEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a Gherkin case carries its source and its keyworded steps")
-        void gherkinCasesCarryBoth() throws Exception {
+        @DisplayName("a Gherkin case with rows carries its steps and NO gherkinSource")
+        void gherkinCasesCarryRowsAndNotTheBlob() throws Exception {
+            // ~~carries its source AND its keyworded steps~~ → §255: a case with rows serves the
+            // rows and nothing else. Serving both would put one procedure on the screen twice,
+            // and the two would disagree the moment anybody edited the rows — which nothing then
+            // writes back to the blob, because nothing writes the blob at all.
             JsonNode body = detailAs(LEAD, ACME, ACME_BANKING, caseId("gherkin"));
 
             assertThat(body.get("stepFormat").asText()).isEqualTo("GHERKIN");
-            assertThat(body.get("gherkinSource").asText()).startsWith("Feature: Refunds");
             assertThat(textsOf(body.get("steps"), "keyword")).containsExactly("GIVEN", "WHEN", "THEN");
+            assertThat(body.get("gherkinSource").isNull())
+                    .as("the row is stored and still holds the blob — the SUPPRESSION is the "
+                            + "behaviour, so a fixture that had no blob would assert nothing")
+                    .isTrue();
         }
 
         @Test
-        @DisplayName("a structured case's gherkinSource is null, not an empty string")
+        @DisplayName("a NOT-YET-MIGRATED case — zero rows — still serves its blob")
+        void aCaseWithNoRowsFallsBackToTheBlob() throws Exception {
+            // The other half, and the reason the condition is "zero rows" rather than "structured".
+            // This case's procedure exists nowhere else, so suppressing it here would make an
+            // upgrade silently empty every un-migrated Gherkin case in the product.
+            JsonNode body = detailAs(LEAD, ACME, ACME_BANKING, caseId("legacy"));
+
+            assertThat(body.get("steps")).isEmpty();
+            assertThat(body.get("gherkinSource").asText()).startsWith("Feature: Refunds");
+        }
+
+        @Test
+        @DisplayName("a structured case with steps serves gherkinSource null, not an empty string")
         void structuredCasesHaveNoGherkinSource() throws Exception {
-            // The two formats are alternatives (plan §6a) and the SPA branches on stepFormat. An
-            // empty string would render as a Gherkin block containing nothing.
+            // An empty string would render as a Gherkin block containing nothing.
             assertThat(detailAs(LEAD, ACME, ACME_BANKING, caseId("full")).get("gherkinSource")
+                    .isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a step's docString and dataTable are on the wire, null when unset")
+        void blockArgumentsAreServed() throws Exception {
+            JsonNode steps = detailAs(LEAD, ACME, ACME_BANKING, caseId("gherkin")).get("steps");
+
+            assertThat(steps.get(0).get("docString").asText())
+                    .isEqualTo("the payment was settled at 10.01 EUR");
+            assertThat(steps.get(1).get("dataTable").get(1).get(1).asText()).isEqualTo("5.01");
+            assertThat(steps.get(2).get("docString").isNull()).isTrue();
+            assertThat(steps.get(2).get("dataTable").isNull())
+                    .as("the KEY is present and null — a consumer must be able to clear its own "
+                            + "field rather than leave the previous step's table behind")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("importedFrom is null on every case — V69's columns have no writer yet")
+        void nothingIsImported() throws Exception {
+            assertThat(detailAs(LEAD, ACME, ACME_BANKING, caseId("full")).get("importedFrom")
                     .isNull()).isTrue();
         }
     }
@@ -1163,6 +1203,18 @@ class CaseDetailEndpointTest extends IntegrationTestBase {
                             + "    Then the refunded amount rounds to 5.01 EUR",
                     "MEDIUM", null, null, "DRAFT", "NOT_AUTOMATABLE", null, LEAD, 1, 0, false);
 
+            // §255's not-yet-migrated case: a GHERKIN case whose procedure is still ONLY the
+            // blob, because migrate-gherkin-source has not run on this instance. It is the one
+            // population TestCase.gherkinSource is still served for, and the fixture cannot be
+            // produced through the API any more — which is exactly why it is seeded.
+            testCase(connection, caseId("legacy"), ACME_BANKING, REFUNDS, "TC-9", 9,
+                    "Refund an expired authorisation", null, null, null,
+                    "GHERKIN",
+                    "Feature: Refunds\n\n  Scenario: Expired authorisation\n"
+                            + "    Given an authorisation that has expired\n"
+                            + "    Then the refund is refused",
+                    "MEDIUM", null, null, "DRAFT", "MANUAL", null, LEAD, 1, 0, false);
+
             // Nothing authored beyond the title: no owner, no severity, no objective, no steps,
             // no conditions, no tags. The state of every case created and filled in later — and it
             // lives in a folder that attaches nothing, because a case whose FOLDER carries a
@@ -1299,10 +1351,14 @@ class CaseDetailEndpointTest extends IntegrationTestBase {
             step(connection, stepId("full-2"), caseId("full"), 2, null,
                     "Request a full refund", "120.00 EUR", "The refund is accepted");
 
-            step(connection, stepId("gherkin-1"), caseId("gherkin"), 1, "GIVEN",
-                    "a settled payment of 10.01 EUR", null, null);
-            step(connection, stepId("gherkin-2"), caseId("gherkin"), 2, "WHEN",
-                    "the merchant refunds half of it", null, null);
+            // One doc string, one table and one step with neither — three states, so a reader
+            // that confused "absent" with "null" or dropped the key on the third row is visible.
+            blockStep(connection, stepId("gherkin-1"), caseId("gherkin"), 1, "GIVEN",
+                    "a settled payment of 10.01 EUR",
+                    "the payment was settled at 10.01 EUR", null);
+            blockStep(connection, stepId("gherkin-2"), caseId("gherkin"), 2, "WHEN",
+                    "the merchant refunds half of it",
+                    null, "[[\"half\",\"rounds to\"],[\"5.005\",\"5.01\"]]");
             step(connection, stepId("gherkin-3"), caseId("gherkin"), 3, "THEN",
                     "the refunded amount rounds to 5.01 EUR", null, null);
 
@@ -1522,6 +1578,36 @@ class CaseDetailEndpointTest extends IntegrationTestBase {
             statement.setString(1, ACME.toString());
             statement.setString(2, caseId.toString());
             statement.setString(3, suiteConditionId.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * One step carrying a Gherkin block argument.
+     *
+     * <p>Seeded through SQL rather than through the API because {@code ck_test_step_one_data}
+     * makes the two arguments alternatives, and a fixture that sent both would be refused by the
+     * constraint this class is not about.
+     */
+    private void blockStep(
+            Connection connection, UUID id, UUID caseId, int position, String keyword,
+            String action, String docstring, String datatable) throws SQLException {
+
+        try (var statement = connection.prepareStatement("""
+                INSERT INTO test_step
+                    (id, company_id, case_id, position, keyword, action, docstring, datatable)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, CAST(? AS text), ?,
+                        CAST(? AS text), CAST(? AS jsonb))
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id.toString());
+            statement.setString(2, ACME.toString());
+            statement.setString(3, caseId.toString());
+            statement.setInt(4, position);
+            statement.setString(5, keyword);
+            statement.setString(6, action);
+            statement.setString(7, docstring);
+            statement.setString(8, datatable);
             statement.executeUpdate();
         }
     }

@@ -681,7 +681,7 @@ class CaseDraftEndpointTest extends IntegrationTestBase {
                 + "\"automationStatus\": \"MANUAL\","
                 + "\"automationKey\": null,\"notAutomatableReason\": null,"
                 + "\"estimatedDurationSec\": 120,"
-                + "\"stepFormat\": \"STRUCTURED\",\"gherkinSource\": null,"
+                + "\"stepFormat\": \"STRUCTURED\","
                 + "\"steps\": [{\"id\": null,\"keyword\": null,\"action\": \"Open the basket\","
                 + "\"testData\": null,\"expectedResult\": null}],"
                 + "\"changeComment\": null}";

@@ -92,6 +92,7 @@ function sourceCase(over: Partial<TestCase> = {}): TestCase {
     automationKey: null,
     notAutomatableReason: null,
     gherkinSource: null,
+    importedFrom: null,
     steps: [],
     preconditions: [],
     postconditions: [],

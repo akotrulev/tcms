@@ -246,6 +246,8 @@ const step = (position: number, statusId: string | null): StepResult => ({
   action: `Step ${position}`,
   testData: null,
   expectedResult: null,
+  docString: null,
+  dataTable: null,
   statusId,
   comment: null,
   evidence: [],

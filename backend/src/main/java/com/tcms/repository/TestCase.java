@@ -137,15 +137,49 @@ public class TestCase {
     private StepFormat stepFormat;
 
     /**
-     * The Gherkin text, for a case whose {@link #stepFormat} is {@code GHERKIN} (plan §6a).
+     * The Gherkin text of a case authored before §255 — <strong>read, never written</strong>.
      *
-     * <p>Held instead of {@code test_step} rows rather than alongside them: the two formats are
-     * alternatives, and a case carrying both would leave the execution screen to pick one. Nothing
-     * in {@code V1} enforces the exclusivity, so this endpoint serves whatever is stored and the
-     * SPA branches on {@code stepFormat} — see {@link TestCaseDetailView}.
+     * <p>It used to be held <em>instead of</em> {@code test_step} rows, the two formats being
+     * alternatives. §255 ended that: {@link #stepFormat} is a lens over one storage, so a
+     * {@code GHERKIN} case has rows like any other and there is nothing left for this column to
+     * hold. Nothing assigns it — {@link #applyEdit} stopped, and {@code ArchitectureRulesTest}
+     * pins the absence in {@code WRITERLESS_BY_DECISION} so re-acquiring a writer fails the build.
+     *
+     * <p>It is not dropped yet because three things still read it: the SPA's not-yet-migrated
+     * fallback, {@code migrate-gherkin-source} (which is what empties the population), and V2's
+     * {@code search_vector} generated column, which has to be re-created without it.
+     * <strong>Initiative {@code 002-} drops all three at once, gated on the backfill having run
+     * on every instance</strong> — that is the only order in which the text is not lost.
      */
     @Column(name = "gherkin_source")
     private String gherkinSource;
+
+    /**
+     * The scenario's text at last import — the one provenance column that is <em>read</em>.
+     *
+     * <p>A re-import compares the file's scenario against this and answers {@code SKIP}
+     * <em>"unchanged since import"</em>. Without it every re-import rewrites every case and the
+     * version history fills with entries whose diff is empty, which is the noise plan §6j added
+     * the content hash to keep out, arriving through a different door.
+     *
+     * <p><del>All three {@code imported_*} columns are writerless until the import endpoint
+     * lands. Mapped here rather than with their writer — the exception to this class's own "a field
+     * mapped before its reader is a field nobody notices has gone stale" — because the READER is in
+     * this task: {@code TestCase.importedFrom} is on the contract and served from
+     * {@link #importedPath} and {@link #importedLine} the moment the columns exist.</del>
+     * → <strong>superseded in §255 T6</strong>, which is the endpoint that paragraph was waiting
+     * for. All three have a writer now, and it is exactly one: {@link #recordImport}.
+     */
+    @Column(name = "imported_source")
+    private String importedSource;
+
+    /** The path the importing caller supplied. Provenance: nothing resolves it to content. */
+    @Column(name = "imported_path")
+    private String importedPath;
+
+    /** 1-based line of the {@code Scenario:} keyword in {@link #importedPath}. */
+    @Column(name = "imported_line")
+    private Integer importedLine;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "priority", nullable = false)
@@ -371,7 +405,6 @@ public class TestCase {
         this.objective = edit.objective();
         this.expectedOutcome = edit.expectedOutcome();
         this.stepFormat = edit.stepFormat();
-        this.gherkinSource = edit.gherkinSource();
         this.priority = edit.priority();
         this.severity = edit.severity();
         this.automationStatus = edit.automationStatus();
@@ -380,6 +413,32 @@ public class TestCase {
         this.estimatedDurationSec = edit.estimatedDurationSec();
         this.updatedAt = now;
         this.updatedBy = editorId;
+    }
+
+    /**
+     * Stamps where this case came from — <strong>the only writer of the three {@code imported_*}
+     * columns</strong>.
+     *
+     * <p>Deliberately not part of {@link #applyEdit}, and for the reason the method below states
+     * about lifecycle: provenance is not authored content. It is not on {@link CaseEdit}, so it is
+     * not in {@code CaseVersions}' content hash and not in the version snapshot — which is correct
+     * twice over. A re-import that changes only the file's path would otherwise mint a version
+     * whose diff a reader cannot see, and a case's history would claim the author moved a file.
+     *
+     * <p>Written AFTER the case write, in the same transaction, because the create path allocates
+     * the id and the update path is the thing being compared against {@link #importedSource}. All
+     * three together or none: {@code ImportedFromView} answers null unless both {@code path} and
+     * {@code line} are present, so a partial stamp would serve a chip pointing at line 0 of an
+     * unnamed file, which reads as a fact.
+     *
+     * @param source the scenario's text at this import — the value the NEXT import compares against
+     *               to answer {@code SKIP "unchanged since import"}
+     */
+    void recordImport(String source, String path, int line, Instant now) {
+        this.importedSource = source;
+        this.importedPath = path;
+        this.importedLine = line;
+        this.updatedAt = now;
     }
 
     /**
@@ -518,6 +577,18 @@ public class TestCase {
 
     public String getGherkinSource() {
         return gherkinSource;
+    }
+
+    public String getImportedSource() {
+        return importedSource;
+    }
+
+    public String getImportedPath() {
+        return importedPath;
+    }
+
+    public Integer getImportedLine() {
+        return importedLine;
     }
 
     public Priority getPriority() {

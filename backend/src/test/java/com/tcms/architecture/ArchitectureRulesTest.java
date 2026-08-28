@@ -777,6 +777,12 @@ class ArchitectureRulesTest {
             // writer. Left as a comment rather than deleted because the pair is this rule's
             // longest-running worked example and the two halves moved independently, which is the
             // property the two maps exist to be able to report.
+            // ~~§255. TestCase.importedSource — its WRITERLESS entry carries the argument; both
+            // halves arrive in 001- T6.~~ -> GONE in T6, which is that task. Its reader is
+            // FeatureImportService's comparison of the file's scenario text against the stored
+            // value, which answers SKIP "unchanged since import" and is the whole reason a
+            // re-imported folder mints no version. The entry lasted five tasks, which is what an
+            // exemption naming its own deleter is supposed to do.
             Map.entry("ClassificationDimension.controlled",
                     "mapped and not on the wire, argued at the field since it was written: the "
                             + "contract's ClassificationDimension does not carry it and inventing "
@@ -1104,7 +1110,33 @@ class ArchitectureRulesTest {
                             + "creation and nowhere else, so there is no save to comment on"),
             Map.entry("TestPlanVersion.changeComment",
                     "the third of the three, and the second that was hidden by an explicit null. "
-                            + "Argued at the field; same exit as the other two"));
+                            + "Argued at the field; same exit as the other two"),
+            // ~~§255's four, and they are two different shapes that happen to land in one map.~~
+            // -> ONE. The other three — TestCase.importedSource, .importedPath and .importedLine —
+            // arrived with T1 naming T6 as their deleter and left in T6, which is what an
+            // exemption that names its own deleter is supposed to do. See the note below the map.
+            Map.entry("TestCase.gherkinSource",
+                    "WRITERLESS BY DECISION, AND THE DECISION IS DATED. §255 made step_format a "
+                            + "LENS over test_step rather than a switch between two storages, so "
+                            + "TestCase.applyEdit stopped assigning this and nothing replaced it. "
+                            + "It is still READ by three things — the SPA's not-yet-migrated "
+                            + "fallback (TestCaseDetailView serves it only for a zero-row case), "
+                            + "CaseUpdateService.hasProcedure, and V2's search_vector generated "
+                            + "column. THE NAMED DELETER IS INITIATIVE 002-, gated on "
+                            + "migrate-gherkin-source having run on every instance with a clean "
+                            + "report; that migration drops the column, re-creates search_vector "
+                            + "without it, and takes test_step.shared_step_id and "
+                            + "case_condition.inline_body with it. An entry that acquires a "
+                            + "writer fails this rule as loudly as one that loses a reader, which "
+                            + "is what makes it safe to leave the text in place until then"));
+
+    // ~~TestCase.importedSource, .importedPath and .importedLine — writerless until the import
+    // endpoint lands.~~ -> ALL THREE GONE in §255 T6, which is the endpoint each entry named as
+    // its own deleter. FeatureImportService writes them through TestCase.recordImport — one call,
+    // all three together — and importedSource's reader is the re-import comparison that answers
+    // SKIP "unchanged since import". Added by T1 and removed by T6 five tasks later; the shape is
+    // the one §245 established, that the moment a column gets a writer the exemption becomes a
+    // FALSE CLAIM and fails the build in the other direction.
 
 
     @Test
@@ -1117,7 +1149,7 @@ class ArchitectureRulesTest {
         // table granularity, answered by a person who happened to be looking.
         //
         // THE TWO RULES ARE NOT REDUNDANT AND THE OVERLAP PROVES IT. ~~Four of these nine~~ ->
-        // THREE OF THESE SEVEN are in
+        // ~~THREE OF THESE SEVEN~~ -> THREE OF THESE EIGHT are in
         // READERLESS_BY_DECISION too, which is the harmless half: a column nobody fills and nobody
         // consults costs a javadoc describing a state the database has never been in. (The old
         // tally was wrong in both halves and in the file whose subject is hand-kept tallies: the
@@ -1659,9 +1691,17 @@ class ArchitectureRulesTest {
         // company at all, and the way that happens is an admin API calling three of the
         // four steps.
         //
-        // com.tcms itself is exempt and is spelled as an exact package (no "..") so the
-        // exemption covers TcmsApplication and nothing else. It decides server-vs-CLI
-        // from the raw arguments, which has to happen before the context exists.
+        // com.tcms itself is exempt and is spelled as an exact package (no ".."), so the
+        // exemption is the composition root and not the tree under it. ~~It covers
+        // TcmsApplication and nothing else.~~ → It covers TWO classes since §255.
+        // TcmsApplication decides server-vs-CLI from the raw arguments, which has to happen
+        // before the context exists; MigrateGherkinSourceCommand is an operator verb whose
+        // migration lives in `repository`, so it cannot sit beside its four siblings without
+        // creating a provisioning -> repository edge that this file's own cross-module rule
+        // refuses. Its class header carries the argument. The exemption is unchanged in shape
+        // and this comment is updated rather than the rule, which is the point: a rule whose
+        // comment counts its own subjects is a comment that goes stale on the next legitimate
+        // use of the thing it describes.
         ArchRule rule = noClasses()
                 .that().resideInAPackage(ROOT_PACKAGE + "..")
                 .and().resideOutsideOfPackage("com.tcms.provisioning..")

@@ -47,6 +47,9 @@ const CaseDetailPage = lazy(() =>
 const CaseEditorPage = lazy(() =>
   import('../features/cases/CaseEditorPage').then((m) => ({ default: m.CaseEditorPage })),
 );
+const FeatureImportPage = lazy(() =>
+  import('../features/cases/FeatureImportPage').then((m) => ({ default: m.FeatureImportPage })),
+);
 const CaseHistoryPage = lazy(() =>
   import('../features/history/CaseHistoryPage').then((m) => ({ default: m.CaseHistoryPage })),
 );
@@ -351,6 +354,19 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <CaseEditorPage mode="create" />
+              </Suspense>
+            }
+          />
+          {/*
+            `import` is declared before `:caseId` for `new`'s reason above and with the same
+            consequence if it is not: the segment would be matched as a case id, and the entry
+            point would fetch a case called "import" and 404 (§255).
+          */}
+          <Route
+            path="/projects/:projectId/cases/import"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <FeatureImportPage />
               </Suspense>
             }
           />

@@ -29,6 +29,10 @@ dependencies {
     implementation(libs.spring.boot.starter.security)
     implementation(libs.spring.boot.starter.oauth2.resource.server)
 
+    implementation(libs.cucumber.gherkin)
+    implementation(libs.cucumber.messages)
+    implementation(libs.jspecify)
+
     implementation(libs.flyway.core)
     runtimeOnly(libs.flyway.postgresql)
     runtimeOnly(libs.postgresql)

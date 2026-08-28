@@ -58,6 +58,26 @@ function contractSiteOf(shape: EntityShape, field: FieldSpec): { schema: string;
 const ENTITIES = Object.values(SHAPES);
 
 /**
+ * Every field of an entity, nested ones included.
+ *
+ * The enum pin read top-level fields only, which is the same blind spot the nested-shape check
+ * below was generalised to close: `steps[].keyword` became an enum in §255 and the strongest
+ * check in this file could not see it. The other questions stay top-level on purpose — a nested
+ * field's contract site is its `itemsSchema`, not the entity's, and that is what they ask about.
+ */
+function everyFieldOf(shape: EntityShape): FieldSpec[] {
+  const out: FieldSpec[] = [];
+  const walk = (fields: readonly FieldSpec[]): void => {
+    for (const field of fields) {
+      out.push(field);
+      if (field.fields) walk(field.fields);
+    }
+  };
+  walk(shape.fields);
+  return out;
+}
+
+/**
  * Contract properties the catalogue deliberately does not offer, each with the reason.
  *
  * An allow-list rather than a silence, so a property that arrives in the contract later shows up
@@ -134,7 +154,7 @@ const UNOFFERED: Readonly<Record<string, string>> = {
 describe('the shape catalogue against openapi.yaml', () => {
   it('declares the contract\'s enum, exactly, wherever it names one', () => {
     for (const shape of ENTITIES) {
-      for (const field of shape.fields) {
+      for (const field of everyFieldOf(shape)) {
         if (!field.enumOf) continue;
         // `Schema` or `Schema.property` — see FieldSpec.enumOf for why both exist.
         const [schemaName, property] = field.enumOf.split('.');

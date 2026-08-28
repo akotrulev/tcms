@@ -1,8 +1,13 @@
 import {
   Alert,
+  AlertTitle,
   Box,
   Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   ListItemText,
   Menu,
@@ -18,6 +23,7 @@ import {
 } from '@mui/material';
 import AddLinkIcon from '@mui/icons-material/AddLinkOutlined';
 import ContentCopyIcon from '@mui/icons-material/ContentCopyOutlined';
+import DescriptionIcon from '@mui/icons-material/DescriptionOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import EditIcon from '@mui/icons-material/Edit';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -34,6 +40,7 @@ import type {
 import {
   useAttachCaseFile,
   useCase,
+  useCaseFeature,
   useDeleteCaseFile,
   useProject,
   useRelabelCaseExternalLink,
@@ -53,9 +60,10 @@ import { ReviewPanel } from '../review/ReviewPanel';
 import { CaseVersionPanel } from './CaseVersionPanel';
 import { ExternalLinkDialog } from './ExternalLinkDialog';
 import { FlakePanel } from './FlakePanel';
+import { StepDataView } from './StepDataCell';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusChip } from '../../components/StatusChip';
 import { formatAge, formatDateTime, formatSeconds } from '../../lib/format';
-import { stepFormatLabels } from '../../lib/labels';
+import { stepFormatLabels, stepKeywordLabels } from '../../lib/labels';
 import { describeLinkTarget } from '../../lib/links';
 import { ScrollX } from '../../components/ScrollX';
 
@@ -165,6 +173,22 @@ export function CaseDetailPage() {
                   </Tooltip>
                   <LifecycleChip status={data.lifecycleStatus} testId="CaseDetail.Lifecycle" />
                   <Chip size="small" variant="outlined" label={stepFormatLabels[data.stepFormat]} />
+                  {/*
+                    Provenance, and a chip rather than a link because there is nothing to link to:
+                    the `.feature` file lives in somebody's automation repository and this instance
+                    has never held it (§255). What it answers is "why does this case say that",
+                    which is a question a reader of an imported case asks and had no way to.
+                  */}
+                  {data.importedFrom && (
+                    <Tooltip title="Imported from a .feature file. This instance does not hold the file.">
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        data-testid="CaseDetail.ImportedFrom"
+                        label={`Imported from ${data.importedFrom.path}:${data.importedFrom.line}`}
+                      />
+                    </Tooltip>
+                  )}
                 </>
               }
               actions={
@@ -329,7 +353,7 @@ export function CaseDetailPage() {
                   emptyBody="No preconditions. The case runs from a clean session."
                 />
 
-                <StepsPanel testCase={data} />
+                <StepsPanel testCase={data} projectId={projectId} />
 
                 <ConditionPanel
                   title="Postconditions"
@@ -791,34 +815,157 @@ function ConditionPanel({
  * never both, and the renderer switches on the case's own declared format rather than
  * guessing from which field happens to be populated.
  */
-function StepsPanel({ testCase }: { testCase: TestCase }) {
-  const isGherkin = testCase.stepFormat === 'GHERKIN';
+/**
+ * The case's procedure — **one renderer for both lenses since §255**.
+ *
+ * ## `GherkinView` is a fallback now, not a branch
+ *
+ * A case is step rows in either lens, so the rows are what this panel draws and the keyword is a
+ * prefix on the action rather than a different screen. What is left of the old branch is the
+ * population `migrate-gherkin-source` has not reached: a case with **zero rows and a stored
+ * `gherkinSource`**, which renders read-only with the note naming the command. That is a state an
+ * operator can end, and saying so is the difference between a fallback and a feature — the whole
+ * branch leaves the product in `002-`, once the backfill has run everywhere.
+ *
+ * The order of the two questions is load-bearing: **rows first**. A migrated case still carries its
+ * blob (the backfill deliberately does not clear it, so `002-` can read it as proof of coverage),
+ * so asking about the blob first would show every migrated case the old text for ever.
+ */
+function StepsPanel({
+  testCase,
+  projectId,
+}: {
+  testCase: TestCase;
+  projectId: string;
+}) {
+  const steps = testCase.steps ?? [];
+  const [viewingFeature, setViewingFeature] = useState(false);
 
   return (
     <Panel
       title="Steps"
       testId="CaseDetail.Steps"
-      actions={<Chip size="small" variant="outlined" label={stepFormatLabels[testCase.stepFormat]} />}
-      dense={!isGherkin}
+      actions={
+        <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
+          {/*
+            Offered on EVERY case, including a structured one, because the endpoint renders every
+            case: numbered steps are a scenario whose steps have no keyword, and `*` is Gherkin's
+            own spelling for that. An action present on some cases and absent on others, for a
+            reason the author never chose, is the thing a 409 here would have produced.
+          */}
+          <Button
+            size="small"
+            startIcon={<DescriptionIcon />}
+            onClick={() => setViewingFeature(true)}
+            data-testid="CaseDetail.Steps.ViewFeature"
+          >
+            View as .feature
+          </Button>
+          <Chip size="small" variant="outlined" label={stepFormatLabels[testCase.stepFormat]} />
+        </Stack>
+      }
+      dense={steps.length > 0}
     >
-      {isGherkin ? (
-        <GherkinView source={testCase.gherkinSource} />
+      {steps.length > 0 ? (
+        <StructuredSteps steps={steps} />
+      ) : testCase.gherkinSource ? (
+        <Stack sx={{ gap: 2, p: 2 }}>
+          <Alert severity="info" data-testid="CaseDetail.Steps.NotMigrated">
+            <AlertTitle>Not yet migrated</AlertTitle>
+            This case&rsquo;s scenario is still stored as text, so it cannot be executed step by
+            step. Ask your operator to run <Identifier>migrate-gherkin-source</Identifier>.
+          </Alert>
+          <GherkinView source={testCase.gherkinSource} />
+        </Stack>
       ) : (
-        <StructuredSteps steps={testCase.steps ?? []} />
+        <Box sx={{ p: 2 }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            No steps written yet.
+          </Typography>
+        </Box>
+      )}
+      {viewingFeature && (
+        <FeatureDialog
+          projectId={projectId}
+          testCase={testCase}
+          onClose={() => setViewingFeature(false)}
+        />
       )}
     </Panel>
   );
 }
 
-/** Gherkin keywords are highlighted; the rest is left exactly as authored. */
-function GherkinView({ source }: { source: string | null | undefined }) {
-  if (!source) {
-    return (
-      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-        No scenario written yet.
-      </Typography>
-    );
-  }
+/**
+ * The `.feature` render of one case (§255) — `GET .../cases/{caseId}/feature`.
+ *
+ * A dialog rather than a route: it is a **view of the case on screen**, not a second page about it,
+ * and the text is short enough to read where it was asked for. Mounted only while open, so the
+ * request is made by opening it — most readers never do.
+ *
+ * `DataRegion` for the loading and failed states like every other read in this app; there is no
+ * empty state, because the endpoint is never empty for a case that exists (a zero-row legacy case
+ * renders its stored blob).
+ */
+function FeatureDialog({
+  projectId,
+  testCase,
+  onClose,
+}: {
+  projectId: string;
+  testCase: TestCase;
+  onClose: () => void;
+}) {
+  const feature = useCaseFeature(projectId, testCase.id);
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>
+        <Identifier>{testCase.key}.feature</Identifier>
+      </DialogTitle>
+      <DialogContent>
+        <DataRegion
+          testId="CaseDetail.Feature"
+          state={{ ...feature, refetch: () => void feature.refetch() }}
+        >
+          {(text) => (
+            <Box
+              component="pre"
+              data-testid="CaseDetail.Feature.Text"
+              sx={{
+                m: 0,
+                p: 2,
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.8125rem',
+                lineHeight: 1.7,
+                whiteSpace: 'pre',
+                overflowX: 'auto',
+                bgcolor: 'background.default',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+              }}
+            >
+              {text}
+            </Box>
+          )}
+        </DataRegion>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} data-testid="CaseDetail.Feature.Close">
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+/**
+ * A stored `gherkin_source` blob, keywords highlighted — **the not-yet-migrated fallback only**.
+ *
+ * It is no longer a rendering of the Gherkin lens: `StepsPanel` above draws the rows for both
+ * lenses, and this draws text nothing can execute. It leaves the product with the field, in `002-`.
+ */
+function GherkinView({ source }: { source: string }) {
 
   const KEYWORDS = /^(\s*)(Feature|Scenario Outline|Scenario|Background|Examples|Given|When|Then|And|But):?\s?/;
 
@@ -856,17 +1003,21 @@ function GherkinView({ source }: { source: string | null | undefined }) {
   );
 }
 
+/**
+ * The rows, in both lenses (§255).
+ *
+ * The keyword is a **prefix on the action** rather than a column of its own: it is part of the
+ * sentence a reader reads — *"Given the account is funded"* — and a column would put a word in one
+ * cell and its object in the next, which is unreadable on a structured case where most rows have
+ * none. `THEN` is styled as the assertion it is, so the row that says what should happen is the one
+ * the eye lands on; that is the same signal `CaseCompleteness` reads to decide whether a case
+ * asserts anything at all.
+ *
+ * The two block arguments render **under the action, spanning nothing** — `StepDataView`, the same
+ * component the execution checklist uses, because a table that wraps differently on the two screens
+ * is an author and a tester disagreeing about what the data says.
+ */
 function StructuredSteps({ steps }: { steps: TestStep[] }) {
-  if (steps.length === 0) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          No steps written yet.
-        </Typography>
-      </Box>
-    );
-  }
-
   return (
     <ScrollX>
       <Table size="small" data-testid="CaseDetail.Steps.Grid">
@@ -887,7 +1038,25 @@ function StructuredSteps({ steps }: { steps: TestStep[] }) {
                   <Identifier variant="muted">{index + 1}</Identifier>
                 </TableCell>
                 <TableCell sx={{ verticalAlign: 'top' }} data-testid="CaseDetail.Steps.Row.Action">
+                  {step.keyword && (
+                    <Box
+                      component="span"
+                      data-testid="CaseDetail.Steps.Row.Keyword"
+                      sx={{
+                        mr: 0.75,
+                        fontWeight: 600,
+                        color: step.keyword === 'THEN' ? 'success.main' : 'primary.main',
+                      }}
+                    >
+                      {stepKeywordLabels[step.keyword]}
+                    </Box>
+                  )}
                   {step.action}
+                  <StepDataView
+                    docString={step.docString}
+                    dataTable={step.dataTable}
+                    testId="CaseDetail.Steps.Row.Data"
+                  />
                 </TableCell>
                 <TableCell sx={{ verticalAlign: 'top', color: 'text.secondary' }}>
                   {step.testData || '—'}

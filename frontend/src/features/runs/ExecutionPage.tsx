@@ -25,6 +25,7 @@ import { useExecution, useProject, useRun, useStatuses, useSubmitResult } from '
 import { DataRegion } from '../../components/DataRegion';
 import { DefectPanel } from './DefectPanel';
 import { StepEvidence } from './StepEvidence';
+import { StepDataView } from '../cases/StepDataCell';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
@@ -35,7 +36,7 @@ import { ExecutionAssignee } from './ExecutionAssignee';
 import { ExecutionGrid } from './ExecutionGrid';
 import { ExecutionQueue } from './ExecutionQueue';
 import { durationSecondsField, formatDateTime, parseDurationSeconds } from '../../lib/format';
-import { isRunClosed, statusLabels } from '../../lib/labels';
+import { isRunClosed, statusLabels, stepKeywordLabels } from '../../lib/labels';
 import {
   EXECUTION_MODES,
   executionModeParam,
@@ -791,7 +792,14 @@ function ExecutionForm({
           >
             {(execution.steps ?? []).length === 0 ? (
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                This case has no structured steps — record the overall result below.
+                {/*
+                  §255 removed the other half of this sentence, which said "structured" and meant
+                  "the case is Gherkin, so there is nothing to tick". A case is step rows in either
+                  lens now, so the only version of the pinned snapshot with no rows is one written
+                  before the backfill reached it — and that is not something the tester can act on
+                  beyond recording the overall result, which is what this says.
+                */}
+                The version being executed has no steps — record the overall result below.
               </Typography>
             ) : (
               <Stack sx={{ gap: 2 }}>
@@ -1147,14 +1155,34 @@ function StepRow({
           <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, mb: 0.5 }}>
             <Identifier variant="muted">{index + 1}</Identifier>
             {step.keyword && (
-              <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 600 }}>
-                {step.keyword}
+              <Typography
+                variant="caption"
+                data-testid="Execution.Steps.Row.Keyword"
+                // THEN is the assertion — the row that says what should happen is the one a tester
+                // is checking against, so it reads differently from the actions around it. Same
+                // colour split as the case detail's step table, for the same reason.
+                sx={{ color: step.keyword === 'THEN' ? 'success.main' : 'primary.main', fontWeight: 600 }}
+              >
+                {stepKeywordLabels[step.keyword]}
               </Typography>
             )}
             <Typography variant="body2" sx={{ fontWeight: 500 }} data-testid="Execution.Steps.Row.Action">
               {step.action}
             </Typography>
           </Stack>
+          {/*
+            The two block arguments, from the PINNED snapshot like every other authored field on
+            this row. `StepDataView` is the case detail's renderer — one component, because the
+            tester and the author must read the same table, and a version written before §255 has
+            neither key and renders nothing.
+          */}
+          <Box sx={{ pl: 3 }}>
+            <StepDataView
+              docString={step.docString}
+              dataTable={step.dataTable}
+              testId="Execution.Steps.Row.Data"
+            />
+          </Box>
           {step.testData && (
             <Typography variant="body2" sx={{ color: 'text.secondary', pl: 3 }}>
               Data: {step.testData}

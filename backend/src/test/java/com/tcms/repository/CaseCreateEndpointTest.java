@@ -688,16 +688,59 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a Gherkin case stores its scenario and no steps")
-        void gherkinCasesStoreNoSteps() throws Exception {
+        @DisplayName("a Gherkin case stores STEPS — 201, with keyword, doc string and table")
+        void gherkinCasesStoreSteps() throws Exception {
+            // ~~a Gherkin case stores its scenario and no steps~~ → §255: step_format is a lens.
+            // This is the arm the whole initiative exists for — a scenario that is rows is a
+            // scenario a tester can record a verdict against, step by step.
             Map<String, Object> payload = newCase("Gherkin case");
             payload.put("stepFormat", "GHERKIN");
-            payload.put("gherkinSource", "Given a captured payment\nWhen I refund it\nThen ...");
+            Map<String, Object> given = gherkinStep("GIVEN", "a captured payment");
+            given.put("docString", "{\n  \"amount\": 100\n}");
+            Map<String, Object> when = gherkinStep("WHEN", "I refund these");
+            when.put("dataTable", List.of(List.of("id", "amount"), List.of("p-1", "100")));
+            payload.put("steps", List.of(
+                    given, when, gherkinStep("THEN", "the payment reaches REFUNDED")));
 
-            UUID caseId = idOf(post(LEAD, ACME, ACME_BANKING, payload, null));
+            MvcResult result = post(LEAD, ACME, ACME_BANKING, payload, null);
+            UUID caseId = idOf(result);
 
-            assertThat(stepsOf(caseId)).isEmpty();
-            assertThat(body(post(LEAD, ACME, ACME_BANKING, payload, null))).isNotNull();
+            assertThat(result.getResponse().getStatus()).isEqualTo(201);
+            assertThat(stepsOf(caseId)).hasSize(3);
+            JsonNode steps = body(result).get("steps");
+            assertThat(steps.get(0).get("keyword").asText()).isEqualTo("GIVEN");
+            assertThat(steps.get(0).get("docString").asText()).contains("\"amount\": 100");
+            assertThat(steps.get(1).get("dataTable").get(1).get(0).asText()).isEqualTo("p-1");
+            assertThat(body(result).get("gherkinSource").isNull())
+                    .as("a case with rows never carries the retired blob — the two would be the "
+                            + "same procedure spelled twice, disagreeing after the first edit")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("a keyword-less step in the Gherkin lens is 400, keyed on steps")
+        void gherkinNeedsKeywords() throws Exception {
+            Map<String, Object> payload = newCase("Gherkin case");
+            payload.put("stepFormat", "GHERKIN");
+            payload.put("steps", List.of(
+                    gherkinStep("GIVEN", "a captured payment"),
+                    step(null, "I refund it")));
+
+            MvcResult result = post(LEAD, ACME, ACME_BANKING, payload, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result).get("steps")).contains("Step 2 needs a keyword.");
+        }
+
+        @Test
+        @DisplayName("importedFrom is null on a case nobody imported")
+        void nothingIsImportedYet() throws Exception {
+            // V69 adds the columns and 001- T6 adds their writer, so this is the whole of what
+            // T1 can assert about them — and it is worth asserting: a required contract field
+            // the server never emits is a key every consumer has to guess the absence of.
+            MvcResult result = post(LEAD, ACME, ACME_BANKING, newCase("Ordinary"), null);
+
+            assertThat(body(result).get("importedFrom").isNull()).isTrue();
         }
     }
 
@@ -903,22 +946,21 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a GHERKIN case with no scenario is created too — the two are one rule")
-        void gherkinWithoutAScenarioIsAStubToo() throws Exception {
-            // StepFormat makes steps and a scenario ALTERNATIVES, so deferring one and requiring the
-            // other would refuse or accept the same act depending on a format the author may not
-            // have chosen yet. CaseCompleteness already reads them as one question.
+        @DisplayName("a GHERKIN case with no steps is created too — one lens, one rule")
+        void gherkinWithoutStepsIsAStubToo() throws Exception {
+            // ~~StepFormat makes steps and a scenario ALTERNATIVES~~ → §255: there is one storage,
+            // so this is the SAME rule as the arm above rather than its twin. The test stays
+            // because the lens is still a field the author picks, and a deferral that held in one
+            // lens and not the other would refuse the same act depending on a choice they have
+            // not made yet.
             Map<String, Object> payload = newCase("Cover the refund path");
             payload.put("stepFormat", "GHERKIN");
-            payload.put("gherkinSource", "  ");
             payload.put("steps", List.of());
 
             MvcResult result = post(LEAD, ACME, ACME_BANKING, payload, null);
 
             assertThat(result.getResponse().getStatus()).isEqualTo(201);
-            assertThat(body(result).get("gherkinSource").isNull())
-                    .as("a blank scenario is stored as null, like every other blank optional")
-                    .isTrue();
+            assertThat(stepsOf(idOf(result))).isEmpty();
         }
 
         @Test
@@ -991,9 +1033,9 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
 
             Set<String> enforced = new LinkedHashSet<>();
             for (String field : newCase("Refund the whole payment").keySet()) {
-                // The two automation fields, and ONLY those two: `steps` and `gherkinSource` are
-                // the update path's conditional pair and this operation defers them outright, so
-                // they belong to neither set here and dropping them is what the tests above assert.
+                // The two automation fields, and ONLY those two: `steps` is the update path's
+                // conditional field and this operation defers it outright, so it belongs to
+                // neither set here and dropping it is what the tests above assert.
                 if (field.equals("automationKey") || field.equals("notAutomatableReason")) {
                     continue;
                 }
@@ -1140,7 +1182,6 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
         payload.put("notAutomatableReason", null);
         payload.put("estimatedDurationSec", 240);
         payload.put("stepFormat", "STRUCTURED");
-        payload.put("gherkinSource", null);
         // No ids: the SPA sends null for a step being added, and on a create every id would be
         // somebody else's.
         payload.put("steps", List.of(
@@ -1150,6 +1191,13 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
         return payload;
     }
 
+    /** The same, in the Gherkin lens — every step carries a keyword (DEC-2 R1). */
+    private static Map<String, Object> gherkinStep(String keyword, String action) {
+        Map<String, Object> step = step(null, action);
+        step.put("keyword", keyword);
+        return step;
+    }
+
     private static Map<String, Object> step(UUID id, String action) {
         Map<String, Object> step = new LinkedHashMap<>();
         step.put("id", id == null ? null : id.toString());
@@ -1157,6 +1205,8 @@ class CaseCreateEndpointTest extends IntegrationTestBase {
         step.put("action", action);
         step.put("testData", null);
         step.put("expectedResult", null);
+        step.put("docString", null);
+        step.put("dataTable", null);
         return step;
     }
 

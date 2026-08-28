@@ -100,7 +100,6 @@ const CASE_ECHO = {
   objective: null,
   expectedOutcome: null,
   stepFormat: 'STRUCTURED',
-  gherkinSource: null,
   priority: 'HIGH',
   automationStatus: 'MANUAL',
   automationKey: null,
@@ -111,7 +110,7 @@ const CASE_ECHO = {
   steps: [
     {
       id: 'st-1', keyword: null, action: 'Sign in',
-      testData: null, expectedResult: 'In.',
+      testData: null, expectedResult: 'In.', docString: null, dataTable: null,
     },
   ],
 };

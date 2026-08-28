@@ -44,7 +44,19 @@ export function PermissionGate({
    * question.
    */
   projectId: string | undefined | 'company';
-  permission: PermissionKey;
+  /**
+   * The key this action costs — or **several keys, any one of which is enough**.
+   *
+   * The array form is for an action a caller can reach by more than one route: the `.feature`
+   * import (§255) plans `CREATE` rows and `UPDATE` rows, and either `case:create` or `case:edit`
+   * gives a caller work the screen can do. Asking about one of the two would grey the entry point
+   * out for somebody the server would serve, which is the failure mode this component exists to
+   * prevent, inverted.
+   *
+   * The single form routes to `Gate.can`/`Gate.reason` unchanged rather than through a
+   * one-element array, so the hundred existing call sites keep the exact verdict they had.
+   */
+  permission: PermissionKey | PermissionKey[];
   /**
    * **The row's author**, for a permission whose grant may be `OWN`-qualified — today `case:delete`
    * and only it (roles spec §A5). Supplying it switches the verdict from "do they hold this" to
@@ -90,12 +102,31 @@ export function PermissionGate({
     );
   }
 
+  const anyOf = Array.isArray(permission) ? permission : null;
+  // An empty list is a question with no subject: `canAny` would answer false and `reasonAny` would
+  // have nothing to name, so the control would render disabled and explain nothing — the silent
+  // half of the original defect. Refused at the call site instead, where it is a typo.
+  if (anyOf && anyOf.length === 0) {
+    throw new Error('PermissionGate: permission={[]} asks about no key, so it can only ever deny.');
+  }
+  // Authorship qualifies ONE grant. Asking it of a list would have to pick which of the keys the
+  // author question is about, and picking is the thing that goes silently wrong.
+  if (anyOf && asksAuthorship) {
+    throw new Error(
+      'PermissionGate: authorId qualifies a single permission; pass one key, not a list.',
+    );
+  }
+
   const allowed = asksAuthorship
-    ? gate.canOnAuthored(permission, authorId)
-    : gate.can(permission);
+    ? gate.canOnAuthored(permission as PermissionKey, authorId)
+    : anyOf
+      ? gate.canAny(anyOf)
+      : gate.can(permission as PermissionKey);
   const reason = asksAuthorship
-    ? gate.reasonOnAuthored(permission, authorId)
-    : gate.reason(permission);
+    ? gate.reasonOnAuthored(permission as PermissionKey, authorId)
+    : anyOf
+      ? gate.reasonAny(anyOf)
+      : gate.reason(permission as PermissionKey);
 
   const control = children({ allowed, reason });
   if (allowed || !reason) return <>{control}</>;

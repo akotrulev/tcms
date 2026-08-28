@@ -664,7 +664,7 @@ class CaseCloneEndpointTest extends IntegrationTestBase {
                 + "\"automationStatus\": \"AUTOMATED\","
                 + "\"automationKey\": \"checkout.saved_card\",\"notAutomatableReason\": null,"
                 + "\"estimatedDurationSec\": 120,"
-                + "\"stepFormat\": \"STRUCTURED\",\"gherkinSource\": null,"
+                + "\"stepFormat\": \"STRUCTURED\","
                 + "\"steps\": ["
                 + "{\"id\": null,\"keyword\": null,\"action\": \"Open the basket\","
                 + "\"testData\": null,\"expectedResult\": null},"

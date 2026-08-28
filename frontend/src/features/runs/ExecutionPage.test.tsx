@@ -6,7 +6,7 @@ import { api } from '../../api/client'
 import type { ExecutionResultInput } from '../../api/queries'
 import type { CaseStatus, RunStatus, TestExecution, TestExecutionSummary } from '../../api/types'
 import { AnnouncerProvider } from '../../a11y/AnnouncerProvider'
-import { anExecution, aProject, aRun, aUserRef } from '../../test/fixtures'
+import { anExecution, aProject, aRun, aStepResult, aUserRef } from '../../test/fixtures'
 import { heldPermissions } from '../../test/permissions'
 import { SessionRecoveryProvider } from '../../auth/SessionRecoveryProvider'
 import { createTestQueryClient } from '../../test/queryClient'
@@ -399,5 +399,83 @@ describe('ExecutionPage keyboard', () => {
     await user.click(screen.getByTestId('Execution.Shortcuts.Open'))
 
     expect(await screen.findByTestId('Execution.Shortcuts.Overlay')).toBeInTheDocument()
+  })
+})
+
+/**
+ * The step checklist reads the PINNED snapshot (§255).
+ *
+ * These are the only arms in this file outside the keyboard, and they are here rather than in a new
+ * file because the harness above is what makes them cheap — four reads, a real provider tree and a
+ * `Where` probe. What they assert is the property `CaseFacts.PinnedStep` exists for: the two block
+ * arguments the author wrote reach the tester who is running the version they were written into,
+ * and a version written before §255 carries neither key and renders nothing rather than throwing.
+ */
+describe('ExecutionPage — the step row (§255)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const withSteps = (steps: ReturnType<typeof aStepResult>[]) =>
+    anExecution({
+      id: EX_2,
+      caseKey: 'TC-2',
+      caseTitle: 'The TC-2 case',
+      lockVersion: 3,
+      stepFormat: 'GHERKIN',
+      steps,
+    })
+
+  it('renders the keyword and the doc string on the step it belongs to', async () => {
+    mockReads({
+      execution: withSteps([
+        aStepResult({ stepId: 's1', keyword: 'WHEN', action: 'post the payload', docString: '{ "amount": 120 }' }),
+      ]),
+    })
+    await renderScreen()
+
+    expect(screen.getByTestId('Execution.Steps.Row.Keyword')).toHaveTextContent('When')
+    expect(screen.getByTestId('Execution.Steps.Row.Data.DocString')).toHaveTextContent('"amount": 120')
+  })
+
+  it('renders a data table as rows a tester can read', async () => {
+    mockReads({
+      execution: withSteps([
+        aStepResult({
+          stepId: 's1',
+          keyword: 'THEN',
+          action: 'the ledger reads',
+          dataTable: [
+            ['account', 'amount'],
+            ['merchant', '-120.00'],
+          ],
+        }),
+      ]),
+    })
+    await renderScreen()
+
+    expect(screen.getAllByTestId('Execution.Steps.Row.Data.Table.Row')).toHaveLength(2)
+    expect(screen.getByText('-120.00')).toBeInTheDocument()
+  })
+
+  it('renders a pre-§255 snapshot, which carries neither key, without a step showing anything', async () => {
+    // A version written before the fields existed reads as null — correct, because that version
+    // did not record one, and inventing today's value would put text on a checklist the tester's
+    // own version never said.
+    mockReads({ execution: withSteps([aStepResult({ stepId: 's1', action: 'do the thing' })]) })
+    await renderScreen()
+
+    expect(screen.getByTestId('Execution.Steps.Row.Action')).toHaveTextContent('do the thing')
+    expect(screen.queryByTestId('Execution.Steps.Row.Data.DocString')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('Execution.Steps.Row.Data.Table')).not.toBeInTheDocument()
+  })
+
+  it('says the VERSION has no steps when the checklist is empty, not that the case is Gherkin', async () => {
+    // The copy §255 replaced. A case is step rows in either lens now, so "no structured steps"
+    // named a distinction that no longer exists — and told the tester nothing they could act on.
+    mockReads({ execution: withSteps([]) })
+    await renderScreen()
+
+    expect(screen.getByText(/version being executed has no steps/i)).toBeInTheDocument()
   })
 })

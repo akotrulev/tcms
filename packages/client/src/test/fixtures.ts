@@ -130,6 +130,7 @@ export function caseDetail(overrides: Partial<Schemas['TestCase']> = {}): Schema
     automationTags: [],
     notAutomatableReason: null,
     gherkinSource: null,
+    importedFrom: null,
     classificationValueIds: [],
     steps: [],
     preconditions: [],
@@ -153,6 +154,8 @@ export function step(overrides: Partial<Schemas['TestStep']> = {}): Schemas['Tes
     action: 'Sign in',
     testData: null,
     expectedResult: 'The dashboard renders.',
+    docString: null,
+    dataTable: null,
     ...overrides,
   };
 }

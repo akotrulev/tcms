@@ -98,6 +98,8 @@ function step(position: number, statusId: string | null, comment: string | null 
     action: `Step ${position} action`,
     testData: null,
     expectedResult: null,
+    docString: null,
+    dataTable: null,
     statusId,
     comment,
     evidence: [],

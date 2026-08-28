@@ -491,18 +491,40 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
     private static final UUID A_DEPRECATED_CASE_MISSING_EVERYTHING =
             UUID.fromString("ce004000-0000-4000-8000-00000000003a");
     /**
-     * APPROVED, classified, {@code GHERKIN} with a written scenario and — legitimately — <em>no
-     * {@code test_step} rows and no expected outcome</em>.
+     * APPROVED, classified, {@code GHERKIN}, with a scenario in {@code gherkin_source} and
+     * <strong>no {@code test_step} rows</strong> — a case nobody has run
+     * {@code migrate-gherkin-source} over yet.
      *
-     * <p>THE fixture of this group. A predicate that read {@code test_step} alone, which is the
-     * obvious spelling of "has steps", reports every Gherkin case in the product as unfinished, and
-     * every other assertion here passes while it does.
+     * <p><del>THE fixture of this group: a predicate that read {@code test_step} alone reported
+     * every Gherkin case in the product as unfinished.</del> → <strong>§255 inverted it.</strong>
+     * {@code step_format} is a lens over {@code test_step}, so a Gherkin case has rows like any
+     * other and this row is not a healthy Gherkin case — it is an <em>un-migrated</em> one, whose
+     * procedure a tester cannot be handed and cannot record a verdict against. Reporting it
+     * {@code INCOMPLETE} is what makes the backfill findable.
      */
-    private static final UUID AN_APPROVED_SCENARIO =
+    private static final UUID AN_UNMIGRATED_SCENARIO =
             UUID.fromString("ce004000-0000-4000-8000-00000000003b");
-    /** The same with an empty scenario — the Gherkin spelling of "no steps". */
+    /** The same with an empty scenario — incomplete before §255 and after it, for two reasons. */
     private static final UUID AN_APPROVED_EMPTY_SCENARIO =
             UUID.fromString("ce004000-0000-4000-8000-00000000003c");
+    /**
+     * APPROVED, classified, {@code GHERKIN}, three rows ending in a {@code THEN} — and
+     * <strong>no {@code expected_outcome} and no {@code expected_result} anywhere</strong>.
+     *
+     * <p>THE fixture of this group since §255. A {@code Then} clause <em>is</em> an expected
+     * result, and finding it used to mean parsing Gherkin in SQL in a scheduled job — which
+     * {@code CaseCompleteness} refused to do, and so took a non-empty scenario as saying what
+     * should happen. The keyword being a column is what turned that refusal into a term.
+     */
+    private static final UUID AN_APPROVED_GHERKIN_CASE =
+            UUID.fromString("ce004000-0000-4000-8000-00000000003d");
+    /**
+     * The same with {@code GIVEN}/{@code WHEN} rows only. Incomplete: nothing in it says what
+     * should happen, which is the same fault {@link #APPROVED_WITHOUT_AN_EXPECTED_RESULT} has one
+     * lens over.
+     */
+    private static final UUID A_GHERKIN_CASE_THAT_ASSERTS_NOTHING =
+            UUID.fromString("ce004000-0000-4000-8000-00000000003e");
 
     /** One MULTI dimension and one value, so a case can be classified without a trigger's help. */
     private static final UUID FEATURE_DIMENSION =
@@ -1031,13 +1053,34 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
             authoredCase(acme, A_DEPRECATED_CASE_MISSING_EVERYTHING, ACME_PROJECT, "TC-55", 55,
                     "DEPRECATED", 1);
 
-            authoredCase(acme, AN_APPROVED_SCENARIO, ACME_PROJECT, "TC-56", 56, "APPROVED", 1);
-            scenario(acme, AN_APPROVED_SCENARIO, "Given a basket\nWhen I pay\nThen I get a receipt");
-            classify(acme, AN_APPROVED_SCENARIO);
+            authoredCase(acme, AN_UNMIGRATED_SCENARIO, ACME_PROJECT, "TC-56", 56, "APPROVED", 1);
+            scenario(acme, AN_UNMIGRATED_SCENARIO, "Given a basket\nWhen I pay\nThen I get a receipt");
+            classify(acme, AN_UNMIGRATED_SCENARIO);
 
             authoredCase(acme, AN_APPROVED_EMPTY_SCENARIO, ACME_PROJECT, "TC-57", 57, "APPROVED", 1);
             scenario(acme, AN_APPROVED_EMPTY_SCENARIO, "   ");
             classify(acme, AN_APPROVED_EMPTY_SCENARIO);
+
+            // The migrated shape: rows, keywords, and NO expected result of either kind. It is
+            // the THEN row alone that makes this case complete.
+            authoredCase(acme, AN_APPROVED_GHERKIN_CASE, ACME_PROJECT, "TC-58", 58, "APPROVED", 1);
+            lens(acme, AN_APPROVED_GHERKIN_CASE);
+            gherkinStep(acme, "ce00a000-0000-4000-8000-000000000006",
+                    AN_APPROVED_GHERKIN_CASE, 0, "GIVEN", "a basket");
+            gherkinStep(acme, "ce00a000-0000-4000-8000-000000000007",
+                    AN_APPROVED_GHERKIN_CASE, 1, "WHEN", "I pay");
+            gherkinStep(acme, "ce00a000-0000-4000-8000-000000000008",
+                    AN_APPROVED_GHERKIN_CASE, 2, "THEN", "I get a receipt");
+            classify(acme, AN_APPROVED_GHERKIN_CASE);
+
+            authoredCase(acme, A_GHERKIN_CASE_THAT_ASSERTS_NOTHING, ACME_PROJECT, "TC-59", 59,
+                    "APPROVED", 1);
+            lens(acme, A_GHERKIN_CASE_THAT_ASSERTS_NOTHING);
+            gherkinStep(acme, "ce00a000-0000-4000-8000-000000000009",
+                    A_GHERKIN_CASE_THAT_ASSERTS_NOTHING, 0, "GIVEN", "a basket");
+            gherkinStep(acme, "ce00a000-0000-4000-8000-00000000000a",
+                    A_GHERKIN_CASE_THAT_ASSERTS_NOTHING, 1, "WHEN", "I pay");
+            classify(acme, A_GHERKIN_CASE_THAT_ASSERTS_NOTHING);
         }
 
         try (Connection umbra = appConnection(UMBRA)) {
@@ -2284,21 +2327,44 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a Gherkin scenario is steps AND an expected result, with no test_step rows")
-        void aScenarioIsNotMissingItsSteps() {
-            // THE test of this group. step_format makes test_step rows and gherkin_source
-            // alternatives (plan §6a), so a GHERKIN case legitimately has neither steps nor an
-            // expected outcome — and the obvious spelling of "has steps", a lookup in test_step,
-            // reports every Gherkin case in the product as unfinished. The scenario also settles
-            // the expected-result term for that format: its Then clause IS the expected result, and
-            // finding it means parsing Gherkin in SQL in a scheduled job.
+        @DisplayName("a THEN row is an expected result — a Gherkin case with one is complete")
+        void aThenRowSaysWhatShouldHappen() {
+            // THE test of this group since §255, and the arm that would pass under the OLD
+            // predicate for the wrong reason: this case has no gherkin_source at all, so a
+            // step_format branch reading the blob calls it incomplete, and a predicate that
+            // dropped the THEN term calls it incomplete too. Both are the same visible failure —
+            // an INCOMPLETE chip on a finished case — from opposite causes.
             recomputeFor(ACME);
-            assertThat(signalsOf(AN_APPROVED_SCENARIO))
+            assertThat(signalsOf(AN_APPROVED_GHERKIN_CASE))
                     .containsExactly("never_executed", "unlinked");
         }
 
         @Test
-        @DisplayName("an empty scenario is the Gherkin spelling of no steps")
+        @DisplayName("GIVEN and WHEN only, with no expected outcome, is INCOMPLETE")
+        void aScenarioThatAssertsNothingIsIncomplete() {
+            // The bound on the arm above. Without it "any Gherkin case with rows" would pass, and
+            // the THEN term would be decoration rather than a term.
+            recomputeFor(ACME);
+            assertThat(signalsOf(A_GHERKIN_CASE_THAT_ASSERTS_NOTHING))
+                    .containsExactlyInAnyOrder("never_executed", "unlinked", "incomplete");
+        }
+
+        @Test
+        @DisplayName("a NOT-YET-MIGRATED case — a scenario in the blob and no rows — is INCOMPLETE")
+        void anUnmigratedScenarioIsIncomplete() {
+            // ~~a Gherkin scenario is steps AND an expected result, with no test_step rows~~ →
+            // §255 reversed this deliberately. The blob is not a procedure a tester can be handed
+            // a step at a time, so an APPROVED case still holding one is unfinished in exactly
+            // the sense §6o means — and saying so is what makes migrate-gherkin-source findable.
+            // Keeping the old reading would report the un-migrated population as healthy right up
+            // to the day 002- drops the column out from under it.
+            recomputeFor(ACME);
+            assertThat(signalsOf(AN_UNMIGRATED_SCENARIO))
+                    .containsExactlyInAnyOrder("never_executed", "unlinked", "incomplete");
+        }
+
+        @Test
+        @DisplayName("an empty scenario with no rows is INCOMPLETE — unchanged, for a new reason")
         void anEmptyScenarioIsIncomplete() {
             recomputeFor(ACME);
             assertThat(signalsOf(AN_APPROVED_EMPTY_SCENARIO))
@@ -3128,10 +3194,38 @@ class CaseHealthRecomputeTest extends IntegrationTestBase {
         }
     }
 
+    /** One step with a Gherkin keyword — §255's shape, where the keyword is a completeness term. */
+    private void gherkinStep(Connection connection, String id, UUID caseId, int position,
+            String keyword, String action) throws SQLException {
+
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO test_step (id, company_id, case_id, position, keyword, action)
+                VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?)
+                ON CONFLICT (id) DO NOTHING
+                """)) {
+            statement.setString(1, id);
+            statement.setString(2, ACME.toString());
+            statement.setString(3, caseId.toString());
+            statement.setInt(4, position);
+            statement.setString(5, keyword);
+            statement.setString(6, action);
+            statement.executeUpdate();
+        }
+    }
+
+    /** Put a case in the Gherkin LENS, leaving {@code gherkin_source} null — §255's shape. */
+    private void lens(Connection connection, UUID caseId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE test_case SET step_format = 'GHERKIN' WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, caseId.toString());
+            statement.executeUpdate();
+        }
+    }
+
     /**
-     * Turn a case into a {@code GHERKIN} one — {@code step_format} and {@code gherkin_source}
-     * together, because the two are one decision and a case carrying one without the other is a
-     * state {@code CaseEdit} refuses.
+     * Turn a case into a not-yet-migrated {@code GHERKIN} one — {@code step_format} and
+     * {@code gherkin_source} together, with no rows. Nothing writes this shape any more; it is
+     * seeded because {@code migrate-gherkin-source} has not run on every instance.
      */
     private void scenario(Connection connection, UUID caseId, String source) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(

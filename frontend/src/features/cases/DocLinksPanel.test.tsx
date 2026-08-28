@@ -123,6 +123,7 @@ function caseBody(links: DocLink[]): TestCase {
     automationKey: null,
     notAutomatableReason: null,
     gherkinSource: null,
+    importedFrom: null,
     steps: [],
     preconditions: [],
     postconditions: [],

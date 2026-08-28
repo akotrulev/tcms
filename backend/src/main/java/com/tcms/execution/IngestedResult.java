@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.tcms.api.AutomationKeys;
 import java.util.Locale;
 
 /**
@@ -44,9 +45,15 @@ public record IngestedResult(
      * written by a human reading their own test source matches a report parsed here only if both
      * spell the join the same way. Changing it silently breaks every stored key at once, with no
      * error anywhere — every test simply stops matching.
+     *
+     * <p><strong>§255 T6 gave that convention a home.</strong> The {@code .feature} import in
+     * {@code repository} writes the same string when it keys a case, and the two modules may not
+     * import each other, so the join moved to {@link AutomationKeys} — a foundation module both can
+     * reach. This method is now a call rather than a second spelling of it, which is what makes the
+     * paragraph above checkable instead of merely true today.
      */
     public String fullName() {
-        return className == null || className.isBlank() ? name : className + "#" + name;
+        return AutomationKeys.join(className, name);
     }
 
     /**

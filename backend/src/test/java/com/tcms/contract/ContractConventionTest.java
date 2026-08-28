@@ -523,7 +523,36 @@ class ContractConventionTest {
             Map.entry("ExternalLinkInput",
                     List.of(com.tcms.documentation.ExternalLinkInput.class)),
             Map.entry("Facet", List.of(com.tcms.repository.FacetView.class)),
+            // §255 T3. The name matches the record, so this entry only confirms what the name
+            // match would propose — kept for the nested one below, which it cannot propose.
+            // §255 T6 — the import's eight, all nested in the two top-level records the endpoint
+            // binds and serves, which is why no name match proposes six of them.
+            Map.entry("FeatureImportRequest",
+                    List.of(com.tcms.repository.FeatureImportRequest.class)),
+            Map.entry("FeatureFile",
+                    List.of(com.tcms.repository.FeatureImportRequest.FeatureFile.class)),
+            Map.entry("FeatureImportPlan",
+                    List.of(com.tcms.repository.FeatureImportPlan.class)),
+            Map.entry("ImportRow",
+                    List.of(com.tcms.repository.FeatureImportPlan.ImportRow.class)),
+            Map.entry("SuiteAction",
+                    List.of(com.tcms.repository.FeatureImportPlan.SuiteAction.class)),
+            Map.entry("ConditionAction",
+                    List.of(com.tcms.repository.FeatureImportPlan.ConditionAction.class)),
+            Map.entry("Orphan",
+                    List.of(com.tcms.repository.FeatureImportPlan.Orphan.class)),
+            Map.entry("ImportTotals",
+                    List.of(com.tcms.repository.FeatureImportPlan.ImportTotals.class)),
+            Map.entry("GherkinParseResult",
+                    List.of(com.tcms.repository.GherkinParseResult.class)),
+            // Nested in the result that carries it: the schema is named for the wire and the
+            // record for the field it sits on, so no name match reaches it.
+            Map.entry("ParsedBackground",
+                    List.of(com.tcms.repository.GherkinParseResult.ParsedBackground.class)),
             Map.entry("HeldPermission", List.of(com.tcms.auth.MeController.HeldPermission.class)),
+            // §255's import provenance. Named for the wire and the record for being a view, so
+            // no name match proposes it.
+            Map.entry("ImportedFrom", List.of(com.tcms.repository.ImportedFromView.class)),
             Map.entry("IngestionInput", List.of(com.tcms.execution.IngestionRequest.class)),
             Map.entry("IngestionJob", List.of(com.tcms.execution.IngestionJobView.class)),
             Map.entry("IngestionJobSummary", List.of(com.tcms.execution.IngestionJobSummary.class)),

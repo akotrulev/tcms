@@ -24,6 +24,9 @@ import type {
   ExecutionHistoryEntry,
   ExternalLink,
   ExternalLinkInput,
+  FeatureImportPlan,
+  FeatureImportRequest,
+  GherkinParseResult,
   LifecycleStatus,
   LinkRelationship,
   Paged,
@@ -289,6 +292,113 @@ export function useCase(projectId: string, caseId: string | undefined): UseQuery
     queryKey: keys.case(projectId, caseId ?? ''),
     queryFn: ({ signal }) => api.get<TestCase>(`${base(projectId)}/cases/${caseId}`, { signal }),
     enabled: !!caseId,
+  });
+}
+
+/**
+ * The case as canonical `.feature` text (§255) — `GET .../cases/{caseId}/feature`.
+ *
+ * **`api.getText`, not `api.get`.** The success body is `text/plain`: it is the artifact a tester
+ * pastes into a Cucumber suite, and a JSON string of escaped newlines is one nobody can paste. A
+ * hook that called `api.get` here would hand `res.json()` a `.feature` file and fail with a
+ * `SyntaxError` three layers below the dialog, which reads as the case failing to load.
+ *
+ * `enabled` on the id, so the dialog that renders it fetches when it opens and not before — the
+ * render is one action on a screen most readers never take.
+ */
+export function useCaseFeature(
+  projectId: string,
+  caseId: string | undefined,
+): UseQueryResult<string> {
+  return useQuery({
+    queryKey: keys.caseFeature(projectId, caseId ?? ''),
+    queryFn: ({ signal }) =>
+      api.getText(`${base(projectId)}/cases/${caseId}/feature`, {
+        signal,
+        timeoutMs: TIMEOUTS.interactive,
+      }),
+    enabled: !!caseId,
+  });
+}
+
+/**
+ * Pasted Gherkin as the rows it would become (§255) — `POST .../cases/parse-gherkin`.
+ *
+ * ## A mutation for a pure function, deliberately
+ *
+ * Nothing is created — the endpoint's own description says so — but this is a `useMutation` rather
+ * than a `useQuery` because the *act* is the point: it runs when the author presses Parse, on text
+ * that is not a cache key anybody would want to keep, and a query keyed on 60 KiB of pasted prose
+ * would fill the cache with one entry per keystroke of a textarea.
+ *
+ * ## `handled`, because the four refusals are the answer
+ *
+ * A parse failure is the ordinary case, not a fault: the dialog renders the sentence the server
+ * put on `errors.text` beside the box the text is in. A global toast would report the author's own
+ * typo at the corner of the screen, away from the thing that needs fixing.
+ *
+ * `api.postText` sends the raw body; `api.post` would send a JSON-quoted string and answer 415.
+ */
+export function useParseGherkin(projectId: string) {
+  return useMutation({
+    mutationFn: (text: string) =>
+      api.postText<GherkinParseResult>(`${base(projectId)}/cases/parse-gherkin`, text, {
+        timeoutMs: TIMEOUTS.interactive,
+      }),
+    meta: { handled: true },
+  });
+}
+
+/**
+ * Plans — and in `APPLY`, executes — an import of `.feature` files (§255).
+ *
+ * `POST .../feature-imports`. One endpoint, two modes, **one response shape**: `PREVIEW` answers
+ * what would happen and writes nothing, `APPLY` recomputes the identical plan inside its
+ * transaction and executes it. So this is one hook rather than two, and the screen renders one
+ * component for both answers.
+ *
+ * ## No `Idempotency-Key`, and it is not an omission
+ *
+ * Every other create in this file mints one (`useCreateCase`, `useCloneCase`) because a retry could
+ * duplicate a row. This endpoint declares no such parameter and the server would not honour it:
+ * what this repository calls idempotency is a unique key on **one created row**, and an import
+ * creates many or none. Determinism replaces it — a replay finds every scenario by `automationKey`
+ * and every condition by `imported_key`, answers `SKIP`/`UNCHANGED` and writes nothing, which also
+ * holds for the same folder imported twice from two different machines. Adding a header here would
+ * look like protection and be inert.
+ *
+ * ## The long budget, because the request is 8 MiB of text
+ *
+ * `TIMEOUTS.long`, for `useCloneCase`'s reason at a larger size: the caps are 200 files and 8 MiB,
+ * the `APPLY` writes every case through `CaseCreateService`/`CaseUpdateService` with a version and
+ * an audit row each, and the interactive budget would abort a request the server then completes —
+ * leaving the caller with a timeout and the cases created.
+ *
+ * ## `handled`, and what a successful APPLY invalidates
+ *
+ * The 400 lands on `errors.files`/`errors.suiteId` beside the drop zone and the 409 renders in a
+ * banner on the page, so the global notifier must stay out of both or the caller is told twice.
+ *
+ * Invalidation runs **only when the plan committed** — a preview changes nothing, and invalidating
+ * on it would refetch the whole case list every time somebody pressed Preview. A committed apply
+ * touches the case list, the suite tree (a `CREATE` suite is new and every count moved), the
+ * condition library (amendment AM1's Background entries) and the project header's case count.
+ */
+export function useFeatureImport(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: FeatureImportRequest) =>
+      api.post<FeatureImportPlan>(`${base(projectId)}/feature-imports`, input, {
+        timeoutMs: TIMEOUTS.long,
+      }),
+    meta: { handled: true },
+    onSuccess: (plan) => {
+      if (!plan.applied) return;
+      invalidateCaseLists(client, projectId);
+      void client.invalidateQueries({ queryKey: keys.suites(projectId) });
+      void client.invalidateQueries({ queryKey: keys.conditionsRoot(projectId) });
+      void client.invalidateQueries({ queryKey: keys.project(projectId), exact: true });
+    },
   });
 }
 

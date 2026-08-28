@@ -204,6 +204,58 @@ which is the same state. It belongs to the next `packages/` live pass
 ever been executed by anything: these two arms have existed for one commit.
 
 
+
+## §255 — the unified step model reaches the carriers (`§255 PK-M1` … `PK-M8`)
+
+✅ **RUN 2026-08-28 on `shanks`, against a green baseline (`393` — 138 client / 102 cli / 153 mcp).**
+**8 of 8 resolved — 4 confirmed exactly as written, 2 broader than written, 1 registered gap that
+holds, and `PK-M8`, which is not a mutation and still needs a live instance.** Ids are `§255 PK-*`;
+`PK-M` is unused across both queue files and every handoff section (grepped before minting it, per
+the §154 banner).
+
+⚠️ **A TRAP FOR WHOEVER RE-RUNS THESE, and it produced a false green on the first attempt.**
+`@tcms/cli` and `@tcms/mcp` consume `@tcms/client` through its **built `dist`**, not its `src`. A
+mutation to `client/src/core/shapes.ts` therefore reaches neither adapter until
+`npx tsc -p tsconfig.lib.json` has re-emitted the client — and every arm reports green in the
+meantime. `PK-M1` "passed" that way before the rebuild was added. Rebuild the client between the
+mutation and the run, and note that `tsc` emits even when it reports errors
+(`noEmitOnError` is off), which is what lets `PK-M3` be measured at all.
+
+**`PK-M3` gained a fourth guard the row does not credit: `tsc` itself.** `gherkinSource` is not on
+`TestCaseInput`, so putting it back is `TS2353` at compile time — expressing the mutation needs an
+`as unknown as` cast. The row says "it types"; it does not.
+
+**Every row mutates `packages/` and runs as `cd packages && npm run test:run --workspaces`.** What
+that costs is the sentence `§189`'s block already carries and it is sharper here than anywhere: a
+stub answers 200 to whatever arrives, so **not one of these rows can tell a step the server would
+store from one it would refuse**. `ck_test_step_one_data`, the 64 KiB doc string cap and the
+200×50 table cap are the server's, and this lane cannot reach any of them. What it CAN check is
+that the shape both adapters compose is the shape the contract declares, which is what `PK-M1` and
+`PK-M2` are for.
+
+**`PK-M3` is the row this block exists for.** The retired scenario field is the one thing a reader
+"tidying" a projection would put back — it is served by the `GET`, it reads as an obvious omission,
+and putting it back is **silent**: Jackson ignores an unknown property, so the server accepts the
+write and nothing at any layer says a word.
+
+| Row | Mutate | Must redden | What a green build would mean | Result (2026-08-28, `shanks`) |
+|---|---|---|---|---|
+| `§255 PK-M1` | In `client/src/core/shapes.ts`, delete the `dataTable` entry from `STEP_FIELDS` | `names a real contract property for every field, or says why not` is NOT the arm — that one is top-level. `pins every nested object shape to its own contract schema` stays green too (it checks the catalogue's fields against the contract, not the reverse), so the arms that must redden are the CLI's `shows all three new step fields, with an example each, in tcms format case --long` and the MCP's `tcms_shape` twin, plus `declares the case body's properties rather than describing them in prose` | **The row that measures the nested-accounting gap.** `shapesContract.test.ts` accounts for every top-level contract property and, one level down, only checks the fields the catalogue DOES declare. A step field dropped from the catalogue is therefore invisible to the pin and visible only to the carriers — which is worth knowing, because the top-level rule is the one a reader assumes applies throughout. If the three named arms do not redden, nothing in this package notices a step field going missing. | ✅ **RUN — CONFIRMED.** 3 named arms red (cli format --long, mcp tcms_shape, mcp declares-properties); client stays green as the row says. NOTE: cli/mcp consume @tcms/client's built dist, so a src-only sync gives a FALSE GREEN. |
+| `§255 PK-M2` | In `client/src/core/shapes.ts`, change `keyword`'s `enumOf` to `'StepFormat'` | `declares the contract's enum, exactly, wherever it names one` | The §255 extension to the enum pin: it walked top-level fields only until this slice, so a nested enum could name any schema at all and the strongest check in the file could not see it. A green build means the walk did not reach `steps[]`. | ✅ **RUN — CONFIRMED.** exactly 1, the named enum-pin arm |
+| `§255 PK-M3` | In `client/src/core/rewrite.ts`, add `gherkinSource: current.gherkinSource` back to `caseInputFrom` | `carries every field of TestCaseInput a round-trip may send, and no other`, both `gherkinLensCase.test.ts` files' `round-trips every step field on an edit, and sends no retired scenario field`, and the harness's own contract comparison as an undeclared property | **The row the block is named for.** It types — `TestCase` still serves the field — and the server ignores it, so every edit either surface makes would carry a field the contract does not declare, indefinitely, with nothing anywhere to say so. Three independent arms must catch it; a green build means the write contract is being asserted from the client's own types rather than from `openapi.yaml`. | ✅ **RUN — CONFIRMED, and broader than written.** all named arms red, plus ~14 more via the contract double. CORRECTION: tsc REFUSES it (TS2353) - gherkinSource is not on TestCaseInput - so there are FOUR guards, not three, and the first is the compiler. Needed an `as unknown as` cast to express. |
+| `§255 PK-M4` | In `client/src/core/rewrite.ts`, drop `docString` and `dataTable` from `stepInputFrom` | both `gherkinLensCase.test.ts` files' `round-trips every step field on an edit, and sends no retired scenario field` | The §143 defect in its §255 clothes: this `PATCH` is partial by verb only, so a field the projection drops is a field the edit **clears**. `tcms case edit TC-42 --title x` on a Gherkin case would silently delete every doc string and every table on it. Nothing else in either package reads those two keys off a projection, which is exactly why the two e2e files were written. | ✅ **RUN — CONFIRMED, and broader than written.** both named e2e arms red, plus 8 writes.test.ts body comparisons. CORRECTION: the row says nothing else reads those keys off a projection; the write-body doubles do. |
+| `§255 PK-M5` | In `client/src/core/shapes.ts`, restore `steps` to `required: { when: 'stepFormat', is: ['STRUCTURED'] }` | both `gherkinLensCase.test.ts` files' `refuses a scenario with no steps, because the lens no longer has a second body`, and `asks for the content each format and automation status actually needs` in `core/core.test.ts` | A `GHERKIN` proposal with no procedure would be filed 201, sit PENDING, and answer the reviewer's accept with a 400 they cannot fix — §143's path exactly, re-opened by the lens that no longer has a second body to be required instead. | ✅ **RUN — CONFIRMED.** exactly the 3 named arms |
+| `§255 PK-M6` | In `client/src/core/shapes.ts`, make `spellableInArgv` return `field.type !== 'object[]'` | *nothing* — a **hole**, and stated as one | No top-level field is a `string[][]` today, so all four call sites answer identically and the whole package stays green. The predicate exists for the field that would be added next, and the mutation proves only that nothing currently depends on it. Recorded rather than faked: the alternative is a top-level table field invented to give the check something to bite on. | ✅ **RUN — CONFIRMED.** stated hole holds - nothing reddens |
+| `§255 PK-M7` | In `client/src/core/shapes.ts`, drop the `field.example` line from `fieldSection` | the CLI's `shows all three new step fields, with an example each, in tcms format case --long` and the MCP's `tcms_shape` twin | `tool-mcp-builder` step 4 — every field description ends with its example, because it is the agent's first-call template — reaching a NESTED field for the first time. `dataTable`'s nesting is the one a caller guesses wrong, and the guide is the only carrier that can show it: `usageFor` lists an object array's inner fields by name alone. | ✅ **RUN — CONFIRMED.** exactly the 2 named guide arms |
+| `§255 PK-M8` | Send a `dataTable` with 201 rows, or a step carrying both a `docString` and a `testData`, through either adapter | *nothing* — the **second hole**, and the one this lane structurally cannot close | Both are refused by the server (`V2.3`, `ck_test_step_one_data`) and accepted by every stub in this tree. **Not a mutation — a missing test**, and it cannot be written here: the check it wants is one real write against a real instance. It belongs to the next `packages/` live pass, alongside the rows `§189` left. | ⬜ **NOT RUN.** not a mutation - a missing test, needs a live instance (row says so) |
+
+**The live-pass rows this slice leaves.** `PK-M8` above, and one `tcms case propose --file` of a
+three-keyword scenario with a doc string and a table against a real backend — the same payload the
+stubs accept, sent where `CaseEdit.validate` can answer. Both are **NOT RUN** and neither has ever
+been executed by anything; the most recent packages live pass is
+`docs/verification/2026-08-09-packages-live-pass-round-2.md`.
+
+
 ---
 
 # TS rows that stayed in the backend file, and why
@@ -213,7 +265,7 @@ but they sit **inside sections whose other rows are backend** — extracting a s
 the narrative the section is written as, so they stay where they are and are indexed here instead.
 
 | Row | Lives in | Target |
-|---|---|---|
+|---|---|---|---|
 | `§141 RL-7` · `§141 RL-8` | §141 — rate limiting | `packages/client`'s `describeRefusal` — the `429` branch and its `retryAfterMs` fallback |
 | `TA-9` | §132 phase 2 | `CaseHistoryPage.authorLine` |
 | `§244 ED-M8` · `§244 ED-M9` | §244 amendment | `ExecutionPage`'s verdict-button `disabled`, `ExecutionGrid.mark`'s `durationMs` |

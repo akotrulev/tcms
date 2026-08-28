@@ -352,21 +352,17 @@ function ProposedCase({ proposal }: { proposal: AiProposal }) {
         </ScrollX>
       ) : (
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          {proposed.gherkinSource
-            ? 'Written as a Gherkin scenario.'
-            : 'No steps — this cannot be accepted until an agent proposes one with steps.'}
+          {/*
+            One sentence where there were two. The other branch read the proposal's
+            `gherkinSource` and said "Written as a Gherkin scenario" — a field that left
+            `TestCaseInput` in §255, because a scenario is step rows in either lens now. A
+            proposal filed before then still stores the blob, and it reads as UNREADABLE rather
+            than as a scenario: `AiProposal.testCase` is null for a payload the current input
+            schema cannot describe, which is the `Proposal.Unreadable` branch above and is the
+            honest answer — the accept path would refuse it.
+          */}
+          No steps — this cannot be accepted until an agent proposes one with steps.
         </Typography>
-      )}
-
-      {proposed.gherkinSource && (
-        <ScrollX>
-          <Box
-            component="pre"
-            sx={{ m: 0, p: 1.5, fontSize: 13, bgcolor: 'action.hover', borderRadius: 1 }}
-          >
-            {proposed.gherkinSource}
-          </Box>
-        </ScrollX>
       )}
     </Stack>
   );

@@ -8,8 +8,11 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.util.List;
 import java.util.UUID;
 import org.hibernate.annotations.Filter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * One step of one case — the thing a tester actually reads while executing.
@@ -34,13 +37,19 @@ import org.hibernate.annotations.Filter;
  * page the moment anything touched it — the N+1 that costs nothing to write and everything to
  * find. The detail endpoint reads one case, so it asks for one case's steps, by id.
  *
- * <h2>The two columns this class deliberately does not map</h2>
+ * <h2>The two block arguments, mapped at last</h2>
  *
- * <p>{@code docstring} and {@code datatable} are Gherkin's block arguments — a multi-line string
- * and an inline table hanging off a single step. Both exist in {@code V1}; neither has a field on
- * the contract's {@code TestStep}, so mapping them would put values on an entity that nothing can
- * serialize and no writer can set. They arrive with the contract change that gives them somewhere
- * to go, which is the same slice that makes a {@code .feature} import round-trip.
+ * <p>{@link #docstring} and {@link #datatable} are Gherkin's block arguments. Both existed in
+ * {@code V1} and neither had a field on the contract's {@code TestStep}, so mapping them would have
+ * put values on an entity nothing could serialize and no writer could set — which is why they were
+ * left off until §255 gave them somewhere to go. That slice is also what makes {@code stepFormat} a
+ * <em>lens</em> rather than a storage switch: a Gherkin case is step rows now, so its doc strings
+ * and tables have to live on the rows.
+ *
+ * <p><strong>At most one of {@link #testData}, {@link #docstring} and {@link #datatable} is
+ * non-null</strong>, which {@code ck_test_step_one_data} enforces and {@link CaseEdit} answers with
+ * a field error first. A step holding two leaves the execution screen to pick which one the tester
+ * follows.
  */
 @Entity
 @Table(name = "test_step")
@@ -74,6 +83,23 @@ public class TestStep {
 
     @Column(name = "expected_result")
     private String expectedResult;
+
+    /** Gherkin's {@code """} block — a multi-line string argument to this one step. */
+    @Column(name = "docstring")
+    private String docstring;
+
+    /**
+     * Gherkin's {@code |}-table as rows of cells.
+     *
+     * <p>{@code @JdbcTypeCode(JSON)} rather than {@code columnDefinition = "jsonb"}, which is
+     * {@link Condition#getBody()}'s mapping one level of nesting deeper and for its reason:
+     * {@code columnDefinition} satisfies {@code ddl-auto: validate} while the parameter is still
+     * bound as {@code varchar}, and Postgres does not implicitly cast {@code varchar} to
+     * {@code jsonb}. Rows may be ragged — nothing here requires a rectangle.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "datatable")
+    private List<List<String>> datatable;
 
     /** JPA only. */
     protected TestStep() {
@@ -113,6 +139,8 @@ public class TestStep {
         this.action = edit.action();
         this.testData = edit.testData();
         this.expectedResult = edit.expectedResult();
+        this.docstring = edit.docString();
+        this.datatable = edit.dataTable();
     }
 
     public UUID getId() {
@@ -141,5 +169,13 @@ public class TestStep {
 
     public String getExpectedResult() {
         return expectedResult;
+    }
+
+    public String getDocstring() {
+        return docstring;
+    }
+
+    public List<List<String>> getDatatable() {
+        return datatable;
     }
 }

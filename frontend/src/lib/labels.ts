@@ -14,11 +14,13 @@ import type {
   ArtifactStatus,
   AutomationStatus,
   BlockLink,
+  ConditionActionKind,
   CriterionMetric,
   DocBlockType,
   DocPageStatus,
   EditAfterApproval,
   HealthSignal,
+  ImportAction,
   IngestedOutcome,
   IngestionFormat,
   IngestionStatus,
@@ -41,6 +43,8 @@ import type {
   SocialProvider,
   StatusKind,
   StepFormat,
+  StepKeyword,
+  SuiteActionKind,
   VerdictSource,
   WorkItemStatus,
 } from '../api/types';
@@ -568,6 +572,70 @@ export const stepFormatLabels = {
   STRUCTURED: 'Structured steps',
   GHERKIN: 'Gherkin',
 } as const satisfies Record<StepFormat, string>;
+
+/**
+ * The Gherkin keywords, title-cased — what a `.feature` file spells and what a step row shows.
+ *
+ * `satisfies Record<StepKeyword, string>` for this catalogue's usual reason: the enum is the
+ * server's and a sixth member is a compile error here until somebody labels it. The mapping looks
+ * like a `charAt(0) + toLowerCase()` away from being derivable, and it is not — the keywords are
+ * *English words in a file format*, so a locale-aware lower-casing would render `GIVEN` as `Gıven`
+ * in a Turkish locale and produce a `.feature` line Cucumber cannot read.
+ */
+export const stepKeywordLabels = {
+  GIVEN: 'Given',
+  WHEN: 'When',
+  THEN: 'Then',
+  AND: 'And',
+  BUT: 'But',
+} as const satisfies Record<StepKeyword, string>;
+
+/**
+ * The four verdicts an imported scenario can carry (§255).
+ *
+ * **`REFUSE` is a row, never a status code** — one `Scenario Outline` in a folder of forty files
+ * refuses that scenario and imports the rest — so it needs a word in a column beside three
+ * successes rather than a page of its own. It is deliberately *"Refused"* and not *"Failed"*:
+ * nothing broke, and a caller who lacks a key is told which key by the row's own `reason`.
+ *
+ * `satisfies Record<ImportAction, string>` for this catalogue's usual reason: a fifth verdict on the
+ * contract is a compile error here until somebody labels it.
+ */
+export const importActionLabels = {
+  CREATE: 'Create',
+  UPDATE: 'Update',
+  SKIP: 'Skip',
+  REFUSE: 'Refused',
+} as const satisfies Record<ImportAction, string>;
+
+/**
+ * What an import does to the suite a `Feature:` maps to (§255).
+ *
+ * Its own map rather than a reuse of {@link importActionLabels}: the two unions differ — a suite is
+ * never skipped and a case is never reused — and one map with the union of both members would label
+ * combinations neither side can produce, which is exactly the silent fall-through these maps exist
+ * to make impossible.
+ */
+export const suiteActionLabels = {
+  CREATE: 'Create',
+  REUSE: 'Use existing',
+  REFUSE: 'Refused',
+} as const satisfies Record<SuiteActionKind, string>;
+
+/**
+ * What an import does to the library entry for one `Background:` step (§255, amendment AM1).
+ *
+ * **`UNCHANGED` is the common answer on a re-import** and it is the point of hashing the step text,
+ * so it is worded as the reassurance it is — *"Already there"* — rather than as the absence of an
+ * act. A reader scanning this panel after a second import is looking for something to have gone
+ * wrong, and a column of blanks is what that looks like.
+ */
+export const conditionActionLabels = {
+  CREATE: 'Create',
+  UPDATE: 'Retitle',
+  UNCHANGED: 'Already there',
+  REFUSE: 'Refused',
+} as const satisfies Record<ConditionActionKind, string>;
 
 /**
  * Health signals are the dashboard's vocabulary, so the label has to say what's wrong in

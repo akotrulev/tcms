@@ -310,4 +310,48 @@ describe('PermissionGate', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled())
     })
   })
+
+  /**
+   * The any-of form (§255), for an action a caller can reach by more than one route.
+   *
+   * The `.feature` import is the one that needed it: a folder plans `CREATE` rows and `UPDATE`
+   * rows, so either `case:create` or `case:edit` gives a caller work the screen can do — and the
+   * server answers 200 with the rest of the rows refused. Gating on one of the two would grey the
+   * entry point out for somebody it would have served, which is this component's own rule inverted.
+   */
+  describe('several keys, any one of which is enough', () => {
+    function renderImport() {
+      return renderGated(
+        <PermissionGate projectId={PROJECT} permission={['case:create', 'case:edit']}>
+          {({ allowed }) => (
+            <Button disabled={!allowed} data-testid="Import">
+              Import feature files
+            </Button>
+          )}
+        </PermissionGate>,
+      )
+    }
+
+    it('enables the control on the SECOND key alone', async () => {
+      // `case:edit` and not `case:create`: a gate asking only about the first would disable this,
+      // and the caller can still have every existing case rewritten from the file.
+      vi.spyOn(api, 'get').mockResolvedValue(answer(['case:read', 'case:edit']))
+      renderImport()
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Import feature files' })).toBeEnabled())
+    })
+
+    it('disables it only when neither is held, and names both', async () => {
+      vi.spyOn(api, 'get').mockResolvedValue(answer(['case:read']))
+      renderImport()
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Import feature files' })).toBeDisabled())
+      await userEvent.hover(screen.getByTestId('Import').parentElement as HTMLElement)
+      // Both, joined with "or": the caller needs one, and naming only the first would send somebody
+      // to ask for a permission when the other was already on its way to them.
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(
+        'create test cases or edit test cases',
+      )
+    })
+  })
 })

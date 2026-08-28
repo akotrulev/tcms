@@ -46,10 +46,21 @@ import java.util.UUID;
  * every case the entries were <em>deleted</em> rather than edited — that map is pinned in both
  * directions, so closing a divergence and keeping its argument fails the build.
  *
- * @param gherkinSource null for a {@code STRUCTURED} case; {@link #steps} is empty for a
- *              {@code GHERKIN} one. The two are alternatives (plan §6a) and the SPA branches on
- *              {@link #stepFormat} rather than on which of them is populated — which is what keeps
- *              a case that somehow carries both from rendering twice.
+ * @param gherkinSource <strong>null unless this case has no step rows at all</strong>, and then
+ *              the stored blob. §255 made {@link #stepFormat} a lens over one storage rather than
+ *              a switch between two, so a Gherkin case is step rows like any other and nothing
+ *              writes this column any more.
+ *
+ *              <p>The population it still serves is finite and shrinking: cases authored before
+ *              §255 whose scenario {@code migrate-gherkin-source} has not yet turned into rows. The
+ *              SPA renders those read-only with a note naming the command, which is why the
+ *              condition is <em>zero rows</em> and not <em>{@code stepFormat == GHERKIN}</em> —
+ *              serving both would put a scenario and its own migrated rows on one screen, saying
+ *              the same thing twice and disagreeing the moment somebody edits one of them.
+ *              <strong>The field leaves the contract in {@code 002-}.</strong>
+ * @param importedFrom the {@code .feature} file and line this case was imported from, or null.
+ *              Null for every case today: {@code V69} adds the columns and the import endpoint is
+ *              what fills them.
  * @param steps  never null. Empty is a real and common state: a case can be created with a title
  *              and filled in later, and the SPA has an empty state that says so.
  * @param preconditions resolved through {@link CaseConditions} — inherited entries first, marked,
@@ -175,6 +186,7 @@ public record TestCaseDetailView(
         String automationKey,
         String notAutomatableReason,
         String gherkinSource,
+        ImportedFromView importedFrom,
         List<TestStepView> steps,
         List<CaseConditionRefView> preconditions,
         List<CaseConditionRefView> postconditions,
@@ -232,7 +244,11 @@ public record TestCaseDetailView(
                 automationTags,
                 row.getAutomationKey(),
                 row.getNotAutomatableReason(),
-                row.getGherkinSource(),
+                // The zero-row condition, not a format check — see the field's javadoc. `steps`
+                // is the list this same call is about to serve, so the response cannot disagree
+                // with itself about whether the case has a procedure.
+                steps.isEmpty() ? row.getGherkinSource() : null,
+                ImportedFromView.of(row),
                 steps,
                 conditions.preconditions(),
                 conditions.postconditions(),

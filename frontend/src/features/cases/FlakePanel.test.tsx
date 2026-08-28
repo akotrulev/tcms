@@ -77,6 +77,7 @@ function caseBody(flake: CaseFlake | null): TestCase {
     automationKey: null,
     notAutomatableReason: null,
     gherkinSource: null,
+    importedFrom: null,
     steps: [],
     preconditions: [],
     postconditions: [],

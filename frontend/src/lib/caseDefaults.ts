@@ -16,14 +16,18 @@ import type { AutomationStatus, Priority, StepFormat } from '../api/types';
  * ## Why these three values
  *
  * `MEDIUM` and `MANUAL` are the neutral member of their enum: neither claims anything about the case
- * that the author did not. `STRUCTURED` is the neutral one for a different reason — `GHERKIN` is
- * refused without a scenario body (`CaseEdit.validate`), so a default of `GHERKIN` would be a case
- * that cannot be written at all, where `STRUCTURED` is one whose steps are still to come.
+ * that the author did not. `STRUCTURED` is the neutral one for a reason that CHANGED in §255 and
+ * still holds: ~~`GHERKIN` is refused without a scenario body, so a default of `GHERKIN` would be a
+ * case that cannot be written at all~~ → **`stepFormat` is a lens over one set of rows now**, and
+ * `GHERKIN` is refused with a keyword-less row instead. So the default is still the permissive one
+ * — a structured row needs no keyword — and it is now a *presentation* choice rather than a choice
+ * about which storage the case uses. Either default produces a writable case; this one produces a
+ * case the author is not asked a Gherkin question about before they have written a step.
  *
  * ## What this does NOT make legal, and it is deliberately not hidden here
  *
  * The four fields the contract lists as `required` are exactly the four `CaseEdit.validate` refuses
- * unconditionally. It refuses **more** conditionally — a `STRUCTURED` case with no steps among them —
+ * unconditionally. It refuses **more** conditionally — a case with no steps among them —
  * and §144 decided those stay off the contract rather than being spelled with a four-way `oneOf`.
  * So a payload built from a title plus these three is everything the *contract* can ask for and one
  * server rule short of a case: see §199 for the decision that is still open about a case authored

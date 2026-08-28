@@ -35,8 +35,8 @@ export class TcmsApiError extends Error {
   readonly type: string | null;
   /**
    * RFC-7807 `errors` — field name to the messages it failed on, present only on a validation
-   * rejection. Keys are spelled as on the input schema (`gherkinSource`), which is what lets a
-   * CLI print `gherkinSource: must not be blank` against the flag the user typed.
+   * rejection. Keys are spelled as on the input schema (`automationKey`), which is what lets a
+   * CLI print `automationKey: must not be blank` against the flag the user typed.
    */
   readonly fieldErrors: Record<string, string[]> | null;
   readonly correlationId: string | null;

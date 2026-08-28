@@ -78,9 +78,22 @@ cp .env.example .env         # required: compose fails fast rather than defaulti
 docker compose up --build    # http://localhost:8080/actuator/health
 docker compose down -v       # -v also drops the volume, so initdb re-runs the role script
 
-# The operator CLI is the same image
+# The operator CLI is the same image — five verbs; `migrate-gherkin-source` is §255's
 docker compose run --rm backend provision-company --slug=acme --name="Acme" \
   --admin-email=ops@acme.test --admin-name="A. Admin"
+docker compose run --rm backend migrate-gherkin-source --slug=acme \
+  --actor=ops@acme.test --dry-run
+                             # gives every pre-§255 Gherkin case the step rows it should have had,
+                             # minting a version per case. SAFE TO RE-RUN; `gherkin_source` is NOT
+                             # cleared — it is the proof the migration was faithful, and initiative
+                             # `002-` drops the column once every instance reports nothing left on
+                             # it. Exit 3 = finished, some cases still on the blob (each listed with
+                             # its line). `--actor` must be able to SEE every project being
+                             # migrated, not merely be a member: the version snapshot records the
+                             # case's classification. Usage text on `MigrateGherkinSourceCommand`
+                             # — which lives in `com.tcms`, the composition root, NOT in
+                             # `com.tcms.provisioning` like the other four (§255 D11; the edge it
+                             # would need is refused by two architecture rules).
 ```
 
 There is no mock API. `npm run dev` proxies `/api` to `localhost:8080` and **requires

@@ -42,6 +42,15 @@ export const keys = {
   caseHistory: (p: string, id: string, scope: string) =>
     ['projects', p, 'cases', id, 'history', scope] as const,
   /**
+   * The case rendered as canonical `.feature` text (§255).
+   *
+   * Under `keys.case`'s prefix for `caseDraft`'s reason and with the same consequence, wanted here
+   * too: a save invalidates `['projects', p, 'cases']`, so the text a reader opened before an edit
+   * cannot survive the edit. A key outside that prefix would serve the previous version's scenario
+   * from cache with nothing on screen saying so.
+   */
+  caseFeature: (p: string, id: string) => ['projects', p, 'cases', id, 'feature'] as const,
+  /**
    * The case's buffered autosave draft (§128).
    *
    * Under `keys.case`'s prefix like the two above, which is what a reader would expect — and it

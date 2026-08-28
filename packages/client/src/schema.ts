@@ -2134,9 +2134,9 @@ export interface paths {
          *     gapless history. Cases that predate this endpoint have no v1 and their first edit is v2; see
          *     `EntityVersion`.
          *
-         *     **A case may be created before its procedure is written.** `steps` for a `STRUCTURED` case
-         *     and `gherkinSource` for a `GHERKIN` one are required by `PATCH` and **not** by this
-         *     operation, which is the one rule where creating is more permissive than editing. It exists
+         *     **A case may be created before its procedure is written.** `steps` is required by `PATCH`
+         *     of a case that already has some and **not** by this operation, which is the one rule where
+         *     creating is more permissive than editing. It exists
          *     because a plan's Test cases tab authors a case from a title alone, where the alternatives
          *     were refusing the save or inventing a step nobody wrote. What you get back is a `DRAFT`
          *     stub; `caseHealth.signals` reports `INCOMPLETE` only once such a case is **approved**, since
@@ -2256,6 +2256,47 @@ export interface paths {
                 404: components["responses"]["NotFound"];
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/cases/parse-gherkin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read pasted Gherkin text as step rows
+         * @description **Pure. Nothing is created, nothing is stored, and the same text may be posted any
+         *     number of times.** It is a `POST` only because the payload is a scenario — multi-line,
+         *     up to 256 KiB, and the author's own text — and a query string cannot carry that past a
+         *     proxy with an opinion about URL length.
+         *
+         *     Takes the **read** gate and no write permission, since it writes nothing: a caller with
+         *     no grant on the project gets the same bodiless `404` every other read here answers.
+         *
+         *     Three shapes are accepted. A bare step list and a lone `Scenario:` block are not Gherkin
+         *     documents — the server wraps them in a nameless `Feature:` (and `Scenario:`) of the
+         *     declared dialect rather than refusing text a person would call a scenario. A
+         *     `# language:` header is honoured; the render on the other side is always English.
+         *
+         *     A `# expected:` or `# data:` comment following a step fills that step's
+         *     `expectedResult` / `testData`. That is not decoration: those two fields have no Gherkin
+         *     syntax, and reading the comments back is what makes `GET .../feature` a lossless view
+         *     rather than a lossy export.
+         *
+         *     A `Background:` comes back as **one `background[]` entry per Background step** and
+         *     **nothing is created** — see `GherkinParseResult.background`.
+         */
+        post: operations["parseGherkin"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2403,10 +2444,10 @@ export interface paths {
          *     **refused with a 400 when they would change something** and accepted when they echo what the
          *     `GET` served (B2), so a round-trip no longer has to know to drop the two fields it just read.
          *
-         *     **This is where the procedure is required**, with the exception B2 added: a `STRUCTURED` case
-         *     that *has* steps must keep at least one, and a `GHERKIN` one must keep its `gherkinSource` —
-         *     so `steps: []` on a written case is refused, which is the body that was ever really a
-         *     mistake. A **stub** created by `POST` with no procedure at all can be saved as it is, so
+         *     **This is where the procedure is required**, with the exception B2 added: a case that
+         *     *has* steps must keep at least one — in either lens since §255, which is where the second
+         *     spelling of a procedure stopped existing — so `steps: []` on a written case is refused,
+         *     which is the body that was ever really a mistake. A **stub** created by `POST` with no procedure at all can be saved as it is, so
          *     reading one back and `PATCH`ing it unchanged is a no-op rather than a `400` about steps
          *     nobody has written yet. The SPA's editor still requires a procedure before it will save, in
          *     its own schema, where the author is looking at the field.
@@ -2924,6 +2965,60 @@ export interface paths {
          *     a corrupt file.
          */
         get: operations["downloadCaseFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/cases/{caseId}/feature": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The case as canonical `.feature` text
+         * @description The inverse of `POST .../cases/parse-gherkin`, and `parse . render . parse` is identity
+         *     on the rows. **Text, not JSON**: the body is the artifact a tester copies into a
+         *     Cucumber suite, and a JSON string of escaped newlines is one nobody can paste. Served
+         *     `inline` under the case's own key (`Content-Disposition: inline; filename="TC-12.feature"`).
+         *
+         *     What it renders, in order — `@tag` lines from the case's automation tags, then
+         *     `Feature: <suite name, or the case key when unfiled>`; a `Background:` from **every**
+         *     attached `PRE` condition in position order, one or more lines each; `Scenario: <title>`
+         *     with the objective as its description; one line per step (`<Keyword> <action>`, and `*`
+         *     for a step with no keyword), a doc string as a triple-quoted block and a data table as
+         *     `|`-rows with cells escaped per the Gherkin spec; `expectedResult` and `testData` as
+         *     following `# expected:` / `# data:` comment lines.
+         *
+         *     `POST` conditions have no Gherkin construct, so they render as a trailing
+         *     `# postconditions:` comment block. The parser reads them back as **nothing**,
+         *     deliberately: they are not steps and must not return as rows.
+         *
+         *     **A `STRUCTURED` case renders too, so there is no `409`.** Numbered steps are a scenario
+         *     whose steps have no keyword, and `*` is Gherkin's spelling for exactly that; refusing
+         *     would make the action present on some cases and an error on others for a reason the
+         *     author never chose.
+         *
+         *     A case with **zero step rows and a stored `gherkinSource`** renders that blob verbatim —
+         *     the population `migrate-gherkin-source` has not reached yet. This endpoint is therefore
+         *     never empty for a legacy case.
+         */
+        get: operations["renderCaseAsFeature"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3877,6 +3972,63 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/feature-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import `.feature` files as suites, preconditions and cases
+         * @description Plans — and in `APPLY`, executes — the mapping of a folder of Cucumber `.feature` files
+         *     onto this project: **a suite per `Feature:`**, **one library `PRE` condition per distinct
+         *     `Background:` step**, and **a case per `Scenario:`** keyed
+         *     `automationKey = "<Feature>#<Scenario>"` so the next Cucumber report a CI job posts
+         *     matches it.
+         *
+         *     **`PREVIEW` and `APPLY` answer the identical shape.** `applied` is the only field that
+         *     differs on a clean run, plus the `caseKey` of the rows that created a case. `APPLY`
+         *     recomputes the plan inside its own transaction, so what the caller approved is what runs
+         *     — a case created by somebody else between the two calls turns a `CREATE` row into a
+         *     `SKIP` rather than into a constraint violation.
+         *
+         *     **`case:read` on a visible project is what it takes to call this.** Everything else is
+         *     decided **per row**: `CREATE` needs `case:create` (plus `suite:manage` when its suite is
+         *     `CREATE`, plus `library:manage` when its feature has a `Background:`), `UPDATE` needs
+         *     `case:edit`. A row the caller cannot perform is `REFUSE` with the key named — never a
+         *     `403`, because a request that 403s tells a test engineer nothing about which of their
+         *     forty files they could import if somebody granted them one key.
+         *
+         *     **No `Idempotency-Key`, by determinism.** A replay finds every scenario by
+         *     `automationKey` and every condition by its Background-step hash, answers `SKIP` /
+         *     `UNCHANGED`, and writes nothing. A case whose stored `imported_source` still equals the
+         *     file's scenario text is `SKIP "unchanged since import"` and mints no version; a case
+         *     edited **in TCMS** since import is still rewritten from the file.
+         *
+         *     **What an `UPDATE` does not touch:** `lifecycleStatus`, `priority`, `severity`,
+         *     classification, every `POST` condition, and every `PRE` condition a human attached.
+         *     Step **ids are preserved** — each submitted step claims the first unclaimed stored row
+         *     with the same `(keyword, action)` — so the evidence and verdicts of past runs stay on
+         *     their steps. An `APPROVED` or `DEPRECATED` case is skipped outright.
+         *
+         *     **Orphans are listed and never touched.** A case filed in a target suite whose
+         *     `automationKey` these files do not name is reported so a human can decide whether it was
+         *     renamed or retired.
+         *
+         *     One transaction for the whole `APPLY`: nothing is half-imported.
+         */
+        post: operations["importFeatureFiles"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9636,8 +9788,8 @@ export interface components {
              *     `@tcms/mcp` hands the same lines to a model that cannot see a screen. A value that is
              *     a datum rather than a sentence — a bare count — is meaningless to two of the three.
              *
-             *     The key is the field's name **as it appears on the input schema** (`gherkinSource`, not
-             *     `gherkin_source` or `caseInput.gherkinSource`) wherever the refusal is about a field the
+             *     The key is the field's name **as it appears on the input schema** (`expectedOutcome`,
+             *     not `expected_outcome` or `caseInput.expectedOutcome`) wherever the refusal is about a field the
              *     caller sent, because the SPA maps it straight onto a form input: a key that does not
              *     match a field name lands the message nowhere and the form reports a failure with
              *     nothing highlighted.
@@ -10023,6 +10175,31 @@ export interface components {
         Priority: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
         /** @enum {string} */
         StepFormat: "STRUCTURED" | "GHERKIN";
+        /**
+         * @description The `.feature` file a case was imported from, and the line its `Scenario:` keyword sat on.
+         *     **Provenance, not a locator** — the file lives in somebody's automation repository and this
+         *     instance never had it, so nothing resolves this to content. It is what lets a reader answer
+         *     "why does this case say that" without guessing.
+         */
+        ImportedFrom: {
+            path: string;
+            line: number;
+        };
+        /**
+         * @description The Gherkin keyword on one step. **Nullable wherever it appears, and the null is the
+         *     format**: a structured step has no keyword because Given/When/Then means nothing about a
+         *     numbered action, so the absence is a fact rather than a value somebody forgot.
+         *
+         *     Extracted as a named schema by §255 because three shapes now reference it — `TestStep`,
+         *     `TestStepInput` and the catalogue `packages/client` renders its help from. It was inlined
+         *     on `TestStep` and spelled as a bare `string` on `TestStepInput`, which is the asymmetry
+         *     that let a client send `Givne` and discover it at the database's check constraint.
+         *
+         *     `AND` and `BUT` are members rather than folded into the preceding keyword: they are what an
+         *     author wrote and what a `.feature` render has to reproduce.
+         * @enum {string}
+         */
+        StepKeyword: "GIVEN" | "WHEN" | "THEN" | "AND" | "BUT";
         /**
          * @description The fixed aggregation class behind a project's own status names, so a report can roll up a
          *     project that renamed "Blocked" to "Environment down" without knowing any of their names.
@@ -10550,7 +10727,27 @@ export interface components {
              */
             automationKey: string | null;
             notAutomatableReason: string | null;
+            /**
+             * @deprecated
+             * @description **Served only for a case that has no step rows yet** — one authored before §255,
+             *     whose scenario has not been migrated into `steps` by the operator's
+             *     `migrate-gherkin-source`. Null for every other case, including every `GHERKIN` one
+             *     authored since.
+             *
+             *     It is no longer written by any path: a scenario is step rows in both lenses now, and
+             *     `stepFormat` is a *lens* rather than a storage switch. **This field leaves the
+             *     contract in `002-`**, once the backfill has run on every instance; until then it is
+             *     what a not-yet-migrated case renders from, and the SPA shows it read-only with a
+             *     note naming the command.
+             */
             gherkinSource: string | null;
+            /**
+             * @description Where this case came from, when it came from a `.feature` file — provenance only,
+             *     never a link that resolves to anything this instance holds. **Null for every case
+             *     nobody imported**, which today is all of them: the columns exist from `V69` and the
+             *     writer arrives with the import endpoint.
+             */
+            importedFrom: components["schemas"]["ImportedFrom"] | null;
             steps: components["schemas"]["TestStep"][];
             preconditions: components["schemas"]["CaseConditionRef"][];
             postconditions: components["schemas"]["CaseConditionRef"][];
@@ -10642,7 +10839,6 @@ export interface components {
             objective?: string | null;
             expectedOutcome?: string | null;
             stepFormat: components["schemas"]["StepFormat"];
-            gherkinSource?: string | null;
             priority: components["schemas"]["Priority"];
             severity?: components["schemas"]["Priority"];
             automationStatus: components["schemas"]["AutomationStatus"];
@@ -10738,19 +10934,315 @@ export interface components {
              */
             id: string;
             position: number;
-            /** @enum {string|null} */
-            keyword?: "GIVEN" | "WHEN" | "THEN" | "AND" | "BUT" | null;
+            keyword: components["schemas"]["StepKeyword"] | null;
             action: string;
-            testData?: string | null;
-            expectedResult?: string | null;
+            testData: string | null;
+            expectedResult: string | null;
+            /**
+             * @description Gherkin's `"""` block argument — a multi-line string hanging off this one step.
+             *     `test_step.docstring` has existed since `V1` and had no field to be served on until
+             *     §255, which is why a `.feature` round trip could not be lossless before it.
+             */
+            docString: string | null;
+            /**
+             * @description Gherkin's `|` table argument, as rows of cells — `[["name","qty"],["widget","2"]]`.
+             *     The first row is a header only by convention; nothing here treats it as one.
+             *
+             *     **Rows may be ragged.** The contract does not require a rectangle and the parser does
+             *     not produce a non-rectangular table, so a consumer that indexes blindly across rows is
+             *     the thing that breaks, not the data.
+             *
+             *     **At most one of `testData`, `docString` and `dataTable` is non-null** — one step, one
+             *     data spelling. `ck_test_step_one_data` is the backstop; the field error is the answer a
+             *     caller actually gets.
+             */
+            dataTable: string[][] | null;
         };
         TestStepInput: {
             /** Format: uuid */
             id?: string | null;
-            keyword?: string | null;
+            /**
+             * @description Required by the server in the `GHERKIN` lens and optional in `STRUCTURED` — a
+             *     conditional this schema cannot state, so it is stated here and enforced in
+             *     `CaseEdit.validate` (400 keyed on `steps`). The first step of a `GHERKIN` case may not
+             *     be `AND` or `BUT`: a continuation with nothing to continue.
+             */
+            keyword?: components["schemas"]["StepKeyword"] | null;
             action: string;
             testData?: string | null;
             expectedResult?: string | null;
+            /** @description At most 64 KiB. A block argument larger than that is a file, not a step. */
+            docString?: string | null;
+            /**
+             * @description At most 200 rows of at most 50 cells, each cell at most 4 KiB. An **empty outer array
+             *     is refused**: `[]` is not a table, and sending it rather than `null` is how a client
+             *     stores a step that renders an empty grid nobody can remove.
+             *
+             *     At most one of `testData`, `docString` and `dataTable` may be non-null.
+             */
+            dataTable?: string[][] | null;
+        };
+        /**
+         * @description What `POST .../cases/parse-gherkin` read out of the pasted text. **Every value is a
+         *     suggestion the author still has to save** — this response is not a case and creates
+         *     nothing.
+         */
+        GherkinParseResult: {
+            /**
+             * @description The `Scenario:` name, or `null` when the text starts at a step. Null rather than a
+             *     derived value: a bare step list is an accepted paste, and inventing a title for one
+             *     would put a value in the editor's title field that nobody typed.
+             */
+            title: string | null;
+            /** @description The free text under `Scenario:`, with its file indentation removed. */
+            objective: string | null;
+            /**
+             * @description Feature tags then scenario tags, merged in that order, each **without** its `@` and
+             *     deduplicated. Merged because a case has one tag list: the file's two levels are a
+             *     property of the file, and the distinction has nothing on this side to land on.
+             */
+            tags: string[];
+            /**
+             * @description **One entry per `Background` step**, in order — not one entry for the whole block.
+             *     A Background is N preconditions in this product's model (amendment AM1), and
+             *     collapsing them into a single condition would make "reset the payment data" and
+             *     "sign in as admin" one library entry no other case can reuse half of. Empty when
+             *     there is no `Background:`.
+             *
+             *     **Nothing is created.** The SPA offers each entry as *Create precondition and
+             *     attach* through `POST /projects/{projectId}/conditions`, which needs
+             *     `library:manage` — disabled with the reason when it is not held, never hidden.
+             */
+            background: components["schemas"]["ParsedBackground"][];
+            /**
+             * @description The scenario's steps, `id` null on every one, ready to be sent to the case write as
+             *     they stand. `keyword` is set on every row except a `*` step, where `null` is the
+             *     format rather than a missing value.
+             */
+            steps: components["schemas"]["TestStepInput"][];
+        };
+        /** @description One `Background` step, shaped as the `ConditionInput` it would become. */
+        ParsedBackground: {
+            /** @description The step line with its keyword — what the library entry would be called. */
+            title: string;
+            /**
+             * @description The step line plus its block-argument lines. The first entry repeats `title` on
+             *     purpose: `Condition.body` is the ordered text a tester reads, and a body that
+             *     omitted the step itself would show them only its attachments.
+             */
+            body: string[];
+        };
+        /**
+         * @description A folder of `.feature` files and what to do with the scenarios in them.
+         *
+         *     **Text, not an upload.** The server wants the scenarios and the caller's own relative
+         *     path beside each one; a `multipart` part carries a filename, not a path, so
+         *     `features/orders/cancel.feature` would arrive as `cancel.feature` and the provenance
+         *     recorded against every case would be something nobody can find.
+         */
+        FeatureImportRequest: {
+            /**
+             * @description 1–200 files, at most 1 MiB each and 8 MiB in total, `path` unique within the
+             *     request. A request holding more than 500 scenarios is refused on this field — the
+             *     same cap `POST /cases/bulk` uses, applied to the unit this endpoint writes.
+             */
+            files: components["schemas"]["FeatureFile"][];
+            /**
+             * Format: uuid
+             * @description When set, **every** scenario files into this suite and no suite is matched or
+             *     created — the escape hatch for a repository whose feature names do not match the
+             *     tree. Must be a live suite of this project.
+             */
+            suiteId?: string | null;
+            /**
+             * @description What an existing case does to the row that would have written it. `SKIP` leaves it
+             *     exactly as it is; `UPDATE` rewrites it from the file, keeping step ids, lifecycle,
+             *     priority, severity, classification, `POST` conditions and human-attached `PRE` ones.
+             * @enum {string}
+             */
+            onExisting: "SKIP" | "UPDATE";
+            /**
+             * @description `PREVIEW` plans and writes nothing. `APPLY` plans and executes, in one transaction.
+             * @enum {string}
+             */
+            mode: "PREVIEW" | "APPLY";
+        };
+        /** @description One file's path and text. */
+        FeatureFile: {
+            /**
+             * @description Provenance only, stored on every case this file writes. **Nothing resolves it to
+             *     content**: the file lives in somebody's automation repository and this instance
+             *     never held it.
+             */
+            path: string;
+            /** @description The file verbatim, as UTF-8 text. At most 1 MiB. */
+            content: string;
+        };
+        /**
+         * @description What an import would do, or what it just did. **The same shape in both modes** — which
+         *     is what lets one screen render a preview and a result, and what makes the preview
+         *     trustworthy: `APPLY` recomputes this from the same code inside its transaction.
+         */
+        FeatureImportPlan: {
+            /**
+             * @description Echoes the request.
+             * @enum {string}
+             */
+            mode: "PREVIEW" | "APPLY";
+            /**
+             * @description `false` for `PREVIEW`; `true` once the `APPLY` transaction has committed the writes
+             *     described below. On a clean run this and the `caseKey`s are the only fields that
+             *     differ between the two answers.
+             */
+            applied: boolean;
+            /**
+             * @description One row per scenario, ordered by file order and then by line — plus one row per file
+             *     that did not parse, with `scenario` null. Deterministic, so a client renders it
+             *     without paging.
+             */
+            scenarios: components["schemas"]["ImportRow"][];
+            /**
+             * @description One entry per distinct `Feature:` name. **Empty when the request named a `suiteId`**:
+             *     nothing is matched and nothing is created, because the caller already answered the
+             *     question this section exists to answer.
+             */
+            suites: components["schemas"]["SuiteAction"][];
+            /**
+             * @description One entry per **distinct `Background:` step** across the whole request (amendment
+             *     AM1) — the same step text in two feature files is one library entry for the project.
+             */
+            conditions: components["schemas"]["ConditionAction"][];
+            /**
+             * @description Cases filed in the target suites whose `automationKey` these files do not name.
+             *     **Listed, never touched.** Whether a missing scenario is a rename or a retirement is
+             *     a question only a human can answer, and deleting the case would destroy the runs it
+             *     appears in on the strength of a file somebody edited.
+             */
+            orphans: components["schemas"]["Orphan"][];
+            totals: components["schemas"]["ImportTotals"];
+        };
+        /** @description One scenario's verdict — every property present, nullable where it does not apply. */
+        ImportRow: {
+            /** @description The file the caller supplied it in. */
+            path: string;
+            /**
+             * @description 1-based line of the `Scenario:` keyword. Null for a whole-file refusal, where there
+             *     is no scenario to point at.
+             */
+            line: number | null;
+            /** @description The `Feature:` name, or null when the file did not parse. */
+            feature: string | null;
+            /** @description The `Scenario:` name, or null for a whole-file refusal. */
+            scenario: string | null;
+            /**
+             * @description `"<Feature>#<Scenario>"` — the string a Cucumber report's own scenario resolves to,
+             *     spelled once on the server and never twice.
+             */
+            automationKey: string | null;
+            /**
+             * @description `REFUSE` is a **row**, never a status code: one `Scenario Outline` in a folder of
+             *     forty files refuses that scenario and imports the rest.
+             * @enum {string}
+             */
+            action: "CREATE" | "UPDATE" | "SKIP" | "REFUSE";
+            /**
+             * @description One of a fixed set of sentences, or null when the action needs no explanation.
+             *     **Clients may match on these strings** — they are the stability a `type` slug
+             *     carries on an error, on an outcome that is not one:
+             *
+             *     - the parser's own `"Line n, column m: …"`
+             *     - `"Feature has no name"`
+             *     - `"Scenario Outline is not supported yet"`
+             *     - `"exists (SKIP)"`
+             *     - `"unchanged since import"`
+             *     - `"approved — not touched by UPDATE"` / `"deprecated — not touched by UPDATE"`
+             *     - `"automationKey already used by TC-412 in project PAY"`
+             *     - `"two suites are named 'Orders' (TS-3, TS-9) — pass suiteId"`
+             *     - `"needs case:create"` / `"needs case:edit"` /
+             *       `"needs suite:manage for suite 'Orders'"` / `"needs library:manage for the Background"`
+             */
+            reason: string | null;
+            /**
+             * @description `TC-n`. Present in **both** modes for a row naming an existing case; filled after
+             *     `APPLY` for a row that created one.
+             */
+            caseKey: string | null;
+            /**
+             * @description The titles of the `PRE` conditions this case carries after the row is applied, in
+             *     position order: the import-owned ones from the `Background:` first, then (on
+             *     `UPDATE`) the case's existing human-attached ones. Empty for a feature with no
+             *     `Background:`. **Read off the plan, not off the library**, so a preview names the
+             *     conditions a clean import is going to create.
+             */
+            preconditions: string[];
+        };
+        /** @description What happens to the suite one `Feature:` maps to. */
+        SuiteAction: {
+            /** @description The `Feature:` name. */
+            name: string;
+            /** @enum {string} */
+            action: "CREATE" | "REUSE" | "REFUSE";
+            /**
+             * Format: uuid
+             * @description The matched suite, or the created one once `APPLY` has written it. Null on `REFUSE`,
+             *     and null on a `CREATE` that has only been previewed.
+             */
+            suiteId?: string | null;
+            /**
+             * @description `"two suites are named 'Orders' (TS-3, TS-9) — pass suiteId"` when the name is
+             *     ambiguous, or `"needs suite:manage for suite 'Orders'"`.
+             */
+            reason?: string | null;
+        };
+        /**
+         * @description What happens to the library entry for one `Background:` step. **`UNCHANGED` is the
+         *     common answer on a re-import** and it is the point of hashing the step text: the key
+         *     finds the row, nothing is written, and the attachment order is the file's.
+         */
+        ConditionAction: {
+            /**
+             * @description `"bg:"` plus the first 16 hex characters of SHA-256 over the normalised step —
+             *     keyword, text and block lines, whitespace collapsed. **A text hash, not a positional
+             *     key**, so a reordered or partly rewritten `Background:` re-mints nothing.
+             */
+            importedKey: string;
+            /**
+             * @description The step line with its keyword, truncated to 150 characters if longer — the body
+             *     keeps the step whole, and the row then carries the truncation reason.
+             */
+            title: string;
+            /**
+             * @description `UPDATE` happens only when the truncated title changed; a hash key means the body
+             *     cannot have.
+             * @enum {string}
+             */
+            action: "CREATE" | "UPDATE" | "UNCHANGED" | "REFUSE";
+            /**
+             * Format: uuid
+             * @description The existing entry, or the created one once `APPLY` has written it.
+             */
+            conditionId?: string | null;
+            /**
+             * @description `"title truncated to 150 characters"` — the scenario row proceeds regardless — or
+             *     `"needs library:manage for the Background"`, which refuses every scenario row of
+             *     that feature.
+             */
+            reason?: string | null;
+        };
+        /**
+         * @description A keyed case filed in a target suite that these files do not name. Reported so a human
+         *     can decide; never modified.
+         */
+        Orphan: {
+            caseKey: string;
+            automationKey: string;
+        };
+        /** @description One count per `ImportRow.action`, so a client says "12 create, 3 update" without re-tallying. */
+        ImportTotals: {
+            create: number;
+            update: number;
+            skip: number;
+            refuse: number;
         };
         StepSuggestion: {
             action: string;
@@ -12230,10 +12722,19 @@ export interface components {
             /** Format: uuid */
             stepId: string;
             position: number;
-            keyword: string | null;
+            keyword: components["schemas"]["StepKeyword"] | null;
             action: string;
             testData: string | null;
             expectedResult: string | null;
+            /**
+             * @description From the **pinned snapshot**, like every other authored field here. A version written
+             *     before §255 has no such key and reads as null — which is correct: that version did not
+             *     record one, and inventing today's value would put text on a checklist the tester's
+             *     version never said.
+             */
+            docString: string | null;
+            /** @description As `docString` — pinned, and null in a snapshot written before §255. */
+            dataTable: string[][] | null;
             /** Format: uuid */
             statusId: string | null;
             comment: string | null;
@@ -15372,6 +15873,85 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    parseGherkin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /** @description The scenario. At most 256 KiB of UTF-8. */
+        requestBody: {
+            content: {
+                "text/plain": string;
+            };
+        };
+        responses: {
+            /** @description The rows the text would become */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GherkinParseResult"];
+                };
+            };
+            /**
+             * @description The text will not parse, and **which of the four it is is the `type`** — the only
+             *     operation in this API whose `type` is not `about:blank`, because these four are the
+             *     refusals a machine client has to tell apart and the remedy differs per reason:
+             *
+             *     | `type` | Means | `errors.text` |
+             *     |---|---|---|
+             *     | `gherkin-syntax` | the parser refused a line | `Line 4, column 3: …`, the parser's own wording after its line and column |
+             *     | `gherkin-outline` | a `Scenario Outline` | `Line 12: Scenario Outline is not supported yet — expand the examples into separate scenarios` |
+             *     | `gherkin-many-scenarios` | more than one `Scenario:` | `This text holds 3 scenarios; paste one, or import the file` |
+             *     | `gherkin-empty` | nothing that parses as a step | `No steps found` |
+             *
+             *     The key is `text`, which is what the paste dialog's textarea is bound to.
+             *     **A parse failure is never a `500`**: the text comes from a person, and being
+             *     unparseable is the ordinary case rather than a fault.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description Over 256 KiB of UTF-8. Refused by the handler rather than by the container: the
+             *     servlet limit bounds form bodies only, so a large paste would otherwise be read in
+             *     full and parsed. `type` is `payload-too-large`.
+             */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description The `Content-Type` is not `text/plain`. Written by the container before any handler
+             *     is chosen, so it carries the ordinary `about:blank` type rather than a slug of its
+             *     own.
+             */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     setCaseStatus: {
         parameters: {
             query?: never;
@@ -15546,6 +16126,81 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    renderCaseAsFeature: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /**
+                 * @description UUID only. Display keys (TC-1) are deliberately NOT accepted here: they are
+                 *     sequential per company and therefore trivially guessable, so allowing one as a
+                 *     path identifier hands out an enumeration oracle (plan §6t). Resolve a key the
+                 *     user typed or pasted through the search endpoint, which returns not-found —
+                 *     never forbidden — for a key in a project the caller cannot reach.
+                 */
+                caseId: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The case, as `.feature` text */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    importFeatureFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeatureImportRequest"];
+            };
+        };
+        responses: {
+            /** @description The plan — in `PREVIEW` what would happen, in `APPLY` what did */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeatureImportPlan"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description A concurrent writer took an `automationKey` or a Background-step key while this
+             *     import ran. **The whole request is rolled back**; `type` is
+             *     `duplicate-automation-key` or `duplicate-imported-key`, because the remedy differs —
+             *     the first needs the plan re-read, the second is a plain retry.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     deletePlan: {

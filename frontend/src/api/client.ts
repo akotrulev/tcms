@@ -173,6 +173,15 @@ interface RequestOptions {
    * every retry of that intent, so the server can dedupe rather than create a second record.
    */
   idempotencyKey?: string;
+  /**
+   * How the success body is read. `json` unless the operation's success body is a **document**.
+   *
+   * Set by the verb, not by the caller: `getText` is the only thing that passes `'text'`, because
+   * the media type is a property of the endpoint rather than of the call. Reading a `text/plain`
+   * body with `res.json()` throws a `SyntaxError` at the transport layer, which surfaces three
+   * layers up as a region that failed to load for no stated reason.
+   */
+  responseType?: 'json' | 'text';
 }
 
 async function request<T>(path: string, init: RequestInit = {}, options: RequestOptions = {}): Promise<T> {
@@ -242,7 +251,7 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
     );
   }
 
-  return res.json() as Promise<T>;
+  return (options.responseType === 'text' ? res.text() : res.json()) as Promise<T>;
 }
 
 /** Serializes filter objects to a query string, dropping empties and expanding arrays. */
@@ -277,6 +286,34 @@ export const api = {
   put: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(body ?? {}) }, options),
   del: <T>(path: string, options?: RequestOptions) => request<T>(path, { method: 'DELETE' }, options),
+  /**
+   * A POST whose **request** is a document and whose response is ordinary JSON — today only
+   * `POST .../cases/parse-gherkin`, which takes a pasted scenario as `text/plain`.
+   *
+   * Separate from `post` rather than a body-type branch inside it, for `upload`'s reason: the two
+   * differ in what they serialize. `post` sends `JSON.stringify(body ?? {})`, which would put a
+   * quoted string with escaped newlines on the wire and answer 400 against a handler bound to a
+   * raw body. The `Content-Type` is set on the `RequestInit` rather than through `options.headers`
+   * so a caller cannot forget it — the endpoint refuses any other type with a 415.
+   */
+  postText: <T>(path: string, text: string, options?: RequestOptions) =>
+    request<T>(
+      path,
+      { method: 'POST', body: text, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
+      options,
+    ),
+  /**
+   * A GET whose **success body is a document** — today only `GET .../cases/{caseId}/feature`.
+   *
+   * The body is the artifact a tester pastes into a Cucumber suite, so it is served as
+   * `text/plain` and there is no JSON schema to type it against; the return is `string` and that
+   * is the whole of what the contract promises. It still goes through `request`, so the timeout
+   * budget, the bearer token and the dev fault seam all apply — a hand-rolled `fetch` at the call
+   * site would have none of the three, which is the shape `fetchArtifact` below exists to avoid
+   * for the same reason.
+   */
+  getText: (path: string, options?: RequestOptions) =>
+    request<string>(path, {}, { ...options, responseType: 'text' }),
   /**
    * A `multipart/form-data` POST — today only evidence upload.
    *

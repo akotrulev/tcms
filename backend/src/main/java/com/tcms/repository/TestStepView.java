@@ -1,5 +1,6 @@
 package com.tcms.repository;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -19,6 +20,18 @@ import java.util.UUID;
  * @param testData nullable. Separate from {@link #action} because a step's data is what varies
  *                 between otherwise identical runs, and merging it into the prose is what makes a
  *                 case impossible to parameterize later.
+ * @param docString Gherkin's {@code """} block, nullable. <strong>At most one of
+ *                 {@link #testData}, this and {@link #dataTable} is non-null</strong> — one step,
+ *                 one data spelling.
+ * @param dataTable Gherkin's {@code |}-table as rows of cells, nullable. Rows may be ragged: the
+ *                 contract does not require a rectangle, so a reader that indexes blindly across
+ *                 rows is the thing that breaks.
+ *
+ *                 <p>This record IS the version snapshot's step shape — {@code CaseVersions}
+ *                 serializes {@link TestCaseDetailView} — so these two fields land in every
+ *                 version written from now on and reach the execution screen through
+ *                 {@code CaseFacts.PinnedStep}. A snapshot written before §255 has neither key and
+ *                 reads as null, which is correct: that version did not record one.
  */
 public record TestStepView(
         UUID id,
@@ -26,7 +39,9 @@ public record TestStepView(
         StepKeyword keyword,
         String action,
         String testData,
-        String expectedResult) {
+        String expectedResult,
+        String docString,
+        List<List<String>> dataTable) {
 
     static TestStepView of(TestStep step) {
         return new TestStepView(
@@ -35,6 +50,8 @@ public record TestStepView(
                 step.getKeyword(),
                 step.getAction(),
                 step.getTestData(),
-                step.getExpectedResult());
+                step.getExpectedResult(),
+                step.getDocstring(),
+                step.getDatatable());
     }
 }

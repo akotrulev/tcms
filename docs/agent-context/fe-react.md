@@ -2,7 +2,11 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-23 (**§252** — **the user guide: `/help`, eleven sections, and a role matrix READ FROM THE SERVER.** ✅ **GATES RUN AND GREEN ON `shanks` — frontend `1732 / 1732` across 129 files (was 1710/128: +22 arms, +1 file), `npm run build` clean, `npm run lint` **0 warnings and 0 errors on 360 files with 104 rules**. Packages `341` (130 client / 82 cli / 129 mcp) re-run and unchanged, because `citedFiles.test.ts` reads `frontend/src/**` and a stale path cited in a comment here reddens the PACKAGES job. Backend deliberately not run — nothing outside `frontend/src` changed.** v1 shipped with **no user documentation reachable from the product**: `docs/features.md`, the roles spec and `client-distribution.md` are authoritative and live in a repository the users of a self-hosted instance do not have. **THE RULE TO CARRY: a matrix the product already serves must be READ, never transcribed — and the page whose whole purpose is telling users the truth about their access is the worst possible place for the sixth copy.** This repo has hand-copied the permission matrix five times and `packages/client/src/test/matrixCopies.test.ts` exists because two of the copies drifted; a copy here would be the one nobody thinks to check, read by the people least able to notice it is wrong. `RoleMatrix` therefore takes its **columns from `GET /roles`** (via the existing `useRoles`) and its **rows from `lib/permissions.ts`** — the same catalogue `useCan` reads to phrase a disabled control's tooltip — so a grant moved between roles by a migration moves here **on the next page load, with no commit**, and an instance on an older seed shows *its* matrix. The arm that proves it feeds a response granting `Viewer` a permission the spec does **not** give it and asserts the cell renders as held: a copy could not do that. **IT IS NOT A SECOND `RoleReference`** — `features/admin/RoleReference.tsx` answers *"if I grant this person Test Lead, what have I just given them"* (one card per role, non-assignable roles DROPPED because it sits beside a Grant button that would refuse them); this answers *"who can do this, and who cannot"*, a comparison across roles, and deliberately **KEEPS** the credential-only roles because a reader wondering what their CI token or their agent can reach has nowhere else to look. Same source, two questions — and if a third view is ever wanted, ask which of these two it really is. **NO MARKDOWN RENDERER**, refused on two counts: ~40 kB of parser and sanitizer for content fixed at build time and never user-supplied, and it puts the copy outside TypeScript where a rename in `lib/permissions.ts` or a route change in `router.tsx` cannot reach it. Sections are TSX (`features/help/sections.tsx`) over seven thin primitives in `prose.tsx`; the chunk is **38.8 kB / 13.0 kB gzip** and is paid only by readers who open Help. **A SECTION PER URL, NOT ANCHORS** — eleven sections on one route is one render of the whole matrix for a reader who came to install the CLI, and a pasted link lands where it meant to; **`/help` redirects to `helpSections[0]`** rather than showing a contents page whose only content is links the sidebar already has, and an unknown `:sectionId` redirects too rather than reaching the not-found page. **Section ids are URLs and are PERMANENT** — retitle freely, never rename an id; a test pins uniqueness and the kebab shape. **UNGATED, and that is the decision**: a key invented for a help page would be seeded to nobody (`BoardService.teamBoard`'s argument), and this is the last screen that should hide from somebody what they are missing. **NOT IN THE RAIL** — every rail item is a place in the *product* and the grouping states whether the switcher changes it; Help sits with the session-level entries (user menu, beside Security) and in the footer. **The footer's `Documentation` link is a recorded condition SATISFIED, not waived**: `AppFooter` removed it as `href="#"` with the note *"they come back when they have somewhere to point"*, and it now points; **Contact support stays out** because its destination is still per-deployment configuration this repository does not know. Two findings recorded and NOT fixed: **`/projects/:projectId/run-schedules` is reachable only by typing the URL** — no rail entry and nothing links to it, grepped rather than assumed (§247 landed in a batch that ran no gates) — and **`packages/cli`'s help says "Settings → API tokens"** where the rail says **Company**. `packages/mcp/src/tools.ts`'s header still says *"the count is 21"*; counted from the built registry it is **23**. **Built and unverified** — browser rows `§252 H-1`…`H-8` recorded and not run; **no mutation rows, and that is not an omission**: one read, no writes. Gates: see above.)
+**Last verified:** 2026-08-28 (**§255 T7** — **the `.feature` import screen: one request, two modes, one rendering.** ✅ **GATED GREEN on `shanks` 2026-08-28 — `1833 / 1833` across 132 files, `npm run build` clean, `npm run lint` 0 warnings.** It took three fixes, and **two were real**: `@mui/icons-material/DeleteOutline` **does not exist** (the icon is `DeleteOutlineOutlined`, which every other import of it in this SPA already says), and **a step-suggestion pick wrote three sibling paths** (`steps.N.action/testData/expectedResult`) while the §255 data cell's `Controller` subscribes to `steps.N` — so the pick never reached the box, and worse, it left a row carrying two of the three mutually-exclusive data fields, which `V69`'s `num_nonnulls` check refuses. It is now one write to the object plus one to `expectedResult`, which is an uncontrolled `register` input and needs its own exact path. T4 (2026-08-27) is the block below this one and is where the frontend's D2 red was repaired; **T7 is the last code in the initiative** and adds `FeatureImportPage.tsx` and `featureFiles.ts`, `useFeatureImport`, three label maps, nine contract type aliases, two fixtures — and, outside its own feature directory, the **any-of** `PermissionGate` (`permission: PermissionKey | PermissionKey[]`, `Gate.canAny`/`reasonAny`), which every screen in the app shares. **THE RULE TO CARRY: a preview and the act it previews must be one rendering.** `PREVIEW` and `APPLY` answer the identical `FeatureImportPlan`, so nothing in `ImportPlanView` branches on `mode` — and the second rule beside it, **`REFUSE` is a row and never a status code**, is what makes Apply's enablement `totals.create + totals.update > 0` rather than a permission check. Read the §255 T7 section before touching anything on that screen, and the T4 section below it before touching a step. The whole initiative — T1–T7 — is **built, ungated and uncommitted**; `docs/plans/001-unified-step-model/delivery-plan.md` §2 is the status table and §7 the twenty rows of decisions and deviations (D0–D19).)
+
+**Superseded header below — T4's, kept because T7 changed nothing it records: the lens, the two new components and the text-media verbs are all still exactly as it describes them.** **Last verified:** 2026-08-27 (**§255 T4** — **one editor, one renderer: `stepFormat` is a LENS and no longer a switch between two storages.** ⚠️ **NO GATE WAS RUN — by standing directive. "Compiles by inspection, tests written."** The frontend has been red since T1 regenerated `schema.d.ts` (deviation D2 in `docs/plans/001-unified-step-model/delivery-plan.md`): `TestCaseInput` lost `gherkinSource`, `TestCase.importedFrom` and `TestStep.docString`/`dataTable` became required, and this task is where that is repaired. **THE RULE TO CARRY: a toggle between two representations of one thing may not delete the thing.** The old lens toggle mounted a `gherkinSource` textarea and `toCasePayload` sent `steps: []`, so switching a case to Gherkin and saving deleted every step row — and with them the ids every `step_result` anchors to — with a 200 and a success toast over it. The whole of the fix is that neither direction of the toggle now touches the list: `STRUCTURED → GHERKIN` only **fills** keywords (`prefilledKeywords`, idempotent, never overwrites), `GHERKIN → STRUCTURED` does nothing at all, and there is no diff dialog in either. **What is new on screen:** a keyword select per row (always in Gherkin, offered behind *Add keyword* in structured), `StepDataCell` — the one control for `testData | docString | dataTable`, whose **mode is derived from the values and never stored** — `PasteGherkinDialog` over `POST …/parse-gherkin` with a *Create precondition and attach* per **Background step** (AM1, disabled with the reason without `library:manage`), `StepsPanel` as the one renderer with `GherkinView` demoted to a zero-row *"Not yet migrated"* fallback, *View as .feature* over `GET …/{caseId}/feature`, the `importedFrom` chip, and the two block arguments on the execution checklist. **`api.postText` and `api.getText` are the first text-media verbs on the client** — `api.post` would JSON-quote a pasted scenario and answer 415, and `api.get` would hand `res.json()` a `.feature` file. Both go through `request`, so the timeout budget, the bearer token and the dev fault seam still apply. Four browser rows appended — `§255 US-1…US-4`, **written, not run**, and `US-4` says plainly that it needs a pre-T1 fixture no lane authors.)
+
+**Superseded header below — §252's, kept because §255 changed no decision it records: it touched no help page, no role matrix and no route.** **Last verified:** 2026-08-23 (**§252** — **the user guide: `/help`, eleven sections, and a role matrix READ FROM THE SERVER.** ✅ **GATES RUN AND GREEN ON `shanks` — frontend `1732 / 1732` across 129 files (was 1710/128: +22 arms, +1 file), `npm run build` clean, `npm run lint` **0 warnings and 0 errors on 360 files with 104 rules**. Packages `341` (130 client / 82 cli / 129 mcp) re-run and unchanged, because `citedFiles.test.ts` reads `frontend/src/**` and a stale path cited in a comment here reddens the PACKAGES job. Backend deliberately not run — nothing outside `frontend/src` changed.** v1 shipped with **no user documentation reachable from the product**: `docs/features.md`, the roles spec and `client-distribution.md` are authoritative and live in a repository the users of a self-hosted instance do not have. **THE RULE TO CARRY: a matrix the product already serves must be READ, never transcribed — and the page whose whole purpose is telling users the truth about their access is the worst possible place for the sixth copy.** This repo has hand-copied the permission matrix five times and `packages/client/src/test/matrixCopies.test.ts` exists because two of the copies drifted; a copy here would be the one nobody thinks to check, read by the people least able to notice it is wrong. `RoleMatrix` therefore takes its **columns from `GET /roles`** (via the existing `useRoles`) and its **rows from `lib/permissions.ts`** — the same catalogue `useCan` reads to phrase a disabled control's tooltip — so a grant moved between roles by a migration moves here **on the next page load, with no commit**, and an instance on an older seed shows *its* matrix. The arm that proves it feeds a response granting `Viewer` a permission the spec does **not** give it and asserts the cell renders as held: a copy could not do that. **IT IS NOT A SECOND `RoleReference`** — `features/admin/RoleReference.tsx` answers *"if I grant this person Test Lead, what have I just given them"* (one card per role, non-assignable roles DROPPED because it sits beside a Grant button that would refuse them); this answers *"who can do this, and who cannot"*, a comparison across roles, and deliberately **KEEPS** the credential-only roles because a reader wondering what their CI token or their agent can reach has nowhere else to look. Same source, two questions — and if a third view is ever wanted, ask which of these two it really is. **NO MARKDOWN RENDERER**, refused on two counts: ~40 kB of parser and sanitizer for content fixed at build time and never user-supplied, and it puts the copy outside TypeScript where a rename in `lib/permissions.ts` or a route change in `router.tsx` cannot reach it. Sections are TSX (`features/help/sections.tsx`) over seven thin primitives in `prose.tsx`; the chunk is **38.8 kB / 13.0 kB gzip** and is paid only by readers who open Help. **A SECTION PER URL, NOT ANCHORS** — eleven sections on one route is one render of the whole matrix for a reader who came to install the CLI, and a pasted link lands where it meant to; **`/help` redirects to `helpSections[0]`** rather than showing a contents page whose only content is links the sidebar already has, and an unknown `:sectionId` redirects too rather than reaching the not-found page. **Section ids are URLs and are PERMANENT** — retitle freely, never rename an id; a test pins uniqueness and the kebab shape. **UNGATED, and that is the decision**: a key invented for a help page would be seeded to nobody (`BoardService.teamBoard`'s argument), and this is the last screen that should hide from somebody what they are missing. **NOT IN THE RAIL** — every rail item is a place in the *product* and the grouping states whether the switcher changes it; Help sits with the session-level entries (user menu, beside Security) and in the footer. **The footer's `Documentation` link is a recorded condition SATISFIED, not waived**: `AppFooter` removed it as `href="#"` with the note *"they come back when they have somewhere to point"*, and it now points; **Contact support stays out** because its destination is still per-deployment configuration this repository does not know. Two findings recorded and NOT fixed: **`/projects/:projectId/run-schedules` is reachable only by typing the URL** — no rail entry and nothing links to it, grepped rather than assumed (§247 landed in a batch that ran no gates) — and **`packages/cli`'s help says "Settings → API tokens"** where the rail says **Company**. `packages/mcp/src/tools.ts`'s header still says *"the count is 21"*; counted from the built registry it is **23**. **Built and unverified** — browser rows `§252 H-1`…`H-8` recorded and not run; **no mutation rows, and that is not an omission**: one read, no writes. Gates: see above.)
 
 **Superseded header below — §250's, kept because §252 changed no decision it records: it added one route, one feature directory and two link sites, and touched none of the audit remediation.** (**§250** — **the round-1 frontend audit, remediated: sixteen findings, and the three that were real defects rather than drift.** ✅ **GATES RUN AND GREEN ON `shanks` — frontend `1710 / 1710` across 128 files (was 1692/125: +18 arms, +3 files), `npm run build` clean, `npm run lint` **0 warnings on 354 files with 104 rules** — 104 because §250 turned one on. Packages `341` (130 client / 82 cli / 129 mcp), build clean.** Driven by `docs/audits/001-frontend-audit-r1.md`, which stays the permanent register: its finding ids are never renumbered and round 2 re-traces every one from scratch. **THE RULE TO CARRY: a suppression for a rule the linter does not run is a guard that exists only in the comment.** Ten files carried `// eslint-disable-next-line react-hooks/exhaustive-deps`; `.oxlintrc.json` enabled two rules and neither was it, so **no dependency-array checking ran anywhere in this project** — in a codebase with debounce timers, autosave buffers and a documented deliberate missing dependency array. The rule exists, and oxlint spells it **`react/exhaustive-deps`** (it *reports* as `react-hooks(exhaustive-deps)`, which is why the wrong name looked plausible for a year). Enabling it produced ten violations, every one of which the ten comments had asserted was handled. **The verdicts differed by site and that is the point of turning it on**: `useMutation`'s returned object is a fresh literal every render (`{...result, mutate, reset}`), so the old comments were RIGHT that depending on it would reset on every render — but `MutationObserver.bindMethods()` binds `reset` ONCE in the constructor, so `const { reset } = remove` is stable and the dependency is free. Nine sites took that fix; **one is a genuine suppression with its reason recorded** (`LinkBlockDialog`, where `intendedCase?.id` is deliberately narrower than `intendedCase` because a parent rebuilding the object each render would discard the picker selection). **THE OTHER TWO REAL DEFECTS.** `/search` wrote `onChange` straight to the URL and the URL is the query key, so typing *"payment gateway"* fired ~14 requests at the app's only company-wide read, under `TIMEOUTS.interactive` (10 s) when `client.ts` defines `typeahead: 3_000` for exactly this. **`useDebouncedValue` (`lib/`) is now the one debounce**, extracted from the three screens that had inlined the same timer — `ConditionsPanel`'s own comment said no shared hook existed and that extracting one belonged to a slice that was about it; this was that slice. And **`keys.caseSearch` had NO invalidation at all**: its exclusion from `['projects', …]` is correct and stays, but the answer to "a project write must not reach this" is a targeted root, not an unreachable key — `invalidateCaseLists(client, projectId)` now does both halves in one function, because the pair would otherwise be spelled at eleven call sites across four modules. **29 HAND-BUILT KEY PREFIXES became six `*Root` helpers** (`casesRoot`, `conditionsRoot`, `artifactsRoot`, `plansRoot`, `runsRoot`, `aiProposalsRoot`) — `workItemRoot` had already made the argument; a renamed segment used to leave every hand-built copy typechecking and silently invalidating nothing. **`passRate` WAS TWO UNITS UNDER ONE NAME** and the contract stated neither: a 0–1 ratio on `TestPlanSummary`, a 0–100 percentage on `PlanStatistics.trend[]`. Latent only because the first is null on every response today. Both are now declared **percentage 0-100** in `openapi.yaml` (both schema copies regenerated, still byte-identical), `PlanListPage` moved to `formatPercent`, and **`formatRatio` is now documented as flakiness-only** — it is still right for `FlakePanel`, and `CaseHistoryPage`'s inline `formatPercent(x * 100, 0)` was replaced by the helper whose module forbids exactly that. **`useAnnouncedResults` keys on the FETCH SETTLING, not on the count changing** — two filters can both match twenty rows, and a count-keyed announcement stays silent on precisely the change the reader asked for; the first settle is skipped because arriving is the route announcement's to report. Five lists announce now; before this, errors were announced (59 `role="alert"`) and results never were. **The execution-result palette now means a test outcome and nothing else**: `--color-passed`/`--color-failed`/`--color-blocked` were doing duty for account status, overdue, priority, staleness, token liveness, automation share and requirement coverage — all moved to the `--color-success`/`--color-warning`/`--color-danger` tokens that `index.css` already defined as *"semantic feedback (distinct from status-of-a-test)"*. The audit named four sites; the sweep found **eleven**, and `DocsPage`'s two genuine result colours were deliberately left. **`ConditionsPanel.test.tsx` is new** — the repo's largest untested component, and its arms are red-green verified: injecting the re-sort its header warns against fails four of eight. Two audit facts were wrong and are corrected here: the suppression count was **ten, not eight**, and `CLAUDE.md` said 1679 tests where the measured figure was 1692/125 (and is 1710/128 after this slice's own arms). `CLAUDE.md` also still said **MUI v7** — §94 recorded that correction in this cache and nobody applied it to the file every contributor reads first. Twelve components still have no test; that is recorded, not fixed. Gates: see below.))
 
@@ -21,6 +25,185 @@
 **Superseded header below — §242's, kept because §244 verified none of it.** (**§242** — **the audit trail: one lazy `AuditLogPage` behind `/projects/:projectId/audit` AND `/admin/audit`.** **A LOCAL `tsc --noEmit` PASSED CLEAN WHILE THREE OF THIS SCREEN'S TESTS FAILED** — the working agreement's warning arriving on schedule, and worth carrying because it was tempting to treat the typecheck as coverage while `shanks` was down. **THE RULE TO CARRY: the rail's disable-don't-hide rule has exactly one exception now, and it is written at the type rather than left for the next reader to discover.** `AppShell.AuditReach` gates the two audit entries on `project:audit` / `audit:view` and **HIDES** them — the opposite of §31 and of the five separate comments in that file arguing that hiding lies about the *product*. Taken at the owner's direction: an audit screen's subject is who did what, so advertising it to somebody who may not read it invites the request the permission exists to refuse. It fails closed while pending. **One component for two routes**, branching on whether `useParams` yields a `projectId`; two components would be two renderings of the same twelve columns with nothing keeping them identical. **`Table`, NOT `DataGrid` — and §241 already measured why**: DataGrid does not render in jsdom, so the twelve component arms are only possible on a `Table`. **Action labels go through a curated map + computed fallback (`auditActionLabel`), NOT `satisfies Record<Union, string>`** — `AuditEvent.action` is a bare `string` in the contract because the verb set grows with every slice, so there is no union to be total against; `notificationEventLabel` is the same shape for the same reason. A refusal renders as a sentence **and makes no request at all**. Filters live in the URL (`useAuditFilters`, `useCaseFilters`'s arrangement). Gates: **1602 / 120**, build and lint clean.)
 
 **Superseded header below — §241's, kept because §242 verified none of it.** (**§241** — **the org chart screen: `/org-chart`, `useOrgChart`, and the tree flattening that became shared.** **THE RULE TO CARRY: a notice that appears only when something is hidden IS the disclosure it was meant to avoid.** The matrix columns are clipped to the reader's own `project:read`, so somebody missing six of eight projects gets a grid **that looks complete** — and the standing line *"Only projects you can open are shown here."* therefore renders **unconditionally**, for a Company Admin who sees everything too. Its test drives exactly that reader, which is the case a conditional implementation would pass. **`/org-chart` sits BESIDE `/admin/teams`, not beneath it**: every affordance there answers to `company:teams` and this screen has no gate at all — no `PermissionGate`, no `enabled`, no `lib/permissions.ts`. **`flattenTeamTree` (`features/admin/teamTree.ts`) is the one tree flattening**, extracted from `TeamsPage` in its own commit and called by `OrgChartTeams`; orphans and cycle members surface at the ROOT. **`keys.orgChart` is invalidated by all nine staffing writes, and a tenth is caught by a rule rather than by the list** — the last arm of `orgChartInvalidation.test.tsx` reads `admin.ts` through `import.meta.glob` and fails any `onSuccess` touching `teams`/`users`/`roleAssignments`/`projects` without it. **`OrgChartMatrix` is a `Table` and NOT `DataGrid`, which is load-bearing: DataGrid does not render in jsdom** (its virtualization measures through a `ResizeObserver` the test shim never fires, so the scroller is 0×0 with no rows) — measured, six arms failed on the DataGrid version, and `CaseListPage` is the repo's only DataGrid screen and has no component test at all. Whole-screen bundle cost **+7,054 B of dist JS (+0.37 %)**. Nine new fixtures including the four org-chart factories. Gates: **1582 / 119**.)
+
+## §255 (T7) — A PREVIEW AND THE ACT IT PREVIEWS ARE ONE RENDERING
+
+**Read this before touching the import screen**, and read `docs/agent-context/be-java.md`'s §255
+beside it — `FeatureImportService` is where every rule below comes from and this side quotes its
+sentences verbatim.
+
+### The two rules
+
+**One request, two modes, one rendering.** `POST /projects/{projectId}/feature-imports` takes
+`{files, suiteId?, onExisting, mode}` and answers the identical `FeatureImportPlan` in both:
+`PREVIEW` plans and writes nothing, `APPLY` recomputes the same plan **inside its transaction** and
+executes it. On a clean run `applied` and the rows' `caseKey`s are the only fields that move. So
+`ImportPlanView` renders both answers and **nothing in it branches on `mode`** — a second rendering
+keyed on the mode is a second decision procedure on the client to go with the server's one, and the
+preview would eventually describe an outcome the apply does not produce.
+
+**`REFUSE` is a row, never a status code.** A caller holding only `case:read` gets **200** with every
+row refused and the key they need named on each. The screen therefore never renders a 403 for the
+request, and **Apply's enablement is `plan.totals.create + plan.totals.update > 0`** — not a
+`PermissionGate`. That one expression is what makes both halves true at once: an all-refused plan
+renders in full with Apply off, and forty importable scenarios import beside any number of refusals.
+A gate on the button would have had to guess which, and would be wrong in the direction that hides
+work from somebody who can do it.
+
+### The seams
+
+- **`features/cases/FeatureImportPage.tsx`** — the page, `ImportPlanView` (the one rendering) and
+  `ScenarioRow`/`SuiteRow`/`ConditionRow`. It exports **the component and nothing else**, which is
+  a lint constraint rather than taste: `react/only-export-components` is a warning, `npm run lint`
+  is a gate at zero warnings, and `allowConstantExport` covers a `const` and not a `function`.
+- **`features/cases/featureFiles.ts`** — the pure half (**D19**): the four caps
+  (`MAX_FILES`/`MAX_FILE_BYTES`/`MAX_TOTAL_BYTES`/`MAX_SCENARIOS`), `PickedFile`, `countScenarios`,
+  `capsRefusals`, `pathOf`, `isFeature`, `readOne`, and `fromEntry` — the folder traversal, and the
+  only code on this side that touches the File System Access API. Three of the four bounds are
+  asserted here directly; driving them through the DOM costs 201 `File`s and 8 MiB of jsdom heap.
+- **`api/queries/cases.ts::useFeatureImport`** — one hook for both modes, `TIMEOUTS.long` (the
+  request is up to 8 MiB and the apply writes a version and an audit row per case), `meta.handled`,
+  and invalidation that runs **only when `plan.applied`**: case lists, `keys.suites`,
+  `keys.conditionsRoot`, the project header. A preview invalidates nothing.
+- **`api/types.ts`** — `FeatureImportPlan`, `FeatureImportRequest`, `FeatureFile`, `ImportRow`,
+  `ImportAction`, `SuiteAction`/`SuiteActionKind`, `ConditionAction`/`ConditionActionKind`,
+  `ImportOrphan`, `ImportTotals`, `OnExisting`. `Orphan` is aliased as **`ImportOrphan`** because
+  the bare word is ambiguous in a codebase whose org chart already talks about orphans.
+- **`lib/labels.ts`** — `importActionLabels`, `suiteActionLabels`, `conditionActionLabels`, three
+  maps rather than one: the unions differ (a suite is never skipped, a case is never reused), and a
+  single map over their union would label combinations neither side can produce.
+- **`components/PermissionGate.tsx` + `auth/useCan.ts`** — the **any-of** form.
+  `permission: PermissionKey | PermissionKey[]`; an array routes to `Gate.canAny`/`reasonAny`, whose
+  sentence joins the labels with *or* (`"create test cases or edit test cases in this project"`)
+  because `where` lives in `useGate` and a call site cannot write it. **The single-key form is
+  unchanged** and still routes to `can`/`reason` rather than through a one-element array, so the
+  hundred existing call sites keep the exact verdict they had. The array throws on an empty list and
+  on a list plus `authorId`.
+- **`test/fixtures.ts::anImportPlan` / `anImportRow`** — `totals` is deliberately **not** derived
+  from `scenarios`: a fixture that computed it would make the screen's use of the server's count
+  untestable, and re-tallying on the client is what `ImportTotals` exists to stop.
+
+### Four things that look like choices and are not
+
+- **`reason` is rendered verbatim and never goes through `describeError`.** The ten sentences are
+  contract — listed on `ImportRow.reason` in `docs/specs/openapi.yaml` — and clients may match on
+  them. `describeError` is the one place a **failure** becomes our copy; an import that refuses a row
+  succeeded, and re-wording `"needs library:manage for the Background"` takes the permission key out
+  of the only place a caller can read it.
+- **`ImportRow.preconditions` is rendered off the ROW.** It arrives ordered and resolved — the
+  import-owned titles in `Background:` order, then the case's human-attached ones. `plan.conditions`
+  is per **request**; deriving a row's chips from it attaches every Background step in the folder to
+  every case in it. There is an arm whose fixture puts a different step in `conditions[]` for
+  exactly this.
+- **The `DataRegion` is mounted conditionally** (`isPending || plan !== null || unfielded`).
+  `DataRegion` reads an undefined `data` as "still loading", which is right for a query that always
+  runs and wrong for a mutation nobody has pressed — unconditional, it shows a skeleton over an empty
+  screen from the moment the page opens.
+- **A field error and the region are exclusive.** A 400 lands on `errors.files`/`errors.suiteId`
+  beside the inputs; everything else (the 409, a timeout, a 500) has no field and goes to
+  `DataRegion`. `unfielded` is the flag, and without it one refusal is stated twice in two voices.
+
+### What is deliberately absent
+
+- **No `Idempotency-Key`.** The contract declares none and the server would not honour one:
+  idempotency here is a unique key on **one created row**, and an import creates many or none.
+  Determinism replaces it — a replay finds every scenario by `automationKey` and every condition by
+  `imported_key` and writes nothing. A header would look like protection and be inert.
+- **No `DataGrid`** — deviation **D16**. §241 measured that it does not render in jsdom, and every
+  one of T7's criteria is an assertion about a row. `Table` + `ScrollX`, as `AuditLogPage` is.
+- **No Gherkin parsing on this side.** `countScenarios` counts keyword lines and its refusal says
+  *"look like they hold"* — deviation **D17**. The 500-scenario cap cannot be computed exactly
+  without a parser, and `POST …/cases/parse-gherkin` is why the SPA does not have one.
+- **No condition-editing UI.** `ConditionsPanel.tsx`'s two panels already cover N PRE / N POST.
+- **No orphan deletion, and no button that could grow into one.** Orphans are listed with a sentence
+  saying nothing is done to them: a renamed scenario and a retired one look identical from a file.
+
+### The `caseKey` link goes to `/search`, not to the case route
+
+The plan carries a **key** and the case route takes an **id**, and that asymmetry is deliberate on
+the contract's side (plan §6t): a key a person read is resolved through the search endpoint, which
+answers not-found rather than forbidden for a case in a project they cannot open. So the cell is
+`<Link to={`/search?q=TC-12`}>`, and it is offered in **both** modes rather than only after an apply
+— a preview naming an existing case should let a reader go and look at what it is about to skip.
+
+## §255 — `stepFormat` IS A LENS, AND THE TOGGLE MAY NOT DELETE THE ROWS
+
+**Read this before touching anything that renders or edits a step**, and read
+`docs/agent-context/be-java.md` §255 beside it — the server half is where the rules come from and
+this side quotes its sentences verbatim.
+
+### The rule
+
+**A toggle between two representations of one thing may not delete the thing.** `stepFormat` used to
+choose a *storage*: `GHERKIN` meant a `gherkin_source` blob and a textarea, `STRUCTURED` meant
+`test_step` rows and a list, and `toCasePayload` read `data.stepFormat === 'STRUCTURED' ? steps : []`.
+So switching a case to Gherkin and pressing Save **deleted every step row**, and with them the ids
+every `step_result` anchors to — 200, a version bump, a success toast, and a run's evidence pointing
+at rows that no longer existed. Nothing failed. Both requests were individually valid.
+
+Both lenses are the same rows now. `GHERKIN` says every step carries a keyword and the case renders
+as a scenario; `STRUCTURED` says the keyword is optional. **Neither direction of the toggle touches
+the list**, there is no diff dialog in either, and the arm that proves it asserts the *payload* as
+well as the screen — a form that still renders the rows while sending none of them is the same
+defect one layer down.
+
+### The seams
+
+- **`features/cases/StepDataCell.tsx`** — the ONE control for `testData | docString | dataTable`,
+  and the read-only `StepDataView` beside it that both the case detail and the execution checklist
+  render. **The mode is DERIVED from the values and never stored**: `docString === null` means "not
+  in that mode", `''` means "in it, empty". A fourth field holding the mode is a second answer to
+  one question, and the two disagree the first time a buffered draft is restored. Switching clears
+  the other two, which is what makes `ck_test_step_one_data` unreachable rather than merely refused.
+- **`features/cases/PasteGherkinDialog.tsx`** — `POST …/cases/parse-gherkin` through `api.postText`.
+  Text in, rows out; **nothing is created except a Background step's precondition**, which really
+  does write (`POST …/conditions`, `library:manage`, **disabled with the reason**, never hidden).
+  One condition **per Background step** (amendment AM1) — collapsing them makes "sign in" and "fund
+  the account" one library entry no other case can reuse half of. It hands the **whole** parse
+  result up: what happens to the title, the objective and the tags is the editor's decision.
+- **`caseSchema.ts::prefilledKeywords`** — the `STRUCTURED → GHERKIN` proposal, pure and tested.
+  First live row `GIVEN`, the **last** row with an expected result `THEN`, `WHEN`/`AND` between. It
+  only ever FILLS and is idempotent, so toggling twice gives the author their own words back.
+- **`caseSchema.ts`'s per-row `superRefine`** — DEC-2 R1/R2/R3, with `CaseEdit.validate`'s sentences
+  quoted. R1 and R2 are the two the lens decides; R3 is **unreachable through the editor** and kept
+  because a restored draft can carry a shape the control cannot produce. The numbering counts LIVE
+  rows, not array indexes — the blank trailing row is not step 1.
+- **`api/client.ts::postText` / `getText`** — the first text-media verbs. `api.post` JSON-quotes its
+  body and would answer 415 against a `text/plain` handler; `api.get` ends in `res.json()` and would
+  fail on a `.feature` file. Both still go through `request`, so the budget, the bearer token and
+  the dev fault seam apply — a hand-rolled `fetch` at the call site would have none of the three.
+- **`test/contractDoubles.ts`** gained `postText`/`getText` in `METHODS` and a `SERVES_TEXT` set.
+  A text operation has no JSON schema, so the seam asks the question it still can: the URL must
+  resolve to a declared path, and the double must serve **text**.
+- **`api/queries/cases.ts::useParseGherkin` / `useCaseFeature`**, `keys.caseFeature` under the
+  `keys.case` prefix so a save invalidates the rendered text with the case.
+
+### What is deliberately absent
+
+- **No diff dialog, in either direction.** Plan §6a rule 1 called for one when converting formats;
+  it was superseded here, because there is nothing to diff — the rows do not change.
+- **No `gherkinSource` anywhere on the write path.** It left `TestCaseInput` in T1. `TestCase` still
+  serves it read-only for a case with **zero rows**, which is the not-yet-backfilled population, and
+  `GherkinView` is now that fallback and nothing else. Both leave the product in `002-`.
+- **No import page** — that is T7.
+- **`StepEvidence.tsx` was not touched.** The delivery plan's file list names it; it renders the
+  evidence controls and has no step text in it, so there was nothing there to change. Recorded as
+  deviation D9 rather than left to be noticed.
+
+### Two things this file and `CLAUDE.md` are both still wrong about
+
+- **`src/api/queries.ts` is a DIRECTORY** — `src/api/queries/`, 19 files (`cases.ts`, `runs.ts`,
+  `keys.ts`, …) behind an `index.ts` barrel. Every `api/queries.ts` below and in `CLAUDE.md` means
+  the barrel; the hook you are looking for is in the file named after its resource, and a new hook
+  must be exported from `index.ts` or nothing can import it.
+- **`stepFormat` is no longer a switch between two storages** — see the rule above. Any sentence in
+  this file that treats `GHERKIN` as "the textarea branch" predates §255.
+
+### The order of two questions, which is load-bearing
+
+`StepsPanel` asks **rows first**, blob second. The backfill deliberately leaves `gherkin_source` in
+place so `002-` can read it as proof of coverage, so a panel that asked about the blob first would
+show every migrated case its old text for ever. There is an arm for exactly that.
 
 ## §252 — THE MATRIX IS READ, NOT TRANSCRIBED
 
@@ -2561,6 +2744,21 @@ directly above the switcher) and the wordmark links there too.
 > slice's shape. `docs/handoff/00-plugin-skills-are-mandatory.md` step 0 now states the protocol.
 
 ## Seams to reuse
+
+**New seams §255 created:**
+- `features/cases/StepDataCell.tsx` — `StepDataCell` (edit) and `StepDataView` (read). **Copy this
+  shape before writing three controls for a set of fields at most one of which may be set**: the
+  mode is derived from the values, and switching clears the others.
+- `features/cases/PasteGherkinDialog.tsx` — a parse-then-apply dialog whose refusals land on the
+  field the server keyed them to (`errors.text`) rather than in a banner. Test ids `PasteGherkin.*`.
+- `features/cases/caseSchema.ts::prefilledKeywords` / `STEP_KEYWORDS` / `StepRow` — the lens
+  proposal, the vocabulary and the row type, all importable and all tested without a render.
+- `api/client.ts::postText` / `getText` and `RequestOptions.responseType` — the text-media lane.
+  **Anything whose success body is a document goes here**, not through a `fetch` at the call site.
+- `test/fixtures.ts::aStep` / `aStepResult` — the two step shapes, complete, so a required field
+  added to either is a compile error in one file.
+- `lib/labels.ts::stepKeywordLabels` — `satisfies Record<StepKeyword, string>`, and deliberately not
+  derived by lower-casing: a Turkish locale renders `GIVEN` as `Gıven` and Cucumber cannot read it.
 
 **New seams §247 created:**
 - `features/runs/RunSchedulePage.tsx` — the schedule list and its create/edit dialog. `DataRegion`

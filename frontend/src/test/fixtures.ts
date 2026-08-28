@@ -35,6 +35,7 @@ import type {
   ExecutionAssignmentChange,
   ExecutionBulkResult,
   ExternalLink,
+  FeatureImportPlan,
   IdentityProvider,
   InvitationPreview,
   NotificationChannel,
@@ -60,7 +61,10 @@ import type {
   User,
   UserInvitation,
   UserRef,
+  ImportRow,
   TestCase,
+  TestStep,
+  StepResult,
   CaseSearchHit,
   TestCaseSummary,
   TestExecution,
@@ -160,6 +164,9 @@ export function aCase(overrides: Partial<TestCase> = {}): TestCase {
     declinedPostconditions: [],
     steps: [],
     gherkinSource: null,
+    // Null for every case nobody imported, which today is all of them (§255) — the columns exist
+    // from `V69` and the writer arrives with the import endpoint.
+    importedFrom: null,
     severity: null,
     estimatedDurationSec: null,
     automationKey: null,
@@ -171,6 +178,50 @@ export function aCase(overrides: Partial<TestCase> = {}): TestCase {
     flake: null,
     currentVersionNo: 1,
     lockVersion: 0,
+    ...overrides,
+  }
+}
+
+/**
+ * One authored step (§255) — the least interesting one the contract admits.
+ *
+ * `keyword`, `docString` and `dataTable` are all null by default, which is a **structured** step
+ * with test data and an expected result and no block argument: the shape most of the suite's cases
+ * are about. A test that is about the Gherkin lens says so by naming a keyword.
+ */
+export function aStep(overrides: Partial<TestStep> = {}): TestStep {
+  return {
+    id: 's1',
+    position: 0,
+    keyword: null,
+    action: 'A step',
+    testData: null,
+    expectedResult: null,
+    docString: null,
+    dataTable: null,
+    ...overrides,
+  }
+}
+
+/**
+ * One step of a pinned case version, with whatever verdict has been recorded against it.
+ *
+ * The step half is history and the result half is current — `StepResult`'s own description — which
+ * is why they are one shape rather than two lists a client joins by `stepId`.
+ */
+export function aStepResult(overrides: Partial<StepResult> = {}): StepResult {
+  return {
+    stepId: 's1',
+    position: 0,
+    keyword: null,
+    action: 'A step',
+    testData: null,
+    expectedResult: null,
+    docString: null,
+    dataTable: null,
+    statusId: null,
+    comment: null,
+    evidence: [],
     ...overrides,
   }
 }
@@ -770,6 +821,51 @@ export function aRunSchedule(overrides: Partial<RunSchedule> = {}): RunSchedule 
     createdAt: AT,
     createdBy: 'user-1',
     createdByName: 'O. Owner',
+    ...overrides,
+  }
+}
+
+/**
+ * A `.feature` import plan (§255) — **the same shape a `PREVIEW` and an `APPLY` answer**.
+ *
+ * The default is the least interesting body the contract admits: `PREVIEW`, not applied, nothing to
+ * do. A test says what it is about by overriding `scenarios` and `totals`, which are the two the
+ * screen reads together — `totals` is the server's tally and is deliberately NOT derived from
+ * `scenarios` here, because a fixture that computed it would make the screen's use of the server's
+ * count untestable, and re-tallying on the client is exactly what `ImportTotals` exists to stop.
+ */
+export function anImportPlan(overrides: Partial<FeatureImportPlan> = {}): FeatureImportPlan {
+  return {
+    mode: 'PREVIEW',
+    applied: false,
+    scenarios: [],
+    suites: [],
+    conditions: [],
+    orphans: [],
+    totals: { create: 0, update: 0, skip: 0, refuse: 0 },
+    ...overrides,
+  }
+}
+
+/**
+ * One row of that plan.
+ *
+ * `reason` defaults to null — the action that needs no explanation — so a test that sets one is
+ * naming a sentence from `api-surface.md` §5.4 on purpose. Every other field is present and
+ * nullable exactly as the contract has it, so a row for a whole-file refusal is written by nulling
+ * `line`, `scenario` and `automationKey` rather than by leaving them out.
+ */
+export function anImportRow(overrides: Partial<ImportRow> = {}): ImportRow {
+  return {
+    path: 'features/orders.feature',
+    line: 12,
+    feature: 'Orders',
+    scenario: 'Cancel an order',
+    automationKey: 'Orders#Cancel an order',
+    action: 'CREATE',
+    reason: null,
+    caseKey: null,
+    preconditions: [],
     ...overrides,
   }
 }

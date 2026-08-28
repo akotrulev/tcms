@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { CaseSchema } from './caseSchema'
+import { CaseSchema, prefilledKeywords, type StepRow } from './caseSchema'
 
 /**
- * The four cross-field refinements on the case form.
+ * The cross-field refinements on the case form.
  *
  * These were the one item §36 left on its own target list and §37 restated as an open follow-up,
  * and the reason they were worth coming back for is that **no field-level test can reach them**:
@@ -15,6 +15,24 @@ import { CaseSchema } from './caseSchema'
  * so the assertions below pin the *path* as well as the verdict: the message has to land on the
  * field that caused it, not in a banner.
  */
+
+/**
+ * One complete step row, as the form holds it (§255).
+ *
+ * Every field spelled, because `StepSchema` requires them all now: `keyword` is `''` for "none"
+ * and the two block arguments are `null` for "this row is not in that mode" — a partial literal
+ * would fail the schema for a reason no test here is about.
+ */
+const step = (over: Partial<StepRow> = {}): StepRow => ({
+  id: null,
+  keyword: '',
+  action: '',
+  testData: '',
+  expectedResult: '',
+  docString: null,
+  dataTable: null,
+  ...over,
+})
 
 /** A minimally valid case: structured, one step, manual. Each test breaks exactly one thing. */
 const valid = () => ({
@@ -29,8 +47,7 @@ const valid = () => ({
   notAutomatableReason: null,
   estimatedDurationSec: null,
   stepFormat: 'STRUCTURED' as const,
-  gherkinSource: null,
-  steps: [{ action: 'Refund the payment a second time' }],
+  steps: [step({ action: 'Refund the payment a second time' })],
   // Present and empty rather than omitted, because the two mean different things all the way down:
   // the server reads an absent field as "leave the classification alone" and an empty array as
   // "clear it", so a form value that could be undefined would make "unclassified" unexpressible.
@@ -90,32 +107,91 @@ describe('CaseSchema — the baseline', () => {
   })
 })
 
-describe('CaseSchema — GHERKIN requires a scenario', () => {
-  it('rejects GHERKIN with no source, on the gherkinSource field', () => {
-    expect(pathsOf({ ...valid(), stepFormat: 'GHERKIN', gherkinSource: null })).toContain('gherkinSource')
-    expect(messageOn({ ...valid(), stepFormat: 'GHERKIN', gherkinSource: null }, 'gherkinSource')).toMatch(
-      /scenario/i,
+/**
+ * The lens rules (§255) — DEC-2 R1 and R2.
+ *
+ * These replace "GHERKIN requires a scenario", which was a rule about a `gherkinSource` textarea
+ * that no longer exists: a Gherkin case is step rows now, and what the lens requires is a keyword
+ * on each of them. **The sentences are the server's, quoted from `CaseEdit.validate`** — a client
+ * that composed its own would tell an author one thing and the 400 would tell them another.
+ */
+describe('CaseSchema — the GHERKIN lens needs a keyword on every row', () => {
+  const gherkin = (steps: unknown[]) => ({ ...valid(), stepFormat: 'GHERKIN' as const, steps })
+
+  it('rejects a keyword-less row, on that row’s keyword', () => {
+    const input = gherkin([step({ action: 'Refund it' })])
+    expect(pathsOf(input)).toContain('steps.0.keyword')
+    expect(messageOn(input, 'steps.0.keyword')).toBe('Step 1 needs a keyword.')
+  })
+
+  it('numbers the message by LIVE row, not by array index', () => {
+    // The trailing blank row is not a step, so a form whose first row was cleared must not report
+    // "Step 2" about the row a reader is looking at as the first one.
+    const input = gherkin([step(), step({ action: 'Refund it' })])
+    expect(messageOn(input, 'steps.1.keyword')).toBe('Step 1 needs a keyword.')
+  })
+
+  it('refuses And/But as the first step — a continuation with nothing to continue', () => {
+    const input = gherkin([
+      step({ keyword: 'AND', action: 'Refund it' }),
+      step({ keyword: 'THEN', action: 'The refund is refused', expectedResult: 'Refused' }),
+    ])
+    expect(messageOn(input, 'steps.0.keyword')).toBe('The first step cannot be And/But.')
+  })
+
+  it('accepts And on a later step', () => {
+    const input = gherkin([
+      step({ keyword: 'GIVEN', action: 'A settled payment' }),
+      step({ keyword: 'AND', action: 'A refund already made' }),
+      step({ keyword: 'THEN', action: 'The second refund is refused' }),
+    ])
+    expect(CaseSchema.safeParse(input).success).toBe(true)
+  })
+
+  it('asks nothing about keywords in the structured lens', () => {
+    expect(pathsOf(valid())).toEqual([])
+  })
+
+  it('keeps a keyword a structured case happens to carry', () => {
+    // The lens is a lens: a case toggled to structured keeps its keywords, and the schema must not
+    // treat one as a value that does not belong there.
+    expect(CaseSchema.safeParse({ ...valid(), steps: [step({ keyword: 'GIVEN', action: 'x' })] }).success).toBe(
+      true,
+    )
+  })
+})
+
+/**
+ * DEC-2 R3 — one data spelling per step.
+ *
+ * **Unreachable through the editor**, whose Data cell clears the others on a mode switch, and kept
+ * because a restored draft is unvalidated by construction. The rule is the server's
+ * `ck_test_step_one_data`; this is the message that saves the round trip.
+ */
+describe('CaseSchema — a step carries at most one data field', () => {
+  it('refuses test data and a doc string on one row', () => {
+    const input = { ...valid(), steps: [step({ action: 'Refund it', testData: '120.00', docString: 'body' })] }
+    expect(pathsOf(input)).toContain('steps.0.testData')
+    expect(messageOn(input, 'steps.0.testData')).toBe(
+      'Step 1 has more than one data field — keep test data, a doc string, or a table.',
     )
   })
 
-  it('rejects whitespace as a scenario — a source of spaces is not a scenario', () => {
-    expect(pathsOf({ ...valid(), stepFormat: 'GHERKIN', gherkinSource: '   \n  ' })).toContain('gherkinSource')
+  it('refuses a doc string and a table on one row', () => {
+    const input = { ...valid(), steps: [step({ action: 'Refund it', docString: 'body', dataTable: [['a']] })] }
+    expect(pathsOf(input)).toContain('steps.0.testData')
   })
 
-  it('accepts GHERKIN with a scenario, and stops demanding steps', () => {
-    const input = { ...valid(), stepFormat: 'GHERKIN', gherkinSource: 'Feature: x', steps: [] }
+  it('accepts an EMPTY doc string — the mode is chosen, the content is not written yet', () => {
+    const input = { ...valid(), steps: [step({ action: 'Refund it', testData: '', docString: '' })] }
     expect(CaseSchema.safeParse(input).success).toBe(true)
   })
 })
 
-describe('CaseSchema — STRUCTURED requires at least one step', () => {
+describe('CaseSchema — a case requires at least one step, in either lens', () => {
   it('rejects zero steps, on the steps field', () => {
     expect(pathsOf({ ...valid(), steps: [] })).toContain('steps')
     expect(messageOn({ ...valid(), steps: [] }, 'steps')).toMatch(/at least one step/i)
-  })
-
-  it('does not demand a scenario while structured', () => {
-    expect(pathsOf({ ...valid(), gherkinSource: null })).not.toContain('gherkinSource')
   })
 
   /**
@@ -134,12 +210,12 @@ describe('CaseSchema — STRUCTURED requires at least one step', () => {
    * The replacement is one idea — a row that carries nothing is not a step — applied twice.
    */
   it('ignores the trailing blank row the editor always renders', () => {
-    const input = { ...valid(), steps: [{ action: 'Refund it' }, { action: '' }] }
+    const input = { ...valid(), steps: [step({ action: 'Refund it' }), step()] }
     expect(CaseSchema.safeParse(input).success).toBe(true)
   })
 
   it('rejects a form whose ONLY step is the blank row — the defect auto-append introduces', () => {
-    const paths = pathsOf({ ...valid(), steps: [{ action: '' }] })
+    const paths = pathsOf({ ...valid(), steps: [step()] })
     expect(paths).toContain('steps')
     // And specifically NOT as a field error on the blank row, which is the other half: the row is
     // an invitation, and an author who has written nothing has one problem, not two.
@@ -148,11 +224,11 @@ describe('CaseSchema — STRUCTURED requires at least one step', () => {
 
   it('treats a whitespace-only row as blank in both directions', () => {
     // Not a step, so it cannot satisfy "at least one step" …
-    expect(pathsOf({ ...valid(), steps: [{ action: '  ', testData: '\t', expectedResult: ' ' }] })).toContain(
-      'steps',
-    )
+    expect(
+      pathsOf({ ...valid(), steps: [step({ action: '  ', testData: '\t', expectedResult: ' ' })] }),
+    ).toContain('steps')
     // … and it cannot fail the action rule either.
-    expect(pathsOf({ ...valid(), steps: [{ action: 'Refund it' }, { action: ' ' }] })).toEqual([])
+    expect(pathsOf({ ...valid(), steps: [step({ action: 'Refund it' }), step({ action: ' ' })] })).toEqual([])
   })
 
   it('still requires an action from a row that carries anything else', () => {
@@ -160,7 +236,7 @@ describe('CaseSchema — STRUCTURED requires at least one step', () => {
     // the message has to land on the action of THAT row rather than in a banner.
     const input = {
       ...valid(),
-      steps: [{ action: '', testData: null, expectedResult: 'The refund is accepted' }],
+      steps: [step({ expectedResult: 'The refund is accepted' })],
     }
     expect(pathsOf(input)).toContain('steps.0.action')
     expect(messageOn(input, 'steps.0.action')).toMatch(/describe the action/i)
@@ -169,21 +245,22 @@ describe('CaseSchema — STRUCTURED requires at least one step', () => {
   it('points at the right row when a later one is half-written', () => {
     const input = {
       ...valid(),
-      steps: [{ action: 'Refund it' }, { action: '  ', testData: '120.00 EUR' }, { action: '' }],
+      steps: [step({ action: 'Refund it' }), step({ action: '  ', testData: '120.00 EUR' }), step()],
     }
     expect(pathsOf(input)).toEqual(['steps.1.action'])
   })
 
-  it('does not police step rows at all while the case is Gherkin', () => {
-    // The array is not submitted and not even rendered, so an error on it would be a refusal with
-    // nothing on screen to fix.
-    const input = {
-      ...valid(),
-      stepFormat: 'GHERKIN',
-      gherkinSource: 'Feature: x',
-      steps: [{ action: '', expectedResult: 'Something' }],
-    }
-    expect(CaseSchema.safeParse(input).success).toBe(true)
+  it('POLICES the rows in the Gherkin lens too, where it used to skip them (§255)', () => {
+    /*
+      The inverse of what this test asserted before. A Gherkin case sent `steps: []` and rendered a
+      textarea, so refusing a half-written row would have been an error with nothing on screen to
+      fix. The rows ARE the scenario now, so the same row is refused in both lenses — and the
+      keyword rule is reported beside it rather than instead of it.
+    */
+    const input = { ...valid(), stepFormat: 'GHERKIN', steps: [step({ expectedResult: 'Something' })] }
+    const paths = pathsOf(input)
+    expect(paths).toContain('steps.0.action')
+    expect(paths).toContain('steps.0.keyword')
   })
 })
 
@@ -250,15 +327,14 @@ describe('CaseSchema — the refinements compose', () => {
    * short-circuits; a plain chain evaluates each. This pins which of the two it is, because a
    * form that reports one problem at a time when two exist makes the user submit twice.
    */
-  it('reports GHERKIN-without-a-scenario and AUTOMATED-without-a-key together', () => {
+  it('reports a missing keyword and AUTOMATED-without-a-key together', () => {
     const paths = pathsOf({
       ...valid(),
       stepFormat: 'GHERKIN',
-      gherkinSource: null,
       automationStatus: 'AUTOMATED',
       automationKey: null,
     })
-    expect(paths).toContain('gherkinSource')
+    expect(paths).toContain('steps.0.keyword')
     expect(paths).toContain('automationKey')
   })
 
@@ -282,5 +358,71 @@ describe('CaseSchema — estimatedDurationSec is a string the form produces', ()
     for (const bad of ['1.5', '-3', 'ten', '9 ']) {
       expect(pathsOf({ ...valid(), estimatedDurationSec: bad })).toContain('estimatedDurationSec')
     }
+  })
+})
+
+/**
+ * The keywords a `STRUCTURED → GHERKIN` toggle proposes — blueprint §2 rule 4.
+ *
+ * **The property that matters is what it does NOT do.** §255 exists because the lens toggle used to
+ * discard the rows; a pre-fill that overwrote a keyword the author had chosen would be the same
+ * class of loss one field narrower, so every assertion below about "leaves it alone" is the point
+ * rather than an edge case.
+ */
+describe('prefilledKeywords', () => {
+  const rows = (...over: Partial<StepRow>[]) => over.map((o) => step(o))
+
+  it('opens with Given, continues with When then And, and closes on the assertion with Then', () => {
+    const filled = prefilledKeywords(
+      rows(
+        { action: 'A settled payment' },
+        { action: 'Refund it' },
+        { action: 'Refund it again' },
+        { action: 'The second refund is refused', expectedResult: 'Refused' },
+      ),
+    )
+    expect(filled.map((row) => row.keyword)).toEqual(['GIVEN', 'WHEN', 'AND', 'THEN'])
+  })
+
+  it('chooses the LAST asserting row as the Then', () => {
+    const filled = prefilledKeywords(
+      rows(
+        { action: 'A settled payment' },
+        { action: 'Refund it', expectedResult: 'Accepted' },
+        { action: 'Refund it again', expectedResult: 'Refused' },
+      ),
+    )
+    expect(filled.map((row) => row.keyword)).toEqual(['GIVEN', 'WHEN', 'THEN'])
+  })
+
+  it('never overwrites a keyword somebody chose', () => {
+    const filled = prefilledKeywords(
+      rows({ action: 'A settled payment', keyword: 'BUT' }, { action: 'Refund it' }),
+    )
+    expect(filled.map((row) => row.keyword)).toEqual(['BUT', 'WHEN'])
+  })
+
+  it('is idempotent — toggling twice gives the author their own words back', () => {
+    const once = prefilledKeywords(rows({ action: 'A settled payment' }, { action: 'Refund it' }))
+    expect(prefilledKeywords(once)).toEqual(once)
+  })
+
+  it('leaves the trailing blank row alone, so it is still an invitation', () => {
+    const filled = prefilledKeywords(rows({ action: 'A settled payment' }, {}))
+    expect(filled.map((row) => row.keyword)).toEqual(['GIVEN', ''])
+  })
+
+  it('changes no other field of any row', () => {
+    const before = rows({ action: 'Refund it', testData: '120.00 EUR', id: 'step-1' })
+    const after = prefilledKeywords(before)
+    expect(after[0]).toEqual({ ...before[0], keyword: 'GIVEN' })
+  })
+
+  it('produces a form the schema accepts in the Gherkin lens', () => {
+    // The whole purpose: the toggle must not land the author in a state its own validation refuses.
+    const steps = prefilledKeywords(
+      rows({ action: 'A settled payment' }, { action: 'Refund it', expectedResult: 'Refused' }, {}),
+    )
+    expect(CaseSchema.safeParse({ ...valid(), stepFormat: 'GHERKIN', steps }).success).toBe(true)
   })
 })

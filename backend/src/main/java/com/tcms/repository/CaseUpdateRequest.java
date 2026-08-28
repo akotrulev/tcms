@@ -51,6 +51,17 @@ import java.util.UUID;
  * {@link CaseConditionInput} states why: nothing can render one, so storing it would be a
  * successful save the author can never see again.
  *
+ * <h2>{@code gherkinSource} is not on this record, and it is not refused either</h2>
+ *
+ * <p>§255 made {@code stepFormat} a <strong>lens</strong> over one storage rather than a switch
+ * between two, so a Gherkin case is {@code test_step} rows like any other and there is nothing left
+ * for a caller to send. It left {@code TestCaseInput} entirely, which is why there is no rule about
+ * it here: an unknown property is ignored by Jackson's default, so a client written against the old
+ * shape keeps working while it is updated rather than being refused for a field that now means
+ * nothing. That is the opposite call from {@code ownerId} and {@code automationTags} above, and the
+ * difference is what the caller loses — a dropped {@code ownerId} discards a value they chose, and
+ * a dropped {@code gherkinSource} discards a spelling of the procedure they also sent as steps.
+ *
  * <p>Accepting them and dropping them is the failure the SPA's own mock handler used to comment on,
  * and it does not need the attribution: a save that reports success and discards a value the user
  * typed. The user then has no way to discover it
@@ -65,7 +76,6 @@ public record CaseUpdateRequest(
         String objective,
         String expectedOutcome,
         StepFormat stepFormat,
-        String gherkinSource,
         Priority priority,
         Priority severity,
         AutomationStatus automationStatus,
@@ -186,7 +196,6 @@ public record CaseUpdateRequest(
                 body.has("objective") ? sent.objective() : stored.objective(),
                 body.has("expectedOutcome") ? sent.expectedOutcome() : stored.expectedOutcome(),
                 sent.stepFormat(),
-                body.has("gherkinSource") ? sent.gherkinSource() : stored.gherkinSource(),
                 sent.priority(),
                 body.has("severity") ? sent.severity() : stored.severity(),
                 sent.automationStatus(),
@@ -219,6 +228,18 @@ public record CaseUpdateRequest(
     /**
      * {@code TestStepInput} — one step as submitted.
      *
+     * <p>{@code keyword} binds as a {@code String} although the contract now {@code $ref}s
+     * {@code StepKeyword}, and that is deliberate: {@link CaseEdit} parses it and answers
+     * <em>"Step 3 has an unrecognized keyword."</em> on a field error, where binding the enum
+     * directly would answer a Jackson deserialization failure naming the JSON path. The contract
+     * narrows; the server's message survives.
+     *
+     * @param docString Gherkin's {@code """} block. At most one of {@link #testData()}, this and
+     *           {@link #dataTable()} may be non-null — {@link CaseEdit} refuses two, so the caller
+     *           gets a sentence rather than {@code ck_test_step_one_data}'s 500.
+     * @param dataTable Gherkin's {@code |}-table as rows of cells. An <strong>empty outer list is
+     *           refused</strong> rather than stored: {@code []} is not a table, and storing it
+     *           gives the editor an empty grid nobody can remove.
      * @param id null for a step being added; the existing {@code test_step.id} for one being kept.
      *           <strong>This field is what makes reordering safe</strong>: {@code step_result} rows
      *           reference these ids, so a step that keeps its id keeps its evidence (handoff §3
@@ -230,6 +251,8 @@ public record CaseUpdateRequest(
             String keyword,
             String action,
             String testData,
-            String expectedResult) {
+            String expectedResult,
+            String docString,
+            List<List<String>> dataTable) {
     }
 }

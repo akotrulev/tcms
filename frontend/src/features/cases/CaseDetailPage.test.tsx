@@ -7,7 +7,7 @@ import type { TestCase } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
-import { aProject, projectSettings } from '../../test/fixtures'
+import { aProject, aStep, projectSettings } from '../../test/fixtures'
 import { CaseDetailPage } from './CaseDetailPage'
 
 /**
@@ -82,6 +82,7 @@ function caseBody(createdBy: string | null): TestCase {
     automationKey: null,
     notAutomatableReason: null,
     gherkinSource: null,
+    importedFrom: null,
     steps: [],
     preconditions: [],
     postconditions: [],
@@ -427,5 +428,152 @@ describe('CaseDetailPage — the lifecycle menu', () => {
     expect(screen.getByTestId('CaseDetail.StatusMenu.DRAFT')).toBeInTheDocument()
     expect(screen.queryByTestId('CaseDetail.StatusMenu.APPROVED')).not.toBeInTheDocument()
     expect(screen.queryByTestId('CaseDetail.StatusMenu.IN_REVIEW')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * One renderer, one fallback, and the `.feature` view (§255).
+ *
+ * `GherkinView` was a **branch** on `stepFormat` and is a **fallback** on emptiness now, and the
+ * order of the two questions is the arm that matters: the backfill deliberately leaves
+ * `gherkin_source` in place (so `002-` can read it as proof of coverage), so a panel that asked
+ * about the blob first would show every migrated case its old text for ever.
+ */
+describe('CaseDetailPage — the steps panel is the one renderer', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const gherkinCase = {
+    stepFormat: 'GHERKIN' as const,
+    steps: [
+      aStep({ id: 's1', position: 0, keyword: 'GIVEN', action: 'a settled payment' }),
+      aStep({
+        id: 's2',
+        position: 1,
+        keyword: 'THEN',
+        action: 'the ledger reads',
+        dataTable: [
+          ['account', 'amount'],
+          ['merchant', '-120.00'],
+        ],
+      }),
+    ],
+  }
+
+  it('renders a Gherkin case as ROWS, with the keyword on the action', async () => {
+    mockReads(CALLER, undefined, gherkinCase)
+    renderPage()
+
+    const rows = await screen.findAllByTestId('CaseDetail.Steps.Row')
+    expect(rows).toHaveLength(2)
+    expect(screen.getAllByTestId('CaseDetail.Steps.Row.Keyword')[0]).toHaveTextContent('Given')
+    // And NOT the blob renderer, which is what this panel used to show for every Gherkin case.
+    expect(screen.queryByTestId('CaseDetail.Steps.Gherkin')).not.toBeInTheDocument()
+  })
+
+  it('renders a step’s table under its action', async () => {
+    mockReads(CALLER, undefined, gherkinCase)
+    renderPage()
+
+    await screen.findAllByTestId('CaseDetail.Steps.Row')
+    expect(screen.getAllByTestId('CaseDetail.Steps.Row.Data.Table.Row')).toHaveLength(2)
+    expect(screen.getByText('-120.00')).toBeInTheDocument()
+  })
+
+  it('prefers the rows over the blob on a case that carries both', async () => {
+    // What a migrated case looks like: rows AND the blob the backfill left behind.
+    mockReads(CALLER, undefined, { ...gherkinCase, gherkinSource: 'Feature: the old text' })
+    renderPage()
+
+    await screen.findAllByTestId('CaseDetail.Steps.Row')
+    expect(screen.queryByText(/the old text/)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('CaseDetail.Steps.NotMigrated')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the blob for a case the backfill has not reached, and names the command', async () => {
+    mockReads(CALLER, undefined, {
+      stepFormat: 'GHERKIN',
+      steps: [],
+      gherkinSource: 'Feature: Refunds\n  Scenario: Double refund',
+    })
+    renderPage()
+
+    // The note is the point: the state is one an operator can end, and a fallback that did not say
+    // so would read as a case somebody forgot to write.
+    expect(await screen.findByTestId('CaseDetail.Steps.NotMigrated')).toHaveTextContent(
+      'migrate-gherkin-source',
+    )
+    expect(screen.getByTestId('CaseDetail.Steps.Gherkin')).toBeInTheDocument()
+  })
+
+  it('says nothing about migration for a case that simply has no steps', async () => {
+    mockReads(CALLER, undefined, { steps: [], gherkinSource: null })
+    renderPage()
+
+    await screen.findByTestId('CaseDetail.Steps')
+    expect(screen.queryByTestId('CaseDetail.Steps.NotMigrated')).not.toBeInTheDocument()
+    expect(screen.getByText('No steps written yet.')).toBeInTheDocument()
+  })
+})
+
+describe('CaseDetailPage — View as .feature', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('is offered on a STRUCTURED case too — the endpoint renders every case', async () => {
+    // There is no 409: numbered steps are a scenario whose steps have no keyword, and `*` is
+    // Gherkin's own spelling for that. An action present on some cases and an error on others,
+    // for a reason the author never chose, is what refusing would have produced.
+    mockReads(CALLER)
+    renderPage()
+
+    expect(await screen.findByTestId('CaseDetail.Steps.ViewFeature')).toBeEnabled()
+  })
+
+  it('fetches the text and shows it as it was served', async () => {
+    mockReads(CALLER)
+    const getText = vi
+      .spyOn(api, 'getText')
+      .mockResolvedValue('Feature: Refunds\n\n  Scenario: Double refund\n    Given a payment')
+    renderPage()
+
+    await userEvent.click(await screen.findByTestId('CaseDetail.Steps.ViewFeature'))
+
+    expect(await screen.findByTestId('CaseDetail.Feature.Text')).toHaveTextContent('Scenario: Double refund')
+    expect(getText.mock.calls[0][0]).toBe(`/projects/${PROJECT}/cases/c1/feature`)
+  })
+
+  it('makes no request until it is opened', async () => {
+    mockReads(CALLER)
+    const getText = vi.spyOn(api, 'getText').mockResolvedValue('Feature: x')
+    renderPage()
+
+    await screen.findByTestId('CaseDetail.Steps.ViewFeature')
+    expect(getText).not.toHaveBeenCalled()
+  })
+})
+
+describe('CaseDetailPage — imported provenance', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('shows nothing for a case nobody imported, which today is all of them', async () => {
+    mockReads(CALLER)
+    renderPage()
+
+    await screen.findByTestId('CaseDetail.Steps')
+    expect(screen.queryByTestId('CaseDetail.ImportedFrom')).not.toBeInTheDocument()
+  })
+
+  it('names the file and the line for an imported one', async () => {
+    mockReads(CALLER, undefined, { importedFrom: { path: 'features/refunds.feature', line: 12 } })
+    renderPage()
+
+    expect(await screen.findByTestId('CaseDetail.ImportedFrom')).toHaveTextContent(
+      'features/refunds.feature:12',
+    )
   })
 })

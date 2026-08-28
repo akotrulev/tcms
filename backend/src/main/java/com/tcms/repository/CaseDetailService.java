@@ -85,6 +85,29 @@ public class CaseDetailService {
                 .map(row -> detail(companyId, userId, projectId, row));
     }
 
+    /**
+     * The rows pasted Gherkin text would become — or empty when the caller may not see the project.
+     *
+     * <h2>Here rather than in a service of its own</h2>
+     *
+     * <p>This endpoint has no state and no write: all it needs is the gate {@link #findOne} already
+     * borrows, and the pure function next to it. A bean whose only body is
+     * {@code projects.readVisible(…, GherkinScenarios::parse)} would be a layer that forwards, which
+     * the case editor's other read does not have either.
+     *
+     * <p><strong>Nothing is persisted and nothing is looked up.</strong> The project is resolved to
+     * answer "may this caller see it" and then discarded; the answer is a function of the argument
+     * alone, which is what lets the same text be pasted repeatedly with no effect.
+     *
+     * @throws GherkinSyntaxException when the text will not parse. It leaves the transaction as it
+     *         leaves this method — the transaction is read-only and has nothing to unwind, and the
+     *         controller turns it into the 400 with the line on it.
+     */
+    @Transactional(readOnly = true)
+    public Optional<GherkinParseResult> parseGherkin(UUID userId, UUID projectId, String text) {
+        return projects.readVisible(userId, projectId, project -> GherkinScenarios.parse(text));
+    }
+
     private TestCaseDetailView detail(
             UUID companyId, UUID userId, UUID projectId, TestCase row) {
 

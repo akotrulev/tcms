@@ -18,8 +18,7 @@ import java.util.UUID;
  * @param lockVersion on the wire because the SPA sends it back as {@code If-Match}, so a second
  *                    tester on the same run is a 409 rather than a silent overwrite. The one
  *                    internal that earns its place in a response.
- * @param steps       the <strong>pinned</strong> version's steps, with results merged in. Empty is a
- *                    real state: a Gherkin case has no structured steps and the screen says so.
+ * @param steps       the <strong>pinned</strong> version's steps, with results merged in.
  */
 public record TestExecutionView(
         UUID id,

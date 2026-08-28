@@ -176,4 +176,87 @@ public interface TestCaseRepository extends JpaRepository<TestCase, UUID> {
                AND tc.deletedAt IS NULL
             """)
     List<UUID> liveIdsForProject(@Param("projectId") UUID projectId);
+
+    /**
+     * Every live case whose procedure is still <strong>only</strong> in
+     * {@code test_case.gherkin_source} — the population {@code migrate-gherkin-source} exists for,
+     * and the one {@code 002-} cannot drop the column until it is empty.
+     *
+     * <h2>The zero-rows half is deliberately NOT in this query</h2>
+     *
+     * <p>A case that already has {@code test_step} rows is selected here and reported by
+     * {@link GherkinBackfill} as {@code already has steps}. Filtering it out in SQL would make a
+     * replay print nothing at all, which an operator cannot tell from a run against the wrong
+     * company or from a command that silently did not execute. The second run's whole value is that
+     * it lists the same cases and says each one is done.
+     *
+     * <h2>Company scope is RLS's, and the format is a parameter</h2>
+     *
+     * <p>No {@code companyId} predicate: the caller opens the context and
+     * {@code FORCE ROW LEVEL SECURITY} does the rest, exactly as {@code case_health}'s recompute
+     * relies on. The format is bound rather than written as an enum literal because every other
+     * enum comparison in this package's queries is bound ({@code ConditionRepository}'s
+     * {@code c.type IN :types}), and one query spelling it differently is the one that behaves
+     * differently under a Hibernate upgrade.
+     *
+     * <p>Ordered by project and then by key sequence so the report reads as the repository does,
+     * and so two runs produce the same list in the same order — a diff between two reports should
+     * be a change of state, never a change of ordering.
+     */
+    @Query("""
+            SELECT tc FROM TestCase tc
+             WHERE tc.stepFormat = :format
+               AND tc.gherkinSource IS NOT NULL
+               AND LENGTH(TRIM(tc.gherkinSource)) > 0
+               AND tc.deletedAt IS NULL
+             ORDER BY tc.projectId ASC, tc.keySeq ASC
+            """)
+    List<TestCase> findStillOnTheBlob(@Param("format") StepFormat format);
+
+    /**
+     * Every live case in <strong>this company</strong> whose automation key is one of these.
+     *
+     * <p>The {@code .feature} import's central lookup, and the one query in this interface that is
+     * deliberately NOT narrowed to a project. {@code test_case_automation_key_idx} is unique per
+     * COMPANY ({@code V1:542-543}), so a scenario whose key is already taken by a case in a sibling
+     * project cannot be created here — the insert would fail — and a plan that only looked inside
+     * the target project would report {@code CREATE} for a row that is going to raise a constraint
+     * violation and roll the whole request back. Returning the case lets the service answer
+     * {@code REFUSE "automationKey already used by TC-412 in project PAY"}, which names the thing
+     * the caller has to go and look at (blueprint DEC-1 R4).
+     *
+     * <p>The company bound is RLS's, as everywhere else here. Soft-deleted cases are excluded, and
+     * that is the same asymmetry {@link #existsByAutomationKeyOtherThan} carries: a retired case
+     * keeps its key reserved against the unique index but is not something a plan can point a human
+     * at, so a key held only by a deleted row reads as free here and fails at the insert. That is a
+     * 409, which is the correct answer to a race and the honest one to this.
+     *
+     * @param automationKeys must be non-empty — an empty collection binds into SQL {@code IN ()}
+     */
+    @Query("""
+            SELECT tc FROM TestCase tc
+             WHERE tc.automationKey IN :automationKeys
+               AND tc.deletedAt IS NULL
+            """)
+    List<TestCase> findLiveByAutomationKeys(
+            @Param("automationKeys") Collection<String> automationKeys);
+
+    /**
+     * Every live case FILED in one of these suites — the import's orphan sweep.
+     *
+     * <p>Filed, and only filed: {@code suite_id} is the case's own column, and the other two arms
+     * of a flat suite (§98 — added, and tag-resolved) are memberships a case can gain without ever
+     * having been imported. An orphan is "a case this import used to write and no longer names",
+     * so the population it is drawn from has to be the one the import itself files into.
+     *
+     * @param suiteIds must be non-empty — the caller returns early when no suite is in scope
+     */
+    @Query("""
+            SELECT tc FROM TestCase tc
+             WHERE tc.suiteId IN :suiteIds
+               AND tc.automationKey IS NOT NULL
+               AND tc.deletedAt IS NULL
+             ORDER BY tc.keySeq ASC
+            """)
+    List<TestCase> findLiveFiledIn(@Param("suiteIds") Collection<UUID> suiteIds);
 }

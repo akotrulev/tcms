@@ -258,7 +258,9 @@ public class CaseCloneService {
                     step.getKeyword() == null ? null : step.getKeyword().name(),
                     step.getAction(),
                     step.getTestData(),
-                    step.getExpectedResult()));
+                    step.getExpectedResult(),
+                    step.getDocstring(),
+                    step.getDatatable()));
         }
 
         List<UUID> classificationValueIds = new ArrayList<>();
@@ -304,8 +306,12 @@ public class CaseCloneService {
                 source.getDescription(),
                 source.getObjective(),
                 source.getExpectedOutcome(),
+                // No gherkinSource beside it since §255: the field left TestCaseInput, so a
+                // clone of a not-yet-migrated case copies its rows (there are none) rather than
+                // its blob. That case is unclonable-in-full until migrate-gherkin-source has run,
+                // which is the same gate everything else in this initiative waits on and is
+                // preferable to a create path that can write a column nothing else may.
                 source.getStepFormat(),
-                source.getGherkinSource(),
                 source.getPriority(),
                 source.getSeverity(),
                 // AUTOMATED becomes TO_BE_AUTOMATED and the key is dropped — see the class header.

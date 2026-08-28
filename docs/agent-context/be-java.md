@@ -2,7 +2,7 @@
 
 # be-java — orientation cache (TCMS)
 
-**Last verified:** 2026-08-22 (**§249** — **cross-project case search: `GET /cases/search`, area D of `docs/plans/2026-08-18-unplanned-gaps.md`, executed against `docs/plans/2026-08-18-gap-d-cross-project-case-search.md`. NO MIGRATION, no permission key, no module edge, catalogue still 55, head still `V68`.**) ✅ **GATES RUN AND GREEN — the first entry in five to quote a build: backend `3249 / 0 / 0`, frontend `1692 / 1692`, lint 0 warnings, packages green, all on `shanks`.** Batch 4's stage 1 greened the tree first (see the fix commits for §244–§248), which is why this area could be gated per phase the way slices ran before batch 1. **THE RULE THAT OUTLIVES THE AREA: when a read spans projects, the grant narrowing goes in the QUERY and the test goes on the TOTAL.** RLS scopes to the **company** — two projects in one company are both visible to the same session, so the database refuses nothing and the project narrowing is *entirely* the application's, which is the opposite of every other case read in this product. A narrowing applied in Java after the read serves the **correct page** beside a count of the whole company's matching rows, and **a page-only assertion cannot tell the two apart**: `theTotalIsNarrowedToo` reports 7 rather than 2, and `thePageCannotHideTheCount` returns an **empty page** because `TC-1`, the row that sorts first of all seven, lives in an ungranted project. The fixture makes every wrong answer a different number (2 correct, 7 the company-wide leak, 8 counting the soft-deleted row, 3 a per-project loop that forgot a grant). **`repository` ASKS `project`, NEVER `identity`, AND THE MASTER PLAN SAID OTHERWISE** — `identity` *is* on this module's `allowedDependencies`, so calling `AdminReach.visibleProjects` would have shipped a violation **ArchUnit and Modulith both pass**; `repository/package-info.java` forbids a permission question through that edge in prose written for exactly this temptation, and `ProjectService.readAllVisible` is the same `PermissionEvaluator` reached legally. **`readAllVisible` is now the cross-project gate for TWO modules (`work` and `repository`), which is what makes it a seam rather than a helper.** **THE PLAN'S OWN FIRST UNCERTAINTY WAS REAL AND WOULD HAVE SHIPPED A NEARLY-EMPTY SEARCH**: it proposed spelling "no suite bound" as `liveSuiteIds = List.of()` + `includeUnfiled = true`, and `CaseSpecifications.suiteScope` reads that pair as `suite_id IS NULL` — **unfiled cases only**, which is what `CaseService` builds it to mean for the grid's unfiled filter. So the cross-project search would have answered the handful of cases filed nowhere and **silently dropped every filed case in the company** — plausible, non-empty, wrong, and invisible to any natural fixture because a natural fixture files everything. `CaseScope` therefore gains an explicit **`boundByTree`**, `suiteScope` returns `Optional`, the compact constructor **refuses** a scope that is both unbounded and naming suites, and `CaseSearchTest` files every case on purpose with exactly one (`TC-8`) deliberately unfiled. **Q4 answered: the search applies no live-tree bound, so a case in a SOFT-DELETED suite is findable here and absent from that project's grid** — deliberate, and asserted on a word of its own (`rebate`) so it cannot disturb the `refund` arithmetic. **`CaseSpecifications`' project bound stops being a documented survivor mutation and becomes the whole boundary**; both texts stand at the site with the old one struck, and `§249 CS-M3` deletes the line expecting red here and **GREEN on `CaseListEndpointTest`**. **THE QUERY PLAN SAYS NO INDEX IS OWED, WHICH CONTRADICTS THE PLAN'S EXPECTATION**: measured `V67`'s way (throwaway PG 17, all **68** migrations as non-superuser `tcms_owner`, every plan as `tcms_app` with `app.current_company` set so the `One-Time Filter` node is present; 1,001 companies, 500,000 cases, 279 MB, measured company 200,000 across 10 projects) the page is a **Bitmap Index Scan on `test_case_lifecycle_idx`** at **72.8 ms** with **no `Seq Scan` anywhere**, the count 68.0 ms, all ten projects 247.1 ms, and the `TC-n` short-circuit **0.064 ms** through `test_case_key_seq_idx`. The candidate `GIN (lower(title) gin_trgm_ops)` was **created and measured rather than reasoned about**, and the planner **ignores it** — identical plan, identical `Rows Removed by Filter: 34639`, 72.8 → 72.9 ms — because the grant predicate has already cut 500k rows to 40k and a GIN scan plus `BitmapAnd` costs more than filtering that. ⚠️ **The first baseline looked 25% slower and it was CACHE, not the index** (`read=7144` vs `hit=7268`); both sides were re-run warm before concluding, and a cold-vs-warm comparison would have "proved" an index worth taking. Q5 is answered **neither** — no expression index, no `search_vector` move (whose GIN index already exists) — and **no Flyway version taken**. Three more plan corrections: **`CaseService:141` is NOT the only `CaseScope` site** (`DashboardService:124` is the second), the new schemas needed **`ContractConventionTest` pairings** the watch-list did not name, and the contract path belongs in the **`repository` banner block** rather than beside `/work-items`, which is in `work`. Regenerating `schema.d.ts` also picked up **§247's un-regenerated contract edit**, which `schemaFreshness` missed because it checks paths and operations and not parameters. Fixture prefix **`4d`**, slugs **`csearch-*`** — a slug is a **second global namespace the UUID prefix assignment does not cover** (`company` is not under RLS; `uq_company_slug` spans the instance), which §247 paid 32 unrelated failures to establish earlier in this batch. Gates: **backend 3249 / 0 / 0.**)
+**Last verified:** 2026-08-28 (**§255** — **the unified step model, initiative 001 T1, T3, T5 and T6. `stepFormat` is a LENS over `test_step`, not a switch between two storages; `V69`; `gherkin_source` is writerless with `002-` as its named deleter. T3 adds the ONE Gherkin parser (`io.cucumber:gherkin` 42.0.1) and its inverse, and the two endpoints on `CaseController`. T5 adds `migrate-gherkin-source` — and it is the first operator verb whose runner is in the COMPOSITION ROOT rather than in `provisioning`, because the migration belongs in `repository` and that edge is one two architecture rules refuse. T6 adds `POST …/feature-imports`, and with it `com.tcms.api.AutomationKeys` — the SIXTH type in the `api` foundation module and the first that is a FORMAT rather than a shape, because two modules that may not import each other have to spell one contract field identically.** ✅ **GATED GREEN on `shanks` 2026-08-28 — backend `3408 / 0 / 0` — and all 108 backend mutation rows EXECUTED.** Reaching green cost nine fixes across the batch, **three of them in shipped code**: a `uq_suite_key` fixture collision that took out 14 arms while `FeatureImportController.raced` reported it to the caller as *"another writer took your key"* (it now rethrows anything that is not one of its two indexes), a fixture UUID prefix already owned by another class (13 arms), and — the sharpest — **a `Background:` change could never detach a condition**, because `imported_source` is cut from the SCENARIO's lines and a `Background:` sits above them, so R6's short-circuit fired on text that was byte-identical. **THE MUTATION PASS'S OWN LESSON: `BF-M1` is refuted — nothing anywhere drives `MigrateGherkinSourceCommand.run`**, because the test helper opens the `CompanyContext` itself and `run` ends in `System.exit`; §246's ordering rule is untested. `FI-M20`, `FI-M31` and `FI-M35` are refuted too, and `FI-M35` is the one to close: nothing asserts an imported case is FILED. Read that section first if you are touching `CaseEdit`, `TestStep`, `CaseCompleteness`, `Condition`, `automationKey`, or anything that parses or renders `.feature` text.) · previously 2026-08-22 (**§249** — **cross-project case search: `GET /cases/search`, area D of `docs/plans/2026-08-18-unplanned-gaps.md`, executed against `docs/plans/2026-08-18-gap-d-cross-project-case-search.md`. NO MIGRATION, no permission key, no module edge, catalogue still 55, head still `V68`.**) ✅ **GATES RUN AND GREEN — the first entry in five to quote a build: backend `3249 / 0 / 0`, frontend `1692 / 1692`, lint 0 warnings, packages green, all on `shanks`.** Batch 4's stage 1 greened the tree first (see the fix commits for §244–§248), which is why this area could be gated per phase the way slices ran before batch 1. **THE RULE THAT OUTLIVES THE AREA: when a read spans projects, the grant narrowing goes in the QUERY and the test goes on the TOTAL.** RLS scopes to the **company** — two projects in one company are both visible to the same session, so the database refuses nothing and the project narrowing is *entirely* the application's, which is the opposite of every other case read in this product. A narrowing applied in Java after the read serves the **correct page** beside a count of the whole company's matching rows, and **a page-only assertion cannot tell the two apart**: `theTotalIsNarrowedToo` reports 7 rather than 2, and `thePageCannotHideTheCount` returns an **empty page** because `TC-1`, the row that sorts first of all seven, lives in an ungranted project. The fixture makes every wrong answer a different number (2 correct, 7 the company-wide leak, 8 counting the soft-deleted row, 3 a per-project loop that forgot a grant). **`repository` ASKS `project`, NEVER `identity`, AND THE MASTER PLAN SAID OTHERWISE** — `identity` *is* on this module's `allowedDependencies`, so calling `AdminReach.visibleProjects` would have shipped a violation **ArchUnit and Modulith both pass**; `repository/package-info.java` forbids a permission question through that edge in prose written for exactly this temptation, and `ProjectService.readAllVisible` is the same `PermissionEvaluator` reached legally. **`readAllVisible` is now the cross-project gate for TWO modules (`work` and `repository`), which is what makes it a seam rather than a helper.** **THE PLAN'S OWN FIRST UNCERTAINTY WAS REAL AND WOULD HAVE SHIPPED A NEARLY-EMPTY SEARCH**: it proposed spelling "no suite bound" as `liveSuiteIds = List.of()` + `includeUnfiled = true`, and `CaseSpecifications.suiteScope` reads that pair as `suite_id IS NULL` — **unfiled cases only**, which is what `CaseService` builds it to mean for the grid's unfiled filter. So the cross-project search would have answered the handful of cases filed nowhere and **silently dropped every filed case in the company** — plausible, non-empty, wrong, and invisible to any natural fixture because a natural fixture files everything. `CaseScope` therefore gains an explicit **`boundByTree`**, `suiteScope` returns `Optional`, the compact constructor **refuses** a scope that is both unbounded and naming suites, and `CaseSearchTest` files every case on purpose with exactly one (`TC-8`) deliberately unfiled. **Q4 answered: the search applies no live-tree bound, so a case in a SOFT-DELETED suite is findable here and absent from that project's grid** — deliberate, and asserted on a word of its own (`rebate`) so it cannot disturb the `refund` arithmetic. **`CaseSpecifications`' project bound stops being a documented survivor mutation and becomes the whole boundary**; both texts stand at the site with the old one struck, and `§249 CS-M3` deletes the line expecting red here and **GREEN on `CaseListEndpointTest`**. **THE QUERY PLAN SAYS NO INDEX IS OWED, WHICH CONTRADICTS THE PLAN'S EXPECTATION**: measured `V67`'s way (throwaway PG 17, all **68** migrations as non-superuser `tcms_owner`, every plan as `tcms_app` with `app.current_company` set so the `One-Time Filter` node is present; 1,001 companies, 500,000 cases, 279 MB, measured company 200,000 across 10 projects) the page is a **Bitmap Index Scan on `test_case_lifecycle_idx`** at **72.8 ms** with **no `Seq Scan` anywhere**, the count 68.0 ms, all ten projects 247.1 ms, and the `TC-n` short-circuit **0.064 ms** through `test_case_key_seq_idx`. The candidate `GIN (lower(title) gin_trgm_ops)` was **created and measured rather than reasoned about**, and the planner **ignores it** — identical plan, identical `Rows Removed by Filter: 34639`, 72.8 → 72.9 ms — because the grant predicate has already cut 500k rows to 40k and a GIN scan plus `BitmapAnd` costs more than filtering that. ⚠️ **The first baseline looked 25% slower and it was CACHE, not the index** (`read=7144` vs `hit=7268`); both sides were re-run warm before concluding, and a cold-vs-warm comparison would have "proved" an index worth taking. Q5 is answered **neither** — no expression index, no `search_vector` move (whose GIN index already exists) — and **no Flyway version taken**. Three more plan corrections: **`CaseService:141` is NOT the only `CaseScope` site** (`DashboardService:124` is the second), the new schemas needed **`ContractConventionTest` pairings** the watch-list did not name, and the contract path belongs in the **`repository` banner block** rather than beside `/work-items`, which is in `work`. Regenerating `schema.d.ts` also picked up **§247's un-regenerated contract edit**, which `schemaFreshness` missed because it checks paths and operations and not parameters. Fixture prefix **`4d`**, slugs **`csearch-*`** — a slug is a **second global namespace the UUID prefix assignment does not cover** (`company` is not under RLS; `uq_company_slug` spans the instance), which §247 paid 32 unrelated failures to establish earlier in this batch. Gates: **backend 3249 / 0 / 0.**)
 
 **Superseded header below — §247's, kept because §249 touched no file in `execution` and no scheduler.** (**§247** — **scheduled runs: `run_schedule`, `V68`, and a per-company poller. Area C of `docs/plans/2026-08-18-unplanned-gaps.md`, executed against `docs/plans/2026-08-18-gap-c-scheduled-runs.md`. THE MASTER PLAN'S ONLY MIGRATION; contract changed; no permission seeded or moved, catalogue still 55; head is now `V68`.**) ⚠️ **GATES NOT RUN, AND NOTHING WAS EVEN COMPILED — the fourth entry in this file that cannot quote a build, and the first that cannot quote a `compileJava` either.** No `./gradlew build`, no `./gradlew test`, no targeted class, no `compileJava`, no npm suite, no `build`, no `lint`, locally or on `shanks`. **61 arms have never executed** (7 `CronScheduleTest` / 26 `RunScheduleEndpointTest` / 15 `RunScheduleFiringTest` / 11 `RunSchedulePage.test.tsx`, plus two added to `AsyncCompanyContextTest`), counted with `grep -c` rather than by hand. It ran **concurrently with area F (§248)** at the user's explicit permission; the two lanes share no source file, and F closed first. **THE RULE THAT OUTLIVES THE AREA: a job's AUTHORITY and a job's ACTOR are different columns, and a poller has only the first.** `run_schedule.created_by` is the authority — that person's `run:create` grant is re-evaluated through `ProjectService.writeGranted` on **every fire**, so a schedule outlives neither the grant nor the account — and the actor on the run row and on the audit row is **null**, because at 03:00 nobody performed the act. It is one line in `RunCreateService.apply` (`UUID actor = source == RunSource.SCHEDULED ? null : userId`) reaching exactly two call sites, and the **gate keeps `userId`**: changing it would make a scheduled run ungated, which is the opposite of the decision (`§247 SK-M2`). **THIS IS THE PRODUCT'S FIRST ACTORLESS WRITER**, which is why `AuditEvent#record`'s “null only for an unattended job” had no producer for eighty sections and why browser row `§242 LG-5` was recorded NOT DRIVABLE until now — rewritten in place, id unchanged, lane preamble corrected, and its expectation is the scheduled row **beside a hand-created one**, because “Automatic” alone is also what a build that had stopped recording actors renders. **THE ARCHIVED REFUSAL LIVES IN `RunScheduleFiringService` AND NOT IN `RunCreateService`**: archiving blocks no other write in this product (`isArchived()` is read by the toggle and two view projections and nothing else), so it is a rule about *schedules*; putting it in the create would add a sealed `Outcome` arm that `RunController`'s exhaustive switch must handle and the HTTP path can never produce — a dead arm on a shipped endpoint — and the cost, one extra permission evaluation per **fire**, is largely absorbed by §225's per-transaction memo. **RUN CREATION IS NOT REIMPLEMENTED**: `createScheduled` is a third package-private door beside `createIngested`, so the version pin, the display-key allocation, §6g's approval gate, the checklist and the audit row stay in the one class that has ever written a run — and the approval-gate **override is unreachable from it**, because §6g's whole word is *documented* and a schedule cannot decide in advance for every night to come. **NO CATCH-UP**: `next_fire_at` is recomputed from the **moment of firing**, never from the missed slot, and `recomputeNextFire` runs in **every branch including every failure** — a schedule that fails once and never advances is re-fired on every tick for ever. The double-fire guard is the **existing** `Idempotency-Key`, `schedule:<scheduleId>:<slot>`, keyed on the **slot** and never on `now`; a `Replayed` is not an error. **THE `Idempotency-Key` WAS REMOVED FROM THE CREATE, REVERSING THE STEPPED PLAN'S OWN RECOMMENDATION** — `V68` declares no idempotency column, so the header would be one nothing honours (§205, arriving from the same side), and `POST /conditions` and the notification-channel create decline it on those terms. **`V61`'s scope document is REUSED and `RunScopeDocument` is the extraction that makes that a property of the code** rather than of two methods currently agreeing; `RunScopeRequestView` now serves **three** contract positions. `RunScheduleScheduler` follows **`CaseHealthScheduler`, not `OutboxScheduler`** (one at-most-once domain write versus an at-least-once lease-based queue drain), including the per-company catch and `continue`. **THE TENANCY ARM HAD TO SPLIT ACROSS TWO CLASSES** because `RunScheduleRepository` is package-private in `execution` and `AsyncCompanyContextTest` is in `tenancy`. **WHAT THE PLAN MISSED: `SchemaConventionTest`'s policy count is a LITERAL, 70 → 71** — and under a no-gates directive nobody would have observed that red. **`everyMappedColumnHasAWriter` needed NO exemption**, relied on via its first disjunct only; `WRITERLESS_BY_DECISION` still holds seven. `@Version` **is** mapped here where `TestRun` refuses it. Fixture prefix **`3d`**. Gates: **NOT RUN**.)
 
@@ -21,6 +21,239 @@
 **Amended 2026-08-17 — `V67`, and the head is `V67`.** ~~"No migration"~~ is still true of the org-chart slice and **no longer true of the feature's record**: the org chart's own T5 query-plan lane ran afterwards and found a seq scan on the **authorization hot path**, which is now `V67__team_membership_answers_which_teams_a_person_is_in.sql`. See §241-A below before adding any index. Gates after `V67`: backend **3082 / 0 / 0**, unchanged — **an index adds no test, and that is the point of the `§241 IX-1` gap row.**
 
 ---
+
+## §255 — `stepFormat` IS A LENS, NOT A STORAGE SWITCH
+
+**Read this before touching `CaseEdit`, `TestStep`, `TestStepView`, `CaseCompleteness`,
+`TestCaseDetailView`, or anything that reads `test_case.gherkin_source`.** Initiative 001
+(`docs/plans/001-unified-step-model/`), task **T1**.
+
+> ⛔ **NOT GATED.** No `./gradlew build`, no `./gradlew test`, not one targeted class — the standing
+> post-batch-on-shanks rule. Every count below is `grep -c '@Test'` or a claim about what an arm
+> asserts, never a measurement.
+
+### The rule, stated once so it outlives the area
+
+> **A case's procedure is `test_step` rows. In both lenses. Always.** `step_format` selects how the
+> rows are *rendered and validated* — Gherkin keywords or numbered actions — and never where they
+> are stored. `test_case.gherkin_source` is the pre-§255 second storage: still read, **written by
+> nothing**, and dropped by initiative `002-` once `migrate-gherkin-source` (T5) has run everywhere.
+
+What that ended, in one line each: a Gherkin case could not be executed step by step, could not
+carry evidence per step, and **lost its step rows on a lens toggle** — `CaseEdit` cleared them, on a
+200, taking the ids every `step_result` anchors to.
+
+### The seam list
+
+| Changed | What it is now | The defect it prevents |
+|---|---|---|
+| `TestStep` | Maps `docstring` (TEXT) and `datatable` (`@JdbcTypeCode(SqlTypes.JSON)`, `List<List<String>>`). | A `.feature` round trip that silently drops every block argument. |
+| `TestStepView` | Gains `docString`/`dataTable`. **This record IS the version snapshot's step shape.** | A field that reaches the editor and stops at the version row — invisible from the case screen, missing on the tester's checklist. |
+| `CaseEdit` | `gherkinSource` component **gone**; `StepEdit` gains the two fields; `normalizeSteps` owns DEC-2 **R1–R3** and the size bounds; the `GHERKIN → List.of()` clear is deleted. | The 200 that discards the author's rows, and a two-spelling step reaching `ck_test_step_one_data` as a 500. |
+| `CaseUpdateRequest` | `gherkinSource` component gone (**ignored, not refused** — Jackson's default); `StepInput` gains the two fields. | A pre-§255 client refused for a field that now means nothing, when it also sent the procedure as steps. |
+| `TestCase` | `gherkin_source` no longer assigned; `imported_source`/`imported_path`/`imported_line` mapped. | — |
+| `TestCaseDetailView` | `importedFrom`; `gherkinSource` served **only for a zero-row case**. | One procedure on the screen twice, disagreeing after the first edit. |
+| `ImportedFromView` *(new)* | `{path, line}`, null unless **both** columns are set. | A chip pointing at line 0 of an unnamed file, which reads as a fact. |
+| `CaseCompleteness` | No `step_format` branch. *Says what should happen* = `expected_outcome` **or** any step `expected_result` **or** any step `keyword = 'THEN'`. | Every finished Gherkin case wearing an INCOMPLETE chip — and, the other way, the un-migrated population reading healthy until `002-` drops the column under it. |
+| `CaseFacts.PinnedStep` · `StepResultView` · `ExecutionViews` | Carry the two fields out of the **snapshot**. | — |
+
+### Three things a later reader will otherwise re-derive
+
+1. **`gherkin_source` is `WRITERLESS_BY_DECISION` with `002-` as the named deleter.** The map is
+   pinned both ways, so re-acquiring a writer fails the build — which is the point. `imported_source`
+   is in **both** exemption maps (writer and reader arrive together in T6); `imported_path`/
+   `imported_line` are writerless only, because `ImportedFromView` reads them from day one.
+2. **Execution renders the pinned snapshot, not `test_step`** (`ExecutionViews.steps` ←
+   `CaseFacts.PinnedStep` ← the snapshot JSON). If a new step field does not show on a run, the
+   snapshot is where to look. A snapshot written before §255 has neither key and reads as null,
+   which is correct rather than lossy.
+3. **`DataTableConverter` was planned and NOT built** — an `AttributeConverter` to `String` binds as
+   `varchar`, and Postgres does not implicitly cast `varchar` to `jsonb`. `Condition.body`'s own
+   javadoc records that trap; the mapping is `@JdbcTypeCode(SqlTypes.JSON)` one level of nesting
+   deeper. Deviation D1 in the delivery plan.
+
+### T3 — the one parser, its inverse, and the two endpoints
+
+**Read this before writing anything that reads or writes `.feature` text.** There is exactly one
+parser in this product and one renderer, both in `com.tcms.repository.GherkinScenarios`, both
+**static and pure** — no Spring bean, no row read, no row written. The backfill (T5) and the import
+(T6) are its consumers; neither may grow a second one (plan §6a rule 3).
+
+| Changed / added | What it is | The defect it prevents |
+|---|---|---|
+| `backend/build.gradle.kts` + `gradle/libs.versions.toml` | `io.cucumber:gherkin` **42.0.1** — the pure parser, not `cucumber-gherkin`. `io.cucumber:messages` and `org.jspecify:jspecify` pinned beside it. | A Cucumber-JVM runtime inside a product that is not a test runner; and, from the pins, two builds of one commit resolving different jars — gherkin declares both transitives as version RANGES. |
+| `GherkinScenarios` *(new)* | `parse(text)` → `GherkinParseResult`; `render(view)` and `render(parsed, featureName)` → text. One private `document(...)` core, one `stepLines(...)` used for both a scenario step and a Background step's condition body. | Two renderers that agree until somebody edits one. |
+| `GherkinParseResult` *(new, + `ParsedBackground`)* | The contract shape. `steps` is `CaseUpdateRequest.StepInput` — literally `TestStepInput`, so a paste is sent to the case write unchanged. | A third step shape between the parser and the editor. |
+| `GherkinSyntaxException` *(new)* | Four `Reason`s: `SYNTAX · OUTLINE · MANY_SCENARIOS · EMPTY`. | A parser failure reaching a client as a 500. |
+| `CaseDetailService.parseGherkin` | The gate, borrowed: `projects.readVisible(…, project -> GherkinScenarios.parse(text))`. | An endpoint that writes nothing being gated on nothing. |
+| `CaseController` | `POST …/cases/parse-gherkin` (`consumes=text/plain`, 256 KiB cap, 413/415) and `GET …/cases/{caseId}/feature` (`text/plain`, `Content-Disposition: inline`). Both on the existing controller — a second one on this prefix is the shape §72 ended. | — |
+
+**Five things a later reader will otherwise re-derive:**
+
+1. **The library reports syntax errors as `ParseError` ENVELOPES, not exceptions.** `ParserException`
+   is **package-private** in gherkin 42 and cannot be caught by type at all. `GherkinParser.parse`
+   catches it internally and emits an envelope, which is why "never a 500" is structural here rather
+   than a `catch` somebody has to remember. Its message opens `(4:3):`; `sentence(...)` strips that
+   and recomposes `"Line 4, column 3: …"`.
+2. **A bare step list and a lone `Scenario:` block are not Gherkin documents.** Both are accepted
+   pastes and both refuse at line 1, so `parse` retries them inside a nameless wrapper of the
+   declared dialect — `Feature:` alone when the text already names a scenario, `Feature:` +
+   `Scenario:` when it starts at a step. **The retry is conditioned on `direct.feature() == null`,
+   not on the text.** Wrapping a document that *did* parse buries its own `Feature:` line inside a
+   synthetic scenario, where it reads as the objective: a plausible success carrying the file's own
+   syntax as prose.
+3. **`*` is in EVERY keyword list of every dialect.** `keywordOf` tests it first for that reason; a
+   membership cascade in any other order reads a format-neutral step as `GIVEN`.
+4. **`expectedResult` and `testData` have no Gherkin syntax**, so they render as `# expected:` /
+   `# data:` comment lines and `parse` reads them back — a comment belongs to the last step at or
+   above it, which is what survives a doc string or a table sitting between them. A multi-line value
+   renders as `#   ` continuation lines. **A case's `POST` conditions render as a trailing
+   `# postconditions:` block and are deliberately NOT read back**: they are not steps.
+5. **`about:blank` is no longer this API's only `type`.** `parse-gherkin`'s four refusals carry
+   `gherkin-syntax` / `gherkin-outline` / `gherkin-many-scenarios` / `gherkin-empty`, because these
+   are the four a machine client has to tell apart. Everywhere else the blank type still stands.
+   The 415 is the container's and keeps `about:blank` — deviation **D6**.
+
+`everything.feature` (`backend/src/test/resources/gherkin/`) **is the contract with the library**:
+one construct of each type `integrations.md` X1 names. A major bump is its own task with that file
+as the gate.
+
+### T5 — `migrate-gherkin-source`, and the one operator verb that is not in `provisioning`
+
+**Read this before adding a fifth operator command, and before writing anything that reconstructs a
+`CaseEdit` outside `CaseUpdateService`.** T5 is what empties the pre-§255 population; `002-` is
+gated on its report showing zero cases left on the blob.
+
+| Changed / added | What it is | The defect it prevents |
+|---|---|---|
+| `com.tcms.MigrateGherkinSourceCommand` *(new)* | The verb: `--slug`, `--actor`, `--dry-run`. Parsing, actor resolution, the company context, the report, the exit code. **In the composition root**, not in `provisioning` — see below. | An operator verb inside a feature module, and the `provisioning → repository` edge two rules refuse. |
+| `com.tcms.repository.GherkinBackfill` *(new, public)* | The migration. Selects the blob population, resolves one context per project, then one transaction per case: `GherkinScenarios.parse` → `CaseEdit.validate` → `CaseSteps.reconcile` → `CaseVersions`. | A second normalizer — see rule 2 below. |
+| `GherkinBackfillReport` *(new, public)* | `Entry(caseKey, outcome, steps, reason, note)` + `stillOnTheBlob()`. `MIGRATED · ALREADY_MIGRATED · NOT_MIGRATED`. | `002-`'s release gate being a number somebody reads out of prose. |
+| `TestCaseRepository.findStillOnTheBlob(StepFormat)` | Live `GHERKIN` cases with a non-blank `gherkin_source`. **No zero-rows predicate** — a case that already has steps is SELECTED and reported. | A replay printing nothing, which reads exactly like a run against the wrong company. |
+| `OperatorCommands.MIGRATE_GHERKIN_SOURCE` | The only **public** verb constant. Registration stays in `provisioning`; the runner does not. | A verb missing from `ALL` — a command that does its work correctly and then never exits. |
+
+**Five things a later reader will otherwise re-derive:**
+
+1. **The command is in `com.tcms` and this is not an accident.** The migration must live in
+   `repository` (rule 2), `provisioning` may not depend on `repository`, and `repository` must not
+   become a foundation module — `execution`'s whole design is that it may not depend on it (plan
+   §3). Both `ArchitectureRulesTest.crossModuleDependenciesPointOnlyAtTheFoundation` and
+   `ModuleStructureTest.declarationsNameOnlyTheFoundationModules` refuse the edge, and the
+   composition root is the mechanism that already exists for composing two modules — the leaf rule's
+   own `because` names the pattern. **The leaf rule's comment used to say the root exemption "covers
+   TcmsApplication and nothing else"; it covers two classes now and the comment says so.**
+   Deviation **D11**, and `§255 BF-M14` is the mutation row for tidying it back.
+2. **A backfill that wrote step rows without a version would be a silent, permanent
+   mis-attribution.** `CaseVersions`' content hash covers `CaseEdit`, which covers the steps — so
+   rows written past it leave every migrated case with a stored hash that no longer describes it,
+   and **the next ordinary save by a real author writes the version, with their name on this
+   migration**. Same trap `CaseBulkService.writeVersion` exists to avoid.
+3. **The request is assembled through `CaseUpdateRequest.overlay`, not by hand.** `sent` states four
+   required fields spelled back off the row plus the two things the command says (`steps`, the
+   change comment); a `PatchBody` of `{"steps": null}` makes `has("steps")` true and everything else
+   comes from `CaseEdit.asRequest`. A hand-written 21-field copy is the second normalizer `CaseEdit.of`
+   warns about, and it fails silently: every hash it produced would disagree with the editor's.
+4. **A project the actor cannot see is REFUSED per case, not migrated with an empty vocabulary.**
+   `CaseRenderer.vocabularies` is a gated read that answers `List.of()` for an ungranted caller, and
+   a snapshot rendered from that records every classified case as unclassified — a false row in the
+   table whose whole purpose is that past claims stay true. So `--actor` must be able to *see* every
+   project being migrated, not merely be a member; a Company Admin satisfies both, and the usage
+   text says so.
+5. **`gherkin_source` is not cleared, the case's own title/objective are not touched, and a
+   `Background:` is reported rather than migrated.** Each has its reason in `data-model.md` §4; the
+   Background one is that an operator command has no `library:manage` semantics to create conditions
+   under, and the scenario still migrates.
+
+**Exit codes**: `0` nothing left on the blob · `3` the run finished and some cases are still on it
+(the `002-` signal) · `2` usage or an actor who is not an ACTIVE member · `1` no such company, or a
+failure. `Resolution` and `exitCodeOf` are split out of `run` **because `run` ends in `System.exit`
+and no in-process test survives it** — and the code a *run* returns is still untested for exactly
+that reason (`§255 BF-M18`, a named hole).
+
+Fixture prefix: `2b…`, slugs `mgs-…`. Both test classes live in `com.tcms`, beside the command.
+
+### T6 — the import endpoint, and the one place `automationKey` is spelled
+
+**Read this before adding anything to `com.tcms.api`, before writing a second `automationKey`
+join, and before assuming a new column needs a new migration.** Initiative 001 task **T6**.
+
+| Changed / added | What it is | The defect it prevents |
+|---|---|---|
+| `com.tcms.api.AutomationKeys` *(new)* | `cucumber(feature, scenario)` and the general `join(owner, test)`. `IngestedResult.fullName` **calls it**. | Two spellings of `"<Feature>#<Scenario>"` in two modules that may not import each other. The drift is silent and total: nothing throws, every ingested result stops matching, `unmatched_count` equals the number of tests that ran. |
+| `GherkinScenarios.parseFeature` + `ParsedFeature` *(new)* | The FILE shape beside the paste shape, out of the one parser. Refusals are DATA (`ParsedScenario.refusal`), one entry per scenario, each carrying its own verbatim text. | A second parser (plan §6a rule 3) — and one `Scenario Outline` refusing a folder of forty files. |
+| `FeatureImportRequest` · `FeatureImportPlan` *(new)* | The contract's eight schemas, two top-level records with six nested. | — |
+| `FeatureImportService` *(new)* | Plan, then apply, **from one method**. Every write through `CaseCreateService` / `CaseUpdateService` / `SuiteWriteService` / `ConditionService`. | A second normalizer, and a preview that disagrees with the apply it approved. |
+| `FeatureImportController` *(new)* | Its own prefix; 200 in both modes; the 409 handler for a raced unique index. | A 403 for the request, which answers nothing a preview is for. |
+| `Condition.importedKey` + `createImported` · `ConditionService.createImported`/`retitleImported` | The library entry the import owns. **Both new service methods are package-private and gateless** — the row's permission is decided before they are reached. | A public door onto the library that skips `library:manage`. |
+| `TestCase.recordImport` | The ONLY writer of `imported_source`/`imported_path`/`imported_line`, all three together. | Provenance entering `CaseEdit` and therefore the content hash — a version whose diff a reader cannot see, claiming its author moved a file. |
+| `TestCaseRepository.findLiveByAutomationKeys` / `findLiveFiledIn` · `ConditionRepository.findLiveImportedInProject` | The three lookups. The first is deliberately **not** project-narrowed. | A plan that reports `CREATE` for a key a sibling project holds, and a 409 that rolls back the other thirty-nine files. |
+
+**Six things a later reader will otherwise re-derive:**
+
+1. **`AutomationKeys` is in `api` and a `com.tcms.shared` must not be created for it.** The plan
+   said `shared`; `api/package-info.java` has a section headed *"Why it is not called `shared`"* and
+   §125 refused the same module by name, so a sixth foundation module would have needed §76's bar
+   cleared for a one-method string joiner. `api`'s charter — *"the contract defines it and more than
+   one module serves it"* — is met on a **format** rather than on a record, and the precedent inside
+   the package is `ProblemEnvelope`, which is there as rendering rather than as a shape. **What it
+   costs is stated in deviation D12**: the charter's sentence refusing *"a helper two modules happen
+   to share"* now sits one line above a class that must not be read as one.
+2. **T6 takes NO migration.** `V69` (T1) already carried `condition.imported_key` and
+   `condition_imported_key_idx` with their `COMMENT ON` lines; `data-model.md` §7 assigns the whole
+   `ALTER` set to T1 and T1 followed it. Head is `V69`; **`V70` is still reserved for `002-`**.
+   What T6 takes is the other half of `V69`'s own promise — the entity field arrives with its
+   writer. Deviation **D13**.
+3. **The three `imported_*` exemptions are GONE from `ArchitectureRulesTest`**, and one from
+   `READERLESS_BY_DECISION` too. They were added by T1 naming T6 as their deleter and removed by T6
+   five tasks later, which is the §245 shape: the moment a column gets a writer the exemption
+   becomes a false claim and fails the build in the other direction. `TestCase.gherkinSource` is the
+   only §255 entry left in that map, and `002-` is still its named deleter.
+4. **`CaseUpdateRequest.overlay` takes the four contract-REQUIRED fields from the body AS SENT.**
+   Not from the stored row — deliberately, so an absent one is still the 400 it has always been.
+   The consequence for anything that reconstructs an update outside the editor: spelling
+   `Priority.MEDIUM` into `sent` **resets the case's priority**, silently.
+   `FeatureImportService` passes `existing.getPriority()`, and `§255 FI-M11` is a registered gap
+   because no fixture case carries another value.
+5. **Ownership is `condition.imported_key` being non-null, and that is the whole rule.** A
+   re-import replaces only the `PRE` attachments whose condition has one; a human-attached `PRE`
+   comes back after the owned set, and `postconditions` is sent as **null** — "leave them alone" —
+   so a `POST` survives untouched. `[]` would detach them all, one character away.
+6. **Per row, the row's OWN key is checked before the Background's.** `case:create` / `case:edit`
+   first, then the suite, then `library:manage` — so a `case:read`-only caller is told the thing
+   they need first, and a row that turns out to be `SKIP` needs no key at all. The plan's ordering
+   was the other way; `§255 FI-M20` is the row that moves it back.
+
+**The ten fixed `reason` sentences**, each produced at exactly one site in `FeatureImportService`
+(`api-surface.md` §5.4; clients may match on them): the parser's own `"Line n, column m: …"` ·
+`"Feature has no name"` · `"Scenario Outline is not supported yet"` · `"exists (SKIP)"` ·
+`"unchanged since import"` · `"approved — not touched by UPDATE"` /
+`"deprecated — not touched by UPDATE"` · `"automationKey already used by TC-n in project X"` ·
+`"two suites are named 'X' (TS-a, TS-b) — pass suiteId"` · `"needs case:create"` /
+`"needs case:edit"` / `"needs suite:manage for suite 'X'"` /
+`"needs library:manage for the Background"` · `"title truncated to 150 characters"`. **One is not in
+§5.4's table** and was added here: `"Scenario has no name"`.
+
+Fixture prefix: `1d…`, slugs `fimp-…`. Eight `.feature` files and one Cucumber report under
+`src/test/resources/gherkin/import/`; the report is read by **two** test classes in two modules and
+is the contract between them. `FeatureImportTest.customRole` seeds the only persona in the product
+that holds `case:create` without `library:manage` — no catalogue role does (deviation **D15**).
+
+### What is owed
+
+`V69` is the head and **`V70` is reserved for `002-`**. T3, T5 **and T6** take no migration — see
+the T6 block's point 2 before assuming otherwise.
+
+**The contract has now changed three times** — T1's step shape, T3's two paths plus
+`GherkinParseResult` / `ParsedBackground`, and T6's `POST …/feature-imports` plus eight schemas
+(`FeatureImportRequest`, `FeatureFile`, `FeatureImportPlan`, `ImportRow`, `SuiteAction`,
+`ConditionAction`, `Orphan`, `ImportTotals`) — and both `schema.d.ts` copies are regenerated and
+byte-identical after each. All eight are paired in `ContractConventionTest.RESPONSE_RECORDS`; their
+enums are declared **inline**, as `api-surface.md` §3 states, so `ContractEnumTest.OWNERS` is
+unchanged at the same count.
+`packages/` (T2) has adapted; **`frontend/` has not and is red until T4**, which is wider than the
+plan's own "packages is red between T1 and T2" note (deviation **D2**). Nothing T3 added is a
+catalogue entity, so `packages/` should stay green — a prediction, and the `schemaFreshness` test is
+what settles it.
 
 ## §249 — THE NARROWING GOES IN THE QUERY, AND THE TEST GOES ON THE TOTAL
 

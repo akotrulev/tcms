@@ -3397,3 +3397,76 @@ computed check now compares each to its registry (`guideCopies.test.ts`, one per
 | `§254 H-9` | Open **The command-line tool** and **AI agent access**. Run `tcms help` against a real instance and compare the two command lists; then read the **Exit codes** block and provoke one — a `tcms case show TC-99999` for a case that does not exist, and `echo $?` | The page's Reading block now names `tcms format` and the two `proposal` commands, and its Writing block matches `tcms help`. The exit-code table is new; the provoked read answers **5**, not 1, which is the whole reason the table exists. **The `--yes` and `--dry-run` entries under "Options that apply everywhere" are the ones to check by doing**: `tcms doc unlink DOC-1 --link <id>` with no terminal must refuse rather than delete, and with `--dry-run` must print what it would do and send nothing. |
 
 ---
+
+## §255 — one editor, one renderer: the unified step model in the SPA
+
+**Four rows, and they do not form a lane of their own.** Each belongs to the lane whose *state* it
+needs, and the ids are quoted from `docs/plans/001-unified-step-model/delivery-plan.md` §T4, so they
+are never renumbered: `US-1` runs in **A3** (it needs a run to execute), the other three in **A1**
+(they need the case editor and the fixture charter's suites).
+
+**`US-2` is the row this slice exists for.** Until §255 the lens toggle was a switch between two
+storages — a Gherkin case sent `steps: []` — so pressing it and saving deleted every step row and
+every step id a `step_result` anchors to, answered 200, and showed a success toast. The automated
+arms cover the payload; what this row covers is that the screen agrees with it, on a case that has
+real evidence attached to a real step.
+
+**`US-4` cannot be driven by this pass as it stands, and that is the row rather than a reason to
+drop it.** It needs a `GHERKIN` case created **before** T1 — a case with a `gherkin_source` blob and
+zero step rows — and no lane in this file makes one, because the editor that could has been replaced
+by the one under test. Three options, in the order they should be considered: (a) run the row against
+an instance that predates this initiative (`shanks`'s own, before the T5 backfill is run on it) —
+strictly the best, because it is the real population; (b) `psql` the blob onto a case and delete its
+rows, which is a fixture the product cannot author and is therefore called out here exactly as
+`TC-3`'s null author is; (c) record it as undriveable and let the T5 backfill's own report stand in.
+**Do not silently skip it** — the fallback and its note are what a not-yet-migrated instance shows
+every reader of every legacy case.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§255 US-1` | **Lane A3.** On a case authored in A1 through *Paste Gherkin* (paste a three-step scenario with one `"""` doc string and one `\|` table), add it to a plan, start a run, open the execution, and **fail step 3** with a comment and an attached screenshot. Submit, leave the run, reopen the execution. | The checklist shows one row per step with the keyword as a prefix — `Then` reading differently from the actions — and the doc string and the table rendered **under the step they belong to**, not in the test-data column. The evidence is on **step 3** after the reopen, not on the execution. The empty-state sentence *"The version being executed has no steps"* must NOT appear. |
+| `§255 US-2` | **Lane A1.** Open a structured case with ≥ 3 steps, at least one carrying test data and one an expected result. Press **Gherkin**, read every row, press **Structured steps**, read them again. Then press **Gherkin** once more, Save, and reopen the case. | **Nothing is lost in either direction.** Every action, test datum and expected result is still there after both presses; the Gherkin press *fills* keywords (`Given` first, `Then` on the last row with an expected result, `When`/`And` between) and the Structured press changes nothing at all. **There is no diff dialog** in either direction. After the save, the detail page shows the same rows with the same step numbers — and if the case had been executed before, the run's evidence is still on the step it was attached to. |
+| `§255 US-3` | **Lane A1**, signed in as an account **holding `library:manage`** (the fixture's `lead`). In the case editor press **Paste Gherkin** and paste a `Feature:` with a **two-step `Background:`** and exactly one `Scenario:`. Read it, press *Create precondition and attach* on **one** of the two, then Add to the steps and Save. Repeat the paste as **`viewer`**. | The dialog offers **one row per Background step, not one for the block** (amendment AM1). Creating one attaches it to the case's Preconditions panel immediately — no reload, and not as "Unknown condition" — and it appears in the project's condition library. The second entry is still offered. As `viewer` the same two rows render with the button **disabled and a tooltip naming the permission** — disabled, not hidden, and the parsed rows still apply. Also paste a `Scenario Outline` and a two-scenario file: each is refused with its own sentence **on the textarea**, and a syntax error reads `Line n, column m: …`. |
+| `§255 US-4` | **Lane A1, and read the note above first — this row needs a fixture no lane authors.** Open a `GHERKIN` case that has a `gherkin_source` blob and **zero step rows**. Then press *View as .feature* on it and on an ordinary `STRUCTURED` case. | The steps panel shows the blob read-only under a **"Not yet migrated"** note naming `migrate-gherkin-source` — and a case that HAS rows never shows it, even though the backfill leaves its blob in place. *View as .feature* is offered on **both** cases and answers text in both: a structured case renders with `*` steps and there is no error. If the case carries an `importedFrom`, the header shows the *Imported from `path:line`* chip; on every other case it is absent. |
+
+---
+
+## §255 (T7) — the `.feature` import screen
+
+**Three rows, and they do not form a lane of their own either.** Each belongs to the lane whose
+*state* it needs, and the ids are quoted from `docs/plans/001-unified-step-model/delivery-plan.md`
+§T7, so they are never renumbered: `FI-1` starts in **A1** and finishes in **A3** (it needs a run to
+ingest into), `FI-2` runs in **A1**, `FI-3` in **L1** with the persona set that lane already has.
+
+**`FI-1` names a fixture this pass has to author, and it is not optional.** Deviation **D14** records
+that *nothing in the backend suite drives an ingestion against imported cases* — `AutomationKeysTest`
+and `FeatureImportTest.theKeysMatchTheReport` compare the two spellings of `"<Feature>#<Scenario>"`
+over one shared fixture, and the **end-to-end `unmatched_count = 0` is this row and nothing else**.
+So the charter must author two things:
+
+- **the three `.feature` files to drop.** `backend/src/test/resources/gherkin/import/orders.feature`,
+  `payments.feature` and `rules.feature` are the shapes to copy — four scenarios between them, one
+  `Background:` each, one `Rule:` with its own `Background:`, one doc string and one data table.
+  Copy them into a folder on the machine running the browser; they are test resources and the SPA
+  reads whatever is dropped.
+- **the Cucumber report to post.** `backend/src/test/resources/gherkin/import/report.json` is the one
+  T6 wrote and it already names those four scenarios with their `Feature:` names. It is the fixture
+  to post at the ingestion endpoint, unchanged, because it is the file the two backend classes agree
+  about — a report typed by hand for this row would prove the import matches *that*, which is the
+  one thing nothing was in doubt about.
+
+**Registered gaps, stated rather than hidden.** `FI-3` needs an account holding `case:create` and
+**not** `library:manage`, and D15 records that no seeded role separates them — `FeatureImportTest`
+had to seed a custom role by raw JDBC to reach the same refusal. So this row is driveable in L1 only
+if the sitting is willing to grant a bespoke role through the admin screens; if it is not, the
+honest outcome is *"not driven, and here is why"*, and the `needs library:manage for the Background`
+sentence stays inspection-only on this side exactly as `§255 FI-M41`'s 409 does on the other. The
+409 itself (`duplicate-automation-key`) is not a row here at all: two concurrent applies against one
+project is not a thing one browser sitting can stage, and its rendering is covered by an automated
+arm instead.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§255 FI-1` | **Lane A1, then A3.** As the fixture's `lead`, open **Test cases → Import feature files**, drop the folder of three features described above, press **Preview**, read it, press **Apply**. Then in **A3** put the created cases in a plan, start a run, and post `report.json` at the ingestion endpoint with `result:submit`. | The preview shows **one row per scenario** (four), one `CREATE` suite per feature name, **one condition row per distinct `Background:` step** — `Given I am signed in as a customer` appearing **once** across three files, not three times — and `totals` that add up to the rows. Apply turns every row's `caseKey` into a link. In A3 the ingestion's **`unmatched_count` is 0**: every scenario in the report resolved to a case the import created. A non-zero count here is the two spellings of `automationKey` having drifted, and it is the only place in the product that can say so. |
+| `§255 FI-2` | **Lane A1**, immediately after `FI-1`. Rename **one** scenario in one of the dropped files, drop the same folder again, choose **Rewrite it from the file**, Preview, Apply. Then drop the folder a third time unchanged and Preview. | The renamed scenario is a **`CREATE`** row and the case it used to be is listed under *Cases these files do not name* — **listed, and still in the case list afterwards with its runs intact**. Nothing is deleted. The `Background:` conditions all read *Already there* (`UNCHANGED`), not *Create*. On the third, unchanged drop every row reads `unchanged since import` and Apply writes nothing — no new version on any case, which the case's History tab is what proves. |
+| `§255 FI-3` | **Lane L1.** As **`viewer`** (`case:read` only), navigate straight to `/projects/<id>/cases/import`, drop one feature with a `Background:`, and press Preview. Then, if the sitting can grant one, as an account holding `case:create`/`case:edit` and **not** `library:manage`, do the same. Finally look at the **Test cases** header as `viewer`. | As `viewer`: **200 and a full plan, not a 403 page** — every row `Refused` reading exactly `needs case:create`, and Apply disabled with *"Nothing in this plan would be created or updated."* beside it. As the second account: every scenario row of a feature that has a `Background:` reads exactly `needs library:manage for the Background`, and the condition row says the same — the whole scenario is refused, never attached partly. On the case list the **Import feature files** button is **disabled with a tooltip naming both keys** ("create test cases or edit test cases"), never hidden. |

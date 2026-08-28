@@ -211,10 +211,12 @@ public class CaseUpdateService {
      * Whether the stored case says how it is run — B2's dividing line.
      *
      * <p>Read off the STORED row and never off the payload: the question is whether this save could
-     * be deleting a procedure, and the payload is the thing being judged. A case is deemed to have
-     * one if it holds a step or a Gherkin source, whichever format it claims — a case whose format
-     * was switched to GHERKIN while its old steps are still on the row has a procedure by either
-     * reading, and treating it as a stub would let the next save silently drop both.
+     * be deleting a procedure, and the payload is the thing being judged.
+     *
+     * <p>{@code gherkin_source} is still a term although §255 stopped writing it, and that is the
+     * point: a case authored before the backfill has its procedure <em>only</em> in the blob, and
+     * reading it as a stub would let one save empty a scenario nobody has migrated yet. The term
+     * dies with the column in {@code 002-}, by which time no such row exists.
      */
     private static boolean hasProcedure(TestCase testCase, List<TestStep> storedSteps) {
         return !storedSteps.isEmpty()

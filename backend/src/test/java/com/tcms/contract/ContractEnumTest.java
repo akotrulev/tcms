@@ -103,6 +103,11 @@ class ContractEnumTest {
                     List.of("com.tcms.repository.Priority", "com.tcms.work.Priority")),
             Map.entry("StepFormat",
                     List.of("com.tcms.repository.StepFormat", "com.tcms.execution.StepFormat")),
+            // ONE owner, unlike its neighbour, and the asymmetry is real rather than an omission:
+            // `execution` needs StepFormat because a run's pinned case declares its lens, and it
+            // reads a pinned step's keyword as a STRING out of the snapshot JSON — there is no
+            // second enum to keep in step. §255 named the schema; the type predates it.
+            Map.entry("StepKeyword", List.of("com.tcms.repository.StepKeyword")),
             Map.entry("StatusKind", List.of("com.tcms.project.StatusKind")),
             Map.entry("HealthSignal", List.of("com.tcms.repository.HealthSignal")),
             // Nested in the enum whose property it is, like ReviewVerdict above. It was an

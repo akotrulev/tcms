@@ -110,6 +110,32 @@ public interface ConditionRepository extends JpaRepository<Condition, UUID> {
             @Param("projectId") UUID projectId, @Param("conditionId") UUID conditionId);
 
     /**
+     * The live entries of this project the {@code .feature} import already owns, by key.
+     *
+     * <p>One point lookup per distinct {@code Background:} step per import request, through
+     * {@code condition_imported_key_idx}. It is what makes a re-import deterministic: the same step
+     * text hashes to the same key, finds the same row, and answers {@code UNCHANGED} instead of
+     * minting a second copy of one condition.
+     *
+     * <p>{@code deletedAt IS NULL} matches the index's own partial predicate, so a retired entry
+     * frees its key and the next import re-creates it rather than colliding with a row no read
+     * returns. {@code projectId} because a Background belongs to one automation repository — the
+     * same key in a sibling project is a different entry, and {@link #findLiveIdsInProject}'s
+     * header argues why a project predicate is not optional on anything that resolves caller input.
+     *
+     * @param importedKeys must be non-empty — see {@link #findLiveIdsInProject}
+     */
+    @Query("""
+            SELECT c FROM Condition c
+             WHERE c.projectId = :projectId
+               AND c.deletedAt IS NULL
+               AND c.importedKey IN :importedKeys
+            """)
+    List<Condition> findLiveImportedInProject(
+            @Param("projectId") UUID projectId,
+            @Param("importedKeys") Collection<String> importedKeys);
+
+    /**
      * Which of the given ids are live entries <strong>of this project</strong>.
      *
      * <p>The {@code projectId}

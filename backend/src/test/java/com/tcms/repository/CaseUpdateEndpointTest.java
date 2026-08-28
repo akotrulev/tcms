@@ -636,32 +636,76 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("switching to Gherkin clears the structured steps")
-        void gherkinClearsSteps() throws Exception {
-            // Plan §6a: the two formats are alternatives. A case holding both leaves the execution
-            // screen to pick one, and the next reader cannot tell which is authoritative.
+        @DisplayName("switching to Gherkin KEEPS the steps and their ids — §255's whole point")
+        void switchingLensKeepsTheSteps() throws Exception {
+            // ~~Plan §6a: the two formats are alternatives, so switching CLEARED the steps.~~ →
+            // §255: step_format is a LENS over one storage. The old behaviour discarded, on a 200,
+            // the rows the author had just written — and it took their ids with them, so every
+            // step_result recorded against the case was orphaned by a format toggle.
             Map<String, Object> payload = edit("Now in Gherkin");
             payload.put("stepFormat", "GHERKIN");
-            payload.put("gherkinSource", "Feature: Refunds\n\n  Scenario: Full\n    Given a payment");
-            payload.put("steps", List.of());
+            payload.put("steps", List.of(
+                    gherkinStep(stepId("one"), "GIVEN", "a captured payment"),
+                    gherkinStep(stepId("two"), "WHEN", "I refund the full amount"),
+                    gherkinStep(stepId("three"), "THEN", "the payment reaches REFUNDED")));
 
             patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
 
-            assertThat(stepsOf(caseId("full"))).isEmpty();
+            assertThat(stepsOf(caseId("full"))).hasSize(3);
+            assertThat(stepsOf(caseId("full"))).extracting(StepRow::id)
+                    .as("the ids are what step_result anchors to, so a lens toggle must not "
+                            + "reassign them")
+                    .containsExactly(stepId("one"), stepId("two"), stepId("three"));
         }
 
         @Test
-        @DisplayName("switching to Gherkin clears the steps even if the client still sends them")
-        void gherkinIgnoresSubmittedSteps() throws Exception {
+        @DisplayName("the version snapshot carries keyword, docString and dataTable per step")
+        void theSnapshotCarriesTheBlockArguments() throws Exception {
+            // The snapshot is what an EXECUTION reads (CaseFacts.PinnedStep), not test_step — so a
+            // field that reaches the editor and stops at the version row is a field a tester
+            // running the case never sees. That failure is invisible from the case screen, which
+            // is why the assertion is on the stored JSON.
             Map<String, Object> payload = edit("Now in Gherkin");
             payload.put("stepFormat", "GHERKIN");
-            payload.put("gherkinSource", "Feature: Refunds\n\n  Scenario: Full\n    Given a payment");
-            payload.put("steps", List.of(step(stepId("one"), "Open the refund screen")));
+            Map<String, Object> when = gherkinStep(stepId("two"), "WHEN", "I refund these");
+            when.put("dataTable", List.of(List.of("id", "amount"), List.of("p-1", "100")));
+            Map<String, Object> given = gherkinStep(stepId("one"), "GIVEN", "a captured payment");
+            given.put("docString", "the whole captured amount");
+            payload.put("steps", List.of(
+                    given, when,
+                    gherkinStep(stepId("three"), "THEN", "the payment reaches REFUNDED")));
 
             patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
 
-            assertThat(stepsOf(caseId("full"))).isEmpty();
-            assertThat(titleOf(caseId("full"))).isEqualTo("Now in Gherkin");
+            JsonNode steps = json.readTree(versionsOf(caseId("full")).getFirst().snapshot())
+                    .get("steps");
+            assertThat(steps.get(0).get("keyword").asText()).isEqualTo("GIVEN");
+            assertThat(steps.get(0).get("docString").asText())
+                    .isEqualTo("the whole captured amount");
+            assertThat(steps.get(1).get("dataTable").get(1).get(0).asText()).isEqualTo("p-1");
+            assertThat(steps.get(2).get("docString").isNull()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a doc string and a table survive a save, one per step")
+        void blockArgumentsRoundTrip() throws Exception {
+            Map<String, Object> payload = edit("Now in Gherkin");
+            payload.put("stepFormat", "GHERKIN");
+            Map<String, Object> withDoc = gherkinStep(stepId("one"), "GIVEN", "a request body");
+            withDoc.put("docString", "{\n  \"amount\": 100\n}");
+            Map<String, Object> withTable = gherkinStep(stepId("two"), "WHEN", "I refund these");
+            withTable.put("dataTable", List.of(List.of("id", "amount"), List.of("p-1", "100")));
+            payload.put("steps", List.of(
+                    withDoc, withTable,
+                    gherkinStep(stepId("three"), "THEN", "the payment reaches REFUNDED")));
+
+            JsonNode after = body(patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null));
+
+            JsonNode steps = after.get("steps");
+            assertThat(steps.get(0).get("docString").asText()).contains("\"amount\": 100");
+            assertThat(steps.get(0).get("dataTable").isNull()).isTrue();
+            assertThat(steps.get(1).get("dataTable").get(1).get(0).asText()).isEqualTo("p-1");
+            assertThat(steps.get(2).get("docString").isNull()).isTrue();
         }
 
         @Test
@@ -800,10 +844,14 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
          * Fields whose absence this check must not attribute to {@code required}.
          *
          * <p>Each is refused only <em>given a value of another field</em>, so the schema cannot
-         * state the obligation without a {@code oneOf} splitting the shape in four — {@code steps}
-         * for {@code STRUCTURED}, {@code gherkinSource} for {@code GHERKIN}, and the two
-         * automation fields for their two statuses. They are optional on the contract and refused
-         * on the server, and that is the honest arrangement rather than a complete one.
+         * state the obligation without a {@code oneOf} splitting the shape in three — {@code steps}
+         * for a case that already has some, and the two automation fields for their two statuses.
+         * They are optional on the contract and refused on the server, and that is the honest
+         * arrangement rather than a complete one.
+         *
+         * <p><strong>{@code gherkinSource} left this set with §255</strong>, and it left
+         * {@code TestCaseInput} at the same time: a Gherkin case is step rows now, so there is no
+         * second spelling of a procedure to be conditionally required.
          *
          * <p><strong>Since §200 the first two are conditional on the VERB as well</strong>, and
          * this test is the update half: {@code PATCH} refuses them, {@code POST} defers them, so a
@@ -813,7 +861,7 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
          * below it.
          */
         private static final Set<String> CONDITIONALLY_REQUIRED =
-                Set.of("steps", "gherkinSource", "automationKey", "notAutomatableReason");
+                Set.of("steps", "automationKey", "notAutomatableReason");
 
         /*
           §143's second defect, as a computed check rather than a careful reading.
@@ -922,16 +970,112 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("GHERKIN with no scenario is refused, keyed on gherkinSource")
-        void gherkinNeedsAScenario() throws Exception {
+        @DisplayName("R1 — a keyword-less step in the Gherkin lens is refused, keyed on steps")
+        void gherkinNeedsAKeywordOnEveryStep() throws Exception {
             Map<String, Object> payload = edit("Renamed");
             payload.put("stepFormat", "GHERKIN");
-            payload.put("gherkinSource", "  ");
+            payload.put("steps", List.of(
+                    gherkinStep(stepId("one"), "GIVEN", "a captured payment"),
+                    step(stepId("two"), "I refund it")));
 
             MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
 
             assertThat(result.getResponse().getStatus()).isEqualTo(400);
-            assertThat(errorsOf(result)).containsKey("gherkinSource");
+            assertThat(errorsOf(result).get("steps")).contains("Step 2 needs a keyword.");
+        }
+
+        @Test
+        @DisplayName("R1 does not apply in the structured lens — a keyword-less step is ordinary")
+        void structuredStepsNeedNoKeyword() throws Exception {
+            // The mirror of the arm above, and the one that makes it a LENS rule rather than a
+            // global one: the same payload, one field different, and it saves.
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("steps", List.of(step(stepId("one"), "Open the refund screen")));
+
+            assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("R2 — a first step of And/But is refused")
+        void theFirstStepCannotContinueNothing() throws Exception {
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("stepFormat", "GHERKIN");
+            payload.put("steps", List.of(
+                    gherkinStep(stepId("one"), "AND", "a captured payment"),
+                    gherkinStep(stepId("two"), "THEN", "it is refunded")));
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result).get("steps"))
+                    .contains("The first step cannot be And/But.");
+        }
+
+        @Test
+        @DisplayName("R2 allows And/But anywhere but first")
+        void aLaterAndIsFine() throws Exception {
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("stepFormat", "GHERKIN");
+            payload.put("steps", List.of(
+                    gherkinStep(stepId("one"), "GIVEN", "a captured payment"),
+                    gherkinStep(stepId("two"), "AND", "a refund window that is open"),
+                    gherkinStep(stepId("three"), "THEN", "it is refunded")));
+
+            assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("R3 — two data spellings on one step are refused, in EITHER lens")
+        void oneDataSpellingPerStep() throws Exception {
+            // Keyed on steps and answered here rather than by ck_test_step_one_data, because a
+            // constraint violation reaching the client is a 500 where a form error belongs.
+            Map<String, Object> payload = edit("Renamed");
+            Map<String, Object> twoSpellings = step(stepId("two"), "Enter the full amount");
+            twoSpellings.put("testData", "100.00");
+            twoSpellings.put("docString", "the whole captured amount");
+            payload.put("steps", List.of(step(stepId("one"), "Open it"), twoSpellings));
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
+
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(errorsOf(result).get("steps"))
+                    .contains("Step 2 has more than one data field — keep test data, a doc "
+                            + "string, or a table.");
+        }
+
+        @Test
+        @DisplayName("every broken step is reported, not just the first")
+        void allTheStepErrorsCometogether() throws Exception {
+            // A paste of a scenario is how these arrive, so a response naming one fault per round
+            // trip makes fixing a ten-row paste ten round trips.
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("stepFormat", "GHERKIN");
+            payload.put("steps", List.of(
+                    step(stepId("one"), "a captured payment"),
+                    step(stepId("two"), "I refund it")));
+
+            MvcResult result = patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null);
+
+            assertThat(errorsOf(result).get("steps"))
+                    .contains("Step 1 needs a keyword.", "Step 2 needs a keyword.");
+        }
+
+        @Test
+        @DisplayName("gherkinSource in a body is ignored, not refused")
+        void theRetiredFieldIsSimplyNotAField() throws Exception {
+            // The opposite call from ownerId/automationTags, which are refused: a client written
+            // against the pre-§255 shape sends the procedure BOTH ways, so dropping the retired
+            // spelling discards nothing the caller did not also send as steps.
+            Map<String, Object> payload = edit("Renamed");
+            payload.put("gherkinSource", "Feature: Refunds\n  Scenario: Full\n    Given a payment");
+
+            assertThat(patch(LEAD, ACME, ACME_BANKING, caseId("full"), payload, null)
+                    .getResponse().getStatus())
+                    .isEqualTo(200);
         }
 
         @Test
@@ -1931,7 +2075,6 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
         payload.put("notAutomatableReason", null);
         payload.put("estimatedDurationSec", 240);
         payload.put("stepFormat", "STRUCTURED");
-        payload.put("gherkinSource", null);
         payload.put("steps", List.of(
                 step(stepId("one"), "Open the refund screen"),
                 step(stepId("two"), "Enter the full amount"),
@@ -1947,6 +2090,15 @@ class CaseUpdateEndpointTest extends IntegrationTestBase {
         step.put("action", action);
         step.put("testData", null);
         step.put("expectedResult", null);
+        step.put("docString", null);
+        step.put("dataTable", null);
+        return step;
+    }
+
+    /** The same, in the Gherkin lens — every step carries a keyword (DEC-2 R1). */
+    private static Map<String, Object> gherkinStep(UUID id, String keyword, String action) {
+        Map<String, Object> step = step(id, action);
+        step.put("keyword", keyword);
         return step;
     }
 

@@ -23,12 +23,12 @@ import java.util.UUID;
  *
  * <h2>Every rule here is also in the SPA, deliberately</h2>
  *
- * <p>The editor's Zod schema enforces the same four cross-field rules, and that is duplication with
+ * <p>The editor's Zod schema enforces the same cross-field rules, and that is duplication with
  * a purpose rather than an accident: the client's copy exists so the message lands on the field that
  * caused it without a round trip, and this copy exists because <strong>the client is not a security
- * boundary</strong> and {@code curl} does not run Zod. Two of these rules are additionally in the
- * database ({@code ck_not_automatable_reason}, the {@code step_format} check), which is the layer
- * that holds when both of the others are wrong.
+ * boundary</strong> and {@code curl} does not run Zod. Three of these rules are additionally in the
+ * database ({@code ck_not_automatable_reason}, the {@code step_format} check, and since §255
+ * {@code ck_test_step_one_data}), which is the layer that holds when both of the others are wrong.
  *
  * <p>The messages are the SPA's messages, word for word. A server message that says the same thing
  * differently makes the same failure read as two different problems depending on which layer caught
@@ -41,7 +41,6 @@ record CaseEdit(
         String objective,
         String expectedOutcome,
         StepFormat stepFormat,
-        String gherkinSource,
         Priority priority,
         Priority severity,
         AutomationStatus automationStatus,
@@ -97,13 +96,20 @@ record CaseEdit(
      */
     private static final int MAX_TAG = 60;
 
-    /** One step, normalized. {@code position} is assigned by payload order, never sent. */
+    /**
+     * One step, normalized. {@code position} is assigned by payload order, never sent.
+     *
+     * <p>At most one of {@link #testData}, {@link #docString} and {@link #dataTable} is non-null
+     * — R3 below, and {@code ck_test_step_one_data} behind it.
+     */
     record StepEdit(
             UUID id,
             StepKeyword keyword,
             String action,
             String testData,
-            String expectedResult) {
+            String expectedResult,
+            String docString,
+            List<List<String>> dataTable) {
     }
 
     /**
@@ -141,14 +147,15 @@ record CaseEdit(
     }
 
     /**
-     * Whether this payload has to state the case's <strong>procedure</strong> — {@code steps} for a
-     * {@code STRUCTURED} case, {@code gherkinSource} for a {@code GHERKIN} one.
+     * Whether this payload has to state the case's <strong>procedure</strong> — {@code steps}, in
+     * either lens.
      *
-     * <p>The two are one rule with two spellings, not two rules: {@link StepFormat} makes them
-     * alternatives, so a case states its procedure in exactly one of them and asking a caller for
-     * the other is a category error. {@link CaseCompleteness} already reads them as one question
-     * for the same reason. They are therefore deferred together and enforced together; nothing else
-     * validated here differs by path.
+     * <p>~~The two are one rule with two spellings, not two rules: {@link StepFormat} makes them
+     * alternatives, so a case states its procedure in exactly one of them.~~ → <strong>superseded
+     * by §255: there is one spelling.</strong> {@code stepFormat} selects a LENS over
+     * {@code test_step} rather than one of two storages, so a Gherkin case has steps like any other
+     * and {@code gherkinSource} is no longer a field a caller can send. What is left is one rule
+     * about one field, which is what this enum was always describing under two names.
      *
      * <h2>Why a case may exist before its procedure does</h2>
      *
@@ -317,16 +324,9 @@ record CaseEdit(
             errors.computeIfAbsent("stepFormat", k -> new ArrayList<>()).add("Choose a step format.");
         }
 
-        String gherkin = trimToNull(request.gherkinSource());
         List<StepEdit> steps =
-                normalizeSteps(request.steps(), existingStepIds, errors);
+                normalizeSteps(request.steps(), format, existingStepIds, errors);
 
-        boolean statesItsProcedure = procedure == ProcedureRule.REQUIRED;
-
-        if (statesItsProcedure && format == StepFormat.GHERKIN && gherkin == null) {
-            errors.computeIfAbsent("gherkinSource", k -> new ArrayList<>())
-                    .add("Write the scenario, or switch to structured steps.");
-        }
         // "Nothing was SENT", not "nothing survived validation" — and the difference is a message
         // that contradicts the one beside it. `normalizeSteps` drops a step it has already
         // complained about, so a payload whose only step was rejected arrives here with an empty
@@ -336,9 +336,9 @@ record CaseEdit(
         // the same pair was already reachable through a blank action and an unknown step id, so it
         // predated that reference check and outlives it.
         boolean noStepsSubmitted = request.steps() == null || request.steps().isEmpty();
-        if (statesItsProcedure && format == StepFormat.STRUCTURED && noStepsSubmitted) {
+        if (procedure == ProcedureRule.REQUIRED && noStepsSubmitted) {
             errors.computeIfAbsent("steps", k -> new ArrayList<>())
-                    .add("Add at least one step, or switch to Gherkin.");
+                    .add("Add at least one step.");
         }
 
         if (request.priority() == null) {
@@ -384,10 +384,6 @@ record CaseEdit(
                 trimToNull(request.objective()),
                 trimToNull(request.expectedOutcome()),
                 format,
-                // Only the chosen format's content is kept, matching what the SPA sends and for the
-                // reason its comment gives: a case holding both leaves the next reader unable to
-                // tell which one is authoritative.
-                format == StepFormat.GHERKIN ? gherkin : null,
                 request.priority(),
                 request.severity(),
                 automation,
@@ -396,8 +392,11 @@ record CaseEdit(
                 // and the company-unique index refuses it to the case that needs it.
                 automation == AutomationStatus.AUTOMATED ? automationKey : null,
                 automation == AutomationStatus.NOT_AUTOMATABLE ? notAutomatable : null,
+                // Kept in BOTH lenses since §255. Clearing them for GHERKIN is what made a
+                // Gherkin case unexecutable per step, and it did it silently: the save answered
+                // 200 having discarded the rows the author had just written.
                 duration,
-                format == StepFormat.GHERKIN ? List.of() : steps,
+                steps,
                 classification,
                 preconditions,
                 postconditions,
@@ -468,7 +467,7 @@ record CaseEdit(
      *
      * <p>The tempting shortcut is to build the record directly from the row's getters. That is a
      * <strong>second normalizer</strong>, and the failure is silent and total: if it trims where
-     * {@link #validate} does not, or keeps a Gherkin source where {@code validate} drops it, then
+     * {@link #validate} does not, or keeps a data spelling where {@code validate} drops it, then
      * every hash it produces disagrees with every hash the edit path produces, and the next save of
      * every touched case writes a spurious version whose diff is empty. Round-tripping through
      * {@code validate} means there is exactly one normalizer and the two paths cannot disagree by
@@ -594,7 +593,6 @@ record CaseEdit(
                 row.getObjective(),
                 row.getExpectedOutcome(),
                 row.getStepFormat(),
-                row.getGherkinSource(),
                 row.getPriority(),
                 row.getSeverity(),
                 row.getAutomationStatus(),
@@ -610,7 +608,9 @@ record CaseEdit(
                                 step.getKeyword() == null ? null : step.getKeyword().name(),
                                 step.getAction(),
                                 step.getTestData(),
-                                step.getExpectedResult()))
+                                step.getExpectedResult(),
+                                step.getDocstring(),
+                                step.getDatatable()))
                         .toList(),
                 // Null means "leave the classification alone", which is exactly what a bulk action
                 // does — none of the eight touches it. The case's stored values are supplied
@@ -964,14 +964,50 @@ record CaseEdit(
     }
 
     /**
-     * Normalizes the submitted steps, dropping nothing silently.
+     * The longest doc string a step may carry. Larger than this is a file, not a step argument.
+     */
+    private static final int MAX_DOC_STRING = 64 * 1024;
+
+    /** Bounds on one table: rows, cells per row, and characters per cell. */
+    private static final int MAX_TABLE_ROWS = 200;
+    private static final int MAX_TABLE_CELLS = 50;
+    private static final int MAX_TABLE_CELL = 4 * 1024;
+
+    /**
+     * Normalizes the submitted steps, dropping nothing silently — and the home of the lens rules.
      *
      * <p>Position is the payload's order and is never taken from the request: a client-supplied
      * position can duplicate or skip, and {@code test_step} has no constraint that would refuse it —
      * so two steps could share position 3 and the execution screen would order them arbitrarily.
+     *
+     * <h2>The four rules §255 added, and why they are all keyed on {@code steps}</h2>
+     *
+     * <ul>
+     *   <li><strong>R1, {@code GHERKIN} only</strong> — every step needs a keyword. A keywordless
+     *       row in a Gherkin case renders as {@code *} in a {@code .feature} file, which is legal
+     *       Gherkin and is not what anybody wrote.</li>
+     *   <li><strong>R2, {@code GHERKIN} only</strong> — the first step may not be {@code AND} or
+     *       {@code BUT}: a continuation with nothing to continue.</li>
+     *   <li><strong>R3, either lens</strong> — at most one data spelling per step.
+     *       {@code ck_test_step_one_data} is the backstop; this is the answer the caller gets,
+     *       because a constraint violation reaching a client is a 500 where a form error
+     *       belongs.</li>
+     *   <li><strong>The bounds</strong> — a doc string or a table larger than
+     *       {@code api-surface.md} §3 declares. Refused rather than truncated: a silently shortened
+     *       table is a step whose data stops mid-row, which reads as authored content.</li>
+     * </ul>
+     *
+     * <p>All of them are collected under {@code steps} rather than under a per-step key, because
+     * the SPA's editor renders one field per step list and every message here names its step
+     * number. A key like {@code steps[2].docString} would land the message nowhere.
+     *
+     * <p><strong>Every error is collected, and nothing short-circuits on the first.</strong> A
+     * paste of ten keywordless rows must report ten sentences in one response — the author fixes
+     * the scenario once rather than discovering the next fault per round trip.
      */
     private static List<StepEdit> normalizeSteps(
             List<CaseUpdateRequest.StepInput> submitted,
+            StepFormat format,
             Set<UUID> existingStepIds,
             Map<String, List<String>> errors) {
 
@@ -993,14 +1029,112 @@ record CaseEdit(
                         .add("Step " + (i + 1) + " refers to a step that is not on this case.");
                 continue;
             }
+
+            StepKeyword keyword = keyword(step.keyword(), i, errors);
+            if (format == StepFormat.GHERKIN) {
+                if (keyword == null && trimToNull(step.keyword()) == null) {
+                    // Guarded on the RAW value, not on the parsed one: an unrecognized keyword
+                    // already produced its own sentence above, and adding "needs a keyword"
+                    // beside it tells the author they sent nothing when they sent something
+                    // wrong. Two messages, one fault, and the second one is false.
+                    errors.computeIfAbsent("steps", k -> new ArrayList<>())
+                            .add("Step " + (i + 1) + " needs a keyword.");
+                } else if (i == 0 && (keyword == StepKeyword.AND || keyword == StepKeyword.BUT)) {
+                    errors.computeIfAbsent("steps", k -> new ArrayList<>())
+                            .add("The first step cannot be And/But.");
+                }
+            }
+
+            String testData = trimToNull(step.testData());
+            String docString = trimToNull(step.docString());
+            List<List<String>> dataTable = normalizeTable(step.dataTable(), i, errors);
+
+            if (nonNulls(testData, docString, dataTable) > 1) {
+                errors.computeIfAbsent("steps", k -> new ArrayList<>())
+                        .add("Step " + (i + 1) + " has more than one data field — keep test data, "
+                                + "a doc string, or a table.");
+                continue;
+            }
+            if (docString != null && docString.length() > MAX_DOC_STRING) {
+                errors.computeIfAbsent("steps", k -> new ArrayList<>())
+                        .add("The doc string on step " + (i + 1) + " is longer than "
+                                + MAX_DOC_STRING + " characters.");
+                continue;
+            }
+
             normalized.add(new StepEdit(
                     step.id(),
-                    keyword(step.keyword(), i, errors),
+                    keyword,
                     action,
-                    trimToNull(step.testData()),
-                    trimToNull(step.expectedResult())));
+                    testData,
+                    trimToNull(step.expectedResult()),
+                    docString,
+                    dataTable));
         }
         return normalized;
+    }
+
+    /** How many of the three data spellings this step carries. */
+    private static int nonNulls(String testData, String docString, List<List<String>> dataTable) {
+        return (testData == null ? 0 : 1) + (docString == null ? 0 : 1) + (dataTable == null ? 0 : 1);
+    }
+
+    /**
+     * A submitted table, bounded and made immutable — or null.
+     *
+     * <p><strong>An empty outer list is null, not an empty table.</strong> {@code []} renders as a
+     * grid with no rows that the editor offers no way to remove, so the two spellings of "no table"
+     * are collapsed into the one the rest of the code can act on. A row that is itself empty is
+     * kept: a Gherkin table legitimately has a row of blank cells, and dropping it would silently
+     * renumber every row after it.
+     *
+     * <p>Cells are <strong>not trimmed</strong>, unlike every other text field here. Leading
+     * whitespace inside a {@code |}-cell is escaped content in the Gherkin spec, so trimming it
+     * would make the render of a parsed table differ from the file it was parsed from — which is
+     * exactly the round-trip property this initiative exists to establish. A null cell becomes an
+     * empty string, because the wire type is {@code string} and a null in the middle of a row is
+     * a hole no renderer has a spelling for.
+     */
+    private static List<List<String>> normalizeTable(
+            List<List<String>> submitted, int index, Map<String, List<String>> errors) {
+
+        if (submitted == null || submitted.isEmpty()) {
+            return null;
+        }
+        if (submitted.size() > MAX_TABLE_ROWS) {
+            errors.computeIfAbsent("steps", k -> new ArrayList<>())
+                    .add("The table on step " + (index + 1) + " has more than " + MAX_TABLE_ROWS
+                            + " rows.");
+            return null;
+        }
+
+        List<List<String>> table = new ArrayList<>(submitted.size());
+        for (List<String> row : submitted) {
+            if (row == null) {
+                errors.computeIfAbsent("steps", k -> new ArrayList<>())
+                        .add("The table on step " + (index + 1) + " has an empty row.");
+                return null;
+            }
+            if (row.size() > MAX_TABLE_CELLS) {
+                errors.computeIfAbsent("steps", k -> new ArrayList<>())
+                        .add("A row of the table on step " + (index + 1) + " has more than "
+                                + MAX_TABLE_CELLS + " cells.");
+                return null;
+            }
+            List<String> cells = new ArrayList<>(row.size());
+            for (String cell : row) {
+                String value = cell == null ? "" : cell;
+                if (value.length() > MAX_TABLE_CELL) {
+                    errors.computeIfAbsent("steps", k -> new ArrayList<>())
+                            .add("A cell of the table on step " + (index + 1) + " is longer than "
+                                    + MAX_TABLE_CELL + " characters.");
+                    return null;
+                }
+                cells.add(value);
+            }
+            table.add(List.copyOf(cells));
+        }
+        return List.copyOf(table);
     }
 
     /**

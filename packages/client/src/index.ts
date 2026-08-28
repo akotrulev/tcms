@@ -63,6 +63,7 @@ export {
   mechanicsFor,
   optionSpecFor,
   shapeOf,
+  spellableInArgv,
   templateFor,
   usageFor,
   violationsOfShape,

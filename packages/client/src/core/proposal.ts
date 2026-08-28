@@ -21,10 +21,11 @@
  * The contract is fixed too (§144). This stays because the file-time endpoint still validates
  * nothing, so the contract being right only helps a caller that reads it.
  *
- * **Two of the six checks stopped mirroring the server in §200** — `steps` and `gherkinSource`,
- * which the create path now defers — and they are kept anyway, for a reason stated at the checks
- * themselves. The rest of this header still holds: every other field it names is refused by the
- * server at accept exactly as it is here.
+ * **One of the five checks stopped mirroring the server in §200** — `steps`, which the create path
+ * now defers — and it is kept anyway, for a reason stated at the check itself. ~~Two of the six,
+ * the other being the scenario blob~~ → §255 took that field off `TestCaseInput` altogether, so
+ * there is nothing left to be stricter than. The rest of this header still holds: every other
+ * field it names is refused by the server at accept exactly as it is here.
  */
 import { TcmsClientError } from '../errors.js';
 import { CASE_SHAPE, fieldsFor, isRequired } from './shapes.js';
@@ -32,9 +33,9 @@ import { CASE_SHAPE, fieldsFor, isRequired } from './shapes.js';
 /**
  * What `CaseEdit.validate` demands unconditionally, on create and on edit alike.
  *
- * The conditional four — `steps` for STRUCTURED, `gherkinSource` for GHERKIN, `automationKey`
- * for AUTOMATED, `notAutomatableReason` for NOT_AUTOMATABLE — are checked below rather than
- * listed here, because each is required only given a value of another field.
+ * The conditional three — `steps` in either lens, `automationKey` for AUTOMATED,
+ * `notAutomatableReason` for NOT_AUTOMATABLE — are checked below rather than listed here, because
+ * each is required only given a value of another field.
  */
 export const REQUIRED_CASE_FIELDS: readonly string[] = fieldsFor(CASE_SHAPE, 'propose', 'body')
   .filter((field) => field.required === 'always')
@@ -56,9 +57,9 @@ export function requireProposableCase(testCase: Record<string, unknown>, source:
     feedback the caller gets, it is read and retried against, and `violationsOfShape` composes a
     list rather than the sentence below.
 
-    Two of the checks are stricter than the server and stay so — see the header. The catalogue
-    carries that as `steps` being `required: { when: 'stepFormat', is: ['STRUCTURED'] }`, which is
-    what the create path would defer and both non-SPA clients will not.
+    One check is stricter than the server and stays so — see the header. The catalogue carries it
+    as `steps` being required under either `stepFormat`, which is what the create path would defer
+    and both non-SPA clients will not.
   */
   const missing = fieldsFor(CASE_SHAPE, 'propose', 'body')
     .filter((field) => isRequired(field, testCase))

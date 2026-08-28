@@ -64,6 +64,8 @@ const METHODS: Record<string, string> = {
   put: 'put',
   del: 'delete',
   upload: 'post',
+  postText: 'post',
+  getText: 'get',
 }
 
 /**
@@ -74,6 +76,18 @@ const METHODS: Record<string, string> = {
  * seam therefore never walks.
  */
 const SENDS_A_BODY = new Set(['post', 'patch', 'put', 'upload'])
+
+/**
+ * The verbs whose **success body is a document** rather than JSON (§255).
+ *
+ * `responseSchemaOf` answers `undefined` for such an operation — correctly, since the contract
+ * declares `text/plain` and no schema — and the report it would otherwise produce ("declares no
+ * JSON success body") would be true of every one of these calls and useful about none of them.
+ * What is still asked is the question that can fail: the URL must resolve to a declared path (the
+ * check above this one), and the double must serve **text**. A double answering `.feature` with an
+ * object is a test whose component would receive something the endpoint cannot send.
+ */
+const SERVES_TEXT = new Set(['getText'])
 
 export interface Served {
   verb: string
@@ -129,6 +143,19 @@ function checkServed(verb: string, url: unknown, body: unknown): void {
 
   const schema = responseSchemaOf(method, contractPath)
   if (!schema) {
+    if (SERVES_TEXT.has(verb)) {
+      if (typeof body !== 'string') {
+        violations.push({
+          verb,
+          url: contractPath,
+          direction: 'served',
+          message:
+            'the contract serves that operation as text/plain, and this double served '
+            + `${typeof body === 'object' ? 'an object' : typeof body}.`,
+        })
+      }
+      return
+    }
     violations.push({
       verb,
       url: contractPath,

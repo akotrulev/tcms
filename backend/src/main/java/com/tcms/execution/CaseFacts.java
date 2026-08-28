@@ -252,14 +252,27 @@ class CaseFacts {
             List<PinnedStep> steps) {
     }
 
-    /** One step of a pinned version — the authored half of the contract's {@code StepResult}. */
+    /**
+     * One step of a pinned version — the authored half of the contract's {@code StepResult}.
+     *
+     * <p>{@code docString} and {@code dataTable} joined it in §255, and <strong>they are read from
+     * the snapshot like everything else here, never from {@code test_step}</strong>. That is the
+     * distinction this whole class exists for: the row a tester is executing is the case as it was
+     * authored at the pinned version, and a table read live would change under them mid-run.
+     *
+     * <p>A snapshot written before §255 carries neither key, so both read as null — which is
+     * correct rather than lossy. That version did not record a doc string, and putting today's on
+     * a checklist would be the class of claim {@code title} is pinned to avoid.
+     */
     record PinnedStep(
             UUID stepId,
             int position,
             String keyword,
             String action,
             String testData,
-            String expectedResult) {
+            String expectedResult,
+            String docString,
+            List<List<String>> dataTable) {
     }
 
     /**
@@ -1095,10 +1108,36 @@ class CaseFacts {
                     // string is a step with nothing written in it, which is a real authored state.
                     text(step, "action") == null ? "" : text(step, "action"),
                     text(step, "testData"),
-                    text(step, "expectedResult")));
+                    text(step, "expectedResult"),
+                    text(step, "docString"),
+                    table(step.path("dataTable"))));
             fallbackPosition++;
         }
         return steps;
+    }
+
+    /**
+     * A pinned step's {@code dataTable}, or null when the snapshot has no such key.
+     *
+     * <p><strong>Absent and empty are both null here</strong>, which is the same collapse
+     * {@code CaseEdit} makes on the way in: a pre-§255 snapshot has no key at all, and a step that
+     * was saved without a table has {@code null}, and neither is a table with no rows. A cell that
+     * is not a string reads as its text, matching {@code text} above — the snapshot is written by
+     * this product and a non-string cell means the column changed shape outside the application.
+     */
+    private static List<List<String>> table(JsonNode array) {
+        if (!array.isArray() || array.isEmpty()) {
+            return null;
+        }
+        List<List<String>> rows = new ArrayList<>();
+        for (JsonNode row : array) {
+            List<String> cells = new ArrayList<>();
+            for (JsonNode cell : row) {
+                cells.add(cell.isNull() ? "" : cell.asText());
+            }
+            rows.add(List.copyOf(cells));
+        }
+        return List.copyOf(rows);
     }
 
     private List<ConditionRefView> conditions(JsonNode array) {

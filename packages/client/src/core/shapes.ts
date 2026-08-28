@@ -62,7 +62,7 @@ export type Requirement = 'always' | { readonly when: string; readonly is: reado
 export interface FieldSpec {
   /** The name this surface takes, which is not always the contract's — see {@link contract}. */
   readonly name: string;
-  readonly type: 'string' | 'integer' | 'boolean' | 'string[]' | 'object[]';
+  readonly type: 'string' | 'integer' | 'boolean' | 'string[]' | 'string[][]' | 'object[]';
   readonly required?: Requirement;
   /** The permitted values, pinned to {@link enumOf}. */
   readonly enum?: readonly string[];
@@ -183,6 +183,7 @@ export interface EntityShape {
 */
 const PRIORITY = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
 const STEP_FORMAT = ['STRUCTURED', 'GHERKIN'] as const;
+const STEP_KEYWORD = ['GIVEN', 'WHEN', 'THEN', 'AND', 'BUT'] as const;
 const AUTOMATION_STATUS = ['MANUAL', 'TO_BE_AUTOMATED', 'AUTOMATED', 'NOT_AUTOMATABLE'] as const;
 const PROPOSAL_VERDICT = ['GROUNDED', 'PARTIAL', 'HALLUCINATED', 'UNVERIFIED'] as const;
 
@@ -226,6 +227,11 @@ export const READ_ENUMS = {
 /**
  * A step, which is **text copied at authoring time** and not a reference.
  *
+ * **One set of rows serves both lenses (§255).** `stepFormat` selects how a case is READ, not
+ * where its procedure is stored: a GHERKIN case is these same rows with a `keyword` on each, and
+ * the free-text scenario blob it used to be is gone from the write contract entirely. So there is
+ * no second body to compose and nothing to keep in step with these rows.
+ *
  * The deliberate opposite of a condition — `openapi.yaml`'s `CaseConditionInput` puts the contrast
  * in as many words. Editing a shared step does not propagate here; editing a library condition
  * does. A model that treats the two the same writes a case that silently stops tracking its own
@@ -242,7 +248,17 @@ const STEP_FIELDS: readonly FieldSpec[] = [
     name: 'keyword',
     type: 'string',
     nullable: true,
-    describe: 'Gherkin keyword for a structured step that wants one — Given, When, Then.',
+    enum: STEP_KEYWORD,
+    enumOf: 'StepKeyword',
+    describe:
+      'The Gherkin keyword — Given, When, Then, And, But. Required on every step of a GHERKIN '
+      + 'case and optional in a STRUCTURED one.',
+    note:
+      'The condition is on the CASE, not on this step, which is why it is not spelled as a '
+      + 'requirement here: `stepFormat` is a field of the case and a step cannot see it. '
+      + '`CaseEdit.validate` collects both lens rules as field errors on `steps` — every step of '
+      + 'a GHERKIN case needs one, and the FIRST step may not be AND or BUT, which is a '
+      + 'continuation with nothing to continue.',
   },
   {
     name: 'testData',
@@ -255,6 +271,31 @@ const STEP_FIELDS: readonly FieldSpec[] = [
     type: 'string',
     nullable: true,
     describe: 'What must be true after the action. Absent means the step only sets up.',
+  },
+  {
+    name: 'docString',
+    type: 'string',
+    nullable: true,
+    example: 'Dear customer,\\nYour order shipped.',
+    describe: 'Gherkin\'s `"""` block argument — a multi-line string hanging off this one step.',
+    note:
+      'At most 64 KiB: a block argument larger than that is a file, not a step argument. The '
+      + 'fences are not part of the value — send the text between them.',
+  },
+  {
+    name: 'dataTable',
+    type: 'string[][]',
+    nullable: true,
+    example: '[["name","qty"],["widget","2"]]',
+    describe: 'Gherkin\'s `|` table argument, as rows of cells.',
+    note:
+      'At most 200 rows of at most 50 cells, each cell at most 4 KiB. The first row is a header '
+      + 'only by convention and nothing here treats it as one; rows may be ragged. An **empty '
+      + 'outer array is refused** — `[]` is not a table, and sending it rather than null is how a '
+      + 'client stores a step that renders an empty grid nobody can remove.\n\n'
+      + '**At most one of `testData`, `docString` and `dataTable` is non-null** — one step, one '
+      + 'data spelling. `ck_test_step_one_data` is the backstop; the field error is the answer a '
+      + 'caller actually gets.',
   },
 ];
 
@@ -293,12 +334,14 @@ const CASE_FIELDS: readonly FieldSpec[] = [
     required: 'always',
     enum: STEP_FORMAT,
     enumOf: 'StepFormat',
-    describe: 'STRUCTURED for a step table, GHERKIN for a scenario. It decides which body field is required.',
+    describe: 'STRUCTURED for a step table, GHERKIN for a scenario. It selects a LENS over one set of steps.',
     actions: ['propose'],
     note:
-      'Absent from the `edit` arm on both adapters and that is not an omission: `TestCaseInput` '
-      + 'carries no way to change it without also supplying the body in the new format, so an '
-      + 'edit that flipped the format alone would leave a STRUCTURED case with no steps.',
+      'Absent from the `edit` arm on both adapters and that is not an omission: flipping the '
+      + 'lens alone would leave a GHERKIN case whose steps carry no keyword, which '
+      + '`CaseEdit.validate` refuses with a field error on `steps`. Changing it means sending '
+      + 'the steps the new lens needs in the same save, and neither adapter\'s edit arm takes '
+      + 'steps.',
   },
   {
     name: 'priority',
@@ -319,26 +362,22 @@ const CASE_FIELDS: readonly FieldSpec[] = [
   {
     name: 'steps',
     type: 'object[]',
-    required: { when: 'stepFormat', is: ['STRUCTURED'] },
+    required: { when: 'stepFormat', is: ['STRUCTURED', 'GHERKIN'] },
     fields: STEP_FIELDS,
     itemsSchema: 'TestStepInput',
     actions: ['propose'],
-    describe: 'The procedure, in order. Required when stepFormat is STRUCTURED.',
+    describe:
+      'The procedure, in order, in either lens. In GHERKIN every step needs a keyword and the '
+      + 'first may not be And/But.',
     note:
-      'Order is the content — position is assigned from the array and is never sent. The server '
+      'Required in BOTH lenses since §255, where it was STRUCTURED only: a GHERKIN case is '
+      + 'these rows with keywords, so there is no longer a second field to send instead. '
+      + 'Order is the content — position is assigned from the array and is never sent. The server '
       + 'would accept a stepless case (§200 deferred the procedure, so a case may exist before '
       + 'anybody has written how to run it), and both non-SPA clients refuse one anyway: that '
       + 'deferral was granted to a person typing a title into a plan they are writing, not to a '
       + 'model asked for the case itself. A proposal with no procedure gains the reviewer nothing '
       + 'they could not have got by typing the title.',
-  },
-  {
-    name: 'gherkinSource',
-    type: 'string',
-    nullable: true,
-    required: { when: 'stepFormat', is: ['GHERKIN'] },
-    actions: ['propose'],
-    describe: 'The scenario text. Required when stepFormat is GHERKIN.',
   },
   {
     name: 'automationKey',
@@ -982,7 +1021,20 @@ function propertyOf(field: FieldSpec): Record<string, unknown> {
     };
   }
 
-  if (field.type === 'string[]') return { type: 'array', items: { type: 'string' }, description };
+  /*
+    An array's nullability is rendered the same way a scalar's is, and `dataTable` is the first
+    field that needs it: a step legitimately has no table, and a host validating `type: 'array'`
+    would refuse the null that says so.
+  */
+  if (field.type === 'string[]' || field.type === 'string[][]') {
+    return {
+      type: field.nullable ? ['array', 'null'] : 'array',
+      items: field.type === 'string[]'
+        ? { type: 'string' }
+        : { type: 'array', items: { type: 'string' } },
+      description,
+    };
+  }
 
   const base = field.type === 'integer' ? 'integer' : field.type;
   return {
@@ -1002,6 +1054,18 @@ function propertyOf(field: FieldSpec): Record<string, unknown> {
 function exampleTextOf(field: FieldSpec): string | undefined {
   if (field.enum || field.keyExample) return undefined;
   return field.example;
+}
+
+/**
+ * Whether argv can carry this field at all.
+ *
+ * `--file` carries the ones it cannot, which is why a command taking steps or conditions has
+ * no per-field flag for them. Asked as a question rather than tested against `object[]` at four
+ * call sites, because `string[][]` joined the answer in §255 and three of the four would have
+ * kept saying yes.
+ */
+export function spellableInArgv(field: FieldSpec): boolean {
+  return field.type !== 'object[]' && field.type !== 'string[][]';
 }
 
 /** The flag a field is spelled with at a terminal. */
@@ -1053,9 +1117,7 @@ export function optionSpecFor(
   const spec: Record<string, { type: 'string' | 'boolean'; multiple?: boolean }> = {};
 
   for (const field of fieldsFor(shape, action)) {
-    // An object array cannot be spelled in argv at all — `--file` carries those, which is why a
-    // command taking steps or conditions has no per-field flag for them.
-    if (field.type === 'object[]') continue;
+    if (!spellableInArgv(field)) continue;
 
     spec[flagOf(field)] = field.cli?.multiple
       ? { type: 'string', multiple: true }
@@ -1088,7 +1150,7 @@ export function usageFor(shape: EntityShape, action: string): string {
     `verdict` as a body key would have a caller put it where the endpoint ignores it.
   */
   const fields = fieldsFor(shape, action, asFile ? 'body' : 'all')
-    .filter((field) => asFile || field.type !== 'object[]');
+    .filter((field) => asFile || spellableInArgv(field));
 
   const lines = fields.map((field) => {
     const name = asFile ? field.name : `--${flagOf(field)}`;
@@ -1116,11 +1178,11 @@ export function usageFor(shape: EntityShape, action: string): string {
 
   const excluded = asFile
     ? ''
-    : `\n\n${fieldsFor(shape, action).filter((field) => field.type === 'object[]')
+    : `\n\n${fieldsFor(shape, action).filter((field) => !spellableInArgv(field))
       .map((field) => `  ${field.name}`).join(', ')} cannot be spelled in argv. `
       + 'Pass them in the --file body.';
 
-  const objects = fieldsFor(shape, action).some((field) => field.type === 'object[]');
+  const objects = fieldsFor(shape, action).some((field) => !spellableInArgv(field));
   const how = asFile ? ' (JSON keys in the --file body)' : ' (flags)';
 
   const beside = asFile
@@ -1159,7 +1221,7 @@ export function usageFor(shape: EntityShape, action: string): string {
  */
 function workedFlags(shape: EntityShape, action: string): string {
   const chosen = fieldsFor(shape, action)
-    .filter((field) => field.type !== 'object[]')
+    .filter(spellableInArgv)
     .filter((field) => (bindsRequired(shape, action) ? isRequired(field, {}) : true))
     .slice(0, bindsRequired(shape, action) ? 99 : 2);
 
@@ -1192,7 +1254,7 @@ export function templateFor(shape: EntityShape, action: string): Record<string, 
 
 function exampleOf(field: FieldSpec): unknown {
   if (field.enum) return field.enum[0];
-  if (field.type === 'string[]') return [];
+  if (field.type === 'string[]' || field.type === 'string[][]') return [];
   if (field.type === 'integer') return 0;
   if (field.type === 'boolean') return false;
   if (field.type === 'object[]') {
@@ -1242,6 +1304,10 @@ function fieldSection(field: FieldSpec, level: number): string[] {
     field.nullable ? '`null` is meaningful' : undefined,
     field.enum ? `one of ${field.enum.map((value) => `\`${value}\``).join(', ')}` : undefined,
     field.keyExample ? `display key, e.g. \`${field.keyExample}\`` : undefined,
+    // The guide is the carrier a nested field's example can reach at all: `usageFor` lists an
+    // object array's inner fields by name only, and `steps[].dataTable` is exactly the field
+    // whose nesting a caller guesses wrong without one.
+    field.example ? `e.g. \`${field.example}\`` : undefined,
   ].filter(Boolean);
 
   const out = [

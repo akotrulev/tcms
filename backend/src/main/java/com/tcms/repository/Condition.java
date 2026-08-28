@@ -94,6 +94,27 @@ public class Condition {
     @Column(name = "body", nullable = false)
     private List<String> body;
 
+    /**
+     * The {@code .feature} import's key for one {@code Background:} step, or null.
+     *
+     * <p>{@code "bg:"} plus the first 16 hex of SHA-256 over the normalised step — a TEXT hash, not
+     * a positional key, so a reordered or partly rewritten Background re-mints nothing and the same
+     * step text in two feature files is one library entry for the project. The column arrived in
+     * {@code V69} and the field arrives here with its writer (§255 T6), which is this repository's
+     * standing rule: a field mapped before its writer is a field nobody notices has gone stale.
+     *
+     * <p><strong>Non-null also means "the import owns this entry".</strong> A re-import may replace
+     * the {@code PRE} attachments whose condition has one, and may never touch a human-attached
+     * {@code PRE} or any {@code POST} — {@code api-surface.md} §5.4, and the ownership half of
+     * amendment AM1. That is the only thing the value is ever compared for besides the lookup.
+     *
+     * <p>Unique per {@code (company_id, project_id, imported_key)} among live rows
+     * ({@code condition_imported_key_idx}, partial on {@code deleted_at IS NULL}), so retiring a
+     * condition frees its key and the next import re-creates it.
+     */
+    @Column(name = "imported_key")
+    private String importedKey;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -144,6 +165,24 @@ public class Condition {
     }
 
     /**
+     * A new library entry the {@code .feature} import owns — {@link #create} plus its key.
+     *
+     * <p>A separate factory rather than a nullable sixth parameter on {@link #create}, because
+     * every other caller would then have to pass {@code null} for a concept it has no business
+     * knowing about, and one of them would eventually pass something else. The two share nothing
+     * but the call below, which is the point: an entry is import-owned or it is not, and the fork
+     * is at the moment it is written.
+     */
+    static Condition createImported(
+            UUID companyId, UUID projectId, ConditionEdit edit, String importedKey, UUID authorId,
+            Instant now) {
+
+        Condition created = create(companyId, projectId, edit, authorId, now);
+        created.importedKey = importedKey;
+        return created;
+    }
+
+    /**
      * Replaces the authored content.
      *
      * <p>Every attachment resolves through this row, so this method <em>is</em> the propagation —
@@ -186,5 +225,10 @@ public class Condition {
 
     public Instant getDeletedAt() {
         return deletedAt;
+    }
+
+    /** Null unless the {@code .feature} import created this entry — see the field. */
+    public String getImportedKey() {
+        return importedKey;
     }
 }

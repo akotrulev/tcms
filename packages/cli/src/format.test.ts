@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { CASE_SHAPE, SHAPES, fieldsFor, flagOf, optionSpecFor } from '@tcms/client';
+import { CASE_SHAPE, SHAPES, fieldsFor, flagOf, optionSpecFor, spellableInArgv } from '@tcms/client';
 
 import { findCommand } from './commands.js';
 import { EXIT, main } from './main.js';
@@ -161,8 +161,8 @@ describe('the shape catalogue against the commands that declare it', () => {
         */
         const scope = action.cliSpelling === 'file' ? 'wrapper' : 'all';
         for (const field of fieldsFor(shape, action.name, scope)) {
-          // argv cannot carry an object array at all; `--file` is how those are sent.
-          if (field.type === 'object[]') continue;
+          // argv cannot carry an object array or a table at all; `--file` is how those are sent.
+          if (!spellableInArgv(field)) continue;
           for (const flag of [flagOf(field), ...(field.cli?.negate ? [field.cli.negate] : [])]) {
             if (!declared.includes(flag)) gaps.push(`${name} does not take --${flag}`);
           }

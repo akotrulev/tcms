@@ -85,17 +85,24 @@ describe('the enriched write schema — the defect this slice was opened by', ()
     /*
       It was `{ type: 'object' }` with no `properties` at all, and everything below was prose a
       model had to parse and then guess past. The step shape in particular was unobtainable: an
-      agent could not know that a step is `{keyword, action, testData, expectedResult}` or that
-      `action` is the only required one.
+      agent could not know what a step's fields are, or that `action` is the only required one.
     */
     expect(Object.keys(testCase.properties).length).toBeGreaterThan(10);
     expect(testCase.required.sort())
       .toEqual(['automationStatus', 'priority', 'stepFormat', 'title']);
 
-    const steps = testCase.properties['steps'] as { items: { properties: object; required: string[] } };
+    const steps = testCase.properties['steps'] as {
+      items: { properties: Record<string, { enum?: unknown[] }>; required: string[] };
+    };
     expect(Object.keys(steps.items.properties).sort())
-      .toEqual(['action', 'expectedResult', 'keyword', 'testData']);
+      .toEqual(['action', 'dataTable', 'docString', 'expectedResult', 'keyword', 'testData']);
     expect(steps.items.required).toEqual(['action']);
+
+    // §203's rule, reaching a NESTED field for the first time: a host validates the input schema
+    // before the call, so an enumerated `keyword` is refused here rather than at the database's
+    // check constraint. It was a bare string on `TestStepInput` until §255.
+    expect(steps.items.properties['keyword']!.enum)
+      .toEqual(['GIVEN', 'WHEN', 'THEN', 'AND', 'BUT', null]);
   });
 
   it('keeps a conditionally-required field out of `required`', () => {

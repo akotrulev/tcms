@@ -152,6 +152,8 @@ class ExecutionViews {
                     step.action(),
                     step.testData(),
                     step.expectedResult(),
+                    step.docString(),
+                    step.dataTable(),
                     outcome == null ? null : outcome.getStatusId(),
                     outcome == null ? null : outcome.getComment(),
                     // Keyed by the step RESULT's id, not the step's: evidence.step_result_id is

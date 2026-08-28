@@ -221,6 +221,73 @@ public class ConditionService {
     }
 
     /**
+     * Creates a library entry the {@code .feature} import owns — {@link #create} plus an
+     * {@code imported_key}.
+     *
+     * <p><strong>Package-private, and it takes no gate.</strong> Both are deliberate. The import
+     * decides per ROW whether the caller may write ({@code api-surface.md} §5.4: a caller without
+     * {@code library:manage} gets a {@code REFUSE} row naming the key, not a 403 for the request),
+     * so the permission question is answered before this is reached and answering it twice would
+     * turn a refusal the plan can report into an exception it cannot. {@link FeatureImportService}
+     * is the only caller and it is in this package; a public overload would be a second door onto
+     * the library that skips {@code library:manage}.
+     *
+     * <p>Everything else is {@link #create}'s: the same validation, the same audit verb, the same
+     * view. A condition written here is an ordinary condition — the key is provenance, not a kind.
+     *
+     * @return the created row, so the caller can attach it by id in the same transaction
+     */
+    Condition createImported(
+            UUID userId, UUID projectId, ConditionWriteRequest request, String importedKey) {
+
+        UUID companyId = CompanyContext.require();
+        ConditionEdit.Outcome validated = ConditionEdit.validate(request);
+        if (validated instanceof ConditionEdit.Outcome.Invalid invalid) {
+            // Unreachable by construction — the import truncates the title to ConditionEdit's own
+            // bound and a Background step always has a body — and thrown rather than swallowed,
+            // because a validation failure here means the truncation rule and the validator have
+            // drifted apart, which is a defect and not a row to report.
+            throw new IllegalStateException(
+                    "an imported Background step failed condition validation: " + invalid.errors());
+        }
+        ConditionEdit edit = ((ConditionEdit.Outcome.Valid) validated).edit();
+
+        Instant now = clock.instant();
+        Condition created =
+                Condition.createImported(companyId, projectId, edit, importedKey, userId, now);
+        conditions.saveAndFlush(created);
+
+        audit(projectId, userId, created, "condition.created", now);
+        return created;
+    }
+
+    /**
+     * Re-titles an import-owned entry whose step text was truncated differently than before.
+     *
+     * <p>Package-private and gateless for {@link #createImported}'s reason, and narrower than it
+     * looks: the {@code imported_key} hashes the step's BODY, so the body of an entry the import
+     * owns can never have changed. The only thing that can move is the title — which is the
+     * truncation of the step text, and the budget is a constant somebody may one day raise. Without
+     * this, a raised budget would leave every existing entry showing the old cut for ever, because
+     * the key would still match and the plan would still say {@code UNCHANGED}.
+     *
+     * <p>Goes through {@link Condition#applyEdit}, so the propagation, the audit row and the
+     * {@code updated_by} stamp are the ordinary ones. Silently does nothing if the row has been
+     * retired since the plan read it: an import must not resurrect a condition a human retired.
+     */
+    void retitleImported(UUID userId, UUID projectId, UUID conditionId, String title) {
+        conditions.findLiveInProject(projectId, conditionId).ifPresent(condition -> {
+            Instant now = clock.instant();
+            condition.applyEdit(
+                    new ConditionEdit(title, condition.getType(), condition.getBody()),
+                    userId,
+                    now);
+            conditions.saveAndFlush(condition);
+            audit(projectId, userId, condition, "condition.updated", now);
+        });
+    }
+
+    /**
      * Edits a library entry, propagating to everything that attaches it. {@code library:manage}.
      *
      * <h2>The order of the checks is the same one §72 fixed and §74 restated</h2>

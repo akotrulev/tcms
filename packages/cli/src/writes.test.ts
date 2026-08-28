@@ -38,7 +38,7 @@ import {
   step,
   suite,
 } from '../../client/src/test/fixtures.js';
-import { CASE_SHAPE, fieldsFor, flagOf, type FieldSpec } from '@tcms/client';
+import { CASE_SHAPE, fieldsFor, flagOf, spellableInArgv, type FieldSpec } from '@tcms/client';
 
 import { EXIT } from './main.js';
 import { PROJECT, api, mainWith, recorder } from './test/harness.js';
@@ -110,7 +110,6 @@ const CASE_ECHO = {
   objective: 'Prove a known user gets in.',
   expectedOutcome: 'The dashboard renders.',
   stepFormat: 'STRUCTURED',
-  gherkinSource: null,
   priority: 'HIGH',
   severity: 'MEDIUM',
   automationStatus: 'MANUAL',
@@ -126,6 +125,8 @@ const CASE_ECHO = {
       action: 'Sign in',
       testData: 'ops@acme.test',
       expectedResult: 'The dashboard renders.',
+      docString: null,
+      dataTable: null,
     },
   ],
 };
@@ -262,7 +263,7 @@ describe('case edit', () => {
     flag the catalogue declares and asserts each one reaches the wire.
   */
   it('sends every catalogue field it accepts a flag for', async () => {
-    const fields = fieldsFor(CASE_SHAPE, 'edit').filter((field) => field.type !== 'object[]');
+    const fields = fieldsFor(CASE_SHAPE, 'edit').filter(spellableInArgv);
     expect(fields.length).toBeGreaterThanOrEqual(8);
 
     const out = recorder();

@@ -44,23 +44,29 @@ import org.springframework.stereotype.Component;
  * signed-off case that does not do its job, and the signal does not say which — the chip is a
  * pointer at the case, and the case is where the gap is visible.
  *
- * <h2>Format is a term in two of the three, and it is not a special case</h2>
+ * <h2><del>Format is a term in two of the three</del> — format is not a term at all any more</h2>
  *
- * <p>{@code step_format} makes {@code test_step} rows and {@code gherkin_source} <em>alternatives</em>
- * (plan §6a, and {@code TestCase.gherkinSource}'s field comment): a {@code GHERKIN} case legitimately
- * has no steps at all, and {@code CaseEdit} refuses to <em>update</em> one to an empty scenario
- * (§200 — a create may leave either spelling of the procedure unwritten, which is what gives the
- * empty-scenario term below a producer at last). A predicate
- * that read {@code test_step} alone would report every Gherkin case in the product as having no
- * steps — which is not a near-miss but the majority of a Gherkin-first team's repository.
+ * <p>~~{@code step_format} makes {@code test_step} rows and {@code gherkin_source}
+ * <em>alternatives</em>, so a predicate that read {@code test_step} alone would report every
+ * Gherkin case in the product as having no steps. A non-empty scenario is taken as saying what
+ * should happen, because finding its {@code Then} clause means parsing Gherkin in SQL in a
+ * scheduled job.~~ → <strong>superseded by §255.</strong> {@code stepFormat} is a lens over
+ * {@code test_step}, so a Gherkin case has rows like any other, and <em>every</em> branch of the
+ * old predicate was a workaround for a second storage that no longer exists.
  *
- * <p>The scenario also settles the expected-result term for that format, and <strong>this is the
- * one place the derivation deliberately says less than it could</strong>: a scenario's {@code Then}
- * clause <em>is</em> its expected result, and finding it means parsing Gherkin. In SQL. In a
- * scheduled job. That is {@code OwnerStanding}'s refusal one module over — a second implementation
- * of something the product already does elsewhere, whose disagreements surface as a chip nobody can
- * explain. A non-empty scenario is taken as saying what should happen, because the editor is what
- * makes sure it does.
+ * <p><strong>The {@code Then} clause is now a term, and it needed no parser.</strong> That is the
+ * whole return on the unified model here: the keyword is a column, so <em>"anything in this case
+ * says what should happen"</em> reads as {@code expected_outcome} non-empty, or any step with an
+ * {@code expected_result}, or any step whose {@code keyword} is {@code THEN} — three same-row or
+ * semi-join terms and no Gherkin in SQL. The refusal the old paragraph recorded stands; the
+ * question simply stopped needing it.
+ *
+ * <p><strong>A not-yet-migrated case is reported INCOMPLETE, and that is correct rather than
+ * collateral.</strong> An approved case whose procedure exists only in {@code gherkin_source} has
+ * no steps a tester can be handed and no verdict they can record per step. Saying so is what makes
+ * {@code migrate-gherkin-source} findable; the alternative — keeping a blob term alive — is a
+ * signal that reports the un-migrated population as healthy right up to the day the column is
+ * dropped.
  *
  * <h2>For a structured case, EITHER expected result counts</h2>
  *
@@ -114,8 +120,8 @@ class CaseCompleteness {
      *
      * <h2>~~Two of the three terms have no reachable producer today~~ → all three do, since §200</h2>
      *
-     * <p>What §182 wrote here was this: {@code CaseEdit.validate} refuses a {@code STRUCTURED} case
-     * with no steps and a {@code GHERKIN} case with no scenario, on <em>both</em> the create and the
+     * <p>What §182 wrote here was this: {@code CaseEdit.validate} refuses a case with no steps, on
+     * <em>both</em> the create and the
      * update path, and every other way a case comes into existence goes through that same validation
      * ({@code CaseCloneService} and {@code AiProposalDecisionService} both say so in their headers,
      * and both give the same reason: a second assembler of a legal case is the one that diverges) —
@@ -159,15 +165,15 @@ class CaseCompleteness {
                         incomplete, computed_at)
                 SELECT c.id, c.company_id, c.project_id,
                        c.lifecycle_status = 'APPROVED'
-                           AND (CASE WHEN c.step_format = 'GHERKIN'
-                                     THEN coalesce(btrim(c.gherkin_source), '') = ''
-                                     ELSE NOT EXISTS (SELECT 1 FROM test_step s
-                                                       WHERE s.case_id = c.id)
-                                       OR (coalesce(btrim(c.expected_outcome), '') = ''
-                                           AND NOT EXISTS (SELECT 1 FROM test_step s
-                                                            WHERE s.case_id = c.id
-                                                              AND coalesce(btrim(s.expected_result), '') <> ''))
-                                END
+                           AND (NOT EXISTS (SELECT 1 FROM test_step s
+                                             WHERE s.case_id = c.id)
+                                OR (coalesce(btrim(c.expected_outcome), '') = ''
+                                    AND NOT EXISTS (SELECT 1 FROM test_step s
+                                                     WHERE s.case_id = c.id
+                                                       AND coalesce(btrim(s.expected_result), '') <> '')
+                                    AND NOT EXISTS (SELECT 1 FROM test_step s
+                                                     WHERE s.case_id = c.id
+                                                       AND s.keyword = 'THEN'))
                                 OR NOT EXISTS (SELECT 1 FROM case_classification cc
                                                 WHERE cc.case_id = c.id)),
                        :now

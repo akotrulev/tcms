@@ -230,7 +230,6 @@ describe('read-modify-write', () => {
     objective: null,
     expectedOutcome: null,
     stepFormat: 'STRUCTURED' as const,
-    gherkinSource: null,
     priority: 'HIGH' as const,
     severity: 'LOW' as const,
     automationStatus: 'MANUAL' as const,
@@ -243,7 +242,7 @@ describe('read-modify-write', () => {
     tags: ['smoke'],
     steps: [{
       id: 'st-1', position: 1, keyword: null, action: 'Sign in',
-      testData: null, expectedResult: 'In.',
+      testData: null, expectedResult: 'In.', docString: null, dataTable: null,
     }],
   } as unknown as Parameters<typeof caseInputFrom>[0];
 
@@ -389,9 +388,11 @@ describe('proposable cases', () => {
   });
 
   it('asks for the content each format and automation status actually needs', () => {
+    // §255: a GHERKIN case is step rows with keywords, so the lens no longer changes WHICH field
+    // the accept would demand. Sending no steps is refused under either one.
     expect(() => requireProposableCase(
       { ...complete, stepFormat: 'GHERKIN', steps: undefined }, 'That case',
-    )).toThrow(/gherkinSource/);
+    )).toThrow(/steps/);
 
     expect(() => requireProposableCase(
       { ...complete, automationStatus: 'AUTOMATED' }, 'That case',

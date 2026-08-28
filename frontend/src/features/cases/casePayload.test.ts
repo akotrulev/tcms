@@ -27,22 +27,39 @@ const filled: CaseInput = {
   automationKey: 'refunds.spec.ts:full',
   notAutomatableReason: null,
   estimatedDurationSec: '240',
-  stepFormat: 'STRUCTURED',
-  gherkinSource: null,
+  stepFormat: 'GHERKIN',
+  // A Gherkin-lens case with all three data spellings across its rows (§255) — one with test data,
+  // one with a doc string and one with a table, so a field dropped by either mapping shows up.
   steps: [
     {
       id: 'step-1',
-      keyword: null,
+      keyword: 'GIVEN',
       action: 'Open the refund screen',
       testData: '120.00 EUR',
       expectedResult: 'The form opens',
+      docString: null,
+      dataTable: null,
     },
     {
       id: null,
-      keyword: null,
-      action: 'Submit',
+      keyword: 'WHEN',
+      action: 'Submit the payload',
       testData: '',
       expectedResult: '',
+      docString: '{\n  "amount": 120\n}',
+      dataTable: null,
+    },
+    {
+      id: null,
+      keyword: 'THEN',
+      action: 'The ledger reads',
+      testData: '',
+      expectedResult: 'Two lines',
+      docString: null,
+      dataTable: [
+        ['account', 'amount'],
+        ['merchant', '-120.00'],
+      ],
     },
   ],
   classificationValueIds: ['cv-1', 'cv-2'],
@@ -65,10 +82,12 @@ describe('the draft round trip', () => {
     // control since §94. Compared without it, since the write drops it by design.
     expect(restored.steps.at(-1)).toEqual({
       id: null,
-      keyword: null,
+      keyword: '',
       action: '',
       testData: '',
       expectedResult: '',
+      docString: null,
+      dataTable: null,
     })
     expect({ ...restored, steps: restored.steps.slice(0, -1) }).toEqual({
       ...filled,
@@ -91,15 +110,68 @@ describe('toCasePayload', () => {
     // step; dropping alone keeps the padding of every pasted step.
     const payload = toCasePayload({
       ...filled,
+      stepFormat: 'STRUCTURED',
       steps: [
-        { id: null, keyword: null, action: '  Pay  ', testData: ' x ', expectedResult: '' },
-        { id: null, keyword: null, action: '   ', testData: '', expectedResult: '' },
+        { id: null, keyword: '', action: '  Pay  ', testData: ' x ', expectedResult: '', docString: null, dataTable: null },
+        { id: null, keyword: '', action: '   ', testData: '', expectedResult: '', docString: null, dataTable: null },
       ],
     })
 
     expect(payload.steps).toEqual([
-      { id: null, keyword: null, action: 'Pay', testData: 'x', expectedResult: null },
+      {
+        id: null,
+        keyword: null,
+        action: 'Pay',
+        testData: 'x',
+        expectedResult: null,
+        docString: null,
+        dataTable: null,
+      },
     ])
+  })
+
+  it('keeps a row whose only content is a doc string', () => {
+    // The §94 emptiness rule, extended: a row carrying only a block argument is a step. Reading it
+    // as blank would drop the author's pasted payload at submit, with a success toast over it.
+    const payload = toCasePayload({
+      ...filled,
+      stepFormat: 'STRUCTURED',
+      steps: [
+        { id: null, keyword: '', action: 'Post it', testData: '', expectedResult: '', docString: '{}', dataTable: null },
+      ],
+    })
+
+    expect(payload.steps).toEqual([
+      { id: null, keyword: null, action: 'Post it', testData: null, expectedResult: null, docString: '{}', dataTable: null },
+    ])
+  })
+
+  it('does NOT trim inside a doc string or a table cell', () => {
+    // Leading whitespace is content in both — it is what makes the `.feature` a case renders to
+    // match the file it was parsed from. `CaseEdit.normalizeTable` says the same from the server.
+    const payload = toCasePayload({
+      ...filled,
+      steps: [
+        { id: null, keyword: 'GIVEN', action: 'Post it', testData: '', expectedResult: '', docString: '  indented\n', dataTable: null },
+        { id: null, keyword: 'THEN', action: 'It reads', testData: '', expectedResult: '', docString: null, dataTable: [['  padded  ']] },
+      ],
+    })
+
+    expect(payload.steps).toEqual([
+      expect.objectContaining({ docString: '  indented\n' }),
+      expect.objectContaining({ dataTable: [['  padded  ']] }),
+    ])
+  })
+
+  it('sends an empty table as null — `[]` is not a table', () => {
+    const payload = toCasePayload({
+      ...filled,
+      steps: [
+        { id: null, keyword: 'GIVEN', action: 'Post it', testData: '', expectedResult: 'x', docString: null, dataTable: [] },
+      ],
+    })
+
+    expect(payload.steps).toEqual([expect.objectContaining({ dataTable: null })])
   })
 
   it('sends an unfiled case as null rather than an empty string', () => {
@@ -107,12 +179,33 @@ describe('toCasePayload', () => {
     expect(toCasePayload({ ...filled, suiteId: '' }).suiteId).toBeNull()
   })
 
-  it('sends only the chosen step format, so the other cannot go stale', () => {
-    const gherkin = toCasePayload({ ...filled, stepFormat: 'GHERKIN', gherkinSource: 'Feature: x' })
-    expect(gherkin.steps).toEqual([])
-    expect(gherkin.gherkinSource).toBe('Feature: x')
+  /**
+   * THE §255 REGRESSION, and the reason this file has a test about a field it no longer sends.
+   *
+   * This assertion used to read `expect(gherkin.steps).toEqual([])` — the payload deleted every
+   * step row of a Gherkin case, and with them the ids every `step_result` anchors to, on a save
+   * that answered 200. `stepFormat` is a lens now, so the rows go in both, and `gherkinSource` is
+   * not on `TestCaseInput` at all.
+   */
+  it('sends the rows in BOTH lenses, and never the retired scenario field', () => {
+    for (const stepFormat of ['STRUCTURED', 'GHERKIN'] as const) {
+      const payload = toCasePayload({ ...filled, stepFormat })
+      expect(payload.steps).toHaveLength(3)
+      expect(payload.stepFormat).toBe(stepFormat)
+      expect(payload).not.toHaveProperty('gherkinSource')
+    }
+  })
 
-    expect(toCasePayload(filled).gherkinSource).toBeNull()
+  it("maps the form's '' keyword back to the contract's null", () => {
+    const payload = toCasePayload({
+      ...filled,
+      stepFormat: 'STRUCTURED',
+      steps: [
+        { id: null, keyword: '', action: 'Pay', testData: '', expectedResult: 'Paid', docString: null, dataTable: null },
+      ],
+    })
+
+    expect(payload.steps).toEqual([expect.objectContaining({ keyword: null })])
   })
 
   it('sends empty collections rather than omitting them', () => {
@@ -197,5 +290,29 @@ describe('fromCasePayload — it decodes a draft nobody validated', () => {
 
     expect(restored.steps).toHaveLength(2)
     expect(restored.steps[1].action).toBe('')
+  })
+
+  it("reads a pre-§255 draft's null keyword as the form's ''", () => {
+    // A buffer written by an older build. `null` there meant "no keyword", which is what '' means
+    // here — and binding the null would make MUI log an uncontrolled-Select warning per row.
+    expect(fromCasePayload({ steps: [{ action: 'x', keyword: null }] }).steps[0].keyword).toBe('')
+  })
+
+  it('reads a missing block argument as null — the MODE, not an empty value', () => {
+    const restored = fromCasePayload({ steps: [{ action: 'x' }] })
+    expect(restored.steps[0].docString).toBeNull()
+    expect(restored.steps[0].dataTable).toBeNull()
+  })
+
+  it('drops a table row that is not an array, and never invents one', () => {
+    // An invented empty row would renumber every row after it, and a Gherkin table legitimately
+    // has a row of blank cells — so the two cannot be collapsed.
+    const restored = fromCasePayload({
+      steps: [{ action: 'x', dataTable: [['a', 'b'], 'nope', [null, 'c']] }],
+    })
+    expect(restored.steps[0].dataTable).toEqual([
+      ['a', 'b'],
+      ['', 'c'],
+    ])
   })
 })

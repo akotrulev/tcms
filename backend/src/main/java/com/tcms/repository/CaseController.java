@@ -2,12 +2,14 @@ package com.tcms.repository;
 
 import com.tcms.api.Problem;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -188,6 +190,124 @@ public class CaseController {
 
         return detail.findOne(UUID.fromString(jwt.getSubject()), projectId, caseId)
                 .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Pasted Gherkin text, read as the rows the editor shows — and <strong>nothing is stored</strong>.
+     *
+     * <h2>A POST that creates nothing, and why it is not a GET</h2>
+     *
+     * <p>The payload is a scenario: multi-line, up to 256 KiB, and the author's own text. A query
+     * string cannot carry it — every proxy between here and the browser has an opinion about URL
+     * length, and the one that truncates it does so silently. So the verb is POST and the resource
+     * is the answer rather than a thing that now exists; there is no {@code Location} and no 201.
+     *
+     * <p>It takes the <strong>read</strong> gate and no write permission, because it writes nothing.
+     * A caller with no grant on the project gets the same bodiless 404 every read on this controller
+     * answers, from {@link CaseDetailService#parseGherkin}'s empty {@link java.util.Optional}.
+     *
+     * <h2>The four refusals, and why they are four</h2>
+     *
+     * <p>Each names a different next action: edit the line, expand the Outline, paste one scenario,
+     * or write something. Collapsing them into one 400 would hand the author a sentence that fits
+     * whichever of the four they did not do. The message lands on {@code errors.text} — the field
+     * name the paste dialog's textarea is bound to — so the SPA renders it beside the box.
+     *
+     * <p><strong>None of them is a 500.</strong> That is the property this endpoint exists to have:
+     * the text comes from a person and being unparseable is the ordinary case, not a fault.
+     */
+    @PostMapping(path = "/parse-gherkin", consumes = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<Object> parseGherkin(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @RequestBody(required = false) String text) {
+
+        String source = text == null ? "" : text;
+        if (source.getBytes(StandardCharsets.UTF_8).length > GherkinScenarios.MAX_PASTE_BYTES) {
+            // Checked here rather than left to a container limit: Tomcat's `maxPostSize` bounds
+            // form bodies only, so a 300 KiB paste would otherwise be read in full and parsed.
+            return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(new Problem(
+                    "payload-too-large",
+                    "Pasted text too large",
+                    HttpStatus.PAYLOAD_TOO_LARGE.value(),
+                    "This endpoint reads one scenario, up to 256 KiB. Import the file instead.",
+                    null));
+        }
+
+        try {
+            return detail.parseGherkin(UUID.fromString(jwt.getSubject()), projectId, source)
+                    .<ResponseEntity<Object>>map(ResponseEntity::ok)
+                    .orElseGet(() -> ResponseEntity.notFound().build());
+        } catch (GherkinSyntaxException refused) {
+            return ResponseEntity.badRequest().body(new Problem(
+                    typeOf(refused.reason()),
+                    titleOf(refused.reason()),
+                    HttpStatus.BAD_REQUEST.value(),
+                    "The pasted text could not be read as a scenario.",
+                    Map.of("text", List.of(refused.getMessage()))));
+        }
+    }
+
+    /**
+     * The {@code type} each refusal carries.
+     *
+     * <p><strong>The first refusals in this API to carry a {@code type} that is not
+     * {@code about:blank}</strong>, and it is a decision rather than an oversight: these four are
+     * the ones a machine client has to tell apart, because {@code @tcms/mcp} hands a model a paste
+     * that failed and the remedy differs per reason. Everywhere else the status and {@code detail}
+     * are the whole answer, which is why the blank type is still right for them.
+     */
+    private static String typeOf(GherkinSyntaxException.Reason reason) {
+        return switch (reason) {
+            case SYNTAX -> "gherkin-syntax";
+            case OUTLINE -> "gherkin-outline";
+            case MANY_SCENARIOS -> "gherkin-many-scenarios";
+            case EMPTY -> "gherkin-empty";
+        };
+    }
+
+    private static String titleOf(GherkinSyntaxException.Reason reason) {
+        return switch (reason) {
+            case SYNTAX -> "That is not valid Gherkin";
+            case OUTLINE -> "Scenario Outline is not supported yet";
+            case MANY_SCENARIOS -> "More than one scenario";
+            case EMPTY -> "No steps found";
+        };
+    }
+
+    /**
+     * One case as canonical {@code .feature} text — the inverse of the paste above.
+     *
+     * <h2>Text, not JSON, and the {@code Content-Disposition} is the reason</h2>
+     *
+     * <p>The body is the artifact: a tester copies it into a Cucumber suite, and a JSON string
+     * carrying escaped newlines is one nobody can paste. Served {@code inline} under the case's own
+     * key, so a browser renders it and a save lands a file named after the case rather than after
+     * the path segment.
+     *
+     * <h2>A {@code STRUCTURED} case renders too, and there is no 409</h2>
+     *
+     * <p>Numbered steps are a scenario whose steps have no keyword, and Gherkin has a spelling for
+     * exactly that — {@code *}. Refusing would make "view as .feature" an action that is present on
+     * some cases and errors on others for a reason the author did not choose, when the honest
+     * answer is available.
+     *
+     * <p>Same single 404 as {@link #findOne}, for the same three failures, since this is that read
+     * in another media type.
+     */
+    @GetMapping(path = "/{caseId}/feature", produces = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<Object> feature(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID caseId) {
+
+        return detail.findOne(UUID.fromString(jwt.getSubject()), projectId, caseId)
+                .<ResponseEntity<Object>>map(view -> ResponseEntity.ok()
+                        .contentType(new MediaType(MediaType.TEXT_PLAIN, StandardCharsets.UTF_8))
+                        .header(HttpHeaders.CONTENT_DISPOSITION,
+                                "inline; filename=\"" + view.key() + ".feature\"")
+                        .body(GherkinScenarios.render(view)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 

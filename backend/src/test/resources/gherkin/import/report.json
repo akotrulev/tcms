@@ -1,0 +1,42 @@
+[
+  {
+    "uri": "features/orders.feature",
+    "name": "Orders",
+    "elements": [
+      { "type": "background", "name": "", "line": 6,
+        "steps": [{ "keyword": "Given ", "name": "I am signed in as a customer",
+                    "result": { "status": "passed", "duration": 1000000 } }] },
+      { "type": "scenario", "name": "Cancel an order", "line": 12,
+        "steps": [{ "keyword": "Given ", "name": "I have placed an order",
+                    "result": { "status": "passed", "duration": 2000000 } },
+                  { "keyword": "When ", "name": "I cancel it",
+                    "result": { "status": "passed", "duration": 3000000 } },
+                  { "keyword": "Then ", "name": "the order is cancelled",
+                    "result": { "status": "passed", "duration": 1000000 } }] },
+      { "type": "scenario", "name": "Refund an order", "line": 20,
+        "steps": [{ "keyword": "Given ", "name": "I have a dispatched order",
+                    "result": { "status": "passed", "duration": 1000000 } },
+                  { "keyword": "When ", "name": "I request a refund with the note",
+                    "result": { "status": "failed", "duration": 4000000,
+                                "error_message": "expected QUEUED" } }] }
+    ]
+  },
+  {
+    "uri": "features/payments.feature",
+    "name": "Payments",
+    "elements": [
+      { "type": "scenario", "name": "Pay by card", "line": 6,
+        "steps": [{ "keyword": "Given ", "name": "I have a basket",
+                    "result": { "status": "passed", "duration": 1000000 } }] }
+    ]
+  },
+  {
+    "uri": "features/rules.feature",
+    "name": "Shipping",
+    "elements": [
+      { "type": "scenario", "name": "A large order ships free", "line": 15,
+        "steps": [{ "keyword": "Then ", "name": "shipping costs nothing",
+                    "result": { "status": "passed", "duration": 1000000 } }] }
+    ]
+  }
+]

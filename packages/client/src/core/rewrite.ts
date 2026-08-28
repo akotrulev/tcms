@@ -89,8 +89,15 @@ type Schemas = components['schemas'];
  * was never shown survives either way — but it would state as an assertion what the caller never
  * mentioned, and this function's rule stays "lists are left alone; a flag changes one".
  *
- * `steps` is projected rather than dropped, because it is **not** left alone: a STRUCTURED case
- * that omits it is a `400` telling the author to add a step they already have.
+ * `steps` is projected rather than dropped, because it is **not** left alone: a case that omits it
+ * is a `400` telling the author to add a step they already have. Since §255 that is true in BOTH
+ * lenses — a GHERKIN case is step rows with keywords, so the round trip has one body to carry
+ * rather than two to keep consistent.
+ *
+ * **The scenario blob is not echoed, because it is no longer on the input.** `TestCase` still
+ * SERVES one, deprecated, for a case whose rows were never backfilled; sending it back would be an
+ * undeclared property the API ignores and this package's contract check refuses. `002-` deletes
+ * the column.
  */
 export function caseInputFrom(current: Schemas['TestCase']): Schemas['TestCaseInput'] {
   return {
@@ -100,7 +107,6 @@ export function caseInputFrom(current: Schemas['TestCase']): Schemas['TestCaseIn
     objective: current.objective,
     expectedOutcome: current.expectedOutcome,
     stepFormat: current.stepFormat,
-    gherkinSource: current.gherkinSource,
     priority: current.priority,
     // Conditional, and the contract is why: `TestCase.severity` is nullable and
     // `TestCaseInput.severity` is not, so an unset severity has **no spelling on the write** —
@@ -138,6 +144,8 @@ function stepInputFrom(step: Schemas['TestStep']): Schemas['TestStepInput'] {
     action: step.action,
     testData: step.testData ?? null,
     expectedResult: step.expectedResult ?? null,
+    docString: step.docString ?? null,
+    dataTable: step.dataTable ?? null,
   };
 }
 

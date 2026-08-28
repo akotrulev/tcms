@@ -1,5 +1,6 @@
 import { Box, Button, Stack, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { useSnackbar } from 'notistack';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -67,19 +68,41 @@ export function CaseListPage() {
             : 'Everything in this project. Pick a suite to narrow it, or filter below.'
         }
         actions={
-          <PermissionGate projectId={projectId} permission="case:create">
-            {({ allowed }) => (
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                disabled={!allowed}
-                onClick={() => navigate(`/projects/${projectId}/cases/new`)}
-                data-testid="Cases.NewCaseButton"
-              >
-                New case
-              </Button>
-            )}
-          </PermissionGate>
+          <Stack direction="row" sx={{ gap: 1 }}>
+            {/*
+              The `.feature` import (§255). **Two keys, either of which is enough**: a folder of
+              feature files plans `CREATE` rows and `UPDATE` rows, and a caller holding one of
+              `case:create`/`case:edit` has work the screen can do for them — the server answers
+              200 with the rest of the rows refused. Gating on one of the two would grey the entry
+              point out for somebody it would have served, which is disable-don't-hide inverted.
+            */}
+            <PermissionGate projectId={projectId} permission={['case:create', 'case:edit']}>
+              {({ allowed }) => (
+                <Button
+                  variant="outlined"
+                  startIcon={<UploadFileIcon />}
+                  disabled={!allowed}
+                  onClick={() => navigate(`/projects/${projectId}/cases/import`)}
+                  data-testid="Cases.ImportFeaturesButton"
+                >
+                  Import feature files
+                </Button>
+              )}
+            </PermissionGate>
+            <PermissionGate projectId={projectId} permission="case:create">
+              {({ allowed }) => (
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  disabled={!allowed}
+                  onClick={() => navigate(`/projects/${projectId}/cases/new`)}
+                  data-testid="Cases.NewCaseButton"
+                >
+                  New case
+                </Button>
+              )}
+            </PermissionGate>
+          </Stack>
         }
       />
 

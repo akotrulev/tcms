@@ -41,6 +41,28 @@ export interface Gate {
   /** The tooltip for a denied action. `undefined` when it is allowed and needs no explanation. */
   reason: (permission: PermissionKey) => string | undefined;
   /**
+   * The same question asked of **several keys at once, any one of which is enough** — for an action
+   * a caller can reach by more than one route.
+   *
+   * The import screen is the one that needed it (§255): a folder of `.feature` files produces
+   * `CREATE` rows and `UPDATE` rows, and a caller holding either key has work the screen can do for
+   * them. Asking {@link can} about one of the two would disable the entry point for somebody the
+   * server would serve, which is the wrong half of the disable-don't-hide rule — a control greyed
+   * out for a caller who may use it teaches them the product cannot do something it can.
+   *
+   * Here rather than composed at the call site, because {@link reasonAny}'s sentence needs `where`,
+   * which is this hook's and not a screen's. A component assembling "you don't have permission to X"
+   * from two `reason` calls would produce two sentences about one disabled button.
+   */
+  canAny: (permissions: PermissionKey[]) => boolean;
+  /**
+   * The tooltip for an action denied on **every** key. `undefined` when at least one is held.
+   *
+   * Names all of them, joined with *or*: the caller needs one, and being told about only the first
+   * would send somebody to ask for `case:create` when `case:edit` was already on its way to them.
+   */
+  reasonAny: (permissions: PermissionKey[]) => string | undefined;
+  /**
    * The same question asked **about a row at a given scope** — the client half of the server's
    * `canDoOnScope`.
    *
@@ -174,6 +196,31 @@ function useGate(query: UseQueryResult<EffectivePermissions>, where: string): Ga
         const qualifier = qualifierOf(permission);
         if (qualifier === undefined || qualifier !== null) return undefined;
         return `You don't have permission to ${permissionLabels[permission]} ${where}.`;
+      },
+
+      /*
+        `some` over the same three-valued read the single-key arms use, so "no answer" falls open
+        here exactly as it does there. An empty list answers false, which is the only honest verdict
+        for "may they do a thing that needs nothing" — and it is unreachable through
+        `PermissionGate`, which refuses one.
+      */
+      canAny: (permissions) => {
+        if (pending) return false;
+        return permissions.some((permission) => {
+          const qualifier = qualifierOf(permission);
+          return qualifier === undefined || qualifier !== null;
+        });
+      },
+      reasonAny: (permissions) => {
+        if (pending) return 'Checking your permissions…';
+        const reachable = permissions.some((permission) => {
+          const qualifier = qualifierOf(permission);
+          return qualifier === undefined || qualifier !== null;
+        });
+        if (reachable) return undefined;
+        return `You don't have permission to ${permissions
+          .map((permission) => permissionLabels[permission])
+          .join(' or ')} ${where}.`;
       },
 
       // The same three arms as the server's canDoOnScope, in the same order. OWN is not among

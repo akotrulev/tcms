@@ -144,6 +144,13 @@ class ExecutionEndpointTest extends IntegrationTestBase {
      */
     private static final UUID FRESH_RUN = UUID.fromString("e2006000-0000-4000-8000-000000000005");
 
+    /** The run and the execution of {@code gherkinCase} — §255's end of the pinning chain. */
+    private static final UUID GHERKIN_RUN =
+            UUID.fromString("e2006000-0000-4000-8000-00000000000f");
+
+    private static final UUID GHERKIN_EXEC =
+            UUID.fromString("e2007000-0000-4000-8000-00000000000f");
+
     private static final UUID EXEC_A = UUID.fromString("e2007000-0000-4000-8000-000000000001");
     private static final UUID EXEC_B = UUID.fromString("e2007000-0000-4000-8000-000000000002");
     /** Belongs to OLD_RUN. Asked for through RUN's path it must be a 404. */
@@ -192,6 +199,17 @@ class ExecutionEndpointTest extends IntegrationTestBase {
     private UUID caseB;
     private UUID mobileCase;
     private UUID umbraCase;
+
+    /**
+     * A {@code GHERKIN} case with a keyword, a doc string and a table on its steps (§255).
+     *
+     * <p>Authored through the real create endpoint like every other case here, and that is the
+     * whole of what makes {@link Steps#theBlockArgumentsReachTheChecklist} worth having: the
+     * fields have to survive {@code TestCaseDetailView} → {@code CaseVersions} → the snapshot JSON
+     * → {@code CaseFacts.PinnedStep} → {@code StepResultView}, and a break anywhere in that chain
+     * is invisible from the case screen, which reads {@code test_step} directly.
+     */
+    private UUID gherkinCase;
 
     @BeforeEach
     void seed() throws Exception {
@@ -244,6 +262,7 @@ class ExecutionEndpointTest extends IntegrationTestBase {
         caseB = createCase(LEAD, ACME, ACME_BANKING, "Partial refund rounds correctly", SPARE);
         mobileCase = createCase(LEAD, ACME, ACME_MOBILE, "Mobile login", MOBILE_SUITE);
         umbraCase = createCase(OUTSIDER, UMBRA, UMBRA_BANKING, "Umbra's own", UMBRA_SUITE);
+        gherkinCase = createGherkinCase(LEAD, ACME, ACME_BANKING, "Refund rounding", REFUNDS);
 
         seedPlansRunsAndExecutions();
 
@@ -555,9 +574,11 @@ class ExecutionEndpointTest extends IntegrationTestBase {
             // A hand-edited URL or a form submitting its empty input arrives as `releaseVersion=`.
             // Taken literally it matches runs whose release is the empty string — of which there are
             // none — so the list would come back empty for a filter the user believes they cleared.
+            // GHERKIN_RUN (§255) is in this list and not in the plan-filtered one above: it carries
+            // no plan, and every run in the project belongs in an unfiltered enumeration.
             assertThat(ids(body(get(LEAD, ACME,
                     "/projects/" + ACME_BANKING + "/runs?releaseVersion="))))
-                    .containsExactlyInAnyOrder(RUN, OLD_RUN, FRESH_RUN);
+                    .containsExactlyInAnyOrder(RUN, OLD_RUN, FRESH_RUN, GHERKIN_RUN);
         }
 
         @Test
@@ -993,6 +1014,27 @@ class ExecutionEndpointTest extends IntegrationTestBase {
             assertThat(amended.get("steps").get(0).get("statusId").asText())
                     .isEqualTo(failedStatus().toString());
             assertThat(stepResultRowCount(EXEC_A)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a Gherkin step's keyword, doc string and table reach the checklist")
+        void theBlockArgumentsReachTheChecklist() throws Exception {
+            // Read off the PINNED SNAPSHOT, not test_step (ExecutionViews.steps drives from
+            // CaseFacts.PinnedStep). A change that reached the case editor and stopped at the
+            // version row leaves the tester executing a table they cannot see, and every
+            // assertion on the case screen stays green.
+            JsonNode steps =
+                    body(get(LEAD, ACME, executionPath(GHERKIN_RUN, GHERKIN_EXEC))).get("steps");
+
+            assertThat(steps).hasSize(3);
+            assertThat(steps.get(0).get("keyword").asText()).isEqualTo("GIVEN");
+            assertThat(steps.get(0).get("docString").asText())
+                    .isEqualTo("settled at 10.01 EUR, card ending 4242");
+            assertThat(steps.get(1).get("dataTable").get(1).get(1).asText()).isEqualTo("5.01");
+            assertThat(steps.get(2).get("docString").isNull())
+                    .as("the KEY is present and null — a step with no block argument must not "
+                            + "render the previous step's")
+                    .isTrue();
         }
 
         @Test
@@ -2439,6 +2481,54 @@ class ExecutionEndpointTest extends IntegrationTestBase {
                 .andReturn();
     }
 
+    /**
+     * A {@code GHERKIN} case whose three steps carry a keyword each, one doc string and one table.
+     *
+     * <p>A separate method rather than a flag on {@link #createCase}: every other fixture case in
+     * this class is structured, and a boolean that switched the lens would put the §255 shape into
+     * payloads no test here is about.
+     */
+    private UUID createGherkinCase(UUID userId, UUID companyId, UUID projectId, String title,
+            UUID suiteId) throws Exception {
+
+        Map<String, Object> given = step("a settled payment of 10.01 EUR");
+        given.put("keyword", "GIVEN");
+        given.put("docString", "settled at 10.01 EUR, card ending 4242");
+        Map<String, Object> when = step("the merchant refunds these");
+        when.put("keyword", "WHEN");
+        when.put("dataTable", List.of(List.of("half", "rounds to"), List.of("5.005", "5.01")));
+        Map<String, Object> then = step("the refunded amount rounds to 5.01 EUR");
+        then.put("keyword", "THEN");
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("title", title);
+        payload.put("suiteId", suiteId.toString());
+        payload.put("objective", "Prove the rounding.");
+        payload.put("description", "Seeded by ExecutionEndpointTest.");
+        payload.put("expectedOutcome", "It rounds up.");
+        payload.put("priority", "HIGH");
+        payload.put("severity", "HIGH");
+        payload.put("automationStatus", "MANUAL");
+        payload.put("estimatedDurationSec", 120);
+        payload.put("stepFormat", "GHERKIN");
+        payload.put("steps", List.of(given, when, then));
+        payload.put("changeComment", null);
+
+        MvcResult created = mvc.perform(MockMvcRequestBuilders
+                        .post("/api/v1/projects/" + projectId + "/cases")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(userId, companyId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(payload)))
+                .andReturn();
+
+        assertThat(created.getResponse().getStatus())
+                .as("the fixture depends on the real create endpoint; %s",
+                        created.getResponse().getContentAsString())
+                .isEqualTo(201);
+        return UUID.fromString(body(created).get("id").asText());
+    }
+
     private static Map<String, Object> step(String action) {
         Map<String, Object> step = new LinkedHashMap<>();
         step.put("id", null);
@@ -2639,6 +2729,15 @@ class ExecutionEndpointTest extends IntegrationTestBase {
             execution(connection, EXEC_OLD, ACME, ACME_BANKING, OLD_RUN, caseA, null);
             execution(connection, MOBILE_EXEC, ACME, ACME_MOBILE, MOBILE_RUN, mobileCase, null);
             execution(connection, FRESH_EXEC, ACME, ACME_BANKING, FRESH_RUN, caseA, null);
+            // Its OWN run, not RUN: this class asserts RUN holds exactly two executions in two
+            // places, and a fixture that quietly changed a count other tests depend on is §19's
+            // collision defect in a different currency.
+            // Release "4.4.0", NOT "4.3.0": `theReleaseFilterNarrows` proves that filter narrows to
+            // RUN alone, and a second run sharing RUN's release makes the arm assert the opposite
+            // of what it is named for.
+            run(connection, GHERKIN_RUN, ACME, ACME_BANKING, null, "TR-5", 5, "Gherkin lens",
+                    "4.4.0");
+            execution(connection, GHERKIN_EXEC, ACME, ACME_BANKING, GHERKIN_RUN, gherkinCase, null);
         }
         try (Connection connection = appConnection(UMBRA)) {
             run(connection, UMBRA_RUN, UMBRA, UMBRA_BANKING, null, "TR-1", 1, "Umbra's run", null);

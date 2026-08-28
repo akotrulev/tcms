@@ -41,7 +41,18 @@ import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import { Controller, useFieldArray, useForm, type Control } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
-import { CaseSchema, fromCasePayload, isBlankStep, toCasePayload, type CaseInput } from './caseSchema';
+import {
+  CaseSchema,
+  STEP_KEYWORDS,
+  fromCasePayload,
+  isBlankStep,
+  liveSteps,
+  prefilledKeywords,
+  toCasePayload,
+  type CaseInput,
+} from './caseSchema';
+import { PasteGherkinDialog } from './PasteGherkinDialog';
+import { StepDataCell } from './StepDataCell';
 import { CaseDraftStatus } from './CaseDraftStatus';
 import { useNewCaseDraft } from './useNewCaseDraft';
 import type { CaseDraft } from '../../api/types';
@@ -68,9 +79,15 @@ import { PermissionGate } from '../../components/PermissionGate';
 import { NEW_CASE_DEFAULTS } from '../../lib/caseDefaults';
 import { formatAge, plural } from '../../lib/format';
 import { useDebouncedValue } from '../../lib/useDebouncedValue';
-import { automationLabels, priorityLabels, stepFormatLabels } from '../../lib/labels';
+import { automationLabels, priorityLabels, stepFormatLabels, stepKeywordLabels } from '../../lib/labels';
 import { selectTestId } from '../../lib/muiTestIds';
-import type { CaseConditionRef, Condition, StepSuggestion, TestCase } from '../../api/types';
+import type {
+  CaseConditionRef,
+  Condition,
+  GherkinParseResult,
+  StepSuggestion,
+  TestCase,
+} from '../../api/types';
 
 /**
  * Case authoring form.
@@ -93,7 +110,16 @@ const TestIdPrefix = 'CaseEditor';
  * row still on it (so the submit trims and drops it), and "at least one step" can no longer be
  * `steps.length` (so `CaseSchema` counts `liveSteps`).
  */
-const BLANK_STEP = { action: '', testData: '', expectedResult: '' };
+const BLANK_STEP = {
+  action: '',
+  // '' is the form's spelling of "no keyword" (`caseSchema`), and `null` on the two block arguments
+  // is "this row is not in that mode" rather than "empty" — see `StepDataCell`'s header.
+  keyword: '',
+  testData: '',
+  expectedResult: '',
+  docString: null,
+  dataTable: null,
+};
 
 /**
  * `useFieldArray.append` focuses the new row's first field by default.
@@ -103,13 +129,6 @@ const BLANK_STEP = { action: '', testData: '', expectedResult: '' };
  * out of the sentence being written on the first keystroke of every step.
  */
 const NO_FOCUS = { shouldFocus: false } as const;
-
-const GHERKIN_TEMPLATE = `Feature:
-
-  Scenario:
-    Given
-    When
-    Then `;
 
 /**
  * One draggable step row — the wrapper, not the row's content (§94).
@@ -296,6 +315,85 @@ function StepActionField({
   );
 }
 
+/**
+ * One step's Gherkin keyword (§255).
+ *
+ * ## A component because it owns state, exactly like `StepActionField` above
+ *
+ * In the `STRUCTURED` lens the select is **shown when the row has a keyword and offered when it
+ * does not** — a numbered action legitimately has none, and a permanently-mounted "None" select on
+ * every row of every structured case is a control asking a question nobody has. The *Add keyword*
+ * button is that offer, and whether it has been taken is per-row state, which cannot live in
+ * `steps.fields.map`.
+ *
+ * ## The lens decides whether "None" is on the menu
+ *
+ * In `GHERKIN` it is not: the form refuses a keyword-less row there with the server's own sentence,
+ * so offering the value that guarantees the error would be a menu item whose only outcome is a
+ * validation message. In `STRUCTURED` it is the ordinary answer and has to be reachable again after
+ * a keyword has been chosen.
+ */
+function StepKeywordCell({
+  control,
+  index,
+  lens,
+  error,
+}: {
+  control: Control<CaseInput>;
+  index: number;
+  lens: CaseInput['stepFormat'];
+  error: string | undefined;
+}) {
+  const [revealed, setRevealed] = useState(false);
+
+  return (
+    <Controller
+      control={control}
+      name={`steps.${index}.keyword`}
+      render={({ field }) =>
+        lens === 'GHERKIN' || revealed || field.value !== '' ? (
+          <TextField
+            select
+            label="Keyword"
+            size="small"
+            sx={{ minWidth: 128, flexShrink: 0 }}
+            value={field.value}
+            onChange={field.onChange}
+            onBlur={field.onBlur}
+            error={!!error}
+            helperText={error}
+            slotProps={{
+              select: { SelectDisplayProps: selectTestId(`${TestIdPrefix}.Steps.Field.Keyword`) },
+              formHelperText: { role: error ? 'alert' : undefined },
+            }}
+          >
+            {lens === 'STRUCTURED' && (
+              <MenuItem value="">
+                <Box component="span" sx={{ color: 'text.secondary' }}>
+                  None
+                </Box>
+              </MenuItem>
+            )}
+            {STEP_KEYWORDS.map((keyword) => (
+              <MenuItem key={keyword} value={keyword}>
+                {stepKeywordLabels[keyword]}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : (
+          <Button
+            size="small"
+            onClick={() => setRevealed(true)}
+            data-testid={`${TestIdPrefix}.Steps.AddKeyword`}
+          >
+            Add keyword
+          </Button>
+        )
+      }
+    />
+  );
+}
+
 export function CaseEditorPage({ mode }: { mode: 'create' | 'edit' }) {
   const { projectId = '', caseId } = useParams();
   const existing = useCase(projectId, mode === 'edit' ? caseId : undefined);
@@ -368,6 +466,9 @@ function CaseEditorForm({
   */
   const [createdConditions, setCreatedConditions] = useState<Condition[]>([]);
 
+  /** Whether the paste dialog is open. Rendered only while it is, so it seeds fresh every time. */
+  const [pasting, setPasting] = useState(false);
+
   /*
     The folder's conditions, rendered read-only beside the case's own. Filtered here rather than in
     the panel so the panel takes exactly what it renders and nothing that needs interpreting.
@@ -427,17 +528,21 @@ function CaseEditorForm({
           ? ''
           : String(existing.estimatedDurationSec),
       stepFormat: existing?.stepFormat ?? NEW_CASE_DEFAULTS.stepFormat,
-      gherkinSource: existing?.gherkinSource ?? '',
       // The case's steps, plus the trailing blank row — on a new case that IS the whole list, which
       // is why the editor no longer opens on nothing at all. Before §94 a new case rendered zero
       // step rows and the only way to get one was the Add button.
       steps: [
         ...(existing?.steps ?? []).map((step) => ({
           id: step.id,
-          keyword: step.keyword ?? null,
+          // The contract's null becomes the form's '' — MUI's Select and `caseSchema.keyword`.
+          keyword: step.keyword ?? '',
           action: step.action,
           testData: step.testData ?? '',
           expectedResult: step.expectedResult ?? '',
+          // NOT `?? ''`: null is the mode here, so defaulting it would open every step in
+          // doc-string mode with an empty block — see `StepDataCell`.
+          docString: step.docString,
+          dataTable: step.dataTable,
         })),
         BLANK_STEP,
       ],
@@ -495,6 +600,70 @@ function CaseEditorForm({
     const rows = getValues('steps');
     const last = rows.at(-1);
     if (!last || !isBlankStep(last)) steps.append(BLANK_STEP, NO_FOCUS);
+  };
+
+  /**
+   * Attaches a library condition to the case and makes it renderable at once.
+   *
+   * Shared by the conditions dialog and the paste dialog's *Create precondition and attach*,
+   * because both create an entry the picker's cached lists cannot resolve yet — a second copy is
+   * how one of the two ends up showing "Unknown condition" on the screen it was created from.
+   */
+  const attachCondition = (created: Condition, kind: 'PRE' | 'POST') => {
+    setCreatedConditions((current) => [...current, created]);
+    const field = kind === 'PRE' ? 'preconditionIds' : 'postconditionIds';
+    setValue(field, [...getValues(field), created.id], { shouldDirty: true });
+  };
+
+  /**
+   * A parsed scenario into the form (§255).
+   *
+   * ## Append keeps ids, Replace does not, and the dialog says so
+   *
+   * Appending leaves every existing row — and therefore every step id, which is what a
+   * `step_result` anchors to — untouched. Replacing discards them, which is a legitimate thing to
+   * want on a case being rewritten and is why the dialog's Replace button carries the warning.
+   * Either way the trailing blank row is re-established, because it IS the way to add a step (§94).
+   *
+   * ## The lens follows the paste, and only when the paste says so
+   *
+   * Text that parsed with keywords is a scenario, so the editor switches to the Gherkin lens rather
+   * than leaving the author to notice a toggle. A bare step list parses to rows with **no** keyword
+   * (`*` in Gherkin's own spelling), and switching on that would put the form straight into a state
+   * its own validation refuses.
+   *
+   * ## Title, objective and tags are filled, never overwritten
+   *
+   * A paste is an import into a form somebody may already have filled in. Tags merge — they are a
+   * set and the file's are as real as the author's — while the title and the objective are written
+   * only into a field that is blank: replacing a sentence somebody typed with one out of a file is
+   * a loss nothing on screen would report.
+   */
+  const applyParsedScenario = (result: GherkinParseResult, mode: 'APPEND' | 'REPLACE') => {
+    const rows = result.steps.map((step) => ({
+      id: null,
+      keyword: step.keyword ?? '',
+      action: step.action,
+      testData: step.testData ?? '',
+      expectedResult: step.expectedResult ?? '',
+      docString: step.docString ?? null,
+      dataTable: step.dataTable ?? null,
+    }));
+    const kept = mode === 'REPLACE' ? [] : liveSteps(getValues('steps'));
+    steps.replace([...kept, ...rows, { ...BLANK_STEP }]);
+
+    if (result.steps.some((step) => step.keyword)) {
+      setValue('stepFormat', 'GHERKIN', { shouldDirty: true });
+    }
+    if (result.title && !getValues('title').trim()) {
+      setValue('title', result.title, { shouldDirty: true });
+    }
+    if (result.objective && !(getValues('objective') ?? '').trim()) {
+      setValue('objective', result.objective, { shouldDirty: true });
+    }
+    if (result.tags.length > 0) {
+      setValue('tags', [...new Set([...getValues('tags'), ...result.tags])], { shouldDirty: true });
+    }
   };
 
   /*
@@ -924,65 +1093,73 @@ function CaseEditorForm({
             title="Steps"
             testId={`${TestIdPrefix}.Steps`}
             actions={
-              <Controller
-                control={control}
-                name="stepFormat"
-                render={({ field }) => (
-                  <ToggleButtonGroup
-                    exclusive
-                    size="small"
-                    value={field.value}
-                    onChange={(_event, value) => {
-                      if (!value) return;
-                      field.onChange(value);
-                      // Seed the editor the user is switching into, so they land on
-                      // something writable rather than an empty box.
-                      if (value === 'GHERKIN' && !watch('gherkinSource')) {
-                        setValue('gherkinSource', GHERKIN_TEMPLATE, { shouldDirty: true });
-                      }
-                      if (value === 'STRUCTURED' && steps.fields.length === 0) {
-                        steps.append(BLANK_STEP, NO_FOCUS);
-                      }
-                    }}
-                    aria-label="Step format"
-                  >
-                    {(['STRUCTURED', 'GHERKIN'] as const).map((format) => (
-                      <ToggleButton
-                        key={format}
-                        value={format}
-                        data-testid={`${TestIdPrefix}.StepFormat.${format}`}
-                      >
-                        {stepFormatLabels[format]}
-                      </ToggleButton>
-                    ))}
-                  </ToggleButtonGroup>
-                )}
-              />
+              <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
+                <Button
+                  size="small"
+                  onClick={() => setPasting(true)}
+                  data-testid={`${TestIdPrefix}.Steps.Paste`}
+                >
+                  Paste Gherkin
+                </Button>
+                <Controller
+                  control={control}
+                  name="stepFormat"
+                  render={({ field }) => (
+                    <ToggleButtonGroup
+                      exclusive
+                      size="small"
+                      value={field.value}
+                      onChange={(_event, value) => {
+                        if (!value) return;
+                        field.onChange(value);
+                        /*
+                          ================== THE TOGGLE THAT USED TO LOSE THE ROWS ==================
+
+                          Both directions now change **no stored value**, and there is no diff
+                          dialog in either. Until §255 the two lenses were two storages: switching
+                          to Gherkin seeded a template into a textarea and `toCasePayload` sent
+                          `steps: []`, so the next Save deleted every row and every step id a
+                          `step_result` anchors to — silently, with a success toast over it. That
+                          is the defect this slice exists to end, and the whole of the fix is that
+                          neither branch below touches the list.
+
+                          `STRUCTURED → GHERKIN` only FILLS: `prefilledKeywords` proposes a keyword
+                          for a row that has none and leaves every row that has one alone, so an
+                          author who toggles twice gets their own words back. It is a first draft
+                          of an answer the lens now requires, not a normalization.
+
+                          `GHERKIN → STRUCTURED` does nothing at all. The keywords stay on the rows
+                          and render in the structured list; clearing them would be the same
+                          silent deletion in the other direction, one field narrower.
+                        */
+                        if (value === 'GHERKIN') {
+                          steps.replace(prefilledKeywords(getValues('steps')));
+                        }
+                      }}
+                      aria-label="Step format"
+                    >
+                      {(['STRUCTURED', 'GHERKIN'] as const).map((format) => (
+                        <ToggleButton
+                          key={format}
+                          value={format}
+                          data-testid={`${TestIdPrefix}.StepFormat.${format}`}
+                        >
+                          {stepFormatLabels[format]}
+                        </ToggleButton>
+                      ))}
+                    </ToggleButtonGroup>
+                  )}
+                />
+              </Stack>
             }
           >
             {/*
-              A case carries one format or the other, never both — the toggle switches which
-              editor is mounted, and only the active one is submitted.
+              ONE EDITOR, BOTH LENSES (§255). There is no second control here any more: the
+              `GHERKIN` branch used to mount a `gherkinSource` textarea, which is the field that
+              left `TestCaseInput` in this slice. What the toggle changes is whether a keyword is
+              required and offered — the rows below are the same rows either way.
             */}
-            {stepFormat === 'GHERKIN' ? (
-              <TextField
-                label="Scenario"
-                fullWidth
-                multiline
-                minRows={12}
-                error={!!errors.gherkinSource}
-                helperText={errors.gherkinSource?.message ?? 'Gherkin. Keywords are recognized on the detail view.'}
-                slotProps={{
-                  htmlInput: {
-                    'data-testid': `${TestIdPrefix}.Field.GherkinSource`,
-                    style: { fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', lineHeight: 1.7 },
-                  },
-                  formHelperText: { role: errors.gherkinSource ? 'alert' : undefined },
-                }}
-                {...register('gherkinSource')}
-              />
-            ) : (
-              <Stack sx={{ gap: 2 }}>
+            <Stack sx={{ gap: 2 }}>
                 {/*
                   `root?.message` as well as `message`, and the first of the two is the one that
                   fires. A refinement whose `path` is a FIELD ARRAY lands on `errors.steps.root` —
@@ -1036,6 +1213,12 @@ function CaseEditorForm({
                         </IconButton>
                       </Tooltip>
                       <Identifier variant="muted">Step {index + 1}</Identifier>
+                      <StepKeywordCell
+                        control={control}
+                        index={index}
+                        lens={stepFormat}
+                        error={errors.steps?.[index]?.keyword?.message}
+                      />
                       <Box sx={{ flex: 1 }} />
                       {/*
                         Reordering is safe because a step keeps its stable id: results and
@@ -1109,10 +1292,29 @@ function CaseEditorForm({
                           changed yet.
                         */
                         onPick={(suggestion) => {
-                          setValue(`steps.${index}.action`, suggestion.action, { shouldDirty: true });
-                          setValue(`steps.${index}.testData`, suggestion.testData ?? '', {
-                            shouldDirty: true,
-                          });
+                          /*
+                            ONE write, at `steps.${index}` — the name the data cell's `Controller`
+                            below subscribes to. Three writes to the sibling paths do not reach it,
+                            and the corpus triple is a STRUCTURED step, so a pick onto a row that is
+                            currently holding a doc string or a table has to clear the other two:
+                            `test_step` allows at most one of the three (`V69`'s `num_nonnulls`
+                            check), and three sibling writes leave a row the server refuses.
+                          */
+                          setValue(
+                            `steps.${index}`,
+                            {
+                              ...getValues(`steps.${index}`),
+                              action: suggestion.action,
+                              testData: suggestion.testData ?? '',
+                              docString: null,
+                              dataTable: null,
+                            },
+                            { shouldDirty: true },
+                          );
+                          // And `expectedResult` on its OWN exact path: it is an uncontrolled
+                          // `register` input, whose DOM value `setValue` writes through the ref it
+                          // holds for that name — a write to the parent object updates the form
+                          // state and leaves the box on screen empty.
                           setValue(`steps.${index}.expectedResult`, suggestion.expectedResult ?? '', {
                             shouldDirty: true,
                           });
@@ -1120,17 +1322,36 @@ function CaseEditorForm({
                         }}
                       />
                       <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1.5 }}>
-                        <TextField
-                          label="Test data"
-                          fullWidth
-                          multiline
-                          slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Steps.Field.TestData` } }}
-                          {...register(`steps.${index}.testData`)}
-                        />
+                        {/*
+                          The three data spellings behind one control (§255) — `Controller` rather
+                          than `register` because the cell writes three fields at once when the
+                          mode changes, which is exactly what makes the "at most one of them" rule
+                          unreachable rather than merely refused.
+                        */}
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Controller
+                            control={control}
+                            name={`steps.${index}`}
+                            render={({ field }) => (
+                              <StepDataCell
+                                index={index}
+                                testIdPrefix={TestIdPrefix}
+                                value={{
+                                  testData: field.value.testData ?? '',
+                                  docString: field.value.docString,
+                                  dataTable: field.value.dataTable,
+                                }}
+                                onChange={(next) => field.onChange({ ...field.value, ...next })}
+                                error={errors.steps?.[index]?.testData?.message}
+                              />
+                            )}
+                          />
+                        </Box>
                         <TextField
                           label="Expected result"
                           fullWidth
                           multiline
+                          sx={{ flex: 1 }}
                           slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Steps.Field.ExpectedResult` } }}
                           {...register(`steps.${index}.expectedResult`)}
                         />
@@ -1159,8 +1380,7 @@ function CaseEditorForm({
                   mechanism half-built — the picker wrote the entry's title into `action` and set a
                   reference nothing on any read path ever resolved.
                 */}
-              </Stack>
-            )}
+            </Stack>
           </Panel>
 
           {mode === 'edit' && (
@@ -1585,14 +1805,27 @@ function CaseEditorForm({
           condition={conditionDialog.condition}
           defaultType={conditionDialog.kind}
           onClose={() => setConditionDialog(null)}
-          onCreated={(created) => {
-            // Attached to the list it was created from. Creating an entry and leaving the author to
-            // find it in the picker they just left is the kind of half-finished flow `ui-rules`
-            // calls a workflow defect — they asked for a condition HERE.
-            setCreatedConditions((current) => [...current, created]);
-            const field = conditionDialog.kind === 'PRE' ? 'preconditionIds' : 'postconditionIds';
-            setValue(field, [...getValues(field), created.id], { shouldDirty: true });
-          }}
+          // Attached to the list it was created from. Creating an entry and leaving the author to
+          // find it in the picker they just left is the kind of half-finished flow `ui-rules`
+          // calls a workflow defect — they asked for a condition HERE.
+          onCreated={(created) => attachCondition(created, conditionDialog.kind)}
+        />
+      )}
+
+      {/*
+        Mounted only while open, so every paste starts from an empty box rather than from the
+        previous one's text and its result — the same reason the condition dialog above is keyed.
+      */}
+      {pasting && (
+        <PasteGherkinDialog
+          projectId={projectId}
+          open
+          onClose={() => setPasting(false)}
+          onApply={applyParsedScenario}
+          // A Background step becomes a PRE condition and nothing else: the import model says so
+          // (amendment AM1), and there is no Gherkin construct that means "postcondition".
+          onConditionCreated={(created) => attachCondition(created, 'PRE')}
+          hasSteps={liveSteps(getValues('steps')).length > 0}
         />
       )}
     </Box>
