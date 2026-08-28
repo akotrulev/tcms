@@ -283,6 +283,24 @@ class ProjectMemberEndpointTest extends IntegrationTestBase {
             // second.
             assertThat(statusOf(VIEWER, ACME, PROJECT)).isEqualTo(200);
         }
+
+        @Test
+        @DisplayName("the read costs project:read and not project:members — 005 Q2, pinned both ways")
+        void readCostsVisibilityNotStaffing() throws Exception {
+            // Decided 2026-08-28: who is on a project is not a secret from the company — the org
+            // chart already discloses it — so the read is the visibility gate and every write on
+            // the path keeps project:members. Both halves asserted: the Viewer reads it AND does
+            // not hold the staffing key, so the 200 cannot be explained by a grant they happen
+            // to have; a member with no visibility still gets the §6t 404.
+            String held = mvc.perform(MockMvcRequestBuilders
+                            .get("/api/v1/me/permissions?projectId=" + PROJECT)
+                            .header("Authorization", "Bearer " + tokenFor(VIEWER, ACME)))
+                    .andReturn().getResponse().getContentAsString();
+            assertThat(held).contains("project:read").doesNotContain("project:members");
+
+            assertThat(statusOf(VIEWER, ACME, PROJECT)).isEqualTo(200);
+            assertThat(statusOf(NO_GRANT, ACME, PROJECT)).isEqualTo(404);
+        }
     }
 
     @Nested

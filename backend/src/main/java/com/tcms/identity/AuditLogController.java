@@ -62,7 +62,9 @@ public class AuditLogController {
         return read(
                 trail.forProject(caller(jwt), projectId, new AuditLogQuery(
                         null, actorUserId, action, occurredAfter, occurredBefore, page, size)),
-                "You do not have permission to see this project's audit trail.");
+                "You do not have permission to see this project's audit trail.",
+                "project:audit",
+                Problem.Scope.PROJECT);
     }
 
     /**
@@ -86,7 +88,9 @@ public class AuditLogController {
         return read(
                 trail.forCompany(caller(jwt), new AuditLogQuery(
                         projectId, actorUserId, action, occurredAfter, occurredBefore, page, size)),
-                "You do not have permission to see this company's audit trail.");
+                "You do not have permission to see this company's audit trail.",
+                "audit:view",
+                Problem.Scope.COMPANY);
     }
 
     private static UUID caller(Jwt jwt) {
@@ -105,11 +109,13 @@ public class AuditLogController {
      * reads as "nothing happened" and the reader has no way to tell that apart from "you were not
      * allowed to look" — see {@link AuditLogService}'s header.
      */
-    private static ResponseEntity<Object> read(GateResult<?> gated, String refusal) {
+    private static ResponseEntity<Object> read(
+            GateResult<?> gated, String refusal, String permission, Problem.Scope scope) {
         return switch (gated) {
             case GateResult.Unreachable<?> ignored -> ResponseEntity.notFound().build();
             case GateResult.Denied<?> ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(Problem.forbidden(refusal));
+                    ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(Problem.forbidden(refusal, permission, scope));
             case GateResult.Allowed<?> allowed -> ResponseEntity.ok(allowed.value());
         };
     }

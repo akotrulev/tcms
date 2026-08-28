@@ -29,7 +29,7 @@ class TokenRateLimiterTest {
 
     /** 60 a minute — one a second, so a permit is worth exactly 1000 ms and the maths is legible. */
     private static RateLimitProperties generous() {
-        return new RateLimitProperties(true, 60, 10, 1000);
+        return new RateLimitProperties(true, 60, 10, 1000, 10, Duration.ofMinutes(15));
     }
 
     private final MutableClock clock = new MutableClock(Instant.parse("2026-08-08T12:00:00Z"));
@@ -143,7 +143,7 @@ class TokenRateLimiterTest {
                     // 40 a minute: a permit is 1500 ms, so an exhausted bucket's honest wait is
                     // 1.5 s — the case where rounding down produces a second refusal for a client
                     // that did exactly what it was told.
-                    new RateLimitProperties(true, 40, 10, 1000), clock);
+                    new RateLimitProperties(true, 40, 10, 1000, 10, Duration.ofMinutes(15)), clock);
             exhaust(limiter, ONE, 10);
 
             assertThat(limiter.check(ONE).retryAfter()).isEqualTo(Duration.ofSeconds(2));
@@ -156,7 +156,7 @@ class TokenRateLimiterTest {
                     // 60,000 a minute — a permit every millisecond, so the true wait rounds to
                     // nothing. `Retry-After: 0` is an instruction to retry immediately, which is
                     // the loop this whole slice exists to interrupt.
-                    new RateLimitProperties(true, 60_000, 10, 1000), clock);
+                    new RateLimitProperties(true, 60_000, 10, 1000, 10, Duration.ofMinutes(15)), clock);
             exhaust(limiter, ONE, 10);
 
             assertThat(limiter.check(ONE).retryAfter()).isEqualTo(Duration.ofSeconds(1));
@@ -179,7 +179,7 @@ class TokenRateLimiterTest {
         @DisplayName("disabled means nothing is counted and nothing is remembered")
         void disabledTracksNothing() {
             TokenRateLimiter limiter =
-                    new TokenRateLimiter(new RateLimitProperties(false, 60, 10, 1000), clock);
+                    new TokenRateLimiter(new RateLimitProperties(false, 60, 10, 1000, 10, Duration.ofMinutes(15)), clock);
 
             for (int i = 0; i < 100; i++) {
                 assertThat(limiter.check(ONE).allowed()).isTrue();
@@ -193,7 +193,7 @@ class TokenRateLimiterTest {
         @DisplayName("a full bucket is forgotten at the cap; a partial one is not")
         void idleBucketsAreEvicted() {
             TokenRateLimiter limiter =
-                    new TokenRateLimiter(new RateLimitProperties(true, 60, 10, 2), clock);
+                    new TokenRateLimiter(new RateLimitProperties(true, 60, 10, 2, 10, Duration.ofMinutes(15)), clock);
 
             limiter.check(ONE);                       // ONE is now one permit short.
             limiter.check(TWO);                       // so is TWO.
@@ -224,7 +224,7 @@ class TokenRateLimiterTest {
         @DisplayName("a burst larger than one minute of refill is refused at bind time")
         void aBurstAboveTheRateIsRefused() {
             assertThat(catchThrowable(
-                    () -> new RateLimitProperties(true, 60, 61, 1000)))
+                    () -> new RateLimitProperties(true, 60, 61, 1000, 10, Duration.ofMinutes(15))))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("must not exceed");
         }
@@ -233,13 +233,13 @@ class TokenRateLimiterTest {
         @DisplayName("and so is a rate, a burst or a cap below one")
         void nonsenseNumbersAreRefused() {
             assertThat(catchThrowable(
-                    () -> new RateLimitProperties(true, 0, 1, 1)))
+                    () -> new RateLimitProperties(true, 0, 1, 1, 10, Duration.ofMinutes(15))))
                     .isInstanceOf(IllegalArgumentException.class);
             assertThat(catchThrowable(
-                    () -> new RateLimitProperties(true, 60, 0, 1)))
+                    () -> new RateLimitProperties(true, 60, 0, 1, 10, Duration.ofMinutes(15))))
                     .isInstanceOf(IllegalArgumentException.class);
             assertThat(catchThrowable(
-                    () -> new RateLimitProperties(true, 60, 10, 0)))
+                    () -> new RateLimitProperties(true, 60, 10, 0, 10, Duration.ofMinutes(15))))
                     .isInstanceOf(IllegalArgumentException.class);
         }
     }

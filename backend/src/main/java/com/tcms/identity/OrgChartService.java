@@ -7,6 +7,7 @@ import com.tcms.tenancy.CompanyContext;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -81,6 +82,7 @@ public class OrgChartService {
     private final TeamRepository teams;
     private final TeamMembershipRepository teamMemberships;
     private final RoleAssignmentRepository roleAssignments;
+    private final PermissionCatalogue catalogue;
 
     public OrgChartService(
             AdminDirectoryService directory,
@@ -89,7 +91,8 @@ public class OrgChartService {
             AppUserRepository users,
             TeamRepository teams,
             TeamMembershipRepository teamMemberships,
-            RoleAssignmentRepository roleAssignments) {
+            RoleAssignmentRepository roleAssignments,
+            PermissionCatalogue catalogue) {
 
         this.directory = directory;
         this.projects = projects;
@@ -98,6 +101,7 @@ public class OrgChartService {
         this.teams = teams;
         this.teamMemberships = teamMemberships;
         this.roleAssignments = roleAssignments;
+        this.catalogue = catalogue;
     }
 
     /**
@@ -114,7 +118,7 @@ public class OrgChartService {
     public OrgChartView chartFor(UUID userId) {
         AdminReach reach = directory.reachOf(userId);
         if (!reach.readsCompany()) {
-            return new OrgChartView(List.of(), List.of(), List.of());
+            return new OrgChartView(List.of(), List.of(), List.of(), List.of());
         }
         UUID companyId = CompanyContext.require();
 
@@ -133,7 +137,8 @@ public class OrgChartService {
             // Not merely an optimization: an empty collection bound into a SQL `IN ()` is a syntax
             // error, so the three matrix queries below must not run. A company with no present
             // members is reachable — every membership REMOVED — rather than hypothetical.
-            return new OrgChartView(directory.listTeams(userId), List.of(), columns);
+            return new OrgChartView(
+                    directory.listTeams(userId), List.of(), columns, gaps(columnIdsOf(columns), Map.of()));
         }
 
         List<UUID> people = present.stream().map(CompanyMembership::getUserId).toList();
@@ -161,7 +166,89 @@ public class OrgChartService {
                         OrgChartPersonView::displayName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
 
-        return new OrgChartView(directory.listTeams(userId), rows, columns);
+        return new OrgChartView(
+                directory.listTeams(userId),
+                rows,
+                columns,
+                gaps(columnIds, heldByActivePerson(companyId, present, accounts, columnIds)));
+    }
+
+    private static Set<UUID> columnIdsOf(List<OrgChartProjectView> columns) {
+        return columns.stream()
+                .map(OrgChartProjectView::id)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /**
+     * What every <em>active</em> person effectively holds on every column — the union the Gaps
+     * panel is the complement of (005 N6).
+     *
+     * <p>"Active" is both gates {@code PermissionEvaluator} applies: an ACTIVE membership and an
+     * ACTIVE account. An invitee's grant covers nothing until redeemed and a deactivated colleague's
+     * grant covers nothing at all, so counting either would hide a real gap behind a name that
+     * cannot act. SYSTEM-scope holders are deliberately not counted either: an instance operator
+     * being the only person who can approve a case on a client's project is exactly the gap the
+     * panel exists to show.
+     *
+     * <p>Per person and per project the rule is the evaluator's, not a flat union of rows: COMPANY-
+     * scope keys always apply; a project-scoped grant (direct or via a team) <em>replaces</em> the
+     * PROJECT-scope role held company-wide rather than adding to it. Read there before changing here
+     * — two readings of which grant wins is the defect §65 closed.
+     */
+    private Map<UUID, Set<String>> heldByActivePerson(
+            UUID companyId,
+            List<CompanyMembership> present,
+            Map<UUID, AppUser> accounts,
+            Set<UUID> columnIds) {
+
+        List<UUID> active = present.stream()
+                .filter(membership -> membership.getStatus() == MembershipStatus.ACTIVE)
+                .map(CompanyMembership::getUserId)
+                .filter(person -> accounts.get(person) != null && accounts.get(person).isActive())
+                .toList();
+        Map<UUID, Set<String>> held = new HashMap<>();
+        if (active.isEmpty() || columnIds.isEmpty()) {
+            return held;
+        }
+
+        Map<UUID, Map<UUID, Set<String>>> onProject = new HashMap<>();
+        for (var row : roleAssignments.findHeldOnProjects(companyId, active)) {
+            onProject.computeIfAbsent(row.getUserId(), key -> new HashMap<>())
+                    .computeIfAbsent(row.getProjectId(), key -> new HashSet<>())
+                    .add(row.getPermissionKey());
+        }
+        Map<UUID, Set<String>> companyScope = new HashMap<>();
+        Map<UUID, Set<String>> inherited = new HashMap<>();
+        for (var row : roleAssignments.findHeldCompanyWide(companyId, active)) {
+            Map<UUID, Set<String>> bucket =
+                    RoleScope.COMPANY.name().equals(row.getRoleScope()) ? companyScope : inherited;
+            bucket.computeIfAbsent(row.getUserId(), key -> new HashSet<>()).add(row.getPermissionKey());
+        }
+
+        for (UUID projectId : columnIds) {
+            Set<String> onThisProject = held.computeIfAbsent(projectId, key -> new HashSet<>());
+            for (UUID person : active) {
+                onThisProject.addAll(companyScope.getOrDefault(person, Set.of()));
+                Set<String> direct = onProject.getOrDefault(person, Map.of()).get(projectId);
+                onThisProject.addAll(direct != null ? direct : inherited.getOrDefault(person, Set.of()));
+            }
+        }
+        return held;
+    }
+
+    /** Every catalogue key a column has no active holder for — sorted, so two reads are diffable. */
+    private List<OrgChartGapView> gaps(Set<UUID> columnIds, Map<UUID, Set<String>> heldByProject) {
+        List<OrgChartGapView> gaps = new ArrayList<>();
+        List<String> keys = catalogue.keys().stream().sorted().toList();
+        for (UUID projectId : columnIds) {
+            Set<String> held = heldByProject.getOrDefault(projectId, Set.of());
+            for (String key : keys) {
+                if (!held.contains(key)) {
+                    gaps.add(new OrgChartGapView(projectId, key));
+                }
+            }
+        }
+        return List.copyOf(gaps);
     }
 
     private OrgChartPersonView row(

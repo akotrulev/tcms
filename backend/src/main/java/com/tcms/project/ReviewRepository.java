@@ -87,6 +87,44 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
      * endpoint gates on a permission held per project, so resolving through the wrong project would
      * ask the right question about the wrong row.
      */
+    /** Open reviews per subject type — the review-owned half of {@code ReviewImpact}. */
+    @Query("""
+            SELECT r.subjectType AS subjectType, COUNT(r) AS open
+              FROM Review r
+             WHERE r.projectId = :projectId
+               AND r.state = com.tcms.project.ReviewState.IN_REVIEW
+             GROUP BY r.subjectType
+            """)
+    List<OpenCount> countOpenBySubjectType(@Param("projectId") UUID projectId);
+
+    interface OpenCount {
+
+        ReviewSubjectType getSubjectType();
+
+        long getOpen();
+    }
+
+    /**
+     * Open reviews with at least one {@code LGTM} from somebody other than the submitter — the ones
+     * a raised {@code requiredPeerReviews} would send back for more.
+     */
+    @Query("""
+            SELECT COUNT(DISTINCT r.id)
+              FROM Review r, ReviewParticipation p
+             WHERE r.projectId = :projectId
+               AND r.state = com.tcms.project.ReviewState.IN_REVIEW
+               AND p.reviewId = r.id
+               AND p.verdict = :verdict
+               AND p.userId <> r.createdBy
+            """)
+    long countOpenWithPeerVerdict(
+            @Param("projectId") UUID projectId,
+            @Param("verdict") ReviewParticipation.Verdict verdict);
+
+    default long countOpenAwaitingFinalApproval(UUID projectId) {
+        return countOpenWithPeerVerdict(projectId, ReviewParticipation.Verdict.LGTM);
+    }
+
     @Query("""
             SELECT r FROM Review r
              WHERE r.projectId = :projectId

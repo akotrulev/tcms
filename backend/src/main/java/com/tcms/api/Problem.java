@@ -3,6 +3,8 @@ package com.tcms.api;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 
 /**
  * {@code Problem} in {@code docs/specs/openapi.yaml} — <s>the error envelope <strong>every</strong>
@@ -40,6 +42,30 @@ import java.util.Map;
  * <em>string literal</em> in {@code auth.RateLimitFilter} — which is the form that shows what the
  * duplication costs, since a field renamed in the contract would have been found by no compiler.
  *
+ * <h2>2026-08-28 (005 C1a) — three members, and the §162–§164 argument reopened once</h2>
+ *
+ * <p>~~{@code errors} is the one optional member.~~ → four are: {@code errors}, {@code permission},
+ * {@code scope} and {@code line}. §141's rule still decides what a refusal carries — a member is
+ * earned by what the caller can do with it — and two things a caller can now do earned these. A 403
+ * whose {@code permission} and {@code scope} are structured lets every screen draw one Refused state
+ * (<em>"needs case:approve on this project — ask a Company Admin"</em>) without parsing prose that no
+ * two controllers word alike; a gherkin refusal whose {@code line} is structured lets the editor
+ * anchor the sentence to the line it is about (003 C4). Both envelopes carry them:
+ * {@link #forbidden(String, String, Scope)} for this record and {@link #forbiddenDetail} for the
+ * {@code ProblemDetail} writers, so the property does not depend on which writer produced it —
+ * §162's whole point. {@code ErrorBodyPolicyTest} pins the seven names in both directions.
+ *
+ * @param permission <strong>on a 403 only</strong>: the catalogue key the caller lacks, exactly as the
+ *                   roles spec spells it. Null, and therefore omitted, on every other status. See
+ *                   {@link #forbidden(String, String, Scope)} for why naming the key stopped being
+ *                   the disclosure the {@link #forbidden(String)} javadoc once said it was.
+ * @param scope      beside {@code permission}: the scope the key is evaluated at, so the copy can say
+ *                   "on this project" rather than guessing from the URL. Null wherever
+ *                   {@code permission} is.
+ * @param line       <strong>on the four gherkin refusals only</strong>: the 1-based line of the pasted
+ *                   text the refusal is about. Every refusal this module's factories write sends
+ *                   null; the repository module's parse and render endpoints fill it from
+ *                   {@code GherkinSyntaxException}.
  * @param errors field name to messages, present only on a validation rejection. Serialized as
  *               {@code null} and omitted from the JSON when absent, so a 409 or a 404 does not carry
  *               an empty errors object that a client might read as "no fields were wrong" rather than
@@ -51,7 +77,29 @@ public record Problem(
         String title,
         int status,
         String detail,
+        String permission,
+        Scope scope,
+        Integer line,
         Map<String, List<String>> errors) {
+
+    /**
+     * The scope a missing permission is evaluated at — {@code Problem.scope} in the contract.
+     *
+     * <p>Declared here rather than as a reference to {@code identity.RoleScope} because {@code api} is
+     * the module every other one imports and may import nothing itself; the two enums spell the same
+     * three names and {@code ContractEnumTest} pins this one to the contract.
+     */
+    public enum Scope { SYSTEM, COMPANY, PROJECT }
+
+    /**
+     * The shape every writer used before 2026-08-28 — no permission, no scope, no line. Kept so the
+     * repository module's six hand-built refusals (the gherkin parse family and the import
+     * conflicts) did not have to change in the slice that added the members; the one that earns
+     * {@code line} switches to the canonical constructor when it fills it.
+     */
+    public Problem(String type, String title, int status, String detail, Map<String, List<String>> errors) {
+        this(type, title, status, detail, null, null, null, errors);
+    }
 
     /** RFC 7807's "no further type information" URI, which is what every problem here is. */
     private static final String BLANK_TYPE = "about:blank";
@@ -64,6 +112,9 @@ public record Problem(
                 // The SPA renders the per-field messages beside the inputs, so this line must not
                 // repeat them — it says where to look, and the fields say what is wrong.
                 "Check the highlighted fields.",
+                null,
+                null,
+                null,
                 errors);
     }
 
@@ -86,6 +137,9 @@ public record Problem(
                 "Someone else saved first",
                 409,
                 "Reload the " + noun + " to see the newer version, then reapply your change.",
+                null,
+                null,
+                null,
                 null);
     }
 
@@ -98,7 +152,7 @@ public record Problem(
      * folder has cases in it. One wording covering both would be the one that fits neither.
      */
     public static Problem conflict(String title, String detail) {
-        return new Problem(BLANK_TYPE, title, 409, detail, null);
+        return new Problem(BLANK_TYPE, title, 409, detail, null, null, null, null);
     }
 
     /**
@@ -109,7 +163,7 @@ public record Problem(
      * immediately — which is the loop the limit exists to prevent, one refusal later.
      */
     public static Problem tooManyRequests(String detail) {
-        return new Problem(BLANK_TYPE, "Too many requests", 429, detail, null);
+        return new Problem(BLANK_TYPE, "Too many requests", 429, detail, null, null, null, null);
     }
 
     /**
@@ -122,18 +176,50 @@ public record Problem(
      * <em>account</em> would say whether one exists.
      */
     public static Problem unprocessable(String title, String detail) {
-        return new Problem(BLANK_TYPE, title, 422, detail, null);
+        return new Problem(BLANK_TYPE, title, 422, detail, null, null, null, null);
     }
 
     /**
-     * @param detail what the caller cannot do, in their words — <strong>never the permission
+     * A 403 that does not name the key — the shape for a refusal that is not about a catalogue
+     * permission at all (an authorship rule, a state the target is in), where {@code permission}
+     * has nothing true to say. A refusal that <em>is</em> about a key uses the three-argument form.
+     *
+     * @param detail what the caller cannot do, in their words. ~~<strong>never the permission
      *               key</strong>. A key is not actionable by someone who cannot grant it to
      *               themselves, and naming it publishes the catalogue to exactly the caller who is not
-     *               entitled to it. Passed in rather than fixed because the action differs per
-     *               endpoint and "you cannot do that" tells a user nothing about which of the three
-     *               things on the screen was refused.
+     *               entitled to it.~~ → superseded 2026-08-28 (005 C1a): the key travels in
+     *               {@code permission}, structured, and the catalogue was never a secret — the same
+     *               caller reads every key it holds from {@code GET /me/permissions} and every key
+     *               that exists from the roles screen. What stays true is the first half: the key
+     *               is not the <em>sentence</em>, so {@code detail} still says what the caller
+     *               cannot do and the client says who to ask.
      */
     public static Problem forbidden(String detail) {
-        return new Problem(BLANK_TYPE, "Not allowed", 403, detail, null);
+        return new Problem(BLANK_TYPE, "Not allowed", 403, detail, null, null, null, null);
+    }
+
+    /**
+     * The ordinary 403: the caller lacks {@code permission} at {@code scope}.
+     *
+     * @param permission the catalogue key as the roles spec spells it — {@code case:approve}, never a
+     *                   role name; the client labels it from the same table it labels
+     *                   {@code GET /me/permissions} from
+     */
+    public static Problem forbidden(String detail, String permission, Scope scope) {
+        return new Problem(BLANK_TYPE, "Not allowed", 403, detail, permission, scope, null, null);
+    }
+
+    /**
+     * The same 403 for the {@code ProblemDetail} writers, so both envelopes serialize the same
+     * members — the property lands through {@code setProperty}, the way {@code errors} already does
+     * on their validation shape.
+     */
+    public static ProblemDetail forbiddenDetail(String detail, String permission, Scope scope) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        problem.setTitle("Not allowed");
+        problem.setDetail(detail);
+        problem.setProperty("permission", permission);
+        problem.setProperty("scope", scope);
+        return problem;
     }
 }

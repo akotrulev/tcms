@@ -30,6 +30,10 @@ import java.util.UUID;
  *                  and future
  * @param projectName null both when the grant is company-wide <em>and</em> when the caller may not
  *                    see the project it names — the id alone is not a leak, the name is
+ * @param grantedBy who made the grant — stored since M0 ({@code role_assignment.granted_by}) and
+ *                  served since 2026-08-28 (005 S1), a wire-only addition. Null for a grant the
+ *                  provisioning command wrote and for a granter who no longer resolves in this
+ *                  company's directory
  */
 public record RoleAssignmentView(
         UUID id,
@@ -38,5 +42,6 @@ public record RoleAssignmentView(
         TeamRef team,
         UUID projectId,
         String projectName,
-        Instant grantedAt) {
+        Instant grantedAt,
+        UserRef grantedBy) {
 }

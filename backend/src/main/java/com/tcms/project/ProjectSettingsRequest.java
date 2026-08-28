@@ -27,6 +27,7 @@ public record ProjectSettingsRequest(
         Boolean reviewEnabledCase,
         Boolean reviewEnabledSuite,
         Boolean reviewEnabledPlan,
+        Boolean reviewEnabledDoc,
         Integer requiredPeerReviews,
         Boolean authorMayApproveOwnWork,
         String editAfterApproval,

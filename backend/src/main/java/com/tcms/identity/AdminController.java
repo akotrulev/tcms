@@ -1,5 +1,6 @@
 package com.tcms.identity;
 
+import com.tcms.api.Problem;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
@@ -105,7 +106,7 @@ public class AdminController {
             case MembershipInviteService.Invite.Invalid invalid ->
                     ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
             case MembershipInviteService.Invite.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbiddenProblem());
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(membersForbiddenProblem());
         };
     }
 
@@ -133,7 +134,7 @@ public class AdminController {
                                     "You cannot remove yourself from this company. Ask another "
                                             + "administrator to do it."))));
             case MembershipRemovalService.Removal.Forbidden ignored ->
-                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbiddenProblem());
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(membersForbiddenProblem());
         };
     }
 
@@ -265,11 +266,24 @@ public class AdminController {
         return problem;
     }
 
+    // What they cannot do, in their words; the key travels structured in `permission` since
+    // 2026-08-28 (005 C1a — see Problem.forbidden for the superseded "never the key" argument).
+    private static ProblemDetail membersForbiddenProblem() {
+        return Problem.forbiddenDetail(
+                "You do not have permission to manage access here.",
+                "company:members",
+                Problem.Scope.COMPANY);
+    }
+
+    /**
+     * The grant and revoke refusals carry no key: which of {@code project:members} and
+     * {@code company:members} was missing depends on the scope of the grant asked for, and
+     * {@code RoleGrantService.Forbidden} does not say. Threading it through is a follow-up; a
+     * wrong key would be worse than none.
+     */
     private static ProblemDetail forbiddenProblem() {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
         problem.setTitle("Not allowed");
-        // Never the permission key: a key is not actionable by someone who cannot grant it to
-        // themselves, and naming it publishes the catalogue to exactly the caller just refused.
         problem.setDetail("You do not have permission to manage access here.");
         return problem;
     }

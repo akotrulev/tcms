@@ -538,6 +538,36 @@ class ErrorBodyPolicyTest {
         assertThat(membersOf("/record"))
                 .as("the fixtures have stopped answering with a problem at all")
                 .containsExactlyInAnyOrder("type", "title", "status", "detail");
+
+        // 2026-08-28 (005 C1a): the 403 shape, which is where the two new members live. Compared
+        // the same way as the validation shape and for the same reason — a member the record's
+        // factory fills and the ProblemDetail helper forgets would pass every other rule here.
+        assertThat(membersOf("/detail-forbidden"))
+                .as("the two envelopes disagree on the 403 shape — `permission` and `scope` are "
+                        + "set by Problem.forbidden and Problem.forbiddenDetail, and the two must "
+                        + "not drift")
+                .isEqualTo(membersOf("/record-forbidden"))
+                .containsExactlyInAnyOrder("type", "title", "status", "detail", "permission", "scope");
+    }
+
+    /**
+     * The eight names — the contract calls them "seven names instead of five" counting `errors` as the one already there — spelled out once. {@link #theContractsProblemIsThisRecord} derives the list
+     * from the document and would accept an eighth on both sides; this is the row that makes an
+     * eighth a decision rather than an edit, because every one of the seven earned its place by
+     * what a caller can do with it (§141) and the argument is in the schema's comment.
+     */
+    @Test
+    @DisplayName("the contract's Problem is the eight members 005 C1a left it with, and the 403 fills two of them")
+    void theProblemHasTheMembers005Named() throws Exception {
+        assertThat(declaredProblemProperties())
+                .containsExactlyInAnyOrder(
+                        "type", "title", "status", "detail", "permission", "scope", "line", "errors");
+
+        var forbidden = new ObjectMapper().readTree(refuse("/record-forbidden", "*/*").getContentAsString());
+        assertThat(forbidden.get("permission").asText()).isEqualTo("case:approve");
+        assertThat(forbidden.get("scope").asText()).isEqualTo("PROJECT");
+        assertThat(forbidden.has("line")).as("null on every refusal that is not about a text").isFalse();
+        assertThat(forbidden.has("errors")).isFalse();
     }
 
     /**
@@ -636,6 +666,22 @@ class ErrorBodyPolicyTest {
          * fixed key set: {@code errors} is a legitimate extra member, declared and optional, and it
          * arrives through the same {@code setProperty} map {@code instance} used to ride out on.
          */
+        @GetMapping("/record-forbidden")
+        ResponseEntity<Object> recordForbidden() {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(com.tcms.api.Problem.forbidden(
+                    "You do not have permission to approve this case.",
+                    "case:approve",
+                    com.tcms.api.Problem.Scope.PROJECT));
+        }
+
+        @GetMapping("/detail-forbidden")
+        ResponseEntity<Object> detailForbidden() {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(com.tcms.api.Problem.forbiddenDetail(
+                    "You do not have permission to approve this case.",
+                    "case:approve",
+                    com.tcms.api.Problem.Scope.PROJECT));
+        }
+
         @GetMapping("/detail-with-errors")
         ResponseEntity<Object> detailWithErrors() {
             ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);

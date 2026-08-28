@@ -78,8 +78,8 @@ export type SpecRole = (typeof SPEC_ROLES)[number];
 /** A column that grants nothing — the prose the `COMPANY` and `SYSTEM` tables end in. */
 const PROSE_COLUMN = 'Covers';
 
-/** The catalogue, as §A3 has printed it since `V3` and as every copy of it claims. */
-export const CATALOGUE_SIZE = 55;
+/** The catalogue — 55 as §A3 printed it from `V3`, 56 since `V71` added `doc:review` (2026-08-28). */
+export const CATALOGUE_SIZE = 56;
 
 /**
  * Test Lead minus Test Engineer, as `V52` (§210) left it: giving approvals, and adding and managing

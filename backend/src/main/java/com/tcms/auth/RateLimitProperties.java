@@ -1,5 +1,6 @@
 package com.tcms.auth;
 
+import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -45,6 +46,13 @@ import org.springframework.validation.annotation.Validated;
  *                           that from being an assumption the map depends on. Full buckets — the
  *                           ones whose owner has been idle long enough to be indistinguishable
  *                           from a caller that has never been seen — are dropped first.
+ * @param signInAttempts     how many failed local sign-ins one address may make inside
+ *                           {@code signInLockout} before the next is refused unverified — 005 S10's
+ *                           lockout, kept on this record by decision (§8.4) rather than given a
+ *                           table. See {@link SignInThrottle} for why it is silent and per address.
+ * @param signInLockout      how long the count lives, and therefore how long a locked address
+ *                           waits. Measured from the first failure, not the last, so a guesser
+ *                           cannot keep the window open by keeping guessing.
  */
 @ConfigurationProperties(prefix = "tcms.rate-limit")
 @Validated
@@ -52,7 +60,9 @@ public record RateLimitProperties(
         boolean enabled,
         int requestsPerMinute,
         int burst,
-        int maxTrackedTokens) {
+        int maxTrackedTokens,
+        int signInAttempts,
+        Duration signInLockout) {
 
     /**
      * Compact constructor. Bean Validation can express the first three of these and not the
@@ -72,6 +82,15 @@ public record RateLimitProperties(
         if (maxTrackedTokens < 1) {
             throw new IllegalArgumentException(
                     "tcms.rate-limit.max-tracked-tokens must be at least 1, was " + maxTrackedTokens);
+        }
+        if (signInAttempts < 1) {
+            throw new IllegalArgumentException(
+                    "tcms.rate-limit.sign-in-attempts must be at least 1, was " + signInAttempts);
+        }
+        if (signInLockout == null || signInLockout.isZero() || signInLockout.isNegative()) {
+            throw new IllegalArgumentException(
+                    "tcms.rate-limit.sign-in-lockout must be a positive duration, was "
+                            + signInLockout);
         }
         // A burst below the per-minute rate is legal and normal — it is the instantaneous
         // allowance, not the sustained one. A burst ABOVE it is the configuration that reads as

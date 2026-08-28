@@ -244,6 +244,7 @@ final class NotificationTexts {
             case CASE -> "test case";
             case SUITE -> "suite";
             case PLAN -> "test plan";
+            case DOC -> "documentation page";
         };
     }
 

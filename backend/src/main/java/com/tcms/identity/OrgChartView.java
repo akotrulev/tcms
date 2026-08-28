@@ -23,5 +23,6 @@ import java.util.List;
 public record OrgChartView(
         List<TeamView> teams,
         List<OrgChartPersonView> people,
-        List<OrgChartProjectView> projects) {
+        List<OrgChartProjectView> projects,
+        List<OrgChartGapView> gaps) {
 }

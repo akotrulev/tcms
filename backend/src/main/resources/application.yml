@@ -236,6 +236,15 @@ tcms:
     # assumption the map silently depends on.
     max-tracked-tokens: ${TCMS_RATE_LIMIT_MAX_TOKENS:10000}
 
+    # The local sign-in lockout (005 S10, decided 2026-08-28 to live here rather than in a table).
+    # Per ADDRESS, never per account — keying on the submitted email would let anybody lock a
+    # colleague out by mistyping their address — and SILENT: a locked address gets the same bodiless
+    # 401 as a wrong password. Ten inside fifteen minutes is far above a person correcting a typo
+    # and far below a useful guess rate against a 12-character minimum. Same in-memory,
+    # one-process caveat as everything above; a restart forgets every lockout.
+    sign-in-attempts: ${TCMS_RATE_LIMIT_SIGN_IN_ATTEMPTS:10}
+    sign-in-lockout: ${TCMS_RATE_LIMIT_SIGN_IN_LOCKOUT:15m}
+
   storage:
     evidence:
       # Where evidence bytes land — the filesystem adapter behind the storage port (open

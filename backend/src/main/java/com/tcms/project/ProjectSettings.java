@@ -63,6 +63,9 @@ public class ProjectSettings {
     @Column(name = "review_enabled_plan", nullable = false)
     private boolean reviewEnabledPlan;
 
+    @Column(name = "review_enabled_doc", nullable = false)
+    private boolean reviewEnabledDoc;
+
     @Column(name = "required_peer_reviews", nullable = false)
     private int requiredPeerReviews;
 
@@ -123,7 +126,7 @@ public class ProjectSettings {
      */
     static ReviewSettings defaults() {
         return new ReviewSettings(
-                false, false, false, 0, false, EditAfterApproval.RETAIN, false);
+                false, false, false, false, 0, false, EditAfterApproval.RETAIN, false);
     }
 
     /** The row a newly created project gets — {@link #defaults}, persisted. */
@@ -149,6 +152,7 @@ public class ProjectSettings {
         this.reviewEnabledCase = settings.reviewEnabledCase();
         this.reviewEnabledSuite = settings.reviewEnabledSuite();
         this.reviewEnabledPlan = settings.reviewEnabledPlan();
+        this.reviewEnabledDoc = settings.reviewEnabledDoc();
         this.requiredPeerReviews = settings.requiredPeerReviews();
         this.authorMayApproveOwnWork = settings.authorMayApproveOwnWork();
         this.editAfterApproval = settings.editAfterApproval();
@@ -163,6 +167,7 @@ public class ProjectSettings {
                 reviewEnabledCase,
                 reviewEnabledSuite,
                 reviewEnabledPlan,
+                reviewEnabledDoc,
                 requiredPeerReviews,
                 authorMayApproveOwnWork,
                 editAfterApproval,

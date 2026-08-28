@@ -4,6 +4,7 @@ import com.tcms.api.UserRef;
 import com.tcms.tenancy.CompanyContext;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -11,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,17 +59,23 @@ public class ProjectSettingsService {
     private final ProjectService projects;
     private final ProjectSettingsRepository settings;
     private final PeopleDirectory people;
+    private final ReviewRepository reviews;
+    private final ObjectProvider<ReviewImpactSource> impactSources;
     private final Clock clock;
 
     public ProjectSettingsService(
             ProjectService projects,
             ProjectSettingsRepository settings,
             PeopleDirectory people,
+            ReviewRepository reviews,
+            ObjectProvider<ReviewImpactSource> impactSources,
             Clock clock) {
 
         this.projects = projects;
         this.settings = settings;
         this.people = people;
+        this.reviews = reviews;
+        this.impactSources = impactSources;
         this.clock = clock;
     }
 
@@ -125,6 +133,51 @@ public class ProjectSettingsService {
         UUID companyId = CompanyContext.require();
         return projects.readVisible(userId, projectId, project ->
                 render(companyId, project.getId()));
+    }
+
+    /**
+     * {@code GET …/settings/review-impact} — gated {@code project:settings}, the write key, because
+     * the counts describe the team's unfinished review work and the only reader with a reason to
+     * ask is the one about to change the policy. Read now, never cached: the point is the number
+     * at the moment the screen opens.
+     *
+     * <p>Every {@link ReviewImpactSource} bean is folded, so a module contributes its count by
+     * registering one and nothing here names the module. An {@code ObjectProvider} rather than a
+     * {@code List}, because a list injection point with no candidates fails the context, and the
+     * interface lands one build batch before its first implementation. {@code plansBlockedFromRunning} is
+     * de-duplicated by id rather than concatenated, so two sources naming the same plan cannot
+     * make the list lie about how many runs would be refused.
+     */
+    @Transactional(readOnly = true)
+    public GateResult<ReviewImpactView> reviewImpact(UUID userId, UUID projectId) {
+        return projects.readGranted(userId, projectId, PROJECT_SETTINGS, project -> {
+            UUID id = project.getId();
+            ReviewSettings policy = effective(id);
+            Map<ReviewSubjectType, Long> open = new EnumMap<>(ReviewSubjectType.class);
+            reviews.countOpenBySubjectType(id)
+                    .forEach(row -> open.put(row.getSubjectType(), row.getOpen()));
+
+            int draftDocPages = 0;
+            Map<UUID, ReviewImpactSource.BlockedPlan> blocked = new LinkedHashMap<>();
+            for (ReviewImpactSource source : impactSources.orderedStream().toList()) {
+                draftDocPages += source.draftDocPages(id);
+                source.plansBlockedFromRunning(id, policy)
+                        .forEach(plan -> blocked.putIfAbsent(plan.planId(), plan));
+            }
+
+            return new ReviewImpactView(
+                    count(open, ReviewSubjectType.CASE),
+                    count(open, ReviewSubjectType.SUITE),
+                    count(open, ReviewSubjectType.PLAN),
+                    count(open, ReviewSubjectType.DOC),
+                    Math.toIntExact(reviews.countOpenAwaitingFinalApproval(id)),
+                    draftDocPages,
+                    List.copyOf(blocked.values()));
+        });
+    }
+
+    private static int count(Map<ReviewSubjectType, Long> open, ReviewSubjectType type) {
+        return Math.toIntExact(open.getOrDefault(type, 0L));
     }
 
     // ----------------------------------------------------------------- the one write ----
@@ -188,6 +241,7 @@ public class ProjectSettingsService {
                         Boolean.TRUE.equals(req.reviewEnabledCase()),
                         Boolean.TRUE.equals(req.reviewEnabledSuite()),
                         Boolean.TRUE.equals(req.reviewEnabledPlan()),
+                        Boolean.TRUE.equals(req.reviewEnabledDoc()),
                         peers,
                         Boolean.TRUE.equals(req.authorMayApproveOwnWork()),
                         mode,

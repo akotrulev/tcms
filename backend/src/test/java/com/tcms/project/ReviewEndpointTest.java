@@ -235,7 +235,7 @@ class ReviewEndpointTest extends IntegrationTestBase {
                     // alongside would hide exactly the coupling §82 refused to create. There were
                     // two until §97 (M7) removed requireApprovedPlanToStart with its edge.
                     new ReviewSettings(
-                            true, true, true, requiredPeers, authorMayApprove,
+                            true, true, true, true, requiredPeers, authorMayApprove,
                             EditAfterApproval.RETAIN, false),
                     null,
                     at);

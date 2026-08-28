@@ -383,6 +383,85 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
             @Param("companyId") UUID companyId, @Param("userIds") Collection<UUID> userIds);
 
     /** One COMPANY-scope role a person holds. */
+    /**
+     * Every (person, project, key) a project-scoped grant confers — direct or through a team — for
+     * the org chart's Gaps panel. Rows only; the replace-don't-union rule against inherited grants
+     * is applied by the caller, per person and per project, the way {@code PermissionEvaluator}
+     * applies it.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT ra.user_id         AS userId,
+                   ra.project_id      AS projectId,
+                   rp.permission_key  AS permissionKey
+              FROM role_assignment ra
+              JOIN role_permission rp ON rp.role_id = ra.role_id
+             WHERE ra.company_id = :companyId
+               AND ra.project_id IS NOT NULL
+               AND ra.user_id IN (:userIds)
+             UNION
+            SELECT tm.user_id         AS userId,
+                   ra.project_id      AS projectId,
+                   rp.permission_key  AS permissionKey
+              FROM role_assignment ra
+              JOIN role_permission rp ON rp.role_id = ra.role_id
+              JOIN team_membership tm ON tm.team_id = ra.team_id
+                                     AND tm.company_id = :companyId
+             WHERE ra.company_id = :companyId
+               AND ra.project_id IS NOT NULL
+               AND tm.user_id IN (:userIds)
+            """)
+    List<HeldOnProject> findHeldOnProjects(
+            @Param("companyId") UUID companyId, @Param("userIds") Collection<UUID> userIds);
+
+    /**
+     * Every (person, role scope, key) a company-wide grant confers — a COMPANY-scope role, which is
+     * never overridden per project, or a PROJECT-scope role held with no project, which is the
+     * inherited default a project-scoped grant replaces.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT ra.user_id         AS userId,
+                   r.scope            AS roleScope,
+                   rp.permission_key  AS permissionKey
+              FROM role_assignment ra
+              JOIN role r ON r.id = ra.role_id
+              JOIN role_permission rp ON rp.role_id = ra.role_id
+             WHERE ra.company_id = :companyId
+               AND ra.project_id IS NULL
+               AND ra.user_id IN (:userIds)
+             UNION
+            SELECT tm.user_id         AS userId,
+                   r.scope            AS roleScope,
+                   rp.permission_key  AS permissionKey
+              FROM role_assignment ra
+              JOIN role r ON r.id = ra.role_id
+              JOIN role_permission rp ON rp.role_id = ra.role_id
+              JOIN team_membership tm ON tm.team_id = ra.team_id
+                                     AND tm.company_id = :companyId
+             WHERE ra.company_id = :companyId
+               AND ra.project_id IS NULL
+               AND tm.user_id IN (:userIds)
+            """)
+    List<HeldCompanyWide> findHeldCompanyWide(
+            @Param("companyId") UUID companyId, @Param("userIds") Collection<UUID> userIds);
+
+    interface HeldOnProject {
+
+        UUID getUserId();
+
+        UUID getProjectId();
+
+        String getPermissionKey();
+    }
+
+    interface HeldCompanyWide {
+
+        UUID getUserId();
+
+        String getRoleScope();
+
+        String getPermissionKey();
+    }
+
     interface CompanyRoleName {
 
         UUID getUserId();

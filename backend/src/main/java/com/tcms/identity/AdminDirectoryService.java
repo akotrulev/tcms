@@ -445,7 +445,8 @@ public class AdminDirectoryService {
                 reach.maySee(grant.getProjectId())
                         ? projectNames.get(grant.getProjectId())
                         : null,
-                grant.getGrantedAt());
+                grant.getGrantedAt(),
+                grant.getGrantedBy() == null ? null : people.get(grant.getGrantedBy()));
     }
 
     /** One grant, rendered for the caller who just made it — the write path's view assembler. */

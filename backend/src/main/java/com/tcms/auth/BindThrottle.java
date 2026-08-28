@@ -12,10 +12,13 @@ import org.springframework.stereotype.Component;
  * How many times one identifier may fail against one provider before this instance stops asking
  * the directory.
  *
- * <h2>Why this exists when local login has no lockout</h2>
+ * <h2>Why this exists <s>when local login has no lockout</s></h2>
  *
- * <p>Not having one is a decision this product already took, and it is right for a credential this
- * product owns: an attacker guessing a TCMS password costs a bcrypt verification and nothing else.
+ * <p><s>Not having one is a decision this product already took, and it is right for a credential
+ * this product owns: an attacker guessing a TCMS password costs a bcrypt verification and nothing
+ * else.</s> → superseded 2026-08-28 (005 S10): local login has {@link SignInThrottle} now, keyed per
+ * address and silent. The argument below still holds and is the sharper one — the two bounds
+ * protect different systems.
  * <strong>A failed LDAP bind increments the customer's own directory counter</strong> — with Active
  * Directory's default policy, an endpoint with no bound here is a way to lock a company's entire
  * staff out of everything, from the internet, in minutes. The harm lands on a system this product

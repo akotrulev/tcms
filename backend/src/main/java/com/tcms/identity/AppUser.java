@@ -211,6 +211,17 @@ public class AppUser {
         this.permissionVersion++;
     }
 
+    /**
+     * Sets or replaces the password (005 S9a). <strong>Bumps nothing</strong>: the epoch is a
+     * revocation channel, and rotating a credential on a schedule is not a reason to sign the
+     * account out of its phone — a person who wants the other sessions gone asks for that by name
+     * ({@code POST /me/sign-out-others}), and coupling the two would make the safe habit costly.
+     */
+    public void changePassword(String passwordHash, Instant now) {
+        this.passwordHash = passwordHash;
+        this.updatedAt = now;
+    }
+
     public void recordLogin(Instant now) {
         this.lastLoginAt = now;
     }

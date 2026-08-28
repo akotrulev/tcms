@@ -1,5 +1,6 @@
 package com.tcms.identity;
 
+import com.tcms.api.Problem;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
@@ -133,9 +134,9 @@ public class IdentityProviderController {
     }
 
     private static ProblemDetail forbiddenProblem() {
-        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
-        problem.setTitle("Not permitted");
-        problem.setDetail("You do not have permission to configure this company's identity providers.");
-        return problem;
+        return Problem.forbiddenDetail(
+                "You do not have permission to configure this company's identity providers.",
+                "company:idp",
+                Problem.Scope.COMPANY);
     }
 }

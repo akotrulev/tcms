@@ -43,6 +43,7 @@ public record ReviewSettings(
         boolean reviewEnabledCase,
         boolean reviewEnabledSuite,
         boolean reviewEnabledPlan,
+        boolean reviewEnabledDoc,
         int requiredPeerReviews,
         boolean authorMayApproveOwnWork,
         EditAfterApproval editAfterApproval,
@@ -71,6 +72,7 @@ public record ReviewSettings(
             case CASE -> reviewEnabledCase;
             case SUITE -> reviewEnabledSuite;
             case PLAN -> reviewEnabledPlan;
+            case DOC -> reviewEnabledDoc;
         };
     }
 }

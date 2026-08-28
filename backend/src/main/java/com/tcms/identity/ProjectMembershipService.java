@@ -101,6 +101,13 @@ public class ProjectMembershipService {
      * clever join that computes visibility directly, which is the second resolution path the header
      * refuses. When the evaluator gets its cache, this improves for free.
      */
+    /**
+     * The read gate is project visibility — {@code project:read} — and nothing stronger (005 Q2,
+     * decided 2026-08-28). Who is on a project is not a secret from the company: the org chart
+     * discloses the same fact to every member, and a picker that 403s for a Viewer would hide the
+     * one list that tells them who to ask. Every write on the path keeps {@code project:members}.
+     * {@code ProjectMemberEndpointTest} pins the gate from both sides.
+     */
     @Transactional(readOnly = true)
     public Optional<List<UserRef>> membersOf(UUID callerId, UUID projectId) {
         return projects.readVisible(callerId, projectId, project -> {

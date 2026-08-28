@@ -564,6 +564,7 @@ class ContractConventionTest {
             // the section that paid for letting one act acquire two spellings.
             Map.entry("LinkRelabelInput", List.of(com.tcms.documentation.LinkRelabelInput.class)),
             Map.entry("OrgChart", List.of(com.tcms.identity.OrgChartView.class)),
+            Map.entry("OrgChartGap", List.of(com.tcms.identity.OrgChartGapView.class)),
             Map.entry("OrgChartAssignment",
                     List.of(com.tcms.identity.OrgChartAssignmentView.class)),
             // Flat, like `User`/`UserView`: the schema is an `allOf` of `UserRef` and that
@@ -588,6 +589,9 @@ class ContractConventionTest {
             // stored in the positive and an absent key would read as the rule being ON when the
             // project turned it off.
             Map.entry("ProjectSettings", List.of(com.tcms.project.ProjectSettingsView.class)),
+            Map.entry("ReviewImpact", List.of(com.tcms.project.ReviewImpactView.class)),
+            Map.entry("PasswordChangeInput",
+                    List.of(com.tcms.auth.MeController.PasswordChangeRequest.class)),
             // The update body is the seven settings and nothing else — no `projectId`, no
             // `updatedAt`, no `updatedBy`, which is why it is a schema of its own rather than the
             // view reused. `ProjectSettingsRequest` and `project.ReviewSettings` are the same seven
@@ -1237,6 +1241,8 @@ class ContractConventionTest {
                     List.of(com.tcms.repository.DashboardView.AutomationCoverageView.class)),
             Map.entry("RepositoryDashboard.recentActivity[]",
                     List.of(com.tcms.repository.DashboardView.ActivityPointView.class)),
+            Map.entry("ReviewImpact.plansBlockedFromRunning[]",
+                    List.of(com.tcms.project.ReviewImpactSource.BlockedPlan.class)),
             Map.entry("Team.projects[]", List.of(com.tcms.identity.TeamView.ProjectRole.class)),
             Map.entry("TestCaseSummary.lastResult",
                     List.of(com.tcms.repository.LastResultView.class)),

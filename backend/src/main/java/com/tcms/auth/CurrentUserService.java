@@ -66,6 +66,10 @@ public class CurrentUserService {
      *              the wire: nothing read it, {@code team_membership.is_lead} confers no
      *              permission (see that field's own comment) and a lead is named on
      *              {@code Team.leads}, which is where the screen that renders one reads it
+     * @param hasPassword whether the account has a password at all (005 S9a) — {@code password_hash
+     *                    IS NOT NULL}, and nothing more: no hint, no age, no strength. A social- or
+     *                    SSO-only account has none, and the Account security page has to know which
+     *                    of "Set a password" and "Change your password" to draw
      */
     public record CurrentUser(
             UUID id,
@@ -73,6 +77,7 @@ public class CurrentUserService {
             String email,
             String avatarUrl,
             boolean isSystemAdmin,
+            boolean hasPassword,
             List<TeamRef> teams) {
     }
 
@@ -95,7 +100,7 @@ public class CurrentUserService {
 
         if (companyId == null) {
             return new CurrentUser(user.getId(), user.getCanonicalName(), user.getEmail(),
-                    null, systemAdmin, List.of());
+                    null, systemAdmin, user.getPasswordHash() != null, List.of());
         }
 
         Optional<CompanyMembership> membership =
@@ -106,7 +111,7 @@ public class CurrentUserService {
         String avatarUrl = membership.map(CompanyMembership::getAvatarUrl).orElse(null);
 
         return new CurrentUser(user.getId(), displayName, user.getEmail(), avatarUrl,
-                systemAdmin, teamsOf(userId));
+                systemAdmin, user.getPasswordHash() != null, teamsOf(userId));
     }
 
     /**

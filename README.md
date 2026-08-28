@@ -36,7 +36,7 @@ Roles are ordered least-permissioned first. Rows are grouped by how widely a per
 > table is a convenience copy. If they disagree, the spec wins and this table is the bug — and
 > since §215 the build says so: `packages/client/src/test/matrixCopies.test.ts` compares all three
 > scopes below against §A3 cell by cell, both ways, so a copy that goes stale reddens CI.
-> 55 permissions, all seeded by `V3__seed_permissions_and_roles.sql`; no migration has added one
+> 56 permissions — 55 seeded by `V3__seed_permissions_and_roles.sql`, `doc:review` by `V71` (2026-08-28); no other migration has added one
 > since. There is no wildcard permission, and **code checks permissions, never role names**.
 
 ### `PROJECT` scope
@@ -61,6 +61,7 @@ Roles are ordered least-permissioned first. Rows are grouped by how widely a per
 | `case:review` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `suite:review` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `plan:review` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `doc:review` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `plan:create` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `plan:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `plan:delete` | — | — | ✓ | ✓ | ✓ | ✓ |

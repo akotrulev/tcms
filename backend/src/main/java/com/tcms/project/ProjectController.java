@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.Problem;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
@@ -314,14 +315,13 @@ public class ProjectController {
         return problem;
     }
 
+    // What they cannot do, in their words; the key travels structured in `permission` since
+    // 2026-08-28 (005 C1a — see Problem.forbidden for the superseded "never the key" argument).
     private static ProblemDetail forbiddenProblem() {
-        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
-        problem.setTitle("Not allowed");
-        // What they cannot do, in their words, and never the permission key: a key is not actionable
-        // by someone who cannot grant it to themselves, and naming it publishes the catalogue to
-        // exactly the caller who is not entitled to it.
-        problem.setDetail("You do not have permission to create projects in this company.");
-        return problem;
+        return Problem.forbiddenDetail(
+                "You do not have permission to create projects in this company.",
+                "project:create",
+                Problem.Scope.COMPANY);
     }
 
     /**
@@ -333,10 +333,10 @@ public class ProjectController {
      * other side.
      */
     private static ProblemDetail archiveForbiddenProblem() {
-        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
-        problem.setTitle("Not allowed");
-        problem.setDetail("You do not have permission to archive this project.");
-        return problem;
+        return Problem.forbiddenDetail(
+                "You do not have permission to archive this project.",
+                "project:settings",
+                Problem.Scope.PROJECT);
     }
 
     /**

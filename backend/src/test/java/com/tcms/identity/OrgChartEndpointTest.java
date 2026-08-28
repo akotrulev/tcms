@@ -295,6 +295,99 @@ class OrgChartEndpointTest extends IntegrationTestBase {
     }
 
     @Nested
+    @DisplayName("005 N6 — the Gaps panel: every key a column has no active holder for")
+    class TheGaps {
+
+        @Test
+        @DisplayName("a column staffed by a Test Lead and a Test Engineer has no gap the lead's role does not cover")
+        void aLeadCoversTheTier() throws Exception {
+            // ATLAS: LEAD holds Test Lead directly, ENGINEER via the QA team, VIEWER holds Viewer,
+            // ROVER inherits Test Engineer company-wide. Nobody holds a COMPANY-scope key through
+            // a project column — ADMIN's Company Admin grant is company-wide and counts on every
+            // column — so the only keys nobody holds on ATLAS are the SYSTEM-scope seven.
+            List<String> gaps = gapsOn(chartAs(ADMIN), ATLAS);
+
+            assertThat(gaps).doesNotContain("case:approve", "project:settings", "case:review");
+            assertThat(gaps)
+                    .as("SYSTEM-scope keys are a gap on every column — an instance operator is "
+                            + "not staffing, which is exactly what the panel is for")
+                    .contains("company:create", "instance:audit");
+        }
+
+        @Test
+        @DisplayName("a column nobody can approve on names the approval keys")
+        void anUnapprovableColumnIsNamed() throws Exception {
+            // BOREAL: LEAD holds Test Lead there, so approvals are covered. Revoke that one grant
+            // and the column keeps ROVER's inherited Test Engineer (reviews, no approvals) and
+            // ADMIN's company-wide role — which, being COMPANY scope, holds the project keys too.
+            // So the gap only appears once ADMIN is gone as well; both are removed to isolate it.
+            try (Connection connection = appConnection(NORTH);
+                 var statement = connection.prepareStatement(
+                         "DELETE FROM role_assignment WHERE id IN (?, ?)")) {
+                statement.setObject(1, GRANT_LEAD_BOREAL);
+                statement.setObject(2, GRANT_ADMIN);
+                statement.executeUpdate();
+            }
+
+            // Read as ROVER, whose inherited role reaches every column; LEAD has just lost BOREAL.
+            List<String> gaps = gapsOn(chartAs(ROVER), BOREAL);
+
+            assertThat(gaps).contains("case:approve", "suite:approve", "plan:approve",
+                    "project:settings", "project:members");
+            assertThat(gaps)
+                    .as("ROVER's inherited Test Engineer still reviews there")
+                    .doesNotContain("case:review", "case:edit");
+        }
+
+        @Test
+        @DisplayName("an INVITED grantee and a REMOVED member hold nothing — a gap is about who can act")
+        void onlyActiveHoldersCount() throws Exception {
+            // INVITEE is granted Test Lead on BOREAL while still INVITED; it must not close the
+            // approval gap opened above, because an unredeemed invitation cannot approve anything.
+            try (Connection connection = appConnection(NORTH);
+                 var statement = connection.prepareStatement(
+                         "DELETE FROM role_assignment WHERE id IN (?, ?)")) {
+                statement.setObject(1, GRANT_LEAD_BOREAL);
+                statement.setObject(2, GRANT_ADMIN);
+                statement.executeUpdate();
+            }
+            inCompany(NORTH, () -> tx.executeWithoutResult(status -> grantOnProject(
+                    UUID.fromString("0c005000-0000-4000-8000-0000000000aa"),
+                    NORTH, Role.TEST_LEAD_ID, INVITEE, BOREAL, Instant.now())));
+
+            assertThat(gapsOn(chartAs(ROVER), BOREAL)).contains("case:approve");
+        }
+
+        @Test
+        @DisplayName("gaps are scoped to the caller's columns — no column, no gap, no existence claim")
+        void gapsFollowTheColumns() throws Exception {
+            JsonNode chart = chartAs(LEAD);
+            List<String> columns = idsOf(chart.get("projects"));
+
+            for (JsonNode gap : chart.get("gaps")) {
+                assertThat(columns).contains(gap.get("projectId").asText());
+            }
+            assertThat(chart.get("gaps").toString()).doesNotContain(SOUTH_PROJECT.toString());
+        }
+
+        @Test
+        @DisplayName("sorted by key within a column, so two reads are diffable")
+        void sortedWithinAColumn() throws Exception {
+            assertThat(gapsOn(chartAs(ADMIN), ATLAS)).isSorted();
+        }
+
+        private List<String> gapsOn(JsonNode chart, UUID projectId) {
+            List<String> keys = new ArrayList<>();
+            for (JsonNode gap : chart.get("gaps")) {
+                if (gap.get("projectId").asText().equals(projectId.toString())) {
+                    keys.add(gap.get("permission").asText());
+                }
+            }
+            return keys;
+        }
+    }
+
+    @Nested
     @DisplayName("§4.4 — companyRoles, lastLoginAt, and what is on no tier at all")
     class TheRedactedFields {
 

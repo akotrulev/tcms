@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.Problem;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -57,6 +58,20 @@ public class ProjectSettingsController {
     }
 
     /** Replaces the project's settings. Needs {@code project:settings} on this project. */
+    /** The blast radius behind the {@code PUT} below — see {@link ProjectSettingsService#reviewImpact}. */
+    @GetMapping("/review-impact")
+    public ResponseEntity<Object> reviewImpact(
+            @AuthenticationPrincipal Jwt jwt, @PathVariable UUID projectId) {
+
+        return switch (settings.reviewImpact(UUID.fromString(jwt.getSubject()), projectId)) {
+            case GateResult.Allowed<ReviewImpactView> allowed -> ResponseEntity.ok(allowed.value());
+            case GateResult.Denied<ReviewImpactView> ignored ->
+                    ResponseEntity.status(HttpStatus.FORBIDDEN).body(forbiddenProblem());
+            case GateResult.Unreachable<ReviewImpactView> ignored ->
+                    ResponseEntity.notFound().build();
+        };
+    }
+
     @PutMapping
     public ResponseEntity<Object> put(
             @AuthenticationPrincipal Jwt jwt,
@@ -86,12 +101,12 @@ public class ProjectSettingsController {
         return problem;
     }
 
+    // What they cannot do, in their words; the key travels structured in `permission` since
+    // 2026-08-28 (005 C1a — see Problem.forbidden for the superseded "never the key" argument).
     private static ProblemDetail forbiddenProblem() {
-        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
-        problem.setTitle("Not allowed");
-        // What they cannot do, in their words, and never the permission key — naming it publishes
-        // the catalogue to exactly the caller who is not entitled to it.
-        problem.setDetail("You do not have permission to change this project's settings.");
-        return problem;
+        return Problem.forbiddenDetail(
+                "You do not have permission to change this project's settings.",
+                "project:settings",
+                Problem.Scope.PROJECT);
     }
 }

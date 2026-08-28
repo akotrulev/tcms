@@ -1,5 +1,6 @@
 package com.tcms.identity;
 
+import com.tcms.api.Problem;
 import java.net.URI;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -156,10 +157,10 @@ public class TeamController {
     }
 
     private static ProblemDetail forbiddenProblem() {
-        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
-        problem.setTitle("Not permitted");
-        problem.setDetail("You do not have permission to manage this company's teams.");
-        return problem;
+        return Problem.forbiddenDetail(
+                "You do not have permission to manage this company's teams.",
+                "company:teams",
+                Problem.Scope.COMPANY);
     }
 
     /**

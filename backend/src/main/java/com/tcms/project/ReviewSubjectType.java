@@ -39,7 +39,15 @@ public enum ReviewSubjectType {
     SUITE("suite:review"),
 
     /** A test plan. Reviewing it is the release-readiness signature (§6g). */
-    PLAN("plan:review");
+    PLAN("plan:review"),
+
+    /**
+     * A documentation page (005 S9b, {@code V71}). The fourth subject type costs a catalogue key and
+     * a {@code ReviewSubjectDirectory} in {@code documentation}, not just this member — a value the
+     * wire can carry must be one the settings gate ({@code reviewEnabledDoc}) and the notification
+     * text can answer for.
+     */
+    DOC("doc:review");
 
     /**
      * The permission a <em>comment</em> costs — <strong>one key for all three subject types</strong>,

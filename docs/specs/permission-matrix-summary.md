@@ -2,8 +2,9 @@
 
 **Authoritative source is `docs/specs/2026-07-30-tcms-roles-permissions-naming.md` §A3** — this is a
 convenience copy, also in `README.md`. If they disagree the spec wins and the copies are the bug.
-55 permissions, all seeded by `V3__seed_permissions_and_roles.sql`; no migration has added one since —
-though `V51` **moved three grants between roles**, which is a different thing and the one this table
+~~55 permissions, all seeded by `V3__seed_permissions_and_roles.sql`; no migration has added one since~~
+→ **56 since 2026-08-28: `V71` added `doc:review`** (plan 005 S9b), the first key seeded after `V3` —
+and `V51` **moved three grants between roles**, which is a different thing and the one this table
 gets wrong most easily.
 **Since §214 the spec's §A3 tables and the seeded rows are compared cell by cell, seven roles,
 both ways** — `SeedDataTest.theSeededMatrixIsTheSpecsMatrix`, with `MATRIX_DIVERGENCE_BY_DECISION`
@@ -25,7 +26,7 @@ Roles are ordered least-permissioned first; rows run broadest-held to narrowest.
 | `case:create` | — | quarantine only | ✓ | ✓ | ✓ | ✓ |
 | `run:create` · `result:submit` · `evidence:attach` | — | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `suite:manage` · `case:edit` · `library:manage` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `case:review` · `suite:review` · `plan:review` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `case:review` · `suite:review` · `plan:review` · `doc:review` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `plan:create` · `plan:edit` · `plan:delete` · `run:execute` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `defect:create` · `workitem:manage` · `doc:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `case:delete` · `evidence:delete` | — | — | ✓ | ✓ | ✓ | ✓ |

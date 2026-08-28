@@ -177,7 +177,7 @@ class SeedDataTest extends IntegrationTestBase {
                         show them as universally ungranted and no grant can ever be made — add them \
                         to a corrective migration together with the roles that should hold them.""")
                 .isEmpty();
-        assertThat(seeded).as("the v1 catalogue is 55 keys (spec Part A3)").hasSize(55);
+        assertThat(seeded).as("the catalogue is 56 keys (spec Part A3: 55 at V3, doc:review at V71)").hasSize(56);
     }
 
     @Test
@@ -640,7 +640,7 @@ class SeedDataTest extends IntegrationTestBase {
                 SELECT DISTINCT r.name
                   FROM role r
                   JOIN role_permission rp ON rp.role_id = r.id
-                 WHERE rp.permission_key IN ('case:review', 'suite:review', 'plan:review')
+                 WHERE rp.permission_key IN ('case:review', 'suite:review', 'plan:review', 'doc:review')
                    AND NOT EXISTS (SELECT 1 FROM role_permission held
                                     WHERE held.role_id = r.id
                                       AND held.permission_key = 'case:comment')
@@ -654,6 +654,32 @@ class SeedDataTest extends IntegrationTestBase {
                         catalogue and key the gate off the subject type; do not delete this \
                         check.""")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("doc:review is the fourth rung of the review tier — held exactly where plan:review is (V71)")
+    void docReviewIsHeldWherePlanReviewIs() throws SQLException {
+        // V71 seeded the 56th key to the holders of plan:review and to nobody else — including
+        // Instance Admin, whose "every permission" V3 derived at V3 time, and Agent, which V52
+        // derived from Test Engineer at V52 time; both needed an explicit row and both are covered
+        // by instanceAdminHoldsEveryPermission / agentIsTestEngineerMinusNothingItCouldUse. This
+        // is the positive statement of the tier: reviewing a page costs what reviewing a plan
+        // costs, so ReviewSettings.reviewEnabledFor(DOC) gates a key the same three roles hold.
+        assertThat(queryStrings("""
+                SELECT r.name FROM role r
+                  JOIN role_permission rp ON rp.role_id = r.id
+                 WHERE rp.permission_key = 'doc:review'
+                 ORDER BY r.name
+                """))
+                .isEqualTo(queryStrings("""
+                        SELECT r.name FROM role r
+                          JOIN role_permission rp ON rp.role_id = r.id
+                         WHERE rp.permission_key = 'plan:review'
+                         ORDER BY r.name
+                        """));
+        assertThat(queryStrings("SELECT area FROM permission WHERE key = 'doc:review'"))
+                .as("it is a review-tier key, grouped with the other *:review keys on both sides")
+                .containsExactly("review");
     }
 
     @Test
@@ -1104,7 +1130,7 @@ class SeedDataTest extends IntegrationTestBase {
      *
      * <p>A parser that silently reads nothing looks exactly like a matrix that agrees, which is the
      * failure mode every check in this class is written against — so the parse asserts its own
-     * yield three ways: 55 distinct keys (the catalogue, pinned independently by
+     * yield three ways: 56 distinct keys (the catalogue, pinned independently by
      * {@link #catalogueMatchesTheContract}), no empty role, and an unrecognised column heading
      * fails rather than being skipped.
      */
@@ -1173,10 +1199,10 @@ class SeedDataTest extends IntegrationTestBase {
         }
 
         assertThat(keysSeen)
-                .as("§A3 parsed as %d keys and the catalogue is 55. Either a table stopped matching "
+                .as("§A3 parsed as %d keys and the catalogue is 56. Either a table stopped matching "
                         + "the parse or the spec lost a row — both are findings, and neither is "
                         + "fixed by relaxing this number.", keysSeen.size())
-                .hasSize(55);
+                .hasSize(56);
         held.forEach((role, keys) -> assertThat(keys)
                 .as("§A3 parsed no grant at all for %s, which no role in this product has", role)
                 .isNotEmpty());
