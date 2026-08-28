@@ -1656,3 +1656,81 @@ describe('CaseEditorPage — pasting a scenario (§255)', () => {
     expect(actionFields()[1]).toHaveValue('a settled payment')
   })
 })
+
+/**
+ * The summary a refused submit puts at the top of the form.
+ *
+ * Before it, a refused submit ran no code at all: `handleSubmit` had no invalid handler, so what
+ * the author experienced was a Save button that did nothing. The inline error was there, on a
+ * field that on this screen — five panels and two columns tall — is routinely off screen. These
+ * assert the three things that make the summary worth its space: that it appears only after the
+ * author has asked to save, that it NAMES what is wrong rather than counting it, and that its
+ * links move focus to the control.
+ */
+describe('CaseEditorPage — the refused submit', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('says nothing until a submit has actually been refused', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    renderEditor()
+
+    // The title is required and empty, and blurring it raises the inline error — the summary is
+    // still silent, because nothing has been asked of the form yet.
+    await user.click(screen.getByTestId('CaseEditor.Field.Title'))
+    await user.tab()
+
+    expect(screen.queryByTestId('CaseEditor.ErrorSummary')).not.toBeInTheDocument()
+  })
+
+  it('names every refusal, and does not post', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    const post = vi.spyOn(api, 'post')
+    renderEditor()
+
+    await waitFor(() => expect(screen.getByTestId('CaseEditor.Submit')).toBeEnabled())
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    const summary = await screen.findByTestId('CaseEditor.ErrorSummary')
+    // Both refusals of an untouched form: no title, and no step with anything in it.
+    expect(within(summary).getByText('Title')).toBeInTheDocument()
+    expect(within(summary).getByText('Steps')).toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('moves focus to the field a line names', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    renderEditor()
+
+    await waitFor(() => expect(screen.getByTestId('CaseEditor.Submit')).toBeEnabled())
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    const summary = await screen.findByTestId('CaseEditor.ErrorSummary')
+    await user.click(within(summary).getByText('Title'))
+
+    expect(screen.getByTestId('CaseEditor.Field.Title')).toHaveFocus()
+  })
+
+  it('drops a line as its refusal is answered, rather than waiting to be dismissed', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    renderEditor()
+
+    await waitFor(() => expect(screen.getByTestId('CaseEditor.Submit')).toBeEnabled())
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+    expect(await screen.findByTestId('CaseEditor.ErrorSummary')).toBeInTheDocument()
+
+    // The title only — the step list is still empty, so the summary stays and loses one line.
+    // The rows are read off `errors`, so there is nothing to dismiss and nothing to clear.
+    await user.type(screen.getByTestId('CaseEditor.Field.Title'), 'Double refund')
+    await user.click(screen.getByTestId('CaseEditor.Submit'))
+
+    const summary = await screen.findByTestId('CaseEditor.ErrorSummary')
+    await waitFor(() => expect(within(summary).queryByText('Title')).not.toBeInTheDocument())
+    expect(within(summary).getByText('Steps')).toBeInTheDocument()
+  })
+})

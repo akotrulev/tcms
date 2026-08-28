@@ -39,6 +39,7 @@ export function CaseDraftStatus({
   save,
   commitLabel,
   testId,
+  inline,
 }: {
   control: Control<CaseInput>;
   getValues: UseFormGetValues<CaseInput>;
@@ -53,6 +54,15 @@ export function CaseDraftStatus({
    */
   commitLabel: string;
   testId: string;
+  /**
+   * Drop the bottom margin, for a caller that already spaces this line itself.
+   *
+   * The commit bar is the one such caller: the line sits beside the button it names rather than
+   * above the form, so the gap that used to separate it from the first panel is now the bar's own
+   * padding. `minHeight` stays either way — it is what stops the bar changing height as the
+   * status cycles through saving → saved.
+   */
+  inline?: boolean;
 }) {
   // Subscribe to every field. The return value is deliberately unused — see the header.
   useWatch({ control });
@@ -66,7 +76,12 @@ export function CaseDraftStatus({
   });
 
   return (
-    <Box role="status" aria-live="polite" sx={{ mb: 2, minHeight: 20 }} data-testid={testId}>
+    <Box
+      role="status"
+      aria-live="polite"
+      sx={{ mb: inline ? 0 : 2, minHeight: 20 }}
+      data-testid={testId}
+    >
       {autosave.status === 'failed' ? (
         <Typography variant="caption" color="error">
           Could not save a backup of your changes. Your work is still here — use {commitLabel} to

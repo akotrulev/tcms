@@ -23,6 +23,7 @@ import {
   Box,
   Button,
   IconButton,
+  Link,
   MenuItem,
   Stack,
   TextField,
@@ -34,9 +35,17 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { useSnackbar } from 'notistack';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
-import { Controller, useFieldArray, useForm, type Control } from 'react-hook-form';
+import {
+  Controller,
+  useFieldArray,
+  useForm,
+  type Control,
+  type FieldErrors,
+  type FieldPath,
+  type UseFormSetFocus,
+} from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import {
@@ -132,6 +141,145 @@ const blankStep = (keyword: string) => ({
 const NO_FOCUS = { shouldFocus: false } as const;
 
 /**
+ * The name every field answers to when something other than the field itself has to name it.
+ *
+ * One map rather than a label written at the control and re-typed in the summary: the two would
+ * drift the first time a field was renamed, and a summary that names a field the form does not
+ * have is worse than no summary — it sends the author looking for a control that is not there.
+ * Keyed by the form path, so a new field is a compile error here the moment it is required.
+ */
+const FIELD_LABELS: Partial<Record<keyof CaseInput, string>> = {
+  title: 'Title',
+  objective: 'Objective',
+  description: 'Description',
+  expectedOutcome: 'Expected outcome',
+  suiteId: 'Suite',
+  tags: 'Tags',
+  priority: 'Priority',
+  estimatedDurationSec: 'Estimated duration',
+  automationStatus: 'Automation status',
+  automationKey: 'Automated test',
+  notAutomatableReason: "Why it can't be automated",
+  changeComment: 'Change note',
+};
+
+/** The four parts of a step row that can each carry an error of their own. */
+const STEP_PARTS = ['keyword', 'action', 'testData', 'expectedResult'] as const;
+
+type SummaryRow = { field: FieldPath<CaseInput>; label: string; message: string };
+
+/**
+ * Every refusal on the form, flattened, in the order the fields appear on screen.
+ *
+ * The step list contributes twice and the two are different things: `errors.steps.root` is a rule
+ * about the LIST ("add at least one step"), and `errors.steps[i]` is a rule about one row. RHF
+ * keeps them in one place — the array carries a `root` property — which is exactly the shape that
+ * made the list-level message render nothing at all for a whole slice (see the panel's own note).
+ */
+function summarizeErrors(errors: FieldErrors<CaseInput>): SummaryRow[] {
+  const rows: SummaryRow[] = [];
+
+  for (const [name, label] of Object.entries(FIELD_LABELS)) {
+    const message = errors[name as keyof CaseInput]?.message;
+    if (typeof message === 'string') {
+      rows.push({ field: name as FieldPath<CaseInput>, label, message });
+    }
+  }
+
+  const steps = errors.steps;
+  const listLevel = steps?.root?.message ?? steps?.message;
+  if (typeof listLevel === 'string') {
+    rows.push({ field: 'steps.0.action', label: 'Steps', message: listLevel });
+  }
+  if (Array.isArray(steps)) {
+    steps.forEach((row, index) => {
+      if (!row) return;
+      for (const part of STEP_PARTS) {
+        const message = row[part]?.message;
+        if (typeof message === 'string') {
+          rows.push({
+            field: `steps.${index}.${part}` as FieldPath<CaseInput>,
+            label: `Step ${index + 1}`,
+            message,
+          });
+        }
+      }
+    });
+  }
+
+  return rows;
+}
+
+/**
+ * What a refused submit says, and where it says it.
+ *
+ * ## Why inline errors were not enough
+ *
+ * Inline errors are necessary and this does not replace them. But this form is two columns and
+ * five panels tall, and the field a refused submit is about is routinely off screen — so what the
+ * author actually experienced was a Save button that did nothing. WCAG 2.2's answer, and the one
+ * used here: one focusable region at the top of the form, one line per refusal, each line moving
+ * focus to the control it names.
+ *
+ * ## Focused on mount, and remounted per attempt
+ *
+ * The caller keys this on `submitCount`, so a second refused submit is a second mount and focus
+ * lands here again. Focus is taken only after a submit the author asked for — never on blur, which
+ * would drag the caret out of the sentence being written.
+ */
+function ErrorSummary({
+  rows,
+  setFocus,
+  testId,
+}: {
+  rows: SummaryRow[];
+  setFocus: UseFormSetFocus<CaseInput>;
+  testId: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+
+  return (
+    <Alert
+      severity="error"
+      role="alert"
+      ref={ref}
+      tabIndex={-1}
+      sx={{ mb: 2, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}
+      data-testid={testId}
+    >
+      <AlertTitle>
+        {rows.length === 1
+          ? 'One thing needs fixing before this can be saved'
+          : `${rows.length} things need fixing before this can be saved`}
+      </AlertTitle>
+      <Box component="ul" sx={{ pl: 2.5, my: 0 }}>
+        {rows.map((row) => (
+          <Typography component="li" variant="body2" key={`${row.field}:${row.message}`}>
+            <Link
+              component="button"
+              type="button"
+              underline="always"
+              color="inherit"
+              onClick={() => setFocus(row.field, { shouldSelect: true })}
+              data-testid={`${testId}.Item`}
+              sx={{ font: 'inherit', textAlign: 'left' }}
+            >
+              {row.label}
+            </Link>
+            {' — '}
+            {row.message}
+          </Typography>
+        ))}
+      </Box>
+    </Alert>
+  );
+}
+
+/**
  * One draggable step row — the wrapper, not the row's content (§94).
  *
  * A render prop rather than a component holding the row's JSX: the row is three fields, a shared
@@ -161,15 +309,25 @@ function SortableStep({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       sx={{
         p: 1.5,
-        border: '1px solid',
-        borderColor: isDragging ? 'primary.main' : 'divider',
         borderRadius: 1,
-        // The row being dragged is lifted rather than hidden: this list is the content the author
-        // is reading, and a gap where the step was makes the drop target ambiguous.
-        bgcolor: 'background.paper',
+        /*
+          A SUNKEN row inside a raised panel, rather than a bordered box inside a bordered box.
+          The old treatment gave every step a full 1px frame nested inside the panel's own, so a
+          six-step case drew thirteen rectangles and the eye had to work out which of them meant
+          anything. Fill separates the rows at a fraction of the visual weight, and it leaves the
+          border free to carry the one thing that IS a state: the row being dragged.
+        */
+        bgcolor: isDragging ? 'background.paper' : 'var(--color-surface-sunken)',
+        borderLeft: '2px solid',
+        borderColor: isDragging ? 'primary.main' : 'transparent',
+        boxShadow: isDragging ? 3 : 0,
         opacity: isDragging ? 0.85 : 1,
         zIndex: isDragging ? 1 : undefined,
         position: 'relative',
+        // The row's own controls recede until the row is under the pointer or holds focus. Opacity
+        // rather than display, and never below 0.55: a control nobody can see is a control that is
+        // not there, and the ▲▼▮ buttons are the keyboard path for reordering.
+        '&:hover .stepTools, &:focus-within .stepTools': { opacity: 1 },
       }}
     >
       {children({ attributes, listeners })}
@@ -198,6 +356,7 @@ function StepActionField({
   control,
   index,
   error,
+  hint,
   onType,
   onPick,
 }: {
@@ -205,6 +364,14 @@ function StepActionField({
   control: Control<CaseInput>;
   index: number;
   error: string | undefined;
+  /**
+   * Whether to say where the suggestions come from.
+   *
+   * True on the first row only. The sentence is a property of the FIELD, not of this row, so
+   * repeating it under all ten of them is ten copies of one fact and ten lines of height — and it
+   * is the height that matters, because it is what turns a list of steps into a list of captions.
+   */
+  hint: boolean;
   /** Every change to the text, before the debounce — the auto-append hangs off this. */
   onType: (value: string) => void;
   onPick: (suggestion: StepSuggestion) => void;
@@ -298,7 +465,7 @@ function StepActionField({
               fullWidth
               multiline
               error={!!error}
-              helperText={error ?? 'Suggestions come from steps this project already uses.'}
+              helperText={error ?? (hint ? 'Suggestions come from steps this project already uses.' : undefined)}
               onBlur={field.onBlur}
               slotProps={{
                 ...params.slotProps,
@@ -344,7 +511,7 @@ function StepKeywordCell({
           select
           label="Keyword"
           size="small"
-          sx={{ minWidth: 128, flexShrink: 0 }}
+          sx={{ minWidth: 112, flexShrink: 0, width: { xs: '100%', md: 112 } }}
           value={field.value}
           onChange={field.onChange}
           onBlur={field.onBlur}
@@ -441,6 +608,15 @@ function CaseEditorForm({
   /** Whether the paste dialog is open. Rendered only while it is, so it seeds fresh every time. */
   const [pasting, setPasting] = useState(false);
 
+  /**
+   * Whether a submit has been refused yet.
+   *
+   * The summary is shown only after the author has asked to save. Before that, the form is
+   * half-filled by definition and a running list of everything still missing is an accusation
+   * rather than help — `mode: 'onBlur'` already marks a field the author has left.
+   */
+  const [showSummary, setShowSummary] = useState(false);
+
   /*
     The folder's conditions, rendered read-only beside the case's own. Filtered here rather than in
     the panel so the panel takes exactly what it renders and nothing that needs interpreting.
@@ -476,7 +652,7 @@ function CaseEditorForm({
     setValue,
     setError,
     setFocus,
-    formState: { errors, isSubmitting, isDirty },
+    formState: { errors, isSubmitting, isDirty, submitCount },
   } = useForm<CaseInput>({
     resolver: zodResolver(CaseSchema),
     mode: 'onBlur',
@@ -909,7 +1085,18 @@ function CaseEditorForm({
             : "Couldn't save the case. Check your connection and try again.",
       });
     }
-  });
+  },
+  /*
+    THE SECOND ARGUMENT, and it is the whole of the refused-submit story.
+
+    Without it a refused submit ran no code at all: the button did nothing, the offending field was
+    typically off screen in a panel the author had not scrolled to, and nothing said so. `showSummary`
+    latches on the first refusal and stays on — the summary's rows are read from `errors`, so it
+    empties itself as the author fixes them rather than needing to be dismissed.
+  */
+  () => setShowSummary(true));
+
+  const summaryRows = summarizeErrors(errors);
 
   return (
     <Box component="form" onSubmit={onSubmit} noValidate aria-busy={isSubmitting} data-testid={`${TestIdPrefix}.Form`}>
@@ -933,38 +1120,15 @@ function CaseEditorForm({
             </Tooltip>
           )
         }
-        actions={
-          <>
-            <Button
-              onClick={() =>
-                navigate(existing ? `/projects/${projectId}/cases/${existing.id}` : `/projects/${projectId}/cases`)
-              }
-              data-testid={`${TestIdPrefix}.Cancel`}
-            >
-              Cancel
-            </Button>
-            {/*
-              Gated as well as its entry points, because the entry points are not the only way in:
-              /cases/new and /cases/:id/edit are real URLs, so a bookmark, a shared link or the
-              back button lands here without passing the New-case button. Gating only the button
-              that navigates here would make the permission look enforced while leaving the form
-              fully usable up to the 403.
-            */}
-            <PermissionGate projectId={projectId} permission={mode === 'edit' ? 'case:edit' : 'case:create'}>
-              {({ allowed }) => (
-                <Button
-                  type="submit"
-                  variant="contained"
-                  disabled={!allowed || isSubmitting || (mode === 'edit' && !isDirty)}
-                  title={allowed && mode === 'edit' && !isDirty ? 'Nothing has changed yet' : undefined}
-                  data-testid={`${TestIdPrefix}.Submit`}
-                >
-                  {isSubmitting ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Create case'}
-                </Button>
-              )}
-            </PermissionGate>
-          </>
-        }
+        /*
+          NO ACTIONS SLOT, and this page is the deliberate exception to the app's header-actions
+          convention. Everywhere else the primary action sits beside the title because the page is
+          about one object and fits on a screen. This one is a form five panels tall whose author
+          finishes at the BOTTOM of a step list of unbounded length — a Save that only exists above
+          the fold is a Save they have to scroll back to, past the work they were checking. It
+          moved into the sticky commit bar at the foot of the form, once, so there is still exactly
+          one `CaseEditor.Submit` on the screen.
+        */
       />
 
       {/*
@@ -1019,27 +1183,44 @@ function CaseEditorForm({
         </Alert>
       )}
 
-      {/* What the buffer is doing. Its own component so the subscription it needs does not
-          re-render the editor — see `CaseDraftStatus`. */}
-      <CaseDraftStatus
-        control={control}
-        getValues={getValues}
-        enabled={autosaveEnabled}
-        save={saveDraftContent}
-        commitLabel={mode === 'edit' ? 'Save changes' : 'Create case'}
-        testId={`${TestIdPrefix}.DraftStatus`}
-      />
-
       {errors.root && (
         <Alert severity="error" role="alert" sx={{ mb: 2 }} data-testid={`${TestIdPrefix}.Error`}>
           {errors.root.message}
         </Alert>
       )}
 
-      <Stack direction={{ xs: 'column', lg: 'row' }} sx={{ gap: 3, alignItems: 'flex-start' }}>
-        <Stack sx={{ gap: 3, flex: 1, minWidth: 0, width: '100%' }}>
-          <Panel title="What this case proves" testId={`${TestIdPrefix}.Summary`}>
-            <Stack sx={{ gap: 2 }}>
+      {/*
+        Keyed on the attempt, so a second refused submit re-mounts it and focus lands here again —
+        see the component's header. `errors.root` above is the server's refusal and stays separate:
+        it names something the author cannot fix by editing a field.
+      */}
+      {showSummary && summaryRows.length > 0 && (
+        <ErrorSummary
+          key={submitCount}
+          rows={summaryRows}
+          setFocus={setFocus}
+          testId={`${TestIdPrefix}.ErrorSummary`}
+        />
+      )}
+
+      <Stack direction={{ xs: 'column', lg: 'row' }} sx={{ gap: 2.5, alignItems: 'flex-start' }}>
+        <Stack sx={{ gap: 2.5, flex: 1, minWidth: 0, width: '100%' }}>
+          {/*
+            "What this proves" — the SAME words the read view uses (`CaseDetail.Summary`). It was
+            "What this case proves" here and "What this proves" there, which is design-audit
+            finding 19: the two most-used views of the core entity renaming a panel between read
+            and write. One name, and the reader learns it once.
+          */}
+          <Panel title="What this proves" testId={`${TestIdPrefix}.Summary`}>
+            {/*
+              MEASURE, not width. Four full-bleed prose fields on a 1900px monitor put ~180
+              characters on a line, which is more than twice the readable maximum — and the panel
+              was four of them stacked, so the one required field on this screen looked like the
+              first of four equal obligations. Capped, and the two fields that answer the same
+              question from opposite ends (what we are checking / what should then be true) sit
+              side by side where they can be read against each other.
+            */}
+            <Stack sx={{ gap: 2, maxWidth: 920 }}>
               <TextField
                 label="Title"
                 required
@@ -1052,34 +1233,165 @@ function CaseEditorForm({
                 }}
                 {...register('title')}
               />
-              <TextField
-                label="Objective"
-                fullWidth
-                multiline
-                minRows={2}
-                error={!!errors.objective}
-                helperText={errors.objective?.message}
-                slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Field.Objective` } }}
-                {...register('objective')}
-              />
+              <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 2 }}>
+                <TextField
+                  label="Objective"
+                  fullWidth
+                  multiline
+                  minRows={2}
+                  sx={{ flex: 1, minWidth: 0 }}
+                  error={!!errors.objective}
+                  helperText={errors.objective?.message ?? 'Why this case exists.'}
+                  slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Field.Objective` } }}
+                  {...register('objective')}
+                />
+                <TextField
+                  label="Expected outcome"
+                  fullWidth
+                  multiline
+                  minRows={2}
+                  sx={{ flex: 1, minWidth: 0 }}
+                  helperText="The case-level outcome, alongside the per-step expected results."
+                  slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Field.ExpectedOutcome` } }}
+                  {...register('expectedOutcome')}
+                />
+              </Stack>
               <TextField
                 label="Description"
                 fullWidth
                 multiline
-                minRows={3}
+                minRows={2}
+                // Last and narrowest of the three, because it is the only one of them nothing reads
+                // in a hurry: the grid shows the title, a run shows the objective and the outcome.
+                sx={{ maxWidth: 680 }}
+                helperText="Optional background — anything a reader needs that the steps assume."
                 slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Field.Description` } }}
                 {...register('description')}
               />
-              <TextField
-                label="Expected outcome"
-                fullWidth
-                multiline
-                minRows={2}
-                helperText="The case-level outcome, alongside the per-step expected results."
-                slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Field.ExpectedOutcome` } }}
-                {...register('expectedOutcome')}
-              />
             </Stack>
+          </Panel>
+
+          {/*
+            ~~Conditions sit between Classification and Automation deliberately.~~ → they sat in
+            the RAIL, and the argument was about their neighbours rather than about the column.
+            The reasoning it gave is the reason they are here now: they are part of what the case
+            IS to a person running it — the setup they must have done before the first step — so
+            they belong in the narrative column, above the procedure that assumes them, not in the
+            metadata rail beside it. The rail was also where the tallest content on the screen had
+            collected: four unrelated concerns in 320px next to a main column that ended halfway
+            down the page.
+          */}
+          <Panel title="Conditions" testId={`${TestIdPrefix}.Conditions`}>
+            {/*
+              The decline toggle is bound through its OWN Controller wrapping both panels, rather
+              than through each panel's. `declinedConditionIds` is one array carrying both kinds
+              (an attachment id determines its kind), so two Controllers over one field would be
+              two independent copies of it — and the last panel to fire would overwrite the other
+              panel's toggles with a value it read before they happened.
+            */}
+            <Controller
+              control={control}
+              name="declinedConditionIds"
+              render={({ field: declines }) => {
+                const toggle = (attachmentId: string, next: boolean) =>
+                  declines.onChange(
+                    next
+                      ? [...declines.value, attachmentId]
+                      : declines.value.filter((id: string) => id !== attachmentId),
+                  );
+
+                /*
+                  The rows the pending move will end (§194) — resolved from what is already on
+                  screen, which is why they can be NAMED. `inheritedPre`/`inheritedPost` carry the
+                  title the panel renders; a count on its own would leave the author to work out
+                  which of four rules they are about to lose.
+
+                  Here rather than in either panel: one array carries both kinds, so a per-panel
+                  alert would state the same event twice on a case declining one precondition and
+                  one postcondition, and each copy would name half of it.
+                */
+                const ending = movingFolder
+                  ? [...inheritedPre, ...inheritedPost].filter((ref) =>
+                      declines.value.includes(ref.id),
+                    )
+                  : [];
+
+                return (
+                  <Stack sx={{ gap: 3 }}>
+                    {/*
+                      `warning`, on the same grounds §193 raised the bulk preview's alert to it: a
+                      skip is something the operation will not do, and this is something it will
+                      do that nobody asked for. The consequence sentence is the one the dialog
+                      uses, because it is the same consequence.
+                    */}
+                    {ending.length > 0 && (
+                      <Alert
+                        severity="warning"
+                        data-testid={`${TestIdPrefix}.Conditions.EndingDeclines`}
+                      >
+                        <AlertTitle>
+                          Moving this case ends {plural(ending.length, 'condition exception')}
+                        </AlertTitle>
+                        <Typography variant="body2">
+                          A folder&rsquo;s rule can only be declined by a case filed in that
+                          folder, so {ending.length === 1 ? 'this exception' : 'these exceptions'}
+                          {' '}end with the move. Moving it back will not bring
+                          {ending.length === 1 ? ' it' : ' them'} back.
+                        </Typography>
+                        <Box component="ul" sx={{ pl: 3, my: 1 }}>
+                          {ending.map((ref) => (
+                            <Typography component="li" variant="body2" key={ref.id}>
+                              {ref.title}
+                              {ref.inheritedFrom ? ` — from ${ref.inheritedFrom}` : null}
+                            </Typography>
+                          ))}
+                        </Box>
+                      </Alert>
+                    )}
+                    <Controller
+                      control={control}
+                      name="preconditionIds"
+                      render={({ field }) => (
+                        <ConditionsPanel
+                          kind="PRE"
+                          projectId={projectId}
+                          testId={`${TestIdPrefix}.Preconditions`}
+                          value={field.value}
+                          inherited={inheritedPre}
+                          declined={declines.value}
+                          leavingFolder={movingFolder}
+                          onToggleDecline={toggle}
+                          onChange={field.onChange}
+                          known={createdConditions}
+                          onCreate={() => setConditionDialog({ kind: 'PRE', condition: null })}
+                          onEdit={(condition) => setConditionDialog({ kind: 'PRE', condition })}
+                        />
+                      )}
+                    />
+                    <Controller
+                      control={control}
+                      name="postconditionIds"
+                      render={({ field }) => (
+                        <ConditionsPanel
+                          kind="POST"
+                          projectId={projectId}
+                          testId={`${TestIdPrefix}.Postconditions`}
+                          value={field.value}
+                          inherited={inheritedPost}
+                          declined={declines.value}
+                          leavingFolder={movingFolder}
+                          onToggleDecline={toggle}
+                          onChange={field.onChange}
+                          known={createdConditions}
+                          onCreate={() => setConditionDialog({ kind: 'POST', condition: null })}
+                          onEdit={(condition) => setConditionDialog({ kind: 'POST', condition })}
+                        />
+                      )}
+                    />
+                  </Stack>
+                );
+              }}
+            />
           </Panel>
 
           <Panel
@@ -1138,7 +1450,23 @@ function CaseEditorForm({
                   <SortableStep key={field.id} id={field.id}>
                     {(handle) => (
                       <>
-                    <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 1 }}>
+                    {/*
+                      ONE LINE for the row's identity, its keyword and its sentence.
+
+                      These used to be two: a full-width strip carrying the handle, "Step 1", the
+                      keyword select and three buttons, and then the action underneath it. That is
+                      ~48px of chrome per step before a word is read, and on a ten-step case it is
+                      half the panel. The action is the row — everything else is an adjunct to it,
+                      so everything else sits on its line.
+                    */}
+                    <Stack
+                      direction={{ xs: 'column', md: 'row' }}
+                      sx={{ alignItems: { md: 'flex-start' }, gap: 1 }}
+                    >
+                      <Stack
+                        direction="row"
+                        sx={{ alignItems: 'center', gap: 0.5, flexShrink: 0, pt: { md: 1 } }}
+                      >
                       {/*
                         The drag handle, and it is a handle rather than the whole row being
                         draggable: every row is three text fields, and a draggable row makes
@@ -1157,13 +1485,85 @@ function CaseEditorForm({
                           <DragIndicatorIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
-                      <Identifier variant="muted">Step {index + 1}</Identifier>
+                      <Identifier variant="muted">{index + 1}</Identifier>
+                      </Stack>
                       <StepKeywordCell
                         control={control}
                         index={index}
                         error={errors.steps?.[index]?.keyword?.message}
                       />
-                      <Box sx={{ flex: 1 }} />
+                      <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
+                        <StepActionField
+                          projectId={projectId}
+                          control={control}
+                          index={index}
+                          error={errors.steps?.[index]?.action?.message}
+                          /* The corpus sentence is the same on every row — said once, on the first. */
+                          hint={index === 0}
+                          /*
+                            Typing in the LAST row appends the next one, so the list always ends in a
+                            blank invitation. Guarded on being last rather than on "this row was
+                            empty a moment ago": one keystroke makes this row non-last, so the next
+                            keystroke cannot append a second time, and a paste appends exactly once.
+                          */
+                          onType={(value) => {
+                            if (index === steps.fields.length - 1 && value.trim().length > 0) {
+                              steps.append(blankStep(nextKeyword(getValues('steps'))), NO_FOCUS);
+                            }
+                          }}
+                          /*
+                            A pick fills all three fields, which is the whole point of the corpus
+                            carrying the triple: completing the action alone would leave exactly the
+                            two fields that distinguish two similar steps blank, and the author would
+                            fill them from memory.
+
+                            `shouldDirty` on all three, so picking into an untouched edit form enables
+                            Save — without it the change is on screen and the button says nothing has
+                            changed yet.
+                          */
+                          onPick={(suggestion) => {
+                            /*
+                              ONE write, at `steps.${index}` — the name the data cell's `Controller`
+                              below subscribes to. Three writes to the sibling paths do not reach it,
+                              and the corpus triple is a STRUCTURED step, so a pick onto a row that is
+                              currently holding a doc string or a table has to clear the other two:
+                              `test_step` allows at most one of the three (`V69`'s `num_nonnulls`
+                              check), and three sibling writes leave a row the server refuses.
+                            */
+                            setValue(
+                              `steps.${index}`,
+                              {
+                                ...getValues(`steps.${index}`),
+                                action: suggestion.action,
+                                testData: suggestion.testData ?? '',
+                                docString: null,
+                                dataTable: null,
+                              },
+                              { shouldDirty: true },
+                            );
+                            // And `expectedResult` on its OWN exact path: it is an uncontrolled
+                            // `register` input, whose DOM value `setValue` writes through the ref it
+                            // holds for that name — a write to the parent object updates the form
+                            // state and leaves the box on screen empty.
+                            setValue(`steps.${index}.expectedResult`, suggestion.expectedResult ?? '', {
+                              shouldDirty: true,
+                            });
+                            if (index === steps.fields.length - 1) {
+                              steps.append(blankStep(nextKeyword(getValues('steps'))), NO_FOCUS);
+                            }
+                          }}
+                        />
+                      </Box>
+                      <Stack
+                        direction="row"
+                        className="stepTools"
+                        sx={{
+                          flexShrink: 0,
+                          pt: { md: 0.5 },
+                          opacity: 0.55,
+                          transition: 'opacity 150ms',
+                        }}
+                      >
                       {/*
                         Reordering is safe because a step keeps its stable id: results and
                         evidence anchor to the id, not the position, so moving a step never
@@ -1206,68 +1606,18 @@ function CaseEditorForm({
                       >
                         <DeleteOutlineIcon fontSize="small" />
                       </IconButton>
+                      </Stack>
                     </Stack>
 
-                    <Stack sx={{ gap: 1.5 }}>
-                      <StepActionField
-                        projectId={projectId}
-                        control={control}
-                        index={index}
-                        error={errors.steps?.[index]?.action?.message}
-                        /*
-                          Typing in the LAST row appends the next one, so the list always ends in a
-                          blank invitation. Guarded on being last rather than on "this row was
-                          empty a moment ago": one keystroke makes this row non-last, so the next
-                          keystroke cannot append a second time, and a paste appends exactly once.
-                        */
-                        onType={(value) => {
-                          if (index === steps.fields.length - 1 && value.trim().length > 0) {
-                            steps.append(blankStep(nextKeyword(getValues('steps'))), NO_FOCUS);
-                          }
-                        }}
-                        /*
-                          A pick fills all three fields, which is the whole point of the corpus
-                          carrying the triple: completing the action alone would leave exactly the
-                          two fields that distinguish two similar steps blank, and the author would
-                          fill them from memory.
-
-                          `shouldDirty` on all three, so picking into an untouched edit form enables
-                          Save — without it the change is on screen and the button says nothing has
-                          changed yet.
-                        */
-                        onPick={(suggestion) => {
-                          /*
-                            ONE write, at `steps.${index}` — the name the data cell's `Controller`
-                            below subscribes to. Three writes to the sibling paths do not reach it,
-                            and the corpus triple is a STRUCTURED step, so a pick onto a row that is
-                            currently holding a doc string or a table has to clear the other two:
-                            `test_step` allows at most one of the three (`V69`'s `num_nonnulls`
-                            check), and three sibling writes leave a row the server refuses.
-                          */
-                          setValue(
-                            `steps.${index}`,
-                            {
-                              ...getValues(`steps.${index}`),
-                              action: suggestion.action,
-                              testData: suggestion.testData ?? '',
-                              docString: null,
-                              dataTable: null,
-                            },
-                            { shouldDirty: true },
-                          );
-                          // And `expectedResult` on its OWN exact path: it is an uncontrolled
-                          // `register` input, whose DOM value `setValue` writes through the ref it
-                          // holds for that name — a write to the parent object updates the form
-                          // state and leaves the box on screen empty.
-                          setValue(`steps.${index}.expectedResult`, suggestion.expectedResult ?? '', {
-                            shouldDirty: true,
-                          });
-                          if (index === steps.fields.length - 1) {
-                            steps.append(blankStep(nextKeyword(getValues('steps'))), NO_FOCUS);
-                          }
-                        }}
-                      />
-                      <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1.5 }}>
+                    <Stack sx={{ gap: 1.5, mt: 1 }}>
+                      {/*
+                        Bottom-aligned, not top-aligned. The left cell carries its mode switch
+                        ABOVE its field, so aligning the two columns by their tops put the data
+                        input a switch's height below the expected-result input beside it — two
+                        boxes holding the same kind of thing, drawn on two different lines.
+                        Aligning by the bottom lines the two inputs up in every mode.
+                      */}
+                      <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1.5, alignItems: { sm: 'flex-end' } }}>
                         {/*
                           The three data spellings behind one control (§255) — `Controller` rather
                           than `register` because the cell writes three fields at once when the
@@ -1346,8 +1696,22 @@ function CaseEditorForm({
           )}
         </Stack>
 
-        <Box sx={{ width: { xs: '100%', lg: 320 }, flexShrink: 0 }}>
-          <Stack sx={{ gap: 3 }}>
+        {/*
+          The rail is METADATA ONLY since Conditions left it: where the case is filed, how it is
+          classified, and how it is executed. All of it is set-once-and-forget, none of it grows
+          with the case, and none of it is what the author came here to write — which is why it can
+          be pinned. `flex-start` on the row above is what makes `sticky` work at all here; a
+          stretched flex child has no room to move within.
+        */}
+        <Box
+          sx={{
+            width: { xs: '100%', lg: 320 },
+            flexShrink: 0,
+            position: { lg: 'sticky' },
+            top: { lg: 'calc(var(--header-height) + 16px)' },
+          }}
+        >
+          <Stack sx={{ gap: 2.5 }}>
             <Panel title="Placement" testId={`${TestIdPrefix}.Placement`}>
               <Controller
                 control={control}
@@ -1538,125 +1902,6 @@ function CaseEditorForm({
               </Stack>
             </Panel>
 
-            {/*
-              Conditions sit between Classification and Automation deliberately: they are part of
-              what the case IS to a person running it — the setup they must have done before the
-              first step — where automation is about how it is executed. Placing them below the
-              step list would put the setup after the procedure that assumes it.
-            */}
-            <Panel title="Conditions" testId={`${TestIdPrefix}.Conditions`}>
-              {/*
-                The decline toggle is bound through its OWN Controller wrapping both panels, rather
-                than through each panel's. `declinedConditionIds` is one array carrying both kinds
-                (an attachment id determines its kind), so two Controllers over one field would be
-                two independent copies of it — and the last panel to fire would overwrite the other
-                panel's toggles with a value it read before they happened.
-              */}
-              <Controller
-                control={control}
-                name="declinedConditionIds"
-                render={({ field: declines }) => {
-                  const toggle = (attachmentId: string, next: boolean) =>
-                    declines.onChange(
-                      next
-                        ? [...declines.value, attachmentId]
-                        : declines.value.filter((id: string) => id !== attachmentId),
-                    );
-
-                  /*
-                    The rows the pending move will end (§194) — resolved from what is already on
-                    screen, which is why they can be NAMED. `inheritedPre`/`inheritedPost` carry the
-                    title the panel renders; a count on its own would leave the author to work out
-                    which of four rules they are about to lose.
-
-                    Here rather than in either panel: one array carries both kinds, so a per-panel
-                    alert would state the same event twice on a case declining one precondition and
-                    one postcondition, and each copy would name half of it.
-                  */
-                  const ending = movingFolder
-                    ? [...inheritedPre, ...inheritedPost].filter((ref) =>
-                        declines.value.includes(ref.id),
-                      )
-                    : [];
-
-                  return (
-                    <Stack sx={{ gap: 3 }}>
-                      {/*
-                        `warning`, on the same grounds §193 raised the bulk preview's alert to it: a
-                        skip is something the operation will not do, and this is something it will
-                        do that nobody asked for. The consequence sentence is the one the dialog
-                        uses, because it is the same consequence.
-                      */}
-                      {ending.length > 0 && (
-                        <Alert
-                          severity="warning"
-                          data-testid={`${TestIdPrefix}.Conditions.EndingDeclines`}
-                        >
-                          <AlertTitle>
-                            Moving this case ends {plural(ending.length, 'condition exception')}
-                          </AlertTitle>
-                          <Typography variant="body2">
-                            A folder&rsquo;s rule can only be declined by a case filed in that
-                            folder, so {ending.length === 1 ? 'this exception' : 'these exceptions'}
-                            {' '}end with the move. Moving it back will not bring
-                            {ending.length === 1 ? ' it' : ' them'} back.
-                          </Typography>
-                          <Box component="ul" sx={{ pl: 3, my: 1 }}>
-                            {ending.map((ref) => (
-                              <Typography component="li" variant="body2" key={ref.id}>
-                                {ref.title}
-                                {ref.inheritedFrom ? ` — from ${ref.inheritedFrom}` : null}
-                              </Typography>
-                            ))}
-                          </Box>
-                        </Alert>
-                      )}
-                      <Controller
-                        control={control}
-                        name="preconditionIds"
-                        render={({ field }) => (
-                          <ConditionsPanel
-                            kind="PRE"
-                            projectId={projectId}
-                            testId={`${TestIdPrefix}.Preconditions`}
-                            value={field.value}
-                            inherited={inheritedPre}
-                            declined={declines.value}
-                            leavingFolder={movingFolder}
-                            onToggleDecline={toggle}
-                            onChange={field.onChange}
-                            known={createdConditions}
-                            onCreate={() => setConditionDialog({ kind: 'PRE', condition: null })}
-                            onEdit={(condition) => setConditionDialog({ kind: 'PRE', condition })}
-                          />
-                        )}
-                      />
-                      <Controller
-                        control={control}
-                        name="postconditionIds"
-                        render={({ field }) => (
-                          <ConditionsPanel
-                            kind="POST"
-                            projectId={projectId}
-                            testId={`${TestIdPrefix}.Postconditions`}
-                            value={field.value}
-                            inherited={inheritedPost}
-                            declined={declines.value}
-                            leavingFolder={movingFolder}
-                            onToggleDecline={toggle}
-                            onChange={field.onChange}
-                            known={createdConditions}
-                            onCreate={() => setConditionDialog({ kind: 'POST', condition: null })}
-                            onEdit={(condition) => setConditionDialog({ kind: 'POST', condition })}
-                          />
-                        )}
-                      />
-                    </Stack>
-                  );
-                }}
-              />
-            </Panel>
-
             <Panel title="Automation" testId={`${TestIdPrefix}.Automation`}>
               <Stack sx={{ gap: 2 }}>
                 <Controller
@@ -1736,6 +1981,79 @@ function CaseEditorForm({
           </Stack>
         </Box>
       </Stack>
+
+      {/*
+        THE COMMIT BAR — the form's one Save, pinned to the bottom of the viewport.
+
+        It carries the buffer's status line as well as the two buttons, and that pairing is the
+        point rather than a saving of space: "Backup saved 14:02 — this is not the case itself, use
+        Save changes to publish your work" is a sentence about a button, and it used to sit at the
+        top of the form naming a control the author had scrolled a thousand pixels past. Now it
+        sits beside it.
+
+        `background.paper` and a top rule, because it overlaps content it must stay legible over —
+        a translucent bar here would put the last step row's text through the button labels.
+      */}
+      <Box
+        data-testid={`${TestIdPrefix}.CommitBar`}
+        sx={{
+          position: 'sticky',
+          bottom: 0,
+          zIndex: 2,
+          mt: 2.5,
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 2,
+          px: 2,
+          py: 1.5,
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+        }}
+      >
+        {/* What the buffer is doing. Its own component so the subscription it needs does not
+            re-render the editor — see `CaseDraftStatus`. */}
+        <Box sx={{ flex: 1, minWidth: 200 }}>
+          <CaseDraftStatus
+            control={control}
+            getValues={getValues}
+            enabled={autosaveEnabled}
+            save={saveDraftContent}
+            commitLabel={mode === 'edit' ? 'Save changes' : 'Create case'}
+            testId={`${TestIdPrefix}.DraftStatus`}
+            inline
+          />
+        </Box>
+        <Button
+          onClick={() =>
+            navigate(existing ? `/projects/${projectId}/cases/${existing.id}` : `/projects/${projectId}/cases`)
+          }
+          data-testid={`${TestIdPrefix}.Cancel`}
+        >
+          Cancel
+        </Button>
+        {/*
+          Gated as well as its entry points, because the entry points are not the only way in:
+          /cases/new and /cases/:id/edit are real URLs, so a bookmark, a shared link or the
+          back button lands here without passing the New-case button. Gating only the button
+          that navigates here would make the permission look enforced while leaving the form
+          fully usable up to the 403.
+        */}
+        <PermissionGate projectId={projectId} permission={mode === 'edit' ? 'case:edit' : 'case:create'}>
+          {({ allowed }) => (
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={!allowed || isSubmitting || (mode === 'edit' && !isDirty)}
+              title={allowed && mode === 'edit' && !isDirty ? 'Nothing has changed yet' : undefined}
+              data-testid={`${TestIdPrefix}.Submit`}
+            >
+              {isSubmitting ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Create case'}
+            </Button>
+          )}
+        </PermissionGate>
+      </Box>
 
       {/*
         Keyed on the entry (or 'new'), which is what makes the dialog's own state reset between

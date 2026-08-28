@@ -3492,3 +3492,23 @@ and a missed one is invisible — it produces a row that looks ordinary and refu
 **Not driven and not in scope here:** the case **detail** page still shows a `Step format` chip
 reading *Gherkin* on every case, and the API still requires and accepts `stepFormat`. Both are the
 §256 backend/contract phase, which is not built — see the handoff section.
+
+## §258 — the case editor’s redesign
+
+**Built 2026-08-28, ungated in a browser.** No contract change and no new endpoint: this is layout,
+disclosure and one behaviour that did not exist. The behaviour is `CaseEditor.ErrorSummary` — before
+it, `handleSubmit` had no invalid handler at all, so a refused submit ran *nothing* and the author
+saw a Save button that did not respond.
+
+**What these rows are really testing** is the two things the unit suite cannot see: that the sticky
+chrome (rail, commit bar) does not obscure or overlap what it sits over, and that the vertical
+budget actually came down on a case big enough to matter. jsdom has no layout, so both are invisible
+to `CaseEditorPage.test.tsx` and both are exactly the class of defect this redesign could introduce.
+
+| Row | Drive | Expect |
+|---|---|---|
+| `§258 CE-1` | **Lane A1.** Open **Test cases → New**, and without typing anything press **Create case** at the foot of the form. Then click the word **Title** in the banner that appears. | A red banner at the top of the form reading *"2 things need fixing…"*, naming **Title** and **Steps** with the refusal beside each, and **focus is in the banner** on arrival (a screen reader announces it). Clicking **Title** puts the caret in the title field. Fix the title only and press Create again — the banner stays, loses its Title line and keeps its Steps line. |
+| `§258 CE-2` | **Lane A1.** Open a case with **ten or more steps** for editing (author one if the fixture has none), and scroll to the bottom of the step list. | The **commit bar stays pinned to the bottom of the viewport** the whole way down, carrying the backup status line and *Cancel* / *Save changes* — Save is never scrolled off. The bar is **opaque**: no step text shows through the button labels. The **metadata rail stays pinned** beside the list and does not scroll away, and it does not collide with the app header at the top of its travel. Confirm there is **exactly one Save** on the screen — it left the page header. |
+| `§258 CE-3` | **Lane A1.** On the same case, look at the step rows and at the *What this proves* panel. | Each step is **one line of chrome, not two**: handle, number, keyword and the action sentence share a row, with the data cell and expected result beneath it and the two inputs **bottom-aligned on the same line**. The *"Suggestions come from steps this project already uses"* caption appears under the **first row only**. The rows read as filled bands inside the panel, not as boxes inside a box. In the summary panel, **Objective and Expected outcome sit side by side** and no prose field runs the full width of the screen. |
+| `§258 CE-4` | **Lane A1.** On a case filed in a suite that carries inherited conditions, open the editor. | The **Conditions panel is in the main column, above Steps** — the setup before the procedure that assumes it — and the rail carries only **Placement, Classification, Automation**. Change the Suite to a different folder and confirm the *"Moving this case ends n condition exceptions"* warning still appears, in the panel's new position, naming the same rules. |
+| `§258 CE-5` | **Lane A1, narrow.** Repeat CE-2 at **1024px** and at **375px**. | At `lg` and below the rail drops beneath the main column and **stops being sticky** (nothing pinned in two directions at once). The commit bar stays sticky at every width and its contents wrap rather than overflow. On the step row the keyword select goes full width above the action rather than squeezing it. |

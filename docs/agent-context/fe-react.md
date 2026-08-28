@@ -197,6 +197,51 @@ with no stated difference between Objective and Description.
 run and execution journeys and called the execution screen the best in the product; it never opened
 the case editor.
 
+## §258 — THE CASE EDITOR'S REDESIGN, AND THE REFUSAL PATH THAT RAN NOTHING
+
+**Read this before touching `CaseEditorPage.tsx`'s submit, its layout, or its step row.**
+
+- **`handleSubmit` NOW TAKES TWO ARGUMENTS, and the second one is the slice.** It took one, so a
+  refused submit executed *nothing* — the button did not respond, and the correct inline error sat
+  on a field five panels away. **A form whose refusal path runs no code has no refusal path, and
+  every gate calls it green**, because every gate asserts the paths that do run. Do not remove the
+  invalid handler; it is the only thing that sets `showSummary`.
+- **`ErrorSummary` + `summarizeErrors` are the named refusal.** Keyed on `submitCount` so a second
+  refusal re-mounts and re-focuses. Rows read off `errors`, so it empties itself — there is no
+  dismiss and there must not be one. `CaseEditor.ErrorSummary` / `.Item` are locators.
+- **`summarizeErrors` reads `errors.steps.root?.message ?? errors.steps.message`, both.** Same trap
+  the Steps panel documents: RHF keeps the field array's per-row errors as the array and reserves
+  `.root` for the list-level rule, while `setError` on server field errors writes `.message`.
+- **`FIELD_LABELS` is the ONE map from form path to display name.** A label re-typed in the summary
+  drifts on the first rename.
+- **`Cancel`/`Save` are NOT in the `PageHeader` `actions` slot.** This page is the deliberate
+  exception to the header-actions convention — they are in `CaseEditor.CommitBar`, pinned to the
+  foot of the viewport with `CaseDraftStatus` beside them, because the status line is a sentence
+  about a button. **There must stay exactly one `CaseEditor.Submit` on the screen.**
+- **The Conditions panel is in the MAIN COLUMN, above Steps**, not in the rail. Its own §194 comment
+  argued for that position while it sat in the rail. The rail is metadata only (Placement,
+  Classification, Automation) and is `position: sticky`, which works only because the row above it
+  is `alignItems: 'flex-start'`.
+- **The step row is one line of chrome, not two.** Handle, number, keyword and the action share a
+  row; the data cell and expected result are beneath it at `alignItems: 'flex-end'` — bottom-aligned
+  because the left cell carries its mode switch *above* its field, so top-alignment drew the two
+  inputs on different lines. `StepActionField`'s `hint` is true on row 0 only.
+- **The row tools recede to opacity 0.55, never to `display: none`.** The ▲▼ pair is the keyboard
+  and screen-reader reorder path (WCAG 2.2 dragging-movements), and a control nobody can see is a
+  control that is not there.
+- **`What this proves`, both here and in `CaseDetailPage`.** Design-audit finding 19 — the panel
+  used to rename itself between read and write.
+
+### What is deliberately absent
+
+- **The full suite was not run**; it runs on CI at the user's direction. Claimed here: `tsc -b`,
+  lint, and `CaseEditorPage.test.tsx` 60/60.
+- **Two of §256's five UX items are still open** — `Enter` does not advance to the next step (no
+  `onKeyDown` in the file; the append is `NO_FOCUS` on purpose), and the Gherkin lens is still a row
+  grid where the server already round-trips text as identity.
+- **No layout assertion exists anywhere**, and cannot: jsdom has no layout. Whether the sticky rail
+  and commit bar obscure what they sit over is `§258 CE-2`/`CE-5` in the browser queue, unrun.
+
 ## §255 — `stepFormat` IS A LENS, AND THE TOGGLE MAY NOT DELETE THE ROWS
 
 **Read this before touching anything that renders or edits a step**, and read
