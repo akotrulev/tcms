@@ -208,3 +208,46 @@ describe('describeError — the copy and the two flags that drive behaviour', ()
     }
   })
 })
+
+describe('a wrong address is told apart from a failure', () => {
+  /**
+   * `/projects/1/cases` — an id that is not a UUID — reached the reader as "The body is not valid
+   * JSON, or a field holds a value of the wrong type. Check the request against the schema in the
+   * API contract." That is `ProblemErrorAttributes`' copy for whoever is holding the OpenAPI
+   * document, and the generic 4xx arm forwarded it verbatim.
+   */
+  it.each([
+    ['a malformed path parameter', apiError(400, 'The body is not valid JSON, or a field holds a value of the wrong type. Check the request against the schema in the API contract.', 'The request could not be read')],
+    ['an unmapped path', apiError(404, 'There is no operation at this path.', 'No such endpoint')],
+    ['a wrong method', apiError(405, 'That HTTP method is not supported at this path.', 'Method not allowed')],
+  ])('%s never shows the contract copy, and marks the address wrong', (_label, error) => {
+    const described = describeError(error);
+    expect(described.isAddressWrong).toBe(true);
+    expect(described.body).not.toContain('API contract');
+    expect(described.body).not.toContain('JSON');
+    expect(described.retryable).toBe(false);
+  });
+
+  it('marks an ordinary 404 as a wrong address so the route can offer a way out', () => {
+    expect(describeError(apiError(404)).isAddressWrong).toBe(true);
+  });
+
+  it.each([
+    ['a 500', apiError(500)],
+    ['a 403', apiError(403)],
+    ['a 409', apiError(409)],
+  ])('does not divert %s — the resource exists, the request failed', (_label, error) => {
+    expect(describeError(error).isAddressWrong).toBe(false);
+  });
+
+  /**
+   * A 400 that is NOT one of the contract-facing problems is a real rejection of a real request,
+   * and its detail is the server telling the user what it objected to. Diverting that to
+   * "not found" would hide the only useful sentence.
+   */
+  it('keeps the detail of a 400 the server wrote for the user', () => {
+    const described = describeError(apiError(400, 'A run cannot start with no cases in scope.', 'Empty scope'));
+    expect(described.isAddressWrong).toBe(false);
+    expect(described.body).toBe('A run cannot start with no cases in scope.');
+  });
+});

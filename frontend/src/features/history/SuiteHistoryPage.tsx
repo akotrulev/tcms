@@ -8,7 +8,7 @@ import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { DenominatorToggle, ResultBar, ResultCountsCell } from '../../components/ResultBar';
 import { executedCount, type Denominator } from '../../lib/results';
-import { formatComputedAt, formatCount, formatDateTime } from '../../lib/format';
+import { EM_DASH, formatComputedAt, formatCount, formatDateTime } from '../../lib/format';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -249,9 +249,9 @@ function SuiteHistoryBody({
                       <TableCell>
                         <Identifier variant="muted">v{run.suiteVersionNo}</Identifier>
                       </TableCell>
-                      <TableCell sx={{ fontSize: '0.75rem' }}>{run.configuration ?? '—'}</TableCell>
+                      <TableCell sx={{ fontSize: '0.75rem' }}>{run.configuration ?? EM_DASH}</TableCell>
                       <TableCell>
-                        {run.releaseVersion ? <Identifier variant="muted">{run.releaseVersion}</Identifier> : '—'}
+                        {run.releaseVersion ? <Identifier variant="muted">{run.releaseVersion}</Identifier> : EM_DASH}
                       </TableCell>
                       <TableCell>
                         <Tooltip

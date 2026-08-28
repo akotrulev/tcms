@@ -62,7 +62,7 @@ import { ExternalLinkDialog } from './ExternalLinkDialog';
 import { FlakePanel } from './FlakePanel';
 import { StepDataView } from './StepDataCell';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusChip } from '../../components/StatusChip';
-import { formatAge, formatDateTime, formatSeconds } from '../../lib/format';
+import { EM_DASH, formatAge, formatDateTime, formatSeconds } from '../../lib/format';
 import { stepFormatLabels, stepKeywordLabels } from '../../lib/labels';
 import { describeLinkTarget } from '../../lib/links';
 import { ScrollX } from '../../components/ScrollX';
@@ -405,8 +405,8 @@ export function CaseDetailPage() {
                   <Panel title="Classification" testId="CaseDetail.Classification">
                     <Stack sx={{ gap: 1.5 }}>
                       <MetaRow label="Suite" value={data.suiteName} />
-                      <MetaRow label="Test type" value={data.testType ?? '—'} />
-                      <MetaRow label="Test level" value={data.testLevel ?? '—'} />
+                      <MetaRow label="Test type" value={data.testType ?? EM_DASH} />
+                      <MetaRow label="Test level" value={data.testLevel ?? EM_DASH} />
                       <MetaRow
                         label="Features"
                         value={
@@ -417,7 +417,7 @@ export function CaseDetailPage() {
                               ))}
                             </Stack>
                           ) : (
-                            '—'
+                            EM_DASH
                           )
                         }
                       />
@@ -1059,10 +1059,10 @@ function StructuredSteps({ steps }: { steps: TestStep[] }) {
                   />
                 </TableCell>
                 <TableCell sx={{ verticalAlign: 'top', color: 'text.secondary' }}>
-                  {step.testData || '—'}
+                  {step.testData || EM_DASH}
                 </TableCell>
                 <TableCell sx={{ verticalAlign: 'top' }} data-testid="CaseDetail.Steps.Row.Expected">
-                  {step.expectedResult || '—'}
+                  {step.expectedResult || EM_DASH}
                 </TableCell>
               </TableRow>
             ))}

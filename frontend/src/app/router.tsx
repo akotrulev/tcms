@@ -1,7 +1,9 @@
 import { Box, Skeleton, Stack } from '@mui/material';
 import { Suspense, lazy } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useMatch } from 'react-router-dom';
 import { AppShell } from './AppShell';
+import { useProject } from '../api/queries/projects';
+import { describeError } from '../lib/describeError';
 import { RequireAuth } from '../auth/RequireAuth';
 import { SessionGate } from '../auth/SessionGate';
 import { AcceptInvitationPage } from '../features/auth/AcceptInvitationPage';
@@ -172,6 +174,37 @@ function RouteFallback() {
   );
 }
 
+/**
+ * Resolves `:projectId` before any project-scoped route renders, and sends a wrong address to the
+ * not-found screen instead of into the app.
+ *
+ * `/projects/1/cases` used to render the complete furnished project shell — rail, project
+ * switcher, breadcrumb, every nav group — around a project that does not exist, and then fail the
+ * data underneath it. The reader was told they were somewhere they were not, and the exits the
+ * shell offered all silently switched them to a different project rather than acknowledging the
+ * problem. The shell asserting a project is a claim, so it is checked once here, above the pages,
+ * rather than separately discovered by each of them.
+ *
+ * It is a **pathless** layout route because the project routes carry absolute paths rather than
+ * nesting under a shared parent — so it owns no params of its own and reads the id from the
+ * location instead.
+ *
+ * Only `isAddressWrong` diverts. A project that fails for any other reason — a 500, a timeout — is
+ * a data failure the pages below already own, with region states, stale markers and retry;
+ * replacing that with "page not found" would say something untrue about a project that exists.
+ */
+function ProjectGuard() {
+  const nested = useMatch('/projects/:projectId/*');
+  const root = useMatch('/projects/:projectId');
+  const project = useProject(nested?.params.projectId ?? root?.params.projectId);
+
+  if (!nested && !root) return <Outlet />;
+  if (project.isPending) return <RouteFallback />;
+  if (project.isError && describeError(project.error).isAddressWrong) return <NotFoundPage />;
+
+  return <Outlet />;
+}
+
 export function AppRouter() {
   return (
     <SessionGate>
@@ -327,6 +360,7 @@ function AppRoutes() {
             }
           />
 
+          <Route element={<ProjectGuard />}>
           <Route
             path="/projects/:projectId"
             element={
@@ -656,6 +690,7 @@ function AppRoutes() {
               </Suspense>
             }
           />
+          </Route>
 
           {/*
             The org chart (§6k) — **beside `/admin/teams`, not beneath it**, and the third route
@@ -730,14 +765,16 @@ function AppRoutes() {
             company-wide key, so a project segment would make the rail's switcher appear to change
             a list it cannot change.
           */}
-          <Route
-            path="/projects/:projectId/audit"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <AuditLogPage />
-              </Suspense>
-            }
-          />
+          <Route element={<ProjectGuard />}>
+            <Route
+              path="/projects/:projectId/audit"
+              element={
+                <Suspense fallback={<RouteFallback />}>
+                  <AuditLogPage />
+                </Suspense>
+              }
+            />
+          </Route>
           <Route
             path="/admin/audit"
             element={

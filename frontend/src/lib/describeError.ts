@@ -25,7 +25,28 @@ export interface DescribedError {
   retryable: boolean;
   /** A 401 is not an ordinary failure — it runs the session-recovery ladder instead. */
   isAuth: boolean;
+  /**
+   * The address itself is wrong, not the data behind it — a 404, or one of the malformed-request
+   * problems the server raises for an unparseable path parameter. A route that can say so should
+   * render the not-found screen, which has a way out, rather than an error panel that does not.
+   */
+  isAddressWrong: boolean;
 }
+
+/**
+ * `ProblemErrorAttributes` on the server words these for an API *caller* — "Check the request
+ * against the schema in the API contract" is advice for somebody holding the OpenAPI document, and
+ * it reached an end user verbatim on `/projects/1/cases` because the generic 4xx arm forwards
+ * `error.detail`. The titles are a fixed set the backend ships, and matching on them is the same
+ * device `describeError` already uses to tell the two kinds of 409 apart.
+ */
+const CONTRACT_FACING_PROBLEMS = new Set([
+  'The request could not be read',
+  'No such endpoint',
+  'Method not allowed',
+  'Not acceptable',
+  'Unsupported content type',
+]);
 
 export function describeError(error: unknown): DescribedError {
   if (error instanceof TimeoutError) {
@@ -37,6 +58,7 @@ export function describeError(error: unknown): DescribedError {
       // The one failure where retrying is genuinely likely to work.
       retryable: true,
       isAuth: false,
+      isAddressWrong: false,
     };
   }
 
@@ -50,6 +72,7 @@ export function describeError(error: unknown): DescribedError {
         body: 'Sign in again to continue — nothing you have typed has been lost.',
         retryable: false,
         isAuth: true,
+        isAddressWrong: false,
       };
     }
     if (error.status === 403) {
@@ -59,6 +82,7 @@ export function describeError(error: unknown): DescribedError {
         body: 'Ask a project lead to grant you the permission this view needs.',
         retryable: false,
         isAuth: false,
+        isAddressWrong: false,
       };
     }
     if (error.status === 404) {
@@ -86,6 +110,7 @@ export function describeError(error: unknown): DescribedError {
         body: 'It may have been deleted, or it may be in a project you cannot open.',
         retryable: false,
         isAuth: false,
+        isAddressWrong: true,
       };
     }
     if (error.status === 409) {
@@ -112,6 +137,7 @@ export function describeError(error: unknown): DescribedError {
           body: error.detail,
           retryable: false,
           isAuth: false,
+          isAddressWrong: false,
         };
       }
       return {
@@ -120,6 +146,7 @@ export function describeError(error: unknown): DescribedError {
         body: 'This was updated while you were working on it. Reload to see their version.',
         retryable: false,
         isAuth: false,
+        isAddressWrong: false,
       };
     }
     if (error.status === 429) {
@@ -129,6 +156,7 @@ export function describeError(error: unknown): DescribedError {
         body: 'The server asked us to slow down. It will retry shortly.',
         retryable: true,
         isAuth: false,
+        isAddressWrong: false,
       };
     }
     if (error.status >= 500) {
@@ -138,11 +166,37 @@ export function describeError(error: unknown): DescribedError {
         body: 'The server ran into a problem. Try again in a moment.',
         retryable: true,
         isAuth: false,
+        isAddressWrong: false,
       };
     }
+    /*
+      A malformed-request problem is never the reader's fault and never their business. Its detail
+      is written for whoever is holding the API contract, and on `/projects/1/cases` — an id that
+      is not a UUID — it put "The body is not valid JSON ... Check the request against the schema
+      in the API contract" on an end user's screen, twice. What actually happened, in their terms,
+      is that the address is wrong.
+    */
+    if (error.title !== null && CONTRACT_FACING_PROBLEMS.has(error.title)) {
+      return {
+        ...shared,
+        title: 'Not found',
+        body: 'That address is not one this app can open. It may be mistyped, or a link that has gone stale.',
+        retryable: false,
+        isAuth: false,
+        isAddressWrong: true,
+      };
+    }
+
     // Remaining 4xx: the request was wrong. The server's own detail is the most useful thing
     // we have, and retrying an unchanged bad request will fail the same way.
-    return { ...shared, title: "Couldn't load this", body: error.detail, retryable: false, isAuth: false };
+    return {
+      ...shared,
+      title: "Couldn't load this",
+      body: error.detail,
+      retryable: false,
+      isAuth: false,
+      isAddressWrong: false,
+    };
   }
 
   // Anything else — a network fault, a drifted response that failed to parse, a bug. No detail
@@ -154,6 +208,7 @@ export function describeError(error: unknown): DescribedError {
     code: error instanceof Error ? error.name : 'unknown',
     retryable: true,
     isAuth: false,
+    isAddressWrong: false,
   };
 }
 

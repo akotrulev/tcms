@@ -22,7 +22,7 @@ import { PermissionGate } from '../../components/PermissionGate';
 import { ResultBar } from '../../components/ResultBar';
 import { RunCreateDialog } from './RunCreateDialog';
 import { executedCount, passRate } from '../../lib/results';
-import { formatAge, formatCount, formatDateTime, formatDuration, formatPercent } from '../../lib/format';
+import { EM_DASH, formatAge, formatCount, formatDateTime, formatDuration, formatPercent } from '../../lib/format';
 import { runSourceLabels, runStatusColors, runStatusLabels } from '../../lib/labels';
 import { ScrollX } from '../../components/ScrollX';
 import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
@@ -167,7 +167,7 @@ function RunTable({ rows, projectId }: { rows: TestRun[]; projectId: string }) {
                     </Typography>
                   </Stack>
                 </TableCell>
-                <TableCell sx={{ fontSize: '0.75rem' }}>{run.configuration?.name ?? '—'}</TableCell>
+                <TableCell sx={{ fontSize: '0.75rem' }}>{run.configuration?.name ?? EM_DASH}</TableCell>
                 <TableCell sx={{ fontSize: '0.75rem' }}>
                   {run.releaseVersion ? (
                     <>

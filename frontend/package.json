@@ -13,6 +13,7 @@
     "lint": "oxlint",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:smoke": "vitest run --config vitest.smoke.config.ts",
     "test:coverage": "vitest run --coverage",
     "preview": "vite preview",
     "gen:api": "npx --yes openapi-typescript@7 ../docs/specs/openapi.yaml -o src/api/schema.d.ts"

@@ -17,7 +17,7 @@ import type { RoleAssignment } from '../../api/types';
 import { PermissionGate } from '../../components/PermissionGate';
 import { ScrollX } from '../../components/ScrollX';
 import { describeError } from '../../lib/describeError';
-import { formatDateTime } from '../../lib/format';
+import { EM_DASH, formatDateTime } from '../../lib/format';
 
 /**
  * One grant per row, with the Revoke the server will accept — shared by the company screen and
@@ -128,7 +128,7 @@ export function RoleAssignmentTable({
                   sx={overridden ? { opacity: 0.62 } : undefined}
                 >
                   <TableCell sx={{ fontWeight: 500 }}>
-                    {assignment.user?.displayName ?? '—'}
+                    {assignment.user?.displayName ?? EM_DASH}
                   </TableCell>
                   <TableCell>
                     <Chip

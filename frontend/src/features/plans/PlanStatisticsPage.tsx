@@ -60,7 +60,7 @@ import { DenominatorToggle, PassRateSummary, ResultBar, ResultCountsCell } from 
 import { criterionColor, criterionState, type Denominator } from '../../lib/results';
 import { StatusChip } from '../../components/StatusChip';
 import { describeError } from '../../lib/describeError';
-import { formatComputedAt, formatCount, formatDateTime, formatPercent, plural } from '../../lib/format';
+import { EM_DASH, formatComputedAt, formatCount, formatDateTime, formatPercent, plural } from '../../lib/format';
 import {
   aggregationHelp,
   aggregationLabels,
@@ -999,7 +999,7 @@ function ExitCriteria({ criteria }: { criteria: Criterion[] }) {
                 target <Identifier variant="muted">{criterion.op} {criterion.value}</Identifier>
               </Typography>
               <Identifier sx={{ minWidth: 64, textAlign: 'right', color, fontWeight: 600 }}>
-                {criterion.actual ?? '—'}
+                {criterion.actual ?? EM_DASH}
               </Identifier>
             </Stack>
           );

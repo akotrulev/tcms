@@ -46,6 +46,14 @@ export function createAppQueryClient(handlers: QueryClientHandlers): QueryClient
           return;
         }
 
+        /*
+          A wrong address is not an incident. `ProjectGuard` answers it with the not-found screen
+          and a region answers it inline; a persistent global notification behind either one is the
+          same fact a third time. One bad URL used to raise three simultaneous error surfaces
+          reporting "Occurred 6 times", which is a comprehension cost paid on every mistyped link.
+        */
+        if (described.isAddressWrong) return;
+
         // The call site is rendering its own message for this failure.
         if (query.meta?.handled) return;
 

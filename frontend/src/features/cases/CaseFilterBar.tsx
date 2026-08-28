@@ -19,7 +19,7 @@ import {
   lifecycleLabels,
   priorityLabels,
 } from '../../lib/labels';
-import { formatCount } from '../../lib/format';
+import { EM_DASH, formatCount, plural } from '../../lib/format';
 import type { CaseFilterState } from './useCaseFilters';
 
 /**
@@ -299,7 +299,13 @@ export function CaseFilterBar({
 
       <Stack direction="row" sx={{ gap: 1.5, alignItems: 'center' }}>
         <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid={`${TestIdPrefix}.ResultCount`}>
-          {total === undefined ? 'Loading…' : `${formatCount(total)} ${total === 1 ? 'case' : 'cases'}`}
+          {/*
+            An unknown count is rendered as absent, not as "Loading…". The `DataRegion` beside this
+            bar already owns loading and failed, and a bare text node claiming the page was still
+            working sat directly above that region's failure panel — the page saying it was working
+            and that it had failed, at the same moment, in the same column.
+          */}
+          {total === undefined ? EM_DASH : plural(total, 'case')}
         </Typography>
         {hasActiveFilters && (
           <Button size="small" onClick={clearFilters} data-testid={`${TestIdPrefix}.ClearAll`}>

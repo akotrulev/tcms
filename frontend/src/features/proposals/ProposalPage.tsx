@@ -24,7 +24,7 @@ import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { ScrollX } from '../../components/ScrollX';
 import { describeError } from '../../lib/describeError';
-import { formatDateTime } from '../../lib/format';
+import { EM_DASH, formatDateTime } from '../../lib/format';
 import { proposalStatusLabels } from '../../lib/labels';
 import { VerdictChip } from './VerdictChip';
 
@@ -344,7 +344,7 @@ function ProposedCase({ proposal }: { proposal: AiProposal }) {
                 <TableRow key={index} data-testid="Proposal.Step">
                   <TableCell>{index + 1}</TableCell>
                   <TableCell>{step.action}</TableCell>
-                  <TableCell>{step.expectedResult ?? '—'}</TableCell>
+                  <TableCell>{step.expectedResult ?? EM_DASH}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

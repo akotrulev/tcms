@@ -529,7 +529,16 @@ function RailContent({
   const { projectId } = useParams();
   const projects = useProjects();
 
-  const activeProjectId = projectId ?? projects.data?.[0]?.id;
+  /*
+    A `projectId` in the URL is not evidence that the project exists. The rail used to furnish the
+    whole project context — every nav group, the switcher, the breadcrumb root — straight off the
+    path segment, so `/projects/1/cases` rendered a complete, interactive project that was never
+    there. `ProjectGuard` now diverts a wrong address before the pages render; the rail is the
+    other half, because it draws outside the routed area and would otherwise still be asserting it
+    while the not-found screen says the opposite.
+  */
+  const known = projects.data?.some((p) => p.id === projectId) ?? true;
+  const activeProjectId = (known ? projectId : undefined) ?? projects.data?.[0]?.id;
 
   /*
     The rail's only permission reads, and the only two entries any verdict here decides — see
