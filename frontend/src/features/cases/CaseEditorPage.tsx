@@ -26,8 +26,6 @@ import {
   MenuItem,
   Stack,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -47,6 +45,7 @@ import {
   fromCasePayload,
   isBlankStep,
   liveSteps,
+  nextKeyword,
   prefilledKeywords,
   toCasePayload,
   type CaseInput,
@@ -79,7 +78,7 @@ import { PermissionGate } from '../../components/PermissionGate';
 import { NEW_CASE_DEFAULTS } from '../../lib/caseDefaults';
 import { formatAge, plural } from '../../lib/format';
 import { useDebouncedValue } from '../../lib/useDebouncedValue';
-import { automationLabels, priorityLabels, stepFormatLabels, stepKeywordLabels } from '../../lib/labels';
+import { automationLabels, priorityLabels, stepKeywordLabels } from '../../lib/labels';
 import { selectTestId } from '../../lib/muiTestIds';
 import type {
   CaseConditionRef,
@@ -110,16 +109,18 @@ const TestIdPrefix = 'CaseEditor';
  * row still on it (so the submit trims and drops it), and "at least one step" can no longer be
  * `steps.length` (so `CaseSchema` counts `liveSteps`).
  */
-const BLANK_STEP = {
+const blankStep = (keyword: string) => ({
   action: '',
-  // '' is the form's spelling of "no keyword" (`caseSchema`), and `null` on the two block arguments
-  // is "this row is not in that mode" rather than "empty" — see `StepDataCell`'s header.
-  keyword: '',
+  // `null` on the two block arguments is "this row is not in that mode" rather than "empty" — see
+  // `StepDataCell`'s header. `keyword` is no longer '' here: §256 makes the row arrive with the
+  // one `nextKeyword` proposes, because a row minted without a keyword is a row this form's own
+  // validation then refuses.
+  keyword,
   testData: '',
   expectedResult: '',
   docString: null,
   dataTable: null,
-};
+});
 
 /**
  * `useFieldArray.append` focuses the new row's first field by default.
@@ -316,80 +317,51 @@ function StepActionField({
 }
 
 /**
- * One step's Gherkin keyword (§255).
+ * One step's Gherkin keyword.
  *
- * ## A component because it owns state, exactly like `StepActionField` above
- *
- * In the `STRUCTURED` lens the select is **shown when the row has a keyword and offered when it
- * does not** — a numbered action legitimately has none, and a permanently-mounted "None" select on
- * every row of every structured case is a control asking a question nobody has. The *Add keyword*
- * button is that offer, and whether it has been taken is per-row state, which cannot live in
- * `steps.fields.map`.
- *
- * ## The lens decides whether "None" is on the menu
- *
- * In `GHERKIN` it is not: the form refuses a keyword-less row there with the server's own sentence,
- * so offering the value that guarantees the error would be a menu item whose only outcome is a
- * validation message. In `STRUCTURED` it is the ordinary answer and has to be reachable again after
- * a keyword has been chosen.
+ * ~~In the `STRUCTURED` lens the select is shown when the row has a keyword and offered when it
+ * does not, via an *Add keyword* button whose per-row state cannot live in `steps.fields.map`.~~
+ * → **superseded in §256.** There is one format, so the select is always mounted, `None` is not on
+ * the menu, and the row arrives with `nextKeyword`'s proposal already selected — the author opens
+ * this only to disagree with it. `CaseEditor.Steps.AddKeyword` went with the button; it was a
+ * locator as well as a control.
  */
 function StepKeywordCell({
   control,
   index,
-  lens,
   error,
 }: {
   control: Control<CaseInput>;
   index: number;
-  lens: CaseInput['stepFormat'];
   error: string | undefined;
 }) {
-  const [revealed, setRevealed] = useState(false);
-
   return (
     <Controller
       control={control}
       name={`steps.${index}.keyword`}
-      render={({ field }) =>
-        lens === 'GHERKIN' || revealed || field.value !== '' ? (
-          <TextField
-            select
-            label="Keyword"
-            size="small"
-            sx={{ minWidth: 128, flexShrink: 0 }}
-            value={field.value}
-            onChange={field.onChange}
-            onBlur={field.onBlur}
-            error={!!error}
-            helperText={error}
-            slotProps={{
-              select: { SelectDisplayProps: selectTestId(`${TestIdPrefix}.Steps.Field.Keyword`) },
-              formHelperText: { role: error ? 'alert' : undefined },
-            }}
-          >
-            {lens === 'STRUCTURED' && (
-              <MenuItem value="">
-                <Box component="span" sx={{ color: 'text.secondary' }}>
-                  None
-                </Box>
-              </MenuItem>
-            )}
-            {STEP_KEYWORDS.map((keyword) => (
-              <MenuItem key={keyword} value={keyword}>
-                {stepKeywordLabels[keyword]}
-              </MenuItem>
-            ))}
-          </TextField>
-        ) : (
-          <Button
-            size="small"
-            onClick={() => setRevealed(true)}
-            data-testid={`${TestIdPrefix}.Steps.AddKeyword`}
-          >
-            Add keyword
-          </Button>
-        )
-      }
+      render={({ field }) => (
+        <TextField
+          select
+          label="Keyword"
+          size="small"
+          sx={{ minWidth: 128, flexShrink: 0 }}
+          value={field.value}
+          onChange={field.onChange}
+          onBlur={field.onBlur}
+          error={!!error}
+          helperText={error}
+          slotProps={{
+            select: { SelectDisplayProps: selectTestId(`${TestIdPrefix}.Steps.Field.Keyword`) },
+            formHelperText: { role: error ? 'alert' : undefined },
+          }}
+        >
+          {STEP_KEYWORDS.map((keyword) => (
+            <MenuItem key={keyword} value={keyword}>
+              {stepKeywordLabels[keyword]}
+            </MenuItem>
+          ))}
+        </TextField>
+      )}
     />
   );
 }
@@ -527,11 +499,26 @@ function CaseEditorForm({
         existing?.estimatedDurationSec === null || existing?.estimatedDurationSec === undefined
           ? ''
           : String(existing.estimatedDurationSec),
-      stepFormat: existing?.stepFormat ?? NEW_CASE_DEFAULTS.stepFormat,
+      /*
+        Pinned, not carried: §256 leaves one format, so a pre-§256 `STRUCTURED` case saved from
+        this editor is saved as what it now is — a scenario whose every row carries a keyword. The
+        field is still sent because `TestCaseInput` requires it, and `NEW_CASE_DEFAULTS` is still
+        the one place the value is written so the plan tab's title-only create agrees with it.
+      */
+      stepFormat: NEW_CASE_DEFAULTS.stepFormat,
       // The case's steps, plus the trailing blank row — on a new case that IS the whole list, which
       // is why the editor no longer opens on nothing at all. Before §94 a new case rendered zero
       // step rows and the only way to get one was the Add button.
-      steps: [
+      /*
+        `prefilledKeywords` runs on LOAD since §256, not only on a toggle that no longer exists.
+
+        A case authored before §256 has keyword-less rows, and with R1 now unconditional it would
+        open already invalid and refuse to save until the author filled a select on every row for a
+        change they did not make. Filling on load proposes the answer instead. It does NOT mark the
+        form dirty: nothing has been edited, Save stays disabled, and the proposal reaches the
+        server only on a save the author asked for.
+      */
+      steps: prefilledKeywords([
         ...(existing?.steps ?? []).map((step) => ({
           id: step.id,
           // The contract's null becomes the form's '' — MUI's Select and `caseSchema.keyword`.
@@ -544,8 +531,12 @@ function CaseEditorForm({
           docString: step.docString,
           dataTable: step.dataTable,
         })),
-        BLANK_STEP,
-      ],
+        blankStep(''),
+      ]).map((step, index, rows) =>
+        // The trailing blank row is the one `prefilledKeywords` deliberately skips, so it gets the
+        // proposal here — it is the row the author is about to type into.
+        index === rows.length - 1 ? { ...step, keyword: nextKeyword(rows.slice(0, -1)) } : step,
+      ),
       // The ids the server served, which are the case's live assignments only — a value retired
       // since it was chosen is absent here AND absent from the payload we send back, and the server
       // deliberately does not read that absence as an instruction to delete it. See
@@ -599,7 +590,7 @@ function CaseEditorForm({
   const ensureTrailingBlank = () => {
     const rows = getValues('steps');
     const last = rows.at(-1);
-    if (!last || !isBlankStep(last)) steps.append(BLANK_STEP, NO_FOCUS);
+    if (!last || !isBlankStep(last)) steps.append(blankStep(nextKeyword(rows)), NO_FOCUS);
   };
 
   /**
@@ -650,11 +641,14 @@ function CaseEditorForm({
       dataTable: step.dataTable ?? null,
     }));
     const kept = mode === 'REPLACE' ? [] : liveSteps(getValues('steps'));
-    steps.replace([...kept, ...rows, { ...BLANK_STEP }]);
-
-    if (result.steps.some((step) => step.keyword)) {
-      setValue('stepFormat', 'GHERKIN', { shouldDirty: true });
-    }
+    /*
+      `prefilledKeywords` over the merged list, because §256 refuses a keyword-less row and a bare
+      step list parses to exactly that (`*` in Gherkin's own spelling). Before §256 this branch
+      instead switched the lens when the paste HAD keywords; there is no lens to switch now, and
+      the paste that needs help is the one WITHOUT them.
+    */
+    const merged = prefilledKeywords([...kept, ...rows]);
+    steps.replace([...merged, blankStep(nextKeyword(merged))]);
     if (result.title && !getValues('title').trim()) {
       setValue('title', result.title, { shouldDirty: true });
     }
@@ -693,7 +687,6 @@ function CaseEditorForm({
     if (move) steps.move(move.from, move.to);
   };
 
-  const stepFormat = watch('stepFormat');
   const automationStatus = watch('automationStatus');
 
   /*
@@ -1101,63 +1094,15 @@ function CaseEditorForm({
                 >
                   Paste Gherkin
                 </Button>
-                <Controller
-                  control={control}
-                  name="stepFormat"
-                  render={({ field }) => (
-                    <ToggleButtonGroup
-                      exclusive
-                      size="small"
-                      value={field.value}
-                      onChange={(_event, value) => {
-                        if (!value) return;
-                        field.onChange(value);
-                        /*
-                          ================== THE TOGGLE THAT USED TO LOSE THE ROWS ==================
-
-                          Both directions now change **no stored value**, and there is no diff
-                          dialog in either. Until §255 the two lenses were two storages: switching
-                          to Gherkin seeded a template into a textarea and `toCasePayload` sent
-                          `steps: []`, so the next Save deleted every row and every step id a
-                          `step_result` anchors to — silently, with a success toast over it. That
-                          is the defect this slice exists to end, and the whole of the fix is that
-                          neither branch below touches the list.
-
-                          `STRUCTURED → GHERKIN` only FILLS: `prefilledKeywords` proposes a keyword
-                          for a row that has none and leaves every row that has one alone, so an
-                          author who toggles twice gets their own words back. It is a first draft
-                          of an answer the lens now requires, not a normalization.
-
-                          `GHERKIN → STRUCTURED` does nothing at all. The keywords stay on the rows
-                          and render in the structured list; clearing them would be the same
-                          silent deletion in the other direction, one field narrower.
-                        */
-                        if (value === 'GHERKIN') {
-                          steps.replace(prefilledKeywords(getValues('steps')));
-                        }
-                      }}
-                      aria-label="Step format"
-                    >
-                      {(['STRUCTURED', 'GHERKIN'] as const).map((format) => (
-                        <ToggleButton
-                          key={format}
-                          value={format}
-                          data-testid={`${TestIdPrefix}.StepFormat.${format}`}
-                        >
-                          {stepFormatLabels[format]}
-                        </ToggleButton>
-                      ))}
-                    </ToggleButtonGroup>
-                  )}
-                />
               </Stack>
             }
           >
             {/*
-              ONE EDITOR, BOTH LENSES (§255). There is no second control here any more: the
-              `GHERKIN` branch used to mount a `gherkinSource` textarea, which is the field that
-              left `TestCaseInput` in this slice. What the toggle changes is whether a keyword is
-              required and offered — the rows below are the same rows either way.
+              ONE EDITOR, ONE FORMAT (§256). §255 made both lenses the same rows; this slice
+              removed the toggle that chose between them, because what it chose was whether the
+              keyword was required — and the keyword is now proposed on every row as it is started
+              (`nextKeyword`), so the permissive side of that choice only ever produced a row the
+              form refused. `CaseEditor.StepFormat.*` went with it.
             */}
             <Stack sx={{ gap: 2 }}>
                 {/*
@@ -1216,7 +1161,6 @@ function CaseEditorForm({
                       <StepKeywordCell
                         control={control}
                         index={index}
-                        lens={stepFormat}
                         error={errors.steps?.[index]?.keyword?.message}
                       />
                       <Box sx={{ flex: 1 }} />
@@ -1278,7 +1222,7 @@ function CaseEditorForm({
                         */
                         onType={(value) => {
                           if (index === steps.fields.length - 1 && value.trim().length > 0) {
-                            steps.append(BLANK_STEP, NO_FOCUS);
+                            steps.append(blankStep(nextKeyword(getValues('steps'))), NO_FOCUS);
                           }
                         }}
                         /*
@@ -1318,7 +1262,9 @@ function CaseEditorForm({
                           setValue(`steps.${index}.expectedResult`, suggestion.expectedResult ?? '', {
                             shouldDirty: true,
                           });
-                          if (index === steps.fields.length - 1) steps.append(BLANK_STEP, NO_FOCUS);
+                          if (index === steps.fields.length - 1) {
+                            steps.append(blankStep(nextKeyword(getValues('steps'))), NO_FOCUS);
+                          }
                         }}
                       />
                       <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1.5 }}>

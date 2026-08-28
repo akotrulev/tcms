@@ -2,7 +2,9 @@
 
 # fe-react — orientation cache (TCMS)
 
-**Last verified:** 2026-08-28 (**§255 T7** — **the `.feature` import screen: one request, two modes, one rendering.** ✅ **GATED GREEN on `shanks` 2026-08-28 — `1833 / 1833` across 132 files, `npm run build` clean, `npm run lint` 0 warnings.** It took three fixes, and **two were real**: `@mui/icons-material/DeleteOutline` **does not exist** (the icon is `DeleteOutlineOutlined`, which every other import of it in this SPA already says), and **a step-suggestion pick wrote three sibling paths** (`steps.N.action/testData/expectedResult`) while the §255 data cell's `Controller` subscribes to `steps.N` — so the pick never reached the box, and worse, it left a row carrying two of the three mutually-exclusive data fields, which `V69`'s `num_nonnulls` check refuses. It is now one write to the object plus one to `expectedResult`, which is an uncontrolled `register` input and needs its own exact path. T4 (2026-08-27) is the block below this one and is where the frontend's D2 red was repaired; **T7 is the last code in the initiative** and adds `FeatureImportPage.tsx` and `featureFiles.ts`, `useFeatureImport`, three label maps, nine contract type aliases, two fixtures — and, outside its own feature directory, the **any-of** `PermissionGate` (`permission: PermissionKey | PermissionKey[]`, `Gate.canAny`/`reasonAny`), which every screen in the app shares. **THE RULE TO CARRY: a preview and the act it previews must be one rendering.** `PREVIEW` and `APPLY` answer the identical `FeatureImportPlan`, so nothing in `ImportPlanView` branches on `mode` — and the second rule beside it, **`REFUSE` is a row and never a status code**, is what makes Apply's enablement `totals.create + totals.update > 0` rather than a permission check. Read the §255 T7 section before touching anything on that screen, and the T4 section below it before touching a step. The whole initiative — T1–T7 — is **built, ungated and uncommitted**; `docs/plans/001-unified-step-model/delivery-plan.md` §2 is the status table and §7 the twenty rows of decisions and deviations (D0–D19).)
+**Last verified:** 2026-08-28 (**§256** — **there is ONE step format, and the keyword is proposed rather than asked for.** ✅ **GATED GREEN on `shanks` 2026-08-28 — `1847 / 1847` across 133 files (was 1833/132: +14 arms, net −0 files), `npm run build` clean, `npm run lint` 0 warnings.** Driven by a user finding, and the finding was right: after §255 made both lenses the same rows, `stepFormat` decided **only** whether a keyword was required, and nothing else in the product differed — while the editor minted every row with `keyword: ''` and its own R1 then refused it. **THE RULE TO CARRY: a control whose only job is to decide whether a field is required is not a control, it is a defect generator — supply the answer as the row is made and the control decides nothing.** `nextKeyword` (`GIVEN` with no live rows, `AND` after) now fills **all four** paths that mint a row, `prefilledKeywords` is repurposed from the dead toggle to the *load* paths, and `fromCasePayload` fills and pins — that last one was a **real failing test**, not a hypothetical: a restored pre-§256 draft landed in the state R1 refuses, so Save silently did nothing and the buffer was never cleared. R1/R2 are unconditional now and unreachable by typing. `CaseEditor.StepFormat.*` and `CaseEditor.Steps.AddKeyword` are gone **as locators**, not just controls. **PHASE 1 OF 2, and phase 2 is not built**: `stepFormat` is still `required` on the contract and still a column, because it cannot leave until `migrate-gherkin-source` reports zero everywhere and its removal breaks `@tcms/cli` and `@tcms/mcp`. **`CaseDetailPage.tsx` was deliberately NOT touched** — a concurrent lane held uncommitted edits in it — so it still renders a `Step format` chip that now reads *Gherkin* on every case. **Five browser rows appended (`§256 GK-1`…`GK-5`), written and not run**, and `§255 US-2` is struck as superseded rather than renumbered. **The UX finding this came out of is one-sixth fixed** — read the §256 section for the five open items, and note that no audit in `docs/audits/` has ever covered the case-authoring screen.)
+
+**Superseded header below — T7's, kept because §256 changed nothing it records: the import screen, its two modes and the any-of `PermissionGate` are all still exactly as it describes them.** **Last verified:** 2026-08-28 (**§255 T7** — **the `.feature` import screen: one request, two modes, one rendering.** ✅ **GATED GREEN on `shanks` 2026-08-28 — `1833 / 1833` across 132 files, `npm run build` clean, `npm run lint` 0 warnings.** It took three fixes, and **two were real**: `@mui/icons-material/DeleteOutline` **does not exist** (the icon is `DeleteOutlineOutlined`, which every other import of it in this SPA already says), and **a step-suggestion pick wrote three sibling paths** (`steps.N.action/testData/expectedResult`) while the §255 data cell's `Controller` subscribes to `steps.N` — so the pick never reached the box, and worse, it left a row carrying two of the three mutually-exclusive data fields, which `V69`'s `num_nonnulls` check refuses. It is now one write to the object plus one to `expectedResult`, which is an uncontrolled `register` input and needs its own exact path. T4 (2026-08-27) is the block below this one and is where the frontend's D2 red was repaired; **T7 is the last code in the initiative** and adds `FeatureImportPage.tsx` and `featureFiles.ts`, `useFeatureImport`, three label maps, nine contract type aliases, two fixtures — and, outside its own feature directory, the **any-of** `PermissionGate` (`permission: PermissionKey | PermissionKey[]`, `Gate.canAny`/`reasonAny`), which every screen in the app shares. **THE RULE TO CARRY: a preview and the act it previews must be one rendering.** `PREVIEW` and `APPLY` answer the identical `FeatureImportPlan`, so nothing in `ImportPlanView` branches on `mode` — and the second rule beside it, **`REFUSE` is a row and never a status code**, is what makes Apply's enablement `totals.create + totals.update > 0` rather than a permission check. Read the §255 T7 section before touching anything on that screen, and the T4 section below it before touching a step. The whole initiative — T1–T7 — is **built, ungated and uncommitted**; `docs/plans/001-unified-step-model/delivery-plan.md` §2 is the status table and §7 the twenty rows of decisions and deviations (D0–D19).)
 
 **Superseded header below — T4's, kept because T7 changed nothing it records: the lens, the two new components and the text-media verbs are all still exactly as it describes them.** **Last verified:** 2026-08-27 (**§255 T4** — **one editor, one renderer: `stepFormat` is a LENS and no longer a switch between two storages.** ⚠️ **NO GATE WAS RUN — by standing directive. "Compiles by inspection, tests written."** The frontend has been red since T1 regenerated `schema.d.ts` (deviation D2 in `docs/plans/001-unified-step-model/delivery-plan.md`): `TestCaseInput` lost `gherkinSource`, `TestCase.importedFrom` and `TestStep.docString`/`dataTable` became required, and this task is where that is repaired. **THE RULE TO CARRY: a toggle between two representations of one thing may not delete the thing.** The old lens toggle mounted a `gherkinSource` textarea and `toCasePayload` sent `steps: []`, so switching a case to Gherkin and saving deleted every step row — and with them the ids every `step_result` anchors to — with a 200 and a success toast over it. The whole of the fix is that neither direction of the toggle now touches the list: `STRUCTURED → GHERKIN` only **fills** keywords (`prefilledKeywords`, idempotent, never overwrites), `GHERKIN → STRUCTURED` does nothing at all, and there is no diff dialog in either. **What is new on screen:** a keyword select per row (always in Gherkin, offered behind *Add keyword* in structured), `StepDataCell` — the one control for `testData | docString | dataTable`, whose **mode is derived from the values and never stored** — `PasteGherkinDialog` over `POST …/parse-gherkin` with a *Create precondition and attach* per **Background step** (AM1, disabled with the reason without `library:manage`), `StepsPanel` as the one renderer with `GherkinView` demoted to a zero-row *"Not yet migrated"* fallback, *View as .feature* over `GET …/{caseId}/feature`, the `importedFrom` chip, and the two block arguments on the execution checklist. **`api.postText` and `api.getText` are the first text-media verbs on the client** — `api.post` would JSON-quote a pasted scenario and answer 415, and `api.get` would hand `res.json()` a `.feature` file. Both go through `request`, so the timeout budget, the bearer token and the dev fault seam still apply. Four browser rows appended — `§255 US-1…US-4`, **written, not run**, and `US-4` says plainly that it needs a pre-T1 fixture no lane authors.)
 
@@ -125,6 +127,75 @@ the contract's side (plan §6t): a key a person read is resolved through the sea
 answers not-found rather than forbidden for a case in a project they cannot open. So the cell is
 `<Link to={`/search?q=TC-12`}>`, and it is offered in **both** modes rather than only after an apply
 — a preview naming an existing case should let a reader go and look at what it is about to skip.
+
+## §256 — THERE IS ONE FORMAT, AND THE KEYWORD IS PROPOSED, NEVER ASKED FOR
+
+**Read this before the §255 section below it**, which it supersedes in part. §255 made both lenses
+the same rows; §256 removed the toggle that chose between them.
+
+### The rule
+
+**A control whose only job is to decide whether a field is required is not a control — it is a
+defect generator.** `stepFormat` chose exactly that: `GHERKIN` required a keyword on every step,
+`STRUCTURED` did not, and nothing else in the product differed. Meanwhile the editor minted every
+row with `keyword: ''` and its own R1 then refused it, so the Gherkin side of the toggle existed to
+reject rows the form itself had just created. The fix is not a better error — it is to **supply the
+answer as the row is made**, which leaves the toggle deciding nothing.
+
+**Every case is `GHERKIN` now.** The field stays on the wire because `TestCaseInput` requires it;
+nothing on any screen sets it.
+
+### The seams
+
+- **`caseSchema.ts::nextKeyword`** — `GIVEN` when there are no live rows yet, `AND` otherwise. Used
+  by **all four** paths that can mint a row: the blank trailing row in `defaultValues`, the append
+  on typing into the last row, the append after a step-suggestion pick, and `ensureTrailingBlank`.
+  **A missed call site is invisible** — it produces an ordinary-looking row that refuses to save —
+  which is why the browser rows in the queue drive the paths and not the function.
+- **`nextKeyword` returns `AND`, not a guess at `WHEN`/`THEN`.** Those are claims about what a step
+  means and it fires before the step has been written. `prefilledKeywords` may guess because it
+  reads a finished case; this one has nothing to read.
+- **`caseSchema.ts::prefilledKeywords`** — unchanged, **repurposed**. It was the toggle's proposal;
+  it is now the *load* path's, in `defaultValues` (a pre-§256 case) and in `fromCasePayload` (a
+  pre-§256 draft). It still only ever FILLS and is still idempotent.
+- **`fromCasePayload` pins `stepFormat` to `GHERKIN` and fills the rows.** Restoring a pre-§256
+  draft verbatim put the form into the state R1 refuses, so Save did nothing and **the buffer was
+  never cleared** — the author's own restored work, unsavable, with nothing on screen saying why.
+  That was a real failing test, not a hypothetical.
+- **`caseSchema.ts`'s R1/R2 are UNCONDITIONAL.** Unreachable by typing now; kept for the two states
+  the controls cannot produce — a draft written before §256, and a select the author cleared.
+- **`CaseEditorPage.tsx::StepKeywordCell`** — always mounted, no `None` on the menu, no per-row
+  `revealed` state. `CaseEditor.Steps.AddKeyword` and `CaseEditor.StepFormat.*` are **gone as
+  locators**, not just as controls.
+
+### What is deliberately absent
+
+- **No backend or contract change.** `stepFormat` is still `required` on `TestCaseSummary`,
+  `TestCaseInput` and the version snapshot; `CaseEdit.validate` still branches on it; the column is
+  still on `test_case`. It cannot leave until `migrate-gherkin-source` reports zero everywhere, and
+  removing a required contract field breaks `@tcms/cli` and `@tcms/mcp`. Phase 2.
+- **`CaseDetailPage.tsx` was NOT touched** — it still renders a `Step format` chip that now reads
+  *Gherkin* on every case, which is a label with no information in it. Left because a **concurrent
+  lane held uncommitted edits in that file** on 2026-08-28 (the design-audit remediation pass), and
+  interleaving another author's in-flight diff is the hazard `CLAUDE.md`'s git section exists for.
+  It is the first thing phase 2 should delete.
+
+### The UX finding this slice came out of, which is mostly NOT fixed
+
+The user's read was that the two formats were indistinguishable and the authoring screen had never
+been designed. Both were correct. What §256 fixed is one item of six. Still open, in the order they
+were judged worth doing: **Enter does not advance to the next step** (there is no `onKeyDown`
+anywhere in `CaseEditorPage.tsx`, and the append deliberately does not focus — `NO_FOCUS`); the
+**Gherkin lens is still a row grid when both halves of a text editor already exist server-side**
+(`POST …/cases/parse-gherkin` and `GET …/cases/{id}/feature`, which the contract says round-trip as
+identity); **four always-visible icon buttons per row** (drag, up, down, remove) against three text
+fields; **`Expected outcome` (case) and `Expected result` (step)** collide on one screen and the
+helper text apologises rather than resolving it; **four multiline boxes before the first step**,
+with no stated difference between Objective and Description.
+
+**The audits never covered this screen.** `docs/audits/002-design-audit-r3-journeys.md` audited the
+run and execution journeys and called the execution screen the best in the product; it never opened
+the case editor.
 
 ## §255 — `stepFormat` IS A LENS, AND THE TOGGLE MAY NOT DELETE THE ROWS
 

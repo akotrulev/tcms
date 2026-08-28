@@ -17,15 +17,16 @@ import { CaseSchema, prefilledKeywords, type StepRow } from './caseSchema'
  */
 
 /**
- * One complete step row, as the form holds it (§255).
+ * One complete step row, as the form holds it.
  *
- * Every field spelled, because `StepSchema` requires them all now: `keyword` is `''` for "none"
- * and the two block arguments are `null` for "this row is not in that mode" — a partial literal
- * would fail the schema for a reason no test here is about.
+ * Every field spelled, because `StepSchema` requires them all: the two block arguments are `null`
+ * for "this row is not in that mode" — a partial literal would fail the schema for a reason no
+ * test here is about. `keyword` defaults to `GIVEN` since §256, where a row without one is the
+ * refusal rather than the ordinary case; the arms that drive R1 pass `''` explicitly.
  */
 const step = (over: Partial<StepRow> = {}): StepRow => ({
   id: null,
-  keyword: '',
+  keyword: 'GIVEN',
   action: '',
   testData: '',
   expectedResult: '',
@@ -46,7 +47,7 @@ const valid = () => ({
   automationKey: null,
   notAutomatableReason: null,
   estimatedDurationSec: null,
-  stepFormat: 'STRUCTURED' as const,
+  stepFormat: 'GHERKIN' as const,
   steps: [step({ action: 'Refund the payment a second time' })],
   // Present and empty rather than omitted, because the two mean different things all the way down:
   // the server reads an absent field as "leave the classification alone" and an empty array as
@@ -108,18 +109,18 @@ describe('CaseSchema — the baseline', () => {
 })
 
 /**
- * The lens rules (§255) — DEC-2 R1 and R2.
+ * DEC-2 R1 and R2 — every row needs a keyword, and the first may not continue nothing.
  *
- * These replace "GHERKIN requires a scenario", which was a rule about a `gherkinSource` textarea
- * that no longer exists: a Gherkin case is step rows now, and what the lens requires is a keyword
- * on each of them. **The sentences are the server's, quoted from `CaseEdit.validate`** — a client
- * that composed its own would tell an author one thing and the 400 would tell them another.
+ * ~~The lens rules.~~ → **§256 made them unconditional**: there is one format, so there is no
+ * second lens under which a keyword-less row is legal. **The sentences are the server's, quoted
+ * from `CaseEdit.validate`** — a client that composed its own would tell an author one thing and
+ * the 400 would tell them another.
  */
-describe('CaseSchema — the GHERKIN lens needs a keyword on every row', () => {
-  const gherkin = (steps: unknown[]) => ({ ...valid(), stepFormat: 'GHERKIN' as const, steps })
+describe('CaseSchema — every row needs a keyword', () => {
+  const gherkin = (steps: unknown[]) => ({ ...valid(), steps })
 
   it('rejects a keyword-less row, on that row’s keyword', () => {
-    const input = gherkin([step({ action: 'Refund it' })])
+    const input = gherkin([step({ keyword: '', action: 'Refund it' })])
     expect(pathsOf(input)).toContain('steps.0.keyword')
     expect(messageOn(input, 'steps.0.keyword')).toBe('Step 1 needs a keyword.')
   })
@@ -127,7 +128,7 @@ describe('CaseSchema — the GHERKIN lens needs a keyword on every row', () => {
   it('numbers the message by LIVE row, not by array index', () => {
     // The trailing blank row is not a step, so a form whose first row was cleared must not report
     // "Step 2" about the row a reader is looking at as the first one.
-    const input = gherkin([step(), step({ action: 'Refund it' })])
+    const input = gherkin([step({ action: '' }), step({ keyword: '', action: 'Refund it' })])
     expect(messageOn(input, 'steps.1.keyword')).toBe('Step 1 needs a keyword.')
   })
 
@@ -148,16 +149,9 @@ describe('CaseSchema — the GHERKIN lens needs a keyword on every row', () => {
     expect(CaseSchema.safeParse(input).success).toBe(true)
   })
 
-  it('asks nothing about keywords in the structured lens', () => {
+  it('asks nothing of a row that already carries one', () => {
+    // Which is now every row the editor mints: `nextKeyword` fills it before the author types.
     expect(pathsOf(valid())).toEqual([])
-  })
-
-  it('keeps a keyword a structured case happens to carry', () => {
-    // The lens is a lens: a case toggled to structured keeps its keywords, and the schema must not
-    // treat one as a value that does not belong there.
-    expect(CaseSchema.safeParse({ ...valid(), steps: [step({ keyword: 'GIVEN', action: 'x' })] }).success).toBe(
-      true,
-    )
   })
 })
 
@@ -257,7 +251,7 @@ describe('CaseSchema — a case requires at least one step, in either lens', () 
       fix. The rows ARE the scenario now, so the same row is refused in both lenses — and the
       keyword rule is reported beside it rather than instead of it.
     */
-    const input = { ...valid(), stepFormat: 'GHERKIN', steps: [step({ expectedResult: 'Something' })] }
+    const input = { ...valid(), steps: [step({ keyword: '', expectedResult: 'Something' })] }
     const paths = pathsOf(input)
     expect(paths).toContain('steps.0.action')
     expect(paths).toContain('steps.0.keyword')
@@ -330,7 +324,7 @@ describe('CaseSchema — the refinements compose', () => {
   it('reports a missing keyword and AUTOMATED-without-a-key together', () => {
     const paths = pathsOf({
       ...valid(),
-      stepFormat: 'GHERKIN',
+      steps: [step({ keyword: '', action: 'Refund it' })],
       automationStatus: 'AUTOMATED',
       automationKey: null,
     })
@@ -370,7 +364,9 @@ describe('CaseSchema — estimatedDurationSec is a string the form produces', ()
  * rather than an edge case.
  */
 describe('prefilledKeywords', () => {
-  const rows = (...over: Partial<StepRow>[]) => over.map((o) => step(o))
+  // `keyword: ''` explicitly: the fixture defaults to `GIVEN` since §256 and these arms are about
+  // what the FILL proposes for a row that has none.
+  const rows = (...over: Partial<StepRow>[]) => over.map((o) => step({ keyword: '', ...o }))
 
   it('opens with Given, continues with When then And, and closes on the assertion with Then', () => {
     const filled = prefilledKeywords(

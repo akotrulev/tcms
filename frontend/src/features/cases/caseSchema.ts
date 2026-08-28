@@ -137,10 +137,12 @@ export const CaseSchema = z
       .nullable()
       .refine((value) => !value || /^\d+$/.test(value), 'Enter a whole number of seconds.'),
     /**
-     * **A lens, not a storage switch, since §255.** Both values are the same rows: `GHERKIN` says
-     * every step carries a keyword and the case renders as a scenario, `STRUCTURED` says the
-     * keywords are optional and it renders as a numbered list. Toggling it therefore changes no
-     * step and loses nothing — see the editor's toggle, which is where that had to be made true.
+     * ~~A lens the author chooses between.~~ → **§256: there is one format and it is `GHERKIN`.**
+     *
+     * The field stays on the form because `TestCaseInput` still requires it, but nothing on any
+     * screen sets it any more and `STRUCTURED` is unreachable through this SPA. It remains in the
+     * enum so a case authored before §256 — or by a client that still sends it — parses rather
+     * than being refused on a value the author cannot see or change.
      */
     stepFormat: z.enum(['STRUCTURED', 'GHERKIN']),
     steps: z.array(StepSchema),
@@ -265,22 +267,29 @@ export const CaseSchema = z
         ctx.addIssue({ code: 'custom', path: ['steps', index, 'action'], message: 'Describe the action.' });
       }
 
-      // R1/R2 — the lens rules. `CaseEdit.validate` refuses both on `steps`; here they land on the
-      // keyword control of the row they are about, which is the whole reason the schema holds them.
-      if (data.stepFormat === 'GHERKIN') {
-        if (step.keyword === '') {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['steps', index, 'keyword'],
-            message: `Step ${position + 1} needs a keyword.`,
-          });
-        } else if (position === 0 && (step.keyword === 'AND' || step.keyword === 'BUT')) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['steps', index, 'keyword'],
-            message: 'The first step cannot be And/But.',
-          });
-        }
+      /*
+        R1/R2 — ~~the lens rules~~ → UNCONDITIONAL since §256, because there is no second lens for
+        them to be conditional on. `CaseEdit.validate` refuses both on `steps`; here they land on
+        the keyword control of the row they are about, which is the whole reason the schema holds
+        them.
+
+        Both are now unreachable by typing: `nextKeyword` puts a keyword on every appended row and
+        `prefilledKeywords` fills a legacy case's rows on load. They are kept for the two states
+        the controls cannot produce — a restored draft written before §256, and a row whose author
+        deliberately cleared the select.
+      */
+      if (step.keyword === '') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['steps', index, 'keyword'],
+          message: `Step ${position + 1} needs a keyword.`,
+        });
+      } else if (position === 0 && (step.keyword === 'AND' || step.keyword === 'BUT')) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['steps', index, 'keyword'],
+          message: 'The first step cannot be And/But.',
+        });
       }
 
       /*
@@ -353,6 +362,23 @@ export function prefilledKeywords(steps: readonly StepRow[]): StepRow[] {
     actionsSeen += 1;
     return { ...step, keyword: actionsSeen === 1 ? 'WHEN' : 'AND' };
   });
+}
+
+/**
+ * The keyword a newly appended row should arrive carrying (§256).
+ *
+ * The first live step of a scenario is its setup, so it is `GIVEN`; every row after it continues
+ * what came before, so it is `AND`. Both are a first draft the author changes from the select —
+ * the point is only that they never have to open it to write an ordinary scenario, and that the
+ * editor stops manufacturing the keyword-less row its own validation then refuses.
+ *
+ * `AND` rather than a guess at `WHEN`/`THEN`: those two are claims about what the step means, and
+ * a wrong claim silently attached to somebody's sentence is worse than a neutral continuation.
+ * `prefilledKeywords` may guess because a toggle was pressed on a finished case; this fires as the
+ * row is being started, where there is nothing yet to read.
+ */
+export function nextKeyword(steps: readonly StepRow[]): string {
+  return liveSteps(steps).length === 0 ? 'GIVEN' : 'AND';
 }
 
 export type CaseInput = z.infer<typeof CaseSchema>;
@@ -521,7 +547,6 @@ export function fromCasePayload(content: unknown): CaseInput {
 
   const priority = str(raw.priority);
   const automationStatus = str(raw.automationStatus);
-  const stepFormat = str(raw.stepFormat);
   const duration = raw.estimatedDurationSec;
 
   const steps = (Array.isArray(raw.steps) ? raw.steps : [])
@@ -565,10 +590,22 @@ export function fromCasePayload(content: unknown): CaseInput {
     // A number on the wire, the string the input produces in the form.
     estimatedDurationSec:
       typeof duration === 'number' && Number.isFinite(duration) ? String(duration) : null,
-    stepFormat: stepFormat === 'GHERKIN' ? 'GHERKIN' : 'STRUCTURED',
+    /*
+      ~~The value the draft carried.~~ → **§256: pinned, and the buffer is why it must be.**
+
+      A draft written before §256 carries `STRUCTURED` and keyword-less rows. Restoring it verbatim
+      put the form straight into the state R1 refuses, so Save did nothing and the buffer was never
+      cleared — the author's own restored work, unsavable, with no control on screen to explain it.
+      Both halves are fixed here rather than at the two call sites: `prefilledKeywords` proposes the
+      keywords the rows never had, and the format is what the product now has one of.
+    */
+    stepFormat: 'GHERKIN',
     // The trailing blank row — see the header. Without it a restored draft has no way to add a
     // step, because the blank last row IS the add control.
-    steps: [...steps, { ...BLANK_ROW }],
+    steps: (() => {
+      const filled = prefilledKeywords(steps);
+      return [...filled, { ...BLANK_ROW, keyword: nextKeyword(filled) }];
+    })(),
     classificationValueIds: strArray(raw.classificationValueIds),
     preconditionIds: conditionIds(raw.preconditions),
     postconditionIds: conditionIds(raw.postconditions),

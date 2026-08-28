@@ -1470,29 +1470,46 @@ describe('CaseEditorPage — moving a case out of the folder it declines (§194)
  * is written first and why it asserts the PAYLOAD as well as the screen: a form that still renders
  * the rows while sending none of them is the same defect one layer down.
  */
-describe('CaseEditorPage — the lens (§255)', () => {
+describe('CaseEditorPage — the one format (§256)', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
   })
 
-  it('keeps every row when the lens is toggled, in both directions', async () => {
+  it('selects Given on the first row and And on the next, without opening the menu', async () => {
     const user = userEvent.setup()
     mockReads()
     renderEditor()
 
-    await user.type(actionFields()[0], 'Refund it')
+    const keywordValue = (index: number) =>
+      screen.getAllByTestId('CaseEditor.Steps.Field.Keyword')[index].textContent
+
+    expect(keywordValue(0)).toBe('Given')
+
+    await user.type(actionFields()[0], 'a settled payment')
     await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(2))
+    expect(keywordValue(1)).toBe('And')
 
-    await user.click(screen.getByTestId('CaseEditor.StepFormat.GHERKIN'))
-    expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(2)
-    expect(actionFields()[0]).toHaveValue('Refund it')
-
-    await user.click(screen.getByTestId('CaseEditor.StepFormat.STRUCTURED'))
-    expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(2)
-    expect(actionFields()[0]).toHaveValue('Refund it')
+    await user.type(actionFields()[1], 'the refund is requested twice')
+    await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(3))
+    expect(keywordValue(2)).toBe('And')
   })
 
-  it('sends the rows after a switch to Gherkin, where it used to send none', async () => {
+  it('mounts a keyword select on every row, with no format control to reach first', async () => {
+    mockReads()
+    renderEditor()
+
+    expect(screen.getAllByTestId('CaseEditor.Steps.Field.Keyword')).toHaveLength(1)
+    expect(screen.queryByTestId('CaseEditor.Steps.AddKeyword')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('CaseEditor.StepFormat.GHERKIN')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('CaseEditor.StepFormat.STRUCTURED')).not.toBeInTheDocument()
+  })
+
+  /*
+    KEPT FROM §255, which is the point of keeping it. That slice's defect was a form that rendered
+    the rows while sending none of them, and removing the toggle is not a licence to stop asserting
+    the payload — this arm is what says the rows still travel, now with the keyword nobody typed.
+  */
+  it('sends GHERKIN and the rows, with the keyword it selected', async () => {
     const user = userEvent.setup()
     mockReads()
     const post = vi.spyOn(api, 'post').mockResolvedValue(
@@ -1501,7 +1518,6 @@ describe('CaseEditorPage — the lens (§255)', () => {
     renderEditor()
 
     await user.type(actionFields()[0], 'Refund it')
-    await user.click(screen.getByTestId('CaseEditor.StepFormat.GHERKIN'))
     await fillHeader(user)
     await user.click(screen.getByTestId('CaseEditor.Submit'))
 
@@ -1509,43 +1525,60 @@ describe('CaseEditorPage — the lens (§255)', () => {
     const payload = post.mock.calls[0][1] as { stepFormat: string; steps: { keyword: string }[] }
     expect(payload.stepFormat).toBe('GHERKIN')
     expect(payload.steps).toHaveLength(1)
-    // Pre-filled by the toggle: the lens requires a keyword and the author has not been asked yet,
-    // so landing them in a state their own form refuses would be the toggle's other failure mode.
     expect(payload.steps[0].keyword).toBe('GIVEN')
   })
 
-  it('shows a keyword select on every row in the Gherkin lens', async () => {
-    const user = userEvent.setup()
-    mockReads()
-    renderEditor()
+  it('opens a pre-§256 case with the keywords proposed, and does not call that a change', async () => {
+    const legacy = loadedCase({
+      id: 'c7',
+      key: 'TC-7',
+      stepFormat: 'STRUCTURED',
+      steps: [
+        { id: 's1', position: 1, keyword: null, action: 'a settled payment', testData: null, expectedResult: null, docString: null, dataTable: null },
+        { id: 's2', position: 2, keyword: null, action: 'the ledger refuses it', testData: null, expectedResult: 'Refused', docString: null, dataTable: null },
+      ],
+    })
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path.startsWith('/me/permissions')) return heldPermissions(['case:edit'], {}, PROJECT)
+      if (path.includes('/draft')) return null
+      if (path.includes('/step-suggestions')) return corpus
+      if (path.includes('/conditions')) return library
+      if (path.includes('/suites')) return suites
+      if (path.includes('/classification')) return []
+      if (path.includes('/tags')) return projectTags
+      if (path.includes('/cases/c7')) return legacy
+      return []
+    }) as never)
 
-    expect(screen.queryAllByTestId('CaseEditor.Steps.Field.Keyword')).toHaveLength(0)
-    await user.click(screen.getByTestId('CaseEditor.StepFormat.GHERKIN'))
+    render(
+      <TestProviders client={createTestQueryClient()} route={`/projects/${PROJECT}/cases/c7/edit`}>
+        <SessionRecoveryContext.Provider value={sessionRecovery}>
+          <SnackbarProvider>
+            <Routes>
+              <Route
+                path="/projects/:projectId/cases/:caseId/edit"
+                element={<CaseEditorPage mode="edit" />}
+              />
+            </Routes>
+          </SnackbarProvider>
+        </SessionRecoveryContext.Provider>
+      </TestProviders>,
+    )
 
-    expect(screen.getAllByTestId('CaseEditor.Steps.Field.Keyword')).toHaveLength(1)
+    const keywords = await screen.findAllByTestId('CaseEditor.Steps.Field.Keyword')
+    expect(keywords[0].textContent).toBe('Given')
+    expect(keywords[1].textContent).toBe('Then')
+    // The proposal is not an edit: Save stays disabled until the author actually changes something.
+    expect(screen.getByTestId('CaseEditor.Submit')).toBeDisabled()
   })
 
-  it('offers rather than mounts the keyword in the structured lens', async () => {
-    // A numbered action legitimately has no keyword, so a permanently-mounted "None" select on
-    // every row of every structured case asks a question nobody has.
-    const user = userEvent.setup()
-    mockReads()
-    renderEditor()
-
-    expect(screen.getByTestId('CaseEditor.Steps.AddKeyword')).toBeInTheDocument()
-    await user.click(screen.getByTestId('CaseEditor.Steps.AddKeyword'))
-    expect(screen.getByTestId('CaseEditor.Steps.Field.Keyword')).toBeInTheDocument()
-  })
-
-  it('refuses to save a Gherkin case with a keyword-less row, in the server’s words', async () => {
+  it('refuses a first step of And/But, in the server’s words', async () => {
     const user = userEvent.setup()
     mockReads()
     const post = vi.spyOn(api, 'post')
     renderEditor()
 
     await user.type(actionFields()[0], 'Refund it')
-    await user.click(screen.getByTestId('CaseEditor.StepFormat.GHERKIN'))
-    // Clear what the pre-fill proposed, which is the only way to reach the refusal from this screen.
     const keyword = screen.getAllByTestId('CaseEditor.Steps.Field.Keyword')[0]
     await user.click(within(keyword.closest('.MuiInputBase-root') as HTMLElement).getByRole('combobox'))
     await user.click(await screen.findByRole('option', { name: 'And' }))
@@ -1587,7 +1620,7 @@ describe('CaseEditorPage — pasting a scenario (§255)', () => {
     return user
   }
 
-  it('lands the parsed rows in the editor and switches to the Gherkin lens', async () => {
+  it('lands the parsed rows in the editor', async () => {
     mockReads()
     await paste('Replace')
 
@@ -1595,7 +1628,6 @@ describe('CaseEditorPage — pasting a scenario (§255)', () => {
     // a paste like every other operation on the list.
     await waitFor(() => expect(screen.getAllByTestId('CaseEditor.Steps.Row')).toHaveLength(3))
     expect(actionFields()[0]).toHaveValue('a settled payment')
-    expect(screen.getByTestId('CaseEditor.StepFormat.GHERKIN')).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('fills a blank title and merges the tags, rather than replacing what is there', async () => {

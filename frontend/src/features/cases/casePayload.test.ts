@@ -80,9 +80,12 @@ describe('the draft round trip', () => {
 
     // The trailing blank row is added back by the read, because the blank last row IS the add
     // control since §94. Compared without it, since the write drops it by design.
+    // `AND` and not '': §256 gives the blank invitation the keyword `nextKeyword` proposes, so the
+    // author never mints a row the form then refuses. `filled` carries live rows, so the row after
+    // them continues the scenario rather than opening one.
     expect(restored.steps.at(-1)).toEqual({
       id: null,
-      keyword: '',
+      keyword: 'AND',
       action: '',
       testData: '',
       expectedResult: '',
@@ -244,7 +247,9 @@ describe('fromCasePayload — it decodes a draft nobody validated', () => {
     expect(restored.title).toBe('')
     expect(restored.priority).toBe('MEDIUM')
     expect(restored.automationStatus).toBe('MANUAL')
-    expect(restored.stepFormat).toBe('STRUCTURED')
+    // §256: pinned rather than carried — a draft's `stepFormat`, like a case's, is no longer a
+    // value anybody chose.
+    expect(restored.stepFormat).toBe('GHERKIN')
     expect(restored.steps).toHaveLength(1)
   })
 
@@ -292,10 +297,15 @@ describe('fromCasePayload — it decodes a draft nobody validated', () => {
     expect(restored.steps[1].action).toBe('')
   })
 
-  it("reads a pre-§255 draft's null keyword as the form's ''", () => {
-    // A buffer written by an older build. `null` there meant "no keyword", which is what '' means
-    // here — and binding the null would make MUI log an uncontrolled-Select warning per row.
-    expect(fromCasePayload({ steps: [{ action: 'x', keyword: null }] }).steps[0].keyword).toBe('')
+  it("fills a pre-§256 draft's null keyword rather than restoring it as ''", () => {
+    /*
+      ~~`null` meant "no keyword", which is what '' means here.~~ → **§256.** Restoring the '' put
+      the form straight into the state R1 refuses, so Save did nothing and the buffer was never
+      cleared — the author's own restored work, unsavable, with nothing on screen saying why. The
+      proposal is made here instead, and binding the raw null would still make MUI log an
+      uncontrolled-Select warning per row.
+    */
+    expect(fromCasePayload({ steps: [{ action: 'x', keyword: null }] }).steps[0].keyword).toBe('GIVEN')
   })
 
   it('reads a missing block argument as null — the MODE, not an empty value', () => {

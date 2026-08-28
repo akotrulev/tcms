@@ -16,13 +16,14 @@ import type { AutomationStatus, Priority, StepFormat } from '../api/types';
  * ## Why these three values
  *
  * `MEDIUM` and `MANUAL` are the neutral member of their enum: neither claims anything about the case
- * that the author did not. `STRUCTURED` is the neutral one for a reason that CHANGED in §255 and
- * still holds: ~~`GHERKIN` is refused without a scenario body, so a default of `GHERKIN` would be a
- * case that cannot be written at all~~ → **`stepFormat` is a lens over one set of rows now**, and
- * `GHERKIN` is refused with a keyword-less row instead. So the default is still the permissive one
- * — a structured row needs no keyword — and it is now a *presentation* choice rather than a choice
- * about which storage the case uses. Either default produces a writable case; this one produces a
- * case the author is not asked a Gherkin question about before they have written a step.
+ * that the author did not.
+ *
+ * `stepFormat` is no longer a choice. ~~`STRUCTURED` is the neutral one... the default is still the
+ * permissive one — a structured row needs no keyword~~ → **superseded in §256: there is one format
+ * and it is `GHERKIN`.** The permissiveness that argument rested on is what made the editor mint
+ * keyword-less rows and then refuse them, and the keyword is now supplied by `nextKeyword` as each
+ * row is started rather than asked for. This constant keeps the field because `TestCaseInput` still
+ * requires it on the wire, not because anything still decides it.
  *
  * ## What this does NOT make legal, and it is deliberately not hidden here
  *
@@ -38,7 +39,7 @@ export const NEW_CASE_DEFAULTS: {
   priority: Priority;
   automationStatus: AutomationStatus;
 } = {
-  stepFormat: 'STRUCTURED',
+  stepFormat: 'GHERKIN',
   priority: 'MEDIUM',
   automationStatus: 'MANUAL',
 };
