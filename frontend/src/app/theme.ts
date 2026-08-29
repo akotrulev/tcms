@@ -15,12 +15,12 @@ import { breakpoints } from './breakpoints';
 // must be made in both — this is the one accepted duplication, and it's why status colours
 // are exported as a map rather than re-typed at each call site.
 export const statusColors = {
-  PASSED: { light: '#2e7d5b', dark: '#5aab84' },
+  PASSED: { light: '#2e7d5b', dark: '#7ec8a0' },
   FAILED: { light: '#c0392b', dark: '#e07568' },
-  BLOCKED: { light: '#b7791f', dark: '#d9a441' },
+  BLOCKED: { light: '#b7791f', dark: '#e0b95f' },
   SKIPPED: { light: '#6b7280', dark: '#8b94a3' },
   UNTESTED: { light: '#9ca3af', dark: '#6b7280' },
-  RETEST: { light: '#7c5cbf', dark: '#a58ad6' },
+  RETEST: { light: '#3f5aa6', dark: '#8fa9e0' },
 } as const;
 
 export const lifecycleColors = {

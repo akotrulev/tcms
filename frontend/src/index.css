@@ -1,4 +1,50 @@
 /*
+ * Tailwind's layers, imported individually so that `preflight.css` can be LEFT OUT.
+ *
+ * This is deliberate and temporary (plan 007, D2). Preflight resets the margins, list styles
+ * and heading sizes that MUI's Emotion baseline is currently supplying, so importing it while
+ * any MUI screen survives strips the typography off every one of them at once. Tailwind's
+ * utilities and theme are wanted now; its reset is wanted only once the last `@mui` import is
+ * gone, which is task T16 — that task adds the missing line and owns the fallout.
+ *
+ * `@import "tailwindcss"` is the form that includes preflight. Do not "simplify" these three
+ * lines back into it before T16.
+ */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/*
+ * The bridge that makes `bg-panel`, `text-ink-3` and `font-mono` mean the tokens below rather
+ * than Tailwind's defaults.
+ *
+ * `inline` is load-bearing: it makes Tailwind emit `var(--color-surface)` into the utility
+ * instead of copying the value out of it. So the custom properties stay the single source and a
+ * palette swap on `[data-mui-color-scheme]` still moves every utility with it — a non-inline
+ * @theme would freeze the light values into the class and break dark mode silently.
+ *
+ * The names on the left are the render kit's (`docs/specs/assets/renders/tcms.css`); the ones on
+ * the right are the app's. That mapping is the whole "port, not translation" claim of the design
+ * language §1, written where the compiler can see it.
+ */
+@theme inline {
+  --color-ground: var(--color-surface-ground);
+  --color-paper: var(--color-surface-sunken);
+  --color-panel: var(--color-surface);
+  --color-field: var(--color-surface-field);
+
+  --color-ink: var(--color-text);
+  --color-ink-2: var(--color-text-muted);
+  --color-ink-3: var(--color-text-faint);
+  --color-ink-4: var(--color-text-ghost);
+
+  --color-steel: var(--color-action-primary);
+
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/*
  * Design tokens — the ONLY thing that legitimately lives global (styling skill).
  * No component styles here.
  *
@@ -35,7 +81,22 @@
   --color-blocked: #b7791f;
   --color-skipped: #6b7280;
   --color-untested: #9ca3af;
-  --color-retest: #7c5cbf;
+  /* Blue, not the former purple: design language rule 5 makes `Then` and `Retest` one hue, and
+     that is a claim about what a colour MEANS, so it holds in both palettes. Darkened from the
+     dark theme's #8fa9e0 to carry on white. */
+  --color-retest: #3f5aa6;
+
+  /* The Gherkin keyword hues — the same three values as passed/blocked/retest, by rule 5. */
+  --color-given: #2e7d5b;
+  --color-when: #b7791f;
+  --color-then: #3f5aa6;
+
+  /* The two surfaces the app had no name for; see the dark block for what each is. */
+  --color-surface-ground: #eaeef3;
+  --color-surface-field: #f0f3f7;
+
+  /* The fourth ink weight — ghosts, placeholders, gutters, disabled. */
+  --color-text-ghost: #a8b2c0;
   /* §97/M9. Matches the colour V32's seed writes into case_status.color — status colour is
      load-bearing data in a TCMS and must not be invented twice. */
   --color-wip: #2563eb;
@@ -127,12 +188,39 @@
   --color-text-faint: #6b7a8d;
   --color-on-action: #0f141b;
 
-  --color-passed: #5aab84;
+  /*
+   * Three hues moved to the render kit's values (design language §1). `retest` is the one that
+   * changes meaning rather than shade: purple → blue, because rule 5 makes `Then` and `Retest`
+   * ONE colour. The editor and the runner render the same steps, and a tester should not have to
+   * learn two meanings for one hue. `--color-given/when/then` below are the same three values
+   * under the names the document surface uses; they are declared twice because the two names mean
+   * different things to a reader, not because they may ever diverge — `themeTokenParity` fails if
+   * they do.
+   */
+  --color-passed: #7ec8a0;
   --color-failed: #e07568;
-  --color-blocked: #d9a441;
+  --color-blocked: #e0b95f;
   --color-skipped: #8b94a3;
   --color-untested: #6b7280;
-  --color-retest: #a58ad6;
+  --color-retest: #8fa9e0;
+
+  --color-given: #7ec8a0;
+  --color-when: #e0b95f;
+  --color-then: #8fa9e0;
+
+  /*
+   * The two surfaces the app had no name for. `--color-ground` is the window behind the shell;
+   * `--color-field` is recessed — inputs, code blocks, table zebra, empty chart tracks.
+   */
+  --color-surface-ground: #0a0e14;
+  --color-surface-field: #0e141c;
+
+  /*
+   * The fourth ink weight. The kit has four and never a fifth; the app shipped three, so
+   * `--color-text-faint` keeps the kit's `--ink-3` role (labels, column heads) and this takes
+   * `--ink-4` (ghosts, placeholders, gutters, disabled).
+   */
+  --color-text-ghost: #4a5566;
   --color-wip: #6ba0f0;
 
   --color-success: #5aab84;

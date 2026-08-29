@@ -78,6 +78,42 @@ describe('theme.ts mirrors index.css', () => {
    * chip on a run with a 0% pass rate. The progress and viz tiers must stay disjoint from the
    * outcome tier **by value**, not only by name — sharing a hex is how the overload comes back.
    */
+  /**
+   * The render kit adds four names the app had none for (design language §1): two surfaces, a
+   * fourth ink weight, and the three Gherkin keyword hues. They are asserted here rather than
+   * left to a screen to discover, because a missing token renders as `transparent` — a surface
+   * that vanishes rather than an error anything reports.
+   */
+  it.each([
+    '--color-surface-ground',
+    '--color-surface-field',
+    '--color-text-ghost',
+    '--color-given',
+    '--color-when',
+    '--color-then',
+  ])('%s is declared in both palettes', (token) => {
+    expect(light.get(token), `${token} missing from :root`).toBeDefined();
+    expect(dark.get(token), `${token} missing from the dark palette`).toBeDefined();
+  });
+
+  /**
+   * Design language rule 5: one palette serves keywords and results. `Given` is the green that
+   * `Passed` is, `When` the amber that `Blocked` is, `Then` the blue that `Retest` is.
+   *
+   * This is a computed check rather than a careful reading for the reason CLAUDE.md states about
+   * catalogue-wide invariants: the two names sit in different parts of the file, both look right
+   * in isolation, and the failure — the editor and the runner colouring the same step differently
+   * — is only visible on a screen nobody opens with both in view.
+   */
+  it.each([
+    ['--color-given', '--color-passed'],
+    ['--color-when', '--color-blocked'],
+    ['--color-then', '--color-retest'],
+  ])('%s is the same hue as %s in both palettes', (keyword, result) => {
+    expect(light.get(keyword)).toBe(light.get(result));
+    expect(dark.get(keyword)).toBe(dark.get(result));
+  });
+
   it.each(['--color-progress-done', '--color-viz-1', '--color-viz-2'])(
     '%s is not a recoloured outcome token',
     (token) => {

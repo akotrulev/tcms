@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 /**
  * `__BUILD_ID__` identifies the build a tab is running.
@@ -48,7 +49,7 @@ const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:80
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   define: {
     __BUILD_ID__: JSON.stringify(buildId),
     __APP_VERSION__: JSON.stringify(appVersion),
