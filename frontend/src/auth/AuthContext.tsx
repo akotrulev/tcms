@@ -27,14 +27,14 @@ import { publishSession, subscribeSession } from './sessionChannel';
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   /*
-    A fresh tab starts signed out, because the token lives in memory and this module was just
-    evaluated — see `accessToken.ts` for the trade and what M4 changes about it. So there is no
-    stored user to paint optimistically any more; the name arrives with `/me` or not at all.
+    ~~A fresh tab starts signed out, because the token lives in memory and this module was just
+    evaluated.~~ → superseded: `accessToken` is seeded from `localStorage` at module evaluation,
+    so a reload and a newly opened tab both start with a token and the mount-time confirmation
+    below is the ordinary path rather than a seam kept alive for M4.
 
-    The mount-time confirmation below is kept rather than deleted even though a real page load
-    can never satisfy it: it is the seam a recovered token comes back through, and it is what
-    M4's refresh rung will hand a session to. Costing one branch to keep the restore path alive
-    is cheaper than rediscovering it.
+    There is still no stored *user* to paint optimistically: the name arrives with `/me` or not
+    at all. The token authenticates; who it belongs to and whether it is still good are the
+    server's to answer, and it answers both in the one request.
   */
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [status, setStatus] = useState<SessionStatus>(() =>
@@ -111,16 +111,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         /*
-          Someone signed in elsewhere, and the message carries the token because this tab has no
-          copy of its own to read — see `accessToken.ts`.
+          Someone signed in elsewhere, and the message carries the token rather than asking this
+          tab to re-read storage — see `accessToken.ts`.
 
-          ~~**This deliberately does not adopt by reading storage, and that cost a browser pass to
+          **This deliberately does not adopt by reading storage, and that cost a browser pass to
           learn.** `localStorage` is shared between tabs but it is not synchronously consistent
           between the renderer *processes* they run in: a `BroadcastChannel` message routes
           through the browser process and can arrive before the sibling's view of the write has
-          caught up. Reading storage here returned `null` on roughly half the runs.~~ → the race
-          is gone with the shared copy it was about: the credential arrives *in* the message, so
-          there is no second view of it to be stale.
+          caught up. Reading storage here returned `null` on roughly half the runs. (The strike
+          this paragraph carried while the token was memory-only is gone with it: storage is
+          shared again, so the race it describes is live again.)
 
           The session is still re-confirmed against `/me` rather than trusted, which is the
           mechanism this provider already documents as correct ("restoring a session is a server

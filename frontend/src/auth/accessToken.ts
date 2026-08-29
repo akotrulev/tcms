@@ -1,5 +1,8 @@
+import { safeStorage } from '../lib/safeStorage';
+
 /**
- * The access token, held in memory for the life of the tab and never written to storage.
+ * The access token, held in memory and mirrored into `localStorage` so it survives a reload and
+ * is there for a tab that opens later.
  *
  * ## Why this is a module and not state
  *
@@ -8,32 +11,54 @@
  * genuine per-tab singleton rather than shared *user data*, so it is the one shape the
  * "no mutable module state" rule exempts.
  *
- * ## What moving it out of `localStorage` costs, and what it buys
+ * ## ~~What moving it out of `localStorage` costs, and what it buys~~ → superseded
  *
- * It buys the obvious thing: a token at rest in `localStorage` is readable by any script that
+ * ~~It buys the obvious thing: a token at rest in `localStorage` is readable by any script that
  * achieves execution on this origin, at any later time, including long after the injection that
- * planted it. In memory it dies with the tab.
+ * planted it. In memory it dies with the tab.~~
  *
- * It costs a reload. There is no refresh endpoint yet — external OIDC and its rotation land with
+ * ~~It costs a reload. There is no refresh endpoint yet — external OIDC and its rotation land with
  * backend M4 — so a token this app cannot re-mint is a token a reload cannot recover, and every
- * refresh, restored tab and new window starts at the login form. That is the accepted trade, and
- * it is what `SessionRecoveryProvider`'s ladder is already shaped to absorb: rungs 1–2 slot in
- * above it when M4 lands, and this file is where the recovered token will be put.
+ * refresh, restored tab and new window starts at the login form. That is the accepted trade.~~
  *
- * Cross-tab sign-in still works, and deliberately not through storage: `sessionChannel` carries
- * the token on the `signed-in` message. A `BroadcastChannel` is same-origin like `localStorage`
- * is, so this is no weaker against a script already running here — but the message is transient,
- * so a script that arrives *afterwards* has nothing to read.
+ * The trade was reversed on the user's instruction: with no refresh endpoint, "dies with the tab"
+ * in practice meant *every new tab and every refresh lands on the login form*, which is what the
+ * memory-only shape actually cost day to day. So the token is persisted again, and the XSS
+ * exposure it re-opens is accepted deliberately rather than by omission — a script that achieves
+ * execution on this origin can read this key at any later time, so it is the CSP and the input
+ * paths, not this module, that carry the weight of preventing that.
+ *
+ * Storage is only a **mirror**. The in-memory copy stays authoritative for reads, so a
+ * `localStorage` that throws (quota, Safari private mode, a blocked third-party context) degrades
+ * exactly to the old behaviour — a working session for the life of the tab — rather than to a
+ * broken one. `safeStorage` is what makes that true; it never throws at this caller.
+ *
+ * Whether the persisted token is still *valid* is unchanged and still a server question:
+ * `AuthContext` confirms it against `/me` on mount and clears it on a 401. Persisting a credential
+ * does not persist a session.
+ *
+ * Cross-tab sign-in still carries the token on `sessionChannel`'s `signed-in` message rather than
+ * asking siblings to re-read storage — a `BroadcastChannel` message routes through the browser
+ * process and can beat the sibling renderer's view of the write, which read as `null` on roughly
+ * half the runs when it was tried.
  */
 
-let token: string | null = null;
+const STORAGE_KEY = 'tcms-access-token';
+
+/**
+ * Seeded from storage at module evaluation — i.e. before `AuthProvider` first renders, which is
+ * what lets its mount-time `/me` confirmation see a token at all on a fresh page load.
+ */
+let token: string | null = safeStorage.get(STORAGE_KEY);
 
 export const accessToken = {
   get: (): string | null => token,
   set: (next: string): void => {
     token = next;
+    safeStorage.set(STORAGE_KEY, next);
   },
   clear: (): void => {
     token = null;
+    safeStorage.remove(STORAGE_KEY);
   },
 };

@@ -35,9 +35,10 @@ export type SessionBroadcast =
   /**
    * Someone signed in on another tab. `email` identifies *who*, which decides what siblings do.
    *
-   * `token` rides along because the credential no longer lives in shared storage — see
-   * `accessToken.ts`. Transient by construction: a script that starts after the message was
-   * posted has nothing to read, which is the property `localStorage` could not offer.
+   * `token` rides along rather than being re-read from storage by the receiver: a
+   * `BroadcastChannel` message routes through the browser process and can arrive before the
+   * sibling renderer's view of the write has caught up, which read as `null` on roughly half the
+   * runs when it was tried. See `accessToken.ts`.
    */
   | { type: 'signed-in'; email: string; token: string }
   /** Someone deliberately signed out on another tab. */
