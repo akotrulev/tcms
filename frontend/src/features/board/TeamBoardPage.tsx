@@ -1,9 +1,11 @@
-import { Alert, AlertTitle, Box, Button, Typography } from '@mui/material';
+import { useEffect } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
+import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
 import { useTeamBoard, useTeams } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
-import { PageHeader } from '../../components/PageHeader';
+import { Banner } from '../../components/kit';
+import { buttonVariants } from '../../components/ui';
 import { Board } from './BoardPage';
 
 /**
@@ -84,6 +86,16 @@ export function TeamBoardPage() {
   const team = teams.data?.find((row) => row.id === teamId);
 
   /*
+    ~~Raised by `PageHeader`.~~ → superseded by 007 T13's top strip; kept here for the reason
+    `MyWorkPage` records. It names the team once it is known, so the second announcement is the
+    useful one rather than a repeat.
+  */
+  const announce = useAnnounce();
+  useEffect(() => {
+    announce(team ? `${team.name} board page loaded` : 'Team board page loaded');
+  }, [announce, team]);
+
+  /*
     **The one refusal this screen has to word itself.**
 
     The server's 404 is empty-bodied and indistinguishable across its three causes on purpose (§6t:
@@ -105,39 +117,49 @@ export function TeamBoardPage() {
   const missing = items.isError && items.error instanceof ApiError && items.error.status === 404;
 
   return (
-    <Box>
+    <div>
+      <title>{team ? `Board · ${team.name} · TCMS` : 'Team board · TCMS'}</title>
+
       {/*
         No breadcrumbs. The honest ancestor would be `/admin/teams`, and a crumb pointing there
         would tell a member who may open this board that they came from a screen whose every
         control refuses them. The "Back to teams" affordance lives on the 404 instead, where it is
         the answer to a question the reader is actually asking.
       */}
-      <PageHeader
-        testId="TeamBoard.Header"
-        title={team ? `${team.name} — board` : 'Team board'}
-        documentTitle={team ? `Board · ${team.name}` : 'Team board'}
-        subtitle="Work assigned to this team’s members, in every project you can see. Somebody with different project access will see a different set."
-      />
+      <header
+        data-testid="TeamBoard.Header"
+        className="mb-3 flex flex-wrap items-start gap-3 border-b border-white/8 pb-3"
+      >
+        <div className="min-w-0 flex-1">
+          <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">
+            {team ? `${team.name} — board` : 'Team board'}
+          </h1>
+          <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
+            Work assigned to this team’s members, in every project you can see. Somebody with
+            different project access will see a different set.
+          </p>
+        </div>
+      </header>
 
       {missing ? (
-        <Alert severity="error" data-testid="TeamBoard.Missing" sx={{ my: 1 }}>
-          <AlertTitle>No such team</AlertTitle>
-          <Typography variant="body2">
-            This team doesn’t exist, or it belongs to another company. It may have been deleted since
-            this link was made.
-          </Typography>
-          <Button
-            component={RouterLink}
-            to="/admin/teams"
-            size="small"
-            variant="outlined"
-            color="error"
-            data-testid="TeamBoard.Missing.Teams"
-            sx={{ mt: 1 }}
-          >
-            Back to teams
-          </Button>
-        </Alert>
+        <div role="alert">
+          <Banner tone="bad" data-testid="TeamBoard.Missing">
+            <div className="flex flex-col items-start gap-2">
+              <p className="m-0 font-medium text-ink">No such team</p>
+              <p className="m-0">
+                This team doesn’t exist, or it belongs to another company. It may have been deleted
+                since this link was made.
+              </p>
+              <RouterLink
+                to="/admin/teams"
+                data-testid="TeamBoard.Missing.Teams"
+                className={buttonVariants({ variant: 'danger', size: 'sm' })}
+              >
+                Back to teams
+              </RouterLink>
+            </div>
+          </Banner>
+        </div>
       ) : (
         <DataRegion
           testId="TeamBoard.Content"
@@ -165,6 +187,6 @@ export function TeamBoardPage() {
           {(rows) => <Board items={rows} crossProject />}
         </DataRegion>
       )}
-    </Box>
+    </div>
   );
 }

@@ -1,6 +1,5 @@
-import { Box, Chip, Stack, Typography } from '@mui/material';
 import type { Team } from '../../api/types';
-import { Identifier } from '../../components/Identifier';
+import { Badge } from '../../components/kit';
 import { formatCount } from '../../lib/format';
 import { flattenTeamTree } from '../admin/teamTree';
 
@@ -14,39 +13,31 @@ import { flattenTeamTree } from '../admin/teamTree';
  * org chart, so a team it silently omits is one nobody will think to look for.
  *
  * Read-only. Every edit affordance is on `/admin/teams` behind `company:teams`; this screen gates
- * nothing and therefore offers nothing to gate.
+ * nothing and therefore offers nothing to gate — which is also why every label here is a **badge**
+ * and not a chip (design language §5): a lead, a member count and a project role are all state the
+ * system owns, and a chip would promise a filter that does not exist.
  */
 export function OrgChartTeams({ teams }: { teams: Team[] }) {
   const tree = flattenTeamTree(teams);
 
   return (
-    <Stack sx={{ gap: 1.5 }} data-testid="OrgChart.Teams.List">
+    <div className="flex flex-col gap-2" data-testid="OrgChart.Teams.List">
       {tree.map(({ team, depth }) => (
-        <Box
+        <div
           key={team.id}
           data-testid="OrgChart.Teams.Item"
-          sx={{
-            ml: depth * 3,
-            pl: 1.5,
-            borderLeft: depth > 0 ? '2px solid' : 'none',
-            borderColor: 'divider',
-          }}
+          className={depth > 0 ? 'border-l border-white/8 pl-3' : undefined}
+          style={depth > 1 ? { marginLeft: (depth - 1) * 12 } : undefined}
         >
-          <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              {team.name}
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              <Identifier variant="muted">{formatCount(team.members.length)}</Identifier>{' '}
-              {team.members.length === 1 ? 'member' : 'members'}
-            </Typography>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[13px] font-semibold text-ink">{team.name}</span>
+            <span className="font-mono text-[11px] text-ink-4">
+              {formatCount(team.members.length)} {team.members.length === 1 ? 'member' : 'members'}
+            </span>
             {team.leads.map((lead) => (
-              <Chip
-                key={lead.id}
-                size="small"
-                variant="outlined"
-                label={`lead: ${lead.displayName}`}
-              />
+              <Badge key={lead.id} tone="steel">
+                lead: {lead.displayName}
+              </Badge>
             ))}
             {/*
               `Team.projects` is already clipped to what this reader may see — the server does it,
@@ -54,15 +45,13 @@ export function OrgChartTeams({ teams }: { teams: Team[] }) {
               see", not "none", which is why nothing counts what is missing.
             */}
             {team.projects.map((project) => (
-              <Chip
-                key={project.projectId}
-                size="small"
-                label={`${project.projectName} · ${project.roleName}`}
-              />
+              <Badge key={project.projectId} tone="plain">
+                {project.projectName} · {project.roleName}
+              </Badge>
             ))}
-          </Stack>
-        </Box>
+          </div>
+        </div>
       ))}
-    </Stack>
+    </div>
   );
 }

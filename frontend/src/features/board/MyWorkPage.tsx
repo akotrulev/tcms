@@ -1,7 +1,7 @@
-import { Box } from '@mui/material';
+import { useEffect } from 'react';
+import { useAnnounce } from '../../a11y/useAnnounce';
 import { useMyWork } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
-import { PageHeader } from '../../components/PageHeader';
 import { Board } from './BoardPage';
 
 /**
@@ -42,22 +42,46 @@ import { Board } from './BoardPage';
  * **Never 404s, and an empty list is not an error.** A member holding no project grants gets an
  * empty board — reachable and empty — which is the distinction the project board has to make
  * (`[]` vs 404) and this one, naming no project, cannot fail to make.
+ *
+ * <h2>The render is frame B of `renders/04-board-and-people.html`</h2>
+ *
+ * *"The same board, one filter pre-applied — so it is the same component, with a different empty
+ * state."* The top strip states the scope in one line where the project board carries a
+ * breadcrumb, because there is no ancestor to point at.
  */
 export function MyWorkPage() {
   const items = useMyWork();
 
+  /*
+    ~~Raised by `PageHeader`.~~ → superseded by 007 T13, which replaced that header with the
+    render's top strip. Kept rather than dropped: a route change that announces nothing leaves a
+    screen-reader user on a page they have no way to know has changed.
+  */
+  const announce = useAnnounce();
+  useEffect(() => {
+    announce('My work page loaded');
+  }, [announce]);
+
   return (
-    <Box>
+    <div>
+      <title>My work · TCMS</title>
+
       {/*
         No breadcrumbs, unlike every project screen: this route has no ancestor. A single crumb
         reading "My work" above a title reading "My work" is chrome that says nothing twice.
       */}
-      <PageHeader
-        testId="MyWork.Header"
-        title="My work"
-        documentTitle="My work"
-        subtitle="Everything assigned to you, across every project you can see — executions to record, reviews you have been asked for, and your own tasks."
-      />
+      <header
+        data-testid="MyWork.Header"
+        className="mb-3 flex flex-wrap items-start gap-3 border-b border-white/8 pb-3"
+      >
+        <div className="min-w-0 flex-1">
+          <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">My work</h1>
+          <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
+            Everything assigned to you, across every project you can see — executions to record,
+            reviews you have been asked for, and your own tasks.
+          </p>
+        </div>
+      </header>
 
       <DataRegion
         testId="MyWork.Content"
@@ -84,6 +108,6 @@ export function MyWorkPage() {
         */}
         {(rows) => <Board items={rows} crossProject />}
       </DataRegion>
-    </Box>
+    </div>
   );
 }

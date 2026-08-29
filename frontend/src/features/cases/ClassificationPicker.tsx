@@ -1,23 +1,9 @@
-import {
-  Box,
-  Checkbox,
-  FormControl,
-  FormControlLabel,
-  FormLabel,
-  MenuItem,
-  Radio,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
-import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
-import { TreeItem } from '@mui/x-tree-view/TreeItem';
-import { useMemo } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { useMemo, useRef, type ReactNode } from 'react';
 
-import type { ClassificationDimension } from '../../api/types';
+import type { ClassificationDimension, ClassificationValue } from '../../api/types';
 import { buildValueTree, type ClassificationValueNode } from '../../lib/classification';
-import { inputTestId } from '../../lib/muiTestIds';
-
+import { cn } from '../../lib/cn';
 
 /**
  * Choosing a case's classification — all four dimensions, one control shape per dimension.
@@ -31,21 +17,27 @@ import { inputTestId } from '../../lib/muiTestIds';
  *
  * | cardinality | hierarchical | control |
  * |---|---|---|
- * | SINGLE | no | a select, with a "None" option — a case need not be classified |
- * | MULTI | no | checkboxes |
- * | MULTI | yes | a tree of checkboxes (the Feature dimension) |
+ * | SINGLE | either | a rail row that opens a listbox, with a "None" option — a case need not be classified |
+ * | MULTI | either | a flat list of checkboxes, indented where the vocabulary has depth |
  *
- * `SINGLE + hierarchical` is not a combination the seed creates and is rendered as a tree of
- * **radios**, which is the honest reading of both flags rather than a thrown error: refusing to
- * draw a dimension a client legitimately configured would hide their data behind a crash.
+ * ~~`SINGLE + hierarchical` is rendered as a tree of **radios**.~~ → superseded by 007 T13: the
+ * two hierarchical shapes collapse into the flat ones, because **a classification vocabulary is a
+ * flat list per dimension with one level of parentage**, not a tree — which is all the `SimpleTreeView`
+ * this file used to import was ever carrying. Depth survives as an indent, so parentage is still
+ * legible; what goes is a whole tree widget, its expansion state and its keyboard model, for one
+ * level of nesting. The MUI tree-view package is imported by no file in the app as of that task.
+ *
+ * The hierarchical SINGLE case also loses its one genuinely awkward affordance with it: a radio
+ * group cannot be un-chosen by clicking the chosen one, so it was wired as a toggle. The listbox
+ * has a "None" option, which is the same escape hatch the flat SINGLE control always had.
  *
  * ## Cardinality is enforced by the control, not by validation
  *
- * A SINGLE dimension is a radio group, so a second value cannot be chosen. That is deliberate:
- * the alternative is a checkbox list plus a Zod refinement, which lets someone tick two boxes and
- * then tells them off for it. The server still checks — `curl` runs no React — and V2's trigger
- * still checks under that; this is the layer that makes the rule feel like a shape rather than a
- * rejection.
+ * A SINGLE dimension is a listbox that takes one value, so a second value cannot be chosen. That is
+ * deliberate: the alternative is a checkbox list plus a Zod refinement, which lets someone tick two
+ * boxes and then tells them off for it. The server still checks — `curl` runs no React — and V2's
+ * trigger still checks under that; this is the layer that makes the rule feel like a shape rather
+ * than a rejection.
  *
  * ## An empty vocabulary renders NO control (003 Phase 1, finding 3)
  *
@@ -63,11 +55,10 @@ import { inputTestId } from '../../lib/muiTestIds';
  *
  * ## Parents are selectable
  *
- * The Feature tree offers a parent exactly as it offers a leaf. The editor previously rendered
+ * The Feature list offers a parent exactly as it offers a leaf. The editor previously rendered
  * features read-only on the stated grounds that a flat select "would let someone set a parent where
  * a leaf is required" — **no such rule exists** in the plan, the ERD, the roles spec or `V1`, and
- * §6q's rule that a feature filter includes descendants is about reading. What a flat select really
- * loses is the parentage, which is why this is a tree.
+ * §6q's rule that a feature filter includes descendants is about reading.
  */
 
 export function ClassificationPicker({
@@ -93,7 +84,7 @@ export function ClassificationPicker({
    * while the picker keeps the one thing it knows, which is *which* of them are empty. Called only
    * when there is at least one, so a caller need not check.
    */
-  emptyNotice?: (empty: ClassificationDimension[]) => React.ReactNode;
+  emptyNotice?: (empty: ClassificationDimension[]) => ReactNode;
 }) {
   const chosen = useMemo(() => new Set(selected), [selected]);
   /*
@@ -123,15 +114,11 @@ export function ClassificationPicker({
   };
 
   if (dimensions.length === 0) {
-    return (
-      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-        This project has no classification dimensions yet.
-      </Typography>
-    );
+    return <p className="m-0 text-[13px] text-ink-3">This project has no classification dimensions yet.</p>;
   }
 
   return (
-    <Stack sx={{ gap: 2.5 }} data-testid={`${testIdPrefix}.Classification`}>
+    <div className="flex flex-col gap-5" data-testid={`${testIdPrefix}.Classification`}>
       {usable.map((dimension) => (
         <DimensionControl
           key={dimension.id}
@@ -144,10 +131,33 @@ export function ClassificationPicker({
         />
       ))}
       {empty.length > 0 && emptyNotice ? (
-        <Box data-testid={`${testIdPrefix}.Classification.EmptyNotice`}>{emptyNotice(empty)}</Box>
+        <div data-testid={`${testIdPrefix}.Classification.EmptyNotice`}>{emptyNotice(empty)}</div>
       ) : null}
-    </Stack>
+    </div>
   );
+}
+
+/** One dimension's values, depth-first, carrying the indent a hierarchy earns. */
+interface FlatValue {
+  value: ClassificationValue;
+  depth: number;
+}
+
+function flatten(nodes: ClassificationValueNode[], depth = 0): FlatValue[] {
+  return nodes.flatMap((node) => [{ value: node.value, depth }, ...flatten(node.children, depth + 1)]);
+}
+
+/**
+ * Where a value's `data-testid` comes from, and why the two shapes disagree.
+ *
+ * A hierarchical dimension's values are addressed **globally** (`Classification.Value.<id>`) and a
+ * flat one's are addressed **under their dimension**. That is not a design; it is what shipped, and
+ * both spellings are keyed on by tests and by the QA page objects. Renaming either is a change to
+ * a locator contract this task does not own — recorded here so the next reader knows it is
+ * inherited rather than intended.
+ */
+function testIdForValue(dimension: ClassificationDimension, dimensionTestId: string, valueId: string) {
+  return dimension.hierarchical ? `Classification.Value.${valueId}` : `${dimensionTestId}.${valueId}`;
 }
 
 function DimensionControl({
@@ -165,166 +175,182 @@ function DimensionControl({
   onSelectOne: (valueId: string | null) => void;
   onToggle: (valueId: string, on: boolean) => void;
 }) {
-  const tree = useMemo(() => buildValueTree(dimension.values), [dimension.values]);
+  const values = useMemo(() => flatten(buildValueTree(dimension.values)), [dimension.values]);
   const testId = `${testIdPrefix}.Dimension.${dimension.key}`;
 
-  /*
-    ~~An empty vocabulary says so here.~~ → 003 Phase 1: an empty dimension never reaches this
-    component, because `ClassificationPicker` above does not render one. The caption it used to
-    draw is the caller's one notice now — see that component's header for why four of them in a
-    320px rail was the defect and not the absence.
-  */
-
-  // A flat SINGLE dimension is a select rather than a radio group: Test Type and Test Level have
-  // eight and seven values, and a column of radios that tall drowns out the fields around it. The
-  // cardinality is still enforced by the control — a select takes one value.
-  if (dimension.cardinality === 'SINGLE' && !dimension.hierarchical) {
-    const current = dimension.values.find((value) => chosen.has(value.id));
+  if (dimension.cardinality === 'SINGLE') {
     return (
-      <TextField
-        select
-        label={dimension.name}
-        fullWidth
+      <SingleValue
+        dimension={dimension}
+        values={values}
+        chosen={chosen}
         disabled={disabled}
-        value={current?.id ?? ''}
-        onChange={(event) => onSelectOne(event.target.value || null)}
-        slotProps={{
-          select: {
-            SelectDisplayProps: { 'data-testid': testId } as React.HTMLAttributes<HTMLDivElement>,
-          },
-        }}
-      >
-        {/* A case need not be classified — `test_case` has no NOT NULL for any of this, and a
-            picker with no way back to "unset" makes the first accidental choice permanent. */}
-        <MenuItem value="">
-          <em>None</em>
-        </MenuItem>
-        {dimension.values.map((value) => (
-          <MenuItem key={value.id} value={value.id}>
-            {value.name}
-          </MenuItem>
-        ))}
-      </TextField>
+        testId={testId}
+        onSelectOne={onSelectOne}
+      />
     );
   }
 
-  if (dimension.hierarchical) {
-    return (
-      <FormControl component="fieldset" disabled={disabled} data-testid={testId}>
-        <FormLabel component="legend" sx={{ typography: 'caption', mb: 0.5 }}>
-          {dimension.name}
-        </FormLabel>
-        <SimpleTreeView
-          // Every node expanded by default. A collapsed tree hides the selected value, and the
-          // first thing a reader needs from this control is what the case is already classified as.
-          defaultExpandedItems={dimension.values.map((value) => value.id)}
-          sx={{ '& .MuiTreeItem-content': { py: 0 } }}
-        >
-          {tree.map((node) => (
-            <ValueTreeItem
-              key={node.value.id}
-              node={node}
-              chosen={chosen}
-              disabled={disabled}
-              single={dimension.cardinality === 'SINGLE'}
-              onSelectOne={onSelectOne}
-              onToggle={onToggle}
-            />
-          ))}
-        </SimpleTreeView>
-      </FormControl>
-    );
-  }
-
-  // MULTI and flat — Execution Phase.
   return (
-    <FormControl component="fieldset" disabled={disabled} data-testid={testId}>
-      <FormLabel component="legend" sx={{ typography: 'caption', mb: 0.5 }}>
+    <fieldset disabled={disabled} data-testid={testId} className="m-0 min-w-0 border-0 p-0">
+      <legend className="mb-1.5 p-0 font-mono text-[11px] uppercase tracking-[.06em] text-ink-4">
         {dimension.name}
-      </FormLabel>
-      <Stack direction="row" sx={{ flexWrap: 'wrap', columnGap: 2 }}>
-        {dimension.values.map((value) => (
-          <FormControlLabel
+      </legend>
+      <div className="flex flex-col">
+        {values.map(({ value, depth }) => (
+          <label
             key={value.id}
-            control={
-              <Checkbox
-                size="small"
-                checked={chosen.has(value.id)}
-                onChange={(event) => onToggle(value.id, event.target.checked)}
-                slotProps={inputTestId(`${testId}.${value.id}`)}
-              />
-            }
-            label={value.name}
-          />
+            style={depth > 0 ? { paddingLeft: depth * 16 } : undefined}
+            className="flex cursor-pointer items-center gap-2 rounded-[5px] py-1 text-[13px] text-ink-2 hover:bg-white/3"
+          >
+            {/*
+              A native input rather than `components/ui/checkbox`, and it is the one place in the
+              port that does not take the kit primitive. That primitive is a Radix `<button>`, and a
+              button is only reached from a wrapping `<label>` through the label's activation
+              behaviour — which is exactly the path a test driving the control directly also
+              travels, so the row would fire twice or not at all depending on how faithfully the
+              environment implements it. A native checkbox is the labeled control of its own label
+              by construction, and `accent-color` carries the kit's steel with no widget to build.
+            */}
+            <input
+              type="checkbox"
+              checked={chosen.has(value.id)}
+              onChange={(event) => onToggle(value.id, event.target.checked)}
+              data-testid={testIdForValue(dimension, testId, value.id)}
+              className={cn(
+                'size-4 shrink-0 cursor-pointer rounded-[4px] accent-[color:var(--color-steel)]',
+                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
+                'disabled:cursor-not-allowed disabled:opacity-45',
+              )}
+            />
+            <span>{value.name}</span>
+          </label>
         ))}
-      </Stack>
-    </FormControl>
+      </div>
+    </fieldset>
   );
 }
 
-function ValueTreeItem({
-  node,
+/**
+ * A SINGLE dimension: the rail row of design language rule 3, opening a listbox of the whole
+ * vocabulary.
+ *
+ * **A `<details>` rather than `components/kit/RailRow` plus state**, for two reasons that pull the
+ * same way. A native disclosure reports its own expanded state to a screen reader, and `RailRow`'s
+ * props cannot carry the `aria-expanded` a hand-rolled one would need — it is a button whose
+ * `onOpen` presumes the caller owns the popup. And a disclosure with no JavaScript state is a
+ * control with no way to disagree with itself about whether it is open. The summary is styled to
+ * the same rule the kit row carries: quiet at rest, bordered on hover, focus-ringed, value right.
+ */
+function SingleValue({
+  dimension,
+  values,
   chosen,
   disabled,
-  single,
+  testId,
   onSelectOne,
-  onToggle,
 }: {
-  node: ClassificationValueNode;
+  dimension: ClassificationDimension;
+  values: FlatValue[];
   chosen: Set<string>;
   disabled?: boolean;
-  single: boolean;
+  testId: string;
   onSelectOne: (valueId: string | null) => void;
-  onToggle: (valueId: string, on: boolean) => void;
 }) {
-  const isChosen = chosen.has(node.value.id);
+  const details = useRef<HTMLDetailsElement>(null);
+  const current = values.find(({ value }) => chosen.has(value.id));
+
+  const choose = (valueId: string | null) => {
+    onSelectOne(valueId);
+    if (details.current) details.current.open = false;
+  };
+
+  const ROW =
+    'flex w-full items-center justify-between gap-2.5 rounded-[5px] py-1 text-[13px] text-left min-h-7';
+
+  if (disabled) {
+    return (
+      <div className={cn(ROW, 'opacity-[.72]')} data-testid={testId}>
+        <span className="shrink-0 text-ink-3">{dimension.name}</span>
+        <span className="text-right text-ink">{current?.value.name ?? 'None'}</span>
+      </div>
+    );
+  }
 
   return (
-    <TreeItem
-      itemId={node.value.id}
-      label={
-        <FormControlLabel
-          // The label must not toggle the tree node: clicking the text of a parent should tick it,
-          // not collapse its children, and TreeItem's own label handler would do the latter.
-          onClick={(event) => event.stopPropagation()}
-          control={
-            single ? (
-              <Radio
-                size="small"
-                checked={isChosen}
-                disabled={disabled}
-                // A radio group cannot be un-chosen by clicking the chosen one, so this is wired as
-                // a toggle: choosing the current value clears it. Without that a hierarchical
-                // SINGLE dimension would have no path back to "unclassified", which the flat
-                // SINGLE control gets from its "None" option.
-                onClick={() => onSelectOne(isChosen ? null : node.value.id)}
-                slotProps={inputTestId(`Classification.Value.${node.value.id}`)}
-              />
-            ) : (
-              <Checkbox
-                size="small"
-                checked={isChosen}
-                disabled={disabled}
-                onChange={(event) => onToggle(node.value.id, event.target.checked)}
-                slotProps={inputTestId(`Classification.Value.${node.value.id}`)}
-              />
-            )
-          }
-          label={node.value.name}
-        />
-      }
+    <details ref={details} className="min-w-0">
+      <summary
+        data-testid={testId}
+        className={cn(
+          ROW,
+          '-mx-2 cursor-pointer list-none border border-transparent px-2',
+          'hover:border-white/14 hover:bg-white/3',
+          'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]',
+          '[&::-webkit-details-marker]:hidden',
+        )}
+      >
+        <span className="shrink-0 text-ink-3">{dimension.name}</span>
+        <span className="flex items-center gap-1.5 text-right text-ink">
+          {current?.value.name ?? 'None'}
+          <ChevronDown aria-hidden className="size-3 shrink-0 text-ink-4" />
+        </span>
+      </summary>
+
+      <div
+        role="listbox"
+        aria-label={dimension.name}
+        className="mt-1 flex max-h-56 flex-col overflow-auto rounded-[5px] border border-white/8 bg-panel p-1"
+      >
+        {/* A case need not be classified — `test_case` has no NOT NULL for any of this, and a
+            picker with no way back to "unset" makes the first accidental choice permanent. */}
+        <Option selected={!current} onChoose={() => choose(null)} testId={`${testId}.None`}>
+          <em className="not-italic text-ink-4">None</em>
+        </Option>
+        {values.map(({ value, depth }) => (
+          <Option
+            key={value.id}
+            selected={chosen.has(value.id)}
+            depth={depth}
+            onChoose={() => choose(value.id)}
+            testId={testIdForValue(dimension, testId, value.id)}
+          >
+            {value.name}
+          </Option>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function Option({
+  selected,
+  depth = 0,
+  onChoose,
+  testId,
+  children,
+}: {
+  selected: boolean;
+  depth?: number;
+  onChoose: () => void;
+  testId: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={selected}
+      onClick={onChoose}
+      data-testid={testId}
+      style={depth > 0 ? { paddingLeft: 8 + depth * 16 } : undefined}
+      className={cn(
+        'cursor-pointer rounded-[4px] border-0 bg-transparent px-2 py-1 text-left text-[13px]',
+        'hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-offset-[-2px]',
+        'focus-visible:outline-[color:var(--color-given)]',
+        selected ? 'text-steel' : 'text-ink-2',
+      )}
     >
-      {node.children.map((child) => (
-        <ValueTreeItem
-          key={child.value.id}
-          node={child}
-          chosen={chosen}
-          disabled={disabled}
-          single={single}
-          onSelectOne={onSelectOne}
-          onToggle={onToggle}
-        />
-      ))}
-    </TreeItem>
+      {children}
+    </button>
   );
 }

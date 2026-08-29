@@ -1,5 +1,5 @@
-import { Alert, Chip, Stack, Typography } from '@mui/material';
 import type { OrgChart, OrgChartGap } from '../../api/types';
+import { Badge, Banner } from '../../components/kit';
 import { formatCount } from '../../lib/format';
 import { permissionLabels } from '../../lib/permissions';
 
@@ -30,6 +30,15 @@ import { permissionLabels } from '../../lib/permissions';
  * approve a case" is a staffing decision, and the same fact spread across a list of permissions is
  * not. Every key in the catalogue is a candidate, so a key this build cannot label renders as its
  * own text rather than being dropped — a gap the client is too old to name is still a gap.
+ *
+ * ## A gap that exists is an amber banner (007 T13)
+ *
+ * `renders/04-board-and-people.html` frame C draws each live gap as `.banner.warn` and says why:
+ * *"an org chart that only shows what exists is a directory"*. Design language §5 gives amber to a
+ * state that is **currently wrong**, which is exactly what a vacancy is — so a gap with a count is
+ * a banner and a gap with none is one quiet line. ~~`Alert severity="success"`~~ for the healthy
+ * case is `neutral`: the kit has no success tone, and a company with no vacancies is a
+ * consequence-free statement of fact rather than a celebration.
  */
 export function OrgChartGaps({ chart }: { chart: OrgChart }) {
   const inNoTeam = chart.people.filter((person) => person.teams.length === 0);
@@ -47,15 +56,15 @@ export function OrgChartGaps({ chart }: { chart: OrgChart }) {
     && gapsByProject.length === 0
   ) {
     return (
-      <Alert severity="success" data-testid="OrgChart.Gaps.None">
+      <Banner tone="neutral" data-testid="OrgChart.Gaps.None">
         Everybody is in a team, every team has a lead, everybody has a role on at least one project
         you can open, and every project has somebody who can do each thing.
-      </Alert>
+      </Banner>
     );
   }
 
   return (
-    <Stack sx={{ gap: 2 }} data-testid="OrgChart.Gaps.List">
+    <div className="flex flex-col gap-2.5" data-testid="OrgChart.Gaps.List">
       <Gap
         testId="OrgChart.Gaps.NoTeam"
         title="In no team"
@@ -92,7 +101,7 @@ export function OrgChartGaps({ chart }: { chart: OrgChart }) {
           labels={permissions.map(labelForPermission)}
         />
       ))}
-    </Stack>
+    </div>
   );
 }
 
@@ -100,6 +109,10 @@ export function OrgChartGaps({ chart }: { chart: OrgChart }) {
  * One gap. Rendered even at zero, with the count, rather than hidden — a section that disappears
  * when it is healthy makes the panel's shape change under the reader, and "teams with no lead" is
  * worth being able to see the answer to when the answer is none.
+ *
+ * The zero form is deliberately **not** a banner: a strip of amber that says "None." is the shape
+ * of a problem wearing the words of a healthy state, and by the fourth one the reader has stopped
+ * reading the words.
  */
 function Gap({
   testId,
@@ -112,23 +125,29 @@ function Gap({
   count: number;
   labels: string[];
 }) {
+  if (count === 0) {
+    return (
+      <p className="m-0 text-[12.5px] text-ink-4" data-testid={testId}>
+        {title} ({formatCount(count)}) — none.
+      </p>
+    );
+  }
+
   return (
-    <Stack sx={{ gap: 0.75 }} data-testid={testId}>
-      <Typography variant="subtitle2">
-        {title} ({formatCount(count)})
-      </Typography>
-      {count === 0 ? (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          None.
-        </Typography>
-      ) : (
-        <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap' }}>
+    <Banner tone="warn" data-testid={testId}>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <span className="font-medium text-ink">
+          {title} ({formatCount(count)})
+        </span>
+        <span className="flex flex-wrap gap-1.5">
           {labels.map((label) => (
-            <Chip key={label} size="small" label={label} />
+            <Badge key={label} tone="plain">
+              {label}
+            </Badge>
           ))}
-        </Stack>
-      )}
-    </Stack>
+        </span>
+      </div>
+    </Banner>
   );
 }
 

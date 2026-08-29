@@ -1,5 +1,3 @@
-import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
-import { Alert, Box, Button, Chip, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import {
   DndContext,
   DragOverlay,
@@ -12,22 +10,24 @@ import {
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import { useState, type ReactNode } from 'react';
-import { useAnnounce } from '../../a11y/useAnnounce';
-import { PermissionGate } from '../../components/PermissionGate';
-import { toast } from '../../notifications/toast';
-import { TaskCreateDialog } from './TaskCreateDialog';
+import { GripVertical, X } from 'lucide-react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
+import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
-import type { WorkItem, WorkItemStatus } from '../../api/types';
 import { useMoveWorkItem, useProject, useWorkItems } from '../../api/queries';
+import type { WorkItem, WorkItemStatus } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
-import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { PermissionGate } from '../../components/PermissionGate';
+import { Badge, Banner } from '../../components/kit';
+import { Button, Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { formatCount } from '../../lib/format';
 import { healthLabels, priorityLabels, workItemColumns, workItemStatusLabels } from '../../lib/labels';
+import { toast } from '../../notifications/toast';
 import { boardKeyboardCoordinates } from './boardKeyboard';
 import { refusalFor, resolveCardMove } from './cardMove';
+import { TaskCreateDialog } from './TaskCreateDialog';
 
 /**
  * The kanban board (plan §6l).
@@ -38,6 +38,19 @@ import { refusalFor, resolveCardMove } from './cardMove';
  * execution is still unexecuted. The cost is that a derived card can't be dragged freely; it
  * only moves where its source legally allows, and the board says so rather than accepting the
  * drop and silently reverting it on the next refresh.
+ *
+ * <h2>The look is `renders/04-board-and-people.html` frame A (007 T13)</h2>
+ *
+ * Five columns of `.col` panels on `--panel`, cards on `--paper`, and three things the render
+ * makes rules rather than decoration:
+ *
+ *   - **Blocked earns colour and Done loses it.** One column is tinted because one column is a
+ *     question for a human; Done drops to 62% opacity — present for counting, quiet for scanning.
+ *     Five identical columns made the eye read all five to find the trouble.
+ *   - **Overdue is a word in red, not a red card.** Colour alone fails a greyscale print and a
+ *     colour-blind reader, and a whole red card drowns the card's own priority (UX#37).
+ *   - **The keyboard twin is on screen while a card is lifted**, in the footer strip, so the
+ *     single-pointer alternative WCAG 2.2 requires is discoverable rather than documented.
  */
 
 /**
@@ -92,63 +105,103 @@ export function BoardPage() {
   const items = useWorkItems(projectId, mine);
   const [creating, setCreating] = useState(false);
 
+  /*
+    ~~`PageHeader` raised the arrival announcement and the tab title.~~ → superseded by 007 T13:
+    the top strip is the render's `.top`, so the announcement is raised here, the way `HelpPage`
+    does it. The sentence is the same one the shared header produced, because a screen-reader user
+    learning a new phrasing per screen is the cost of moving it.
+  */
+  const announce = useAnnounce();
+  useEffect(() => {
+    announce('Board page loaded');
+  }, [announce]);
+
   return (
-    <Box>
-      <PageHeader
-        testId="Board.Header"
-        title="Board"
-        documentTitle={project.data ? `Board · ${project.data.name}` : 'Board'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Board' },
-        ]}
-        subtitle="Tasks alongside the work the repository already knows about — assigned executions, pending reviews, cases that need attention and tests somebody has quarantined."
-        actions={
-          <Stack direction="row" sx={{ gap: 0.5, alignItems: 'center' }}>
-            {(
-              [
-                { value: false, label: 'Everyone' },
-                { value: true, label: 'Assigned to me' },
-              ]
-            ).map((option) => (
-              <Chip
+    <div>
+      <title>{project.data ? `Board · ${project.data.name} · TCMS` : 'Board · TCMS'}</title>
+
+      <header
+        data-testid="Board.Header"
+        className="mb-3 flex flex-wrap items-start gap-3 border-b border-white/8 pb-3"
+      >
+        <div className="min-w-0 flex-1">
+          <nav aria-label="Breadcrumb" className="mb-1 text-[12.5px] text-ink-3">
+            <RouterLink
+              to={`/projects/${projectId}`}
+              data-testid="Board.Header.Breadcrumb"
+              className="text-ink-3 no-underline hover:text-ink-2"
+            >
+              {project.data?.name ?? 'Project'}
+            </RouterLink>
+            <span className="px-1.5 text-ink-4">/</span>
+            <b className="font-medium text-ink-2">Board</b>
+          </nav>
+          <h1
+            data-testid="Board.Header.Title"
+            className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink"
+          >
+            Board
+          </h1>
+          <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
+            Tasks alongside the work the repository already knows about — assigned executions,
+            pending reviews, cases that need attention and tests somebody has quarantined.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/*
+            `.lens` — the render's segmented scope switch, not two chips. The two options are one
+            choice with two states, and a pair of independent-looking chips says otherwise.
+          */}
+          <div className="inline-flex gap-0.5 rounded-lg bg-white/4 p-0.5">
+            {[
+              { value: false, label: 'Everyone' },
+              { value: true, label: 'Assigned to me' },
+            ].map((option) => (
+              <button
                 key={String(option.value)}
-                label={option.label}
+                type="button"
+                aria-pressed={mine === option.value}
+                data-testid={`Board.Filter.${option.value ? 'Mine' : 'Everyone'}`}
                 onClick={() => {
                   const next = new URLSearchParams(params);
                   if (option.value) next.set('mine', 'true');
                   else next.delete('mine');
                   setParams(next, { replace: true });
                 }}
-                variant={mine === option.value ? 'filled' : 'outlined'}
-                color={mine === option.value ? 'primary' : 'default'}
-                aria-pressed={mine === option.value}
-                data-testid={`Board.Filter.${option.value ? 'Mine' : 'Everyone'}`}
-                sx={{ cursor: 'pointer' }}
-              />
+                className={cn(
+                  'flex cursor-pointer items-center gap-1.5 rounded-md border-0 px-[11px] py-1 text-xs font-medium',
+                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
+                  mine === option.value
+                    ? 'bg-panel text-ink shadow-[0_1px_2px_rgb(0_0_0/40%)]'
+                    : 'bg-transparent text-ink-3 hover:text-ink-2',
+                )}
+              >
+                {option.label}
+              </button>
             ))}
-            {/*
-              Disable-don't-hide (§31): a Viewer sees the button greyed with a reason, which teaches
-              that the capability exists and is worth asking for. Hiding it would teach that the
-              product cannot do it, which is a lie.
-            */}
-            <PermissionGate projectId={projectId} permission="workitem:manage">
-              {({ allowed }) => (
-                <Button
-                  variant="contained"
-                  size="small"
-                  disabled={!allowed}
-                  onClick={() => setCreating(true)}
-                  data-testid="Board.NewTask"
-                  sx={{ ml: 1 }}
-                >
-                  New task
-                </Button>
-              )}
-            </PermissionGate>
-          </Stack>
-        }
-      />
+          </div>
+
+          {/*
+            Disable-don't-hide (§31): a Viewer sees the button greyed with a reason, which teaches
+            that the capability exists and is worth asking for. Hiding it would teach that the
+            product cannot do it, which is a lie.
+          */}
+          <PermissionGate projectId={projectId} permission="workitem:manage">
+            {({ allowed }) => (
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={!allowed}
+                onClick={() => setCreating(true)}
+                data-testid="Board.NewTask"
+              >
+                New task
+              </Button>
+            )}
+          </PermissionGate>
+        </div>
+      </header>
 
       {/*
         Conditionally rendered, so the form — and the create hook's per-intent Idempotency-Key —
@@ -178,7 +231,7 @@ export function BoardPage() {
       >
         {(rows) => <Board items={rows} />}
       </DataRegion>
-    </Box>
+    </div>
   );
 }
 
@@ -308,8 +361,8 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
     if (outcome.outcome === 'NONE') return;
     if (outcome.outcome === 'REFUSED') {
       setRejected(outcome.reason);
-      // The alert is `role="alert"`, but a refusal at the end of a *keyboard* drag arrives while
-      // focus is still on the card — announcing it puts the sentence where the user is.
+      // The banner is inside `role="alert"`, but a refusal at the end of a *keyboard* drag arrives
+      // while focus is still on the card — announcing it puts the sentence where the user is.
       announce(outcome.reason);
       return;
     }
@@ -323,7 +376,7 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
       /*
         The card is already back where it was — `useMoveWorkItem` restores its snapshot in
         `onError`. So this says what happened rather than doing the undo, and it says it twice on
-        purpose: the alert persists (a toast about a card that has visibly snapped back is gone
+        purpose: the banner persists (a toast about a card that has visibly snapped back is gone
         before the eye returns to it) and the announcement reaches a screen reader, for whom the
         snap-back is otherwise completely silent.
       */
@@ -355,20 +408,36 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
         void commit(item, over?.id);
       }}
     >
-      <Stack sx={{ gap: 2 }}>
+      <div className="flex flex-col gap-3">
         {rejected && (
-          <Alert severity="warning" role="alert" onClose={() => setRejected(null)} data-testid="Board.RejectedMove">
-            <Typography variant="body2">{rejected}</Typography>
-          </Alert>
+          <div role="alert">
+            <Banner tone="warn" data-testid="Board.RejectedMove" className="items-center">
+              <span className="flex-1">{rejected}</span>
+              <button
+                type="button"
+                onClick={() => setRejected(null)}
+                aria-label="Dismiss"
+                className="cursor-pointer border-0 bg-transparent p-0 text-ink-4 hover:text-ink focus-visible:outline-2 focus-visible:outline-[color:var(--color-given)]"
+              >
+                <X aria-hidden className="size-3.5" />
+              </button>
+            </Banner>
+          </div>
         )}
 
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: `repeat(${COLUMNS.length}, 1fr)` },
-            gap: 2,
-            alignItems: 'start',
-          }}
+        {/*
+          The column count is `COLUMNS.length`, not the literal 5: a status added to the contract
+          gets a column here the moment it is labelled. Tailwind cannot name a dynamic class, so
+          the count travels as a custom property and the arbitrary `grid-template-columns` reads
+          it — which keeps the breakpoint in the class list rather than in an inline media query
+          nothing can express.
+        */}
+        <div
+          className={
+            'grid items-start gap-3 sm:grid-cols-2 ' +
+            'lg:[grid-template-columns:repeat(var(--board-columns),minmax(0,1fr))]'
+          }
+          style={{ '--board-columns': COLUMNS.length } as CSSProperties}
         >
           {COLUMNS.map((column) => {
             const columnItems = items
@@ -395,9 +464,7 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
                 dragging={dragging !== null}
               >
                 {columnItems.length === 0 ? (
-                  <Typography variant="caption" sx={{ color: 'text.secondary', p: 1 }}>
-                    Nothing here
-                  </Typography>
+                  <p className="m-0 px-1 py-2.5 text-xs text-ink-4">Nothing here</p>
                 ) : (
                   columnItems.map((item) => (
                     <WorkCard
@@ -411,16 +478,34 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
               </BoardColumn>
             );
           })}
-        </Box>
-      </Stack>
+        </div>
+
+        {/*
+          The render's `.foot`, and it is the WCAG 2.2 half of the drag rather than chrome: the
+          keyboard path exists whether or not it is drawn, and a path nobody can discover is one
+          nobody uses. It appears only while a card is lifted, which is the moment the words are
+          about something.
+        */}
+        {dragging && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-white/8 bg-[rgb(14_19_26/92%)] px-4 py-2.5">
+            <span className="flex-1 text-xs text-ink-4">
+              Dragging <b className="font-medium text-ink-3">{dragging.title}</b> · drop to move, or
+              press <b className="font-medium text-ink-3">Esc</b> to cancel
+            </span>
+            <span className="font-mono text-[11px] text-ink-4">
+              Space lift · ←→ column · ↑↓ position · Space drop
+            </span>
+          </div>
+        )}
+      </div>
 
       {/*
         The card follows the cursor instead of the browser's ghost image. It is not decoration:
         with `useDraggable` alone the card stays in its column while an invisible drag happens, so
         the gesture gives no feedback at all until the drop.
 
-        `dragging={false}` on the copy — the overlay is not the draggable, and passing the live
-        card would register a second draggable with the same id.
+        `overlay` on the copy — the overlay is not the draggable, and passing the live card would
+        register a second draggable with the same id.
       */}
       <DragOverlay>
         {dragging && <WorkCard item={dragging} crossProject={crossProject} onMove={() => {}} overlay />}
@@ -435,6 +520,10 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
  * A component rather than a `map` body because `useDroppable` is a hook — the same reason
  * `GridRow` and `StepActionField` exist. Its droppable id is the column's own status code, which
  * is what lets `resolveCardMove` treat an `over` that is not a column as a stale id.
+ *
+ * `BLOCKED` is the one column with a hue and `DONE` the one that gives its colour up (render note
+ * *"Blocked earns colour; Done loses it"*). Neither is decoration: they are the two columns a
+ * reader is looking for and looking past.
  */
 function BoardColumn({
   column,
@@ -452,37 +541,41 @@ function BoardColumn({
   const { setNodeRef, isOver } = useDroppable({ id: column, disabled: dragging && !canAccept });
 
   return (
-    <Box ref={setNodeRef} data-testid={`Board.Column.${column}`} data-over={isOver ? 'true' : undefined}>
-      <Panel
-        dense
-        title={
-          <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
-            <Typography variant="h5" component="h2">
-              {workItemStatusLabels[column]}
-            </Typography>
-            <Identifier variant="muted">{formatCount(count)}</Identifier>
-          </Stack>
-        }
+    <section
+      ref={setNodeRef}
+      data-testid={`Board.Column.${column}`}
+      data-over={isOver ? 'true' : undefined}
+      className={cn(
+        'flex min-h-0 flex-col rounded-lg border border-white/8 bg-panel',
+        'transition-colors duration-150 motion-reduce:transition-none',
+        isOver && canAccept && 'border-[color:var(--color-steel)]',
+        // Not colour alone: a column that cannot accept the card also dims, and the card's own
+        // buttons carry the reason in words.
+        dragging && !canAccept && 'opacity-50',
+      )}
+    >
+      <h2
+        className={cn(
+          'm-0 flex items-center gap-2 border-b border-white/8 px-3 py-2.5',
+          'text-[11px] font-semibold uppercase tracking-[.08em]',
+          column === 'BLOCKED' ? 'text-[color:var(--color-blocked)]' : 'text-ink-3',
+        )}
       >
-        <Stack
-          sx={{
-            p: 1,
-            gap: 1,
-            minHeight: 120,
-            bgcolor: dragging ? (canAccept ? 'action.hover' : 'transparent') : 'transparent',
-            // Not colour alone: a column that cannot accept the card also dims, and the card's
-            // own buttons carry the reason in words.
-            opacity: dragging && !canAccept ? 0.5 : 1,
-            outline: isOver && canAccept ? '2px solid' : 'none',
-            outlineColor: 'primary.main',
-            borderRadius: 1,
-            transition: 'background-color 120ms ease',
-          }}
-        >
-          {children}
-        </Stack>
-      </Panel>
-    </Box>
+        {/* The label is its own element: the count sits in the same heading, and a test — or a
+            reader — asking for the column by name must not have to know that. */}
+        <span>{workItemStatusLabels[column]}</span>
+        <span className="ml-auto font-mono tracking-normal text-ink-4">{formatCount(count)}</span>
+      </h2>
+      <div
+        className={cn(
+          'flex min-h-[120px] flex-col gap-2 p-2.5',
+          column === 'DONE' && 'opacity-[.62]',
+          dragging && canAccept && 'bg-white/3',
+        )}
+      >
+        {children}
+      </div>
+    </section>
   );
 }
 
@@ -508,55 +601,53 @@ function WorkCard({
     disabled: overlay || item.allowedTransitions.length === 0,
   });
 
-  const priorityColor =
-    item.priority === 'CRITICAL'
-      ? 'var(--color-danger)'
-      : item.priority === 'HIGH'
-        ? 'var(--color-warning)'
-        : 'var(--color-border-strong)';
-
   const movable = item.allowedTransitions.length > 0;
 
   return (
-    <Box
+    <article
       ref={overlay ? undefined : setNodeRef}
       data-testid="Board.Card"
-      sx={{
-        p: 1.25,
-        border: '1px solid',
-        borderColor: 'divider',
-        borderLeft: '3px solid',
-        borderLeftColor: priorityColor,
-        borderRadius: 1,
-        bgcolor: 'background.paper',
+      className={cn(
+        'rounded-[5px] border border-white/8 bg-paper px-[11px] py-2.5 text-[13px] leading-[1.45]',
+        'hover:border-white/14',
+        item.status === 'BLOCKED' && 'border-[color:color-mix(in_oklab,var(--color-blocked)_26%,transparent)]',
         // The original stays in place and fades while the overlay copy follows the cursor;
         // removing it would collapse the column under the pointer mid-drag.
-        opacity: isDragging ? 0.4 : 1,
-        boxShadow: overlay ? 4 : 'none',
-      }}
+        isDragging && 'opacity-40',
+        overlay && 'shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]',
+      )}
     >
-      <Stack direction="row" sx={{ alignItems: 'center', gap: 0.75, mb: 0.5, flexWrap: 'wrap' }}>
+      <div className="mb-1.5 flex flex-wrap items-center gap-[7px]">
         {/*
           A handle rather than a draggable card, and for the same reason §94 gave the step rows
           one: the card carries a link and six buttons, and making the whole card draggable turns
           every attempt to press one into the start of a drag.
         */}
         {movable && !overlay && (
-          <Tooltip title="Drag to another column. The → buttons below do the same thing.">
-            <IconButton
-              size="small"
-              disableRipple
-              {...attributes}
-              {...listeners}
-              aria-label={`Move ${item.title}`}
-              data-testid="Board.Card.DragHandle"
-              sx={{ cursor: 'grab', touchAction: 'none', ml: -0.5 }}
-            >
-              <DragIndicatorIcon fontSize="small" />
-            </IconButton>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                {...attributes}
+                {...listeners}
+                aria-label={`Move ${item.title}`}
+                data-testid="Board.Card.DragHandle"
+                className={cn(
+                  '-ml-1 flex cursor-grab touch-none items-center rounded-[4px] border-0 bg-transparent p-0.5 text-ink-4',
+                  'hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-[color:var(--color-given)]',
+                )}
+              >
+                <GripVertical aria-hidden className="size-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Drag to another column. The → buttons below do the same thing.</TooltipContent>
           </Tooltip>
         )}
-        <Chip size="small" variant="outlined" label={kindLabels[item.kind]} data-testid="Board.Card.Kind" />
+
+        <Badge tone="plain" data-testid="Board.Card.Kind">
+          {kindLabels[item.kind]}
+        </Badge>
+
         {/*
           Which project this card is from — the field §83 finally reads.
 
@@ -567,45 +658,45 @@ function WorkCard({
           this screen sits outside the project frame.
         */}
         {crossProject && (
-          <Identifier variant="muted" testId="Board.Card.Project">
+          <span data-testid="Board.Card.Project" className="font-mono text-[11px] text-ink-4">
             {item.projectKey}
-          </Identifier>
+          </span>
         )}
+
         {/*
           Derived cards are marked. A user who knows a card mirrors an execution understands
           why it won't drag, and where to go instead.
         */}
         {item.derived && (
-          <Tooltip title="This card mirrors an execution, review or case. Its status comes from the source, so update the source to move it.">
-            <Chip
-              size="small"
-              label="linked"
-              data-testid="Board.Card.DerivedMarker"
-              sx={{
-                bgcolor: 'transparent',
-                color: 'var(--color-info)',
-                border: '1px solid color-mix(in srgb, var(--color-info) 45%, transparent)',
-              }}
-            />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span data-testid="Board.Card.DerivedMarker">
+                <Badge tone="steel">linked</Badge>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              This card mirrors an execution, review or case. Its status comes from the source, so
+              update the source to move it.
+            </TooltipContent>
           </Tooltip>
         )}
-        {item.overdue && (
-          <Chip
-            size="small"
-            label="overdue"
-            data-testid="Board.Card.Overdue"
-            sx={{
-              bgcolor: 'color-mix(in srgb, var(--color-danger) 12%, transparent)',
-              color: 'var(--color-danger)',
-              border: '1px solid color-mix(in srgb, var(--color-danger) 40%, transparent)',
-            }}
-          />
-        )}
-      </Stack>
 
-      <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }} data-testid="Board.Card.Title">
+        {/* A word in red, never a red card (render note, UX#37). */}
+        {item.overdue && (
+          <Badge tone="failed" data-testid="Board.Card.Overdue">
+            overdue
+          </Badge>
+        )}
+
+        <span className="flex-1" />
+        <Badge tone="plain" className="text-[10.5px]">
+          {priorityLabels[item.priority]}
+        </Badge>
+      </div>
+
+      <span data-testid="Board.Card.Title" className="mb-2 block font-[450] text-ink">
         {item.title}
-      </Typography>
+      </span>
 
       {/*
         **The card has to say WHY, and until the live pass it didn't.**
@@ -619,81 +710,70 @@ function WorkCard({
         That is the failure `BoardService.cardFor` warns about in its own javadoc — "a card whose
         reason is hidden behind a click gets ignored in bulk" — shipped anyway, because the server
         was right and the screen was silent. Only driving it showed that.
+
+        A blocked card puts its reason under a hairline rule, which is the render's *"a blocked card
+        says why, on the card"*: the reason is the only thing a blocked item is for.
       */}
       {item.description && (
-        <Typography
-          variant="caption"
-          sx={{ display: 'block', color: 'text.secondary', mb: 0.5 }}
+        <p
           data-testid="Board.Card.Reason"
+          className={cn(
+            'm-0 mb-1 text-[11.5px] leading-[1.5] text-ink-4',
+            item.status === 'BLOCKED' && 'mt-[7px] border-t border-white/8 pt-[7px]',
+          )}
         >
           {describeCard(item)}
-        </Typography>
+        </p>
       )}
 
       {item.linkedKey && (
         <RouterLink
           to={linkFor(item)}
           data-testid="Board.Card.LinkedKey"
+          className="font-mono text-[12.5px] text-ink-3 no-underline hover:text-steel"
         >
-          <Identifier variant="muted">{item.linkedKey}</Identifier>
+          {item.linkedKey}
         </RouterLink>
       )}
 
-      <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mt: 0.75, flexWrap: 'wrap' }}>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          {priorityLabels[item.priority]}
-        </Typography>
-        {item.assignee && (
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            · {item.assignee.displayName}
-          </Typography>
-        )}
+      <div className="mt-1.5 flex flex-wrap items-center gap-[7px] text-[11px] text-ink-4">
+        {item.assignee && <span>{item.assignee.displayName}</span>}
+        {item.assignee && item.dueDate && <span aria-hidden>·</span>}
         {item.dueDate && (
-          <Typography variant="caption" sx={{ color: item.overdue ? 'var(--color-danger)' : 'text.secondary' }}>
-            · due <Identifier variant="muted">{item.dueDate}</Identifier>
-          </Typography>
+          <span className={cn('font-mono', item.overdue && 'text-[color:var(--color-failed)]')}>
+            due {item.dueDate}
+          </span>
         )}
-      </Stack>
+      </div>
 
       {/*
         Dragging is not the only way to move a card. A keyboard user gets the same capability
         from these buttons, and they carry the disabled reason rather than disappearing.
 
-        **The reason has to be reachable, and for a disabled control it isn't by default.** MUI
-        sets `pointer-events: none` on a disabled button, so no hover ever reaches a `Tooltip`
-        wrapped straight around one — and on this board 14 of the 24 move buttons are disabled,
-        because a derived card follows its source. Every one of them greyed out and explained
-        nothing, which is the worse half of disable-don't-hide: the affordance says "no" and
-        refuses to say why. `PermissionGate` already documents this trap and solves it with a
-        span anchor; the same solution belongs here rather than a second invention.
+        **The reason has to be reachable, and for a disabled control it isn't by default.** ~~MUI
+        sets `pointer-events: none` on a disabled button~~ → the kit's own `buttonVariants` sets
+        `disabled:pointer-events-none` for the same reason MUI did, so the trap survived the port:
+        no hover ever reaches a tooltip wrapped straight around a disabled control — and on this
+        board 14 of the 24 move buttons are disabled, because a derived card follows its source.
+        Every one of them greyed out and explained nothing, which is the worse half of
+        disable-don't-hide: the affordance says "no" and refuses to say why. `PermissionGate`
+        already documents this trap and solves it with a span anchor; the same solution belongs
+        here rather than a second invention.
       */}
-      <Stack direction="row" sx={{ gap: 0.5, mt: 1, flexWrap: 'wrap' }}>
+      <div className="mt-2 flex flex-wrap gap-1">
         {COLUMNS.filter((column) => column !== item.status).map((column) => {
           const allowed = item.allowedTransitions.includes(column);
           const button = (
-            <Box
-              component="button"
-              type="button"
+            <Button
+              size="sm"
               disabled={!allowed}
               aria-disabled={!allowed}
               onClick={() => onMove(column)}
               data-testid={`Board.Card.MoveTo.${column}`}
-              sx={{
-                font: 'inherit',
-                fontSize: '0.6875rem',
-                px: 0.75,
-                py: 0.25,
-                borderRadius: 0.5,
-                border: '1px solid',
-                borderColor: 'divider',
-                bgcolor: 'transparent',
-                color: allowed ? 'text.secondary' : 'text.disabled',
-                cursor: allowed ? 'pointer' : 'not-allowed',
-                '&:hover:not(:disabled)': { borderColor: 'primary.main', color: 'primary.main' },
-              }}
+              className="min-h-6 px-2 py-0.5 text-[11px]"
             >
               → {workItemStatusLabels[column]}
-            </Box>
+            </Button>
           );
 
           // The same sentence a refused DROP produces (`cardMove.refusalFor`). Two affordances,
@@ -702,21 +782,24 @@ function WorkCard({
           const title = allowed ? `Move to ${workItemStatusLabels[column]}` : refusalFor(item, column);
 
           return (
-            <Tooltip key={column} title={title}>
-              {allowed ? (
-                button
-              ) : (
-                // The anchor that actually receives the hover. `role="none"` because it is
-                // scaffolding, and `cursor: not-allowed` states the verdict before the tooltip
-                // has had time to open.
-                <Box component="span" role="none" sx={{ display: 'inline-flex', cursor: 'not-allowed' }}>
-                  {button}
-                </Box>
-              )}
+            <Tooltip key={column}>
+              <TooltipTrigger asChild>
+                {allowed ? (
+                  button
+                ) : (
+                  // The anchor that actually receives the hover. `role="none"` because it is
+                  // scaffolding, and `cursor: not-allowed` states the verdict before the tooltip
+                  // has had time to open.
+                  <span role="none" className="inline-flex cursor-not-allowed">
+                    {button}
+                  </span>
+                )}
+              </TooltipTrigger>
+              <TooltipContent>{title}</TooltipContent>
             </Tooltip>
           );
         })}
-      </Stack>
-    </Box>
+      </div>
+    </article>
   );
 }

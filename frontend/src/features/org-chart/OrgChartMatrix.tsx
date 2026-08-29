@@ -1,16 +1,6 @@
-import {
-  Chip,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material';
 import type { OrgChartAssignment, OrgChartPerson, OrgChartProject } from '../../api/types';
-import { Identifier } from '../../components/Identifier';
+import { Badge } from '../../components/kit';
+import { cn } from '../../lib/cn';
 import { assignmentViaLabels } from '../../lib/labels';
 
 /**
@@ -21,24 +11,37 @@ import { assignmentViaLabels } from '../../lib/labels';
  * grids of different widths. `OrgChartPage` states that unconditionally beside the table; a matrix
  * that only said so when something was hidden would make its own presence the disclosure.
  *
- * <h2>Why this is a `Table` and not `DataGrid`, against the plan's own §9.2</h2>
+ * <h2>Why this is a plain table and not a grid component, against the plan's own §9.2</h2>
  *
- * The plan says DataGrid with dynamic columns, and DataGrid is what `CaseGrid` uses. Two reasons
- * not to here, and the second is the one that decided it:
+ * ~~The plan says DataGrid with dynamic columns, and DataGrid is what `CaseGrid` uses.~~ →
+ * the MUI data grid left the tree in 007 T9 and `CaseGrid` runs on TanStack Table; the argument
+ * below survives the swap unchanged, because neither reason was about MUI:
  *
- *   1. **Every DataGrid feature this screen would use is absent.** The whole document arrives in
- *      one response, so there is no server-side paging, sorting or filtering to mode-switch — which
- *      is what `CaseGrid` is actually built around. What would be left is a table with a scrollbar.
- *   2. **DataGrid does not render in jsdom**, because its virtualization measures through a
- *      `ResizeObserver` that the test shim never fires, so the scroller comes back 0×0 with no rows
- *      in it. That is not hypothetical: `CaseListPage` is the repo's only DataGrid screen and has
- *      **no component test at all**. Paying that price here would leave the §9.4 standing line, the
+ *   1. **Every grid feature this screen would use is absent.** The whole document arrives in one
+ *      response, so there is no server-side paging, sorting or filtering to mode-switch — which is
+ *      what `CaseGrid` is actually built around. What would be left is a table with a scrollbar.
+ *   2. **A virtualized grid does not render in jsdom**, because its virtualization measures through
+ *      a `ResizeObserver` that the test shim never fires, so the scroller comes back 0×0 with no
+ *      rows in it. Paying that price here would leave the §9.4 standing line, the
  *      Company-Admin-has-no-cell rule and the `via` labels — the three things on this screen most
- *      worth pinning — assertable only through a browser pass that §65 has deferred.
+ *      worth pinning — assertable only through a browser pass.
  *
- * The measured bundle delta is the other half of the argument and it is recorded in the slice's
- * handoff. Nothing here branches on a role name: the strings are display only (plan §6b), which is
- * also why a cell renders the name it was given rather than mapping it through anything.
+ * Nothing here branches on a role name: the strings are display only (plan §6b), which is also why
+ * a cell renders the name it was given rather than mapping it through anything.
+ *
+ * <h2>Three arms, three fills — and the words stay (007 T13)</h2>
+ *
+ * `renders/04-board-and-people.html` frame C is the source: a direct grant, a grant through a team
+ * and a company-wide default are three fills, because *"a matrix built the obvious way draws direct
+ * and team grants identically and omits company-wide defaults entirely"*.
+ *
+ * **The render's legend is deliberately not ported.** It decodes a fill for cells that carry only a
+ * role name; ours carry the arm **in words** on the cell's second line, which is the stronger form
+ * of the same information — colour is never the only carrier — and a legend repeating those three
+ * phrases underneath would put every one of them on screen twice.
+ *
+ * The column heads are rotated rather than truncated, which is the render's other rule here: a
+ * project name is a distinguishing name (UX#113) and must stay whole.
  */
 export function OrgChartMatrix({
   people,
@@ -48,69 +51,72 @@ export function OrgChartMatrix({
   projects: OrgChartProject[];
 }) {
   return (
-    <Table size="small" data-testid="OrgChart.Matrix.Grid">
-      <TableHead>
-        <TableRow>
-          <TableCell>Person</TableCell>
-          <TableCell>Company</TableCell>
-          <TableCell>Teams</TableCell>
+    <table
+      data-testid="OrgChart.Matrix.Grid"
+      className="w-full border-separate border-spacing-[5px] text-xs"
+    >
+      <thead>
+        <tr>
+          <th className="px-1 pb-1 text-left text-[11px] font-medium text-ink-3">Person</th>
+          <th className="px-1 pb-1 text-left text-[11px] font-medium text-ink-3">Company</th>
+          <th className="px-1 pb-1 text-left text-[11px] font-medium text-ink-3">Teams</th>
           {projects.map((project) => (
-            <TableCell key={project.id} data-testid="OrgChart.Matrix.Column">
-              <Stack sx={{ gap: 0.25 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {project.name}
-                </Typography>
-                <Identifier variant="muted">{project.key}</Identifier>
-              </Stack>
-            </TableCell>
+            <th
+              key={project.id}
+              data-testid="OrgChart.Matrix.Column"
+              className="h-[100px] p-0 pb-1.5 align-bottom"
+            >
+              <div className="flex rotate-180 items-center gap-1.5 whitespace-nowrap [writing-mode:vertical-rl]">
+                <span className="text-[11px] font-medium text-ink-3">{project.name}</span>
+                <span className="font-mono text-[10.5px] text-ink-4">{project.key}</span>
+              </div>
+            </th>
           ))}
-        </TableRow>
-      </TableHead>
-      <TableBody>
+        </tr>
+      </thead>
+      <tbody>
         {people.map((person) => (
-          <TableRow key={person.id} data-testid="OrgChart.Matrix.Row">
-            <TableCell>
-              <Typography variant="body2">{person.displayName}</Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                {person.email}
-              </Typography>
-            </TableCell>
-            <TableCell>
+          <tr key={person.id} data-testid="OrgChart.Matrix.Row">
+            <td className="whitespace-nowrap pr-2 align-middle">
+              <span className="block text-[13px] text-ink-2">{person.displayName}</span>
+              <span className="block text-[11px] text-ink-4">{person.email}</span>
+            </td>
+            <td className="align-middle">
               {/*
                 On the PERSON, never smeared across the project columns. A COMPANY-scope role is
                 authority over the company rather than a default for its projects, so a Company
                 Admin correctly shows a badge here and NO cell anywhere to the right — and an empty
                 row of cells for them is the truth rather than "they have no access".
               */}
-              <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap' }}>
+              <span className="flex flex-wrap gap-1">
                 {person.companyRoles.map((role) => (
-                  <Chip key={role} size="small" color="primary" variant="outlined" label={role} />
+                  <Badge key={role} tone="steel">
+                    {role}
+                  </Badge>
                 ))}
-              </Stack>
-            </TableCell>
-            <TableCell>
-              <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap' }}>
+              </span>
+            </td>
+            <td className="align-middle">
+              <span className="flex flex-wrap gap-1">
                 {person.teams.map((team) => (
-                  <Chip
+                  <Badge
                     key={team.id}
-                    size="small"
-                    variant={
-                      person.leadsTeams.some((led) => led.id === team.id) ? 'filled' : 'outlined'
-                    }
-                    label={team.name}
-                  />
+                    tone={person.leadsTeams.some((led) => led.id === team.id) ? 'steel' : 'plain'}
+                  >
+                    {team.name}
+                  </Badge>
                 ))}
-              </Stack>
-            </TableCell>
+              </span>
+            </td>
             {projects.map((project) => (
-              <TableCell key={project.id}>
+              <td key={project.id} className="align-middle">
                 <Cell assignment={cellFor(person, project.id)} />
-              </TableCell>
+              </td>
             ))}
-          </TableRow>
+          </tr>
         ))}
-      </TableBody>
-    </Table>
+      </tbody>
+    </table>
   );
 }
 
@@ -118,20 +124,34 @@ function cellFor(person: OrgChartPerson, projectId: string): OrgChartAssignment 
   return person.projects.find((assignment) => assignment.projectId === projectId);
 }
 
+/** `.cell.d` / `.cell.t` / `.cell.i` — one fill per arm, in the render's own colours. */
+const VIA_FILL: Record<OrgChartAssignment['via'], string> = {
+  DIRECT:
+    'border-[color:color-mix(in_oklab,var(--color-steel)_22%,transparent)] ' +
+    'bg-[color:color-mix(in_oklab,var(--color-steel)_12%,transparent)] text-[color:var(--color-steel)]',
+  TEAM:
+    'border-[color:color-mix(in_oklab,var(--color-passed)_26%,transparent)] ' +
+    'bg-[color:color-mix(in_oklab,var(--color-passed)_12%,transparent)] text-[color:var(--color-passed)]',
+  INHERITED: 'border-white/8 bg-white/4 text-ink-3',
+};
+
 /**
  * One cell. An absent assignment renders an em dash rather than nothing, so "no role here" and
  * "the table did not draw this cell" are distinguishable at a glance.
+ *
+ * ~~The arm was a tooltip.~~ → 007 T13: it is the cell's second line. A fact that decides whether
+ * a grant can be revoked from the team page or has to be revoked from the project is not something
+ * to hover for, and a tooltip is unreachable on the touch device the render is drawn for.
  */
 function Cell({ assignment }: { assignment: OrgChartAssignment | undefined }) {
   if (!assignment) {
     return (
-      <Typography
-        variant="body2"
-        sx={{ color: 'text.disabled' }}
+      <span
         data-testid="OrgChart.Matrix.Cell.Empty"
+        className="grid h-[30px] place-items-center rounded-[5px] font-mono text-[11px] text-ink-4"
       >
         —
-      </Typography>
+      </span>
     );
   }
 
@@ -139,13 +159,15 @@ function Cell({ assignment }: { assignment: OrgChartAssignment | undefined }) {
   const detail = assignment.viaTeam ? `${via}: ${assignment.viaTeam.name}` : via;
 
   return (
-    <Tooltip title={detail}>
-      <Stack sx={{ gap: 0.25 }} data-testid="OrgChart.Matrix.Cell">
-        <Typography variant="body2">{assignment.roleName}</Typography>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          {detail}
-        </Typography>
-      </Stack>
-    </Tooltip>
+    <span
+      data-testid="OrgChart.Matrix.Cell"
+      className={cn(
+        'flex flex-col items-center gap-px rounded-[5px] border px-2 py-1 text-center',
+        VIA_FILL[assignment.via],
+      )}
+    >
+      <span className="font-mono text-[11px] leading-tight">{assignment.roleName}</span>
+      <span className="text-[10.5px] leading-tight text-ink-4">{detail}</span>
+    </span>
   );
 }

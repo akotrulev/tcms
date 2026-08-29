@@ -1,8 +1,9 @@
-import { Alert, Box, Stack } from '@mui/material';
+import { useEffect } from 'react';
+import { useAnnounce } from '../../a11y/useAnnounce';
 import { useOrgChart } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
-import { PageHeader, Panel } from '../../components/PageHeader';
 import { ScrollX } from '../../components/ScrollX';
+import { Banner } from '../../components/kit';
 import { OrgChartGaps } from './OrgChartGaps';
 import { OrgChartMatrix } from './OrgChartMatrix';
 import { OrgChartTeams } from './OrgChartTeams';
@@ -22,22 +23,45 @@ import { OrgChartTeams } from './OrgChartTeams';
  * they share a failure — honestly, since they share a request — but they do not share an *empty*,
  * and a company with teams and no visible projects should get a drawn tree beside an empty matrix
  * rather than one verdict for the page.
+ *
+ * <h2>The layout is `renders/04-board-and-people.html` frame C (007 T13)</h2>
+ *
+ * ~~Three stacked `Panel`s.~~ → the render's `.split.wide-side`: the matrix is the subject and gets
+ * a **bare** pane (rule 1 — no panel around the only thing on screen), while Teams and Gaps are the
+ * side column's two `.sec` sections, which is where the render puts the two things you read
+ * *about* the matrix rather than *in* it.
+ *
+ * The three regions stay mounted side by side rather than behind the render's lens tabs. Gaps are
+ * *"the point of the screen"* by that render's own note, and a tab is a place to put something you
+ * are content for the reader not to see.
  */
 export function OrgChartPage() {
   const chart = useOrgChart();
   const state = { ...chart, refetch: () => void chart.refetch() };
 
-  return (
-    <Box>
-      <PageHeader
-        title="Org chart"
-        documentTitle="Org chart"
-        subtitle="The company's people and teams, and what they can do on your projects."
-        testId="OrgChart"
-      />
+  const announce = useAnnounce();
+  useEffect(() => {
+    announce('Org chart page loaded');
+  }, [announce]);
 
-      <Stack sx={{ gap: 3 }}>
-        <Panel title="People and projects" testId="OrgChart.Matrix">
+  return (
+    <div>
+      <title>Org chart · TCMS</title>
+
+      <header
+        data-testid="OrgChart"
+        className="mb-3 flex flex-wrap items-start gap-3 border-b border-white/8 pb-3"
+      >
+        <div className="min-w-0 flex-1">
+          <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">Org chart</h1>
+          <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
+            The company's people and teams, and what they can do on your projects.
+          </p>
+        </div>
+      </header>
+
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <section className="min-w-0" data-testid="OrgChart.Matrix" aria-label="People and projects">
           {/*
             §9.4, and it is NOT optional and NOT conditional.
 
@@ -47,11 +71,15 @@ export function OrgChartPage() {
             claim the plan's §4.3 rejected — the "+3 more" count wearing a different hat — so it
             renders for every reader including a Company Admin who sees everything. It needs no
             server field, which is why the document has no `viewer` block.
+
+            `steel` rather than `neutral`: design language §5 gives steel to something the instance
+            itself is telling the reader about what they are looking at, which is exactly what a
+            statement about the shape of this table is.
           */}
-          <Alert severity="info" sx={{ mb: 2 }} data-testid="OrgChart.Matrix.Scope">
+          <Banner tone="steel" data-testid="OrgChart.Matrix.Scope" className="mb-3">
             Only projects you can open are shown here. A colleague may see more columns than you
             do, or fewer.
-          </Alert>
+          </Banner>
 
           <DataRegion
             testId="OrgChart.Matrix.Region"
@@ -64,24 +92,32 @@ export function OrgChartPage() {
               </ScrollX>
             )}
           </DataRegion>
-        </Panel>
+        </section>
 
-        <Panel title="Teams" testId="OrgChart.Teams">
-          <DataRegion
-            testId="OrgChart.Teams.Region"
-            state={state}
-            isEmpty={(data) => data.teams.length === 0}
-          >
-            {(data) => <OrgChartTeams teams={data.teams} />}
-          </DataRegion>
-        </Panel>
+        <aside className="flex flex-col rounded-lg border border-white/8 bg-panel">
+          <section className="border-b border-white/8 p-4" data-testid="OrgChart.Teams">
+            <h2 className="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
+              Teams
+            </h2>
+            <DataRegion
+              testId="OrgChart.Teams.Region"
+              state={state}
+              isEmpty={(data) => data.teams.length === 0}
+            >
+              {(data) => <OrgChartTeams teams={data.teams} />}
+            </DataRegion>
+          </section>
 
-        <Panel title="Gaps" testId="OrgChart.Gaps">
-          <DataRegion testId="OrgChart.Gaps.Region" state={state}>
-            {(data) => <OrgChartGaps chart={data} />}
-          </DataRegion>
-        </Panel>
-      </Stack>
-    </Box>
+          <section className="p-4" data-testid="OrgChart.Gaps">
+            <h2 className="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
+              Gaps
+            </h2>
+            <DataRegion testId="OrgChart.Gaps.Region" state={state}>
+              {(data) => <OrgChartGaps chart={data} />}
+            </DataRegion>
+          </section>
+        </aside>
+      </div>
+    </div>
   );
 }
