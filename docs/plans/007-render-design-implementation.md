@@ -207,7 +207,7 @@ pointing at the drawing would produce a second, drifting design source — which
 | 13 | T13 — Family 4, Board & people | **done** | Board · MyWork · TeamBoard · OrgChart; the MUI tree-view package unimported | T3, T8 |
 | 14 | T14 — Family 5, Authoring | **done** | Docs · DocPageEditor · FeatureImport at the 70ch prose measure | T11 |
 | 15 | T15 — Family 6 & 7, Analytics and Settings | **done** | Dashboard · PlanStatistics per §6; the **11** settings/account screens (§8's nine plus the two it does not list) | T10 |
-| 16 | T16 — MUI removed, preflight on | open | No `@mui`/`@emotion`/`notistack` in `package.json` or any import; Preflight imported; `muiTestIds.ts` deleted with **both** citations | T6–T15 |
+| 16 | T16 — MUI removed, preflight on | **done** `98ffb79a` | No `@mui`/`@emotion`/`notistack` in `package.json` or any import; Preflight imported; `muiTestIds.ts` deleted with **both** citations | T6–T15 |
 | 17 | T17 — Gates and bundle measurement | open | The four gates green on `shanks` (the **only** gate pass for T6–T16 — see the directive in the header); before/after bundle numbers recorded; preflight layout damage fixed | T16 |
 
 Seventeen tasks. T6–T15 are the ten screen tasks and are ordered so the cheapest proof of the kit
@@ -1474,7 +1474,7 @@ from the steps above:
 
 ---
 
-### T16 — MUI removed, preflight on
+### T16 — MUI removed, preflight on — **DONE** (`98ffb79a`)
 
 **Deliverable:** `@mui/*`, `@emotion/*` and `notistack` appear in no import and in no
 `package.json`; Tailwind's Preflight is imported; `lib/muiTestIds.ts` is deleted along with the one
@@ -1492,7 +1492,77 @@ comment that cites it.
   renamed successor) before they do, or the theme toggle becomes the no-op CLAUDE.md warns about
 - Modify: `docs/specs/assets/renders/tcms.css:6-7` — the header names `theme.ts` (§5)
 
-- [ ] **Step 1: Prove nothing imports MUI**
+**What landed, and where it differs from the steps below.**
+
+**Step 1 failed, and the diagnosis in the step is wrong.** The step says *"a single hit here means
+a screen task is unfinished"*. **Zero `*Page.tsx` files imported MUI** — every screen task had done
+its job — and 81 other files did:
+
+| Group | Files |
+|---|---|
+| Shared `src/components/*` | 20 — `Identifier` (55 importers), `DataRegion` (47), `PermissionGate` (41), `PageHeader` (37), … |
+| Feature dialogs, panels and tables | 48 — cases 16, runs 12, plans 7, reports 5, ingestion 3, artifacts 2, +4 |
+| App / auth / a11y / test infra | 10 — `AppShell`, `Providers`, `router`, `theme.ts`, `SessionGate`, `SessionRecoveryProvider`, `AnnouncerProvider`, `TestProviders` |
+| Test files | 8 — `ThemeProvider` wraps and four MUI-internal queries |
+
+**This was deferred into T16 on purpose and then not written down here.** T11's note says of five
+of the shared components: *"they are shared with screens T12/T15 own and are **T16's to port**"*,
+and T14 says the same of `PageHeader`/`Panel`. T16's own **Files** list never enumerated any of it,
+and **nothing in the plan ever owned the 48 feature components**. So the omission is this section's,
+not the screen tasks'. All 81 are ported here, on the instruction to absorb rather than split.
+
+**`app/colorScheme.tsx` is new, and it had to land before `ThemeProvider` could go.** Step 6's own
+warning is the whole reason: `index.css` hangs the dark palette off one attribute on `<html>` and
+MUI's provider was the only thing writing it, so deleting the provider first leaves a toggle that
+typechecks, lints and does nothing. The attribute is renamed with the port —
+`data-mui-color-scheme` → **`data-color-scheme`** — because the old name was MUI's contract rather
+than a description; `index.css` and `tokenSystem.test.ts` are its only two readers, ever. The
+stored key moves with it (`mui-mode` → `tcms-color-scheme`), which costs each user one re-pick and
+saves shipping a reader for a vocabulary this app no longer has.
+
+**Two kit components are new and neither is in §5's nine.** `kit/Combobox` and `kit/MultiPicker`
+replace **nine** `<Autocomplete>`s across seven files. Neither is built on Radix's `Select`, for
+the reason `ReviewPanel` and `LinkBlockDialog` already record: it calls `hasPointerCapture`, jsdom
+implements neither it nor a polyfill, and `src/test/setup.ts` is not a place where the application
+is bent to suit the harness. `features/docs/LinkBlockDialog.tsx` keeps the private copy T14 wrote —
+the same relationship `kit/Field` has with `ConditionEditDialog` — and should collapse onto the
+shared one next time it is open.
+
+**`components/ResultBar`'s own `ResultBar` is deleted, not ported.** `kit/ResultBar` has been the
+one on screen since T10 and this one had no importer left. Its three figure helpers survive
+(`PassRateSummary`, `ResultCountsCell`, `DenominatorToggle`) because the kit has no equivalent;
+`PlanStatisticsPage` is their one caller, exactly as T15 predicted.
+
+**Three things moved out of `sx` into places that can hold them.** The `@keyframes` behind
+`DataRegion`'s refresh hairline is in `index.css` now — Emotion was the thing turning an `sx`
+keyframe into a real stylesheet rule, and a `<style>` per mounted region would emit one copy each.
+`lib/labels.ts`'s `trackerStatusCategoryColors` becomes `BadgeTone`; its dead twin
+`trackerConnectionStateColors` is deleted, both as T15 predicted.
+
+**One assertion got weaker and it is recorded rather than quietly changed.**
+`PermissionGate.test.tsx` read `getComputedStyle(anchor).display` to prove the `wrapper="block"`
+fix. That worked because Emotion injected `sx` into jsdom as a real stylesheet; **jsdom loads no
+stylesheet for Tailwind**, so the expression now returns `''` for every class the component could
+carry and would pass or fail without reference to the code. It asserts the class instead. That
+proves the component *chose* `block`, not that `block` laid out as a block.
+
+**§5's fourth document needed a decision, not just an edit.** The collapsed rail is **64px** in the
+build and 60px in the renders. 64 wins and the *spec* is amended (§4 and §9.2), per §4 of this
+plan: it is a multiple of the 4px grid the shell sits on and leaves a 40px icon target 12px of
+padding.
+
+**No gate ran, per the header directive — but the port was not left unchecked.** Roughly 4,000
+lines of this were machine-transformed, and handing T17 a pile of parse errors would defeat the
+point of T17 finding *preflight layout damage*. So three non-gate checks ran instead: every one of
+the 86 changed files **parses** (TypeScript's parser, syntax only — no typecheck, no lint, no
+suite), every JSX identifier **resolves** to an import or a local, and **no import is unused**.
+Those caught real breakage the transformers introduced — six files that did not parse, three whole
+components (`GroupCard`, `DeleteSectionDialog`, `SuitePicker`) deleted by a bad splice, `{expr}`
+labels flattened to text, interactive chips turned into non-interactive badges, and an attribute
+stripper that ate the word `color` out of `var(--color-info)`. **Type errors and layout damage are
+still T17's**, and this remains *built and unverified*.
+
+- [x] **Step 1: Prove nothing imports MUI**
 
 ```bash
 cd frontend && grep -rn "@mui\|@emotion\|notistack" src/ ; echo "exit=$?"
@@ -1501,17 +1571,22 @@ cd frontend && grep -rn "@mui\|@emotion\|notistack" src/ ; echo "exit=$?"
 Expected: no matches (`exit=1`). A single hit here means a screen task is unfinished; finish it
 before proceeding — this is the task that makes the D2 intermediate state end.
 
-- [ ] **Step 2: Delete the two files and fix the citations**
+- [x] **Step 2: Delete the two files and fix the citations**
 
 `components/ui/ui.test.tsx:20` reads `The whole reason \`lib/muiTestIds.ts\` exists is …`; it is the
 test that proved the premise gone, and it now describes a file that is not there — strike the
-path through and say the file was deleted here, per D4. (`BlockedDialog.tsx:105` was the other
+path through and say the file was deleted here, per D4. **As landed the path is *removed*, not
+struck through**, because the two halves of this step contradict each other: `citedFiles.test.ts`
+excuses a citation inside a `~~…~~` span, but the step's own acceptance check is
+`grep -rn "muiTestIds" frontend/src` → no matches, and a struck-through path is still the string.
+The grep wins; the strike-through carries the reasoning, and the comment says explicitly why the
+name is not written. (`BlockedDialog.tsx:105` was the other
 citation and T12 owns it; if it survived, T12 is unfinished.) **This is not optional**:
 `packages/client/src/test/citedFiles.test.ts` scans `frontend/src` for `.ts`/`.tsx` and fails on a
 path that is not on disk, and it reddens the **packages** job, not the frontend one — the wrong
 place to go looking. `grep -rn "muiTestIds" frontend/src` → no matches is the proof.
 
-- [ ] **Step 3: Rewrite `themeTokenParity.test.ts`**
+- [x] **Step 3: Rewrite `themeTokenParity.test.ts`**
 
 Its job was pinning `index.css` against `app/theme.ts`, and `theme.ts` is gone. What survives is the
 half that still has a subject: the rule-5 identity test from T1 Step 6, plus a check that every
@@ -1519,7 +1594,7 @@ token named in `@theme inline` resolves to a declared custom property. Rename th
 `tokenSystem.test.ts` and say in its header what it stopped checking and why — CLAUDE.md's rule
 about writing superseded decisions and their reversal into the record.
 
-- [ ] **Step 4: Turn Preflight on**
+- [x] **Step 4: Turn Preflight on**
 
 ```css
 @layer theme, base, components, utilities;
@@ -1528,7 +1603,7 @@ about writing superseded decisions and their reversal into the record.
 @import "tailwindcss/utilities.css" layer(utilities);
 ```
 
-- [ ] **Step 5: Drop the dependencies**
+- [x] **Step 5: Drop the dependencies**
 
 ```bash
 cd frontend && npm uninstall @mui/material @mui/icons-material @mui/x-data-grid \
@@ -1537,7 +1612,7 @@ cd frontend && npm uninstall @mui/material @mui/icons-material @mui/x-data-grid 
 
 `@mui/x-date-pickers` is removed here having never been imported by anything — see §1.
 
-- [ ] **Step 6: ~~Run the full gate and expect layout damage~~ → superseded — no gate here**
+- [x] **Step 6: ~~Run the full gate and expect layout damage~~ → superseded — no gate here**
 
 ~~`cd frontend && npm run build && npm run lint && npm run test:run`~~
 
@@ -1548,7 +1623,7 @@ this file: the damage now surfaces in **T17**, which is therefore a gate pass *a
 fix-up for whatever preflight moved. Fix it there, against T17's build output, and record it in
 T17's Results section.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src frontend/package.json frontend/package-lock.json
