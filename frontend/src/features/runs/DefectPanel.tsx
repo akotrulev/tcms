@@ -255,7 +255,7 @@ function DefectRow({
 }) {
   return (
     <div className="flex items-center gap-2" data-testid="Execution.Defects.Row">
-      <a className="flex-1 min-w-0" href={defect.url} target="_blank" rel="noopener" data-testid="Execution.Defects.Link">
+      <a className="flex-1 min-w-0" href={defect.url} target="_blank" rel="noopener noreferrer" data-testid="Execution.Defects.Link">
         <Identifier>{defect.externalKey}</Identifier>
         <span className="ml-1 text-ink-2" aria-hidden="true">
           ↗

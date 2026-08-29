@@ -121,8 +121,8 @@ describe('ClassificationSettingsPage — the gate each dimension asks for', () =
     renderPage()
 
     await waitFor(() => expect(screen.getByTestId('Classification.feature.Add')).toBeEnabled())
-    expect(screen.getByTestId('Classification.Value.v-payments.Edit')).toBeEnabled()
-    expect(screen.getByTestId('Classification.Value.v-payments.Retire')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Rename Payments' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Retire Payments' })).toBeEnabled()
   })
 
   it('refuses the same Test Lead the company’s Test Type axis', async () => {
@@ -133,7 +133,7 @@ describe('ClassificationSettingsPage — the gate each dimension asks for', () =
     await permissionsResolved()
 
     expect(screen.getByTestId('Classification.test_type.Add')).toBeDisabled()
-    expect(screen.getByTestId('Classification.Value.v-functional.Edit')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Rename Functional' })).toBeDisabled()
   })
 
   it('lets a Company Admin edit both', async () => {
@@ -147,7 +147,7 @@ describe('ClassificationSettingsPage — the gate each dimension asks for', () =
     await waitFor(() =>
       expect(screen.getByTestId('Classification.test_type.Add')).toBeEnabled(),
     )
-    expect(screen.getByTestId('Classification.Value.v-functional.Edit')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Rename Functional' })).toBeEnabled()
   })
 
   it('shows a caller who can edit nothing the whole vocabulary anyway', async () => {
@@ -157,7 +157,7 @@ describe('ClassificationSettingsPage — the gate each dimension asks for', () =
     renderPage()
 
     await waitFor(() => expect(screen.getByTestId('Classification.feature.Add')).toBeDisabled())
-    expect(screen.getByTestId('Classification.Value.v-payments.Edit')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Rename Payments' })).toBeDisabled()
     expect(screen.getByText('Payments')).toBeInTheDocument()
   })
 
@@ -169,7 +169,7 @@ describe('ClassificationSettingsPage — the gate each dimension asks for', () =
     // "Stranded" is the orphan. Dropped, it would be a value nobody can retire — and the retire
     // button is the only way back from the state that produced it.
     expect(screen.getAllByText('Stranded')).toHaveLength(1)
-    expect(screen.getByTestId('Classification.Value.v-orphan.Retire')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Retire Stranded' })).toBeEnabled()
     expect(screen.getAllByText('Refunds')).toHaveLength(1)
   })
 
@@ -180,8 +180,8 @@ describe('ClassificationSettingsPage — the gate each dimension asks for', () =
     renderPage()
     await permissionsResolved()
 
-    expect(screen.getByTestId('Classification.Value.v-payments.AddChild')).toBeInTheDocument()
-    expect(screen.queryByTestId('Classification.Value.v-functional.AddChild')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Add a value under Payments' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add a value under Functional' })).toBeNull()
   })
 })
 
@@ -195,7 +195,7 @@ describe('ClassificationSettingsPage — retiring', () => {
     renderPage()
     await permissionsResolved()
 
-    await userEvent.click(screen.getByTestId('Classification.Value.v-refunds.Retire'))
+    await userEvent.click(screen.getByRole('button', { name: 'Retire Refunds' }))
 
     // The verb does not carry either half: nothing is deleted, and the cases already classified
     // with it keep it. An administrator who assumes otherwise will not retire anything.
@@ -219,7 +219,7 @@ describe('ClassificationSettingsPage — retiring', () => {
     renderPage()
     await permissionsResolved()
 
-    await userEvent.click(screen.getByTestId('Classification.Value.v-payments.Retire'))
+    await userEvent.click(screen.getByRole('button', { name: 'Retire Payments' }))
     await userEvent.click(screen.getByTestId('Classification.Retire.Confirm'))
 
     // Not a toast over a closed dialog, and not an optimistic removal that puts the row back: the

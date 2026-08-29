@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useSearchParams } from 'react-router-dom';
 import {
   useChangeMyPassword,
   useCurrentUser,
@@ -73,7 +73,6 @@ const TestIdPrefix = 'AccountSecurity';
 export function AccountSecurityPage() {
   const [searchParams] = useSearchParams();
   const location = useLocation();
-  const navigate = useNavigate();
   const providers = useSocialProviders();
   const identities = useMySocialIdentities();
   const startLink = useStartSocialLink();
@@ -105,12 +104,17 @@ export function AccountSecurityPage() {
               Your account is ready. Want to sign in with GitHub, GitLab or Google next time? Link
               one now — or skip this; your password always works.
             </span>
-            <Button
-              size="sm"
-              data-testid={`${TestIdPrefix}.Skip`}
-              onClick={() => navigate('/', { replace: true })}
-            >
-              Skip for now
+            {/*
+              A real `<Link>` wearing the button's classes: skipping goes to the dashboard, and
+              ordinary navigation has to be an anchor to earn middle-click, ⌘-click and copy-link.
+              `replace` is carried by the link rather than by a `navigate` option — this landing is
+              reached once, from a redemption, and leaving it on the back stack sends the reader
+              back into a flow they have already finished.
+            */}
+            <Button asChild size="sm" data-testid={`${TestIdPrefix}.Skip`}>
+              <RouterLink to="/" replace>
+                Skip for now
+              </RouterLink>
             </Button>
           </span>
         </Banner>

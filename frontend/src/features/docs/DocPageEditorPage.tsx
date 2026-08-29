@@ -299,11 +299,14 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
       <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-line pb-3">
         <Identifier variant="muted">{page.key}</Identifier>
         <span className="flex-1" />
-        <Button
-          onClick={() => navigate(`/projects/${projectId}/docs/${page.id}`)}
-          data-testid={`${TestIdPrefix}.Cancel`}
-        >
-          Discard
+        {/*
+          Discard leaves this editor for the page it was editing, so it is a real `<Link>` wearing
+          the button's classes rather than an `onClick` that calls `navigate` — which is what earns
+          it middle-click, ⌘-click and copy-link, the same rule `features/reports/ReportJobCard.tsx`
+          states for its view control.
+        */}
+        <Button asChild data-testid={`${TestIdPrefix}.Cancel`}>
+          <RouterLink to={`/projects/${projectId}/docs/${page.id}`}>Discard</RouterLink>
         </Button>
         <Button
           type="submit"

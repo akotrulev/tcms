@@ -90,7 +90,7 @@ export function IssueChip({
             <a
               href={issue.url}
               target="_blank"
-              rel="noreferrer noopener"
+              rel="noopener noreferrer"
               className="text-inherit no-underline hover:underline"
             >
               {/*
@@ -101,6 +101,7 @@ export function IssueChip({
               */}
               {issue.key} · {issue.title} · {issue.statusName}
               <ExternalLink aria-hidden className="ml-1 inline size-3 align-text-bottom" />
+              <span className="sr-only">(opens in a new tab)</span>
             </a>
           </Badge>
           </span>
@@ -140,11 +141,12 @@ export function IssueChip({
             <a
               href={link.url}
               target="_blank"
-              rel="noreferrer noopener"
+              rel="noopener noreferrer"
               className="text-inherit no-underline hover:underline"
             >
               {providerLabel} issue {link.issueId}
               <ExternalLink aria-hidden className="ml-1 inline size-3 align-text-bottom" />
+              <span className="sr-only">(opens in a new tab)</span>
             </a>
           </Badge>
           </span>

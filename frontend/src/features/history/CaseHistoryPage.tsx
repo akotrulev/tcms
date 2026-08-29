@@ -385,7 +385,7 @@ function ExecutionEvent({
                   key={defect.id}
                   href={defect.url}
                   target="_blank"
-                  rel="noopener"
+                  rel="noopener noreferrer"
                   className="text-[11.5px] text-steel underline-offset-4 hover:underline"
                   data-testid="CaseHistory.Timeline.DefectLink"
                 >

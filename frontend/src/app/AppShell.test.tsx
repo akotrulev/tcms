@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, useLocation } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { api } from '../api/client'
 import type { PermissionKey, Project } from '../api/types'
@@ -134,10 +134,13 @@ describe('AppShell navigation', () => {
     expect(rail().getByRole('link', { name: 'All projects' })).toBeInTheDocument()
     expect(rail().getByRole('link', { name: 'My work' })).toBeInTheDocument()
 
-    // The switcher survives as the project's key — the one question a 64px rail must still answer.
-    expect(rail().getByTestId('Nav.ProjectSwitcher')).toHaveAccessibleName(
-      'Switch project — current project Online Banking',
-    )
+    /*
+      The switcher is no longer in the rail at either width — it moved to the header, where it does
+      not collapse, so the question a 64px rail could not answer is not asked any more. Asserted
+      from both ends so this cannot pass on a switcher that simply failed to render.
+    */
+    expect(rail().queryByTestId('Nav.ProjectSwitcher')).toBeNull()
+    expect(screen.getByTestId('Nav.ProjectSwitcher')).toBeInTheDocument()
   })
 
   it('remembers the collapsed rail across a reload', async () => {
@@ -269,6 +272,99 @@ describe('the rail collapses on the document routes (design language §4)', () =
     renderShell(`/projects/${OLB}/cases`)
     await railReady()
     expect(rail().getByTestId('Nav.CollapseToggle')).toBeInTheDocument()
+  })
+})
+
+/**
+ * The two controls the header gained on 2026-08-29, and the one the rail moved.
+ *
+ * What each test here is actually protecting:
+ *
+ * 1. **The switcher is in the header and nowhere else.** Moving a control usually leaves the old
+ *    one behind, and two switchers that disagree is worse than either placement.
+ * 2. **The search is a field, not a link.** The regression that matters is somebody restoring the
+ *    rail entry: a link satisfies "you can reach search" while giving back the empty-input
+ *    round trip the field exists to remove. So this asserts the *submission*, not the presence.
+ * 3. **The query is carried in the URL.** A field that navigates to a bare `/search` looks
+ *    identical on screen and loses everything the reader typed.
+ * 4. **The collapse toggle is in the rail's header row**, not its foot — the placement is the
+ *    change, so the test names the row rather than only the button.
+ */
+describe('AppShell header controls', () => {
+  const probe = () => screen.getByTestId('Probe.Location').textContent
+
+  function renderWithProbe(route: string) {
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path === '/projects') return PROJECTS
+      if (path.startsWith('/me/permissions')) return heldPermissions([])
+      return []
+    }) as typeof api.get)
+
+    function Probe() {
+      const location = useLocation()
+      return <span data-testid="Probe.Location">{`${location.pathname}${location.search}`}</span>
+    }
+
+    return render(
+      <TestProviders client={createTestQueryClient()} route={route} userId="user-1">
+        <AppShell />
+        <Probe />
+      </TestProviders>,
+    )
+  }
+
+  it('puts the project switcher in the header, naming the resolved project', async () => {
+    renderShell(`/projects/${OLB}/cases`)
+    await railReady()
+
+    /*
+      `AppShell` is mounted here without the app's route table, so nothing matches
+      `/projects/:projectId` and `useActiveProject` falls back to the first project the caller can
+      see — which is the fallback's own behaviour, and what the picker must say when it fires.
+    */
+    const switcher = screen.getByTestId('Nav.ProjectSwitcher')
+    expect(switcher).toHaveTextContent('Online Banking')
+    // The header, not the rail — and the rail keeps no copy of it.
+    expect(switcher.closest('header')).not.toBeNull()
+    expect(rail().queryByTestId('Nav.ProjectSwitcher')).toBeNull()
+  })
+
+  it('searches cases from the header field, carrying the query into the URL', async () => {
+    const user = userEvent.setup()
+    renderWithProbe(`/projects/${OLB}/cases`)
+    await railReady()
+
+    // The rail entry it replaced is gone: a link would satisfy "search is reachable" while
+    // restoring the empty-input hop this field exists to remove.
+    expect(rail().queryByTestId('Nav.Link.Searchcases')).toBeNull()
+
+    const field = screen.getByRole('searchbox', { name: 'Search test cases' })
+    expect(field.closest('header')).not.toBeNull()
+
+    await user.type(field, 'login timeout{Enter}')
+
+    await waitFor(() => expect(probe()).toBe('/search?q=login+timeout'))
+  })
+
+  it('leaves the query off entirely when the field is empty', async () => {
+    const user = userEvent.setup()
+    renderWithProbe(`/projects/${OLB}/cases`)
+    await railReady()
+
+    // Whitespace only — a `?q=` carrying nothing but spaces is a filter the results page would
+    // honour, and it reads as "no matches" rather than as "you searched for nothing".
+    await user.type(screen.getByRole('searchbox', { name: 'Search test cases' }), '   {Enter}')
+
+    await waitFor(() => expect(probe()).toBe('/search'))
+  })
+
+  it('puts the collapse toggle in the rail header row, beside the wordmark', async () => {
+    renderShell(`/projects/${OLB}/cases`)
+    await railReady()
+
+    const toggle = rail().getByTestId('Nav.CollapseToggle')
+    const wordmark = rail().getByTestId('Nav.Wordmark')
+    expect(toggle.parentElement).toBe(wordmark.parentElement)
   })
 })
 

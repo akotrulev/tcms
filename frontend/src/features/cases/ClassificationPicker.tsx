@@ -147,19 +147,6 @@ function flatten(nodes: ClassificationValueNode[], depth = 0): FlatValue[] {
   return nodes.flatMap((node) => [{ value: node.value, depth }, ...flatten(node.children, depth + 1)]);
 }
 
-/**
- * Where a value's `data-testid` comes from, and why the two shapes disagree.
- *
- * A hierarchical dimension's values are addressed **globally** (`Classification.Value.<id>`) and a
- * flat one's are addressed **under their dimension**. That is not a design; it is what shipped, and
- * both spellings are keyed on by tests and by the QA page objects. Renaming either is a change to
- * a locator contract this task does not own — recorded here so the next reader knows it is
- * inherited rather than intended.
- */
-function testIdForValue(dimension: ClassificationDimension, dimensionTestId: string, valueId: string) {
-  return dimension.hierarchical ? `Classification.Value.${valueId}` : `${dimensionTestId}.${valueId}`;
-}
-
 function DimensionControl({
   dimension,
   chosen,
@@ -176,6 +163,18 @@ function DimensionControl({
   onToggle: (valueId: string, on: boolean) => void;
 }) {
   const values = useMemo(() => flatten(buildValueTree(dimension.values)), [dimension.values]);
+
+  /*
+    The dimension is the named parent region, keyed on its stable slug; every value under it shares
+    the one row locator `${testId}.Value`.
+
+    ~~Values carried their database UUID, and in two spellings — hierarchical ones addressed
+    globally as `Classification.Value.<id>`, flat ones under their dimension.~~ → both are gone.
+    The two shapes only existed because a UUID is globally unique, and a UUID is precisely what a
+    locator must not contain: it changes with every seed and re-provision, so no E2E suite can
+    write it down. A test reaches the value it means by the checkbox's accessible name, or by
+    index within this region.
+  */
   const testId = `${testIdPrefix}.Dimension.${dimension.key}`;
 
   if (dimension.cardinality === 'SINGLE') {
@@ -216,7 +215,7 @@ function DimensionControl({
               type="checkbox"
               checked={chosen.has(value.id)}
               onChange={(event) => onToggle(value.id, event.target.checked)}
-              data-testid={testIdForValue(dimension, testId, value.id)}
+              data-testid={`${testId}.Value`}
               className={cn(
                 'size-4 shrink-0 cursor-pointer rounded-[4px] accent-[color:var(--color-steel)]',
                 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
@@ -312,7 +311,7 @@ function SingleValue({
             selected={chosen.has(value.id)}
             depth={depth}
             onChoose={() => choose(value.id)}
-            testId={testIdForValue(dimension, testId, value.id)}
+            testId={`${testId}.Value`}
           >
             {value.name}
           </Option>

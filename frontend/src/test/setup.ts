@@ -35,6 +35,29 @@ import { afterEach, beforeEach, vi } from 'vitest'
 configure({ asyncUtilTimeout: 5000 })
 
 /**
+ * ## Which locator a test reaches for, and why this suite's ratio is what it is
+ *
+ * `data-testid` is the handshake this repo runs on: QA's page objects locate testid-first, and
+ * `components/kit` and every feature screen are tagged for that contract. Inside RTL it is the
+ * *last* resort rather than the first, and the two facts are not in tension — they are about
+ * different readers. An E2E suite needs a locator that survives a copy change; a component test is
+ * the place where the copy and the role ARE the subject.
+ *
+ * **The rule: an interactive element is queried by `getByRole(..., { name })`; a container or a
+ * region is queried by its testid.** A button, link, checkbox, textbox, option or menu item has an
+ * accessible name, and asking for it asserts that name for free. A panel, a row set, a data region's
+ * loading/failed/empty/stale branch, and the notification surface have no role worth naming — their
+ * testid is the honest locator.
+ *
+ * This is written down because the suite's history runs the other way: at the audit that raised it
+ * the ratio was 1037 `getByTestId` to 69 `getByRole`, and the cost was legible — the dead `Escape`
+ * handlers on five hand-rolled popups (audit I5) were invisible to 146 test files, because a test
+ * that finds a control by testid never asks whether a keyboard user could have found it at all. The
+ * ratio is not being swept; a rewrite of a thousand passing assertions buys churn. It moves when a
+ * file is opened for another reason, and new tests start on the right side of it.
+ */
+
+/**
  * jsdom implements neither `matchMedia` nor `ResizeObserver`, and the app reaches for both.
  *
  * ~~MUI reaches for both — the theme's `useMediaQuery` calls, and MUI X's tree/grid

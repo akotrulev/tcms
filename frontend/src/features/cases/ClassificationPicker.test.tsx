@@ -91,7 +91,7 @@ describe('ClassificationPicker', () => {
     // an assertion on 'v-smoke' alone and silently clear the Test Type and the Feature.
     const onChange = renderPicker(['v-functional', 'v-refunds'])
 
-    await userEvent.click(screen.getByTestId('Editor.Dimension.execution_phase.v-smoke'))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Smoke' }))
 
     expect(lastSelection(onChange)).toEqual(['v-functional', 'v-refunds', 'v-smoke'])
   })
@@ -99,7 +99,7 @@ describe('ClassificationPicker', () => {
   it('unticks a MULTI value and keeps the rest', async () => {
     const onChange = renderPicker(['v-functional', 'v-smoke', 'v-regression'])
 
-    await userEvent.click(screen.getByTestId('Editor.Dimension.execution_phase.v-smoke'))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Smoke' }))
 
     expect(lastSelection(onChange)).toEqual(['v-functional', 'v-regression'])
   })
@@ -132,7 +132,7 @@ describe('ClassificationPicker', () => {
     // for two milestones and used it to justify keeping the whole field read-only.
     const onChange = renderPicker([])
 
-    await userEvent.click(screen.getByTestId('Classification.Value.v-payments'))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Payments' }))
 
     expect(lastSelection(onChange)).toEqual(['v-payments'])
   })
@@ -140,15 +140,15 @@ describe('ClassificationPicker', () => {
   it('shows a nested feature under its parent', () => {
     renderPicker([])
 
-    expect(screen.getByTestId('Classification.Value.v-refunds')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Refunds' })).toBeInTheDocument()
   })
 
   it('reflects what the case already carries', () => {
     renderPicker(['v-refunds', 'v-smoke'])
 
-    expect(screen.getByTestId('Classification.Value.v-refunds')).toBeChecked()
-    expect(screen.getByTestId('Editor.Dimension.execution_phase.v-smoke')).toBeChecked()
-    expect(screen.getByTestId('Editor.Dimension.execution_phase.v-regression')).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Refunds' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Smoke' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Regression' })).not.toBeChecked()
   })
 
   /*

@@ -1394,6 +1394,7 @@ function DocLinkTarget({ link, projectId }: { link: DocLink; projectId: string }
         data-testid="CaseDetail.DocLinks.ExternalUrl"
       >
         {link.externalUrl}
+        <span className="sr-only"> (opens in a new tab)</span>
       </a>
     );
   }

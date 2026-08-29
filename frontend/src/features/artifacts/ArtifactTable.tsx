@@ -86,7 +86,7 @@ export function ArtifactTable({
                       {artifact.title}
                     </RouterLink>
                   ) : artifact.kind === 'EXTERNAL_URL' && artifact.url ? (
-                    <a className="font-medium text-[0.8125rem]" href={artifact.url} target="_blank" rel="noopener" data-testid="Artifacts.Row.Link">
+                    <a className="font-medium text-[0.8125rem]" href={artifact.url} target="_blank" rel="noopener noreferrer" data-testid="Artifacts.Row.Link">
                       {artifact.title}
                       <span className="ml-1" aria-hidden="true">
                         ↗

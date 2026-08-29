@@ -107,11 +107,12 @@ export function StepEvidence({
             <a
               href={item.url}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="overflow-hidden text-ellipsis whitespace-nowrap text-sm text-steel underline-offset-4 hover:underline max-w-[200px]"
               data-testid="Execution.Steps.Row.Evidence.Link"
             >
               {item.filename}
+              <span className="sr-only"> (opens in a new tab)</span>
             </a>
             <PermissionGate projectId={projectId} permission="evidence:delete">
               {({ allowed, reason }) => (

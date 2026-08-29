@@ -170,11 +170,12 @@ function EvidenceRow({
         <a
           href={item.url}
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
           className="overflow-hidden text-ellipsis whitespace-nowrap text-sm text-steel underline-offset-4 hover:underline"
           data-testid="Execution.Evidence.Link"
         >
           {item.filename}
+          <span className="sr-only"> (opens in a new tab)</span>
         </a>
         <span className="m-0 text-xs text-ink-2">
           {formatBytes(item.sizeBytes)}

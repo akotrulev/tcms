@@ -59,6 +59,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  Input,
   Select,
   SelectContent,
   SelectItem,
@@ -154,25 +155,6 @@ const MY_WORK: NavItem = {
   label: 'My work',
   to: '/my-work',
   icon: <UserCheck className="size-4" />,
-  end: true,
-};
-
-/**
- * §249's cross-project case search — beside My work, and ungated.
- *
- * **No permission gate at all**, which is the same call `MY_WORK` makes: every company member may
- * open it, and a member holding no project grants gets an honest empty result rather than a
- * refusal. Gating it would need a key, and a key invented for this would be seeded to nobody —
- * `BoardService.teamBoard`'s argument, and §67/§79/§80's.
- *
- * It renders before `useProjects` answers, for `MY_WORK`'s reason: the search's own bound is the
- * caller's project visibility, computed server-side per request, so the rail does not need to know
- * it to offer the screen.
- */
-const CASE_SEARCH: NavItem = {
-  label: 'Search cases',
-  to: '/search',
-  icon: <Search className="size-4" />,
   end: true,
 };
 
@@ -620,19 +602,8 @@ function RailContent({
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }) {
-  const { projectId } = useParams();
-  const projects = useProjects();
-
-  /*
-    A `projectId` in the URL is not evidence that the project exists. The rail used to furnish the
-    whole project context — every nav group, the switcher, the breadcrumb root — straight off the
-    path segment, so `/projects/1/cases` rendered a complete, interactive project that was never
-    there. `ProjectGuard` now diverts a wrong address before the pages render; the rail is the
-    other half, because it draws outside the routed area and would otherwise still be asserting it
-    while the not-found screen says the opposite.
-  */
-  const known = projects.data?.some((p) => p.id === projectId) ?? true;
-  const activeProjectId = (known ? projectId : undefined) ?? projects.data?.[0]?.id;
+  // See `useActiveProject` for why the path segment alone is not enough to name the project.
+  const { activeProjectId } = useActiveProject();
 
   /*
     The rail's only permission reads, and the only two entries any verdict here decides — see
@@ -676,8 +647,8 @@ function RailContent({
       */}
       <div
         className={cn(
-          'flex items-center border-b border-line py-[14px]',
-          collapsed ? 'justify-center px-0' : 'justify-start px-4',
+          'flex items-center gap-2 border-b border-line py-[14px]',
+          collapsed ? 'flex-col justify-center px-0' : 'justify-between px-4',
         )}
       >
         <RouterLink
@@ -694,6 +665,45 @@ function RailContent({
             TCMS
           </Identifier>
         </RouterLink>
+
+        {/*
+          Top of the rail, in the wordmark row. ~~Bottom of the rail, below the scrolling nav
+          list.~~ → **superseded 2026-08-29:** the foot put the control furthest from the edge it
+          moves and furthest from the header the switcher and the search field now live in, so the
+          one gesture that changes the rail's width sat at the opposite end of the screen from
+          everything else that frames it. The wordmark row is the rail's own header, it never
+          scrolls, and it is where the reader's eye already is on arrival — the original note's
+          real requirement ("a toggle that scrolls away with the links is one the user cannot find
+          to undo") is satisfied here too, and better.
+
+          Rendered only where it does something — the drawer omits it, and so does a route that
+          forced the collapse.
+        */}
+        {onToggleCollapse && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="quiet"
+                size="icon"
+                onClick={onToggleCollapse}
+                /*
+                  The accessible name states the *action*, and `aria-expanded` states the current
+                  state of the thing it controls. Naming it "Navigation" and leaving the state to
+                  the attribute alone would read as a second way to open the drawer.
+                */
+                aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+                aria-expanded={!collapsed}
+                aria-controls="nav-rail"
+                data-testid="Nav.CollapseToggle"
+              >
+                {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              {collapsed ? 'Expand navigation' : 'Collapse navigation'}
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       {/*
@@ -703,23 +713,23 @@ function RailContent({
       <ul className="m-0 list-none p-0 py-2">
         <li>
           <RailLink item={MY_WORK} onNavigate={onNavigate} collapsed={collapsed} />
-          <RailLink item={CASE_SEARCH} onNavigate={onNavigate} collapsed={collapsed} />
         </li>
         <li>
           <RailLink item={ALL_PROJECTS} onNavigate={onNavigate} collapsed={collapsed} />
         </li>
       </ul>
 
-      <hr className="m-0 border-t border-line" />
+      {/*
+        ~~The project switcher sat here, between the ungrouped block and the project groups it
+        frames.~~ → **superseded 2026-08-29: it lives in the header.** The frame is now stated once,
+        across the full width of the page, beside the search field that reaches across every project
+        — and it no longer has to be two controls, because the header does not collapse to 64px.
 
-      {/* Project switcher: which project you're in is the frame for every key on screen. */}
-      <ProjectSwitcher
-        projects={projects.data ?? []}
-        activeProjectId={activeProjectId}
-        collapsed={collapsed}
-        onNavigate={onNavigate}
-      />
-
+        What the rail loses is the adjacency argument the old note made: the groups below are scoped
+        by the switcher, and the switcher used to sit directly above them saying so. The headings
+        still say it (`Repository`, `Execution`, `Project`), and the header switcher is the more
+        prominent of the two placements, so a reader is more likely to see it, not less.
+      */}
       <hr className="m-0 border-t border-line" />
 
       <div className="flex-1 overflow-y-auto py-2">
@@ -749,137 +759,142 @@ function RailContent({
         ))}
       </div>
 
-      {/*
-        Bottom of the rail, below the scrolling nav list rather than inside it: it is a control on
-        the rail, not a destination in it, and a toggle that scrolls away with the links is one the
-        user cannot find to undo. Rendered only where it does something — the drawer omits it.
-      */}
-      {onToggleCollapse && (
-        <>
-          <hr className="m-0 border-t border-line" />
-          <div className={cn('flex px-2 py-1.5', collapsed ? 'justify-center' : 'justify-end')}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="quiet"
-                  size="icon"
-                  onClick={onToggleCollapse}
-                  /*
-                    The accessible name states the *action*, and `aria-expanded` states the current
-                    state of the thing it controls. Naming it "Navigation" and leaving the state to
-                    the attribute alone would read as a second way to open the drawer.
-                  */
-                  aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-                  aria-expanded={!collapsed}
-                  aria-controls="nav-rail"
-                  data-testid="Nav.CollapseToggle"
-                >
-                  {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                {collapsed ? 'Expand navigation' : 'Collapse navigation'}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </>
-      )}
     </>
   );
 }
 
 /**
- * The switcher in both widths.
+ * Which project the shell is currently framed by, and the list to switch between.
  *
- * Collapsed it becomes the project's **key** in a button — not a generic folder icon — because the
- * one thing this control must answer at a glance is *which project am I in*, and that is the
- * question a 64px rail is most likely to drop. The key is what the rest of the product identifies a
- * project by, so it needs no legend.
+ * Shared by the rail (which needs the id to build its project groups) and the header switcher
+ * (which needs the list as well) — one resolution rule, read twice, rather than two that can drift.
  *
- * It renders even with no project to switch to, matching the expanded picker, which renders empty
- * rather than disappearing: a member holding no project grants should see that the control exists
- * and is empty, not conclude the app has no projects in it.
+ * A `projectId` in the URL is not evidence that the project exists. The rail used to furnish the
+ * whole project context — every nav group, the switcher, the breadcrumb root — straight off the
+ * path segment, so `/projects/1/cases` rendered a complete, interactive project that was never
+ * there. `ProjectGuard` now diverts a wrong address before the pages render; this is the other
+ * half, because the shell draws outside the routed area and would otherwise still be asserting it
+ * while the not-found screen says the opposite.
  */
-function ProjectSwitcher({
-  projects,
-  activeProjectId,
-  collapsed,
-  onNavigate,
-}: {
-  projects: Project[];
-  activeProjectId: string | undefined;
-  collapsed: boolean;
-  onNavigate?: () => void;
-}) {
-  const navigate = useNavigate();
+function useActiveProject(): { projects: Project[]; activeProjectId: string | undefined } {
+  const { projectId } = useParams();
+  const projects = useProjects();
 
-  const active = projects.find((project) => project.id === activeProjectId);
+  const known = projects.data?.some((p) => p.id === projectId) ?? true;
 
-  const go = (id: string) => {
-    navigate(`/projects/${id}`);
-    onNavigate?.();
+  return {
+    projects: projects.data ?? [],
+    activeProjectId: (known ? projectId : undefined) ?? projects.data?.[0]?.id,
   };
+}
 
-  if (collapsed) {
-    return (
-      <div className="flex justify-center py-3">
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label={active ? `Switch project — current project ${active.name}` : 'Switch project'}
-                  data-testid="Nav.ProjectSwitcher"
-                >
-                  {active ? (
-                    <Identifier variant="strong" className="text-xs">
-                      {active.key}
-                    </Identifier>
-                  ) : (
-                    <Folder className="size-4" />
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent side="right">{active ? `Project: ${active.name}` : 'Project'}</TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent align="start" side="right">
-            {projects.map((project) => (
-              <DropdownMenuItem
-                key={project.id}
-                onClick={() => go(project.id)}
-                className={cn(project.id === activeProjectId && 'bg-wash-2 text-ink')}
-              >
-                <Identifier variant="muted">{project.key}</Identifier>
-                <span>{project.name}</span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    );
-  }
+/**
+ * The project switcher, in the header.
+ *
+ * ~~The switcher in both widths — collapsed it becomes the project's key in a button, because the
+ * one thing this control must answer at a glance is *which project am I in* and that is the
+ * question a 64px rail is most likely to drop.~~ → **superseded 2026-08-29: one control, in the
+ * header.** The header has a fixed height and does not collapse, so the two-variant design and the
+ * question it answered both go away — the switcher now states the frame at full width on every
+ * screen, at the same altitude as the search field that deliberately escapes that frame.
+ *
+ * It still renders with **no project to switch to**, which is the one part of the old design that
+ * survives unchanged: a member holding no project grants should see that the control exists and is
+ * empty, not conclude the app has no projects in it.
+ *
+ * The project's **key** rides beside its name in the list for the reason the collapsed variant
+ * existed at all — the key is what the rest of the product identifies a project by, so it needs no
+ * legend — but as a companion to the name rather than a replacement for it.
+ */
+function ProjectSwitcher() {
+  const navigate = useNavigate();
+  const { projects, activeProjectId } = useActiveProject();
 
   return (
-    <div className="px-3 py-3">
-      <label htmlFor="project-switcher" className="mb-1 block text-xs text-ink-3">
-        Project
-      </label>
-      <Select value={activeProjectId ?? ''} onValueChange={go}>
-        <SelectTrigger id="project-switcher" data-testid="Nav.ProjectSwitcher">
-          <SelectValue placeholder="Select a project" />
-        </SelectTrigger>
-        <SelectContent>
-          {projects.map((project) => (
-            <SelectItem key={project.id} value={project.id}>
-              {project.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <Select value={activeProjectId ?? ''} onValueChange={(id) => navigate(`/projects/${id}`)}>
+      <SelectTrigger
+        id="project-switcher"
+        aria-label="Project"
+        data-testid="Nav.ProjectSwitcher"
+        className="h-8 w-[168px] shrink-0 md:w-[212px]"
+      >
+        <SelectValue placeholder="Select a project" />
+      </SelectTrigger>
+      <SelectContent>
+        {projects.map((project) => (
+          <SelectItem key={project.id} value={project.id}>
+            <span className="flex items-center gap-2">
+              <Identifier variant="muted">{project.key}</Identifier>
+              <span>{project.name}</span>
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/**
+ * §249's cross-project case search, as a **field** rather than a link to one.
+ *
+ * ~~A rail entry beside `My work`, ungated.~~ → **superseded 2026-08-29:** the entry was a link to
+ * a screen whose first act was to ask for a query, so the reader paid a navigation to reach an
+ * empty input. The field is that input, hoisted one level: type, press Enter, land on the results.
+ *
+ * Two properties of the old entry are kept deliberately, because both were argued and neither
+ * changed:
+ *
+ * - **No permission gate at all** — every company member may search, and a member holding no
+ *   project grants gets an honest empty result rather than a refusal. Gating it would need a key,
+ *   and a key invented for this would be seeded to nobody.
+ * - **It is not scoped by the switcher beside it.** The search's bound is the caller's project
+ *   visibility, computed server-side per request — not knowing which project holds the case is the
+ *   entire premise of the screen. That is exactly why it does not pass `projectId`, and why the two
+ *   controls sit side by side rather than the search sitting inside the project frame.
+ *
+ * It is a `<form>` with a submit, not an input that navigates per keystroke: routing on every
+ * character would push a history entry per letter and re-run the query behind the reader's typing.
+ * `CaseSearchPage` owns the live filtering once you are there — this only has to get you there with
+ * the query you meant.
+ */
+function HeaderCaseSearch() {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState('');
+
+  return (
+    <form
+      role="search"
+      className="flex min-w-0 flex-1 items-center"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const q = query.trim();
+        // `URLSearchParams` rather than `encodeURIComponent`, so the query this writes is
+        // byte-identical to the one `CaseSearchPage` writes back through `useSearchParams` — two
+        // spellings of the same search would show as two history entries and two cache keys.
+        navigate(q ? `/search?${new URLSearchParams({ q })}` : '/search');
+      }}
+    >
+      <div className="relative w-full max-w-[420px]">
+        <Search
+          aria-hidden
+          className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-4"
+        />
+        <Input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          /*
+            The accessible name says what is searched, because "Search" alone in a product with a
+            case list, a document tree and a board is three different promises. The placeholder is
+            not the name — it disappears the moment anyone types.
+          */
+          aria-label="Search test cases"
+          placeholder="Search test cases"
+          data-testid="TopBar.CaseSearch"
+          className="h-8 pl-8"
+        />
+      </div>
+    </form>
   );
 }
 
@@ -980,9 +995,21 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
       </Button>
 
       {/*
+        The frame, then the thing that escapes it — in that order, and adjacent on purpose. The
+        switcher says which project every screen below is about; the search reaches across all of
+        them. Reading them left to right is the whole model of the app in two controls.
+      */}
+      <ProjectSwitcher />
+      <HeaderCaseSearch />
+
+      {/*
         Where a page puts its own commit bar — the case editor's Save sits here rather than in a
         footer bar of its own (design language rule 1, 007 §0 item 7). Empty on every route that
         fills nothing, so it doubles as the spacer this header already needed.
+
+        `flex-1` alongside the search field's own `flex-1`: with nothing in the strip it collapses
+        to zero and the search keeps its `max-w`, and when a page fills it the two share what is
+        left. It stays right-aligned either way.
       */}
       <TopStripTarget className="flex flex-1 items-center justify-end gap-2" />
 

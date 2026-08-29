@@ -82,17 +82,17 @@ export const helpSections: HelpSection[] = [
             {
               term: 'The project switcher',
               detail:
-                'In the left rail. Everything below it is scoped to the project you picked — switching projects changes what those screens show.',
+                'In the header, at the top of every screen. Everything in the left rail is scoped to the project you picked — switching projects changes what those screens show.',
+            },
+            {
+              term: 'The search field',
+              detail:
+                'Beside the switcher, and deliberately not scoped by it. Type and press Enter to find a case across every project you can open, for when you do not know which project holds it.',
             },
             {
               term: 'My work',
               detail:
-                'Above the switcher, so it is not scoped by it: everything assigned to you across every project you can see.',
-            },
-            {
-              term: 'Search cases',
-              detail:
-                'Also above the switcher. Finds a case across every project you can open, for when you do not know which project holds it.',
+                'In the rail, above the project groups, so it is not scoped by the switcher: everything assigned to you across every project you can see.',
             },
           ]}
         />

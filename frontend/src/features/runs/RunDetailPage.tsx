@@ -619,7 +619,7 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
                             key={defect.id}
                             href={defect.url}
                             target="_blank"
-                            rel="noopener"
+                            rel="noopener noreferrer"
                             className="text-[12px] text-steel underline-offset-4 hover:underline"
                             data-testid={`${RowTestId}.DefectLink`}
                           >

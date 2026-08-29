@@ -251,6 +251,17 @@ function DimensionPanel({
 }
 
 /**
+ * The row locator, and why it holds no id.
+ *
+ * ~~A value's `data-testid` interpolated its database UUID (`Classification.Value.<uuid>`).~~
+ * → a locator that changes with every seed, environment and re-provision is one an E2E suite
+ * cannot write down, which is what the testid convention's static-row rule exists to prevent. The
+ * row locator is now the same string for every row; a test picks the row it means through the
+ * `aria-label` each control already carries (*"Retire Refunds"*), or by index over the set.
+ */
+const ValueRowTestId = 'Classification.Value';
+
+/**
  * One value and everything under it.
  *
  * The tree comes from `buildValueTree`, which surfaces orphans **and the members of a `parentId`
@@ -291,7 +302,7 @@ function ValueRow({
       <div
         style={{ paddingLeft: depth * 22 }}
         className="group flex items-center gap-2 rounded-[5px] py-1.5 pr-1 text-[13px] hover:bg-wash-1"
-        data-testid={`Classification.Value.${value.id}`}
+        data-testid={ValueRowTestId}
       >
         {depth > 0 && <CornerDownRight aria-hidden className="size-3.5 shrink-0 text-ink-4" />}
         {value.color && (
@@ -314,7 +325,7 @@ function ValueRow({
                   onClick={() => onAdd(value)}
                   title="Add underneath"
                   aria-label={`Add a value under ${value.name}`}
-                  data-testid={`Classification.Value.${value.id}.AddChild`}
+                  data-testid={`${ValueRowTestId}.AddChild`}
                 >
                   <Plus aria-hidden className="size-4" />
                 </Button>
@@ -326,7 +337,7 @@ function ValueRow({
                 onClick={() => onEdit(value)}
                 title="Rename"
                 aria-label={`Rename ${value.name}`}
-                data-testid={`Classification.Value.${value.id}.Edit`}
+                data-testid={`${ValueRowTestId}.Edit`}
               >
                 <Pencil aria-hidden className="size-4" />
               </Button>
@@ -337,7 +348,7 @@ function ValueRow({
                 onClick={() => onRetire(value)}
                 title="Retire"
                 aria-label={`Retire ${value.name}`}
-                data-testid={`Classification.Value.${value.id}.Retire`}
+                data-testid={`${ValueRowTestId}.Retire`}
               >
                 <Trash2 aria-hidden className="size-4" />
               </Button>

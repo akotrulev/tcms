@@ -1375,7 +1375,7 @@ function Blockers({
                           key={defect.id}
                           href={defect.url}
                           target="_blank"
-                          rel="noopener"
+                          rel="noopener noreferrer"
                           data-testid="PlanStats.Blockers.Row.DefectLink"
                           className="inline-flex items-center gap-1 text-[12px] text-steel hover:underline"
                         >

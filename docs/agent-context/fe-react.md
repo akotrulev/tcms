@@ -1,6 +1,6 @@
 # fe-react — orientation cache
 
-**Baseline commit:** `6de8c9a9` · **Written:** 2026-08-29 · **Verdict on creation:** FULL (no cache existed)
+**Baseline commit:** `7818740c` · **Last verified:** 2026-08-29 · **Verdict this run:** FULL (fingerprint changed — `package.json` + lockfile moved in the T16 delta, invalidating the version lane and everything keyed to it)
 
 Per `ep-agent-orientation-cache`: validate this against a git delta before trusting it. A changed
 `frontend/package.json`, `package-lock.json`, `tsconfig*.json` or `vite.config.ts` invalidates the
@@ -49,14 +49,16 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 |---|---|
 | Server state | **TanStack Query owns all of it.** `src/api/queries/`, one file per domain behind a barrel. **One** `keys` factory in `keys.ts` — never add a second |
 | Client state | Session in Context; **filter state lives in the URL** (`useSearchParams`) |
-| Component library | **MUI v9** + `@mui/icons-material`; X: `x-data-grid` (1 file), `x-tree-view` (2), `x-date-pickers` (**0 — an unused dependency**) |
-| Styling authority | MUI `theme` + `sx`. Tokens are CSS custom properties in `index.css`, bridged into `createTheme` in `app/theme.ts`, pinned by `app/themeTokenParity.test.ts` |
+| Component library | **shadcn/ui over Radix** in `components/ui/` (18 files) + the house kit in `components/kit/` (16). ~~MUI v9~~ → gone in T16; `@mui/*`, `@emotion/*`, `notistack` are in no import and no `package.json` |
+| Styling authority | **Tailwind v4, single authority.** Preflight on, one stylesheet (`src/index.css`), no `sx`, no CSS-in-JS, no CSS Modules. Tokens are custom properties bridged into utility names by `@theme inline` (*inline* is load-bearing — it emits `var(…)` so the `[data-color-scheme]` swap moves every utility). `app/tokenSystem.test.ts` checks the system against itself |
+| Lines & washes | `border-line` / `border-line-strong` / `bg-line` / `bg-wash-1..3` / `bg-rail` — added in the audit-fix pass to replace 277 `white/N` alpha literals the T16 port left. **A raw `-white/` alpha in `src/` now fails `tokenSystem.test.ts`**; use these |
+| Session token | **In memory only** — `auth/accessToken.ts`, never `localStorage`. A reload signs the user out (no refresh endpoint until backend M4). Cross-tab sign-in carries the token on `sessionChannel`'s `signed-in` message |
 | Provider order | `app/Providers.tsx` — **nesting order is load-bearing and documented in the file**: the query client is constructed *innermost* because its global error handlers consume the notification and session-recovery providers |
 | Errors | `lib/describeError.ts` is the one place an error becomes user-facing copy (owns `isTransient()`); `app/queryClient.ts` is the one place a failure raises a notification; `components/ErrorBoundaries.tsx` has the root/route/region tiers |
 | Data states | `components/DataRegion.tsx` — loading/loaded/failed/empty/stale |
 | Display logic | **Shared layer, never the page**: `lib/labels.ts` (each `satisfies Record<Union, string>`, so a new enum member is a compile error until labeled), `lib/format.ts`, `lib/results.ts`, `lib/permissions.ts`, `components/Identifier` for anything monospace |
-| `data-testid` | Broad coverage, `Domain.Thing` convention, per-file `TestIdPrefix` const. **Tests query by testid and role, not MUI class** — only 8 files touch MUI internals |
-| MUI testid workaround | `lib/muiTestIds.ts` — `inputTestId` / `selectTestId`, because MUI types slot props too narrowly to accept `data-*` |
+| `data-testid` | ~1470 (676 literal + 794 composed), `Domain.Thing` PascalCase, per-file `TestIdPrefix` const. `ClassificationPicker.tsx:150` documents `Classification.Value.<id>` as a **locator contract QA page objects key on** — do not rename it here |
+| Field ↔ error wiring | `components/kit/Field.tsx` clones its child to add `aria-describedby` pointing at `${htmlFor}-message`. Callers pass nothing; do not re-add per-call-site ids |
 | Dev fault switches | `lib/devFaults.ts` behind `src/api/client.ts`; `tcmsFaults.{status,hang,expire,drift,only,off}()` in the console. Both guards are a **literal** `import.meta.env.DEV` so Rollup drops the module — routing that check through an imported constant ships it |
 
 ## Test-harness rules the suites enforce
@@ -87,14 +89,31 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 
 ## Known unknowns
 
-- **Nothing in `docs/specs/assets/renders/` is implemented.** Nine render families, 42 screens,
-  drawn 2026-08-28 and never ported. `docs/plans/007-render-design-implementation.md` is the plan
-  for it; before that plan lands, any screen this agent touches is still MUI.
+- **84 tests fail on a clean checkout, in 18 files, and they are T16 port residue** — not the
+  audit-fix pass, which reduced them from 137. Five distinct causes, each needing a judgment call
+  about whether the test or the component is wrong (e.g. `HealthChip` puts its `data-testid` on the
+  `TooltipTrigger asChild` wrapper while the colour sits on the `Pill` inside, so the test reads
+  black). Unowned.
+- ~~**Nothing in `docs/specs/assets/renders/` is implemented.**~~ → 007 landed T6–T16; all 42
+  screens are on the render kit.
 - The renders were opened at 1680px only. No claim holds at 1280px, against a real API, or with a
   fifty-step case (design-language §0, §9.1).
 - E2E / Playwright surfaces belong to the `qa-ui-typescript` peer; none are mapped here.
 
 ## Session log
+
+- **2026-08-29** — fe-react conformance audit (`docs/audits/001-fe-react-conformance-r1.md`, 18
+  findings) then Mode FIX over it. **`master` was red on arrival and had been since T16** — 60 `tsc`
+  errors in 22 files, CI failing on `7818740c`; the audit's A1 said "unverifiable, static only" and
+  should have looked. Repaired all 60 (MUI props on the new primitives, `variant="text"/"contained"`,
+  dropped `cn`/`DialogHeader`/`buttonVariants` imports, `PlanCasesTab`'s duplicated import block,
+  and the `themeTokenParity` → `tokenSystem` rename `tsconfig.node.json` never followed). Two port
+  defects found while doing it and fixed: `ReportView`'s bar chart computed `barPercents` and drew
+  no bar, and `PlanCasesTab`'s three reference chips had lost both their JSX braces and their
+  remove affordance. Then the findings: 277 `white/N` literals → tokens + a gate; the session token
+  → memory; `kit/Field` → `aria-describedby`; `kit/Combobox` → arrow keys + a live `Escape` (it was
+  bound to a listbox that never holds focus, in five places); `CaseEditorPage` → keyed by `caseId`;
+  seven nav buttons → real links; five stale MUI comments deleted. Suite went 137 red → 84.
 
 - **2026-08-29** — T8 (family 9, the states). **`notistack` is imported by no file.** The split
   survives the swap and is now *two surfaces, one of them sonner*: `<Toaster />` replaces
