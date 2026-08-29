@@ -421,7 +421,7 @@ export function CaseDetailPage() {
                 />
 
                 {(data.description || data.expectedOutcome) && (
-                  <section className="mt-8 border-t border-white/8 pt-5">
+                  <section className="mt-8 border-t border-line pt-5">
                     <div className="grid gap-5 md:grid-cols-2">
                       {data.description && <Field label="Description" value={data.description} />}
                       {data.expectedOutcome && (
@@ -468,8 +468,8 @@ export function CaseDetailPage() {
                 one click away. `RailRow`'s read-only branch is a `<div>` rather than a disabled
                 button for exactly that reason — there is no action behind it to enable.
               */}
-              <aside className="w-full shrink-0 border-white/8 bg-panel lg:w-[300px] lg:border-l">
-                <section className="border-b border-white/8 px-4 py-4" data-testid="CaseDetail.Summary">
+              <aside className="w-full shrink-0 border-line bg-panel lg:w-[300px] lg:border-l">
+                <section className="border-b border-line px-4 py-4" data-testid="CaseDetail.Summary">
                   <h2 className={SECTION_HEADING}>Summary</h2>
                   <RailRow readOnly label="Suite" value={data.suiteName ?? EM_DASH} />
                   <RailRow
@@ -491,7 +491,7 @@ export function CaseDetailPage() {
                   />
                 </section>
 
-                <section className="border-b border-white/8 px-4 py-4" data-testid="CaseDetail.LastResult">
+                <section className="border-b border-line px-4 py-4" data-testid="CaseDetail.LastResult">
                   <h2 className={SECTION_HEADING}>Last result</h2>
                   {data.lastResult?.statusKind ? (
                     <>
@@ -518,7 +518,7 @@ export function CaseDetailPage() {
                   )}
                 </section>
 
-                <section className="border-b border-white/8 px-4 py-4" data-testid="CaseDetail.Automation">
+                <section className="border-b border-line px-4 py-4" data-testid="CaseDetail.Automation">
                   <h2 className={SECTION_HEADING}>Automation</h2>
                   <RailRow
                     readOnly
@@ -558,7 +558,7 @@ export function CaseDetailPage() {
                   )}
                 </section>
 
-                <section className="border-b border-white/8 px-4 py-4" data-testid="CaseDetail.Classification">
+                <section className="border-b border-line px-4 py-4" data-testid="CaseDetail.Classification">
                   <h2 className={SECTION_HEADING}>Classification</h2>
                   {/*
                     §0 item 3, rule 4 — *nothing configured, nothing shown*. A project that has
@@ -602,7 +602,7 @@ export function CaseDetailPage() {
                   this is a panel a reader acts on, and a quarantined test is a standing decision
                   somebody has to either justify or undo.
                 */}
-                <div className="border-b border-white/8 px-4 py-4">
+                <div className="border-b border-line px-4 py-4">
                   <FlakePanel projectId={projectId} testCase={data} />
                 </div>
 
@@ -613,7 +613,7 @@ export function CaseDetailPage() {
                   so the panel can say the case has moved past the version under review — the
                   server cannot compute that, holding only one of the two numbers.
                 */}
-                <div className="border-b border-white/8 px-4 py-4">
+                <div className="border-b border-line px-4 py-4">
                   <ReviewPanel
                     projectId={projectId}
                     subjectType="CASE"
@@ -710,7 +710,7 @@ function LifecycleMenu({
             onKeyDown={(event) => {
               if (event.key === 'Escape') setOpen(false);
             }}
-            className="absolute right-0 z-50 mt-1 min-w-[200px] rounded-md border border-white/8 bg-panel p-1 shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]"
+            className="absolute right-0 z-50 mt-1 min-w-[200px] rounded-md border border-line bg-panel p-1 shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]"
           >
             {moves.map((option) => (
               <PermissionGate
@@ -735,7 +735,7 @@ function LifecycleMenu({
                       'focus-visible:outline-2 focus-visible:outline-offset-[-2px] ' +
                       'focus-visible:outline-[color:var(--color-given)] ' +
                       (allowed && !setStatus.isPending
-                        ? 'cursor-pointer text-ink-2 hover:bg-white/5 hover:text-ink'
+                        ? 'cursor-pointer text-ink-2 hover:bg-wash-2 hover:text-ink'
                         : 'cursor-not-allowed text-ink-4')
                     }
                   >
@@ -1058,7 +1058,7 @@ function FeatureDialog({
           {(text) => (
             <pre
               data-testid="CaseDetail.Feature.Text"
-              className="m-0 max-h-[60vh] overflow-auto rounded-md border border-white/8 bg-field p-3 font-mono text-[12.5px] leading-[1.7] whitespace-pre text-ink-2"
+              className="m-0 max-h-[60vh] overflow-auto rounded-md border border-line bg-field p-3 font-mono text-[12.5px] leading-[1.7] whitespace-pre text-ink-2"
             >
               {text}
             </pre>
@@ -1086,7 +1086,7 @@ function GherkinView({ source }: { source: string }) {
   return (
     <pre
       data-testid="CaseDetail.Steps.Gherkin"
-      className="m-0 overflow-x-auto rounded-md border border-white/8 bg-field p-3 font-mono text-[12.5px] leading-[1.7] text-ink-2"
+      className="m-0 overflow-x-auto rounded-md border border-line bg-field p-3 font-mono text-[12.5px] leading-[1.7] text-ink-2"
     >
       {source.split('\n').map((line, i) => {
         const match = KEYWORDS.exec(line);
@@ -1266,7 +1266,7 @@ function DocLinksPanel({
           Not linked to any specification. Nothing traces this case back to a requirement.
         </p>
       ) : (
-        <div className="flex flex-col divide-y divide-white/8">
+        <div className="flex flex-col divide-y divide-line">
           {links.map((link) => (
             <div key={link.id} className="py-2.5 first:pt-0" data-testid="CaseDetail.DocLinks.Item">
               <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -1308,7 +1308,7 @@ function DocLinksPanel({
               </div>
 
               {link.blockExcerpt && (
-                <p className="m-0 border-l-2 border-white/8 pl-3 text-[13px] text-ink-3">
+                <p className="m-0 border-l-2 border-line pl-3 text-[13px] text-ink-3">
                   {link.blockExcerpt}
                 </p>
               )}

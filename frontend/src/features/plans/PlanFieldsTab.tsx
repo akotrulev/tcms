@@ -8,6 +8,7 @@ import {
   criterionMetricLabels,
   criterionOperators,
 } from '../../lib/labels';
+import { criterionRowId } from './planDraft';
 import type { CriterionRow, PlanDraft } from './planDraft';
 
 /**
@@ -203,13 +204,13 @@ function CriteriaEditor({
 </div>
         )}
         {rows.map((row, index) => (
-          <div className="flex flex-col" key={index}>
+          <div className="flex flex-col" key={row.rowId}>
             <NativeSelect
               value={row.metric}
               onChange={(event) => update(index, { metric: event.target.value })}
               data-testid={`${testId}.Metric.${index}`}
-              inputProps={{ 'aria-label': `Metric for criterion ${index + 1}` }}
-              style={{ minWidth: 170 }}
+              aria-label={`Metric for criterion ${index + 1}`}
+              className="min-w-[170px]"
             >
               {Object.entries(criterionMetricLabels).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -233,8 +234,8 @@ function CriteriaEditor({
               value={row.op}
               onChange={(event) => update(index, { op: event.target.value })}
               data-testid={`${testId}.Op.${index}`}
-              inputProps={{ 'aria-label': `Comparison for criterion ${index + 1}` }}
-              style={{ minWidth: 80 }}
+              aria-label={`Comparison for criterion ${index + 1}`}
+              className="min-w-[80px]"
             >
               {criterionOperators.map((op) => (
                 <option key={op} value={op}>
@@ -278,7 +279,7 @@ function CriteriaEditor({
             disabled={rows.length >= MAX_CRITERIA}
             data-testid={`${testId}.Add`}
             onClick={() =>
-              onChange([...rows, { metric: 'pass_rate', op: '>=', value: '', label: '' }])
+              onChange([...rows, { rowId: criterionRowId(), metric: 'pass_rate', op: '>=', value: '', label: '' }])
             }
           >
             Add criterion

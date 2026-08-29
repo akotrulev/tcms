@@ -201,7 +201,7 @@ function DimensionControl({
           <label
             key={value.id}
             style={depth > 0 ? { paddingLeft: depth * 16 } : undefined}
-            className="flex cursor-pointer items-center gap-2 rounded-[5px] py-1 text-[13px] text-ink-2 hover:bg-white/3"
+            className="flex cursor-pointer items-center gap-2 rounded-[5px] py-1 text-[13px] text-ink-2 hover:bg-wash-1"
           >
             {/*
               A native input rather than `components/ui/checkbox`, and it is the one place in the
@@ -284,7 +284,7 @@ function SingleValue({
         className={cn(
           ROW,
           '-mx-2 cursor-pointer list-none border border-transparent px-2',
-          'hover:border-white/14 hover:bg-white/3',
+          'hover:border-line-strong hover:bg-wash-1',
           'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]',
           '[&::-webkit-details-marker]:hidden',
         )}
@@ -299,7 +299,7 @@ function SingleValue({
       <div
         role="listbox"
         aria-label={dimension.name}
-        className="mt-1 flex max-h-56 flex-col overflow-auto rounded-[5px] border border-white/8 bg-panel p-1"
+        className="mt-1 flex max-h-56 flex-col overflow-auto rounded-[5px] border border-line bg-panel p-1"
       >
         {/* A case need not be classified — `test_case` has no NOT NULL for any of this, and a
             picker with no way back to "unset" makes the first accidental choice permanent. */}
@@ -345,7 +345,7 @@ function Option({
       style={depth > 0 ? { paddingLeft: 8 + depth * 16 } : undefined}
       className={cn(
         'cursor-pointer rounded-[4px] border-0 bg-transparent px-2 py-1 text-left text-[13px]',
-        'hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-offset-[-2px]',
+        'hover:bg-wash-2 focus-visible:outline-2 focus-visible:outline-offset-[-2px]',
         'focus-visible:outline-[color:var(--color-given)]',
         selected ? 'text-steel' : 'text-ink-2',
       )}

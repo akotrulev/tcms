@@ -51,7 +51,7 @@ export function DocumentTitle({ children, why, whyLabel = 'Why', className }: Do
           {why}
         </p>
       )}
-      <div className="my-[18px] h-px bg-white/8" />
+      <div className="my-[18px] h-px bg-line" />
     </div>
   );
 }

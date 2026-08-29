@@ -27,17 +27,17 @@ type SourceType = BlockLink['sourceType'];
 const TestIdPrefix = 'Docs.Block.LinkDialog';
 
 const FIELD =
-  'w-full rounded-[6px] border border-white/8 bg-field px-3 py-1.5 text-left text-[13px] text-ink ' +
+  'w-full rounded-[6px] border border-line bg-field px-3 py-1.5 text-left text-[13px] text-ink ' +
   'placeholder:text-ink-4 focus-visible:outline-2 focus-visible:outline-offset-2 ' +
   'focus-visible:outline-[color:var(--color-given)]';
 
 const POPOVER =
-  'absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border border-white/8 bg-panel p-1 ' +
+  'absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border border-line bg-panel p-1 ' +
   'shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]';
 
 const OPTION =
   'block w-full cursor-pointer rounded-[4px] px-2.5 py-1.5 text-left text-[13px] text-ink-2 ' +
-  'hover:bg-white/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] ' +
+  'hover:bg-wash-2 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] ' +
   'focus-visible:outline-[color:var(--color-given)]';
 
 /**
@@ -187,7 +187,7 @@ export function LinkBlockDialog({
           <div
             role="group"
             aria-label="What is being linked"
-            className="inline-flex w-fit gap-0.5 rounded-lg bg-white/4 p-0.5"
+            className="inline-flex w-fit gap-0.5 rounded-lg bg-wash-1 p-0.5"
           >
             {(Object.keys(linkSourceTypeLabels) as SourceType[]).map((value) => (
               <button

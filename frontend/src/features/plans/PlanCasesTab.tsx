@@ -1,4 +1,4 @@
-import { Badge, Banner, MultiPicker } from '../../components/kit';
+import { Banner, Chip, MultiPicker } from '../../components/kit';
 import { Field } from '../../components/kit/Field';
 import {
   Button,
@@ -14,15 +14,6 @@ import {
 } from '../../components/ui';
 import { NativeSelect } from '../../components/ui/native-select';
 import { ArrowDown, ArrowUp, Trash2 } from 'lucide-react';
-import { Banner, MultiPicker } from '../../components/kit';
-import { Field } from '../../components/kit/Field';
-import {
-  Button,
-  Input,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '../../components/ui';
 import { useMemo, useState } from 'react';
 import { useCases, useProjectTags, useSuites, type CaseReference } from '../../api/queries';
 import type { TestCaseSummary, TestPlan } from '../../api/types';
@@ -349,7 +340,7 @@ function GroupCard({
   const remove = (reference: Reference) => onChange(removeReference(draft, group, reference));
 
   return (
-    <div className="border border-white/8 rounded-lg p-3" data-testid={section ? 'PlanCases.Section' : 'PlanCases.Unsectioned'}>
+    <div className="border border-line rounded-lg p-3" data-testid={section ? 'PlanCases.Section' : 'PlanCases.Unsectioned'}>
       <div className="flex flex-col gap-3">
         <div className="flex gap-2 items-center flex-wrap">
           {section ? (
@@ -409,43 +400,61 @@ function GroupCard({
 
         {/* What defines this group — the references, never the cases they resolve to. */}
         <div className="flex gap-1 flex-wrap">
-          {references.suiteIds.map((id) => (
-            <Badge tone="plain"
-              key={`suite-${id}`}
-              data-testid="PlanCases.SuiteChip"
-              // The suite tree is served whole, so an unresolved id here means the list has not
-              // arrived yet — never that the suite is missing. `…` says loading; a sentence about
-              // a suite not being found would be a claim this component cannot make.
-            >
-`Suite ${suitesById.get(id)?.name ?? '…'}`</Badge>
-          ))}
-          {references.tags.map((tag) => (
-            <Badge tone="plain"
-              key={`tag-${tag}`}
-              data-testid="PlanCases.TagChip"
-            >
-`Tag ${tag}`</Badge>
-          ))}
+          {references.suiteIds.map((id) => {
+            /*
+              The suite tree is served whole, so an unresolved id here means the list has not
+              arrived yet — never that the suite is missing. `…` says loading; a sentence about a
+              suite not being found would be a claim this component cannot make.
+            */
+            const reference: Reference = { kind: 'suite', id };
+            return (
+              <Chip
+                key={`suite-${id}`}
+                data-testid="PlanCases.SuiteChip"
+                onClick={() => remove(reference)}
+                onRemove={() => remove(reference)}
+              >
+                {`Suite ${suitesById.get(id)?.name ?? '…'}`}
+              </Chip>
+            );
+          })}
+          {references.tags.map((tag) => {
+            const reference: Reference = { kind: 'tag', value: tag };
+            return (
+              <Chip
+                key={`tag-${tag}`}
+                data-testid="PlanCases.TagChip"
+                onClick={() => remove(reference)}
+                onRemove={() => remove(reference)}
+              >
+                {`Tag ${tag}`}
+              </Chip>
+            );
+          })}
           {references.caseIds.map((id) => {
             const known = casesById.get(id);
+            const reference: Reference = { kind: 'case', id };
             return (
-              <Badge tone="plain"
+              <Chip
                 key={`case-${id}`}
                 data-testid="PlanCases.CaseChip"
+                onClick={() => remove(reference)}
+                onRemove={() => remove(reference)}
               >
-
-                  known ? (
-                    <div className="flex gap-1.5 items-center">
-                      <Identifier>{known.key}</Identifier>
-                      <span>{known.title}</span>
-                    </div>
-                  ) : (
-                    // Since B8 this is a case the by-ids read did not answer for: deleted since
-                    // the plan named it, or past the 200-id cap. It can still be removed, which
-                    // is what the chip is for. Named honestly rather than shown as a UUID.
-                    'A case this project no longer lists'
-                  )
-                </Badge>
+                {known ? (
+                  <span className="flex gap-1.5 items-center">
+                    <Identifier>{known.key}</Identifier>
+                    <span>{known.title}</span>
+                  </span>
+                ) : (
+                  /*
+                    Since B8 this is a case the by-ids read did not answer for: deleted since the
+                    plan named it, or past the 200-id cap. It can still be removed, which is what
+                    the chip is for. Named honestly rather than shown as a UUID.
+                  */
+                  'A case this project no longer lists'
+                )}
+              </Chip>
             );
           })}
           {references.suiteIds.length + references.tags.length + references.caseIds.length === 0

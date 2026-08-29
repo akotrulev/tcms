@@ -1,3 +1,4 @@
+import { buttonVariants } from '../../components/ui/buttonVariants';
 import { Link2 } from 'lucide-react';
 import { Banner } from '../../components/kit';
 import { Field } from '../../components/kit/Field';
@@ -6,6 +7,7 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
+  DialogHeader,
   DialogTitle,
   Input,
 } from '../../components/ui';
@@ -225,7 +227,7 @@ function LinkIssueDialog({
                     onClick={() => link(issue)}
                     disabled={create.isPending}
                     data-testid="CaseDetail.IssueLinks.Result"
-                    className="block w-full cursor-pointer px-4 py-1.5 text-left hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-45"
+                    className="block w-full cursor-pointer px-4 py-1.5 text-left hover:bg-wash-2 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <span className="block text-[13px] text-ink">
                       {issue.key} · {issue.title}

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
 
@@ -13,9 +13,16 @@ import { cn } from '../../lib/cn';
  * hint is the shape that keeps the layout still when a save comes back 400, and `role="alert"` is
  * what makes it reach somebody who is not looking at the field they just left.
  *
- * `features/cases/ConditionEditDialog.tsx` has a private copy of this, written in 007 T7 before
- * there was anywhere shared to put it. This is the same component; that one should collapse onto
- * it the next time the file is open.
+ * **The message is tied to the control, not merely placed under it.** `role="alert"` fires once,
+ * when the refusal appears; a reader who tabs back to the field a moment later gets nothing from
+ * it. So the message carries an id derived from `htmlFor` and the control is given a matching
+ * `aria-describedby` — which is what makes the field announce *why* it is invalid rather than only
+ * *that* it is. Wired here by cloning the child rather than asked of ~40 call sites, because a
+ * rule every caller has to remember is one some caller will not.
+ *
+ * ~~`features/cases/ConditionEditDialog.tsx` has a private copy of this, written in 007 T7 before
+ * there was anywhere shared to put it.~~ → collapsed onto this in the audit-fix pass, along with
+ * the copies in `BulkActionDialog` and `AssignExecutionsDialog`.
  */
 export interface FieldProps {
   label: ReactNode;
@@ -28,15 +35,28 @@ export interface FieldProps {
 
 export function Field({ label, htmlFor, help, error, children, className }: FieldProps) {
   const message = error ?? help;
+  const messageId = `${htmlFor}-message`;
+
+  const only = Children.count(children) === 1 ? Children.only(children) : null;
+  const described =
+    message !== undefined && message !== false && only !== null && isValidElement(only)
+      ? cloneElement(only as ReactElement<{ 'aria-describedby'?: string }>, {
+          'aria-describedby':
+            [(only.props as { 'aria-describedby'?: string })['aria-describedby'], messageId]
+              .filter(Boolean)
+              .join(' '),
+        })
+      : children;
 
   return (
     <div className={cn('min-w-0', className)}>
       <label htmlFor={htmlFor} className="mb-1 block text-[13px] font-medium text-ink-2">
         {label}
       </label>
-      {children}
+      {described}
       {message && (
         <p
+          id={messageId}
           role={error ? 'alert' : undefined}
           className={cn('m-0 mt-1 text-xs', error ? 'text-[color:var(--color-failed)]' : 'text-ink-4')}
         >

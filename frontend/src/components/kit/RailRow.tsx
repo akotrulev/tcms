@@ -65,7 +65,7 @@ export function RailRow({ label, value, onOpen, readOnly, className, ...rest }: 
       className={cn(
         ROW,
         '-mx-2 w-[calc(100%+1rem)] cursor-pointer border border-transparent px-2',
-        'hover:border-white/14 hover:bg-white/3',
+        'hover:border-line-strong hover:bg-wash-1',
         'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]',
         className,
       )}

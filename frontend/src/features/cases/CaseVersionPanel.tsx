@@ -81,7 +81,7 @@ function VersionRow({ version, isCurrent }: { version: CaseVersion; isCurrent: b
   return (
     <div
       data-testid="CaseDetail.Versions.Item"
-      className={cn('border-l-2 pl-3', isCurrent ? 'border-steel' : 'border-white/8')}
+      className={cn('border-l-2 pl-3', isCurrent ? 'border-steel' : 'border-line')}
     >
       <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
         <Identifier variant="strong">v{version.versionNo}</Identifier>
@@ -156,7 +156,7 @@ function EarliestRecorded({ oldest }: { oldest: CaseVersion | undefined }) {
 
   return (
     <p
-      className="m-0 border-t border-white/8 pt-3 text-xs text-ink-2"
+      className="m-0 border-t border-line pt-3 text-xs text-ink-2"
       data-testid="CaseDetail.Versions.EarliestRecorded"
     >
       v{oldest.versionNo} is the earliest recorded version. This case is older than its history —

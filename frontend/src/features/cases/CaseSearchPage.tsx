@@ -355,7 +355,7 @@ function Pager({
 
   return (
     <div
-      className="flex flex-wrap items-center justify-end gap-3 border-t border-white/8 px-3 py-2 text-[12px] text-ink-4"
+      className="flex flex-wrap items-center justify-end gap-3 border-t border-line px-3 py-2 text-[12px] text-ink-4"
       data-testid={`${TestId}.Pager`}
     >
       <label className="flex items-center gap-1.5">
@@ -363,7 +363,7 @@ function Pager({
         <select
           value={size}
           onChange={(event) => onSize(Number(event.target.value))}
-          className="rounded-[5px] border border-white/8 bg-field px-1.5 py-0.5 font-mono text-[12px] text-ink-2"
+          className="rounded-[5px] border border-line bg-field px-1.5 py-0.5 font-mono text-[12px] text-ink-2"
           data-testid={`${TestId}.Pager.Size`}
         >
           {[25, 50, 100].map((option) => (
@@ -440,7 +440,7 @@ function EnumFilter({
             }
           : undefined
       }
-      className="inline-flex items-center gap-1.5 rounded-[5px] border border-white/8 px-2.5 py-[3px] font-sans text-xs text-ink-2"
+      className="inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] font-sans text-xs text-ink-2"
     >
       <DropdownMenu>
         <DropdownMenuTrigger

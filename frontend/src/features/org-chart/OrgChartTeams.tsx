@@ -26,7 +26,7 @@ export function OrgChartTeams({ teams }: { teams: Team[] }) {
         <div
           key={team.id}
           data-testid="OrgChart.Teams.Item"
-          className={depth > 0 ? 'border-l border-white/8 pl-3' : undefined}
+          className={depth > 0 ? 'border-l border-line pl-3' : undefined}
           style={depth > 1 ? { marginLeft: (depth - 1) * 12 } : undefined}
         >
           <div className="flex flex-wrap items-center gap-1.5">

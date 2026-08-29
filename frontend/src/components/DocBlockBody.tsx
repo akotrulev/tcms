@@ -134,7 +134,7 @@ function CodeBody({ block, testId }: { block: DocBlock; testId: string }) {
     // blob — and keeps that scrollbar inside this block, which is the rule the table below follows.
     <pre
       data-testid={`${testId}.Code`}
-      className="m-0 overflow-x-auto rounded border border-white/8 bg-field p-3 font-mono text-[0.85rem] whitespace-pre-wrap text-ink"
+      className="m-0 overflow-x-auto rounded border border-line bg-field p-3 font-mono text-[0.85rem] whitespace-pre-wrap text-ink"
     >
       {/* A real <code> inside a real <pre>: the two elements together are what tells a screen
           reader this is preformatted source rather than a paragraph that happens to be monospace. */}
@@ -162,7 +162,7 @@ function TableBody({ block, testId }: { block: DocBlock; testId: string }) {
 
   const [header, ...body] = rows;
 
-  const CELL = 'border border-white/8 px-2 py-1.5 text-left align-top text-[0.9rem]';
+  const CELL = 'border border-line px-2 py-1.5 text-left align-top text-[0.9rem]';
 
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
@@ -327,7 +327,7 @@ function AttachmentImage({
         // image in a specification is never decorative.
         alt={alt}
         data-testid={`${testId}.Image`}
-        className="h-auto max-w-full rounded border border-white/8"
+        className="h-auto max-w-full rounded border border-line"
       />
       {/* The alt text again, visibly. In a specification the sentence describing a diagram is part
           of the specification — a reader quoting the document needs it, and hiding it in an

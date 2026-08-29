@@ -345,7 +345,7 @@ export function NotificationChannelDialog({
               </div>
             )}
 
-            <div className="border-t border-white/8 pt-4">
+            <div className="border-t border-line pt-4">
               <p className="text-[13px] text-ink-2">What this channel is told about</p>
               <p className="text-[12px] leading-[1.55] text-ink-4">
                 {/*

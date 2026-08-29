@@ -108,8 +108,7 @@ export function StepEvidence({
               href={item.url}
               target="_blank"
               rel="noreferrer"
-              variant="caption"
-              className="overflow-hidden text-ellipsis whitespace-nowrap text-sm text-steel underline-offset-4 hover:underline" style={{ maxWidth: 200 }}
+              className="overflow-hidden text-ellipsis whitespace-nowrap text-sm text-steel underline-offset-4 hover:underline max-w-[200px]"
               data-testid="Execution.Steps.Row.Evidence.Link"
             >
               {item.filename}

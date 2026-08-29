@@ -415,8 +415,8 @@ function StartCard({
       disabled={disabled}
       data-testid={testId}
       className={cn(
-        'flex cursor-pointer flex-col items-start rounded-lg border border-white/8 bg-panel p-3.5 text-left',
-        'hover:border-white/14 focus-visible:outline-2 focus-visible:outline-offset-2',
+        'flex cursor-pointer flex-col items-start rounded-lg border border-line bg-panel p-3.5 text-left',
+        'hover:border-line-strong focus-visible:outline-2 focus-visible:outline-offset-2',
         'focus-visible:outline-[color:var(--color-given)]',
         'disabled:cursor-not-allowed disabled:opacity-45',
         highlighted &&
@@ -425,7 +425,7 @@ function StartCard({
     >
       <span className="mb-1.5 text-[13.5px] font-semibold text-ink">{title}</span>
       <span className="text-[12.5px] leading-[1.5] text-ink-3">{children}</span>
-      <span className="mt-2.5 rounded border border-white/14 px-[5px] py-px font-mono text-[10.5px] text-ink-4">
+      <span className="mt-2.5 rounded border border-line-strong px-[5px] py-px font-mono text-[10.5px] text-ink-4">
         {hint}
       </span>
     </button>
@@ -1256,7 +1256,7 @@ function CaseEditorForm({
             migration behind it. So the *panel* goes and the fields stay, in the document's
             narrative column under the procedure, where prose belongs.
           */}
-          <section className="mt-10 max-w-[74ch] border-t border-white/8 pt-6" data-testid={`${TestIdPrefix}.Notes`}>
+          <section className="mt-10 max-w-[74ch] border-t border-line pt-6" data-testid={`${TestIdPrefix}.Notes`}>
             <div className="grid gap-5 md:grid-cols-2">
               <NoteField
                 label="Expected outcome"
@@ -1310,8 +1310,8 @@ function CaseEditorForm({
           It is present on the BLANK STATE too, with defaults and the Suite prefilled from context
           (frame B draws no rail; a new case still needs a suite).
         */}
-        <aside className="w-full shrink-0 border-white/8 bg-panel lg:w-[300px] lg:border-l">
-          <section className="border-b border-white/8 px-4 py-4" data-testid={`${TestIdPrefix}.Rail`}>
+        <aside className="w-full shrink-0 border-line bg-panel lg:w-[300px] lg:border-l">
+          <section className="border-b border-line px-4 py-4" data-testid={`${TestIdPrefix}.Rail`}>
             <h2 className="m-0 mb-2 text-[11px] font-semibold tracking-[.08em] text-ink-3 uppercase">
               Properties
             </h2>
@@ -1369,7 +1369,7 @@ function CaseEditorForm({
                 <RailDisclosure
                   label="Priority"
                   value={
-                    <span className="rounded-full border border-white/8 bg-white/6 px-2 py-0.5 text-[11.5px] text-ink-2">
+                    <span className="rounded-full border border-line bg-wash-2 px-2 py-0.5 text-[11.5px] text-ink-2">
                       {priorityLabels[field.value]}
                     </span>
                   }
@@ -1514,7 +1514,7 @@ function CaseEditorForm({
               </RailField>
             </RailDisclosure>
 
-            <div className="my-2 h-px bg-white/8" />
+            <div className="my-2 h-px bg-line" />
 
             {/*
               PRECONDITIONS — a read-only inherited count, because the case's OWN preconditions
@@ -1626,7 +1626,7 @@ function CaseEditorForm({
                       )}
                     </div>
 
-                    <div className="h-px bg-white/8" />
+                    <div className="h-px bg-line" />
 
                     {/* POSTCONDITIONS — new, and the render draws no such row. Gherkin emits
                         them as comments the parser reads back as nothing by design, so the
@@ -1667,7 +1667,7 @@ function CaseEditorForm({
             rows firing eight reads of a thousand-row list — does not apply to a panel there is
             one of.
           */}
-          <section className="border-b border-white/8 px-4 py-4" data-testid={`${TestIdPrefix}.Corpus`}>
+          <section className="border-b border-line px-4 py-4" data-testid={`${TestIdPrefix}.Corpus`}>
             <h2 className="m-0 mb-2 text-[11px] font-semibold tracking-[.08em] text-ink-3 uppercase">
               Steps this project uses
             </h2>
@@ -1689,7 +1689,7 @@ function CaseEditorForm({
                         type="button"
                         onClick={() => insertFromCorpus(row)}
                         data-testid={`${TestIdPrefix}.Corpus.Step`}
-                        className="cursor-pointer rounded-md px-2.5 py-2 text-left text-[13px] leading-[1.45] text-ink-2 hover:bg-white/4 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]"
+                        className="cursor-pointer rounded-md px-2.5 py-2 text-left text-[13px] leading-[1.45] text-ink-2 hover:bg-wash-1 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]"
                       >
                         <span className="block font-medium text-ink">{row.action}</span>
                         {/* The ranking signal, shown rather than only sorted by. */}
@@ -1713,7 +1713,7 @@ function CaseEditorForm({
             are the picker's `emptyNotice`, owned here because this is the side that knows
             where Classification lives.
           */}
-          <section className="border-b border-white/8 px-4 py-4">
+          <section className="border-b border-line px-4 py-4">
             <h2 className="m-0 mb-2 text-[11px] font-semibold tracking-[.08em] text-ink-3 uppercase">
               Classification
             </h2>
@@ -1821,11 +1821,11 @@ function CaseEditorForm({
 }
 
 const SELECT_CLASS =
-  'w-full cursor-pointer rounded-[6px] border border-white/8 bg-field px-2 py-1 text-[13px] text-ink ' +
+  'w-full cursor-pointer rounded-[6px] border border-line bg-field px-2 py-1 text-[13px] text-ink ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]';
 
 const INPUT_CLASS =
-  'w-full rounded-[6px] border border-white/8 bg-field px-2 py-1 text-[13px] text-ink ' +
+  'w-full rounded-[6px] border border-line bg-field px-2 py-1 text-[13px] text-ink ' +
   'placeholder:text-ink-4 ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]';
 
@@ -1864,7 +1864,7 @@ function RailDisclosure({
         data-testid={testId}
       />
       {open && (
-        <div className="mt-1 mb-2 flex flex-col gap-3 rounded-md border border-white/8 bg-field px-2.5 py-2.5">
+        <div className="mt-1 mb-2 flex flex-col gap-3 rounded-md border border-line bg-field px-2.5 py-2.5">
           {children}
         </div>
       )}

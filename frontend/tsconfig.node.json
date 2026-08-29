@@ -14,6 +14,7 @@
     "noEmit": true,
 
     /* Linting */
+    "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
@@ -43,6 +44,6 @@
     "src/api/contractOperations.test.ts",
     "src/api/contractFixtures.test.ts",
     "src/api/contractIntrospection.ts",
-    "src/app/themeTokenParity.test.ts"
+    "src/app/tokenSystem.test.ts"
   ]
 }

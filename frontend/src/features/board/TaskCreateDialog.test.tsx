@@ -18,8 +18,8 @@ import { drivingAFailedRead } from '../../test/renderFailures'
  *      as assignees, so the form would offer a choice the submit rejects. This is the one
  *      assertion that fails if somebody "simplifies" the hook to the directory it looks like.
  *   2. **"Unassigned" sends `null`, not `''`.** The contract types `assigneeId` as `uuid | null`,
- *      and the empty string is the default value of a MUI select. Sending it would 400 on the
- *      option the form starts on, which is the most-used path through this dialog.
+ *      and the empty string is the default value of the unassigned
+ *      option. Sending it would 400 on the option the form starts on, which is the most-used path through this dialog.
  *   3. **A members request that fails does not block the create.** The assignment is optional; a
  *      dialog that refused to submit because an optional list did not load would let one failing
  *      request cost the task.
@@ -53,14 +53,8 @@ function renderDialog(onCreated = vi.fn()) {
   )
 }
 
-/**
- * MUI's `select` TextField is a listbox behind a button, not a native `<select>`, so
- * `selectOptions` cannot drive it — the value reaches react-hook-form through the hidden input MUI
- * updates when an option is clicked. `RunCreateDialog.test` documents the same trap.
- */
-async function chooseAssignee(testId: string) {
-  await userEvent.click(screen.getByRole('combobox', { name: /assignee/i }))
-  await userEvent.click(await screen.findByTestId(testId))
+async function chooseAssignee(value: string) {
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: /assignee/i }), value)
 }
 
 describe('TaskCreateDialog — the assignee picker', () => {
@@ -95,12 +89,11 @@ describe('TaskCreateDialog — the assignee picker', () => {
     const post = vi.spyOn(api, 'post').mockResolvedValue(aWorkItem({ id: 't1', title: 'X' }) as never)
 
     renderDialog()
-    // The options only exist once the popover is open — MUI renders the menu lazily — so the
-    // list having loaded is observed through the field leaving its disabled loading state.
+    // The list having loaded is observed through the field leaving its disabled loading state.
     await waitFor(() => expect(screen.getByRole('combobox', { name: /assignee/i })).not.toHaveAttribute('aria-disabled', 'true'))
 
     await userEvent.type(screen.getByTestId('Board.Create.Title'), 'Update the refund cases')
-    await chooseAssignee('Board.Create.Assignee.user-marco')
+    await chooseAssignee('user-marco')
     await userEvent.click(screen.getByTestId('Board.Create.Submit'))
 
     await waitFor(() => expect(post).toHaveBeenCalled())

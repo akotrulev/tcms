@@ -27,7 +27,7 @@ export function Tile({ label, value, detail, alert, onClick, className, ...rest 
       onClick={onClick}
       style={alert ? { borderColor: 'color-mix(in oklab, var(--color-failed) 26%, transparent)' } : undefined}
       className={cn(
-        'rounded-lg border border-white/8 bg-panel px-[15px] py-[13px] text-left hover:border-white/14',
+        'rounded-lg border border-line bg-panel px-[15px] py-[13px] text-left hover:border-line-strong',
         className,
       )}
       {...rest}

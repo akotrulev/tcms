@@ -72,7 +72,7 @@ export function MyWorkPage() {
       */}
       <header
         data-testid="MyWork.Header"
-        className="mb-3 flex flex-wrap items-start gap-3 border-b border-white/8 pb-3"
+        className="mb-3 flex flex-wrap items-start gap-3 border-b border-line pb-3"
       >
         <div className="min-w-0 flex-1">
           <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">My work</h1>

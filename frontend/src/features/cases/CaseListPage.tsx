@@ -128,7 +128,7 @@ export function CaseListPage() {
       <div className="flex flex-col items-start gap-4 md:flex-row">
         {/* The tree is its own region — its failure must not empty the grid beside it. */}
         <div className="w-full shrink-0 md:w-[260px]">
-          <section data-testid="Cases.SuitePanel" className="border-b border-white/8 pb-3 md:border-b-0 md:pb-0">
+          <section data-testid="Cases.SuiteTree" className="border-b border-line pb-3 md:border-b-0 md:pb-0">
             <h2 className="mb-2 px-1 font-mono text-[11px] font-medium uppercase tracking-[.07em] text-ink-4">
               Suites
             </h2>

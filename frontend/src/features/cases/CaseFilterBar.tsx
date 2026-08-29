@@ -319,7 +319,7 @@ function SelectFilter({
         value={value ?? ''}
         onChange={(event) => onChange(event.target.value || undefined)}
         data-testid={testId}
-        inputProps={{ 'aria-label': `Filter by ${label.toLowerCase()}` }}
+        aria-label={`Filter by ${label.toLowerCase()}`}
       >
         <option value="">{label}: any</option>
         {(dimension?.values ?? []).map((option) => (

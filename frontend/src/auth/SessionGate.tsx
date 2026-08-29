@@ -40,7 +40,7 @@ export function SessionGate({ children }: { children: ReactNode }) {
         */}
         <span
           aria-hidden
-          className="size-5 rounded-full border-2 border-white/12 border-t-steel motion-safe:animate-spin"
+          className="size-5 rounded-full border-2 border-line-strong border-t-steel motion-safe:animate-spin"
         />
         <p className="m-0 text-sm text-ink-2">Restoring your session…</p>
       </div>

@@ -496,7 +496,7 @@ function ScheduleDialog({
             <select
               value={zoneId}
               onChange={(event) => setZoneId(event.target.value)}
-              className="w-full rounded-[6px] border border-white/8 bg-field px-3 py-1.5 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
+              className="w-full rounded-[6px] border border-line bg-field px-3 py-1.5 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
               data-testid="RunSchedules.Dialog.Zone"
             >
               {zoneOptions(schedule?.zoneId).map((zone) => (

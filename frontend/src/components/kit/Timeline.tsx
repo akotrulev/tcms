@@ -50,7 +50,7 @@ export function TimelineEvent({ when, children, detail, highlighted, className, 
           }
           className={cn('z-10 mt-1.5 size-[7px] shrink-0 rounded-full', highlighted ? 'bg-steel' : 'bg-ink-4')}
         />
-        <span aria-hidden className="tl-connector absolute top-[11px] bottom-[-16px] w-px bg-white/8" />
+        <span aria-hidden className="tl-connector absolute top-[11px] bottom-[-16px] w-px bg-line" />
       </span>
       <span className="min-w-0 pl-3 text-[13px] leading-[1.55] text-ink-2">
         {children}

@@ -161,7 +161,7 @@ export function ConditionEditDialog({
               value={type}
               onChange={(event) => setType(event.target.value)}
               data-testid="CaseEditor.Condition.Type"
-              className="w-full cursor-pointer rounded-[6px] border border-white/8 bg-field px-3 py-1.5 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
+              className="w-full cursor-pointer rounded-[6px] border border-line bg-field px-3 py-1.5 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
             >
               {TYPES.map((option) => (
                 <option key={option.value} value={option.value}>

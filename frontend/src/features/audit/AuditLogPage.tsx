@@ -256,7 +256,7 @@ function Pager({
 
   return (
     <div
-      className="mt-3 flex flex-wrap items-center gap-3 border-t border-white/8 pt-3 text-[12px] text-ink-3"
+      className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3 text-[12px] text-ink-3"
       data-testid="Audit.Pager"
     >
       <span>
@@ -321,7 +321,7 @@ function GroupRow({ group }: { group: AuditGroup }) {
         open && (
           // Nested inside the event rather than as a sibling row, so opening one cannot move the
           // gutter or the stamp column of anything below it.
-          <ol className="mt-1.5 flex flex-col gap-1.5 border-l border-white/8 pl-3" data-testid="Audit.Group.Rows">
+          <ol className="mt-1.5 flex flex-col gap-1.5 border-l border-line pl-3" data-testid="Audit.Group.Rows">
             {group.rows.map((row) => (
               <li key={row.id} className="text-[12.5px] text-ink-3" data-testid="Audit.Row">
                 <Actor row={row} /> <span data-testid="Audit.Row.Action">{auditActionLabel(row.action)}</span>{' '}

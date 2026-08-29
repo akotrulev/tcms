@@ -226,7 +226,7 @@ function FailedCaseRow({
   return (
     <div>
       <CaseLine execution={execution} projectId={projectId} runId={runId} />
-      <div className="pl-4 mt-1 border-l-2 border-white/8">
+      <div className="pl-4 mt-1 border-l-2 border-line">
         {pending ? null : outcome === null ? (
           <span className="m-0 text-xs text-ink-2">
             Open the case to see where it failed.

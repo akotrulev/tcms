@@ -163,7 +163,7 @@ function BlankScaffold({ testId }: { testId: string }) {
         Name the case on the first line…
       </span>
       <span className="mt-1 block text-sm">One sentence stating what is verified</span>
-      <span className="my-5 block h-px max-w-[74ch] bg-white/8" />
+      <span className="my-5 block h-px max-w-[74ch] bg-line" />
       {SCAFFOLD.map((row, index) => (
         <ProcedureLine key={row.keyword} line={index + 1} keyword={row.keyword} className="opacity-55">
           {row.hint}
@@ -331,8 +331,8 @@ export function CaseDocument({
             onClick={addTag}
             data-testid={`${testIdPrefix}.Document.AddTag`}
             className={cn(
-              'rounded-[5px] border border-dashed border-white/14 px-[7px] py-0.5',
-              'font-mono text-xs text-ink-4 hover:border-white/25 hover:text-ink-2',
+              'rounded-[5px] border border-dashed border-line-strong px-[7px] py-0.5',
+              'font-mono text-xs text-ink-4 hover:border-line-strong hover:text-ink-2',
               'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
             )}
           >
@@ -418,7 +418,7 @@ export function CaseDocument({
           <div
             data-testid={`${testIdPrefix}.Document.Suggestions`}
             style={{ top: popup.top, left: popup.left }}
-            className="absolute z-30 w-[min(520px,100%)] overflow-hidden rounded-md border border-white/14 bg-panel py-1 shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]"
+            className="absolute z-30 w-[min(520px,100%)] overflow-hidden rounded-md border border-line-strong bg-panel py-1 shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]"
           >
             {options.map((option, index) => (
               <div
@@ -434,7 +434,7 @@ export function CaseDocument({
                 }}
                 className={cn(
                   'flex cursor-pointer items-baseline gap-2.5 px-3 py-1.5 text-[13.5px]',
-                  index === highlighted && 'bg-white/5',
+                  index === highlighted && 'bg-wash-2',
                 )}
               >
                 <span className="font-medium text-ink">{option.action}</span>

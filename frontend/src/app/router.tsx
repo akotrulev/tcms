@@ -32,9 +32,13 @@ import { ProjectsPage } from '../features/projects/ProjectsPage';
  * the whole URL shape — including the `/c/{companySlug}` segment that arrives with backend
  * M6 — gets designed once rather than twice.
  *
- * Heavy screens are code-split. The grid, the editor, the dashboard and the board each pull
- * in a sizable chunk of MUI X, and a user who only reviews plans should not pay for the
- * DataGrid on first load.
+ * Heavy screens are code-split. ~~The grid, the editor, the dashboard and the board each pull
+ * in a sizable chunk of MUI X, and a user who only reviews plans should not pay for the DataGrid
+ * on first load.~~ → T16 removed MUI X; the split stayed because the weight moved rather than
+ * left. The editor carries the Gherkin document surface and its corpus, the board carries
+ * `@dnd-kit`, the dashboard and the statistics page carry their own chart drawing, and the grid
+ * carries TanStack Table — none of which belongs in the first load of someone who only reviews
+ * plans. The boundaries are the same; only the reason for each is different.
  */
 
 const CaseListPage = lazy(() =>

@@ -75,27 +75,16 @@ export default defineConfig({
       },
     },
   },
-  build: {
-    /**
-     * Raised from the 500 kB default to 600 kB, deliberately and with the reasoning recorded,
-     * rather than left to fire on every build until everyone learns to ignore it.
-     *
-     * The chunk it fires on is `CaseListPage`, at ~528 kB raw / ~155 kB gzip, and the weight is
-     * MUI X DataGrid. Two things make that acceptable where a 528 kB *entry* chunk would not be:
-     *
-     *   1. **It is not on the critical path.** The route is `lazy()`, so the grid is fetched
-     *      only when someone opens the case list. First load is the `index` chunk at ~118 kB
-     *      gzip, comfortably inside the 130–170 kB per-route budget.
-     *   2. **Splitting it further made it worse.** Forcing the DataGrid into its own
-     *      `manualChunks` entry defeated tree-shaking: the page chunk fell to 72 kB but the
-     *      grid chunk came out at 728 kB, taking total JS from ~909 kB to ~1275 kB. And since
-     *      `CaseGrid.tsx` is the only consumer, the separate chunk bought no cache reuse — it
-     *      was downloaded in lockstep with the page anyway. Measured, then reverted.
-     *
-     * The real lever, if this route's weight ever becomes a problem, is dropping MUI X DataGrid
-     * for a plain table — a Phase 5 conversation about whether its features earn their cost,
-     * not a bundler setting.
-     */
-    chunkSizeWarningLimit: 600,
-  },
+  /*
+   * ~~`chunkSizeWarningLimit: 600`, raised from the 500 kB default because `CaseListPage` came out
+   * at ~528 kB raw on the weight of MUI X DataGrid — and because forcing the grid into its own
+   * `manualChunks` entry defeated tree-shaking, taking total JS from ~909 kB to ~1275 kB.
+   * Measured, then reverted.~~
+   *
+   * → **Removed.** T16 replaced the DataGrid with TanStack Table and the chunk it was raised for
+   * no longer exists: `CaseListPage` is ~86 kB raw / ~26 kB gzip, and the largest chunk in the
+   * build is ~399 kB. Nothing is within reach of even the default limit, so the raise was
+   * suppressing a warning that has nothing left to fire on — and a suppression outliving its
+   * subject is how the next genuinely oversized chunk ships unnoticed.
+   */
 })

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
 
@@ -24,6 +24,15 @@ export interface BadgeProps {
   tone: BadgeTone;
   children: ReactNode;
   className?: string;
+  /**
+   * An colour outside the eight tones, merged over the tone's own.
+   *
+   * Three callers need a hue the kit does not name — `--color-info` on an inherited artifact,
+   * the flake bands, the report-job lifecycle — and mapping each onto its nearest tone would be
+   * those files quietly choosing a different colour. Not an escape hatch for styling in general:
+   * everything else belongs in `className`.
+   */
+  style?: CSSProperties;
   'data-testid'?: string;
 }
 
@@ -45,7 +54,7 @@ const FILLED_PCT: Partial<Record<BadgeTone, { border: number; bg: number }>> = {
   steel: { border: 22, bg: 12 },
 };
 
-export function Badge({ tone, children, className, ...rest }: BadgeProps) {
+export function Badge({ tone, children, className, style: override, ...rest }: BadgeProps) {
   const varName = tone === 'plain' ? null : `var(${TONE_VAR[tone]})`;
   const filled = FILLED_PCT[tone];
 
@@ -63,10 +72,10 @@ export function Badge({ tone, children, className, ...rest }: BadgeProps) {
 
   return (
     <span
-      style={style}
+      style={{ ...style, ...override }}
       className={cn(
-        'inline-flex items-center gap-[5px] whitespace-nowrap rounded-full border border-white/8',
-        'bg-white/5 px-2 py-0.5 text-[11.5px] font-medium text-ink-2',
+        'inline-flex items-center gap-[5px] whitespace-nowrap rounded-full border border-line',
+        'bg-wash-2 px-2 py-0.5 text-[11.5px] font-medium text-ink-2',
         className,
       )}
       {...rest}

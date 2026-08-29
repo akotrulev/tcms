@@ -394,8 +394,8 @@ function TeamTree({
           style={{ marginLeft: depth * 22 }}
           className={
             depth > 0
-              ? 'border-b border-l-2 border-white/8 py-2.5 pl-3 last:border-b-0'
-              : 'border-b border-white/8 py-2.5 last:border-b-0'
+              ? 'border-b border-l-2 border-line py-2.5 pl-3 last:border-b-0'
+              : 'border-b border-line py-2.5 last:border-b-0'
           }
         >
           <div className="flex flex-wrap items-center gap-2">

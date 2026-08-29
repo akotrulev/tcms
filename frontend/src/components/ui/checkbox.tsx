@@ -12,7 +12,7 @@ function Checkbox({ className, ...props }: ComponentProps<typeof CheckboxPrimiti
     <CheckboxPrimitive.Root
       className={cn(
         'peer flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] ' +
-          'border border-white/14 bg-field transition-colors ' +
+          'border border-line-strong bg-field transition-colors ' +
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)] ' +
           'disabled:cursor-not-allowed disabled:opacity-45 ' +
           'data-[state=checked]:border-steel data-[state=checked]:bg-steel',
@@ -20,7 +20,7 @@ function Checkbox({ className, ...props }: ComponentProps<typeof CheckboxPrimiti
       )}
       {...props}
     >
-      <CheckboxPrimitive.Indicator className="flex items-center justify-center text-[#08121a]">
+      <CheckboxPrimitive.Indicator className="flex items-center justify-center text-[color:var(--color-on-action)]">
         <svg
           className="size-3"
           viewBox="0 0 24 24"

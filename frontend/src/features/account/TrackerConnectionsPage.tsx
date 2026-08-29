@@ -135,7 +135,7 @@ function IdentityRow({
   return (
     <div
       data-testid={`${TestId}.Row`}
-      className="flex items-start gap-4 border-b border-white/8 py-4 last:border-b-0"
+      className="flex items-start gap-4 border-b border-line py-4 last:border-b-0"
     >
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[13.5px] font-medium text-ink">

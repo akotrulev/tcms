@@ -275,7 +275,7 @@ export function PasteGherkinDialog({
             close();
           }}
           disabled={!result}
-          variant={hasSteps ? 'contained' : 'text'}
+          variant={hasSteps ? 'primary' : 'quiet'}
           data-testid="PasteGherkin.Append"
         >
           Add to the steps
@@ -286,8 +286,7 @@ export function PasteGherkinDialog({
             close();
           }}
           disabled={!result}
-          color={hasSteps ? 'warning' : 'primary'}
-          variant={hasSteps ? 'text' : 'contained'}
+          variant={hasSteps ? 'danger' : 'primary'}
           title={hasSteps ? 'The steps already written are discarded, with their ids.' : undefined}
           data-testid="PasteGherkin.Replace"
         >

@@ -42,14 +42,10 @@ const formatLabel = (format: string): string =>
 export function DownloadReportButton({
   job,
   testId,
-  size = 'small',
-  variant = 'outlined',
 }: {
   job: ReportJob;
   /** Locator root; the control renders as `<testId>` and its failure as `<testId>.Error`. */
   testId: string;
-  size?: 'small' | 'medium';
-  variant?: 'outlined' | 'contained';
 }) {
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -84,8 +80,8 @@ export function DownloadReportButton({
       )}
       <div>
         <Button
-          size={size}
-          variant={variant}
+          size="sm"
+          variant="ghost"
           disabled={downloading}
           onClick={() => void download()}
           data-testid={testId}

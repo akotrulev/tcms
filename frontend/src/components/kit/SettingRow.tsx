@@ -31,7 +31,7 @@ export function SettingRow({ label, description, consequence, control, className
   return (
     <div
       className={cn(
-        'grid items-start gap-4 border-b border-white/8 py-4 last:border-b-0',
+        'grid items-start gap-4 border-b border-line py-4 last:border-b-0',
         'md:grid-cols-[minmax(0,1fr)_220px] md:gap-[26px]',
         className,
       )}
@@ -43,7 +43,7 @@ export function SettingRow({ label, description, consequence, control, className
           <p className="max-w-[62ch] text-[12.5px] leading-[1.55] text-ink-3">{description}</p>
         )}
         {consequence && (
-          <p className="mt-2 max-w-[62ch] border-l-2 border-white/14 pl-2.5 text-[12px] leading-[1.55] text-ink-4">
+          <p className="mt-2 max-w-[62ch] border-l-2 border-line-strong pl-2.5 text-[12px] leading-[1.55] text-ink-4">
             {consequence}
           </p>
         )}

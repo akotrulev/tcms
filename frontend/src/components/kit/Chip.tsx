@@ -42,7 +42,7 @@ export function Chip({
     : undefined;
 
   const pill = cn(
-    'inline-flex items-center gap-1.5 rounded-[5px] border border-white/8 px-2.5 py-[3px]',
+    'inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px]',
     'font-sans text-xs text-ink-2',
     variant === 'add' && 'border-dashed text-ink-4',
     className,
@@ -54,7 +54,7 @@ export function Chip({
         type="button"
         onClick={onClick}
         style={selectedStyle}
-        className={cn(pill, 'hover:border-white/14 hover:bg-white/4 hover:text-ink', FOCUS)}
+        className={cn(pill, 'hover:border-line-strong hover:bg-wash-1 hover:text-ink', FOCUS)}
         {...rest}
       >
         {children}

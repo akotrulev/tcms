@@ -132,7 +132,7 @@ const VIA_FILL: Record<OrgChartAssignment['via'], string> = {
   TEAM:
     'border-[color:color-mix(in_oklab,var(--color-passed)_26%,transparent)] ' +
     'bg-[color:color-mix(in_oklab,var(--color-passed)_12%,transparent)] text-[color:var(--color-passed)]',
-  INHERITED: 'border-white/8 bg-white/4 text-ink-3',
+  INHERITED: 'border-line bg-wash-1 text-ink-3',
 };
 
 /**

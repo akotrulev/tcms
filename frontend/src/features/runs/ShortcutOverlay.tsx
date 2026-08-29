@@ -54,7 +54,7 @@ export function ShortcutOverlay({ open, onClose }: { open: boolean; onClose: () 
                     className="flex items-baseline gap-3"
                     data-testid="Execution.Shortcuts.Row"
                   >
-                    <dt className="min-w-10 shrink-0 rounded-[2px] border border-white/8 px-1.5 py-0.5 text-center font-mono text-xs font-semibold text-ink">
+                    <dt className="min-w-10 shrink-0 rounded-[2px] border border-line px-1.5 py-0.5 text-center font-mono text-xs font-semibold text-ink">
                       {shortcut.display}
                     </dt>
                     <dd className="m-0 text-sm text-ink">{shortcut.description}</dd>

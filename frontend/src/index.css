@@ -47,6 +47,26 @@
 
   --color-steel: var(--color-action-primary);
 
+  /*
+   * Lines and washes — the two families the T16 port spelled as `border-white/8` and
+   * `bg-white/5` in 86 files.
+   *
+   * Those literals are correct on a dark ground and invisible on a light one, which is what
+   * made the light palette below unusable rather than merely divergent. Both families are
+   * authored per palette as ALPHA values, not opaque hexes, because the thing being drawn is a
+   * modifier of whatever surface it sits on — a rule over `panel` and the same rule over `field`
+   * must both read, and an opaque colour can only be right over one of them.
+   *
+   * The dark values are byte-identical to the literals they replaced, so this is a fix to light
+   * and not a restyle of dark.
+   */
+  --color-line: var(--color-rule);
+  --color-line-strong: var(--color-rule-strong);
+  --color-wash-1: var(--color-overlay-1);
+  --color-wash-2: var(--color-overlay-2);
+  --color-wash-3: var(--color-overlay-3);
+  --color-rail: var(--color-surface-rail);
+
   --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 
@@ -97,6 +117,18 @@
   --color-surface-raised: #ffffff;
   --color-border: #dde3ea;
   --color-border-strong: #c3ccd8;
+
+  /*
+   * Ink-tinted rather than pure black: a neutral grey wash over a white panel reads as dirt,
+   * where a wash carrying the text hue reads as the same material one step forward. Same
+   * reasoning as the dark palette's refusal of pure black.
+   */
+  --color-rule: rgb(27 42 65 / 12%);
+  --color-rule-strong: rgb(27 42 65 / 20%);
+  --color-overlay-1: rgb(27 42 65 / 4%);
+  --color-overlay-2: rgb(27 42 65 / 6%);
+  --color-overlay-3: rgb(27 42 65 / 10%);
+  --color-surface-rail: #eef1f5;
 
   /* --- text --- */
   --color-text: #1b2a41;
@@ -211,6 +243,14 @@
   --color-surface-raised: #1c242f;
   --color-border: #2a3340;
   --color-border-strong: #3b4757;
+
+  /* The literals T16 wrote inline, unchanged — see the bridge's note. */
+  --color-rule: rgb(255 255 255 / 8%);
+  --color-rule-strong: rgb(255 255 255 / 14%);
+  --color-overlay-1: rgb(255 255 255 / 4%);
+  --color-overlay-2: rgb(255 255 255 / 5%);
+  --color-overlay-3: rgb(255 255 255 / 8%);
+  --color-surface-rail: #0c1119;
 
   --color-text: #e8edf3;
   --color-text-muted: #9aa8ba;

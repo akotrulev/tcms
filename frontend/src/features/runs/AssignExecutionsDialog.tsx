@@ -309,32 +309,6 @@ export function AssignExecutionsDialog({
 }
 
 /** One labelled control with its server-side error underneath — `BulkActionDialog`'s `Field`. */
-function Field({
-  label,
-  htmlFor,
-  error,
-  children,
-}: {
-  label: string
-  htmlFor: string
-  error?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div>
-      <label className="m-0 text-xs block mb-1" htmlFor={htmlFor}>
-        {label}
-      </label>
-      {children}
-      {error && (
-        <span className="m-0 text-xs text-[color:var(--color-failed)] mt-1 block" role="alert">
-          {error}
-        </span>
-      )}
-    </div>
-  )
-}
-
 /**
  * Two readings of one result: who gets how many, and which case goes where.
  *

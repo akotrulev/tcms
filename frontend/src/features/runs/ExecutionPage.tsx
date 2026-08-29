@@ -388,7 +388,7 @@ function ModeSwitch({ mode, onChange }: { mode: ExecutionMode; onChange: (next: 
   } satisfies Record<ExecutionMode, string>;
 
   return (
-    <div role="group" aria-label="Execution layout" className="inline-flex gap-0.5 rounded-md bg-white/4 p-0.5">
+    <div role="group" aria-label="Execution layout" className="inline-flex gap-0.5 rounded-md bg-wash-1 p-0.5">
       {EXECUTION_MODES.map((option) => {
         const active = option === mode;
         return (
@@ -442,7 +442,7 @@ function RailSection({
   children: ReactNode;
 }) {
   return (
-    <section className={cn('border-b border-white/8 px-4 py-3.5', className)} data-testid={testId}>
+    <section className={cn('border-b border-line px-4 py-3.5', className)} data-testid={testId}>
       <h2 className={SECTION_HEADING}>
         {title}
         {aside && <span className="ml-auto font-mono tracking-normal normal-case">{aside}</span>}
@@ -997,7 +997,7 @@ function ExecutionForm({
           not yet noticed them on the current step.
         */}
         {steps.length > 0 && (
-          <p className="mt-5 flex flex-wrap items-center gap-3 border-t border-white/8 pt-3 text-[12px] text-ink-4">
+          <p className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-3 text-[12px] text-ink-4">
             <span>
               Recorded{' '}
               <b className="font-medium text-ink-3">
@@ -1010,7 +1010,7 @@ function ExecutionForm({
       </DocumentSurface>
 
       {/* THE RAIL — the render's right `.side`: record, describe, attach, assign. */}
-      <aside className="w-full shrink-0 border-white/8 bg-panel lg:w-[300px] lg:border-l">
+      <aside className="w-full shrink-0 border-line bg-panel lg:w-[300px] lg:border-l">
         <RailSection
           title={failedStep ? `Failed at step ${failedStepIndex + 1}` : 'Record the result'}
           testId="Execution.Actions"
@@ -1097,8 +1097,8 @@ function ExecutionForm({
                           : undefined
                       }
                       className={cn(
-                        'flex-1 cursor-pointer rounded-md border border-white/8 px-1.5 py-2 text-center',
-                        'text-[12.5px] font-medium text-ink-2 hover:border-white/14 hover:bg-white/4',
+                        'flex-1 cursor-pointer rounded-md border border-line px-1.5 py-2 text-center',
+                        'text-[12.5px] font-medium text-ink-2 hover:border-line-strong hover:bg-wash-1',
                         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
                         'disabled:cursor-not-allowed disabled:opacity-45',
                         // The suggestion is a weight, not a state: a heavier border on the verdict
@@ -1459,8 +1459,8 @@ function StepLine({
                     // fifteen steps, and a ragged right edge makes the column unscannable — the
                     // tester is aiming down it, not reading it.
                     'grid h-6 w-[30px] cursor-pointer place-items-center rounded-[3px] border',
-                    'border-white/8 font-mono text-[11px] font-semibold text-ink-3',
-                    'hover:border-white/14 hover:text-ink',
+                    'border-line font-mono text-[11px] font-semibold text-ink-3',
+                    'hover:border-line-strong hover:text-ink',
                     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
                     'disabled:cursor-not-allowed disabled:opacity-45',
                   )}
@@ -1529,7 +1529,7 @@ function StepMedallion({ kind }: { kind: StatusKind | null }) {
             }
           : undefined
       }
-      className="mt-[5px] grid size-5 place-items-center rounded-full border border-white/14 font-mono text-[10px] text-ink-4"
+      className="mt-[5px] grid size-5 place-items-center rounded-full border border-line-strong font-mono text-[10px] text-ink-4"
     >
       {kind === 'PASSED' ? (
         <Check className="size-2.5" strokeWidth={3} />

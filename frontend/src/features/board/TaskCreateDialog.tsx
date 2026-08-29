@@ -308,21 +308,12 @@ export function TaskCreateDialog({
               data-testid={`${TestId}.Assignee`}
               {...register('assigneeId')}
             >
-
-                          <option value="" data-testid={`${TestId}.Assignee.None`}>
-                            Unassigned
-                          </option>
-                          {(members.data ?? []).map((person) => (
-                            <option key={person.id}
-                              value={person.id}
-                              // Keyed by the person's id, not a shared `.Option` — the test-id audit
-                              // requires distinct locators, and selecting a MUI option is a click on the
-                              // menu item rather than a value assignment.
-                              data-testid={`${TestId}.Assignee.${person.id}`}
-                            >
-                              {person.displayName}
-                            </option>
-                          ))}
+              <option value="">Unassigned</option>
+              {(members.data ?? []).map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.displayName}
+                </option>
+              ))}
             </NativeSelect>
             </Field>
           </div>

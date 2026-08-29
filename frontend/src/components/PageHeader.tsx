@@ -183,12 +183,12 @@ export function Panel({
   return (
     <section
       data-testid={testId}
-      className="overflow-hidden rounded-lg border border-white/8 bg-panel"
+      className="overflow-hidden rounded-lg border border-line bg-panel"
     >
       {(title || actions) && (
         <div
           className={cn(
-            'flex items-center justify-between gap-2 border-b border-white/8',
+            'flex items-center justify-between gap-2 border-b border-line',
             dense ? 'px-3 py-2' : 'px-4 py-3',
           )}
         >

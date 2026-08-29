@@ -175,7 +175,7 @@ export function DocsPage() {
         {project.data ? `Documentation · ${project.data.name} · TCMS` : 'Documentation · TCMS'}
       </title>
 
-      <header className="mb-3 flex flex-wrap items-start gap-3 border-b border-white/8 pb-3">
+      <header className="mb-3 flex flex-wrap items-start gap-3 border-b border-line pb-3">
         <div className="min-w-0 flex-1">
           <nav aria-label="Breadcrumb" className="mb-1 text-[12.5px] text-ink-3">
             <RouterLink
@@ -281,7 +281,7 @@ export function DocsPage() {
       {/* The render's `.split.three`: the tree, the reading column, and the page's own facts. */}
       <div className="flex flex-col items-start gap-4 lg:flex-row">
         <aside
-          className="w-full shrink-0 rounded-lg border border-white/8 bg-panel p-3 lg:w-[260px]"
+          className="w-full shrink-0 rounded-lg border border-line bg-panel p-3 lg:w-[260px]"
           data-testid="Docs.TreePanel"
         >
           <h2 className={SECTION_HEADING}>{searchQuery ? 'Results' : 'Pages'}</h2>
@@ -382,7 +382,7 @@ export function DocsPage() {
             </DataRegion>
           ) : (
             <p
-              className="m-0 rounded-lg border border-white/8 bg-panel p-4 text-[13px] text-ink-3"
+              className="m-0 rounded-lg border border-line bg-panel p-4 text-[13px] text-ink-3"
               data-testid="Docs.NoSelection"
             >
               {(pages.data?.length ?? 0) === 0
@@ -441,7 +441,7 @@ function DocsSearchField({
         data-testid="Docs.Search.Input"
         placeholder={count === undefined ? 'Search documentation' : `Filter ${count} pages`}
         className={
-          'w-full rounded-[6px] border border-white/8 bg-field py-1.5 pr-8 pl-8 text-[12.5px] ' +
+          'w-full rounded-[6px] border border-line bg-field py-1.5 pr-8 pl-8 text-[12.5px] ' +
           'text-ink placeholder:text-ink-4 focus-visible:outline-2 focus-visible:outline-offset-2 ' +
           'focus-visible:outline-[color:var(--color-given)]'
         }
@@ -496,7 +496,7 @@ function SearchResults({
               data-testid="Docs.Results.Item"
               aria-current={active ? 'page' : undefined}
               style={active ? SELECTED_ROW : undefined}
-              className="block rounded-md px-2 py-1.5 no-underline hover:bg-white/5"
+              className="block rounded-md px-2 py-1.5 no-underline hover:bg-wash-2"
             >
               <span
                 className={cn(
@@ -582,7 +582,7 @@ function PageTree({
               aria-current={active ? 'page' : undefined}
               style={{ paddingLeft: `${8 + depth * 14}px`, ...(active ? SELECTED_ROW : {}) }}
               className={cn(
-                'flex items-center gap-2 rounded-md py-1 pr-2 text-[13px] no-underline hover:bg-white/5',
+                'flex items-center gap-2 rounded-md py-1 pr-2 text-[13px] no-underline hover:bg-wash-2',
                 active ? 'font-semibold text-ink' : 'text-ink-2',
                 unpublished && !active && 'opacity-60',
               )}
@@ -650,7 +650,7 @@ function PageView({
     <DocumentSurface
       measure="prose"
       data-testid="Docs.Content"
-      className="rounded-lg border border-white/8"
+      className="rounded-lg border border-line"
     >
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Identifier variant="strong">{page.key}</Identifier>
@@ -665,7 +665,7 @@ function PageView({
       </h1>
       <p className="m-0 text-[12.5px] text-ink-4">Updated {formatDateTime(page.updatedAt)}</p>
 
-      <div className="my-[18px] flex flex-wrap items-center gap-2 border-t border-white/8 pt-3">
+      <div className="my-[18px] flex flex-wrap items-center gap-2 border-t border-line pt-3">
         <PageActions page={page} projectId={projectId} onDelete={onDelete} />
       </div>
 
@@ -706,7 +706,7 @@ function PageFacts({ page }: { page: DocPage }) {
   }
 
   return (
-    <aside className="w-full shrink-0 rounded-lg border border-white/8 bg-panel p-4 xl:w-[280px]">
+    <aside className="w-full shrink-0 rounded-lg border border-line bg-panel p-4 xl:w-[280px]">
       {coverable.length > 0 && (
         <section className="mb-5">
           <h2 className={SECTION_HEADING}>
@@ -1015,8 +1015,8 @@ function BlockLinks({
             }
             data-testid="Docs.Block.Links.Item.Source"
             className={
-              'inline-flex items-center gap-1.5 rounded-[5px] border border-white/8 px-2.5 py-[3px] ' +
-              'text-xs text-ink-2 no-underline hover:border-white/14 hover:bg-white/4 hover:text-ink'
+              'inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] ' +
+              'text-xs text-ink-2 no-underline hover:border-line-strong hover:bg-wash-1 hover:text-ink'
             }
           >
             <Identifier variant="muted">{link.sourceKey}</Identifier> {link.sourceTitle}

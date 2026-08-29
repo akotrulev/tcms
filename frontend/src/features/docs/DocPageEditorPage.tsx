@@ -296,7 +296,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
 
   return (
     <form onSubmit={submit} noValidate aria-busy={isSubmitting}>
-      <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-white/8 pb-3">
+      <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-line pb-3">
         <Identifier variant="muted">{page.key}</Identifier>
         <span className="flex-1" />
         <Button
@@ -318,7 +318,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
       <div className="flex flex-col items-start gap-4 xl:flex-row">
         <DocumentSurface
           measure="prose"
-          className="min-w-0 flex-1 rounded-lg border border-white/8"
+          className="min-w-0 flex-1 rounded-lg border border-line"
         >
           {errors.root && (
             <div className="mb-4" data-testid={`${TestIdPrefix}.Error`}>
@@ -351,7 +351,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
               {errors.title.message}
             </p>
           )}
-          <div className="my-[18px] h-px bg-white/8" />
+          <div className="my-[18px] h-px bg-line" />
 
           <div data-testid={`${TestIdPrefix}.Blocks`}>
             {blocks.fields.length === 0 && (
@@ -550,7 +550,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
               button performed.
             */}
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span aria-hidden className="h-px flex-1 bg-white/8" />
+              <span aria-hidden className="h-px flex-1 bg-line" />
               {BLOCK_TYPES.map((value) => (
                 <button
                   key={value}
@@ -574,8 +574,8 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
                       : `${TestIdPrefix}.AddBlock.${value}`
                   }
                   className={
-                    'cursor-pointer rounded-[6px] border border-dashed border-white/14 px-2.5 py-0.5 ' +
-                    'font-mono text-[11px] text-ink-4 hover:border-white/25 hover:text-ink-2 ' +
+                    'cursor-pointer rounded-[6px] border border-dashed border-line-strong px-2.5 py-0.5 ' +
+                    'font-mono text-[11px] text-ink-4 hover:border-line-strong hover:text-ink-2 ' +
                     'focus-visible:outline-2 focus-visible:outline-offset-2 ' +
                     'focus-visible:outline-[color:var(--color-given)]'
                   }
@@ -583,12 +583,12 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
                   + {docBlockTypeLabel[value].toLowerCase()}
                 </button>
               ))}
-              <span aria-hidden className="h-px flex-1 bg-white/8" />
+              <span aria-hidden className="h-px flex-1 bg-line" />
             </div>
           </div>
         </DocumentSurface>
 
-        <aside className="w-full shrink-0 rounded-lg border border-white/8 bg-panel p-4 xl:w-[280px]">
+        <aside className="w-full shrink-0 rounded-lg border border-line bg-panel p-4 xl:w-[280px]">
           {linkedCases.size > 0 && (
             <section className="mb-5">
               <h2 className={SECTION_HEADING}>
@@ -626,7 +626,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
             </p>
           </section>
 
-          <p className="mt-5 border-t border-white/8 pt-3 text-[12px] text-ink-4">
+          <p className="mt-5 border-t border-line pt-3 text-[12px] text-ink-4">
             {blocks.fields.length === 1 ? '1 block' : `${blocks.fields.length} blocks`}
           </p>
         </aside>
@@ -716,7 +716,7 @@ function TableRowsEditor({
               placeholder={rowIndex === 0 ? 'Column name' : undefined}
               data-testid={`${testId}.Cell`}
               className={
-                'min-w-[90px] flex-1 rounded-[6px] border border-white/8 bg-field px-2 py-1 ' +
+                'min-w-[90px] flex-1 rounded-[6px] border border-line bg-field px-2 py-1 ' +
                 'font-mono text-[12px] text-ink placeholder:text-ink-4 ' +
                 'focus-visible:outline-2 focus-visible:outline-offset-2 ' +
                 'focus-visible:outline-[color:var(--color-given)]'

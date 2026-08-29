@@ -27,14 +27,14 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        ghost: 'border border-white/8 text-ink-2 hover:bg-white/5 hover:text-ink',
+        ghost: 'border border-line text-ink-2 hover:bg-wash-2 hover:text-ink',
         primary:
-          'bg-steel text-[#08121a] font-semibold ' +
+          'bg-steel text-[color:var(--color-on-action)] font-semibold ' +
           'shadow-[0_0_0_1px_rgb(107_168_196/30%),0_4px_14px_-4px_rgb(107_168_196/35%)] ' +
           'hover:brightness-110',
-        quiet: 'text-ink-2 hover:bg-white/5 hover:text-ink',
+        quiet: 'text-ink-2 hover:bg-wash-2 hover:text-ink',
         danger:
-          'border border-white/8 text-[color:var(--color-failed)] hover:bg-[color:var(--color-failed)]/10',
+          'border border-line text-[color:var(--color-failed)] hover:bg-[color:var(--color-failed)]/10',
         link: 'text-steel underline-offset-4 hover:underline p-0 min-h-0',
       },
       size: {

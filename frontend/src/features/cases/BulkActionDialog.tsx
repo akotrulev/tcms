@@ -556,32 +556,6 @@ export function BulkActionDialog({
  * kind of two-line duplication that ends up inconsistent — one field showing its error in red
  * caption, another in a helper text, a third silently swallowing it.
  */
-function Field({
-  label,
-  htmlFor,
-  error,
-  children,
-}: {
-  label: string;
-  htmlFor: string;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="m-0 text-xs block mb-1" htmlFor={htmlFor}>
-        {label}
-      </label>
-      {children}
-      {error && (
-        <span className="m-0 text-xs text-[color:var(--color-failed)] mt-1 block" role="alert">
-          {error}
-        </span>
-      )}
-    </div>
-  );
-}
-
 function BulkPreview({ result }: { result: BulkResult }) {
   return (
     <div data-testid={`${TestIdPrefix}.Preview.Result`}>

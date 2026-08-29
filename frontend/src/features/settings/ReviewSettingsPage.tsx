@@ -427,7 +427,7 @@ function ReviewSettingsForm({
         </Banner>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/8 pt-4">
+      <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
         <Button
           type="submit"
           variant="primary"

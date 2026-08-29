@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -203,5 +204,56 @@ describe('the breakpoint contract is single', () => {
     expect(declared.get(name), `--breakpoint-${name} not declared in @theme inline`).toBe(
       contract.get(name),
     );
+  });
+});
+
+/**
+ * Lines and washes exist in both palettes, and nothing draws one by hand.
+ *
+ * The T16 port spelled these as `border-white/8` and `bg-white/5` in 86 files. A white alpha is
+ * correct over the dark palette and invisible over the light one, so the light theme shipped with
+ * borders it could not draw — and no gate saw it, because every literal was a valid Tailwind
+ * class and every token in `@theme inline` resolved. The two halves below are what would have
+ * caught it: the names have to exist in both palettes, and no component may go back to a literal.
+ */
+describe('lines and washes are tokens, not literals', () => {
+  const surfaceModifiers = [
+    '--color-rule',
+    '--color-rule-strong',
+    '--color-overlay-1',
+    '--color-overlay-2',
+    '--color-overlay-3',
+    '--color-surface-rail',
+  ];
+
+  it.each(surfaceModifiers)('%s is declared in both palettes', (token) => {
+    expect(cssBlock(':root'), `${token} missing from :root`).toContain(`${token}:`);
+    expect(
+      cssBlock("[data-color-scheme='dark']"),
+      `${token} missing from the dark palette`,
+    ).toContain(`${token}:`);
+  });
+
+  /** `git grep` exits 1 on no matches, which is the passing case — the status is the answer. */
+  function gitGrep(pattern: string): string[] {
+    const result = spawnSync('git', ['grep', '-nE', pattern, '--', 'src'], {
+      cwd: resolve(HERE, '..', '..'),
+      encoding: 'utf8',
+    });
+    expect(result.status, `git grep failed: ${result.stderr}`).toBeLessThan(2);
+    return (result.stdout ?? '').split('\n').filter((line) => line !== '');
+  }
+
+  /**
+   * White alphas only. A black alpha is still legitimate for a modal scrim and a shadow, because
+   * those dim whatever is behind them and are the same gesture in either palette; a white alpha
+   * has no such reading — it is always a light-on-dark assumption.
+   */
+  it('no component draws a border, fill or divider with a raw white alpha', () => {
+    const offenders = gitGrep('(border|bg|divide|ring|outline)-white/').filter(
+      (line) => !/\.(test\.tsx?|css):/.test(line),
+    );
+
+    expect(offenders, 'use border-line / border-line-strong / bg-wash-1..3 / bg-line').toEqual([]);
   });
 });

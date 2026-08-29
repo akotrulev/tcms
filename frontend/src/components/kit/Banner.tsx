@@ -55,7 +55,7 @@ export function Banner({ tone, children, className, ...rest }: BannerProps) {
           : undefined
       }
       className={cn(
-        'flex items-start gap-[11px] rounded-lg border border-white/8 bg-panel px-3.5 py-2.5',
+        'flex items-start gap-[11px] rounded-lg border border-line bg-panel px-3.5 py-2.5',
         'text-[13px] leading-[1.55] text-ink-2',
         className,
       )}

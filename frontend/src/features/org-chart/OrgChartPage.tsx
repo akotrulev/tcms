@@ -50,7 +50,7 @@ export function OrgChartPage() {
 
       <header
         data-testid="OrgChart"
-        className="mb-3 flex flex-wrap items-start gap-3 border-b border-white/8 pb-3"
+        className="mb-3 flex flex-wrap items-start gap-3 border-b border-line pb-3"
       >
         <div className="min-w-0 flex-1">
           <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">Org chart</h1>
@@ -94,8 +94,8 @@ export function OrgChartPage() {
           </DataRegion>
         </section>
 
-        <aside className="flex flex-col rounded-lg border border-white/8 bg-panel">
-          <section className="border-b border-white/8 p-4" data-testid="OrgChart.Teams">
+        <aside className="flex flex-col rounded-lg border border-line bg-panel">
+          <section className="border-b border-line p-4" data-testid="OrgChart.Teams">
             <h2 className="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
               Teams
             </h2>

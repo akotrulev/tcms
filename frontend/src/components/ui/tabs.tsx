@@ -8,7 +8,7 @@ const Tabs = TabsPrimitive.Root;
 function TabsList({ className, ...props }: ComponentProps<typeof TabsPrimitive.List>) {
   return (
     <TabsPrimitive.List
-      className={cn('inline-flex gap-0.5 rounded-md bg-white/4 p-0.5', className)}
+      className={cn('inline-flex gap-0.5 rounded-md bg-wash-1 p-0.5', className)}
       {...props}
     />
   );

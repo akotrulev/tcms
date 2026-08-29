@@ -1,3 +1,4 @@
+import { buttonVariants } from '../../components/ui/buttonVariants';
 import { Link2, Trash2 } from 'lucide-react';
 /** Defect links on an execution — the list, and the controls that add and remove one. */
 import { Banner } from '../../components/kit';
@@ -7,6 +8,7 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
+  DialogHeader,
   DialogTitle,
   Input,
   Textarea,

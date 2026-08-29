@@ -382,7 +382,7 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
         three numbers beside the title rather than in a bordered box of their own.
       */}
       <section
-        className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-white/8 pb-4"
+        className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-line pb-4"
         data-testid="RunDetail.Summary"
       >
         <div data-testid="RunDetail.PassRate">
@@ -477,7 +477,7 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
 
         {selection.length > 0 && (
           <div
-            className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-white/14 bg-white/[4%] px-3 py-2"
+            className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-line-strong bg-wash-1 px-3 py-2"
             data-testid="RunDetail.SelectionBar"
           >
             <span className="text-[13px] font-medium text-ink" data-testid="RunDetail.SelectionCount">

@@ -1,3 +1,4 @@
+import { cn } from '../../lib/cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui';
 import { Link as RouterLink } from 'react-router-dom';
 import type { TestExecutionSummary } from '../../api/types';
@@ -49,7 +50,7 @@ export function ExecutionQueue({
 
   return (
     <nav aria-label="Cases in this run" data-testid="Execution.Queue">
-      <div className="px-4 py-3 border-b border-white/8">
+      <div className="px-4 py-3 border-b border-line">
         <span className="m-0 text-xs text-ink-2" data-testid="Execution.Queue.Position">
           {position >= 0
             ? `Case ${position + 1} of ${ordered.length}`

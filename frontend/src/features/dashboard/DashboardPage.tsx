@@ -398,7 +398,7 @@ function TileRow({
             // that differed. The `??` went with it: `DashboardTile.severity` is required on the
             // wire, so the fallback answered a question the contract does not ask.
             style={{ borderLeftColor: severityVar[tile.severity] }}
-            className="h-full rounded-md border border-l-[3px] border-white/8 bg-panel px-3.5 py-3 transition-colors hover:border-white/14"
+            className="h-full rounded-md border border-l-[3px] border-line bg-panel px-3.5 py-3 transition-colors hover:border-line-strong"
           >
             <span className="block font-mono text-[22px] leading-[1.1] font-medium tracking-[-.02em] tabular-nums text-ink">
               {formatCount(tile.count)}
@@ -510,7 +510,7 @@ function BreakdownList({
                 className={
                   entry.color
                     ? 'block size-2.5 rounded-[2px]'
-                    : 'block size-2.5 rounded-[2px] border border-white/14 bg-field'
+                    : 'block size-2.5 rounded-[2px] border border-line-strong bg-field'
                 }
               />
               {entry.label}
@@ -619,7 +619,7 @@ function ActivityChart({ activity }: { activity: RepositoryDashboard['recentActi
         return (
           <div
             key={key}
-            className="grid grid-cols-[minmax(0,72px)_minmax(46px,1fr)_46px] items-center gap-3 border-b border-white/8 py-[7px] last:border-b-0"
+            className="grid grid-cols-[minmax(0,72px)_minmax(46px,1fr)_46px] items-center gap-3 border-b border-line py-[7px] last:border-b-0"
           >
             <span className="truncate text-[12.5px] text-ink-2">{label}</span>
             <span className="flex h-[34px] items-end gap-px" aria-hidden>

@@ -44,7 +44,7 @@ export function ThresholdLayout({ headline, blurb, footnote, children, className
     >
       <div
         className={
-          'flex flex-col justify-between gap-8 border-b border-white/8 px-6 py-8 ' +
+          'flex flex-col justify-between gap-8 border-b border-line px-6 py-8 ' +
           'bg-[linear-gradient(150deg,var(--color-ground),var(--color-paper)_55%,var(--color-panel))] ' +
           'md:border-b-0 md:border-r md:px-[46px] md:py-11'
         }
@@ -116,9 +116,9 @@ export function FieldHelp({ id, children }: { id?: string; children: ReactNode }
 export function OrRule({ children = 'or' }: { children?: ReactNode }) {
   return (
     <div className="my-5 flex items-center gap-[11px] font-mono text-[11.5px] uppercase tracking-[.06em] text-ink-4">
-      <span aria-hidden className="h-px flex-1 bg-white/8" />
+      <span aria-hidden className="h-px flex-1 bg-line" />
       {children}
-      <span aria-hidden className="h-px flex-1 bg-white/8" />
+      <span aria-hidden className="h-px flex-1 bg-line" />
     </div>
   );
 }

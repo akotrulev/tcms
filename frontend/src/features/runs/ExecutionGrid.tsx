@@ -99,7 +99,7 @@ export function ExecutionGrid({
         it opens the checklist rather than recording in one click.
       </span>
 
-      <div className="border border-white/8 rounded-lg bg-panel">
+      <div className="border border-line rounded-lg bg-panel">
         <ScrollX>
           <Table data-testid="Execution.Grid">
             <TableHead>
@@ -197,8 +197,8 @@ function GridRow({
   return (
     <TableRow
       data-testid={RowTestId}
-      hover
-      className={current ? 'bg-white/8' : 'bg-transparent'}
+
+      className={current ? 'bg-wash-3' : 'bg-transparent'}
     >
       <TableCell>
         {/* The key goes to the CASE and the title to the EXECUTION — both decided in

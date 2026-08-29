@@ -1,3 +1,4 @@
+import { cn } from '../../lib/cn';
 import { Table, TableBody, TableCell, TableHead, TableRow } from '../../components/kit';
 import { Panel } from '../../components/PageHeader';
 import { ScrollX } from '../../components/ScrollX';
@@ -185,8 +186,12 @@ function SeriesChart({ series }: { series: ReportSeries }) {
           <span className="m-0 text-xs shrink-0" style={{ width: 140 }}>
             {point.label}
           </span>
-          <div className="flex-1 bg-field rounded" style={{ height: 10 }}>
-            <div data-testid={`${TestId}.Series.Bar`} />
+          <div className="h-2.5 flex-1 rounded bg-field">
+            <div
+              data-testid={`${TestId}.Series.Bar`}
+              className="h-full rounded bg-[color:var(--color-viz-1)]"
+              style={{ width: `${percents[index]}%` }}
+            />
           </div>
           <span className="m-0 text-xs text-right shrink-0" style={{ width: 64 }}>
             {point.value}

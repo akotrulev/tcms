@@ -8,7 +8,7 @@ function Switch({ className, ...props }: ComponentProps<typeof SwitchPrimitive.R
     <SwitchPrimitive.Root
       className={cn(
         'peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full ' +
-          'border border-white/8 bg-white/8 transition-colors ' +
+          'border border-line bg-wash-3 transition-colors ' +
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)] ' +
           'disabled:cursor-not-allowed disabled:opacity-45 data-[state=checked]:bg-steel',
         className,

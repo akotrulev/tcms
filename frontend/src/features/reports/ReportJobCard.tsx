@@ -1,6 +1,6 @@
+import { buttonVariants } from '../../components/ui/buttonVariants';
 import { Eye } from 'lucide-react';
 import { Badge, Banner } from '../../components/kit';
-import { Button } from '../../components/ui';
 import { Link as RouterLink } from 'react-router-dom';
 import { isJobFinished } from '../../api/queries';
 import type { ReportJob } from '../../api/types';
@@ -57,7 +57,7 @@ const formatLabel = (format: string): string =>
 
 export function ReportJobCard({ projectId, job }: { projectId: string; job: ReportJob }) {
   return (
-    <div className="border border-white/8 rounded-lg p-4" data-testid={TestId}>
+    <div className="border border-line rounded-lg p-4" data-testid={TestId}>
       <JobBody job={job} projectId={projectId} />
     </div>
   );
@@ -113,7 +113,7 @@ function JobBody({ job, projectId }: { job: ReportJob; projectId: string }) {
           <span
             aria-hidden
             data-testid={`${TestId}.Spinner`}
-            className="size-3.5 shrink-0 rounded-full border-2 border-white/12 border-t-steel motion-safe:animate-spin"
+            className="size-3.5 shrink-0 rounded-full border-2 border-line-strong border-t-steel motion-safe:animate-spin"
           />
         )}
         <Badge

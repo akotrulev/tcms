@@ -101,7 +101,7 @@ export function CaseHistoryPage() {
           pair sits in the strip as the render's `.lens`, and the choice stays in the URL where
           every other filter in this product lives.
         */}
-        <div className="flex items-center gap-0.5 rounded-md border border-white/8 p-0.5">
+        <div className="flex items-center gap-0.5 rounded-md border border-line p-0.5">
           {(
             [
               { value: 'CURRENT_VERSION' as const, label: 'Current version' },
@@ -121,7 +121,7 @@ export function CaseHistoryPage() {
               className={
                 'rounded-[4px] px-2.5 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-[-2px] ' +
                 'focus-visible:outline-[color:var(--color-given)] ' +
-                (scope === option.value ? 'bg-white/8 text-ink' : 'text-ink-3 hover:text-ink-2')
+                (scope === option.value ? 'bg-wash-3 text-ink' : 'text-ink-3 hover:text-ink-2')
               }
             >
               {option.label}
@@ -155,8 +155,8 @@ function HistoryBody({
         <HistoryTimeline entries={entries} markers={versionMarkers} projectId={projectId} />
       </div>
 
-      <aside className="w-full shrink-0 border-white/8 bg-panel lg:w-[300px] lg:border-l">
-        <section className="border-b border-white/8 px-4 py-4" data-testid="CaseHistory.Summary">
+      <aside className="w-full shrink-0 border-line bg-panel lg:w-[300px] lg:border-l">
+        <section className="border-b border-line px-4 py-4" data-testid="CaseHistory.Summary">
           <h2 className={SECTION_HEADING}>
             Execution history{' '}
             <span className="font-mono text-[10.5px] tracking-normal text-ink-4 normal-case">

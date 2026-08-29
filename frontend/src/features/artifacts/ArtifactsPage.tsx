@@ -46,7 +46,7 @@ export function ArtifactsPage() {
               value={planId}
               onChange={(event) => setPlanId(event.target.value)}
               aria-label="Which scope to show"
-              className="min-w-[260px] rounded-[6px] border border-white/8 bg-field px-3 py-1.5 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
+              className="min-w-[260px] rounded-[6px] border border-line bg-field px-3 py-1.5 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
               data-testid="Artifacts.ScopeSelect"
             >
               <option value="">Project scope only</option>

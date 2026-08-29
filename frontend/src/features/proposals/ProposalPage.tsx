@@ -174,8 +174,8 @@ export function ProposalPage() {
               <ProposedCase proposal={row} />
             </DocumentSurface>
 
-            <aside className="w-full shrink-0 border-white/8 bg-panel lg:w-[340px] lg:border-l">
-              <section className="border-b border-white/8 px-4 py-4" data-testid="Proposal.GroundingPanel">
+            <aside className="w-full shrink-0 border-line bg-panel lg:w-[340px] lg:border-l">
+              <section className="border-b border-line px-4 py-4" data-testid="Proposal.GroundingPanel">
                 <h2 className={SECTION_HEADING}>Grounding evidence</h2>
                 {row.grounding ? (
                   <>
@@ -401,7 +401,7 @@ function ProposedCase({ proposal }: { proposal: AiProposal }) {
         document's narrative column, exactly as T7 did on the editor.
       */}
       {(proposed.description || proposed.expectedOutcome) && (
-        <section className="mt-8 border-t border-white/8 pt-5">
+        <section className="mt-8 border-t border-line pt-5">
           <div className="grid gap-5 md:grid-cols-2">
             {proposed.description && (
               <Field label="Description" value={proposed.description} testId="Proposal.Description" />

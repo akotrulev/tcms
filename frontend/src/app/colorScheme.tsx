@@ -1,13 +1,11 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+
 import { safeStorage } from '../lib/safeStorage';
+import {
+  ColorSchemeContext,
+  type ColorSchemeMode,
+  type ColorSchemeValue,
+} from './colorSchemeContextValue';
 
 /**
  * The colour scheme — the app's own, replacing MUI's `useColorScheme` in T16.
@@ -37,22 +35,8 @@ import { safeStorage } from '../lib/safeStorage';
  * the page is plainly dark, and a control labelled from the *setting* offers "switch to dark" on
  * an already-dark page.
  */
-export type ColorSchemeMode = 'light' | 'dark' | 'system';
-
 const STORAGE_KEY = 'tcms-color-scheme';
 const ATTRIBUTE = 'data-color-scheme';
-
-interface ColorSchemeValue {
-  /** What the user chose. `system` is a choice, not an absence. */
-  mode: ColorSchemeMode;
-  /** What the OS is currently asking for. */
-  systemMode: 'light' | 'dark';
-  /** What is actually on screen — `mode` with `system` resolved. */
-  resolved: 'light' | 'dark';
-  setMode: (next: ColorSchemeMode) => void;
-}
-
-const ColorSchemeContext = createContext<ColorSchemeValue | null>(null);
 
 function readStoredMode(): ColorSchemeMode {
   const stored = safeStorage.get(STORAGE_KEY);
@@ -110,19 +94,3 @@ export function ColorSchemeProvider({ children }: { children: ReactNode }) {
   return <ColorSchemeContext value={value}>{children}</ColorSchemeContext>;
 }
 
-/**
- * Non-throwing outside the provider, deliberately: the top bar is the only caller, and a test
- * that renders it without the provider should see the default scheme rather than an exception
- * about a concern it is not testing.
- */
-export function useColorScheme(): ColorSchemeValue {
-  const value = useContext(ColorSchemeContext);
-  return (
-    value ?? {
-      mode: 'system',
-      systemMode: 'light',
-      resolved: 'light',
-      setMode: () => {},
-    }
-  );
-}

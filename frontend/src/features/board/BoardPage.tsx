@@ -122,7 +122,7 @@ export function BoardPage() {
 
       <header
         data-testid="Board.Header"
-        className="mb-3 flex flex-wrap items-start gap-3 border-b border-white/8 pb-3"
+        className="mb-3 flex flex-wrap items-start gap-3 border-b border-line pb-3"
       >
         <div className="min-w-0 flex-1">
           <nav aria-label="Breadcrumb" className="mb-1 text-[12.5px] text-ink-3">
@@ -153,7 +153,7 @@ export function BoardPage() {
             `.lens` — the render's segmented scope switch, not two chips. The two options are one
             choice with two states, and a pair of independent-looking chips says otherwise.
           */}
-          <div className="inline-flex gap-0.5 rounded-lg bg-white/4 p-0.5">
+          <div className="inline-flex gap-0.5 rounded-lg bg-wash-1 p-0.5">
             {[
               { value: false, label: 'Everyone' },
               { value: true, label: 'Assigned to me' },
@@ -487,7 +487,7 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
           about something.
         */}
         {dragging && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-white/8 bg-[rgb(14_19_26/92%)] px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-[rgb(14_19_26/92%)] px-4 py-2.5">
             <span className="flex-1 text-xs text-ink-4">
               Dragging <b className="font-medium text-ink-3">{dragging.title}</b> · drop to move, or
               press <b className="font-medium text-ink-3">Esc</b> to cancel
@@ -546,7 +546,7 @@ function BoardColumn({
       data-testid={`Board.Column.${column}`}
       data-over={isOver ? 'true' : undefined}
       className={cn(
-        'flex min-h-0 flex-col rounded-lg border border-white/8 bg-panel',
+        'flex min-h-0 flex-col rounded-lg border border-line bg-panel',
         'transition-colors duration-150 motion-reduce:transition-none',
         isOver && canAccept && 'border-[color:var(--color-steel)]',
         // Not colour alone: a column that cannot accept the card also dims, and the card's own
@@ -556,7 +556,7 @@ function BoardColumn({
     >
       <h2
         className={cn(
-          'm-0 flex items-center gap-2 border-b border-white/8 px-3 py-2.5',
+          'm-0 flex items-center gap-2 border-b border-line px-3 py-2.5',
           'text-[11px] font-semibold uppercase tracking-[.08em]',
           column === 'BLOCKED' ? 'text-[color:var(--color-blocked)]' : 'text-ink-3',
         )}
@@ -570,7 +570,7 @@ function BoardColumn({
         className={cn(
           'flex min-h-[120px] flex-col gap-2 p-2.5',
           column === 'DONE' && 'opacity-[.62]',
-          dragging && canAccept && 'bg-white/3',
+          dragging && canAccept && 'bg-wash-1',
         )}
       >
         {children}
@@ -608,8 +608,8 @@ function WorkCard({
       ref={overlay ? undefined : setNodeRef}
       data-testid="Board.Card"
       className={cn(
-        'rounded-[5px] border border-white/8 bg-paper px-[11px] py-2.5 text-[13px] leading-[1.45]',
-        'hover:border-white/14',
+        'rounded-[5px] border border-line bg-paper px-[11px] py-2.5 text-[13px] leading-[1.45]',
+        'hover:border-line-strong',
         item.status === 'BLOCKED' && 'border-[color:color-mix(in_oklab,var(--color-blocked)_26%,transparent)]',
         // The original stays in place and fades while the overlay copy follows the cursor;
         // removing it would collapse the column under the pointer mid-drag.
@@ -719,7 +719,7 @@ function WorkCard({
           data-testid="Board.Card.Reason"
           className={cn(
             'm-0 mb-1 text-[11.5px] leading-[1.5] text-ink-4',
-            item.status === 'BLOCKED' && 'mt-[7px] border-t border-white/8 pt-[7px]',
+            item.status === 'BLOCKED' && 'mt-[7px] border-t border-line pt-[7px]',
           )}
         >
           {describeCard(item)}

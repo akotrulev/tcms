@@ -1,3 +1,4 @@
+import { cn } from '../../lib/cn';
 import { MoreVertical, Plus, X } from 'lucide-react';
 import { Banner } from '../../components/kit';
 import {
@@ -199,7 +200,7 @@ export function SuiteList({
               data-testid="SuiteList.Item.Status"
               title={lifecycleLabels[suite.lifecycleStatus]}
               className={cn(
-                'rounded border border-white/8 px-1 text-[0.625rem] tracking-[0.04em] uppercase',
+                'rounded border border-line px-1 text-[0.625rem] tracking-[0.04em] uppercase',
                 suite.lifecycleStatus === 'DEPRECATED' ? 'text-ink-4' : 'text-ink-2',
               )}
             >

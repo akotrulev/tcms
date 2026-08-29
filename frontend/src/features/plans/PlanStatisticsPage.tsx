@@ -162,7 +162,7 @@ export function PlanStatisticsPage() {
                   setParams(next, { replace: true });
                 }}
                 data-testid="PlanStats.AggregationSelect"
-                className="w-full rounded-[6px] border border-white/8 bg-field px-2.5 py-1.5 text-[12.5px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
+                className="w-full rounded-[6px] border border-line bg-field px-2.5 py-1.5 text-[12.5px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
               >
                 {Object.entries(aggregationLabels).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -185,7 +185,7 @@ export function PlanStatisticsPage() {
       <div
         role="tablist"
         aria-label="Plan"
-        className="mb-4 flex gap-1 overflow-x-auto border-b border-white/8"
+        className="mb-4 flex gap-1 overflow-x-auto border-b border-line"
         data-testid="PlanStats.Tabs"
       >
         {PLAN_TABS.map((id) => (
@@ -998,7 +998,7 @@ function ResultLegend({ counts }: { counts: PlanStatistics['counts'] }) {
             className={
               entry.color
                 ? 'block size-2.5 rounded-[2px]'
-                : 'block size-2.5 rounded-[2px] border border-white/14 bg-field'
+                : 'block size-2.5 rounded-[2px] border border-line-strong bg-field'
             }
           />
           {entry.label} <Identifier variant="muted">{formatCount(entry.count)}</Identifier>
@@ -1074,7 +1074,7 @@ function ExitCriteria({ criteria }: { criteria: Criterion[] }) {
             // Metric is not unique — a plan may gate on pass_rate per configuration — so the
             // index is part of the key rather than the whole of it being the metric.
             key={`${criterion.metric}-${index}`}
-            className="flex items-start gap-[11px] border-b border-white/8 py-2.5 text-[13px] last:border-b-0"
+            className="flex items-start gap-[11px] border-b border-line py-2.5 text-[13px] last:border-b-0"
             data-testid="PlanStats.ExitCriteria.Item"
           >
             <Mark aria-hidden style={{ color }} className="mt-px size-4 shrink-0" />
@@ -1130,7 +1130,7 @@ function BreakdownTable({
       {rows.map((row) => (
         <div
           key={row.id}
-          className="grid grid-cols-[minmax(0,1fr)_minmax(70px,110px)_auto] items-center gap-[11px] border-b border-white/8 py-2 text-[12.5px] last:border-b-0"
+          className="grid grid-cols-[minmax(0,1fr)_minmax(70px,110px)_auto] items-center gap-[11px] border-b border-line py-2 text-[12.5px] last:border-b-0"
           data-testid={`${testId}.Row`}
         >
           <span className="flex min-w-0 items-center gap-2">
@@ -1415,7 +1415,7 @@ function NotRun({
         {cases.map((testCase) => (
           <div
             key={testCase.id}
-            className="flex min-w-0 items-center gap-2 border-b border-white/8 py-1.5 text-[12.5px] last:border-b-0"
+            className="flex min-w-0 items-center gap-2 border-b border-line py-1.5 text-[12.5px] last:border-b-0"
             data-testid="PlanStats.NotRun.Row"
           >
             <RouterLink to={`/projects/${projectId}/cases/${testCase.id}`} data-testid="PlanStats.NotRun.Row.CaseLink">

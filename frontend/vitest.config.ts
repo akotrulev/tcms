@@ -28,9 +28,12 @@ export default mergeConfig(
        *      has a branch that fires when storage *throws* (private mode), and its answer
        *      there — refuse to reload — is the one that prevents an infinite reload loop.
        *      Testing it needs a storage implementation that behaves like the browser's.
-       *   2. **MUI + Emotion.** `DataRegion`, `PermissionGate` and the suite tree render real
-       *      MUI, which reads computed styles and (via Popper/Tooltip) layout. jsdom is what
-       *      MUI's own suite runs against.
+       *   2. **Radix's popper measures layout.** ~~`DataRegion`, `PermissionGate` and the suite
+       *      tree render real MUI, which reads computed styles and (via Popper/Tooltip)
+       *      layout.~~ → T16 removed MUI, and the requirement survived its reason: the dialogs,
+       *      dropdowns and tooltips are Radix now, and Radix reads `ResizeObserver` and computed
+       *      styles to place a popper. `src/test/setup.ts` polyfills the first; the second needs
+       *      an environment that has one.
        *   3. **It is the reference implementation.** happy-dom is meaningfully faster, and at
        *      this suite's size that buys under a second — not enough to trade for divergence
        *      from the DOM the app actually runs in.
@@ -62,7 +65,7 @@ export default mergeConfig(
        * new tests removed, so it predates them.
        *
        * The cause is duration, not correctness: a `userEvent` test that types a sentence and then
-       * drives a MUI popover is dozens of real-timer round trips through React's scheduler, and
+       * drives a popover is dozens of real-timer round trips through React's scheduler, and
        * with files running in parallel on a busy machine the slowest of them crosses five seconds.
        * The failure says so — *Test timed out in 5000ms*, never an assertion.
        *

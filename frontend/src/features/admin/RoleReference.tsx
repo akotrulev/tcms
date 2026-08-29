@@ -51,7 +51,7 @@ export function RoleReference({
       {shown.map((role) => (
         <div
           key={role.id}
-          className="border-b border-white/8 py-3.5 last:border-b-0"
+          className="border-b border-line py-3.5 last:border-b-0"
           data-testid={`${testId}.Item`}
         >
           <div className="mb-1 flex flex-wrap items-center gap-2">

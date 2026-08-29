@@ -1,3 +1,4 @@
+import { cn } from '../../lib/cn';
 import { ArrowDown, ArrowUp, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 /**
  * The case editor's Preconditions / Postconditions panel (§95).
@@ -114,7 +115,7 @@ function SortableCondition({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         'relative rounded border bg-panel p-2',
-        isDragging ? 'border-steel opacity-85' : 'border-white/8 opacity-100',
+        isDragging ? 'border-steel opacity-85' : 'border-line opacity-100',
       )}
     >
       {children({ attributes, listeners })}
@@ -261,7 +262,7 @@ export function ConditionsPanel({
                 key={ref.id}
                 data-testid={`${testId}.Inherited.Item`}
                 data-declined={isDeclined ? 'true' : 'false'}
-                className="rounded border border-dashed border-white/8 p-2"
+                className="rounded border border-dashed border-line p-2"
               >
                 <div className="flex gap-2 items-center">
                   <p

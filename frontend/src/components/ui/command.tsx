@@ -25,7 +25,7 @@ function Command({ className, ...props }: ComponentProps<typeof CommandPrimitive
 
 function CommandInput({ className, ...props }: ComponentProps<typeof CommandInputPrimitive>) {
   return (
-    <div className="flex items-center border-b border-white/8 px-3">
+    <div className="flex items-center border-b border-line px-3">
       <CommandInputPrimitive
         className={cn(
           'flex h-9 w-full bg-transparent py-2 text-[13px] text-ink outline-none ' +
@@ -71,7 +71,7 @@ function CommandItem({ className, ...props }: ComponentProps<typeof CommandItemP
     <CommandItemPrimitive
       className={cn(
         'relative flex cursor-pointer select-none items-center gap-2 rounded-[4px] px-2 py-1.5 ' +
-          'text-[13px] text-ink-2 outline-none data-[selected=true]:bg-white/5 ' +
+          'text-[13px] text-ink-2 outline-none data-[selected=true]:bg-wash-2 ' +
           'data-[selected=true]:text-ink data-[disabled=true]:pointer-events-none ' +
           'data-[disabled=true]:opacity-45',
         className,
@@ -82,7 +82,7 @@ function CommandItem({ className, ...props }: ComponentProps<typeof CommandItemP
 }
 
 function CommandSeparator({ className, ...props }: ComponentProps<typeof CommandSeparatorPrimitive>) {
-  return <CommandSeparatorPrimitive className={cn('my-1 h-px bg-white/8', className)} {...props} />;
+  return <CommandSeparatorPrimitive className={cn('my-1 h-px bg-line', className)} {...props} />;
 }
 
 export {

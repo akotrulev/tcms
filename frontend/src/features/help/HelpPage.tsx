@@ -85,7 +85,7 @@ function Contents({ current }: { current: string }) {
                 data-testid={`Help.Contents.Link.${section.id}`}
                 className={cn(
                   'block rounded-md px-3 py-1.5 text-[13px] no-underline',
-                  active ? 'bg-white/6 font-medium text-ink' : 'text-ink-3 hover:bg-white/4 hover:text-ink-2',
+                  active ? 'bg-wash-2 font-medium text-ink' : 'text-ink-3 hover:bg-wash-1 hover:text-ink-2',
                 )}
               >
                 {section.title}
@@ -138,11 +138,11 @@ function SectionBody({ section }: { section: HelpSection }) {
         {section.title}
       </h2>
       <p className="m-0 max-w-[62ch] text-[14.5px] leading-[1.6] text-ink-3">{section.summary}</p>
-      <div className="my-[18px] h-px bg-white/8" />
+      <div className="my-[18px] h-px bg-line" />
 
       {section.body}
 
-      <div className="mt-8 h-px bg-white/8" />
+      <div className="mt-8 h-px bg-line" />
       <Pager current={section.id} />
     </DocumentSurface>
   );

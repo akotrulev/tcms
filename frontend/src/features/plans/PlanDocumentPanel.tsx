@@ -1,3 +1,5 @@
+import { buttonVariants } from '../../components/ui/buttonVariants';
+import { cn } from '../../lib/cn';
 import { Badge, Banner } from '../../components/kit';
 import { Field } from '../../components/kit/Field';
 import { Button } from '../../components/ui';
@@ -318,7 +320,7 @@ function BlockView({
                     ? `/projects/${projectId}/cases/${link.sourceId}`
                     : `/projects/${projectId}/suites/${link.sourceId}`
                 }
-                className="inline-flex items-center gap-1.5 rounded-[5px] border border-white/8 px-2.5 py-[3px] text-xs text-ink-2 no-underline hover:border-white/14 hover:bg-white/4 hover:text-ink"
+                className="inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] text-xs text-ink-2 no-underline hover:border-line-strong hover:bg-wash-1 hover:text-ink"
               >
                 <Identifier>{link.sourceKey}</Identifier>
                 <span>{link.sourceTitle}</span>

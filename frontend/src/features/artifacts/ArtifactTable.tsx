@@ -68,7 +68,7 @@ export function ArtifactTable({
         </TableHead>
         <TableBody>
           {sorted.map((artifact) => (
-            <TableRow key={artifact.id} data-testid="Artifacts.Row" hover>
+            <TableRow key={artifact.id} data-testid="Artifacts.Row">
               <TableCell>
                 <Badge tone="plain" >
 {humanize(artifact.category)}</Badge>
@@ -82,11 +82,11 @@ export function ArtifactTable({
                     URLs, which is the failure the register exists to prevent.
                   */}
                   {artifact.kind === 'DOC_PAGE_REF' && artifact.docPageId ? (
-                    <RouterLink className="font-medium" style={{ fontSize: '0.8125rem' }} to={`/projects/${projectId}/docs/${artifact.docPageId}`} data-testid="Artifacts.Row.PageLink">
+                    <RouterLink className="font-medium text-[0.8125rem]" to={`/projects/${projectId}/docs/${artifact.docPageId}`} data-testid="Artifacts.Row.PageLink">
                       {artifact.title}
                     </RouterLink>
                   ) : artifact.kind === 'EXTERNAL_URL' && artifact.url ? (
-                    <a className="font-medium" style={{ fontSize: '0.8125rem' }} href={artifact.url} target="_blank" rel="noopener" data-testid="Artifacts.Row.Link">
+                    <a className="font-medium text-[0.8125rem]" href={artifact.url} target="_blank" rel="noopener" data-testid="Artifacts.Row.Link">
                       {artifact.title}
                       <span className="ml-1" aria-hidden="true">
                         ↗
@@ -116,7 +116,7 @@ export function ArtifactTable({
                       // invented from the media type would not be.
                       filename={artifact.filename ?? artifact.title}
                       testId="Artifacts.Row.Download"
-                      className="font-medium" style={{ fontSize: '0.8125rem' }}
+                      className="font-medium text-[0.8125rem]"
                     >
                       {artifact.title}
                     </FileDownloadLink>
@@ -243,7 +243,7 @@ function statusReason(artifact: Artifact, titles: Map<string, string>): string {
  * every row somebody has ever replaced. The button opens; the two status items are greyed by the
  * status test they already had, and *why* the row is superseded is the sentence already on its
  * status chip beside the title — which is where a reader looks, and where a tooltip actually
- * fires (MUI raises no hover events on a disabled `MenuItem`).
+ * fires (MUI raises no events on a disabled `MenuItem`).
  *
  * ## The two permissions are asked differently, and the difference is the schema's
  *
@@ -362,7 +362,7 @@ function ArtifactRowActions({ artifact, projectId }: { artifact: Artifact; proje
         </DropdownMenuItem>
         {/*
           Why the row's promise is stated here and not as a tooltip on the two disabled items: a
-          disabled menu item raises no hover events, so a tooltip there is a reason nobody
+          disabled menu item raises no events, so a tooltip there is a reason nobody
           can read — the finding this file already records for the superseded case. A line inside
           the menu is read by the person who just found both acts greyed.
         */}

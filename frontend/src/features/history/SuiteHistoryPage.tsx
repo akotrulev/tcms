@@ -140,7 +140,7 @@ function SuiteHistoryBody({
 
         <span className="ml-auto flex items-center gap-1.5 text-[12px] text-ink-4">
           Pass rate as a share of
-          <span className="flex items-center gap-0.5 rounded-md border border-white/8 p-0.5">
+          <span className="flex items-center gap-0.5 rounded-md border border-line p-0.5">
             {(['EXECUTED', 'TOTAL'] as const).map((option) => (
               <button
                 key={option}
@@ -151,7 +151,7 @@ function SuiteHistoryBody({
                 className={
                   'rounded-[4px] px-2 py-0.5 text-[11.5px] focus-visible:outline-2 ' +
                   'focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)] ' +
-                  (denominator === option ? 'bg-white/8 text-ink' : 'text-ink-3 hover:text-ink-2')
+                  (denominator === option ? 'bg-wash-3 text-ink' : 'text-ink-3 hover:text-ink-2')
                 }
               >
                 {option === 'EXECUTED' ? 'what ran' : 'the whole suite'}
@@ -206,7 +206,7 @@ function SuiteHistoryBody({
               <Fragment key={run.runId}>
                 {boundary && (
                   <TableRow key={`marker-${boundary.versionNo}`} data-testid="SuiteHistory.VersionMarker">
-                    <TableCell colSpan={8} className="bg-white/[3%]">
+                    <TableCell colSpan={8} className="bg-wash-1">
                       <span className="flex flex-wrap items-center gap-2">
                         <Badge tone="steel">Suite changed to v{boundary.versionNo}</Badge>
                         <span className="text-[12px] text-ink-4">

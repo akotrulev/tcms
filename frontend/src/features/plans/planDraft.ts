@@ -63,14 +63,32 @@ export const PLAN_TABS = Object.keys(planTabLabels) as PlanTabId[];
  * survives.
  */
 export interface CriterionRow {
+  /**
+   * Identity for React's benefit only — never sent, never compared, never round-tripped.
+   *
+   * A criterion has no server id until the plan is saved, and the rows are edited in place and
+   * removed by position. Keyed by array index, deleting the middle row of three makes React reuse
+   * the deleted row's inputs for its successor, so the threshold the author typed reappears
+   * against a metric they never chose.
+   */
+  rowId: string;
   metric: string;
   op: string;
   value: string;
   label: string;
 }
 
+let nextRowId = 0;
+
+/** A fresh row identity. Monotonic per tab, which is all a React key has to be. */
+export function criterionRowId(): string {
+  nextRowId += 1;
+  return `criterion-${nextRowId}`;
+}
+
 export function criterionRows(criteria: TestPlan['exitCriteria']): CriterionRow[] {
   return (criteria ?? []).map((criterion) => ({
+    rowId: criterionRowId(),
     metric: criterion.metric,
     op: criterion.op,
     value: String(criterion.value),

@@ -120,8 +120,8 @@ export function DenominatorToggle({
             'cursor-pointer rounded-[2px] border px-2 py-0.5 font-sans text-xs text-ink',
             'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
             value === option
-              ? 'border-steel bg-white/8 font-semibold'
-              : 'border-white/8 bg-transparent',
+              ? 'border-steel bg-wash-3 font-semibold'
+              : 'border-line bg-transparent',
           )}
         >
           {option === 'EXECUTED' ? 'executed' : 'all in scope'}

@@ -71,7 +71,7 @@ export function CopyField({
             of view, because the whole point of rendering it is that every character can be read
             and selected. */}
         <div
-          className="identifier flex-1 rounded border border-white/8 bg-field p-2.5 text-[13px] break-all select-all"
+          className="identifier flex-1 rounded border border-line bg-field p-2.5 text-[13px] break-all select-all"
           data-testid={`${testId}.Value`}
         >
           {value}

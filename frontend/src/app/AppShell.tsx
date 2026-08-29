@@ -1,4 +1,4 @@
-import { useColorScheme } from './colorScheme';
+import { useColorScheme } from './useColorScheme';
 import {
   Bell,
   Bug,
@@ -539,7 +539,7 @@ export function AppShell() {
           */
           data-collapsed={collapsed ? 'true' : 'false'}
           className={cn(
-            'hidden md:flex flex-col shrink-0 border-r border-white/8 bg-[#0c1119]',
+            'hidden md:flex flex-col shrink-0 border-r border-line bg-rail',
             'sticky top-0 h-screen',
             // A width the user asked to change should be seen to change. Motion is opt-out at the
             // theme level (`prefers-reduced-motion` is a hard floor), so this respects it.
@@ -676,7 +676,7 @@ function RailContent({
       */}
       <div
         className={cn(
-          'flex items-center border-b border-white/8 py-[14px]',
+          'flex items-center border-b border-line py-[14px]',
           collapsed ? 'justify-center px-0' : 'justify-start px-4',
         )}
       >
@@ -689,7 +689,7 @@ function RailContent({
         >
           <Identifier
             variant="strong"
-            style={{ fontSize: collapsed ? '0.8125rem' : '1rem', letterSpacing: collapsed ? 0 : '0.08em' }}
+            className={cn(collapsed ? 'text-[0.8125rem] tracking-normal' : 'text-base tracking-[0.08em]')}
           >
             TCMS
           </Identifier>
@@ -710,7 +710,7 @@ function RailContent({
         </li>
       </ul>
 
-      <hr className="m-0 border-t border-white/8" />
+      <hr className="m-0 border-t border-line" />
 
       {/* Project switcher: which project you're in is the frame for every key on screen. */}
       <ProjectSwitcher
@@ -720,7 +720,7 @@ function RailContent({
         onNavigate={onNavigate}
       />
 
-      <hr className="m-0 border-t border-white/8" />
+      <hr className="m-0 border-t border-line" />
 
       <div className="flex-1 overflow-y-auto py-2">
         {groups.map((group, index) => (
@@ -732,7 +732,7 @@ function RailContent({
               The first group needs no rule — there is already a divider above it.
             */}
             {collapsed ? (
-              index > 0 && <hr className="mx-3 mb-2 border-t border-white/8" />
+              index > 0 && <hr className="mx-3 mb-2 border-t border-line" />
             ) : (
               <p className="m-0 px-4 py-1 font-mono text-[10px] uppercase tracking-[.1em] text-ink-4">
                 {group.heading}
@@ -756,7 +756,7 @@ function RailContent({
       */}
       {onToggleCollapse && (
         <>
-          <hr className="m-0 border-t border-white/8" />
+          <hr className="m-0 border-t border-line" />
           <div className={cn('flex px-2 py-1.5', collapsed ? 'justify-center' : 'justify-end')}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -834,7 +834,7 @@ function ProjectSwitcher({
                   data-testid="Nav.ProjectSwitcher"
                 >
                   {active ? (
-                    <Identifier variant="strong" style={{ fontSize: '0.75rem' }}>
+                    <Identifier variant="strong" className="text-xs">
                       {active.key}
                     </Identifier>
                   ) : (
@@ -850,7 +850,7 @@ function ProjectSwitcher({
               <DropdownMenuItem
                 key={project.id}
                 onClick={() => go(project.id)}
-                className={cn(project.id === activeProjectId && 'bg-white/5 text-ink')}
+                className={cn(project.id === activeProjectId && 'bg-wash-2 text-ink')}
               >
                 <Identifier variant="muted">{project.key}</Identifier>
                 <span>{project.name}</span>
@@ -916,7 +916,7 @@ function RailLink({
           className={cn(
             'relative flex items-center py-[7px] text-[13px]',
             collapsed ? 'justify-center gap-0 px-0' : 'justify-start gap-2.5 px-4',
-            isActive ? 'bg-steel/12 font-medium text-ink' : 'text-ink-2 hover:bg-white/4',
+            isActive ? 'bg-steel/12 font-medium text-ink' : 'text-ink-2 hover:bg-wash-1',
           )}
         >
           {isActive && (
@@ -967,7 +967,7 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
   const isDark = resolved === 'dark';
 
   return (
-    <header className="sticky top-0 z-10 flex h-[52px] shrink-0 items-center gap-1 border-b border-white/8 bg-paper px-2 md:px-4">
+    <header className="sticky top-0 z-10 flex h-[52px] shrink-0 items-center gap-1 border-b border-line bg-paper px-2 md:px-4">
       <Button
         variant="quiet"
         size="icon"
@@ -1012,7 +1012,7 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
             <p className="m-0 text-[13px] font-semibold text-ink">{user?.displayName}</p>
             <p className="m-0 text-xs text-ink-3">{user?.email}</p>
           </div>
-          <div className="my-1 h-px bg-white/8" />
+          <div className="my-1 h-px bg-line" />
           {/* The account's own sign-in identities (V58) — self-service, so no gate. */}
           <DropdownMenuItem asChild>
             <RouterLink to="/account/security" data-testid="TopBar.SecurityLink">
@@ -1077,7 +1077,7 @@ function AppFooter() {
   return (
     <footer
       data-testid="AppFooter"
-      className="border-t border-white/8 px-2 py-2 text-ink-3 md:px-4"
+      className="border-t border-line px-2 py-2 text-ink-3 md:px-4"
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs">

@@ -346,7 +346,7 @@ function Assignees({
                 */
                 <span
                   data-testid="Review.Assignee"
-                  className="inline-flex items-center gap-1.5 rounded-[5px] border border-white/8 px-2.5 py-[3px] text-xs text-ink-2"
+                  className="inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] text-xs text-ink-2"
                 >
                   {assignee.team ? (
                     <Users aria-hidden className="size-3 text-ink-4" />
@@ -478,7 +478,7 @@ function AssignForm({
           onClick={() => setOpen((current) => !current)}
           data-testid="Review.Assign.Choice"
           className={
-            'flex w-full items-center justify-between gap-2 rounded-[6px] border border-white/8 ' +
+            'flex w-full items-center justify-between gap-2 rounded-[6px] border border-line ' +
             'bg-field px-3 py-1.5 text-left text-[13px] text-ink disabled:cursor-not-allowed ' +
             'disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 ' +
             'focus-visible:outline-[color:var(--color-given)]'
@@ -496,7 +496,7 @@ function AssignForm({
               onKeyDown={(event) => {
                 if (event.key === 'Escape') setOpen(false);
               }}
-              className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border border-white/8 bg-panel p-1 shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]"
+              className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border border-line bg-panel p-1 shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]"
             >
               {options.length === 0 ? (
                 <p className="m-0 px-2.5 py-1.5 text-[12.5px] text-ink-4">
@@ -515,7 +515,7 @@ function AssignForm({
                     }}
                     className={
                       'block w-full cursor-pointer rounded-[4px] px-2.5 py-1.5 text-left text-[13px] ' +
-                      'hover:bg-white/5 hover:text-ink focus-visible:outline-2 ' +
+                      'hover:bg-wash-2 hover:text-ink focus-visible:outline-2 ' +
                       'focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)] ' +
                       (option.value === choice ? 'text-ink' : 'text-ink-2')
                     }
@@ -579,7 +579,7 @@ function Trail({ participations }: { participations: ReviewParticipation[] }) {
         <div
           key={participation.id}
           data-testid="Review.Trail.Item"
-          className="border-l-2 border-white/8 pl-3"
+          className="border-l-2 border-line pl-3"
         >
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-[13px] font-medium text-ink">
@@ -642,7 +642,7 @@ function Threads({
   }
 
   return (
-    <div className="flex flex-col gap-2 border-t border-white/8 pt-3" data-testid="Review.Comments">
+    <div className="flex flex-col gap-2 border-t border-line pt-3" data-testid="Review.Comments">
       <h3 className="m-0 text-[12px] font-medium text-ink-2">Comments</h3>
 
       {comments.length === 0 ? (

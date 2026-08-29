@@ -57,7 +57,7 @@ export function StepDataView({
         // scrolls rather than wrapping — a re-wrapped doc string is a different payload.
         <pre
           data-testid={`${testId}.DocString`}
-          className="m-0 overflow-x-auto rounded border border-white/8 bg-ground p-3 font-mono text-[13px] leading-[1.7] whitespace-pre text-ink"
+          className="m-0 overflow-x-auto rounded border border-line bg-ground p-3 font-mono text-[13px] leading-[1.7] whitespace-pre text-ink"
         >
           {docString}
         </pre>

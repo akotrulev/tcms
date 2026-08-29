@@ -172,16 +172,6 @@ export function SessionRecoveryProvider({ children }: { children: ReactNode }) {
       {children}
 
       {/*
-        MUI's Dialog is used rather than a hand-rolled overlay because it already does focus
-        trap, Esc handling, focus restore, and `aria-modal` correctly — and the accessibility
-        rule is to take the library primitive over re-implementing the APG pattern.
-
-        No `onClose`: this dialog is not dismissible by backdrop click or Esc. That is the one
-        justified exception to "always offer a way out" — every request is failing until the
-        session is restored, so dismissing it would leave the user clicking a dead page with no
-        explanation. The way out is the explicit "Sign out" button.
-      */}
-      {/*
         No `onOpenChange`. This dialog is not dismissible — the session is gone, and every escape
         hatch it could offer is already on it as a labelled control ("Sign out instead"). Radix
         would otherwise close it on Escape or an outside click and leave the reader on a page whose

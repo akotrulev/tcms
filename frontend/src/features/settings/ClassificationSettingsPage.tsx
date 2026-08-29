@@ -187,7 +187,7 @@ function DimensionPanel({
 
   return (
     <section data-testid={`Classification.${dimension.key}`}>
-      <div className="mb-2 flex flex-wrap items-center gap-2.5 border-b border-white/8 pb-2">
+      <div className="mb-2 flex flex-wrap items-center gap-2.5 border-b border-line pb-2">
         <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
           {dimension.name}
         </h2>
@@ -290,7 +290,7 @@ function ValueRow({
     <li className="list-none">
       <div
         style={{ paddingLeft: depth * 22 }}
-        className="group flex items-center gap-2 rounded-[5px] py-1.5 pr-1 text-[13px] hover:bg-white/[3%]"
+        className="group flex items-center gap-2 rounded-[5px] py-1.5 pr-1 text-[13px] hover:bg-wash-1"
         data-testid={`Classification.Value.${value.id}`}
       >
         {depth > 0 && <CornerDownRight aria-hidden className="size-3.5 shrink-0 text-ink-4" />}
@@ -298,7 +298,7 @@ function ValueRow({
           <span
             aria-hidden
             style={{ backgroundColor: value.color }}
-            className="block size-3 shrink-0 rounded-full border border-white/14"
+            className="block size-3 shrink-0 rounded-full border border-line-strong"
           />
         )}
         <span className="min-w-0 flex-1 truncate text-ink-2">{value.name}</span>

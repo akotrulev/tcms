@@ -470,7 +470,7 @@ export function CaseGrid({
           <select
             value={size}
             onChange={(event) => table.setPageSize(Number(event.target.value))}
-            className="rounded border border-white/14 bg-field px-1.5 py-0.5 text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-given"
+            className="rounded border border-line-strong bg-field px-1.5 py-0.5 text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-given"
             data-testid={`${TestIdPrefix}.Pager.Size`}
           >
             {PAGE_SIZES.map((option) => (
