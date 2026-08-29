@@ -1,39 +1,12 @@
-import {
-  Alert,
-  AlertTitle,
-  Box,
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  ListItemText,
-  Menu,
-  MenuItem,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import AddLinkIcon from '@mui/icons-material/AddLinkOutlined';
-import ContentCopyIcon from '@mui/icons-material/ContentCopyOutlined';
-import DescriptionIcon from '@mui/icons-material/DescriptionOutlined';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
-import EditIcon from '@mui/icons-material/Edit';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import HistoryIcon from '@mui/icons-material/History';
-import { useState } from 'react';
+import { ChevronDown, Copy, History, Link2, Pencil, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { useAnnounce } from '../../a11y/useAnnounce';
 import type {
   CaseConditionRef,
   DocLink,
   LifecycleStatus,
+  StepKeyword,
   TestCase,
   TestStep,
 } from '../../api/types';
@@ -42,18 +15,34 @@ import {
   useCase,
   useCaseFeature,
   useDeleteCaseFile,
-  useProject,
   useRelabelCaseExternalLink,
   useSetCaseStatus,
   useUnlinkCaseExternal,
 } from '../../api/queries';
+import { TopStripSlot } from '../../app/topStripSlot';
 import { AttachmentsPanel } from '../../components/AttachmentList';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import {
+  Badge,
+  Banner,
+  DocumentSurface,
+  DocumentTitle,
+  ProcedureLine,
+  RailRow,
+  type ProcedureKeyword,
+} from '../../components/kit';
 import { LinkRelationshipControl } from '../../components/LinkRelationshipControl';
 import { PermissionGate } from '../../components/PermissionGate';
 import { UnlinkDialog } from '../../components/UnlinkDialog';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui';
 import { CaseCloneDialog } from './CaseCloneDialog';
 import { CaseDeleteDialog } from './CaseDeleteDialog';
 import { ReviewPanel } from '../review/ReviewPanel';
@@ -64,9 +53,25 @@ import { FlakePanel } from './FlakePanel';
 import { StepDataView } from './StepDataCell';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusChip } from '../../components/StatusChip';
 import { EM_DASH, formatAge, formatDateTime, formatSeconds } from '../../lib/format';
-import { stepFormatLabels, stepKeywordLabels } from '../../lib/labels';
+import { stepFormatLabels } from '../../lib/labels';
 import { describeLinkTarget } from '../../lib/links';
-import { ScrollX } from '../../components/ScrollX';
+
+/** `.sec h3` from `renders/tcms.css` — one spelling of a rail section heading on this screen. */
+const SECTION_HEADING = 'm-0 mb-2.5 text-[11px] font-semibold tracking-[.08em] text-ink-3 uppercase';
+
+/**
+ * A step's keyword, in the four the kit's procedure line paints — design language rule 5, where
+ * `Given` is the green `Passed` is and `Then` is the blue `Retest` is. `stepKeywordLabels` is no
+ * longer read here because `ProcedureLine` owns the word as well as the hue: two spellings of
+ * "Given" on one screen is exactly the drift rule 5 exists to stop.
+ */
+const KEYWORD = {
+  GIVEN: 'given',
+  WHEN: 'when',
+  THEN: 'then',
+  AND: 'and',
+  BUT: 'but',
+} as const satisfies Record<StepKeyword, ProcedureKeyword>;
 
 /**
  * Test case detail.
@@ -135,160 +140,170 @@ const caseMoves = {
 
 export function CaseDetailPage() {
   const { projectId = '', caseId = '' } = useParams();
-  const project = useProject(projectId);
   const testCase = useCase(projectId, caseId);
   const navigate = useNavigate();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [cloning, setCloning] = useState(false);
 
+  /*
+    The tab title and the arrival announcement, raised here because this screen no longer has a
+    `PageHeader` (007 T11, following T7). Design language rule 1: *"no page heading repeating the
+    rail's active item"* — and on a record read as a document the case's own title is the heading,
+    drawn once by `DocumentTitle` at the top of the document. React 19 hoists a bare `<title>`, so
+    the two things the header did that nothing else does survive its removal; the breadcrumb moves
+    into the top strip, where the render puts it.
+  */
+  const pageTitle = testCase.data ? `${testCase.data.key} ${testCase.data.title}` : 'Test case';
+  const announce = useAnnounce();
+  useEffect(() => {
+    announce(`${pageTitle} page loaded`);
+  }, [announce, pageTitle]);
+
   return (
-    <Box>
+    <div className="flex min-h-full flex-col">
+      <title>{`${pageTitle} · TCMS`}</title>
+
+      {/*
+        THE BREADCRUMB IS CHROME AND STAYS UP. It renders outside the region on purpose: a failed
+        or slow read must not take the only non-rail way back to the list with it — the resilience
+        rule that a failure is scoped to the response-dependent subtree, applied to the one piece
+        of this screen that is not about the case's body.
+      */}
+      <TopStripSlot>
+        <nav
+          aria-label="Breadcrumb"
+          data-testid="CaseDetail.Breadcrumbs"
+          className="mr-auto hidden min-w-0 truncate text-[12.5px] text-ink-3 sm:block"
+        >
+          <RouterLink to={`/projects/${projectId}/cases`} className="hover:underline">
+            Test cases
+          </RouterLink>
+          {' / '}
+          {/*
+            An unfiled case has no folder to point at, so the crumb becomes the grid's own
+            unfiled filter rather than a link to `?suiteId=null` — which would render every
+            case in the project and read as the crumb being broken.
+          */}
+          {testCase.data && (
+            <>
+              <RouterLink
+                to={
+                  testCase.data.suiteId === null
+                    ? `/projects/${projectId}/cases?unfiled=true`
+                    : `/projects/${projectId}/cases?suiteId=${testCase.data.suiteId}`
+                }
+                className="hover:underline"
+              >
+                {testCase.data.suiteId === null ? 'Not filed' : (testCase.data.suiteName ?? '')}
+              </RouterLink>
+              {' / '}
+            </>
+          )}
+          <span className="font-medium text-ink-2">{testCase.data?.key ?? 'Case'}</span>
+        </nav>
+      </TopStripSlot>
+
       <DataRegion testId="CaseDetail.Content" state={{ ...testCase, refetch: () => void testCase.refetch() }}>
         {(data) => (
           <>
-            <PageHeader
-              testId="CaseDetail.Header"
-              title={data.title}
-              documentTitle={`${data.key} ${data.title}`}
-              crumbs={[
-                { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-                { label: 'Test cases', to: `/projects/${projectId}/cases` },
-                // An unfiled case has no folder to point at, so the crumb becomes the grid's own
-                // unfiled filter rather than a link to `?suiteId=null` — which would render every
-                // case in the project and read as the crumb being broken.
-                data.suiteId === null
-                  ? { label: 'Not filed', to: `/projects/${projectId}/cases?unfiled=true` }
-                  : {
-                      label: data.suiteName ?? '',
-                      to: `/projects/${projectId}/cases?suiteId=${data.suiteId}`,
-                    },
-                { label: data.key },
-              ]}
-              meta={
-                <>
-                  <Identifier variant="strong">{data.key}</Identifier>
-                  <Tooltip title="The version currently saved. Runs pin the version they executed.">
-                    <Box>
-                      <Identifier variant="muted">v{data.currentVersionNo}</Identifier>
-                    </Box>
-                  </Tooltip>
-                  <LifecycleChip status={data.lifecycleStatus} testId="CaseDetail.Lifecycle" />
-                  <Chip size="small" variant="outlined" label={stepFormatLabels[data.stepFormat]} />
-                  {/*
-                    Provenance, and a chip rather than a link because there is nothing to link to:
-                    the `.feature` file lives in somebody's automation repository and this instance
-                    has never held it (§255). What it answers is "why does this case say that",
-                    which is a question a reader of an imported case asks and had no way to.
-                  */}
-                  {data.importedFrom && (
-                    <Tooltip title="Imported from a .feature file. This instance does not hold the file.">
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        data-testid="CaseDetail.ImportedFrom"
-                        label={`Imported from ${data.importedFrom.path}:${data.importedFrom.line}`}
-                      />
-                    </Tooltip>
-                  )}
-                </>
-              }
-              actions={
-                <>
-                  <Button
-                    component={RouterLink}
-                    to={`/projects/${projectId}/cases/${caseId}/history`}
-                    startIcon={<HistoryIcon />}
-                    data-testid="CaseDetail.HistoryLink"
-                  >
+            <TopStripSlot>
+              <div className="flex flex-wrap items-center gap-2" data-testid="CaseDetail.Actions">
+                <Button asChild size="sm" data-testid="CaseDetail.HistoryLink">
+                  <RouterLink to={`/projects/${projectId}/cases/${caseId}/history`}>
+                    <History aria-hidden className="size-3.5" />
                     Execution history
-                  </Button>
-                  <LifecycleMenu projectId={projectId} caseId={caseId} testCase={data} />
-                  {/*
-                    §129. `case:create` and not `case:edit`: a clone creates a case and changes
-                    nothing about this one, which is the key the endpoint charges. Disabled rather
-                    than hidden (§31) — an Automation Service token holds `case:create` only in
-                    quarantine and a Viewer holds neither, and both should be able to see that the
-                    action exists.
-                  */}
-                  <PermissionGate projectId={projectId} permission="case:create">
-                    {({ allowed }) => (
-                      <Button
-                        startIcon={<ContentCopyIcon />}
-                        disabled={!allowed}
-                        onClick={() => setCloning(true)}
-                        data-testid="CaseDetail.CloneButton"
-                      >
-                        Clone
-                      </Button>
-                    )}
-                  </PermissionGate>
-                  {/*
-                    The denied branch renders a plain `<button>`, NOT a disabled link. MUI's
-                    `disabled` on `component={RouterLink}` only adds `aria-disabled` and kills
-                    pointer events — the anchor keeps its `href`, so Enter on a focused link and a
-                    middle-click both still navigate. A disabled-looking link that opens the editor
-                    is worse than no gate at all, because it looks like the gate worked.
-                  */}
-                  <PermissionGate projectId={projectId} permission="case:edit">
-                    {({ allowed }) =>
-                      allowed ? (
-                        <Button
-                          component={RouterLink}
-                          to={`/projects/${projectId}/cases/${caseId}/edit`}
-                          variant="contained"
-                          startIcon={<EditIcon />}
-                          data-testid="CaseDetail.EditButton"
-                        >
-                          Edit case
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="contained"
-                          disabled
-                          startIcon={<EditIcon />}
-                          data-testid="CaseDetail.EditButton"
-                        >
-                          Edit case
-                        </Button>
-                      )
-                    }
-                  </PermissionGate>
-                  {/*
-                    Asks about the ROW as well as the caller — and since V51 (§207) the row half
-                    no longer changes the answer: `case:delete` is unqualified for every role that
-                    holds it, so any non-Viewer contributor deletes any case.
+                  </RouterLink>
+                </Button>
 
-                    ~~`case:delete` is OWN-qualified for a Test Engineer (roles spec §A5), so
-                    holding it is not the same as holding it *here*. Before `createdBy` was on the
-                    wire this button enabled on every case and the caller discovered whose was
-                    whose by being refused.~~ That was true from §65 until 2026-08-14.
+                <LifecycleMenu projectId={projectId} caseId={caseId} testCase={data} />
 
-                    `authorId` is still passed, deliberately. The qualifier is data on the server
-                    (see IdentityProjectAccess.canDoOnAuthored), so a future OWN grant must find
-                    this gate already asking the question — hard-coding "authorship never matters"
-                    is what would re-create the original defect inverted: an enabled Delete that
-                    403s. It costs one already-loaded field.
-                  */}
-                  <PermissionGate
-                    projectId={projectId}
-                    permission="case:delete"
-                    authorId={data.createdBy?.id ?? null}
-                  >
-                    {({ allowed }) => (
-                      <Button
-                        color="error"
-                        startIcon={<DeleteOutlineIcon />}
-                        disabled={!allowed}
-                        onClick={() => setConfirmingDelete(true)}
-                        data-testid="CaseDetail.DeleteButton"
-                      >
-                        Delete
+                {/*
+                  §129. `case:create` and not `case:edit`: a clone creates a case and changes
+                  nothing about this one, which is the key the endpoint charges. Disabled rather
+                  than hidden (§31) — an Automation Service token holds `case:create` only in
+                  quarantine and a Viewer holds neither, and both should be able to see that the
+                  action exists.
+                */}
+                <PermissionGate projectId={projectId} permission="case:create">
+                  {({ allowed }) => (
+                    <Button
+                      size="sm"
+                      disabled={!allowed}
+                      onClick={() => setCloning(true)}
+                      data-testid="CaseDetail.CloneButton"
+                    >
+                      <Copy aria-hidden className="size-3.5" />
+                      Clone
+                    </Button>
+                  )}
+                </PermissionGate>
+
+                {/*
+                  The denied branch renders a plain `<button>`, NOT a disabled link.
+
+                  ~~MUI's `disabled` on `component={RouterLink}` only adds `aria-disabled` and kills
+                  pointer events — the anchor keeps its `href`, so Enter on a focused link and a
+                  middle-click both still navigate.~~ → **superseded by 007 T11**: the control is
+                  `Button asChild` over a `<RouterLink>` now, and `asChild` has the same hole for
+                  the same reason — `disabled` is not an anchor attribute, so a "disabled" link is
+                  a link. A disabled-looking link that opens the editor is worse than no gate at
+                  all, because it looks like the gate worked. So the two branches render two
+                  different elements, exactly as before.
+                */}
+                <PermissionGate projectId={projectId} permission="case:edit">
+                  {({ allowed }) =>
+                    allowed ? (
+                      <Button asChild size="sm" variant="primary" data-testid="CaseDetail.EditButton">
+                        <RouterLink to={`/projects/${projectId}/cases/${caseId}/edit`}>
+                          <Pencil aria-hidden className="size-3.5" />
+                          Edit case
+                        </RouterLink>
                       </Button>
-                    )}
-                  </PermissionGate>
-                </>
-              }
-            />
+                    ) : (
+                      <Button size="sm" variant="primary" disabled data-testid="CaseDetail.EditButton">
+                        <Pencil aria-hidden className="size-3.5" />
+                        Edit case
+                      </Button>
+                    )
+                  }
+                </PermissionGate>
+
+                {/*
+                  Asks about the ROW as well as the caller — and since V51 (§207) the row half
+                  no longer changes the answer: `case:delete` is unqualified for every role that
+                  holds it, so any non-Viewer contributor deletes any case.
+
+                  ~~`case:delete` is OWN-qualified for a Test Engineer (roles spec §A5), so
+                  holding it is not the same as holding it *here*. Before `createdBy` was on the
+                  wire this button enabled on every case and the caller discovered whose was
+                  whose by being refused.~~ That was true from §65 until 2026-08-14.
+
+                  `authorId` is still passed, deliberately. The qualifier is data on the server
+                  (see IdentityProjectAccess.canDoOnAuthored), so a future OWN grant must find
+                  this gate already asking the question — hard-coding "authorship never matters"
+                  is what would re-create the original defect inverted: an enabled Delete that
+                  403s. It costs one already-loaded field.
+                */}
+                <PermissionGate
+                  projectId={projectId}
+                  permission="case:delete"
+                  authorId={data.createdBy?.id ?? null}
+                >
+                  {({ allowed }) => (
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      disabled={!allowed}
+                      onClick={() => setConfirmingDelete(true)}
+                      data-testid="CaseDetail.DeleteButton"
+                    >
+                      <Trash2 aria-hidden className="size-3.5" />
+                      Delete
+                    </Button>
+                  )}
+                </PermissionGate>
+              </div>
+            </TopStripSlot>
 
             {/*
               Mounted only while confirming, so the dialog's own reset-on-open effect starts from a
@@ -325,26 +340,67 @@ export function CaseDetailPage() {
               />
             )}
 
-            {data.healthSignals.length > 0 && (
-              <Stack direction="row" sx={{ gap: 0.75, flexWrap: 'wrap', mb: 2 }} data-testid="CaseDetail.Health">
-                {/* In the order the server sent them, which is worst first (§179) — the same
-                    ranking the grid's single chip is chosen by, so the two screens agree about
-                    which of a case's problems is the one to read first. */}
-                {data.healthSignals.map((raised) => (
-                  <HealthChip key={raised.signal} signal={raised.signal} severity={raised.severity} />
-                ))}
-              </Stack>
-            )}
+            <div className="flex min-w-0 flex-1 flex-col lg:flex-row">
+              {/*
+                THE DOCUMENT COLUMN — `renders/02-record-as-document.html` panel A.
 
-            <Stack direction={{ xs: 'column', lg: 'row' }} sx={{ gap: 3, alignItems: 'flex-start' }}>
-              <Stack sx={{ gap: 3, flex: 1, minWidth: 0, width: '100%' }}>
-                <Panel title="What this proves" testId="CaseDetail.Summary">
-                  <Stack sx={{ gap: 2 }}>
-                    <Field label="Objective" value={data.objective} />
-                    <Field label="Description" value={data.description} />
-                    <Field label="Expected outcome" value={data.expectedOutcome} />
-                  </Stack>
-                </Panel>
+                Nine titled panels became one document and a rail. What a reader came here for is
+                the procedure, so it gets the width and the ink at the editor's own 74ch measure:
+                pressing *Edit* lands the caret in text that has not moved a pixel, which is the
+                thesis the whole family rests on. The classification, ownership and traceability
+                metadata is reference material and moves to the rail.
+              */}
+              <DocumentSurface measure="procedure" className="min-w-0 flex-1">
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <Identifier variant="strong">{data.key}</Identifier>
+                  <span title="The version currently saved. Runs pin the version they executed.">
+                    <Identifier variant="muted">v{data.currentVersionNo}</Identifier>
+                  </span>
+                  <LifecycleChip status={data.lifecycleStatus} testId="CaseDetail.Lifecycle" />
+                  <Badge tone="plain">{stepFormatLabels[data.stepFormat]}</Badge>
+                  {/*
+                    Provenance, and a badge rather than a link because there is nothing to link to:
+                    the `.feature` file lives in somebody's automation repository and this instance
+                    has never held it (§255). What it answers is "why does this case say that",
+                    which is a question a reader of an imported case asks and had no way to.
+                  */}
+                  {data.importedFrom && (
+                    <span title="Imported from a .feature file. This instance does not hold the file.">
+                      <Badge tone="plain" data-testid="CaseDetail.ImportedFrom">
+                        Imported from {data.importedFrom.path}:{data.importedFrom.line}
+                      </Badge>
+                    </span>
+                  )}
+                </div>
+
+                {data.healthSignals.length > 0 && (
+                  <div className="mb-4 flex flex-wrap gap-1.5" data-testid="CaseDetail.Health">
+                    {/* In the order the server sent them, which is worst first (§179) — the same
+                        ranking the grid's single chip is chosen by, so the two screens agree about
+                        which of a case's problems is the one to read first. */}
+                    {data.healthSignals.map((raised) => (
+                      <HealthChip key={raised.signal} signal={raised.signal} severity={raised.severity} />
+                    ))}
+                  </div>
+                )}
+
+                {/*
+                  *Why this exists* is the only prose above the rule, and it is the objective —
+                  the render's `.dwhy`, and the same decision the editor took. `description` and
+                  `expectedOutcome` survive below the procedure (007 §4 defers deleting them,
+                  because they are on the wire and hold data), in the document's narrative column
+                  rather than in a titled *What this proves* panel.
+                */}
+                <DocumentTitle
+                  whyLabel="Why this exists"
+                  why={
+                    data.objective ? (
+                      <span data-testid="CaseDetail.Objective">{data.objective}</span>
+                    ) : undefined
+                  }
+                >
+                  {data.title}
+                </DocumentTitle>
 
                 <ConditionPanel
                   title="Preconditions"
@@ -364,20 +420,35 @@ export function CaseDetailPage() {
                   emptyBody="No postconditions. Nothing needs cleaning up after this case."
                 />
 
+                {(data.description || data.expectedOutcome) && (
+                  <section className="mt-8 border-t border-white/8 pt-5">
+                    <div className="grid gap-5 md:grid-cols-2">
+                      {data.description && <Field label="Description" value={data.description} />}
+                      {data.expectedOutcome && (
+                        <Field label="Expected outcome" value={data.expectedOutcome} />
+                      )}
+                    </div>
+                  </section>
+                )}
+
                 {/*
                   Below the steps and the conditions, above traceability: an attachment on a case is
                   supporting material for the procedure above it — a reference screenshot, a sample
                   CSV — and traceability is about a different question (what requirement this
-                  covers). It is in the CONTENT column and not the metadata sidebar for the same
+                  covers). It is in the CONTENT column and not the metadata rail for the same
                   reason: a tester reads it while executing.
                 */}
-                <CaseAttachments projectId={projectId} caseId={caseId} attachments={data.attachments} />
+                <div className="mt-8">
+                  <CaseAttachments projectId={projectId} caseId={caseId} attachments={data.attachments} />
+                </div>
 
-                <DocLinksPanel
-                  links={data.relatedDocuments ?? []}
-                  projectId={projectId}
-                  caseId={caseId}
-                />
+                <div className="mt-8">
+                  <DocLinksPanel
+                    links={data.relatedDocuments ?? []}
+                    projectId={projectId}
+                    caseId={caseId}
+                  />
+                </div>
 
                 {/*
                   004 Phase 3's issue links, below traceability and deliberately not inside it: that
@@ -385,157 +456,191 @@ export function CaseDetailPage() {
                   thing it covers. The two have different lifetimes and one list would call a closed
                   bug and a requirement both "related".
                 */}
-                <IssueLinksPanel projectId={projectId} caseId={caseId} />
-              </Stack>
+                <div className="mt-8">
+                  <IssueLinksPanel projectId={projectId} caseId={caseId} />
+                </div>
+              </DocumentSurface>
 
-              {/* Metadata sidebar. */}
-              <Box sx={{ width: { xs: '100%', lg: 320 }, flexShrink: 0 }}>
-                <Stack sx={{ gap: 3 }}>
-                  <Panel title="Last result" testId="CaseDetail.LastResult">
-                    {data.lastResult?.statusKind ? (
-                      <Stack sx={{ gap: 1 }}>
-                        <StatusChip kind={data.lastResult.statusKind} size="medium" />
-                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                          {formatDateTime(data.lastResult.executedAt)}
-                        </Typography>
-                        {data.lastResult.releaseVersion && (
-                          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                            Release <Identifier variant="muted">{data.lastResult.releaseVersion}</Identifier>
-                          </Typography>
-                        )}
-                      </Stack>
-                    ) : (
-                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        Never executed.
-                      </Typography>
-                    )}
-                  </Panel>
+              {/*
+                THE RAIL — quiet at rest, values right-aligned, one section heading per group
+                (`tcms.css`'s `.sec h3`, which is not a panel). Every row here is `readOnly`: this
+                screen reads a case, and the control that changes any of these values is the editor
+                one click away. `RailRow`'s read-only branch is a `<div>` rather than a disabled
+                button for exactly that reason — there is no action behind it to enable.
+              */}
+              <aside className="w-full shrink-0 border-white/8 bg-panel lg:w-[300px] lg:border-l">
+                <section className="border-b border-white/8 px-4 py-4" data-testid="CaseDetail.Summary">
+                  <h2 className={SECTION_HEADING}>Summary</h2>
+                  <RailRow readOnly label="Suite" value={data.suiteName ?? EM_DASH} />
+                  <RailRow
+                    readOnly
+                    label="Priority"
+                    value={<PriorityLabel priority={data.priority} testId="CaseDetail.Priority" />}
+                  />
+                  <RailRow readOnly label="Estimated" value={formatSeconds(data.estimatedDurationSec)} />
+                  {/*
+                    owner is nullable: test_case.owner_id is, so an imported case or one
+                    whose owner was offboarded has none. "Unassigned" rather than a blank
+                    row — a missing value and a missing field read the same otherwise.
+                  */}
+                  <RailRow readOnly label="Owner" value={data.owner?.displayName ?? 'Unassigned'} />
+                  <RailRow
+                    readOnly
+                    label="Updated"
+                    value={<span title={formatDateTime(data.updatedAt)}>{formatAge(data.updatedAt)}</span>}
+                  />
+                </section>
 
-                  <Panel title="Classification" testId="CaseDetail.Classification">
-                    <Stack sx={{ gap: 1.5 }}>
-                      <MetaRow label="Suite" value={data.suiteName} />
-                      <MetaRow label="Test type" value={data.testType ?? EM_DASH} />
-                      <MetaRow label="Test level" value={data.testLevel ?? EM_DASH} />
-                      <MetaRow
+                <section className="border-b border-white/8 px-4 py-4" data-testid="CaseDetail.LastResult">
+                  <h2 className={SECTION_HEADING}>Last result</h2>
+                  {data.lastResult?.statusKind ? (
+                    <>
+                      <RailRow
+                        readOnly
+                        label="Latest"
+                        value={<StatusChip kind={data.lastResult.statusKind} />}
+                      />
+                      <RailRow
+                        readOnly
+                        label="Executed"
+                        value={formatDateTime(data.lastResult.executedAt)}
+                      />
+                      {data.lastResult.releaseVersion && (
+                        <RailRow
+                          readOnly
+                          label="Release"
+                          value={<Identifier variant="muted">{data.lastResult.releaseVersion}</Identifier>}
+                        />
+                      )}
+                    </>
+                  ) : (
+                    <p className="m-0 text-[13px] text-ink-4">Never executed.</p>
+                  )}
+                </section>
+
+                <section className="border-b border-white/8 px-4 py-4" data-testid="CaseDetail.Automation">
+                  <h2 className={SECTION_HEADING}>Automation</h2>
+                  <RailRow
+                    readOnly
+                    label="Status"
+                    value={<AutomationLabel status={data.automationStatus} testId="CaseDetail.AutomationStatus" />}
+                  />
+                  {data.automationKey && (
+                    <RailRow
+                      readOnly
+                      label="Test method"
+                      value={
+                        <span className="truncate" title={data.automationKey}>
+                          <Identifier variant="muted">{data.automationKey}</Identifier>
+                        </span>
+                      }
+                    />
+                  )}
+                  {data.automationTags && data.automationTags.length > 0 && (
+                    <RailRow
+                      readOnly
+                      label="Tags"
+                      value={
+                        <span className="flex flex-wrap justify-end gap-1">
+                          {data.automationTags.map((tag) => (
+                            <Identifier key={tag} variant="muted">
+                              {tag}
+                            </Identifier>
+                          ))}
+                        </span>
+                      }
+                    />
+                  )}
+                  {data.notAutomatableReason && (
+                    <p className="mt-1.5 mb-0 text-[12px] leading-[1.5] text-ink-4">
+                      {data.notAutomatableReason}
+                    </p>
+                  )}
+                </section>
+
+                <section className="border-b border-white/8 px-4 py-4" data-testid="CaseDetail.Classification">
+                  <h2 className={SECTION_HEADING}>Classification</h2>
+                  {/*
+                    §0 item 3, rule 4 — *nothing configured, nothing shown*. A project that has
+                    never defined a vocabulary gets one sentence in the same words the editor's
+                    rail uses, not three rows of em dashes.
+                  */}
+                  {data.testType || data.testLevel || data.features.length > 0 ? (
+                    <>
+                      <RailRow readOnly label="Test type" value={data.testType ?? EM_DASH} />
+                      <RailRow readOnly label="Test level" value={data.testLevel ?? EM_DASH} />
+                      <RailRow
+                        readOnly
                         label="Features"
                         value={
                           data.features.length ? (
-                            <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap' }}>
+                            <span className="flex flex-wrap justify-end gap-1">
                               {data.features.map((feature) => (
-                                <Chip key={feature} size="small" variant="outlined" label={feature} />
+                                <Badge key={feature} tone="plain">
+                                  {feature}
+                                </Badge>
                               ))}
-                            </Stack>
+                            </span>
                           ) : (
                             EM_DASH
                           )
                         }
                       />
-                      <MetaRow
-                        label="Priority"
-                        value={<PriorityLabel priority={data.priority} testId="CaseDetail.Priority" />}
-                      />
-                      <MetaRow label="Estimated" value={formatSeconds(data.estimatedDurationSec)} />
-                    </Stack>
-                  </Panel>
+                    </>
+                  ) : (
+                    <p className="m-0 text-[12.5px] leading-[1.55] text-ink-4">
+                      This project has no test types, levels or features defined, so there is
+                      nothing to show.
+                    </p>
+                  )}
+                </section>
 
-                  <Panel title="Automation" testId="CaseDetail.Automation">
-                    <Stack sx={{ gap: 1.5 }}>
-                      <MetaRow
-                        label="Status"
-                        value={<AutomationLabel status={data.automationStatus} testId="CaseDetail.AutomationStatus" />}
-                      />
-                      {data.automationKey && (
-                        <MetaRow
-                          label="Test method"
-                          value={
-                            <Tooltip title={data.automationKey}>
-                              <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                <Identifier variant="muted">{data.automationKey}</Identifier>
-                              </Box>
-                            </Tooltip>
-                          }
-                        />
-                      )}
-                      {data.automationTags && data.automationTags.length > 0 && (
-                        <MetaRow
-                          label="Tags"
-                          value={
-                            <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap' }}>
-                              {data.automationTags.map((tag) => (
-                                <Identifier key={tag} variant="muted">
-                                  {tag}
-                                </Identifier>
-                              ))}
-                            </Stack>
-                          }
-                        />
-                      )}
-                      {data.notAutomatableReason && (
-                        <MetaRow label="Why not automatable" value={data.notAutomatableReason} />
-                      )}
-                    </Stack>
-                  </Panel>
-
-                  <Panel title="Ownership" testId="CaseDetail.Ownership">
-                    <Stack sx={{ gap: 1.5 }}>
-                      {/*
-                        owner is nullable: test_case.owner_id is, so an imported case or one
-                        whose owner was offboarded has none. "Unassigned" rather than a blank
-                        row — a missing value and a missing field read the same otherwise.
-                      */}
-                      <MetaRow label="Owner" value={data.owner?.displayName ?? 'Unassigned'} />
-                      <MetaRow
-                        label="Updated"
-                        value={
-                          <Tooltip title={formatDateTime(data.updatedAt)}>
-                            <Box component="span">{formatAge(data.updatedAt)}</Box>
-                          </Tooltip>
-                        }
-                      />
-                    </Stack>
-                  </Panel>
-
-                  {/*
-                    Directly under Automation, because that is what it is about: a flake score is
-                    computed from repeat runs under identical conditions, which in practice means
-                    CI. Above the review panel for the reason that one gives about its own place —
-                    this is a panel a reader acts on, and a quarantined test is a standing decision
-                    somebody has to either justify or undo.
-                  */}
+                {/*
+                  Directly under Automation, because that is what it is about: a flake score is
+                  computed from repeat runs under identical conditions, which in practice means
+                  CI. Above the review panel for the reason that one gives about its own place —
+                  this is a panel a reader acts on, and a quarantined test is a standing decision
+                  somebody has to either justify or undo.
+                */}
+                <div className="border-b border-white/8 px-4 py-4">
                   <FlakePanel projectId={projectId} testCase={data} />
+                </div>
 
-                  {/*
-                    Above the version history and below the metadata, because it is the panel a
-                    reader acts on: an open review is a question somebody is waiting on an answer
-                    to, while the version list is reference material. `currentVersionNo` is passed
-                    so the panel can say the case has moved past the version under review — the
-                    server cannot compute that, holding only one of the two numbers.
-                  */}
+                {/*
+                  Above the version history and below the metadata, because it is the panel a
+                  reader acts on: an open review is a question somebody is waiting on an answer
+                  to, while the version list is reference material. `currentVersionNo` is passed
+                  so the panel can say the case has moved past the version under review — the
+                  server cannot compute that, holding only one of the two numbers.
+                */}
+                <div className="border-b border-white/8 px-4 py-4">
                   <ReviewPanel
                     projectId={projectId}
                     subjectType="CASE"
                     subjectId={caseId}
                     currentVersionNo={data.currentVersionNo}
                   />
+                </div>
 
-                  {/*
-                    Below Ownership rather than above it: the sidebar reads as "what is this case"
-                    (classification, automation, who owns it) and then "what has happened to it".
-                    It is also the tallest panel here, and putting a scrolling region above three
-                    short ones pushes them off the fold on a laptop.
-                  */}
+                {/*
+                  Below Ownership rather than above it: the rail reads as "what is this case"
+                  (classification, automation, who owns it) and then "what has happened to it".
+                  It is also the tallest panel here, and putting a scrolling region above three
+                  short ones pushes them off the fold on a laptop.
+                */}
+                <div className="px-4 py-4">
                   <CaseVersionPanel
                     projectId={projectId}
                     caseId={caseId}
                     currentVersionNo={data.currentVersionNo}
                   />
-                </Stack>
-              </Box>
-            </Stack>
+                </div>
+              </aside>
+            </div>
           </>
         )}
       </DataRegion>
-    </Box>
+    </div>
   );
 }
 
@@ -572,50 +677,77 @@ function LifecycleMenu({
   caseId: string;
   testCase: TestCase;
 }) {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [open, setOpen] = useState(false);
   const setStatus = useSetCaseStatus(projectId, caseId);
   const moves = caseMoves[testCase.lifecycleStatus];
 
   return (
-    <>
+    <div className="relative">
       <Button
-        startIcon={<ExpandMoreIcon />}
-        onClick={(event) => setAnchor(event.currentTarget)}
+        size="sm"
+        onClick={() => setOpen((current) => !current)}
         disabled={setStatus.isPending}
         aria-haspopup="menu"
+        aria-expanded={open}
         data-testid="CaseDetail.StatusButton"
       >
         Status
+        <ChevronDown aria-hidden className="size-3.5" />
       </Button>
-      <Menu
-        open={!!anchor}
-        anchorEl={anchor}
-        onClose={() => setAnchor(null)}
-        data-testid="CaseDetail.StatusMenu"
-      >
-        {moves.map((option) => (
-          <PermissionGate
-            key={option.target}
-            projectId={projectId}
-            permission={option.permission}
-            wrapper="block"
+      {open && (
+        <>
+          {/*
+            A scrim rather than a document listener: the menu closes on the next click anywhere,
+            and the element that swallows that click is a real one in the tree, so nothing has to
+            be registered, removed, or reasoned about across a re-render. It is `aria-hidden`
+            because it is a dismissal surface and not a control — Escape is the keyboard's way out
+            and the menu itself carries it.
+          */}
+          <div aria-hidden className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            role="menu"
+            data-testid="CaseDetail.StatusMenu"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setOpen(false);
+            }}
+            className="absolute right-0 z-50 mt-1 min-w-[200px] rounded-md border border-white/8 bg-panel p-1 shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]"
           >
-            {({ allowed }) => (
-              <MenuItem
-                disabled={!allowed || setStatus.isPending}
-                data-testid={`CaseDetail.StatusMenu.${option.target}`}
-                onClick={() => {
-                  setStatus.mutate(option.target);
-                  setAnchor(null);
-                }}
+            {moves.map((option) => (
+              <PermissionGate
+                key={option.target}
+                projectId={projectId}
+                permission={option.permission}
+                wrapper="block"
               >
-                <ListItemText>{option.label}</ListItemText>
-              </MenuItem>
-            )}
-          </PermissionGate>
-        ))}
-      </Menu>
-    </>
+                {({ allowed }) => (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    aria-disabled={!allowed || setStatus.isPending ? 'true' : undefined}
+                    data-testid={`CaseDetail.StatusMenu.${option.target}`}
+                    onClick={() => {
+                      if (!allowed || setStatus.isPending) return;
+                      setStatus.mutate(option.target);
+                      setOpen(false);
+                    }}
+                    className={
+                      'block w-full rounded-[4px] px-2.5 py-1.5 text-left text-[13px] ' +
+                      'focus-visible:outline-2 focus-visible:outline-offset-[-2px] ' +
+                      'focus-visible:outline-[color:var(--color-given)] ' +
+                      (allowed && !setStatus.isPending
+                        ? 'cursor-pointer text-ink-2 hover:bg-white/5 hover:text-ink'
+                        : 'cursor-not-allowed text-ink-4')
+                    }
+                  >
+                    {option.label}
+                  </button>
+                )}
+              </PermissionGate>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -666,25 +798,14 @@ function CaseAttachments({
 
 function Field({ label, value }: { label: string; value: string | null | undefined }) {
   return (
-    <Box>
-      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block', mb: 0.25 }}>
+    <div>
+      <span className="mb-1 block font-mono text-[11px] tracking-[.06em] text-ink-4 uppercase">
         {label}
-      </Typography>
-      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-        {value || <Box component="span" sx={{ color: 'text.secondary' }}>Not set</Box>}
-      </Typography>
-    </Box>
-  );
-}
-
-function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <Stack direction="row" sx={{ gap: 1, alignItems: 'flex-start' }}>
-      <Typography variant="body2" sx={{ color: 'text.secondary', width: 108, flexShrink: 0 }}>
-        {label}
-      </Typography>
-      <Box sx={{ flex: 1, minWidth: 0, fontSize: '0.8125rem' }}>{value}</Box>
-    </Stack>
+      </span>
+      <p className="m-0 text-[13px] leading-[1.6] whitespace-pre-wrap text-ink-2">
+        {value || <span className="text-ink-4">Not set</span>}
+      </p>
+    </div>
   );
 }
 
@@ -716,14 +837,36 @@ function ConditionPanel({
   testId: string;
   emptyBody: string;
 }) {
+  const inherited = conditions.filter((condition) => condition.inherited);
+
   return (
-    <Panel title={title} testId={testId}>
+    <section className="mb-6" data-testid={testId}>
+      <h2 className={SECTION_HEADING}>{title}</h2>
+
+      {/*
+        INHERITED RULES ARE A LINE, NOT A PANEL — the render's decision for panel A: what matters
+        is that something runs before step 1 and that it came from the suite, and a titled panel
+        listing them made the reader scroll past the procedure to reach it. The list itself is
+        still here, because a tester executing this case has to be able to read the rules; what
+        went is the box around it.
+      */}
+      {inherited.length > 0 && (
+        <Banner tone="neutral" className="mb-3">
+          <span>
+            <strong className="font-medium text-ink">
+              {inherited.length} {inherited.length === 1 ? 'rule' : 'rules'} inherited from{' '}
+              {inherited[0].inheritedFrom}
+            </strong>{' '}
+            {title === 'Preconditions' ? 'run before step 1' : 'run after the last step'}. Editing
+            one affects every case beneath that suite.
+          </span>
+        </Banner>
+      )}
+
       {conditions.length === 0 ? (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          {emptyBody}
-        </Typography>
+        <p className="m-0 text-[13px] text-ink-4">{emptyBody}</p>
       ) : (
-        <Stack sx={{ gap: 1.5 }}>
+        <div className="flex flex-col gap-3">
           {/*
            * Rendered in the order the server sent, and NOT re-sorted by `position`.
            *
@@ -740,82 +883,62 @@ function ConditionPanel({
            * there and only there.
            */}
           {conditions.map((condition) => (
-              <Box
-                key={condition.id}
-                data-testid={`${testId}.Item`}
-                sx={{
-                  pl: 1.5,
-                  borderLeft: '2px solid',
-                  borderColor: condition.inherited ? 'var(--color-info)' : 'divider',
-                }}
-              >
-                <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                    {condition.title}
-                  </Typography>
-                  {condition.inherited && (
-                    <Tooltip
-                      title={`Inherited from the ${condition.inheritedFrom} suite. Editing it affects every case beneath that suite.`}
-                    >
-                      <Chip
-                        size="small"
-                        label={`Inherited from ${condition.inheritedFrom}`}
-                        data-testid={`${testId}.InheritedMarker`}
-                        sx={{
-                          bgcolor: 'transparent',
-                          color: 'var(--color-info)',
-                          border: '1px solid color-mix(in srgb, var(--color-info) 45%, transparent)',
-                        }}
-                      />
-                    </Tooltip>
-                  )}
-                  {condition.inline && <Chip size="small" variant="outlined" label="Only on this case" />}
-                </Stack>
-                <Stack component="ol" sx={{ m: 0, pl: 2.5, gap: 0.25 }}>
-                  {condition.body.map((line, i) => (
-                    <Box component="li" key={`${condition.id}-${i}`}>
-                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        {line}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Stack>
-              </Box>
-            ))}
-        </Stack>
+            <div
+              key={condition.id}
+              data-testid={`${testId}.Item`}
+              className="border-l-2 pl-3"
+              style={{
+                borderColor: condition.inherited ? 'var(--color-info)' : 'rgb(255 255 255 / 8%)',
+              }}
+            >
+              <div className="mb-1 flex flex-wrap items-center gap-2">
+                <span className="text-[13px] font-medium text-ink">{condition.title}</span>
+                {condition.inherited && (
+                  <span
+                    title={`Inherited from the ${condition.inheritedFrom} suite. Editing it affects every case beneath that suite.`}
+                  >
+                    <Badge tone="steel" data-testid={`${testId}.InheritedMarker`}>
+                      Inherited from {condition.inheritedFrom}
+                    </Badge>
+                  </span>
+                )}
+                {condition.inline && <Badge tone="plain">Only on this case</Badge>}
+              </div>
+              <ol className="m-0 flex list-decimal flex-col gap-0.5 pl-5 text-[13px] text-ink-3">
+                {condition.body.map((line, i) => (
+                  <li key={`${condition.id}-${i}`}>{line}</li>
+                ))}
+              </ol>
+            </div>
+          ))}
+        </div>
       )}
 
       {declined.length > 0 && (
-        <Stack sx={{ gap: 0.5, mt: 2 }} data-testid={`${testId}.Declined`}>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+        <div className="mt-4 flex flex-col gap-1" data-testid={`${testId}.Declined`}>
+          <span className="font-mono text-[11px] tracking-[.06em] text-ink-4 uppercase">
             Turned off for this case
-          </Typography>
+          </span>
           {declined.map((condition) => (
-            <Stack
+            <div
               key={condition.id}
-              direction="row"
               data-testid={`${testId}.DeclinedItem`}
-              sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
+              className="flex flex-wrap items-center gap-2"
             >
-              <Typography
-                variant="body2"
-                sx={{ textDecoration: 'line-through', color: 'text.disabled' }}
-              >
-                {condition.title}
-              </Typography>
-              {/* Named for the same reason the inherited chip above is: "declined" alone leaves the
-                  reader without the one fact that makes it actionable — which folder set the rule,
-                  and therefore where it still applies. */}
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              <span className="text-[13px] text-ink-4 line-through">{condition.title}</span>
+              {/* Named for the same reason the inherited badge above is: "declined" alone leaves
+                  the reader without the one fact that makes it actionable — which folder set the
+                  rule, and therefore where it still applies. */}
+              <span className="text-[12px] text-ink-4">
                 {condition.inheritedFrom
                   ? `still applies to every other case in ${condition.inheritedFrom}`
                   : 'still applies to every other case in the folder'}
-              </Typography>
-            </Stack>
+              </span>
+            </div>
           ))}
-        </Stack>
+        </div>
       )}
-    </Panel>
+    </section>
   );
 }
 
@@ -851,48 +974,42 @@ function StepsPanel({
   const [viewingFeature, setViewingFeature] = useState(false);
 
   return (
-    <Panel
-      title="Steps"
-      testId="CaseDetail.Steps"
-      actions={
-        <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
-          {/*
-            Offered on EVERY case, including a structured one, because the endpoint renders every
-            case: numbered steps are a scenario whose steps have no keyword, and `*` is Gherkin's
-            own spelling for that. An action present on some cases and absent on others, for a
-            reason the author never chose, is the thing a 409 here would have produced.
-          */}
-          <Button
-            size="small"
-            startIcon={<DescriptionIcon />}
-            onClick={() => setViewingFeature(true)}
-            data-testid="CaseDetail.Steps.ViewFeature"
-          >
-            View as .feature
-          </Button>
-          <Chip size="small" variant="outlined" label={stepFormatLabels[testCase.stepFormat]} />
-        </Stack>
-      }
-      dense={steps.length > 0}
-    >
+    <section className="mb-6" data-testid="CaseDetail.Steps">
+      <div className="mb-2.5 flex items-center gap-2">
+        <h2 className={SECTION_HEADING + ' mb-0 mr-auto'}>Steps</h2>
+        {/*
+          Offered on EVERY case, including a structured one, because the endpoint renders every
+          case: numbered steps are a scenario whose steps have no keyword, and `*` is Gherkin's
+          own spelling for that. An action present on some cases and absent on others, for a
+          reason the author never chose, is the thing a 409 here would have produced.
+        */}
+        <Button
+          size="sm"
+          variant="quiet"
+          onClick={() => setViewingFeature(true)}
+          data-testid="CaseDetail.Steps.ViewFeature"
+        >
+          View as .feature
+        </Button>
+      </div>
+
       {steps.length > 0 ? (
         <StructuredSteps steps={steps} />
       ) : testCase.gherkinSource ? (
-        <Stack sx={{ gap: 2, p: 2 }}>
-          <Alert severity="info" data-testid="CaseDetail.Steps.NotMigrated">
-            <AlertTitle>Not yet migrated</AlertTitle>
-            This case&rsquo;s scenario is still stored as text, so it cannot be executed step by
-            step. Ask your operator to run <Identifier>migrate-gherkin-source</Identifier>.
-          </Alert>
+        <div className="flex flex-col gap-3">
+          <Banner tone="warn" data-testid="CaseDetail.Steps.NotMigrated">
+            <span>
+              <strong className="block font-medium text-ink">Not yet migrated</strong>
+              This case&rsquo;s scenario is still stored as text, so it cannot be executed step by
+              step. Ask your operator to run <Identifier>migrate-gherkin-source</Identifier>.
+            </span>
+          </Banner>
           <GherkinView source={testCase.gherkinSource} />
-        </Stack>
+        </div>
       ) : (
-        <Box sx={{ p: 2 }}>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            No steps written yet.
-          </Typography>
-        </Box>
+        <p className="m-0 text-[13px] text-ink-4">No steps written yet.</p>
       )}
+
       {viewingFeature && (
         <FeatureDialog
           projectId={projectId}
@@ -900,7 +1017,7 @@ function StepsPanel({
           onClose={() => setViewingFeature(false)}
         />
       )}
-    </Panel>
+    </section>
   );
 }
 
@@ -927,43 +1044,32 @@ function FeatureDialog({
   const feature = useCaseFeature(projectId, testCase.id);
 
   return (
-    <Dialog open onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
-        <Identifier>{testCase.key}.feature</Identifier>
-      </DialogTitle>
-      <DialogContent>
+    <Dialog open onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>
+            <Identifier>{testCase.key}.feature</Identifier>
+          </DialogTitle>
+        </DialogHeader>
         <DataRegion
           testId="CaseDetail.Feature"
           state={{ ...feature, refetch: () => void feature.refetch() }}
         >
           {(text) => (
-            <Box
-              component="pre"
+            <pre
               data-testid="CaseDetail.Feature.Text"
-              sx={{
-                m: 0,
-                p: 2,
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.8125rem',
-                lineHeight: 1.7,
-                whiteSpace: 'pre',
-                overflowX: 'auto',
-                bgcolor: 'background.default',
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-              }}
+              className="m-0 max-h-[60vh] overflow-auto rounded-md border border-white/8 bg-field p-3 font-mono text-[12.5px] leading-[1.7] whitespace-pre text-ink-2"
             >
               {text}
-            </Box>
+            </pre>
           )}
         </DataRegion>
+        <DialogFooter>
+          <Button onClick={onClose} data-testid="CaseDetail.Feature.Close">
+            Close
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid="CaseDetail.Feature.Close">
-          Close
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }
@@ -975,109 +1081,87 @@ function FeatureDialog({
  * lenses, and this draws text nothing can execute. It leaves the product with the field, in `002-`.
  */
 function GherkinView({ source }: { source: string }) {
-
   const KEYWORDS = /^(\s*)(Feature|Scenario Outline|Scenario|Background|Examples|Given|When|Then|And|But):?\s?/;
 
   return (
-    <Box
-      component="pre"
+    <pre
       data-testid="CaseDetail.Steps.Gherkin"
-      sx={{
-        m: 0,
-        p: 2,
-        fontFamily: 'var(--font-mono)',
-        fontSize: '0.8125rem',
-        lineHeight: 1.7,
-        bgcolor: 'background.default',
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 1,
-        overflowX: 'auto',
-      }}
+      className="m-0 overflow-x-auto rounded-md border border-white/8 bg-field p-3 font-mono text-[12.5px] leading-[1.7] text-ink-2"
     >
       {source.split('\n').map((line, i) => {
         const match = KEYWORDS.exec(line);
-        if (!match) return <Box key={i}>{line || ' '}</Box>;
+        if (!match) return <div key={i}>{line || ' '}</div>;
         return (
-          <Box key={i}>
+          <div key={i}>
             {match[1]}
-            <Box component="span" sx={{ color: 'primary.main', fontWeight: 600 }}>
+            <span className="font-medium" style={{ color: 'var(--color-given)' }}>
               {match[2]}
-            </Box>
+            </span>
             {line.slice(match[0].length - (match[0].endsWith(' ') ? 1 : 0)).replace(/^:/, ':')}
-          </Box>
+          </div>
         );
       })}
-    </Box>
+    </pre>
   );
 }
 
 /**
- * The rows, in both lenses (§255).
+ * The rows, in both lenses (§255) — **the procedure, at the editor's own measure since 007 T11**.
  *
  * The keyword is a **prefix on the action** rather than a column of its own: it is part of the
  * sentence a reader reads — *"Given the account is funded"* — and a column would put a word in one
  * cell and its object in the next, which is unreadable on a structured case where most rows have
- * none. `THEN` is styled as the assertion it is, so the row that says what should happen is the one
- * the eye lands on; that is the same signal `CaseCompleteness` reads to decide whether a case
- * asserts anything at all.
+ * none.
  *
- * The two block arguments render **under the action, spanning nothing** — `StepDataView`, the same
- * component the execution checklist uses, because a table that wraps differently on the two screens
- * is an author and a tester disagreeing about what the data says.
+ * ~~A four-column table: #, Action, Test data, Expected result.~~ → **superseded.** The renders'
+ * whole thesis for this family is that read and write are the same document, and the editor draws
+ * a numbered line with the keyword coloured by rule 5's palette. A table of the same rows is a
+ * second shape for one thing, and the two screens then disagree about what a case is. So the rows
+ * are `kit/ProcedureLine`, and the two fields a table gave columns to — `testData` and
+ * `expectedResult` — become the quiet second and third lines under the action they belong to,
+ * which is `Table`'s own rule (UX#113: *a quiet second line in the cell, never a twelfth column*)
+ * applied where the cell has become a line.
+ *
+ * The two block arguments render **under the action** — `StepDataView`, the same component the
+ * execution checklist uses, because a table that wraps differently on the two screens is an author
+ * and a tester disagreeing about what the data says.
  */
 function StructuredSteps({ steps }: { steps: TestStep[] }) {
   return (
-    <ScrollX>
-      <Table size="small" data-testid="CaseDetail.Steps.Grid">
-        <TableHead>
-          <TableRow>
-            <TableCell sx={{ width: 44, color: 'text.secondary' }}>#</TableCell>
-            <TableCell sx={{ color: 'text.secondary' }}>Action</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: '22%' }}>Test data</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: '32%' }}>Expected result</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {[...steps]
-            .sort((a, b) => a.position - b.position)
-            .map((step, index) => (
-              <TableRow key={step.id} data-testid="CaseDetail.Steps.Row">
-                <TableCell sx={{ verticalAlign: 'top' }}>
-                  <Identifier variant="muted">{index + 1}</Identifier>
-                </TableCell>
-                <TableCell sx={{ verticalAlign: 'top' }} data-testid="CaseDetail.Steps.Row.Action">
-                  {step.keyword && (
-                    <Box
-                      component="span"
-                      data-testid="CaseDetail.Steps.Row.Keyword"
-                      sx={{
-                        mr: 0.75,
-                        fontWeight: 600,
-                        color: step.keyword === 'THEN' ? 'success.main' : 'primary.main',
-                      }}
-                    >
-                      {stepKeywordLabels[step.keyword]}
-                    </Box>
-                  )}
-                  {step.action}
-                  <StepDataView
-                    docString={step.docString}
-                    dataTable={step.dataTable}
-                    testId="CaseDetail.Steps.Row.Data"
-                  />
-                </TableCell>
-                <TableCell sx={{ verticalAlign: 'top', color: 'text.secondary' }}>
-                  {step.testData || EM_DASH}
-                </TableCell>
-                <TableCell sx={{ verticalAlign: 'top' }} data-testid="CaseDetail.Steps.Row.Expected">
-                  {step.expectedResult || EM_DASH}
-                </TableCell>
-              </TableRow>
-            ))}
-        </TableBody>
-      </Table>
-    </ScrollX>
+    <div data-testid="CaseDetail.Steps.Grid">
+      {[...steps]
+        .sort((a, b) => a.position - b.position)
+        .map((step, index) => (
+          <ProcedureLine
+            key={step.id}
+            line={index + 1}
+            keyword={step.keyword ? KEYWORD[step.keyword] : undefined}
+            keywordTestId="CaseDetail.Steps.Row.Keyword"
+            data-testid="CaseDetail.Steps.Row"
+          >
+            <span data-testid="CaseDetail.Steps.Row.Action">{step.action}</span>
+            <StepDataView
+              docString={step.docString}
+              dataTable={step.dataTable}
+              testId="CaseDetail.Steps.Row.Data"
+            />
+            {step.testData && (
+              <span className="mt-0.5 block font-mono text-[12px] text-ink-4">
+                {step.testData}
+              </span>
+            )}
+            {step.expectedResult && (
+              <span
+                className="mt-0.5 block text-[13px] text-ink-3"
+                data-testid="CaseDetail.Steps.Row.Expected"
+              >
+                {'→ '}
+                {step.expectedResult}
+              </span>
+            )}
+          </ProcedureLine>
+        ))}
+    </div>
   );
 }
 
@@ -1134,77 +1218,65 @@ function DocLinksPanel({
   const navigate = useNavigate();
 
   return (
-    <Panel
-      title="Traceability"
-      testId="CaseDetail.DocLinks"
-      actions={
-        <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
-          {staleCount > 0 && (
-            <Chip
-              size="small"
-              label={`${staleCount} stale`}
-              data-testid="CaseDetail.DocLinks.StaleCount"
-              sx={{
-                bgcolor: 'transparent',
-                color: 'var(--color-failed)',
-                border: '1px solid color-mix(in srgb, var(--color-failed) 45%, transparent)',
-              }}
-            />
+    <section data-testid="CaseDetail.DocLinks">
+      <div className="mb-2.5 flex flex-wrap items-center gap-2">
+        <h2 className={SECTION_HEADING + ' mb-0 mr-auto'}>Traceability</h2>
+        {staleCount > 0 && (
+          <Badge tone="failed" data-testid="CaseDetail.DocLinks.StaleCount">
+            {staleCount} stale
+          </Badge>
+        )}
+        {/*
+          Disabled rather than hidden (§31): a Viewer should be able to see that the product can
+          do this. `case:edit` and not `doc:edit` — the endpoint's gate, because this link renders
+          here and on no documentation page.
+        */}
+        <PermissionGate projectId={projectId} permission="doc:edit">
+          {({ allowed }) => (
+            <Button
+              size="sm"
+              variant="quiet"
+              disabled={!allowed}
+              onClick={() => navigate(`/projects/${projectId}/docs?linkCase=${encodeURIComponent(caseId)}`)}
+              data-testid="CaseDetail.DocLinks.LinkSpecButton"
+            >
+              <Link2 aria-hidden className="size-3.5" />
+              Link a specification
+            </Button>
           )}
-          {/*
-            Disabled rather than hidden (§31): a Viewer should be able to see that the product can
-            do this. `case:edit` and not `doc:edit` — the endpoint's gate, because this link renders
-            here and on no documentation page.
-          */}
-          <PermissionGate projectId={projectId} permission="doc:edit">
-            {({ allowed }) => (
-              <Button
-                size="small"
-                startIcon={<AddLinkIcon />}
-                disabled={!allowed}
-                onClick={() =>
-                  navigate(`/projects/${projectId}/docs?linkCase=${encodeURIComponent(caseId)}`)
-                }
-                data-testid="CaseDetail.DocLinks.LinkSpecButton"
-              >
-                Link a specification
-              </Button>
-            )}
-          </PermissionGate>
-          <PermissionGate projectId={projectId} permission="case:edit">
-            {({ allowed }) => (
-              <Button
-                size="small"
-                startIcon={<AddLinkIcon />}
-                disabled={!allowed}
-                onClick={() => setLinking(true)}
-                data-testid="CaseDetail.DocLinks.AddButton"
-              >
-                Link code or a URL
-              </Button>
-            )}
-          </PermissionGate>
-        </Stack>
-      }
-    >
+        </PermissionGate>
+        <PermissionGate projectId={projectId} permission="case:edit">
+          {({ allowed }) => (
+            <Button
+              size="sm"
+              variant="quiet"
+              disabled={!allowed}
+              onClick={() => setLinking(true)}
+              data-testid="CaseDetail.DocLinks.AddButton"
+            >
+              <Link2 aria-hidden className="size-3.5" />
+              Link code or a URL
+            </Button>
+          )}
+        </PermissionGate>
+      </div>
+
       {links.length === 0 ? (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        <p className="m-0 text-[13px] text-ink-4">
           Not linked to any specification. Nothing traces this case back to a requirement.
-        </Typography>
+        </p>
       ) : (
-        <Stack sx={{ gap: 1.5 }} divider={<Divider />}>
+        <div className="flex flex-col divide-y divide-white/8">
           {links.map((link) => (
-            <Box key={link.id} data-testid="CaseDetail.DocLinks.Item">
-              <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
+            <div key={link.id} className="py-2.5 first:pt-0" data-testid="CaseDetail.DocLinks.Item">
+              <div className="mb-1 flex flex-wrap items-center gap-2">
                 {/* The claim, correctable in place since §174 — `case:edit`, this panel's own
                     key and the one the endpoint charges. */}
                 <PermissionGate projectId={projectId} permission="case:edit">
                   {({ allowed }) => (
                     <LinkRelationshipControl
                       value={link.relationship}
-                      onChange={(relationship) =>
-                        relabel.mutate({ linkId: link.id, relationship })
-                      }
+                      onChange={(relationship) => relabel.mutate({ linkId: link.id, relationship })}
                       // A block link's claim is corrected on the documentation page, where the
                       // block is — the same split that gives it no Remove here.
                       disabled={!allowed || link.targetKind === 'DOC_BLOCK'}
@@ -1220,12 +1292,11 @@ function DocLinksPanel({
                     {({ allowed }) =>
                       allowed ? (
                         <Button
-                          size="small"
-                          color="inherit"
-                          startIcon={<DeleteOutlineIcon />}
+                          size="sm"
+                          variant="quiet"
+                          className="ml-auto"
                           disabled={remove.isPending}
                           onClick={() => setWithdrawing(link)}
-                          sx={{ ml: 'auto', color: 'text.secondary' }}
                           data-testid="CaseDetail.DocLinks.Remove"
                         >
                           Remove
@@ -1234,25 +1305,25 @@ function DocLinksPanel({
                     }
                   </PermissionGate>
                 )}
-              </Stack>
+              </div>
 
               {link.blockExcerpt && (
-                <Typography variant="body2" sx={{ color: 'text.secondary', pl: 1.5, borderLeft: '2px solid', borderColor: 'divider' }}>
+                <p className="m-0 border-l-2 border-white/8 pl-3 text-[13px] text-ink-3">
                   {link.blockExcerpt}
-                </Typography>
+                </p>
               )}
 
               {link.stale && (
-                <Alert severity="warning" sx={{ mt: 1 }} data-testid="CaseDetail.DocLinks.StaleMarker">
-                  <Typography variant="body2">
-                    The linked text changed after this case was last edited. Re-read it before trusting
-                    this case as coverage.
-                  </Typography>
-                </Alert>
+                <Banner tone="warn" className="mt-2" data-testid="CaseDetail.DocLinks.StaleMarker">
+                  <span>
+                    The linked text changed after this case was last edited. Re-read it before
+                    trusting this case as coverage.
+                  </span>
+                </Banner>
               )}
-            </Box>
+            </div>
           ))}
-        </Stack>
+        </div>
       )}
 
       <ExternalLinkDialog
@@ -1274,16 +1345,14 @@ function DocLinksPanel({
           // needs to know is that the thing at the other end survives — the panel's Remove sits
           // beside a file path, and "remove" beside a file path invites the wrong reading.
           consequence="Only the record of the link is removed. The code and the case are untouched."
-          onConfirm={() =>
-            remove.mutate(withdrawing.id, { onSuccess: () => setWithdrawing(null) })
-          }
+          onConfirm={() => remove.mutate(withdrawing.id, { onSuccess: () => setWithdrawing(null) })}
           pending={remove.isPending}
           error={remove.isError ? remove.error : null}
           reset={remove.reset}
           testId="CaseDetail.DocLinks.Unlink"
         />
       )}
-    </Panel>
+    </section>
   );
 }
 
@@ -1300,11 +1369,10 @@ function DocLinkTarget({ link, projectId }: { link: DocLink; projectId: string }
     return (
       <RouterLink
         to={`/projects/${projectId}/docs/${link.pageId}#${link.blockId}`}
+        className="text-[13px] font-medium text-steel underline-offset-4 hover:underline"
         data-testid="CaseDetail.DocLinks.PageLink"
       >
-        <Typography variant="body2" component="span" sx={{ fontWeight: 500 }}>
-          {link.pageTitle}
-        </Typography>
+        {link.pageTitle}
       </RouterLink>
     );
   }
@@ -1314,17 +1382,15 @@ function DocLinkTarget({ link, projectId }: { link: DocLink; projectId: string }
       // `noopener` with `_blank` is not optional: without it the opened page can navigate this tab
       // through `window.opener`, and this href is a value somebody typed. The scheme is refused at
       // the write, which is the other half of the same problem.
-      <Typography
-        component="a"
+      <a
         href={link.externalUrl ?? undefined}
         target="_blank"
         rel="noopener noreferrer"
-        variant="body2"
-        sx={{ fontWeight: 500 }}
+        className="text-[13px] font-medium text-steel underline-offset-4 hover:underline"
         data-testid="CaseDetail.DocLinks.ExternalUrl"
       >
         {link.externalUrl}
-      </Typography>
+      </a>
     );
   }
 
@@ -1333,14 +1399,11 @@ function DocLinkTarget({ link, projectId }: { link: DocLink; projectId: string }
   // panel used to, presents the pin as a footnote — and the pin is what makes the range mean
   // anything six months later (#26).
   return (
-    <Stack
-      direction="row"
-      sx={{ alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}
+    <span
+      className="flex flex-wrap items-center gap-1.5 text-[13px]"
       data-testid="CaseDetail.DocLinks.ExternalGit"
     >
-      <Typography variant="body2" component="span" sx={{ fontWeight: 500 }}>
-        {link.externalRepo}
-      </Typography>
+      <span className="font-medium text-ink">{link.externalRepo}</span>
       <Identifier variant="muted">
         {link.externalPath}
         {link.externalLineStart != null && `:${link.externalLineStart}`}
@@ -1348,11 +1411,8 @@ function DocLinkTarget({ link, projectId }: { link: DocLink; projectId: string }
           link.externalLineEnd !== link.externalLineStart &&
           `–${link.externalLineEnd}`}
       </Identifier>
-      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-        at
-      </Typography>
+      <span className="text-[12px] text-ink-4">at</span>
       <Identifier variant="muted">{link.externalCommitSha}</Identifier>
-    </Stack>
+    </span>
   );
 }
-

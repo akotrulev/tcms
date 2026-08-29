@@ -1,39 +1,67 @@
+import { useState } from 'react';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import type { RunStatus, StatusKind, TestRunDetail } from '../../api/types';
+import { useProject, useRun, useSetRunStatus } from '../../api/queries';
+import { DataRegion } from '../../components/DataRegion';
+import { Identifier } from '../../components/Identifier';
 import {
-  Box,
-  Button,
-  Checkbox,
+  Badge,
   Chip,
-  Stack,
+  ResultBar,
   Table,
   TableBody,
   TableCell,
   TableHead,
+  TableHeaderCell,
   TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import { useState } from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
-import type { RunStatus, TestRunDetail } from '../../api/types';
-import { useProject, useRun, useSetRunStatus } from '../../api/queries';
-import { DataRegion } from '../../components/DataRegion';
-import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
-import { PassRateSummary, ResultBar } from '../../components/ResultBar';
+  type BadgeTone,
+} from '../../components/kit';
+import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
-import { StatusChip } from '../../components/StatusChip';
+import { Button, Checkbox } from '../../components/ui';
 import { describeError } from '../../lib/describeError';
-import { compareCaseKeys, formatCount, formatDateTime, formatDuration } from '../../lib/format';
-import { isRunClosed, runStatusColors, runStatusLabels, statusLabels } from '../../lib/labels';
+import {
+  compareCaseKeys,
+  formatCount,
+  formatDateTime,
+  formatDuration,
+  formatPercent,
+} from '../../lib/format';
+import { isRunClosed, runStatusLabels, statusLabels } from '../../lib/labels';
 import { describeRunCode } from '../../lib/links';
-import { inputTestId } from '../../lib/muiTestIds';
-import { ScrollX } from '../../components/ScrollX';
+import { executedCount, passRate } from '../../lib/results';
 import { toast } from '../../notifications/toast';
 import { CaseKeyLink, ExecuteCaseLink } from './ExecutionRowLinks';
 import { FailureSummary } from './FailureSummary';
 import { RunCloneDialog } from './RunCloneDialog';
 import { AssignExecutionsDialog } from './AssignExecutionsDialog';
 import { selectAll, toggleSelected } from './executionSelection';
+
+/**
+ * A verdict's badge tone. `WIP` is a run in flight rather than an outcome, so it takes the plain
+ * badge — design language rule 5 spends the result palette on results.
+ */
+const statusTone = {
+  PASSED: 'passed',
+  FAILED: 'failed',
+  BLOCKED: 'blocked',
+  SKIPPED: 'skipped',
+  RETEST: 'retest',
+  UNTESTED: 'untested',
+  WIP: 'plain',
+} as const satisfies Record<StatusKind, BadgeTone>;
+
+/**
+ * A run's own status badge is its *result* rather than its lifecycle, the same reading
+ * `RunListPage` takes from `renders/01-index-tables.html` frame C: a completed run whose
+ * executions failed is the red that `Failed` is, because rule 5 gives results one palette.
+ */
+function runTone(status: RunStatus, failed: number): BadgeTone {
+  if (status === 'IN_PROGRESS') return 'blocked';
+  if (status === 'ABORTED') return 'skipped';
+  if (status === 'COMPLETED') return failed > 0 ? 'failed' : 'passed';
+  return 'plain';
+}
 
 /** The row's static locator — never interpolated with an execution id (`test-ids` rule 6). */
 const RowTestId = 'RunDetail.Executions.Row';
@@ -51,7 +79,7 @@ export function RunDetailPage() {
   const run = useRun(projectId, runId);
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId="RunDetail.Header"
         title={run.data?.name ?? 'Test run'}
@@ -66,17 +94,14 @@ export function RunDetailPage() {
           run.data && (
             <>
               <Identifier variant="strong">{run.data.key}</Identifier>
-              <Chip
-                size="small"
-                variant="outlined"
+              <Badge
+                tone={runTone(run.data.status, run.data.counts.failed)}
                 data-testid="RunDetail.Status"
-                label={runStatusLabels[run.data.status]}
-                sx={{ color: runStatusColors[run.data.status] }}
-              />
+              >
+                {runStatusLabels[run.data.status]}
+              </Badge>
               {run.data.configuration && (
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  {run.data.configuration.name}
-                </Typography>
+                <span className="text-[13px] text-ink-3">{run.data.configuration.name}</span>
               )}
               {/*
                 Who opened the run (005 S1) — stored since M0 and served since 2026-08-28, so this
@@ -89,16 +114,12 @@ export function RunDetailPage() {
                 beside it is where the first of the two is actually answered.
               */}
               {run.data.createdBy && (
-                <Typography
-                  variant="body2"
-                  sx={{ color: 'text.secondary' }}
-                  data-testid="RunDetail.CreatedBy"
-                >
+                <span className="text-[13px] text-ink-3" data-testid="RunDetail.CreatedBy">
                   Opened by {run.data.createdBy.displayName}
-                </Typography>
+                </span>
               )}
               {run.data.releaseVersion && (
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                <span className="text-[13px] text-ink-3">
                   Release <Identifier variant="muted">{run.data.releaseVersion}</Identifier>
                   {run.data.buildNumber && (
                     <>
@@ -106,7 +127,7 @@ export function RunDetailPage() {
                       build <Identifier variant="muted">{run.data.buildNumber}</Identifier>
                     </>
                   )}
-                </Typography>
+                </span>
               )}
               {/* §177's Git traceability, and NOT nested inside the release the way `build` is
                   above: a CI run knows its commit whether or not anybody set a release version, so
@@ -114,12 +135,16 @@ export function RunDetailPage() {
                   runs that always have one. `describeRunCode` owns the wording, which is the doc
                   link's `at <sha>` and must stay it. */}
               {describeRunCode(run.data) && (
-                <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid="RunDetail.Code">
+                <span className="text-[13px] text-ink-3" data-testid="RunDetail.Code">
                   <Identifier variant="muted">{describeRunCode(run.data)}</Identifier>
-                </Typography>
+                </span>
               )}
               {run.data.planKey && (
-                <RouterLink to={`/projects/${projectId}/plans/${run.data.planId}`} data-testid="RunDetail.PlanLink">
+                <RouterLink
+                  to={`/projects/${projectId}/plans/${run.data.planId}`}
+                  className="text-steel underline-offset-4 hover:underline"
+                  data-testid="RunDetail.PlanLink"
+                >
                   <Identifier variant="muted">{run.data.planKey}</Identifier>
                 </RouterLink>
               )}
@@ -131,7 +156,7 @@ export function RunDetailPage() {
       <DataRegion testId="RunDetail.Content" state={{ ...run, refetch: () => void run.refetch() }}>
         {(data) => <RunBody data={data} projectId={projectId} runId={runId} />}
       </DataRegion>
-    </Box>
+    </div>
   );
 }
 
@@ -171,8 +196,8 @@ function RunActions({ projectId, run }: { projectId: string; run: TestRunDetail 
   };
 
   return (
-    <Stack sx={{ gap: 0.5, alignItems: 'flex-end' }}>
-      <Stack direction="row" sx={{ gap: 1 }}>
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex flex-wrap items-center gap-2">
         {/*
           §129 — `run:create`, the key the endpoint charges, which Automation Service holds: a CI
           credential may already open a run and a clone of a run is a run. Offered on a CLOSED run
@@ -183,8 +208,7 @@ function RunActions({ projectId, run }: { projectId: string; run: TestRunDetail 
         <PermissionGate projectId={projectId} permission="run:create">
           {({ allowed }) => (
             <Button
-              size="small"
-              variant="outlined"
+              size="sm"
               data-testid="RunDetail.CloneButton"
               disabled={!allowed}
               onClick={() => setCloning(true)}
@@ -197,8 +221,7 @@ function RunActions({ projectId, run }: { projectId: string; run: TestRunDetail 
           {({ allowed }) =>
             closed ? (
               <Button
-                size="small"
-                variant="outlined"
+                size="sm"
                 data-testid="RunDetail.Reopen"
                 disabled={!allowed || setStatus.isPending}
                 // IN_PROGRESS, always — the server derives NOT_STARTED for a run that never began,
@@ -210,30 +233,27 @@ function RunActions({ projectId, run }: { projectId: string; run: TestRunDetail 
               </Button>
             ) : (
               <>
-                <Tooltip
+                <Button
+                  size="sm"
+                  data-testid="RunDetail.Complete"
+                  /*
+                    The reason travels on the control's own `title` rather than in a wrapper — a
+                    disabled kit button is a plain `<button disabled>`, so there is no
+                    pointer-events hole for a tooltip to need a span around.
+                  */
                   title={
                     allowed && status === 'NOT_STARTED'
                       ? 'Nothing has been recorded in this run yet. Abort it instead.'
-                      : ''
+                      : undefined
                   }
+                  disabled={!allowed || status === 'NOT_STARTED' || setStatus.isPending}
+                  onClick={() => move('COMPLETED')}
                 >
-                  {/* A disabled MUI Button fires no events, so the tooltip needs the wrapper. */}
-                  <span>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      data-testid="RunDetail.Complete"
-                      disabled={!allowed || status === 'NOT_STARTED' || setStatus.isPending}
-                      onClick={() => move('COMPLETED')}
-                    >
-                      Complete run
-                    </Button>
-                  </span>
-                </Tooltip>
+                  Complete run
+                </Button>
                 <Button
-                  size="small"
-                  variant="outlined"
-                  color="error"
+                  size="sm"
+                  variant="danger"
                   data-testid="RunDetail.Abort"
                   disabled={!allowed || setStatus.isPending}
                   onClick={() => move('ABORTED')}
@@ -244,11 +264,14 @@ function RunActions({ projectId, run }: { projectId: string; run: TestRunDetail 
             )
           }
         </PermissionGate>
-      </Stack>
+      </div>
       {error && (
-        <Typography variant="caption" sx={{ color: 'var(--color-failed)' }} data-testid="RunDetail.StatusError">
+        <span
+          className="text-[12px] text-[color:var(--color-failed)]"
+          data-testid="RunDetail.StatusError"
+        >
           {error}
-        </Typography>
+        </span>
       )}
       {cloning && (
         <RunCloneDialog
@@ -262,7 +285,7 @@ function RunActions({ projectId, run }: { projectId: string; run: TestRunDetail 
           onCloned={(created) => navigate(`/projects/${projectId}/runs/${created.id}`)}
         />
       )}
-    </Stack>
+    </div>
   );
 }
 
@@ -312,9 +335,9 @@ function ScopeProvenance({ scopeRequest }: { scopeRequest: TestRunDetail['scopeR
   if (arms.length === 0) return null;
 
   return (
-    <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid="RunDetail.Scope">
+    <span className="text-[12px] text-ink-4" data-testid="RunDetail.Scope">
       Created from {arms.join(', ')} — as they resolved at the time.
-    </Typography>
+    </span>
   );
 }
 
@@ -349,47 +372,65 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
     return rank(a.status?.kind) - rank(b.status?.kind) || compareCaseKeys(a.caseKey, b.caseKey);
   });
 
-  return (
-    <Stack sx={{ gap: 3 }}>
-      <Panel testId="RunDetail.Summary">
-        <Stack sx={{ gap: 2 }}>
-          <PassRateSummary counts={data.counts} testId="RunDetail.PassRate" />
-          <ResultBar counts={data.counts} height={14} showLegend testId="RunDetail.ResultBar" />
-          <Stack direction="row" sx={{ gap: 3, flexWrap: 'wrap' }}>
-            {/*
-              Three states, not two. Until runs could be created, every fixture was IN_PROGRESS
-              with a `startedAt`, so the un-started case had never been rendered — and the first
-              live run created through the new endpoint read "Started — · Still running", which
-              is two false claims about a run nobody has opened yet.
+  const executed = executedCount(data.counts);
 
-              A run starts when somebody records the first result, not when it is named (see
-              `TestRun.create`), so a null `startedAt` is an ordinary and common state rather
-              than missing data.
-            */}
-            {data.startedAt ? (
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                Started {formatDateTime(data.startedAt)}
-              </Typography>
-            ) : (
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                Not started yet
-              </Typography>
-            )}
-            {data.completedAt ? (
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                Finished {formatDateTime(data.completedAt)}
-              </Typography>
-            ) : (
-              data.startedAt && (
-                <Typography variant="caption" sx={{ color: 'var(--color-info)' }}>
-                  Still running
-                </Typography>
-              )
-            )}
-          </Stack>
+  return (
+    <div className="flex flex-col gap-4">
+      {/*
+        THE ROLLUP IS A STRIP, not a panel — design language rule 1: the subject of this screen is
+        the checklist below, and `renders/02-record-as-document.html` panel B puts the bar and its
+        three numbers beside the title rather than in a bordered box of their own.
+      */}
+      <section
+        className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-white/8 pb-4"
+        data-testid="RunDetail.Summary"
+      >
+        <div data-testid="RunDetail.PassRate">
+          <span className="font-mono text-[26px] leading-none font-semibold tabular-nums text-ink">
+            {formatPercent(passRate(data.counts, 'EXECUTED'))}
+          </span>
+          <span className="mt-1 block text-[12px] text-ink-4">
+            passed, of {formatCount(executed)} executed · {formatCount(data.counts.total)} in scope
+          </span>
+        </div>
+
+        <div className="min-w-[220px] flex-1" data-testid="RunDetail.ResultBar">
+          <ResultBar
+            passed={data.counts.passed}
+            failed={data.counts.failed}
+            blocked={data.counts.blocked}
+            skipped={data.counts.skipped}
+            untested={data.counts.notRun}
+            className="h-2"
+          />
+          <div className="mt-2 flex flex-wrap gap-3 font-mono text-[11.5px] tabular-nums">
+            <span style={{ color: 'var(--color-passed)' }}>{formatCount(data.counts.passed)} passed</span>
+            <span style={{ color: 'var(--color-failed)' }}>{formatCount(data.counts.failed)} failed</span>
+            <span style={{ color: 'var(--color-blocked)' }}>{formatCount(data.counts.blocked)} blocked</span>
+            <span className="text-ink-4">{formatCount(data.counts.notRun)} not run</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-0.5 text-[12px] text-ink-4">
+          {/*
+            Three states, not two. Until runs could be created, every fixture was IN_PROGRESS
+            with a `startedAt`, so the un-started case had never been rendered — and the first
+            live run created through the new endpoint read "Started — · Still running", which
+            is two false claims about a run nobody has opened yet.
+
+            A run starts when somebody records the first result, not when it is named (see
+            `TestRun.create`), so a null `startedAt` is an ordinary and common state rather
+            than missing data.
+          */}
+          <span>{data.startedAt ? `Started ${formatDateTime(data.startedAt)}` : 'Not started yet'}</span>
+          {data.completedAt ? (
+            <span>Finished {formatDateTime(data.completedAt)}</span>
+          ) : (
+            data.startedAt && <span style={{ color: 'var(--color-info)' }}>Still running</span>
+          )}
           <ScopeProvenance scopeRequest={data.scopeRequest} />
-        </Stack>
-      </Panel>
+        </div>
+      </section>
 
       {/*
         Between the rollup and the checklist, because it is the question asked in between: the
@@ -400,89 +441,67 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
       */}
       <FailureSummary data={data} projectId={projectId} runId={runId} />
 
-      <Panel
-        title="Executions"
-        testId="RunDetail.Executions"
-        dense
-        actions={
-          <Stack direction="row" sx={{ gap: 0.5 }}>
-            {(
-              [
-                { value: 'ALL' as const, label: `All ${formatCount(executions.length)}` },
-                { value: 'TODO' as const, label: `Not run ${formatCount(data.counts.notRun)}` },
-                {
-                  value: 'FAILED' as const,
-                  label: `Needs attention ${formatCount(data.counts.failed + data.counts.blocked)}`,
-                },
-              ]
-            ).map((option) => (
-              <Chip
-                key={option.value}
-                size="small"
-                label={option.label}
-                onClick={() => {
-                  // The chips swap which rows are in view, and a selection holding ids that are
-                  // no longer on screen is a bulk act over rows the person cannot see.
-                  setFilter(option.value);
-                  setSelection([]);
-                }}
-                variant={filter === option.value ? 'filled' : 'outlined'}
-                color={filter === option.value ? 'primary' : 'default'}
-                aria-pressed={filter === option.value}
-                data-testid={`RunDetail.Filter.${option.value}`}
-                sx={{ cursor: 'pointer' }}
-              />
-            ))}
-          </Stack>
-        }
-      >
+      <section data-testid="RunDetail.Executions">
+        {/* Filters in one row under the toolbar — rule 2, and the render's `.filters` strip. */}
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          {(
+            [
+              { value: 'ALL' as const, label: `All ${formatCount(executions.length)}` },
+              { value: 'TODO' as const, label: `Not run ${formatCount(data.counts.notRun)}` },
+              {
+                value: 'FAILED' as const,
+                label: `Needs attention ${formatCount(data.counts.failed + data.counts.blocked)}`,
+              },
+            ]
+          ).map((option) => (
+            <Chip
+              key={option.value}
+              selected={filter === option.value}
+              aria-pressed={filter === option.value}
+              onClick={() => {
+                // The chips swap which rows are in view, and a selection holding ids that are
+                // no longer on screen is a bulk act over rows the person cannot see.
+                setFilter(option.value);
+                setSelection([]);
+              }}
+              data-testid={`RunDetail.Filter.${option.value}`}
+            >
+              {option.label}
+            </Chip>
+          ))}
+          <span className="ml-auto text-[12px] text-ink-4">
+            <span className="font-mono tabular-nums text-ink-2">{formatCount(sorted.length)}</span>{' '}
+            of {formatCount(executions.length)} executions
+          </span>
+        </div>
+
         {selection.length > 0 && (
-          <Stack
-            direction="row"
-            sx={{
-              alignItems: 'center',
-              gap: 1.5,
-              mb: 1,
-              px: 1.5,
-              py: 1,
-              border: '1px solid',
-              borderColor: 'primary.main',
-              borderRadius: 1,
-              bgcolor: 'action.selected',
-            }}
+          <div
+            className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-white/14 bg-white/[4%] px-3 py-2"
             data-testid="RunDetail.SelectionBar"
           >
-            <Typography variant="body2" sx={{ fontWeight: 600 }} data-testid="RunDetail.SelectionCount">
+            <span className="text-[13px] font-medium text-ink" data-testid="RunDetail.SelectionCount">
               {formatCount(selection.length)} selected
-            </Typography>
+            </span>
             <PermissionGate projectId={projectId} permission="run:execute">
               {({ allowed, reason }) => (
-                <Tooltip
+                <Button
+                  size="sm"
+                  variant="primary"
+                  disabled={!allowed || frozen}
                   title={
                     frozen
                       ? 'This run has ended, so its checklist can no longer be reorganised. Reopen the run to make changes.'
-                      : allowed
-                        ? ''
-                        : (reason ?? '')
+                      : (reason ?? undefined)
                   }
+                  onClick={() => setAssignOpen(true)}
+                  data-testid="RunDetail.AssignButton"
                 >
-                  {/* A disabled button fires no events, so the tooltip needs a wrapper that can —
-                      §31's disable-don't-hide, and the same span RunActions uses. */}
-                  <Box component="span">
-                    <Button
-                      size="small"
-                      variant="contained"
-                      disabled={!allowed || frozen}
-                      onClick={() => setAssignOpen(true)}
-                      data-testid="RunDetail.AssignButton"
-                    >
-                      Assign…
-                    </Button>
-                  </Box>
-                </Tooltip>
+                  Assign…
+                </Button>
               )}
             </PermissionGate>
-            <Button size="small" onClick={() => setSelection([])} data-testid="RunDetail.ClearSelection">
+            <Button size="sm" variant="quiet" onClick={() => setSelection([])} data-testid="RunDetail.ClearSelection">
               Clear selection
             </Button>
             {/*
@@ -491,166 +510,149 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
               exactly the filter a coordinator uses before distributing, so telling them the act
               covers rows the chip hid is the misstatement this caption exists to prevent.
             */}
-            <Typography variant="caption" sx={{ color: 'text.secondary', ml: 'auto' }}>
+            <span className="ml-auto text-[12px] text-ink-4">
               Selection covers the rows this filter shows.
-            </Typography>
-          </Stack>
+            </span>
+          </div>
         )}
 
         {sorted.length === 0 ? (
-          <Box sx={{ p: 3 }}>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid="RunDetail.Executions.Empty">
-              {filter === 'TODO'
-                ? 'Everything in this run has been executed.'
-                : filter === 'FAILED'
-                  ? 'Nothing failed or was blocked in this run.'
-                  : 'This run has no cases in scope.'}
-            </Typography>
-          </Box>
+          <p className="m-0 py-6 text-[13px] text-ink-3" data-testid="RunDetail.Executions.Empty">
+            {filter === 'TODO'
+              ? 'Everything in this run has been executed.'
+              : filter === 'FAILED'
+                ? 'Nothing failed or was blocked in this run.'
+                : 'This run has no cases in scope.'}
+          </p>
         ) : (
-          <ScrollX>
-            <Table size="small" data-testid="RunDetail.Executions.Grid">
-              <TableHead>
-                <TableRow>
+          <Table data-testid="RunDetail.Executions.Grid">
+            <TableHead>
+              <TableRow>
+                {/*
+                  There was an "Execution" column here showing TE_0001. Executions no longer
+                  carry a display key (plan §6t) — they are reached through their run or case —
+                  so the column had no data to show. The row→detail affordance moved onto the
+                  case title below, which is what a tester actually recognises.
+                */}
+                <TableHeaderCell className="w-[34px]">
+                  <Checkbox
+                    checked={
+                      selection.length === 0
+                        ? false
+                        : selection.length === sorted.length
+                          ? true
+                          : 'indeterminate'
+                    }
+                    onCheckedChange={(checked) => setSelection(checked === true ? selectAll(sorted) : [])}
+                    aria-label="Select every row this filter shows"
+                    data-testid="RunDetail.Executions.SelectAll"
+                  />
+                </TableHeaderCell>
+                <TableHeaderCell>Case</TableHeaderCell>
+                <TableHeaderCell className="w-[116px]">Result</TableHeaderCell>
+                <TableHeaderCell className="w-[130px]">Defects</TableHeaderCell>
+                <TableHeaderCell align="right" className="w-[90px]">
+                  Duration
+                </TableHeaderCell>
+                <TableHeaderCell className="w-[150px]">Executed by</TableHeaderCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {sorted.map((execution) => (
+                <TableRow key={execution.id} data-testid={RowTestId} selected={selection.includes(execution.id)}>
                   {/*
-                    There was an "Execution" column here showing TE_0001. Executions no longer
-                    carry a display key (plan §6t) — they are reached through their run or case —
-                    so the column had no data to show. The row→detail affordance moved onto the
-                    case title below, which is what a tester actually recognises.
+                    Row-click selection is deliberately NOT added: the row's targets are two
+                    links already, and a click that both navigates and selects is the ambiguity
+                    the case grid settled with `disableRowSelectionOnClick`.
                   */}
-                  <TableCell padding="checkbox">
+                  <TableCell>
                     <Checkbox
-                      size="small"
-                      checked={selection.length > 0 && selection.length === sorted.length}
-                      indeterminate={selection.length > 0 && selection.length < sorted.length}
-                      onChange={(event) => setSelection(event.target.checked ? selectAll(sorted) : [])}
-                      // `slotProps`, not `inputProps` — MUI v7's spelling, and this is the trap's
-                      // FIFTH firing (§71, §74 twice, ReviewSettingsPage). `inputTestId` owns the
-                      // shape and carries the label, and it puts both on the INPUT: a bare
-                      // `data-testid` on a MUI Checkbox lands on the wrapper span, where the
-                      // checked state is unreadable, so a test can click it and assert nothing.
-                      slotProps={inputTestId(
-                        'RunDetail.Executions.SelectAll',
-                        'Select every row this filter shows',
-                      )}
+                      checked={selection.includes(execution.id)}
+                      onCheckedChange={() => setSelection(toggleSelected(selection, execution.id))}
+                      aria-label={`Select ${execution.caseKey}`}
+                      data-testid={`${RowTestId}.Select`}
                     />
                   </TableCell>
-                  <TableCell sx={{ color: 'text.secondary' }}>Case</TableCell>
-                  <TableCell sx={{ color: 'text.secondary', width: 116 }}>Result</TableCell>
-                  <TableCell sx={{ color: 'text.secondary', width: 130 }}>Defects</TableCell>
-                  <TableCell sx={{ color: 'text.secondary', width: 90 }} align="right">
-                    Duration
-                  </TableCell>
-                  <TableCell sx={{ color: 'text.secondary', width: 150 }}>Executed by</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sorted.map((execution) => (
-                  <TableRow key={execution.id} data-testid={RowTestId} hover>
-                    {/*
-                      Row-click selection is deliberately NOT added: the row's targets are two
-                      links already, and a click that both navigates and selects is the ambiguity
-                      the case grid settled with `disableRowSelectionOnClick`.
-                    */}
-                    <TableCell padding="checkbox">
-                      <Checkbox
-                        size="small"
-                        checked={selection.includes(execution.id)}
-                        onChange={() => setSelection(toggleSelected(selection, execution.id))}
-                        slotProps={inputTestId(
-                          `${RowTestId}.Select`,
-                          `Select ${execution.caseKey}`,
-                        )}
+                  <TableCell variant="title">
+                    <span className="flex min-w-0 flex-wrap items-center gap-2">
+                      {/*
+                        Both links come from `ExecutionRowLinks`, shared with Grid mode on the
+                        execution screen — the key opens the case, the title opens this
+                        execution. This screen had that pair right and Grid mode had it
+                        backwards; one module now decides it for both.
+                      */}
+                      <CaseKeyLink execution={execution} projectId={projectId} testId={RowTestId} />
+                      <ExecuteCaseLink
+                        execution={execution}
+                        projectId={projectId}
+                        runId={runId}
+                        testId={RowTestId}
                       />
-                    </TableCell>
-                    <TableCell>
-                      <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}>
-                        {/*
-                          Both links come from `ExecutionRowLinks`, shared with Grid mode on the
-                          execution screen — the key opens the case, the title opens this
-                          execution. This screen had that pair right and Grid mode had it
-                          backwards; one module now decides it for both.
-                        */}
-                        <CaseKeyLink
-                          execution={execution}
-                          projectId={projectId}
-                          testId={RowTestId}
-                        />
-                        <ExecuteCaseLink
-                          execution={execution}
-                          projectId={projectId}
-                          runId={runId}
-                          testId={RowTestId}
-                        />
-                        {/*
-                          The pinned case version. This is what makes past results honest: the
-                          case may have been edited five times since, and this row still says
-                          which text was executed.
-                        */}
-                        <Tooltip title="The case version this execution ran against">
-                          <Box sx={{ flexShrink: 0 }}>
-                            <Identifier variant="muted">v{execution.caseVersionNo}</Identifier>
-                          </Box>
-                        </Tooltip>
-                      </Stack>
-                    </TableCell>
-                    <TableCell>
-                      {execution.status?.kind ? (
-                        <StatusChip kind={execution.status.kind} testId={`${RowTestId}.Status`} />
-                      ) : (
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid={`${RowTestId}.Status`}>
-                          {statusLabels.UNTESTED}
-                        </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {execution.defects.length === 0 ? (
-                        <Box sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>—</Box>
-                      ) : (
-                        <Stack sx={{ gap: 0.25 }}>
-                          {execution.defects.map((defect) => (
-                            <Box
-                              key={defect.id}
-                              component="a"
-                              href={defect.url}
-                              target="_blank"
-                              rel="noopener"
-                              sx={{ fontSize: '0.75rem' }}
-                              data-testid={`${RowTestId}.DefectLink`}
-                            >
-                              <Identifier>{defect.externalKey}</Identifier>
-                              <Box component="span" aria-hidden="true" sx={{ ml: 0.5, color: 'text.secondary' }}>
-                                ↗
-                              </Box>
-                              <Box component="span" className="sr-only">
-                                (opens in a new tab)
-                              </Box>
-                            </Box>
-                          ))}
-                        </Stack>
-                      )}
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontSize: '0.75rem' }}>
-                      <Identifier variant="muted">{formatDuration(execution.durationMs)}</Identifier>
-                    </TableCell>
-                    <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                      {execution.executedAt ? (
-                        <Tooltip title={formatDateTime(execution.executedAt)}>
-                          <Box component="span">{execution.executedBy?.displayName ?? 'CI'}</Box>
-                        </Tooltip>
-                      ) : (
-                        <Box component="span">
-                          {execution.assignee ? `assigned to ${execution.assignee.displayName}` : 'unassigned'}
-                        </Box>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollX>
+                      {/*
+                        The pinned case version. This is what makes past results honest: the
+                        case may have been edited five times since, and this row still says
+                        which text was executed.
+                      */}
+                      <span className="shrink-0" title="The case version this execution ran against">
+                        <Identifier variant="muted">v{execution.caseVersionNo}</Identifier>
+                      </span>
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    {execution.status?.kind ? (
+                      <Badge tone={statusTone[execution.status.kind]} data-testid={`${RowTestId}.Status`}>
+                        {statusLabels[execution.status.kind]}
+                      </Badge>
+                    ) : (
+                      <span className="text-[12px] text-ink-4" data-testid={`${RowTestId}.Status`}>
+                        {statusLabels.UNTESTED}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {execution.defects.length === 0 ? (
+                      <span className="text-[12px] text-ink-4">—</span>
+                    ) : (
+                      <span className="flex flex-col gap-0.5">
+                        {execution.defects.map((defect) => (
+                          <a
+                            key={defect.id}
+                            href={defect.url}
+                            target="_blank"
+                            rel="noopener"
+                            className="text-[12px] text-steel underline-offset-4 hover:underline"
+                            data-testid={`${RowTestId}.DefectLink`}
+                          >
+                            <Identifier>{defect.externalKey}</Identifier>
+                            <span aria-hidden="true" className="ml-1 text-ink-4">
+                              ↗
+                            </span>
+                            <span className="sr-only">(opens in a new tab)</span>
+                          </a>
+                        ))}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell align="right" className="text-[12px]">
+                    <Identifier variant="muted">{formatDuration(execution.durationMs)}</Identifier>
+                  </TableCell>
+                  <TableCell className="text-[12px] text-ink-4">
+                    {execution.executedAt ? (
+                      <span title={formatDateTime(execution.executedAt)}>
+                        {execution.executedBy?.displayName ?? 'CI'}
+                      </span>
+                    ) : (
+                      <span>
+                        {execution.assignee ? `assigned to ${execution.assignee.displayName}` : 'unassigned'}
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
-      </Panel>
+      </section>
 
       <AssignExecutionsDialog
         open={assignOpen}
@@ -672,6 +674,6 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
           setSelection([]);
         }}
       />
-    </Stack>
+    </div>
   );
 }

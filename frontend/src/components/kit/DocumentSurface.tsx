@@ -61,13 +61,20 @@ export function DocumentTitle({ children, why, whyLabel = 'Why', className }: Do
  * coloured by `--color-given/--color-when/--color-then` — the same hues the runner paints results
  * in, by design language rule 5.
  */
-export type ProcedureKeyword = 'given' | 'when' | 'then' | 'and';
+export type ProcedureKeyword = 'given' | 'when' | 'then' | 'and' | 'but';
 
+/**
+ * `but` was added by the read view (007 T11), which renders steps a person actually typed rather
+ * than a scaffold: `StepKeyword` has five members and folding `BUT` into `And` would print a word
+ * the author did not write. It carries no colour of its own for the same reason `and` does not —
+ * rule 5 spends the three hues on the three that mean something to the runner.
+ */
 const KEYWORD_LABEL: Record<ProcedureKeyword, string> = {
   given: 'Given',
   when: 'When',
   then: 'Then',
   and: 'And',
+  but: 'But',
 };
 
 const KEYWORD_COLOR: Record<ProcedureKeyword, string | undefined> = {
@@ -75,23 +82,31 @@ const KEYWORD_COLOR: Record<ProcedureKeyword, string | undefined> = {
   when: 'var(--color-when)',
   then: 'var(--color-then)',
   and: undefined,
+  but: undefined,
 };
 
 export interface ProcedureLineProps {
   line: number;
   keyword?: ProcedureKeyword;
+  /**
+   * A locator for the keyword itself. The component owns the word as well as the hue — two
+   * spellings of "Given" on one screen is the drift rule 5 exists to stop — so a caller whose
+   * suite asserts on the keyword has nowhere else to put one.
+   */
+  keywordTestId?: string;
   children: ReactNode;
   className?: string;
   'data-testid'?: string;
 }
 
-export function ProcedureLine({ line, keyword, children, className, ...rest }: ProcedureLineProps) {
+export function ProcedureLine({ line, keyword, keywordTestId, children, className, ...rest }: ProcedureLineProps) {
   return (
     <div className={cn('grid grid-cols-[26px_1fr] gap-3.5 py-0.5', className)} {...rest}>
       <span className="pt-[5px] text-right font-mono text-[11px] tabular-nums text-ink-4">{line}</span>
       <span className="min-w-0">
         {keyword && (
           <span
+            data-testid={keywordTestId}
             style={KEYWORD_COLOR[keyword] ? { color: KEYWORD_COLOR[keyword] } : undefined}
             className={cn('mr-[7px] font-mono text-sm font-medium', !KEYWORD_COLOR[keyword] && 'text-ink-3')}
           >

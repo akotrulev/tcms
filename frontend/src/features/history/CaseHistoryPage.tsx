@@ -1,13 +1,39 @@
-import { Alert, Box, Chip, Stack, Tooltip, Typography } from '@mui/material';
+import { useEffect, type ReactNode } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
+import { useAnnounce } from '../../a11y/useAnnounce';
 import type { CaseHistoryResponse } from '../../api/queries';
-import type { ExecutionHistoryEntry, VersionMarker } from '../../api/types';
-import { useCase, useCaseHistory, useProject } from '../../api/queries';
+import type { ExecutionHistoryEntry, StatusKind, VersionMarker } from '../../api/types';
+import { useCase, useCaseHistory } from '../../api/queries';
+import { TopStripSlot } from '../../app/topStripSlot';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
-import { StatusChip } from '../../components/StatusChip';
-import { formatCount, formatDateTime, formatDuration, formatPercent, formatRatio, percentOf, plural } from '../../lib/format';
+import {
+  Badge,
+  Banner,
+  RailRow,
+  Timeline,
+  TimelineEvent,
+  type BadgeTone,
+} from '../../components/kit';
+import { formatAge, formatCount, formatDateTime, formatDuration, formatPercent, formatRatio, percentOf, plural } from '../../lib/format';
+import { statusLabels } from '../../lib/labels';
+
+/** `.sec h3` from `renders/tcms.css` — the one spelling of a section heading on this screen. */
+const SECTION_HEADING = 'm-0 mb-2.5 text-[11px] font-semibold tracking-[.08em] text-ink-3 uppercase';
+
+/**
+ * A verdict's badge tone. `WIP` has no result colour of its own — it is a run in flight rather
+ * than an outcome — so it reads as the plain badge every other non-result does.
+ */
+const statusTone = {
+  PASSED: 'passed',
+  FAILED: 'failed',
+  BLOCKED: 'blocked',
+  SKIPPED: 'skipped',
+  RETEST: 'retest',
+  UNTESTED: 'untested',
+  WIP: 'plain',
+} as const satisfies Record<StatusKind, BadgeTone>;
 
 /**
  * Execution history for one case (plan §6p).
@@ -29,65 +55,85 @@ export function CaseHistoryPage() {
 
   const scope = (params.get('scope') ?? 'CURRENT_VERSION') as 'CURRENT_VERSION' | 'ALL_VERSIONS';
 
-  const project = useProject(projectId);
   const testCase = useCase(projectId, caseId);
   const history = useCaseHistory(projectId, caseId, scope);
 
+  /*
+    The tab title and the arrival announcement, raised here because this screen has no
+    `PageHeader` (007 T11, following T7): design language rule 1 puts the crumb and the lens in the
+    top strip and gives the width to the timeline, and `renders/02-record-as-document.html` panel E
+    draws no page heading at all.
+  */
+  const pageTitle = testCase.data ? `History · ${testCase.data.key}` : 'Execution history';
+  const announce = useAnnounce();
+  useEffect(() => {
+    announce(`${pageTitle} page loaded`);
+  }, [announce, pageTitle]);
+
   return (
-    <Box>
-      <PageHeader
-        testId="CaseHistory.Header"
-        title="Execution history"
-        documentTitle={testCase.data ? `History · ${testCase.data.key}` : 'Execution history'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test cases', to: `/projects/${projectId}/cases` },
-          { label: testCase.data?.key ?? 'Case', to: `/projects/${projectId}/cases/${caseId}` },
-          { label: 'History' },
-        ]}
-        meta={
-          testCase.data && (
-            <>
-              <RouterLink to={`/projects/${projectId}/cases/${caseId}`} data-testid="CaseHistory.CaseLink">
-                <Identifier variant="strong">{testCase.data.key}</Identifier>
-              </RouterLink>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                {testCase.data.title}
-              </Typography>
-            </>
-          )
-        }
-        actions={
-          <Stack direction="row" sx={{ gap: 0.5 }}>
-            {(
-              [
-                { value: 'CURRENT_VERSION' as const, label: 'Current version' },
-                { value: 'ALL_VERSIONS' as const, label: 'All versions' },
-              ]
-            ).map((option) => (
-              <Chip
-                key={option.value}
-                label={option.label}
-                onClick={() => {
-                  const next = new URLSearchParams(params);
-                  next.set('scope', option.value);
-                  setParams(next, { replace: true });
-                }}
-                variant={scope === option.value ? 'filled' : 'outlined'}
-                color={scope === option.value ? 'primary' : 'default'}
-                aria-pressed={scope === option.value}
-                data-testid={`CaseHistory.Scope.${option.value}`}
-                sx={{ cursor: 'pointer' }}
-              />
-            ))}
-          </Stack>
-        }
-      />
+    <div className="flex min-h-full flex-col">
+      <title>{`${pageTitle} · TCMS`}</title>
+
+      <TopStripSlot>
+        <nav
+          aria-label="Breadcrumb"
+          data-testid="CaseHistory.Breadcrumbs"
+          className="mr-auto hidden min-w-0 truncate text-[12.5px] text-ink-3 sm:block"
+        >
+          <RouterLink to={`/projects/${projectId}/cases`} className="hover:underline">
+            Test cases
+          </RouterLink>
+          {' / '}
+          <RouterLink
+            to={`/projects/${projectId}/cases/${caseId}`}
+            className="hover:underline"
+            data-testid="CaseHistory.CaseLink"
+          >
+            {testCase.data?.key ?? 'Case'}
+          </RouterLink>
+          {' / '}
+          <span className="font-medium text-ink-2">History</span>
+        </nav>
+
+        {/*
+          THE SCOPE LENS. Both readings are legitimate — *current version* answers "is this test
+          passing as it stands", *all versions* answers "has this area ever been stable" — so the
+          pair sits in the strip as the render's `.lens`, and the choice stays in the URL where
+          every other filter in this product lives.
+        */}
+        <div className="flex items-center gap-0.5 rounded-md border border-white/8 p-0.5">
+          {(
+            [
+              { value: 'CURRENT_VERSION' as const, label: 'Current version' },
+              { value: 'ALL_VERSIONS' as const, label: 'All versions' },
+            ]
+          ).map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={scope === option.value}
+              onClick={() => {
+                const next = new URLSearchParams(params);
+                next.set('scope', option.value);
+                setParams(next, { replace: true });
+              }}
+              data-testid={`CaseHistory.Scope.${option.value}`}
+              className={
+                'rounded-[4px] px-2.5 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-[-2px] ' +
+                'focus-visible:outline-[color:var(--color-given)] ' +
+                (scope === option.value ? 'bg-white/8 text-ink' : 'text-ink-3 hover:text-ink-2')
+              }
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </TopStripSlot>
 
       <DataRegion testId="CaseHistory.Content" state={{ ...history, refetch: () => void history.refetch() }}>
         {(data) => <HistoryBody data={data} projectId={projectId} scope={scope} />}
       </DataRegion>
-    </Box>
+    </div>
   );
 }
 
@@ -103,68 +149,83 @@ function HistoryBody({
   const { summary, entries, versionMarkers } = data;
 
   return (
-    <Stack sx={{ gap: 3 }}>
-      {/* The scope is stated as prose, because "3 executions, 1 passed" is only meaningful
-          once the reader knows the 3 are all against v7 and not across every revision. */}
-      <Panel testId="CaseHistory.Summary">
-        <Stack direction="row" sx={{ gap: 4, flexWrap: 'wrap', mb: 1.5 }}>
-          <Metric
-            value={formatPercent(percentOf(summary.passed, summary.executions))}
-            label={`passed, of ${plural(summary.executions, 'execution')}`}
+    <div className="flex min-w-0 flex-1 flex-col lg:flex-row">
+      <div className="min-w-0 flex-1 overflow-auto bg-paper px-4 py-6 md:px-7">
+        <h2 className={SECTION_HEADING}>Timeline</h2>
+        <HistoryTimeline entries={entries} markers={versionMarkers} projectId={projectId} />
+      </div>
+
+      <aside className="w-full shrink-0 border-white/8 bg-panel lg:w-[300px] lg:border-l">
+        <section className="border-b border-white/8 px-4 py-4" data-testid="CaseHistory.Summary">
+          <h2 className={SECTION_HEADING}>
+            Execution history{' '}
+            <span className="font-mono text-[10.5px] tracking-normal text-ink-4 normal-case">
+              {plural(summary.executions, 'execution')}
+            </span>
+          </h2>
+
+          <RailRow
+            readOnly
+            label="Pass rate"
+            value={<span className="font-mono tabular-nums">{formatPercent(percentOf(summary.passed, summary.executions))}</span>}
           />
-          <Metric value={formatCount(summary.failed)} label="failed" />
+          <RailRow
+            readOnly
+            label="Failed"
+            value={
+              <span
+                className="font-mono tabular-nums"
+                style={summary.failed > 0 ? { color: 'var(--color-failed)' } : undefined}
+              >
+                {formatCount(summary.failed)}
+              </span>
+            }
+          />
           {summary.flakinessScore !== null && summary.flakinessScore !== undefined && (
-            <Metric
-              value={formatRatio(summary.flakinessScore, 0)}
-              label="flakiness"
-              help="How often the result changed between consecutive runs on the same version. High means the test is unreliable, not that the feature is."
+            <RailRow
+              readOnly
+              label="Flakiness"
+              value={
+                <span
+                  className="font-mono tabular-nums"
+                  title="How often the result changed between consecutive runs on the same version. High means the test is unreliable, not that the feature is."
+                >
+                  {formatRatio(summary.flakinessScore, 0)}
+                </span>
+              }
             />
           )}
-        </Stack>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid="CaseHistory.Scope.Notice">
-          Scope: {summary.scope}.{' '}
-          {scope === 'CURRENT_VERSION'
-            ? 'Only results recorded against the version currently saved.'
-            : 'Results across every version of this case — the test itself changed during this period.'}
-        </Typography>
 
-        {summary.firstFailedAt && (
-          <Alert severity="warning" sx={{ mt: 2 }} data-testid="CaseHistory.FirstFailure">
-            <Typography variant="body2">
-              First failed {formatDateTime(summary.firstFailedAt)}
-              {summary.firstFailedInRelease && (
-                <>
-                  {' '}
-                  in release <Identifier variant="muted">{summary.firstFailedInRelease}</Identifier>
-                </>
-              )}
-              .
-            </Typography>
-          </Alert>
-        )}
-      </Panel>
+          {/* The scope is stated as prose, because "3 executions, 1 passed" is only meaningful
+              once the reader knows the 3 are all against v7 and not across every revision. */}
+          <p
+            className="mt-3 mb-0 text-[12px] leading-[1.55] text-ink-4"
+            data-testid="CaseHistory.Scope.Notice"
+          >
+            Scope: {summary.scope}.{' '}
+            {scope === 'CURRENT_VERSION'
+              ? 'Only results recorded against the version currently saved.'
+              : 'Results across every version of this case — the test itself changed during this period.'}
+          </p>
 
-      <Panel title="Timeline" testId="CaseHistory.Timeline" dense>
-        <Box sx={{ p: 2 }}>
-          <Timeline entries={entries} markers={versionMarkers} projectId={projectId} />
-        </Box>
-      </Panel>
-    </Stack>
+          {summary.firstFailedAt && (
+            <Banner tone="warn" className="mt-3" data-testid="CaseHistory.FirstFailure">
+              <span>
+                First failed {formatDateTime(summary.firstFailedAt)}
+                {summary.firstFailedInRelease && (
+                  <>
+                    {' '}
+                    in release <Identifier variant="muted">{summary.firstFailedInRelease}</Identifier>
+                  </>
+                )}
+                .
+              </span>
+            </Banner>
+          )}
+        </section>
+      </aside>
+    </div>
   );
-}
-
-function Metric({ value, label, help }: { value: string; label: string; help?: string }) {
-  const content = (
-    <Box>
-      <Typography className="identifier" sx={{ fontSize: '1.75rem', fontWeight: 600, lineHeight: 1 }}>
-        {value}
-      </Typography>
-      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-        {label}
-      </Typography>
-    </Box>
-  );
-  return help ? <Tooltip title={help}>{content}</Tooltip> : content;
 }
 
 type TimelineRow =
@@ -175,8 +236,13 @@ type TimelineRow =
  * Executions and version changes merged into one descending timeline. Interleaving them is
  * the whole point — two separate lists leave the reader correlating timestamps by hand,
  * which is exactly the work this screen exists to remove.
+ *
+ * It is `kit/Timeline` since 007 T11, which is the same one column, the same mono gutter and the
+ * same 7px dot the suite history and the audit trail draw — design language §5's *"the eye learns
+ * it once"*. What was here was this screen's own rail, connector and dot, built before there was a
+ * kit to take them from.
  */
-function Timeline({
+function HistoryTimeline({
   entries,
   markers,
   projectId,
@@ -192,86 +258,54 @@ function Timeline({
 
   if (rows.length === 0) {
     return (
-      <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid="CaseHistory.Timeline.Empty">
+      <p className="m-0 text-[13px] text-ink-3" data-testid="CaseHistory.Timeline.Empty">
         No executions recorded in this scope yet.
-      </Typography>
+      </p>
     );
   }
 
   return (
-    <Stack sx={{ gap: 0 }}>
-      {rows.map((row, index) =>
+    <Timeline data-testid="CaseHistory.Timeline">
+      {rows.map((row) =>
         row.kind === 'version' ? (
-          <VersionRow key={`v${row.marker.versionNo}`} marker={row.marker} last={index === rows.length - 1} />
+          <VersionEvent key={`v${row.marker.versionNo}`} marker={row.marker} />
         ) : (
-          <ExecutionRow
-            key={row.entry.executionId}
-            entry={row.entry}
-            projectId={projectId}
-            last={index === rows.length - 1}
-          />
+          <ExecutionEvent key={row.entry.executionId} entry={row.entry} projectId={projectId} />
         ),
       )}
-    </Stack>
+    </Timeline>
   );
 }
 
-/** The rail that makes the two row types read as one sequence. */
-function Rail({ color, last, filled }: { color: string; last: boolean; filled: boolean }) {
-  return (
-    <Stack sx={{ alignItems: 'center', width: 24, flexShrink: 0 }}>
-      <Box
-        aria-hidden="true"
-        sx={{
-          width: 10,
-          height: 10,
-          borderRadius: '50%',
-          mt: 0.5,
-          flexShrink: 0,
-          bgcolor: filled ? color : 'background.paper',
-          border: `2px solid ${color}`,
-        }}
-      />
-      {!last && <Box aria-hidden="true" sx={{ width: 2, flex: 1, minHeight: 24, bgcolor: 'divider' }} />}
-    </Stack>
-  );
+/** The mono stamp in the gutter: the age, with the exact moment on the title. */
+function stamp(at: string): ReactNode {
+  return <span title={formatDateTime(at)}>{formatAge(at)}</span>;
 }
 
-function VersionRow({ marker, last }: { marker: VersionMarker; last: boolean }) {
+function VersionEvent({ marker }: { marker: VersionMarker }) {
   return (
-    <Stack direction="row" sx={{ gap: 1.5 }} data-testid="CaseHistory.Timeline.VersionMarker">
-      <Rail color="var(--color-action-primary)" last={last} filled={false} />
-      <Box sx={{ pb: 2.5, flex: 1, minWidth: 0 }}>
-        <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          {/* v1 is the case being authored, not edited — since §29 a created case gets its v1
-              written alongside it. "Edited to v1" put a change at the bottom of every timeline
-              that nobody made, which is the opposite of what a reader scanning for "what changed?"
-              needs. Caught in the live browser pass, not by any gate. */}
-          <Chip
-            size="small"
-            label={marker.versionNo === 1 ? 'Created at v1' : `Edited to v${marker.versionNo}`}
-            sx={{
-              bgcolor: 'color-mix(in srgb, var(--color-action-primary) 12%, transparent)',
-              color: 'var(--color-action-primary)',
-              border: '1px solid color-mix(in srgb, var(--color-action-primary) 40%, transparent)',
-              fontWeight: 600,
-            }}
-          />
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {/* `author` is genuinely nullable: test_case_version.created_by has no foreign key, so
-                "nobody was recorded" and "the account is gone" are both real rows. Naming an author
-                anyway would put a person's name on the one table whose purpose is that past claims
-                stay true — so the edit is reported without one. */}
-            {marker.author?.displayName ?? 'Unknown author'} · {formatDateTime(marker.occurredAt)}
-          </Typography>
-        </Stack>
-        {marker.changeComment && (
-          <Typography variant="body2" sx={{ mt: 0.5, color: 'text.secondary' }}>
-            {marker.changeComment}
-          </Typography>
-        )}
-      </Box>
-    </Stack>
+    <TimelineEvent
+      when={stamp(marker.occurredAt)}
+      highlighted
+      data-testid="CaseHistory.Timeline.VersionMarker"
+      detail={marker.changeComment ?? undefined}
+    >
+      {/* v1 is the case being authored, not edited — since §29 a created case gets its v1
+          written alongside it. "Edited to v1" put a change at the bottom of every timeline
+          that nobody made, which is the opposite of what a reader scanning for "what changed?"
+          needs. Caught in the live browser pass, not by any gate. */}
+      {/* `author` is genuinely nullable: test_case_version.created_by has no foreign key, so
+          "nobody was recorded" and "the account is gone" are both real rows. Naming an author
+          anyway would put a person's name on the one table whose purpose is that past claims
+          stay true — so the edit is reported without one. */}
+      <strong className="font-medium text-ink">
+        {marker.author?.displayName ?? 'Unknown author'}
+      </strong>{' '}
+      {marker.versionNo === 1 ? 'created it' : 'edited the case'}
+      <Badge tone="steel" className="ml-1.5">
+        v{marker.versionNo}
+      </Badge>
+    </TimelineEvent>
   );
 }
 
@@ -295,128 +329,114 @@ function authorLine(entry: ExecutionHistoryEntry): string {
   return ingested ? 'ingested by CI' : `by ${entry.executedBy?.displayName ?? 'unknown'}`;
 }
 
-function ExecutionRow({
+function ExecutionEvent({
   entry,
   projectId,
-  last,
 }: {
   entry: ExecutionHistoryEntry;
   projectId: string;
-  last: boolean;
 }) {
   return (
-    <Stack direction="row" sx={{ gap: 1.5 }} data-testid="CaseHistory.Timeline.Execution">
-      <Rail color={entry.statusColor} last={last} filled />
-      <Box sx={{ pb: 2.5, flex: 1, minWidth: 0 }}>
-        <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          {entry.statusKind && <StatusChip kind={entry.statusKind} testId="CaseHistory.Timeline.Status" />}
-          {/* A withdrawn run keeps its result on this timeline — §6p, "the entry marked rather than
-              vanishing" — but the run itself answers 404, so the key is rendered as plain text
-              instead of a link. Offering navigation that lands on a not-found page reads as a
-              broken app rather than as a deleted run, which is why the chip beside it says which. */}
-          {entry.runDeleted ? (
-            <Tooltip title="This run was deleted. The result is kept, because history that quietly loses rows is worse than no history.">
-              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                <Identifier variant="muted">{entry.runKey}</Identifier>
-                <Chip
-                  size="small"
-                  label="Run deleted"
-                  data-testid="CaseHistory.Timeline.RunDeleted"
-                  sx={{ height: 20, fontSize: '0.6875rem', color: 'text.secondary' }}
-                />
-              </Box>
-            </Tooltip>
-          ) : (
-            <RouterLink to={`/projects/${projectId}/runs/${entry.runId}`} data-testid="CaseHistory.Timeline.RunLink">
-              <Identifier>{entry.runKey}</Identifier>
-            </RouterLink>
-          )}
-          <Typography variant="body2" sx={{ color: 'text.secondary', minWidth: 0 }}>
-            {entry.runName}
-          </Typography>
-          {/* Which version ran. On the all-versions view this is what stops a reader from
-              attributing an old failure to the current text. */}
-          <Tooltip title="The case version this run executed">
-            <Box>
-              <Identifier variant="muted">v{entry.caseVersionNo}</Identifier>
-            </Box>
-          </Tooltip>
-        </Stack>
+    <TimelineEvent
+      when={stamp(entry.executedAt)}
+      data-testid="CaseHistory.Timeline.Execution"
+      detail={
+        <>
+          {/* A CI token and a person are different kinds of author, and knowing which one
+              recorded a result changes who you ask about it.
 
-        <Stack direction="row" sx={{ gap: 2, flexWrap: 'wrap', mt: 0.5 }}>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {formatDateTime(entry.executedAt)}
-          </Typography>
+              It branches on the ACTOR, not on the run's source — which is a correction. The
+              source is a property of the run and the actor is a property of this verdict, and
+              the two came apart the moment executed_by_token got a writer: Automation Service
+              holds result:submit, so a credential can post a single verdict into a MANUAL run,
+              and keying off the source rendered that as "by <the owner's name>" — a person's
+              name on a machine's claim, which is the one thing attribution must not do. */}
+          {authorLine(entry)}
+          {entry.configuration && <> · {entry.configuration}</>}
           {entry.releaseVersion && (
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              release <Identifier variant="muted">{entry.releaseVersion}</Identifier>
+            <>
+              {' · release '}
+              <Identifier variant="muted">{entry.releaseVersion}</Identifier>
               {entry.buildNumber && (
                 <>
-                  {' '}
-                  build <Identifier variant="muted">{entry.buildNumber}</Identifier>
+                  {' build '}
+                  <Identifier variant="muted">{entry.buildNumber}</Identifier>
                 </>
               )}
-            </Typography>
+            </>
           )}
-          {entry.configuration && (
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              {entry.configuration}
-            </Typography>
-          )}
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {/* A CI token and a person are different kinds of author, and knowing which one
-                recorded a result changes who you ask about it.
-
-                It branches on the ACTOR, not on the run's source — which is a correction. The
-                source is a property of the run and the actor is a property of this verdict, and
-                the two came apart the moment executed_by_token got a writer: Automation Service
-                holds result:submit, so a credential can post a single verdict into a MANUAL run,
-                and keying off the source rendered that as "by <the owner's name>" — a person's
-                name on a machine's claim, which is the one thing attribution must not do. */}
-            {authorLine(entry)}
-          </Typography>
           {entry.durationMs !== null && entry.durationMs !== undefined && (
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            <>
+              {' · '}
               <Identifier variant="muted">{formatDuration(entry.durationMs)}</Identifier>
-            </Typography>
+            </>
           )}
-        </Stack>
-
-        {entry.defects.length > 0 && (
-          <Stack direction="row" sx={{ gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
-            {entry.defects.map((defect) => (
-              <Box
-                key={defect.id}
-                component="a"
-                href={defect.url}
-                target="_blank"
-                rel="noopener"
-                sx={{ fontSize: '0.75rem' }}
-                data-testid="CaseHistory.Timeline.DefectLink"
-              >
-                <Identifier>{defect.externalKey}</Identifier>
-                {defect.statusCache && (
-                  <Box component="span" sx={{ color: 'text.secondary', ml: 0.5 }}>
-                    {defect.statusCache}
-                  </Box>
-                )}
-                <Box component="span" aria-hidden="true" sx={{ ml: 0.5, color: 'text.secondary' }}>
-                  ↗
-                </Box>
-                <Box component="span" className="sr-only">
-                  (opens in a new tab)
-                </Box>
-              </Box>
-            ))}
-          </Stack>
-        )}
-
-        {entry.evidenceCount > 0 && (
-          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
-            {formatCount(entry.evidenceCount)} {entry.evidenceCount === 1 ? 'attachment' : 'attachments'}
-          </Typography>
-        )}
-      </Box>
-    </Stack>
+          {entry.evidenceCount > 0 && (
+            <>
+              {' · '}
+              {formatCount(entry.evidenceCount)}{' '}
+              {entry.evidenceCount === 1 ? 'attachment' : 'attachments'}
+            </>
+          )}
+          {entry.defects.length > 0 && (
+            <span className="mt-1 flex flex-wrap gap-2">
+              {entry.defects.map((defect) => (
+                <a
+                  key={defect.id}
+                  href={defect.url}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-[11.5px] text-steel underline-offset-4 hover:underline"
+                  data-testid="CaseHistory.Timeline.DefectLink"
+                >
+                  <Identifier>{defect.externalKey}</Identifier>
+                  {defect.statusCache && <span className="ml-1 text-ink-4">{defect.statusCache}</span>}
+                  <span aria-hidden="true" className="ml-1 text-ink-4">
+                    ↗
+                  </span>
+                  <span className="sr-only">(opens in a new tab)</span>
+                </a>
+              ))}
+            </span>
+          )}
+        </>
+      }
+    >
+      Executed in{' '}
+      {/* A withdrawn run keeps its result on this timeline — §6p, "the entry marked rather than
+          vanishing" — but the run itself answers 404, so the key is rendered as plain text
+          instead of a link. Offering navigation that lands on a not-found page reads as a
+          broken app rather than as a deleted run, which is why the badge beside it says which. */}
+      {entry.runDeleted ? (
+        <span title="This run was deleted. The result is kept, because history that quietly loses rows is worse than no history.">
+          <Identifier variant="muted">{entry.runKey}</Identifier>
+          <Badge tone="plain" className="ml-1.5" data-testid="CaseHistory.Timeline.RunDeleted">
+            Run deleted
+          </Badge>
+        </span>
+      ) : (
+        <RouterLink
+          to={`/projects/${projectId}/runs/${entry.runId}`}
+          className="text-steel underline-offset-4 hover:underline"
+          data-testid="CaseHistory.Timeline.RunLink"
+        >
+          <Identifier>{entry.runKey}</Identifier>
+        </RouterLink>
+      )}{' '}
+      <span className="text-ink-3">{entry.runName}</span>
+      {entry.statusKind && (
+        <>
+          {' — '}
+          <Badge tone={statusTone[entry.statusKind]} data-testid="CaseHistory.Timeline.Status">
+            {statusLabels[entry.statusKind]}
+          </Badge>
+        </>
+      )}
+      {/* Which version ran. On the all-versions view this is what stops a reader from
+          attributing an old failure to the current text. */}
+      <span className="ml-1.5" title="The case version this run executed">
+        <Identifier variant="muted">v{entry.caseVersionNo}</Identifier>
+      </span>
+    </TimelineEvent>
   );
 }

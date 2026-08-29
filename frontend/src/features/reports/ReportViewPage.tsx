@@ -1,10 +1,11 @@
-import { Alert, AlertTitle, Box, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { isJobFinished, useProject, useReportJob, useReportModel } from '../../api/queries';
 import type { ReportJob } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { Banner } from '../../components/kit';
+import { PageHeader } from '../../components/PageHeader';
+import { Button } from '../../components/ui';
 import { humanize, reportJobStatusLabels } from '../../lib/labels';
 import { DownloadReportButton } from './DownloadReportButton';
 import { PinReportButton } from './PinReportButton';
@@ -67,7 +68,7 @@ export function ReportViewPage() {
   const title = model.data?.report.title ?? (job.data ? humanize(job.data.type) : 'Report');
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId={`${TestId}.Header`}
         title={title}
@@ -80,7 +81,7 @@ export function ReportViewPage() {
         subtitle="What you see here is the model the exported file was rendered from — the same numbers, the same header."
         actions={
           job.data ? (
-            <Stack direction="row" sx={{ gap: 1, alignItems: 'flex-start' }}>
+            <div className="flex items-start gap-2">
               <DownloadReportButton job={job.data} testId={`${TestId}.Download`} />
               {/*
                 Beside the download, because the two are the same question asked over different
@@ -94,7 +95,7 @@ export function ReportViewPage() {
                 reportTitle={title}
                 testId={`${TestId}.Pin`}
               />
-            </Stack>
+            </div>
           ) : null
         }
       />
@@ -102,11 +103,11 @@ export function ReportViewPage() {
       <DataRegion
         testId={`${TestId}.Job`}
         state={{ ...job, refetch: () => void job.refetch() }}
-        skeleton={<Typography variant="body2">Finding that report…</Typography>}
+        skeleton={<p className="m-0 text-[13px] text-ink-2">Finding that report…</p>}
       >
         {(row) => <JobBody job={row} model={model} projectId={projectId} />}
       </DataRegion>
-    </Box>
+    </div>
   );
 }
 
@@ -121,14 +122,13 @@ function JobBody({
 }) {
   if (!isJobFinished(job.status)) {
     return (
-      <Panel testId={`${TestId}.Waiting`} dense>
-        <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5, p: 2 }}>
-          <CircularProgress size={16} />
-          <Typography variant="body2" data-testid={`${TestId}.Waiting.Text`}>
+      <section data-testid={`${TestId}.Waiting`}>
+        <Banner tone="steel">
+          <span data-testid={`${TestId}.Waiting.Text`}>
             {reportJobStatusLabels[job.status]} — this page updates itself when the report is ready.
-          </Typography>
-        </Stack>
-      </Panel>
+          </span>
+        </Banner>
+      </section>
     );
   }
 
@@ -137,24 +137,19 @@ function JobBody({
     // worker, so this is the only place that refusal is ever seen. The way out is offered beside it
     // — an error naming a state the UI gives no path out of is the design bug `ui-rules` §4 names.
     return (
-      <Alert severity="error" role="alert" data-testid={`${TestId}.Failed`}>
-        <AlertTitle sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
-          This report was not produced
-        </AlertTitle>
-        <Typography variant="body2" sx={{ mb: 1.5 }}>
-          {job.error ?? 'The report could not be generated, and the server did not say why.'}
-        </Typography>
-        <Button
-          component={RouterLink}
-          to={`/projects/${projectId}/reports`}
-          size="small"
-          variant="outlined"
-          color="error"
-          data-testid={`${TestId}.Failed.Back`}
-        >
-          Back to reports
-        </Button>
-      </Alert>
+      <div role="alert" data-testid={`${TestId}.Failed`}>
+        <Banner tone="bad">
+          <span>
+            <strong className="block font-medium text-ink">This report was not produced</strong>
+            <span className="mt-1 block">
+              {job.error ?? 'The report could not be generated, and the server did not say why.'}
+            </span>
+            <Button asChild size="sm" className="mt-3" data-testid={`${TestId}.Failed.Back`}>
+              <RouterLink to={`/projects/${projectId}/reports`}>Back to reports</RouterLink>
+            </Button>
+          </span>
+        </Banner>
+      </div>
     );
   }
 
@@ -167,34 +162,49 @@ function JobBody({
   */
   if (!job.modelUrl) {
     return (
-      <Alert severity="info" data-testid={`${TestId}.NoModel`}>
-        This report has no stored model, so it cannot be shown here. Download it in the format it was
-        generated in.
-      </Alert>
+      <Banner tone="steel" data-testid={`${TestId}.NoModel`}>
+        <span>
+          This report has no stored model, so it cannot be shown here. Download it in the format it
+          was generated in.
+        </span>
+      </Banner>
     );
   }
 
   if (model.error instanceof ApiError && model.error.status === 403) {
     return (
-      <Alert severity="warning" data-testid={`${TestId}.Forbidden`}>
-        <AlertTitle sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
-          You cannot read reports in this project
-        </AlertTitle>
-        <Typography variant="body2">
-          Opening a report needs <strong>report:view</strong>, which you do not have here. Ask a
-          project lead to grant it.
-        </Typography>
-      </Alert>
+      <Banner tone="warn" data-testid={`${TestId}.Forbidden`}>
+        <span>
+          <strong className="block font-medium text-ink">
+            You cannot read reports in this project
+          </strong>
+          <span className="mt-1 block">
+            Opening a report needs <strong className="font-mono text-ink-2">report:view</strong>,
+            which you do not have here. Ask a project lead to grant it.
+          </span>
+        </span>
+      </Banner>
     );
   }
 
+  /*
+    THE ONE SURFACE IN THE PRODUCT THAT IS NOT DARK, and the recessed ground that says so.
+
+    007 D1 and design language §9.1: a PDF preview drawn dark misrepresents the file being
+    downloaded, so `ReportView` keeps its light surface and this task must not "fix" it. What the
+    port adds is the frame `renders/02-record-as-document.html` panel G draws around it — the
+    preview centred on `--field`, so the light page reads as a document in a viewer rather than as
+    a screen that forgot the theme.
+  */
   return (
-    <DataRegion
-      testId={`${TestId}.Model`}
-      state={{ ...model, refetch: () => void model.refetch() }}
-      skeleton={<Typography variant="body2">Loading the report…</Typography>}
-    >
-      {(document) => <ReportView document={document} />}
-    </DataRegion>
+    <div className="rounded-lg bg-field p-4 md:p-6">
+      <DataRegion
+        testId={`${TestId}.Model`}
+        state={{ ...model, refetch: () => void model.refetch() }}
+        skeleton={<p className="m-0 text-[13px] text-ink-2">Loading the report…</p>}
+      >
+        {(document) => <ReportView document={document} />}
+      </DataRegion>
+    </div>
   );
 }

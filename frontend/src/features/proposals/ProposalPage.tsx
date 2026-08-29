@@ -1,32 +1,29 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Divider,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
 import { useAcceptProposal, useAiProposal, useProject, useRejectProposal } from '../../api/queries';
 import type { AiProposal } from '../../api/types';
+import { TopStripSlot } from '../../app/topStripSlot';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import {
+  Badge,
+  Banner,
+  DocumentSurface,
+  DocumentTitle,
+  ProcedureLine,
+} from '../../components/kit';
 import { PermissionGate } from '../../components/PermissionGate';
 import { ScrollX } from '../../components/ScrollX';
+import { Button, Textarea } from '../../components/ui';
 import { describeError } from '../../lib/describeError';
-import { EM_DASH, formatDateTime } from '../../lib/format';
+import { formatDateTime } from '../../lib/format';
 import { proposalStatusLabels } from '../../lib/labels';
 import { VerdictChip } from './VerdictChip';
+
+/** `.sec h3` from `renders/tcms.css` — the rail's section heading, one spelling on this screen. */
+const SECTION_HEADING = 'm-0 mb-2.5 text-[11px] font-semibold tracking-[.08em] text-ink-3 uppercase';
 
 /**
  * One proposal, and the decision — **the screen where §6w.6's boundary is actually enforced**
@@ -69,55 +66,84 @@ export function ProposalPage() {
   const fieldErrors =
     accept.error instanceof ApiError ? (accept.error.fieldErrors ?? null) : null;
 
+  /*
+    The tab title and the arrival announcement, raised here because this screen has no
+    `PageHeader` — 007 T11, following T7. Design language rule 1 forbids a page `<h1>` repeating
+    what the document below already says, and on this screen the proposal's title *is* the
+    document's title. React 19 hoists a bare `<title>`, so the two things the header did that
+    nothing else does survive its removal.
+  */
+  const pageTitle = proposal.data ? `${proposal.data.title} · Generated case` : 'Generated case';
+  const announce = useAnnounce();
+  useEffect(() => {
+    announce(`${pageTitle} page loaded`);
+  }, [announce, pageTitle]);
+
   return (
-    <Box>
-      <PageHeader
-        testId="Proposal.Header"
-        title={proposal.data?.title ?? 'Generated case'}
-        documentTitle={
-          proposal.data ? `${proposal.data.title} · Generated case` : 'Generated case'
-        }
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Generated cases', to: `/projects/${projectId}/generated-cases` },
-          { label: proposal.data?.title ?? 'Proposal' },
-        ]}
-        subtitle="Nothing here is in the repository. Accepting creates the case exactly as writing it by hand would — as a draft, with you as its author."
-      />
+    <div className="flex min-h-full flex-col">
+      <title>{`${pageTitle} · TCMS`}</title>
+
+      <TopStripSlot>
+        <nav
+          aria-label="Breadcrumb"
+          data-testid="Proposal.Breadcrumbs"
+          className="mr-auto hidden min-w-0 truncate text-[12.5px] text-ink-3 sm:block"
+        >
+          <RouterLink to={`/projects/${projectId}`} className="hover:underline">
+            {project.data?.name ?? 'Project'}
+          </RouterLink>
+          {' / '}
+          <RouterLink
+            to={`/projects/${projectId}/generated-cases`}
+            className="hover:underline"
+          >
+            Generated cases
+          </RouterLink>
+          {' / '}
+          <span className="font-medium text-ink-2">{proposal.data?.title ?? 'Proposal'}</span>
+        </nav>
+      </TopStripSlot>
 
       <DataRegion
         testId="Proposal.Detail"
         state={{ ...proposal, refetch: () => void proposal.refetch() }}
       >
         {(row) => (
-          <Stack sx={{ gap: 2 }}>
-            <Panel testId="Proposal.SummaryPanel" dense>
-              <Stack sx={{ gap: 1.5 }}>
-                <Stack
-                  direction="row"
-                  sx={{ alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}
-                >
-                  <VerdictChip verdict={row.verdict} source={row.verdictSource} />
-                  <Chip
-                    size="small"
-                    variant="outlined"
-                    label={proposalStatusLabels[row.status]}
-                    data-testid="Proposal.Status"
-                  />
-                </Stack>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Filed {formatDateTime(row.createdAt)} by{' '}
+          <div className="flex min-w-0 flex-1 flex-col lg:flex-row">
+            {/*
+              THE DOCUMENT, THE EVIDENCE BESIDE IT, THE VERDICT LAST — `renders/02-record-as-document.html`
+              panel D, and the reading order §6w.6 asks for: *"the review UI shows the grounding
+              evidence alongside the proposal so the reviewer is reviewing against the spec, not
+              against their memory of it."* Accept sits under the excerpts it is a judgement about,
+              not in a toolbar above them.
+            */}
+            <DocumentSurface measure="procedure" className="flex-1">
+              <Banner tone="steel" className="mb-5">
+                <span>
+                  <strong className="font-medium text-ink">Generated, not written.</strong> Filed{' '}
+                  {formatDateTime(row.createdAt)} by{' '}
                   {row.createdBy?.displayName ?? 'someone no longer in this company'}
-                  {row.filedByAgent ? ', through an API token they own' : ''}.
-                </Typography>
+                  {row.filedByAgent ? ', through an API token they own' : ''}. It is not in the
+                  repository until you accept it.
+                </span>
+              </Banner>
 
-                {row.status === 'ACCEPTED' && (
-                  <Alert severity="info" data-testid="Proposal.Accepted">
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <VerdictChip verdict={row.verdict} source={row.verdictSource} />
+                <Badge tone="plain" data-testid="Proposal.Status">
+                  {proposalStatusLabels[row.status]}
+                </Badge>
+              </div>
+
+              {row.status === 'ACCEPTED' && (
+                <Banner tone="steel" className="mb-4" data-testid="Proposal.Accepted">
+                  <span>
                     {row.acceptedCase ? (
                       <>
                         Accepted by {row.decidedBy?.displayName ?? 'someone'} — this became{' '}
                         <RouterLink
                           to={`/projects/${projectId}/cases/${row.acceptedCase.id}`}
+                          className="text-steel underline-offset-4 hover:underline"
                           data-testid="Proposal.AcceptedCase"
                         >
                           <Identifier>{row.acceptedCase.key}</Identifier>
@@ -132,105 +158,85 @@ export function ProposalPage() {
                       */
                       <>The case this became has since been deleted.</>
                     )}
-                  </Alert>
-                )}
+                  </span>
+                </Banner>
+              )}
 
-                {row.status === 'REJECTED' && (
-                  <Alert severity="warning" data-testid="Proposal.Rejected">
+              {row.status === 'REJECTED' && (
+                <Banner tone="warn" className="mb-4" data-testid="Proposal.Rejected">
+                  <span>
                     Rejected by {row.decidedBy?.displayName ?? 'someone'}
                     {row.decisionNote ? ` — ${row.decisionNote}` : '. No reason was given.'}
-                  </Alert>
-                )}
-              </Stack>
-            </Panel>
-
-            <Panel testId="Proposal.CasePanel" title="The proposed case" dense>
-              <ProposedCase proposal={row} />
-            </Panel>
-
-            <Panel testId="Proposal.GroundingPanel" title="Grounding evidence" dense>
-              {row.grounding ? (
-                <>
-                  <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-                    Sent by the proposer and shown as it arrived. TCMS did not produce this and does
-                    not check it.
-                  </Typography>
-                  {/*
-                    Rendered as preformatted TEXT, never as markup and never parsed into a shape
-                    this product invented. The payload comes from a third-party agent, and the one
-                    thing a review screen must not do is give somebody else's output the authority
-                    of the product's own vocabulary.
-                  */}
-                  <ScrollX>
-                    <Box
-                      component="pre"
-                      data-testid="Proposal.Grounding"
-                      sx={{
-                        m: 0,
-                        p: 1.5,
-                        fontSize: 13,
-                        bgcolor: 'action.hover',
-                        borderRadius: 1,
-                        whiteSpace: 'pre-wrap',
-                      }}
-                    >
-                      {JSON.stringify(row.grounding, null, 2)}
-                    </Box>
-                  </ScrollX>
-                </>
-              ) : (
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  None was sent. Nobody has checked this proposal against anything — read it against
-                  the specification it claims to cover.
-                </Typography>
+                  </span>
+                </Banner>
               )}
-            </Panel>
 
-            {row.status === 'PENDING' && (
-              <Panel testId="Proposal.DecisionPanel" title="Your decision" dense>
-                {fieldErrors && (
-                  <Alert severity="warning" sx={{ mb: 2 }} data-testid="Proposal.AcceptErrors">
-                    <Typography variant="body2" sx={{ mb: 1 }}>
-                      This proposal cannot become a case as it stands. It was filed before these
-                      things changed, or the agent got them wrong:
-                    </Typography>
-                    <ul style={{ margin: 0, paddingLeft: 18 }}>
-                      {Object.entries(fieldErrors).map(([field, messages]) => (
-                        <li key={field}>
-                          <strong>{field}</strong>: {messages.join(' ')}
-                        </li>
-                      ))}
-                    </ul>
-                  </Alert>
+              <ProposedCase proposal={row} />
+            </DocumentSurface>
+
+            <aside className="w-full shrink-0 border-white/8 bg-panel lg:w-[340px] lg:border-l">
+              <section className="border-b border-white/8 px-4 py-4" data-testid="Proposal.GroundingPanel">
+                <h2 className={SECTION_HEADING}>Grounding evidence</h2>
+                {row.grounding ? (
+                  <>
+                    <p className="mt-0 mb-2 text-[12.5px] leading-[1.55] text-ink-3">
+                      Sent by the proposer and shown as it arrived. TCMS did not produce this and
+                      does not check it.
+                    </p>
+                    {/*
+                      Rendered as preformatted TEXT, never as markup and never parsed into a shape
+                      this product invented. The payload comes from a third-party agent, and the one
+                      thing a review screen must not do is give somebody else's output the authority
+                      of the product's own vocabulary.
+                    */}
+                    <ScrollX>
+                      <pre
+                        data-testid="Proposal.Grounding"
+                        className="m-0 rounded-md bg-field p-2.5 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap text-ink-2"
+                      >
+                        {JSON.stringify(row.grounding, null, 2)}
+                      </pre>
+                    </ScrollX>
+                  </>
+                ) : (
+                  <p className="m-0 text-[12.5px] leading-[1.55] text-ink-3">
+                    None was sent. Nobody has checked this proposal against anything — read it
+                    against the specification it claims to cover.
+                  </p>
                 )}
-                {accept.error && !fieldErrors && (
-                  <Alert severity="error" sx={{ mb: 2 }} data-testid="Proposal.AcceptFailed">
-                    {describeError(accept.error).body}
-                  </Alert>
-                )}
-                {reject.error && (
-                  <Alert severity="error" sx={{ mb: 2 }} data-testid="Proposal.RejectFailed">
-                    {describeError(reject.error).body}
-                  </Alert>
-                )}
+              </section>
 
-                <TextField
-                  fullWidth
-                  multiline
-                  minRows={2}
-                  size="small"
-                  label="Why are you rejecting it? (optional)"
-                  value={note}
-                  onChange={(event) => setNote(event.target.value)}
-                  slotProps={{ htmlInput: { maxLength: 2000 } }}
-                  data-testid="Proposal.Note"
-                  sx={{ mb: 2 }}
-                  helperText="Kept with the rejection. It is the only signal anyone has for whether a generation profile is worth running again."
-                />
+              {row.status === 'PENDING' && (
+                <section className="px-4 py-4" data-testid="Proposal.DecisionPanel">
+                  <h2 className={SECTION_HEADING}>Your decision</h2>
 
-                <Divider sx={{ mb: 2 }} />
+                  {fieldErrors && (
+                    <Banner tone="warn" className="mb-3" data-testid="Proposal.AcceptErrors">
+                      <span>
+                        This proposal cannot become a case as it stands. It was filed before these
+                        things changed, or the agent got them wrong:
+                        <ul className="mt-1.5 mb-0 list-disc pl-4">
+                          {Object.entries(fieldErrors).map(([field, messages]) => (
+                            <li key={field}>
+                              <strong className="font-mono text-ink">{field}</strong>:{' '}
+                              {messages.join(' ')}
+                            </li>
+                          ))}
+                        </ul>
+                      </span>
+                    </Banner>
+                  )}
+                  {accept.error && !fieldErrors && (
+                    <Banner tone="bad" className="mb-3" data-testid="Proposal.AcceptFailed">
+                      <span>{describeError(accept.error).body}</span>
+                    </Banner>
+                  )}
+                  {reject.error && (
+                    <Banner tone="bad" className="mb-3" data-testid="Proposal.RejectFailed">
+                      <span>{describeError(reject.error).body}</span>
+                    </Banner>
+                  )}
 
-                <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap' }}>
                   {/*
                     Disable-don't-hide (§31), and the permission is `case:create` because accepting
                     IS creating. A Viewer sees both buttons greyed with the reason, which is how
@@ -243,57 +249,76 @@ export function ProposalPage() {
                   */}
                   <PermissionGate projectId={projectId} permission="case:create">
                     {({ allowed, reason }) => (
-                      <span title={allowed ? undefined : reason}>
-                        <Button
-                          variant="contained"
-                          disabled={!allowed || accept.isPending}
-                          data-testid="Proposal.Accept"
-                          onClick={() => {
-                            accept.mutate(proposalId, {
-                              onSuccess: (created) => {
-                                // Straight to the case. What the reviewer wanted was a case in the
-                                // repository, and leaving them on a decided proposal makes them
-                                // hunt for the thing they just made.
-                                void navigate(`/projects/${projectId}/cases/${created.id}`);
-                              },
-                            });
-                          }}
-                        >
-                          Accept and create the case
-                        </Button>
-                      </span>
+                      <Button
+                        variant="primary"
+                        className="w-full"
+                        title={allowed ? undefined : reason}
+                        disabled={!allowed || accept.isPending}
+                        data-testid="Proposal.Accept"
+                        onClick={() => {
+                          accept.mutate(proposalId, {
+                            onSuccess: (created) => {
+                              // Straight to the case. What the reviewer wanted was a case in the
+                              // repository, and leaving them on a decided proposal makes them
+                              // hunt for the thing they just made.
+                              void navigate(`/projects/${projectId}/cases/${created.id}`);
+                            },
+                          });
+                        }}
+                      >
+                        Accept and create the case
+                      </Button>
                     )}
                   </PermissionGate>
 
+                  <div className="mt-4" data-testid="Proposal.Note">
+                    <label
+                      htmlFor="Proposal.Note.Input"
+                      className="mb-1 block text-[12px] font-medium text-ink-2"
+                    >
+                      Why are you rejecting it? (optional)
+                    </label>
+                    <Textarea
+                      id="Proposal.Note.Input"
+                      rows={2}
+                      maxLength={2000}
+                      value={note}
+                      onChange={(event) => setNote(event.target.value)}
+                    />
+                    <p className="mt-1 mb-0 text-[11.5px] leading-[1.5] text-ink-4">
+                      Kept with the rejection. It is the only signal anyone has for whether a
+                      generation profile is worth running again.
+                    </p>
+                  </div>
+
                   <PermissionGate projectId={projectId} permission="case:create">
                     {({ allowed, reason }) => (
-                      <span title={allowed ? undefined : reason}>
-                        <Button
-                          variant="outlined"
-                          color="warning"
-                          disabled={!allowed || reject.isPending}
-                          data-testid="Proposal.Reject"
-                          onClick={() => {
-                            reject.mutate({
-                              proposalId,
-                              // Blank is null, not '': the field is nullable on the contract and an
-                              // empty string is a reason somebody typed nothing into.
-                              note: note.trim() === '' ? null : note.trim(),
-                            });
-                          }}
-                        >
-                          Reject
-                        </Button>
-                      </span>
+                      <Button
+                        variant="danger"
+                        className="mt-2 w-full"
+                        title={allowed ? undefined : reason}
+                        disabled={!allowed || reject.isPending}
+                        data-testid="Proposal.Reject"
+                        onClick={() => {
+                          reject.mutate({
+                            proposalId,
+                            // Blank is null, not '': the field is nullable on the contract and an
+                            // empty string is a reason somebody typed nothing into.
+                            note: note.trim() === '' ? null : note.trim(),
+                          });
+                        }}
+                      >
+                        Reject
+                      </Button>
                     )}
                   </PermissionGate>
-                </Stack>
-              </Panel>
-            )}
-          </Stack>
+                </section>
+              )}
+            </aside>
+          </div>
         )}
       </DataRegion>
-    </Box>
+    </div>
   );
 }
 
@@ -310,48 +335,53 @@ function ProposedCase({ proposal }: { proposal: AiProposal }) {
 
   if (!proposed) {
     return (
-      <Alert severity="warning" data-testid="Proposal.Unreadable">
-        This proposal can no longer be read as a test case — it was filed against an older version
-        of the API. Reject it; it cannot be accepted.
-      </Alert>
+      <>
+        <DocumentTitle>{proposal.title}</DocumentTitle>
+        <Banner tone="warn" data-testid="Proposal.Unreadable">
+          <span>
+            This proposal can no longer be read as a test case — it was filed against an older
+            version of the API. Reject it; it cannot be accepted.
+          </span>
+        </Banner>
+      </>
     );
   }
 
   return (
-    <Stack sx={{ gap: 1.5 }}>
-      {proposed.objective && (
-        <Field label="Objective" value={proposed.objective} testId="Proposal.Objective" />
-      )}
-      {proposed.description && (
-        <Field label="Description" value={proposed.description} testId="Proposal.Description" />
-      )}
-      {proposed.expectedOutcome && (
-        <Field label="Expected outcome" value={proposed.expectedOutcome} />
-      )}
+    <>
+      {/*
+        The title and the objective are the document's own, not a page header's: design language
+        rule 1, and the proposal's title is what the reader came for. `Why this exists` is the one
+        piece of prose above the rule — `renders/02-record-as-document.html` panel A's decision,
+        inherited here so the two screens agree about what a case is.
+      */}
+      <DocumentTitle
+        whyLabel="Why this exists"
+        why={
+          proposed.objective ? (
+            <span data-testid="Proposal.Objective">{proposed.objective}</span>
+          ) : undefined
+        }
+      >
+        {proposal.title}
+      </DocumentTitle>
 
       {proposed.steps && proposed.steps.length > 0 ? (
-        <ScrollX>
-          <Table size="small" data-testid="Proposal.Steps">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ color: 'text.secondary', width: 48 }}>#</TableCell>
-                <TableCell sx={{ color: 'text.secondary' }}>Action</TableCell>
-                <TableCell sx={{ color: 'text.secondary' }}>Expected result</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {proposed.steps.map((step, index) => (
-                <TableRow key={index} data-testid="Proposal.Step">
-                  <TableCell>{index + 1}</TableCell>
-                  <TableCell>{step.action}</TableCell>
-                  <TableCell>{step.expectedResult ?? EM_DASH}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </ScrollX>
+        <div data-testid="Proposal.Steps">
+          {proposed.steps.map((step, index) => (
+            <ProcedureLine key={index} line={index + 1} data-testid="Proposal.Step">
+              {step.action}
+              {step.expectedResult && (
+                <span className="mt-0.5 block text-[13px] text-ink-4">
+                  {'\u2192 '}
+                  {step.expectedResult}
+                </span>
+              )}
+            </ProcedureLine>
+          ))}
+        </div>
       ) : (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        <p className="m-0 text-[13px] text-ink-3">
           {/*
             One sentence where there were two. The other branch read the proposal's
             `gherkinSource` and said "Written as a Gherkin scenario" — a field that left
@@ -362,29 +392,39 @@ function ProposedCase({ proposal }: { proposal: AiProposal }) {
             honest answer — the accept path would refuse it.
           */}
           No steps — this cannot be accepted until an agent proposes one with steps.
-        </Typography>
+        </p>
       )}
-    </Stack>
+
+      {/*
+        `description` and `expectedOutcome` under the procedure rather than in a titled panel over
+        it — 007 §4 keeps both fields (they are on the wire and hold data) and moves them into the
+        document's narrative column, exactly as T7 did on the editor.
+      */}
+      {(proposed.description || proposed.expectedOutcome) && (
+        <section className="mt-8 border-t border-white/8 pt-5">
+          <div className="grid gap-5 md:grid-cols-2">
+            {proposed.description && (
+              <Field label="Description" value={proposed.description} testId="Proposal.Description" />
+            )}
+            {proposed.expectedOutcome && (
+              <Field label="Expected outcome" value={proposed.expectedOutcome} />
+            )}
+          </div>
+        </section>
+      )}
+    </>
   );
 }
 
-function Field({
-  label,
-  value,
-  testId,
-}: {
-  label: string;
-  value: string;
-  testId?: string;
-}) {
+function Field({ label, value, testId }: { label: string; value: string; testId?: string }) {
   return (
-    <Box>
-      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+    <div>
+      <span className="mb-1 block font-mono text-[11px] tracking-[.06em] text-ink-4 uppercase">
         {label}
-      </Typography>
-      <Typography variant="body2" data-testid={testId} sx={{ whiteSpace: 'pre-wrap' }}>
+      </span>
+      <p data-testid={testId} className="m-0 text-[13px] leading-[1.6] whitespace-pre-wrap text-ink-2">
         {value}
-      </Typography>
-    </Box>
+      </p>
+    </div>
   );
 }

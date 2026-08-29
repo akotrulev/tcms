@@ -1,24 +1,10 @@
+import { Check, MessageSquare, User, Users, X } from 'lucide-react';
 import { useState } from 'react';
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Divider,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
-import CancelIcon from '@mui/icons-material/Cancel';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
-import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
-import PersonOutlineIcon from '@mui/icons-material/PersonOutlineOutlined';
-import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import type {
   PermissionKey,
   ProjectSettings,
   Review,
+  ReviewState,
   ReviewAssignee,
   ReviewComment,
   ReviewParticipation,
@@ -36,17 +22,30 @@ import {
   useUnassignReviewer,
 } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
-import { Panel } from '../../components/PageHeader';
+import { Badge, Banner, type BadgeTone } from '../../components/kit';
 import { PermissionGate } from '../../components/PermissionGate';
+import { Button, Textarea } from '../../components/ui';
 import { describeError } from '../../lib/describeError';
 import { formatDateTime } from '../../lib/format';
-import { selectTestId } from '../../lib/muiTestIds';
 import {
-  reviewStateColors,
   reviewStateLabels,
   reviewSubjectLabels,
   reviewVerdictLabels,
 } from '../../lib/labels';
+
+/** `.sec h3` from `renders/tcms.css` — this panel sits in a rail, and takes the rail's heading. */
+const SECTION_HEADING = 'm-0 mb-2.5 text-[11px] font-semibold tracking-[.08em] text-ink-3 uppercase';
+
+/**
+ * A review state's badge tone. `IN_REVIEW` is amber — a state that is currently *waiting on
+ * somebody*, which is design language §5's amber — and an approval is the green a pass is.
+ */
+const stateTone = {
+  IN_REVIEW: 'blocked',
+  APPROVED: 'passed',
+  REJECTED: 'failed',
+  WITHDRAWN: 'skipped',
+} as const satisfies Record<ReviewState, BadgeTone>;
 
 /**
  * Which settings flag switches review on for each artifact type.
@@ -124,7 +123,8 @@ export function ReviewPanel({
   }
 
   return (
-    <Panel title="Review" testId="Review.Panel">
+    <section data-testid="Review.Panel">
+      <h2 className={SECTION_HEADING}>Review</h2>
       <DataRegion
         testId="Review.Panel.Region"
         state={{ ...reviews, refetch: () => void reviews.refetch() }}
@@ -140,7 +140,7 @@ export function ReviewPanel({
         }}
       >
         {(rows) => (
-          <Stack sx={{ gap: 2 }} data-testid="Review.Panel.List">
+          <div className="flex flex-col gap-3" data-testid="Review.Panel.List">
             <CurrentReview
               projectId={projectId}
               subjectType={subjectType}
@@ -149,10 +149,10 @@ export function ReviewPanel({
               currentVersionNo={currentVersionNo}
             />
             {rows.length > 1 && <EarlierReviews reviews={rows.slice(1)} />}
-          </Stack>
+          </div>
         )}
       </DataRegion>
-    </Panel>
+    </section>
   );
 }
 
@@ -188,19 +188,12 @@ function CurrentReview({
   const movedOn = currentVersionNo !== undefined && currentVersionNo > review.subjectVersionNo;
 
   return (
-    <Stack sx={{ gap: 1.25 }} data-testid="Review.Current">
-      <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-        <Chip
-          size="small"
-          label={reviewStateLabels[review.state]}
-          data-testid="Review.State"
-          sx={{
-            bgcolor: reviewStateColors[review.state],
-            color: 'var(--color-on-status)',
-            fontWeight: 600,
-          }}
-        />
-        <Typography variant="body2" color="text.secondary">
+    <div className="flex flex-col gap-2" data-testid="Review.Current">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={stateTone[review.state]} data-testid="Review.State">
+          {reviewStateLabels[review.state]}
+        </Badge>
+        <span className="text-[12px] text-ink-4">
           {/*
             "Submitted by" survives a null author: `submittedBy` is nullable because the account may
             have been offboarded since, and the record still stands. Collapsing that into a name
@@ -210,17 +203,14 @@ function CurrentReview({
             ? `Submitted by ${review.submittedBy.displayName}`
             : 'Submitted by a former member'}{' '}
           · {formatDateTime(review.createdAt)}
-        </Typography>
-      </Stack>
+        </span>
+      </div>
 
       {review.approvedBy && review.approvedAt && (
-        <Typography variant="body2" data-testid="Review.Approval">
-          <CheckCircleOutlineIcon
-            fontSize="inherit"
-            sx={{ verticalAlign: 'text-bottom', mr: 0.5 }}
-          />
+        <p className="m-0 flex items-center gap-1.5 text-[13px] text-ink-2" data-testid="Review.Approval">
+          <Check aria-hidden className="size-3.5" style={{ color: 'var(--color-passed)' }} />
           Signed off by {review.approvedBy.displayName} · {formatDateTime(review.approvedAt)}
-        </Typography>
+        </p>
       )}
 
       {/*
@@ -229,10 +219,12 @@ function CurrentReview({
         so is the difference between a reviewer's LGTM meaning something and meaning nothing.
       */}
       {movedOn && (
-        <Alert severity="warning" data-testid="Review.Stale">
-          This {reviewSubjectLabels[subjectType]} has changed since it was submitted — the review
-          covers v{review.subjectVersionNo}, and you are looking at v{currentVersionNo}.
-        </Alert>
+        <Banner tone="warn" data-testid="Review.Stale">
+          <span>
+            This {reviewSubjectLabels[subjectType]} has changed since it was submitted — the review
+            covers v{review.subjectVersionNo}, and you are looking at v{currentVersionNo}.
+          </span>
+        </Banner>
       )}
 
       <Assignees
@@ -269,7 +261,7 @@ function CurrentReview({
           )}
         </PermissionGate>
       )}
-    </Stack>
+    </div>
   );
 }
 
@@ -324,15 +316,15 @@ function Assignees({
   }
 
   return (
-    <Stack sx={{ gap: 1 }} data-testid="Review.Assignees">
-      <Typography variant="subtitle2">Asked to review</Typography>
+    <div className="flex flex-col gap-1.5" data-testid="Review.Assignees">
+      <h3 className="m-0 text-[12px] font-medium text-ink-2">Asked to review</h3>
 
       {assignees.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" data-testid="Review.Assignees.Empty">
+        <p className="m-0 text-[12.5px] text-ink-4" data-testid="Review.Assignees.Empty">
           Nobody has been asked yet. Anyone with review rights can still give a verdict.
-        </Typography>
+        </p>
       ) : (
-        <Stack direction="row" sx={{ gap: 0.75, flexWrap: 'wrap' }}>
+        <div className="flex flex-wrap gap-1.5">
           {assignees.map((assignee) => (
             <PermissionGate
               key={assignee.id}
@@ -340,37 +332,44 @@ function Assignees({
               permission={REVIEW_PERMISSION[subjectType]}
             >
               {({ allowed }) => (
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  icon={assignee.team ? <GroupOutlinedIcon /> : <PersonOutlineIcon />}
-                  /*
-                    Both null is a real row: the person asked has been offboarded since, and the
-                    request stands. Dropping the chip would hide a request nobody can discharge,
-                    which is the one state a lead most needs to see (§66's rule, from the render
-                    side).
-                  */
-                  label={
-                    assignee.team?.name ?? assignee.user?.displayName ?? 'A former member'
-                  }
+                /*
+                  A NAME WITH A WITHDRAWAL, not a `kit/Chip`. §5's chip is *a value the reader
+                  owns and is a button* — this is neither: nothing happens when you click a
+                  person's name here, and the only act on the row is removing the request. The kit
+                  component's own `onClick` is required for exactly that reason, so borrowing it
+                  would mean inventing a click that does nothing.
+
+                  Both null is a real row: the person asked has been offboarded since, and the
+                  request stands. Dropping the row would hide a request nobody can discharge,
+                  which is the one state a lead most needs to see (§66's rule, from the render
+                  side).
+                */
+                <span
                   data-testid="Review.Assignee"
-                  /*
-                    An explicit delete icon, only so it can carry a test id. MUI's default one is
-                    an internal component with no identifier of its own, so a test can find the
-                    chip and have nothing to click — the same class of miss as §71's hidden native
-                    input, discovered here the same way.
-                  */
-                  deleteIcon={<CancelIcon data-testid="Review.Assignee.Remove" />}
-                  onDelete={
-                    isOpen && allowed
-                      ? () => unassign.mutate({ reviewId, assignmentId: assignee.id })
-                      : undefined
-                  }
-                />
+                  className="inline-flex items-center gap-1.5 rounded-[5px] border border-white/8 px-2.5 py-[3px] text-xs text-ink-2"
+                >
+                  {assignee.team ? (
+                    <Users aria-hidden className="size-3 text-ink-4" />
+                  ) : (
+                    <User aria-hidden className="size-3 text-ink-4" />
+                  )}
+                  {assignee.team?.name ?? assignee.user?.displayName ?? 'A former member'}
+                  {isOpen && allowed && (
+                    <button
+                      type="button"
+                      aria-label={`Withdraw the request to ${assignee.team?.name ?? assignee.user?.displayName ?? 'a former member'}`}
+                      onClick={() => unassign.mutate({ reviewId, assignmentId: assignee.id })}
+                      data-testid="Review.Assignee.Remove"
+                      className="text-ink-4 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]"
+                    >
+                      <X aria-hidden className="size-3" />
+                    </button>
+                  )}
+                </span>
               )}
             </PermissionGate>
           ))}
-        </Stack>
+        </div>
       )}
 
       {isOpen && (
@@ -390,11 +389,11 @@ function Assignees({
       )}
 
       {unassign.isError && (
-        <Alert severity="error" data-testid="Review.Assignees.Error">
-          {describeError(unassign.error).body}
-        </Alert>
+        <Banner tone="bad" data-testid="Review.Assignees.Error">
+          <span>{describeError(unassign.error).body}</span>
+        </Banner>
       )}
-    </Stack>
+    </div>
   );
 }
 
@@ -423,6 +422,7 @@ function AssignForm({
   allowed: boolean;
 }) {
   const [choice, setChoice] = useState('');
+  const [open, setOpen] = useState(false);
   const assign = useAssignReviewer(projectId, subjectType, subjectId);
   const members = useProjectMembers(projectId, allowed);
   const teams = useTeams();
@@ -439,39 +439,99 @@ function AssignForm({
   );
   const groups = (teams.data ?? []).filter((team) => !askedTeams.has(team.id));
 
+  const options = [
+    ...people.map((person) => ({ value: `user:${person.id}`, label: person.displayName })),
+    ...groups.map((team) => ({ value: `team:${team.id}`, label: `${team.name} (team)` })),
+  ];
+  const chosen = options.find((option) => option.value === choice);
+
   return (
-    <Stack direction="row" sx={{ gap: 1, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-      <TextField
-        select
-        size="small"
-        label="Ask someone to review"
-        value={choice}
-        disabled={!allowed || assign.isPending}
-        onChange={(event) => setChoice(event.target.value)}
-        sx={{ minWidth: 240 }}
-        /*
-          On the Select's DISPLAY element, not `htmlInput`. A `TextField select` renders a hidden
-          native input plus the div a user actually clicks, so an id on the former is findable and
-          `pointer-events: none` — §71's trap, which fired again there despite the helper existing,
-          because the file it was copied from predates it.
-        */
-        slotProps={{ select: { SelectDisplayProps: selectTestId('Review.Assign.Choice') } }}
-      >
-        {people.map((person) => (
-          <MenuItem key={person.id} value={`user:${person.id}`}>
-            {person.displayName}
-          </MenuItem>
-        ))}
-        {groups.map((team) => (
-          <MenuItem key={team.id} value={`team:${team.id}`}>
-            {team.name} (team)
-          </MenuItem>
-        ))}
-      </TextField>
+    <div className="flex flex-wrap items-start gap-2">
+      {/*
+        A LISTBOX THIS FILE OWNS, not `ui/select`.
+
+        ~~`slotProps.select.SelectDisplayProps` carried the test id, because a `TextField select`
+        renders a hidden native input plus the div a user actually clicks and an id on the former
+        is findable and `pointer-events: none` — §71's trap.~~ → **superseded by 007 T11**, with
+        the helper module the workaround lived in (D3 of 007 deletes it in T16). What replaces it is not the kit's
+        Radix `Select`: that primitive calls `hasPointerCapture` on its trigger, jsdom implements
+        neither it nor the polyfill, and `src/test/setup.ts` is deliberately not a place where the
+        application is bent to suit the harness. This screen's suite drives the picker three times,
+        so the control is a plain disclosure over a real `role="listbox"` — native focus, native
+        keys, and nothing to stub.
+      */}
+      <div className="relative min-w-[240px]">
+        <label
+          htmlFor="Review.Assign.Choice"
+          className="mb-1 block text-[12px] font-medium text-ink-2"
+        >
+          Ask someone to review
+        </label>
+        <button
+          type="button"
+          id="Review.Assign.Choice"
+          role="combobox"
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-controls={open ? 'Review.Assign.Options' : undefined}
+          disabled={!allowed || assign.isPending}
+          onClick={() => setOpen((current) => !current)}
+          data-testid="Review.Assign.Choice"
+          className={
+            'flex w-full items-center justify-between gap-2 rounded-[6px] border border-white/8 ' +
+            'bg-field px-3 py-1.5 text-left text-[13px] text-ink disabled:cursor-not-allowed ' +
+            'disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+            'focus-visible:outline-[color:var(--color-given)]'
+          }
+        >
+          {chosen ? chosen.label : <span className="text-ink-4">Nobody chosen</span>}
+        </button>
+
+        {open && (
+          <>
+            <div aria-hidden className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+            <div
+              id="Review.Assign.Options"
+              role="listbox"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setOpen(false);
+              }}
+              className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border border-white/8 bg-panel p-1 shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]"
+            >
+              {options.length === 0 ? (
+                <p className="m-0 px-2.5 py-1.5 text-[12.5px] text-ink-4">
+                  Everybody who can be asked has been.
+                </p>
+              ) : (
+                options.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={option.value === choice}
+                    onClick={() => {
+                      setChoice(option.value);
+                      setOpen(false);
+                    }}
+                    className={
+                      'block w-full cursor-pointer rounded-[4px] px-2.5 py-1.5 text-left text-[13px] ' +
+                      'hover:bg-white/5 hover:text-ink focus-visible:outline-2 ' +
+                      'focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)] ' +
+                      (option.value === choice ? 'text-ink' : 'text-ink-2')
+                    }
+                  >
+                    {option.label}
+                  </button>
+                ))
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
       <Button
-        variant="outlined"
-        size="small"
-        sx={{ mt: 0.5 }}
+        size="sm"
+        className="mt-[22px]"
         disabled={!allowed || assign.isPending || !choice}
         onClick={() =>
           assign.mutate(
@@ -489,16 +549,16 @@ function AssignForm({
         Ask
       </Button>
       {assign.isError && (
-        <Alert severity="error" sx={{ flexBasis: '100%' }} data-testid="Review.Assign.Error">
+        <Banner tone="bad" className="basis-full" data-testid="Review.Assign.Error">
           {/*
             Beside the picker, because every refusal this can reach is about *who* was named — the
             submitter, somebody with no grant, a team that has gone — and a toast detached from the
             select would name a person the reader can no longer see.
           */}
-          {describeError(assign.error).body}
-        </Alert>
+          <span>{describeError(assign.error).body}</span>
+        </Banner>
       )}
-    </Stack>
+    </div>
   );
 }
 
@@ -507,37 +567,35 @@ function Trail({ participations }: { participations: ReviewParticipation[] }) {
     return (
       // "Nobody has given a verdict" and not "nobody has commented": since §79 the two are
       // different things on this panel, and the old wording named the one below it.
-      <Typography variant="body2" color="text.secondary" data-testid="Review.Trail.Empty">
+      <p className="m-0 text-[12.5px] text-ink-4" data-testid="Review.Trail.Empty">
         Nobody has given a verdict yet.
-      </Typography>
+      </p>
     );
   }
 
   return (
-    <Stack sx={{ gap: 1 }} data-testid="Review.Trail">
+    <div className="flex flex-col gap-1.5" data-testid="Review.Trail">
       {participations.map((participation) => (
-        <Box
+        <div
           key={participation.id}
           data-testid="Review.Trail.Item"
-          sx={{ pl: 1.5, borderLeft: '2px solid', borderColor: 'divider' }}
+          className="border-l-2 border-white/8 pl-3"
         >
-          <Stack direction="row" sx={{ alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[13px] font-medium text-ink">
               {reviewVerdictLabels[participation.verdict]}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
+            </span>
+            <span className="text-[12px] text-ink-4">
               {participation.user?.displayName ?? 'A former member'} ·{' '}
               {formatDateTime(participation.createdAt)}
-            </Typography>
-          </Stack>
+            </span>
+          </div>
           {participation.comment && (
-            <Typography variant="body2" color="text.secondary">
-              {participation.comment}
-            </Typography>
+            <p className="m-0 text-[13px] text-ink-3">{participation.comment}</p>
           )}
-        </Box>
+        </div>
       ))}
-    </Stack>
+    </div>
   );
 }
 
@@ -584,14 +642,13 @@ function Threads({
   }
 
   return (
-    <Stack sx={{ gap: 1.25 }} data-testid="Review.Comments">
-      <Divider />
-      <Typography variant="subtitle2">Comments</Typography>
+    <div className="flex flex-col gap-2 border-t border-white/8 pt-3" data-testid="Review.Comments">
+      <h3 className="m-0 text-[12px] font-medium text-ink-2">Comments</h3>
 
       {comments.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" data-testid="Review.Comments.Empty">
+        <p className="m-0 text-[12.5px] text-ink-4" data-testid="Review.Comments.Empty">
           No comments yet.
-        </Typography>
+        </p>
       ) : (
         comments.map((thread) => (
           <Thread
@@ -627,7 +684,7 @@ function Threads({
           )}
         </PermissionGate>
       )}
-    </Stack>
+    </div>
   );
 }
 
@@ -654,19 +711,18 @@ function Thread({
   const resolved = !!thread.resolvedAt;
 
   return (
-    <Box
+    <div
       data-testid="Review.Thread"
-      sx={{
-        pl: 1.5,
-        borderLeft: '2px solid',
-        borderColor: resolved ? 'success.main' : 'divider',
+      className="border-l-2 pl-3"
+      style={{
+        borderColor: resolved ? 'var(--color-passed)' : 'rgb(255 255 255 / 8%)',
         opacity: resolved ? 0.7 : 1,
       }}
     >
       <CommentBody comment={thread} testId="Review.Thread.Root" />
 
       {resolved && (
-        <Typography variant="caption" color="text.secondary" data-testid="Review.Thread.Resolved">
+        <span className="block text-[12px] text-ink-4" data-testid="Review.Thread.Resolved">
           {/*
             The resolver is named, which is the whole reason `V24` added the column: a thread marked
             dealt with by nobody is the one entry an auditor cannot follow up. Null survives it, for
@@ -674,23 +730,24 @@ function Thread({
           */}
           Resolved by {thread.resolvedBy?.displayName ?? 'a former member'} ·{' '}
           {formatDateTime(thread.resolvedAt ?? '')}
-        </Typography>
+        </span>
       )}
 
       {thread.replies.length > 0 && (
-        <Stack sx={{ gap: 0.75, mt: 0.75, pl: 2 }} data-testid="Review.Thread.Replies">
+        <div className="mt-1.5 flex flex-col gap-2 pl-4" data-testid="Review.Thread.Replies">
           {thread.replies.map((reply) => (
             <CommentBody key={reply.id} comment={reply} testId="Review.Thread.Reply" />
           ))}
-        </Stack>
+        </div>
       )}
 
       {isOpen && (
-        <Stack direction="row" sx={{ gap: 1, mt: 0.75, flexWrap: 'wrap' }}>
+        <div className="mt-1.5 flex flex-wrap gap-2">
           <PermissionGate projectId={projectId} permission="case:comment">
             {({ allowed }) => (
               <Button
-                size="small"
+                size="sm"
+                variant="quiet"
                 disabled={!allowed}
                 onClick={onReplyToggle}
                 data-testid="Review.Thread.ReplyToggle"
@@ -702,7 +759,8 @@ function Thread({
           <PermissionGate projectId={projectId} permission={REVIEW_PERMISSION[subjectType]}>
             {({ allowed }) => (
               <Button
-                size="small"
+                size="sm"
+                variant="quiet"
                 disabled={!allowed || resolution.isPending}
                 onClick={() =>
                   resolution.mutate({ reviewId, commentId: thread.id, resolved: !resolved })
@@ -713,7 +771,7 @@ function Thread({
               </Button>
             )}
           </PermissionGate>
-        </Stack>
+        </div>
       )}
 
       {replying && (
@@ -736,28 +794,26 @@ function Thread({
       )}
 
       {resolution.isError && (
-        <Alert severity="error" sx={{ mt: 1 }} data-testid="Review.Thread.Error">
-          {describeError(resolution.error).body}
-        </Alert>
+        <Banner tone="bad" className="mt-2" data-testid="Review.Thread.Error">
+          <span>{describeError(resolution.error).body}</span>
+        </Banner>
       )}
-    </Box>
+    </div>
   );
 }
 
 function CommentBody({ comment, testId }: { comment: ReviewComment; testId: string }) {
   return (
-    <Box data-testid={testId}>
-      <Typography variant="caption" color="text.secondary">
+    <div data-testid={testId}>
+      <span className="block text-[12px] text-ink-4">
         {comment.author?.displayName ?? 'A former member'} · {formatDateTime(comment.createdAt)}
-      </Typography>
+      </span>
       {/*
         `pre-wrap`, because the body is prose a reviewer typed: a paragraph break they made is part
         of what they said, and collapsing it changes the remark.
       */}
-      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-        {comment.body}
-      </Typography>
-    </Box>
+      <p className="m-0 text-[13px] whitespace-pre-wrap text-ink-2">{comment.body}</p>
+    </div>
   );
 }
 
@@ -788,21 +844,22 @@ function CommentForm({
   const add = useAddReviewComment(projectId, subjectType, subjectId);
 
   return (
-    <Stack sx={{ gap: 1, mt: 1 }} data-testid={testId}>
-      <TextField
-        size="small"
-        multiline
-        minRows={2}
-        label={label}
+    <div className="mt-2 flex flex-col gap-2" data-testid={testId}>
+      <label htmlFor={`${testId}.Body.Label`} className="text-[12px] font-medium text-ink-2">
+        {label}
+      </label>
+      <Textarea
+        id={`${testId}.Body.Label`}
+        rows={2}
         value={body}
         disabled={!allowed || add.isPending}
         onChange={(event) => setBody(event.target.value)}
-        slotProps={{ htmlInput: { 'data-testid': `${testId}.Body` } }}
+        data-testid={`${testId}.Body`}
       />
-      <Box>
+      <div>
         <Button
-          variant="contained"
-          size="small"
+          size="sm"
+          variant="primary"
           // Empty is refused by the server as a field error, so the button is disabled rather than
           // letting a caller discover it — the same rule the editor's Save follows.
           disabled={!allowed || add.isPending || !body.trim()}
@@ -821,13 +878,13 @@ function CommentForm({
         >
           {submitLabel}
         </Button>
-      </Box>
+      </div>
       {add.isError && (
-        <Alert severity="error" data-testid={`${testId}.Error`}>
-          {describeError(add.error).body}
-        </Alert>
+        <Banner tone="bad" data-testid={`${testId}.Error`}>
+          <span>{describeError(add.error).body}</span>
+        </Banner>
       )}
-    </Stack>
+    </div>
   );
 }
 
@@ -862,64 +919,67 @@ function VerdictForm({
   };
 
   return (
-    <Stack sx={{ gap: 1 }} data-testid="Review.VerdictForm">
-      <TextField
-        size="small"
-        multiline
-        minRows={2}
-        label="Comment (optional)"
+    <div className="flex flex-col gap-2" data-testid="Review.VerdictForm">
+      <label htmlFor="Review.Comment.Label" className="text-[12px] font-medium text-ink-2">
+        Comment (optional)
+      </label>
+      <Textarea
+        id="Review.Comment.Label"
+        rows={2}
         value={comment}
         disabled={!allowed || record.isPending}
         onChange={(event) => setComment(event.target.value)}
-        slotProps={{ htmlInput: { 'data-testid': 'Review.Comment' } }}
+        data-testid="Review.Comment"
       />
-      <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap' }}>
+      <div className="flex flex-wrap gap-2">
         <Button
-          variant="contained"
-          startIcon={<CheckCircleOutlineIcon />}
+          size="sm"
+          variant="primary"
           disabled={!allowed || record.isPending}
           onClick={() => submit('LGTM')}
           data-testid="Review.Lgtm"
         >
+          <Check aria-hidden className="size-3.5" />
           Looks good
         </Button>
         <Button
-          startIcon={<RateReviewOutlinedIcon />}
+          size="sm"
           disabled={!allowed || record.isPending}
           onClick={() => submit('CHANGES_REQUESTED')}
           data-testid="Review.RequestChanges"
         >
+          <MessageSquare aria-hidden className="size-3.5" />
           Request changes
         </Button>
-      </Stack>
+      </div>
       {/*
         In place, beside the review it is about. The 403 a caller can reach here is the one the
         disabled state already predicted; the 409 is the one it could not — somebody approved or
         sent the artifact back while this panel was open, which is ordinary rather than exceptional.
       */}
       {record.isError && (
-        <Alert severity="error" data-testid="Review.Error">
-          {describeError(record.error).body}
-        </Alert>
+        <Banner tone="bad" data-testid="Review.Error">
+          <span>{describeError(record.error).body}</span>
+        </Banner>
       )}
-    </Stack>
+    </div>
   );
 }
 
 function EarlierReviews({ reviews }: { reviews: Review[] }) {
   return (
-    <Box data-testid="Review.Earlier">
-      <Typography variant="caption" color="text.secondary">
+    <div data-testid="Review.Earlier">
+      <span className="block text-[11px] font-medium tracking-[.06em] text-ink-4 uppercase">
         Earlier reviews
-      </Typography>
-      <Stack sx={{ gap: 0.25, mt: 0.5 }}>
+      </span>
+      <div className="mt-1 flex flex-col gap-0.5">
         {reviews.map((review) => (
-          <Typography key={review.id} variant="body2" color="text.secondary">
+          <span key={review.id} className="text-[12.5px] text-ink-4">
             {reviewStateLabels[review.state]} · v{review.subjectVersionNo} ·{' '}
             {formatDateTime(review.createdAt)}
-          </Typography>
+          </span>
         ))}
-      </Stack>
-    </Box>
+      </div>
+    </div>
   );
 }

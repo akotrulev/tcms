@@ -1,27 +1,24 @@
+import { Link2 } from 'lucide-react';
+import { useState } from 'react';
+import { Link as RouterLink, useParams } from 'react-router-dom';
+import { useIngestion, useProject } from '../../api/queries';
+import type { IngestedOutcome, UnmatchedTest } from '../../api/types';
+import { DataRegion } from '../../components/DataRegion';
+import { Identifier } from '../../components/Identifier';
 import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Stack,
+  Badge,
+  Banner,
   Table,
   TableBody,
   TableCell,
   TableHead,
+  TableHeaderCell,
   TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
-import { useState } from 'react';
-import { Link as RouterLink, useParams } from 'react-router-dom';
-import { useIngestion, useProject } from '../../api/queries';
-import type { UnmatchedTest } from '../../api/types';
-import { DataRegion } from '../../components/DataRegion';
-import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+  type BadgeTone,
+} from '../../components/kit';
+import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
-import { ScrollX } from '../../components/ScrollX';
+import { Button } from '../../components/ui';
 import { formatDateTime } from '../../lib/format';
 import {
   ingestedOutcomeLabels,
@@ -79,7 +76,7 @@ export function IngestionJobPage() {
   const posted = job.data ? formatDateTime(job.data.createdAt) : '';
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId="Ingestion.Header"
         title={posted ? `Report posted ${posted}` : 'Posted report'}
@@ -92,20 +89,13 @@ export function IngestionJobPage() {
         subtitle="What this report matched, and the tests it could not place. Binding a test name here makes every later build find it."
         meta={
           job.data ? (
-            <Stack direction="row" sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Chip
-                size="small"
-                variant="outlined"
-                label={ingestionStatusLabels[job.data.status]}
-              />
-              <Chip
-                size="small"
-                variant="outlined"
-                label={ingestionFormatLabels[job.data.format]}
-              />
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                {job.data.matchedCount} matched · {job.data.unmatchedCount} unmatched
-              </Typography>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="plain">{ingestionStatusLabels[job.data.status]}</Badge>
+              <Badge tone="plain">{ingestionFormatLabels[job.data.format]}</Badge>
+              <span className="text-[13px] text-ink-3">
+                <span className="font-mono tabular-nums">{job.data.matchedCount}</span> matched ·{' '}
+                <span className="font-mono tabular-nums">{job.data.unmatchedCount}</span> unmatched
+              </span>
               {job.data.runId && job.data.runKey && (
                 <RouterLink
                   to={`/projects/${projectId}/runs/${job.data.runId}`}
@@ -122,12 +112,12 @@ export function IngestionJobPage() {
                 kept.
               */}
               <DownloadRawReportButton job={job.data} testId="Ingestion.DownloadReport" />
-            </Stack>
+            </div>
           ) : undefined
         }
       />
 
-      <Panel testId="Ingestion.Panel" dense>
+      <section data-testid="Ingestion.Panel">
         <DataRegion
           testId="Ingestion.Unmatched"
           state={{ ...job, refetch: () => void job.refetch() }}
@@ -139,7 +129,7 @@ export function IngestionJobPage() {
           }}
         >
           {(one) => (
-            <Box>
+            <div>
               {/*
                 A report that matched NOTHING is its own state and is worth saying out loud: no run
                 was opened, which is a designed outcome rather than a failure, and it is the shape
@@ -147,74 +137,70 @@ export function IngestionJobPage() {
                 integration works at all.
               */}
               {one.runId === null && (
-                <Alert severity="info" sx={{ mb: 2 }} data-testid="Ingestion.NoRun">
-                  Nothing in this report matched a case, so no run was opened — a run of zero cases
-                  would report itself complete. Bind these tests and post again.
-                </Alert>
+                <Banner tone="steel" className="mb-4" data-testid="Ingestion.NoRun">
+                  <span>
+                    Nothing in this report matched a case, so no run was opened — a run of zero
+                    cases would report itself complete. Bind these tests and post again.
+                  </span>
+                </Banner>
               )}
 
               {one.unmatched.length < one.unmatchedCount && (
-                <Alert severity="warning" sx={{ mb: 2 }} data-testid="Ingestion.Capped">
-                  Showing the first {one.unmatched.length} of {one.unmatchedCount} unmatched tests.
-                  Bind these and post the report again to see the rest.
-                </Alert>
+                <Banner tone="warn" className="mb-4" data-testid="Ingestion.Capped">
+                  <span>
+                    Showing the first {one.unmatched.length} of {one.unmatchedCount} unmatched
+                    tests. Bind these and post the report again to see the rest.
+                  </span>
+                </Banner>
               )}
 
-              <ScrollX>
-                <Table size="small" data-testid="Ingestion.UnmatchedGrid">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ color: 'text.secondary' }}>Test</TableCell>
-                      <TableCell sx={{ color: 'text.secondary', width: 130 }}>Reported</TableCell>
-                      <TableCell sx={{ width: 150 }} align="right" />
+              <Table data-testid="Ingestion.UnmatchedGrid">
+                <TableHead>
+                  <TableRow>
+                    <TableHeaderCell>Reported test</TableHeaderCell>
+                    <TableHeaderCell className="w-[130px]">Reported</TableHeaderCell>
+                    <TableHeaderCell align="right" className="w-[150px]" />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {one.unmatched.map((test) => (
+                    <TableRow key={test.normalizedName} data-testid="Ingestion.UnmatchedRow">
+                      <TableCell>
+                        <Identifier>{test.name}</Identifier>
+                      </TableCell>
+                      <TableCell>
+                        <Outcome outcome={test.outcome} />
+                      </TableCell>
+                      <TableCell align="right">
+                        {/*
+                          `case:edit`, disabled with the reason rather than hidden (§31). It is
+                          the same key that writes a case's automationKey, and Automation Service
+                          deliberately does not hold it — so a leaked CI token cannot re-point
+                          where anybody's results land.
+                        */}
+                        <PermissionGate projectId={projectId} permission="case:edit">
+                          {({ allowed, reason }) => (
+                            <Button
+                              size="sm"
+                              disabled={!allowed}
+                              title={allowed ? 'Say which case this test verifies' : reason}
+                              onClick={() => setBinding(test)}
+                              data-testid="Ingestion.Bind"
+                            >
+                              <Link2 aria-hidden className="size-3.5" />
+                              Bind
+                            </Button>
+                          )}
+                        </PermissionGate>
+                      </TableCell>
                     </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {one.unmatched.map((test) => (
-                      <TableRow key={test.normalizedName} data-testid="Ingestion.UnmatchedRow" hover>
-                        <TableCell>
-                          <Identifier>{test.name}</Identifier>
-                        </TableCell>
-                        <TableCell>
-                          <Outcome outcome={test.outcome} />
-                        </TableCell>
-                        <TableCell align="right">
-                          {/*
-                            `case:edit`, disabled with the reason rather than hidden (§31). It is
-                            the same key that writes a case's automationKey, and Automation Service
-                            deliberately does not hold it — so a leaked CI token cannot re-point
-                            where anybody's results land.
-                          */}
-                          <PermissionGate projectId={projectId} permission="case:edit">
-                            {({ allowed, reason }) => (
-                              <Tooltip
-                                title={allowed ? 'Say which case this test verifies' : reason}
-                              >
-                                <span>
-                                  <Button
-                                    size="small"
-                                    variant="outlined"
-                                    startIcon={<LinkOutlinedIcon />}
-                                    disabled={!allowed}
-                                    onClick={() => setBinding(test)}
-                                    data-testid="Ingestion.Bind"
-                                  >
-                                    Bind
-                                  </Button>
-                                </span>
-                              </Tooltip>
-                            )}
-                          </PermissionGate>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </ScrollX>
-            </Box>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </DataRegion>
-      </Panel>
+      </section>
 
       {binding && (
         <BindTestDialog
@@ -224,7 +210,7 @@ export function IngestionJobPage() {
           onClose={() => setBinding(null)}
         />
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -237,15 +223,13 @@ export function IngestionJobPage() {
  * than the thing under test. On the screen that shows what was *reported*, that distinction is the
  * whole point.
  */
+const outcomeTone = {
+  PASSED: 'passed',
+  FAILED: 'failed',
+  ERRORED: 'failed',
+  SKIPPED: 'skipped',
+} as const satisfies Record<IngestedOutcome, BadgeTone>;
+
 function Outcome({ outcome }: { outcome: UnmatchedTest['outcome'] }) {
-  const bad = outcome === 'FAILED' || outcome === 'ERRORED';
-  return (
-    <Typography
-      component="span"
-      variant="body2"
-      sx={{ color: bad ? 'var(--color-danger)' : 'text.secondary', fontWeight: bad ? 600 : 400 }}
-    >
-      {ingestedOutcomeLabels[outcome]}
-    </Typography>
-  );
+  return <Badge tone={outcomeTone[outcome]}>{ingestedOutcomeLabels[outcome]}</Badge>;
 }
