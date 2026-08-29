@@ -1,33 +1,38 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Checkbox,
-  Chip,
-  FormControlLabel,
-  Stack,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import CenterFocusStrongOutlinedIcon from '@mui/icons-material/CenterFocusStrongOutlined';
-import TableRowsOutlinedIcon from '@mui/icons-material/TableRowsOutlined';
-import VerticalSplitOutlinedIcon from '@mui/icons-material/VerticalSplitOutlined';
+import { Check, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { useAnnounce } from '../../a11y/useAnnounce';
 import { useCan } from '../../auth/useCan';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
-import type { CaseStatus, StepResult, TestExecution, TestExecutionSummary } from '../../api/types';
+import type {
+  CaseStatus,
+  StatusKind,
+  StepKeyword,
+  StepResult,
+  TestExecution,
+  TestExecutionSummary,
+} from '../../api/types';
 import { useExecution, useProject, useRun, useStatuses, useSubmitResult } from '../../api/queries';
+import { TopStripSlot } from '../../app/topStripSlot';
 import { DataRegion } from '../../components/DataRegion';
+import {
+  Badge,
+  Banner,
+  DocumentSurface,
+  DocumentTitle,
+  ProcedureLine,
+  type BadgeTone,
+  type ProcedureKeyword,
+} from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import { Button, Checkbox, Input, Textarea } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { toast } from '../../notifications/toast';
 import { DefectPanel } from './DefectPanel';
 import { StepEvidence } from './StepEvidence';
 import { StepDataView } from '../cases/StepDataCell';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { QuarantineChip, StatusChip } from '../../components/StatusChip';
 import { BlockedDialog } from './BlockedDialog';
@@ -36,14 +41,20 @@ import { ExecutionAssignee } from './ExecutionAssignee';
 import { ExecutionGrid } from './ExecutionGrid';
 import { ExecutionQueue } from './ExecutionQueue';
 import { durationSecondsField, formatDateTime, parseDurationSeconds } from '../../lib/format';
-import { isRunClosed, statusLabels, stepKeywordLabels } from '../../lib/labels';
+import { isRunClosed, statusLabels } from '../../lib/labels';
 import {
   EXECUTION_MODES,
   executionModeParam,
   parseExecutionMode,
   type ExecutionMode,
 } from './executionMode';
-import { matchNotesShortcut, matchShortcut, type ExecutionAction } from './executionKeys';
+import {
+  EXECUTION_SHORTCUTS,
+  isTypingTarget,
+  matchNotesShortcut,
+  matchShortcut,
+  type ExecutionAction,
+} from './executionKeys';
 import { orderedQueue } from './queueOrder';
 import { ShortcutOverlay } from './ShortcutOverlay';
 import { suggestedVerdict } from './suggestedVerdict';
@@ -65,6 +76,21 @@ import { suggestedVerdict } from './suggestedVerdict';
  * Since §100 the screen has three layouts over one queue — Focus, Split, Grid — chosen in the
  * URL. `executionMode.ts` carries what each is for; all three write the same result through the
  * same mutation, and none of them relaxes rule 1.
+ *
+ * <h3>007 T12 — the runner drawn as a document</h3>
+ *
+ * Ported against `docs/specs/assets/renders/03-execution.html`. Three of the render's four notes
+ * land here, and the fourth is recorded in the plan as blocked rather than half-built:
+ *
+ *   - **The procedure gets the reading width and the ink.** The steps are the document, at the
+ *     editor's own 74ch measure, with a verdict gutter beside each line: the current step at full
+ *     ink behind a steel edge, the ones already recorded ticked and quiet, the ones ahead legible
+ *     but dimmed. A tester reads ahead to know what is coming, so nothing is hidden.
+ *   - **The verdict is a number key.** `1`–`4` record the step the tester is on and move to the
+ *     next, and the digits are printed on that step's own marks rather than left in a help page.
+ *   - **A failure is answered in place, not in a dialog.** Marking a step Failed turns the rail's
+ *     recording section into the failure panel — the step it is about stays on screen and readable
+ *     while the description is typed, which a modal would have covered (UX#55).
  */
 export function ExecutionPage() {
   const { projectId = '', runId = '', executionId = '' } = useParams();
@@ -83,14 +109,19 @@ export function ExecutionPage() {
   const modeParam = executionModeParam(mode);
 
   /*
-    What arriving here announces — which case, and how far through the run. Raised from the header
-    on ARRIVAL rather than from `moveBy` on the keypress (§248), because the keypress's own
-    announcement was overwritten by the header's generic "page loaded" a moment later, every single
-    time: the sentence was written, shipped, and never heard. Announcing it here also covers
-    arriving from the rail or from a link, which the keyboard's version never did.
+    What arriving here announces — which case, and how far through the run. Raised on ARRIVAL
+    rather than from `moveBy` on the keypress (§248), because the keypress's own announcement was
+    overwritten by the generic "page loaded" a moment later, every single time: the sentence was
+    written, shipped, and never heard. Announcing it here also covers arriving from the rail or
+    from a link, which the keyboard's version never did.
 
-    Undefined until both reads land, so the header falls back to its own sentence rather than
-    announcing a position computed from an empty queue.
+    Undefined until both reads land, so the fallback sentence is used rather than a position
+    computed from an empty queue.
+
+    ~~`PageHeader` raised this from its `announcement` prop.~~ → **superseded by 007 T12**: this
+    screen has no page heading, for T11's reason — the case's own title is the document's subject
+    and repeating it above the rail's active item is design language rule 1's named failure. React
+    19 hoists a bare `<title>`, so the two things the header did that nothing else does survive it.
   */
   const arrivalQueue = orderedQueue(run.data?.executions ?? []);
   const arrivalAt = arrivalQueue.findIndex((candidate) => candidate.id === executionId);
@@ -99,6 +130,12 @@ export function ExecutionPage() {
       ? `Case ${arrivalAt + 1} of ${arrivalQueue.length}. `
         + `${execution.data.caseKey}, ${execution.data.caseTitle}.`
       : undefined;
+
+  const pageTitle = execution.data ? `${execution.data.caseKey} in this run` : 'Execution';
+  const announce = useAnnounce();
+  useEffect(() => {
+    announce(arrival ?? `${pageTitle} page loaded`);
+  }, [announce, arrival, pageTitle]);
 
   const setMode = (next: ExecutionMode) => {
     const params = new URLSearchParams(searchParams);
@@ -111,42 +148,67 @@ export function ExecutionPage() {
   };
 
   return (
-    <Box>
-      <PageHeader
-        testId="Execution.Header"
-        announcement={arrival}
-        title={execution.data?.caseTitle ?? 'Execution'}
-        documentTitle={execution.data ? `${execution.data.caseKey} in this run` : 'Execution'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test runs', to: `/projects/${projectId}/runs` },
-          { label: 'Run', to: `/projects/${projectId}/runs/${runId}` },
-          { label: execution.data?.caseKey ?? 'Execution' },
-        ]}
-        actions={<ModeSwitch mode={mode} onChange={setMode} />}
-        meta={
-          execution.data && (
+    <div className="flex min-h-full flex-col">
+      <title>{`${pageTitle} · TCMS`}</title>
+
+      {/*
+        THE CRUMB AND THE LENS ARE CHROME AND STAY UP. They render outside the region on purpose:
+        a failed or slow read must not take the only non-rail way back to the run with it, and a
+        tester whose case failed to load still needs the layout switch — the resilience rule that
+        a failure is scoped to the response-dependent subtree.
+      */}
+      <TopStripSlot>
+        <nav
+          aria-label="Breadcrumb"
+          data-testid="Execution.Breadcrumbs"
+          className="mr-auto hidden min-w-0 truncate text-[12.5px] text-ink-3 sm:block"
+        >
+          <RouterLink to={`/projects/${projectId}`} className="hover:underline">
+            {project.data?.name ?? 'Project'}
+          </RouterLink>
+          {' / '}
+          <RouterLink to={`/projects/${projectId}/runs`} className="hover:underline">
+            Test runs
+          </RouterLink>
+          {' / '}
+          <RouterLink to={`/projects/${projectId}/runs/${runId}`} className="hover:underline">
+            <span className="font-medium text-ink-2">{run.data?.key ?? 'Run'}</span>
+          </RouterLink>
+        </nav>
+      </TopStripSlot>
+
+      <TopStripSlot>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {execution.data && (
             <>
+              {arrivalAt >= 0 && (
+                <span className="text-[12px] text-ink-4">
+                  Case <b className="font-mono font-medium text-ink-2">{arrivalAt + 1}</b> of{' '}
+                  <b className="font-mono font-medium text-ink-2">{arrivalQueue.length}</b>
+                </span>
+              )}
               {/*
                 An execution has no display key of its own (plan §6t) — it is identified by the
                 case it ran and the run it belongs to. So the case key IS the subject identifier
                 here, and it links to the case. Showing "TE_1401" told a tester nothing; "TC-3"
                 is what they recognise and what they'd paste into a message.
               */}
-              <RouterLink to={`/projects/${projectId}/cases/${execution.data.caseId}`} data-testid="Execution.CaseLink">
+              <RouterLink
+                to={`/projects/${projectId}/cases/${execution.data.caseId}`}
+                data-testid="Execution.CaseLink"
+              >
                 <Identifier variant="strong">{execution.data.caseKey}</Identifier>
               </RouterLink>
-              <Tooltip title="This execution is recorded against this version of the case. Later edits do not change it.">
-                <Box>
-                  <Identifier variant="muted">v{execution.data.caseVersionNo}</Identifier>
-                </Box>
-              </Tooltip>
+              <span title="This execution is recorded against this version of the case. Later edits do not change it.">
+                <Identifier variant="muted">v{execution.data.caseVersionNo}</Identifier>
+              </span>
               {execution.data.status?.kind && <StatusChip kind={execution.data.status.kind} />}
               {execution.data.quarantined && <QuarantineChip testId="Execution.Quarantined" />}
             </>
-          )
-        }
-      />
+          )}
+          <ModeSwitch mode={mode} onChange={setMode} />
+        </div>
+      </TopStripSlot>
 
       <Workspace
         mode={mode}
@@ -171,7 +233,7 @@ export function ExecutionPage() {
           )}
         </DataRegion>
       </Workspace>
-    </Box>
+    </div>
   );
 }
 
@@ -237,7 +299,7 @@ function Workspace({
   }
 
   return (
-    <Stack direction="row" sx={{ alignItems: 'flex-start', gap: 0 }}>
+    <div className="flex min-w-0 flex-1 items-start">
       {mode === 'split' && (
         <ExecutionQueue
           executions={executions}
@@ -247,8 +309,8 @@ function Workspace({
           modeParam={modeParam}
         />
       )}
-      <Box sx={{ flex: 1, minWidth: 0, pl: mode === 'split' ? { xs: 0, lg: 3 } : 0 }}>{children}</Box>
-    </Stack>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
   );
 }
 
@@ -315,15 +377,10 @@ function GridBlockedDialog({
   );
 }
 
-/** Which layout, in the URL. Three segments rather than a menu: the set is small, fixed, and the
- *  tester switches between them often enough that a click to open a menu is a click too many. */
+/** Which layout, in the URL — the render's `.lens`. Three segments rather than a menu: the set is
+ *  small, fixed, and the tester switches between them often enough that a click to open a menu is
+ *  a click too many. */
 function ModeSwitch({ mode, onChange }: { mode: ExecutionMode; onChange: (next: ExecutionMode) => void }) {
-  const icons = {
-    focus: <CenterFocusStrongOutlinedIcon fontSize="small" />,
-    split: <VerticalSplitOutlinedIcon fontSize="small" />,
-    grid: <TableRowsOutlinedIcon fontSize="small" />,
-  } satisfies Record<ExecutionMode, ReactNode>;
-
   const hints = {
     focus: 'Focus — one case at a time, nothing else on screen',
     split: 'Split — the run’s cases beside the one you are running',
@@ -331,53 +388,121 @@ function ModeSwitch({ mode, onChange }: { mode: ExecutionMode; onChange: (next: 
   } satisfies Record<ExecutionMode, string>;
 
   return (
-    <Stack
-      direction="row"
-      role="group"
-      aria-label="Execution layout"
-      sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}
-    >
+    <div role="group" aria-label="Execution layout" className="inline-flex gap-0.5 rounded-md bg-white/4 p-0.5">
       {EXECUTION_MODES.map((option) => {
         const active = option === mode;
         return (
-          <Tooltip key={option} title={hints[option]}>
-            <Box
-              component="button"
-              type="button"
-              onClick={() => onChange(option)}
-              aria-pressed={active}
-              // Derived from the mode itself rather than a lookup table, so a fourth mode cannot
-              // silently share a locator with a third (`test-ids` rule 7).
-              data-testid={`Execution.Mode.${option}`}
-              sx={{
-                font: 'inherit',
-                fontSize: '0.75rem',
-                fontWeight: active ? 600 : 400,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 0.75,
-                px: 1.25,
-                height: 30,
-                cursor: 'pointer',
-                border: 'none',
-                borderLeft: '1px solid',
-                borderLeftColor: 'divider',
-                '&:first-of-type': { borderLeft: 'none' },
-                // Weight and background, not colour alone — the active-state rule the rail and
-                // the nav already follow.
-                bgcolor: active ? 'action.selected' : 'transparent',
-                color: active ? 'primary.main' : 'text.secondary',
-                textTransform: 'capitalize',
-              }}
-            >
-              {icons[option]}
-              {option}
-            </Box>
-          </Tooltip>
+          <button
+            key={option}
+            type="button"
+            title={hints[option]}
+            onClick={() => onChange(option)}
+            aria-pressed={active}
+            // Derived from the mode itself rather than a lookup table, so a fourth mode cannot
+            // silently share a locator with a third (`test-ids` rule 7).
+            data-testid={`Execution.Mode.${option}`}
+            className={cn(
+              'cursor-pointer rounded-[6px] px-2.5 py-1 text-[12px] capitalize',
+              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
+              // Weight and background, not colour alone — the active-state rule the rail and the
+              // nav already follow.
+              active ? 'bg-panel font-medium text-ink shadow-[0_1px_2px_rgb(0_0_0/40%)]' : 'text-ink-3 hover:text-ink',
+            )}
+          >
+            {option}
+          </button>
         );
       })}
-    </Stack>
+    </div>
   );
+}
+
+/** `.sec h3` from `renders/tcms.css` — one spelling of a rail section heading on this screen. */
+const SECTION_HEADING =
+  'm-0 mb-2.5 flex items-center gap-2 text-[11px] font-semibold tracking-[.08em] text-ink-3 uppercase';
+
+/**
+ * One `.sec` of the runner's rail.
+ *
+ * It replaces `PageHeader`'s `Panel` on this screen only. A panel is a titled box with a border of
+ * its own; a rail section is a heading and a rule, and stacking six panels 300px wide is what the
+ * render's note calls *everything that is not the current step failing to get out of the way*.
+ */
+function RailSection({
+  title,
+  aside,
+  testId,
+  className,
+  children,
+}: {
+  title: ReactNode;
+  aside?: ReactNode;
+  testId?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={cn('border-b border-white/8 px-4 py-3.5', className)} data-testid={testId}>
+      <h2 className={SECTION_HEADING}>
+        {title}
+        {aside && <span className="ml-auto font-mono tracking-normal normal-case">{aside}</span>}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+const KEYWORD = {
+  GIVEN: 'given',
+  WHEN: 'when',
+  THEN: 'then',
+  AND: 'and',
+  BUT: 'but',
+} as const satisfies Record<StepKeyword, ProcedureKeyword>;
+
+const VERDICT_KINDS = ['PASSED', 'FAILED', 'BLOCKED', 'SKIPPED'] as const;
+
+type VerdictKind = (typeof VERDICT_KINDS)[number];
+
+/** Every status kind's badge tone. `satisfies` so a new kind in the contract is a compile error
+ *  here rather than a silently grey badge. */
+const BADGE_TONE = {
+  PASSED: 'passed',
+  FAILED: 'failed',
+  BLOCKED: 'blocked',
+  SKIPPED: 'skipped',
+  RETEST: 'retest',
+  UNTESTED: 'untested',
+  WIP: 'steel',
+} as const satisfies Record<StatusKind, BadgeTone>;
+
+function badgeTone(kind: StatusKind): BadgeTone {
+  return BADGE_TONE[kind];
+}
+
+/**
+ * The number keys, and the one place on this screen that is a second source of key truth.
+ *
+ * `executionKeys.ts` is the map both the handler and the overlay read, and the reason it exists is
+ * that a shortcut written twice drifts. These four are not in it: they bind a **step** rather than
+ * the case verdict its four letters bind, and the file is outside 007 T12's list. They are
+ * therefore printed on the marks they operate — the render's own rule, *"printed on the buttons,
+ * not hidden in a help page"* — rather than in the overlay, which would claim the map holds them.
+ * Folding them into `EXECUTION_SHORTCUTS` needs that file, and is recorded in the plan as the
+ * follow-up it is.
+ */
+const STEP_VERDICT_KEYS = {
+  '1': 'PASSED',
+  '2': 'FAILED',
+  '3': 'BLOCKED',
+  '4': 'SKIPPED',
+} as const satisfies Record<string, VerdictKind>;
+
+/** The letter the overlay prints for a case verdict, read from the map rather than restated. */
+function verdictKey(kind: VerdictKind): string | undefined {
+  return EXECUTION_SHORTCUTS.find(
+    (shortcut) => shortcut.action.kind === 'verdict' && shortcut.action.verdict === kind,
+  )?.display;
 }
 
 function ExecutionForm({
@@ -412,8 +537,10 @@ function ExecutionForm({
   const run = useRun(projectId, runId);
   const frozen = run.data ? isRunClosed(run.data.status) : false;
 
+  const steps = execution.steps ?? [];
+
   const [stepResults, setStepResults] = useState<Record<string, string | null>>(() =>
-    Object.fromEntries((execution.steps ?? []).map((step) => [step.stepId ?? '', step.statusId ?? null])),
+    Object.fromEntries(steps.map((step) => [step.stepId ?? '', step.statusId ?? null])),
   );
   const [stepComments, setStepComments] = useState<Record<string, string>>({});
   const [comment, setComment] = useState(execution.comment ?? '');
@@ -450,7 +577,7 @@ function ExecutionForm({
     not need one — its writes are immediate single-field mutations with no unsaved buffer. This
     screen is the opposite shape.
   */
-  const markedSomeStep = (execution.steps ?? []).some(
+  const markedSomeStep = steps.some(
     (step) => stepResults[step.stepId ?? ''] !== (step.statusId ?? null),
   );
   const typedSomething =
@@ -465,6 +592,8 @@ function ExecutionForm({
   );
 
   const byKind = (kind: string) => statuses.find((s) => s.kind === kind);
+  const kindOfStatusId = (statusId: string | null) =>
+    statusId ? (statuses.find((s) => s.id === statusId)?.kind ?? null) : null;
   const unmetPreconditions = (execution.preconditions ?? []).filter((c) => !metPreconditions[c.id]);
 
   const duration = parseDurationSeconds(durationSeconds);
@@ -511,12 +640,38 @@ function ExecutionForm({
     }
   };
 
-  const allStepsMarked =
-    (execution.steps ?? []).length > 0 &&
-    (execution.steps ?? []).every((step) => stepResults[step.stepId ?? ''] !== null);
-  const anyStepFailed = (execution.steps ?? []).some(
+  const markedCount = steps.filter((step) => stepResults[step.stepId ?? ''] !== null).length;
+  const allStepsMarked = steps.length > 0 && markedCount === steps.length;
+  const anyStepFailed = steps.some(
     (step) => stepResults[step.stepId ?? ''] === byKind('FAILED')?.id,
   );
+
+  /*
+    Where the tester is: the first step with no verdict yet. It is what the number keys record, and
+    it is the only line drawn at full ink — the render's second note, and the reason the steps
+    ahead of it are dimmed rather than hidden. `-1` once every step is marked, which is a real
+    state and not an error: there is nothing left to record but the case's own verdict.
+  */
+  const currentStepIndex = steps.findIndex((step) => stepResults[step.stepId ?? ''] === null);
+
+  /*
+    The failure panel's subject — the first step marked Failed, and `null` when there is none.
+
+    The render puts this in the rail *in place of* the recording section rather than in a dialog:
+    the step the failure is about stays on screen and re-readable while its description is typed,
+    which is UX#55's *error near the problem*, and which a modal would have covered.
+  */
+  const failedStepIndex = steps.findIndex(
+    (step) => kindOfStatusId(stepResults[step.stepId ?? ''] ?? null) === 'FAILED',
+  );
+  const failedStep = failedStepIndex >= 0 ? steps[failedStepIndex] : null;
+  const failureDescription = failedStep ? (stepComments[failedStep.stepId ?? ''] ?? '') : '';
+  /* A failure without a description is refused, and says so — the render's note, and §258's rule
+     that a refusal path which cannot be seen is no refusal path. The sentence is rendered under
+     the field it is about and announced to the keyboard, never collected into a summary. */
+  const failureNeedsDescription = failedStep !== null && failureDescription.trim() === '';
+  const failureRefusal =
+    'A failure needs a description. This is what the next person reads, and what a defect is filed from.';
 
   /*
     The verdict the steps propose — a suggestion, never a decision. The rules and the argument
@@ -528,16 +683,13 @@ function ExecutionForm({
     about, and means a project that renames a status changes nothing in the logic.
   */
   const suggestedKind = suggestedVerdict(
-    (execution.steps ?? []).map((step) => {
-      const statusId = stepResults[step.stepId ?? ''];
-      return statuses.find((s) => s.id === statusId)?.kind ?? null;
-    }),
+    steps.map((step) => kindOfStatusId(stepResults[step.stepId ?? ''] ?? null)),
   );
 
   /*
     The keyboard (§248). Everything below is an accelerator for a control that is also on screen —
-    the verdict buttons, the Previous/Next pair, the notes field, the shortcuts button — because a
-    shortcut that is the ONLY route to something is not a shortcut.
+    the verdict buttons, the step marks, the Previous/Next pair, the notes field, the shortcuts
+    button — because a shortcut that is the ONLY route to something is not a shortcut.
   */
   const announce = useAnnounce();
   const gate = useCan(projectId);
@@ -564,9 +716,8 @@ function ExecutionForm({
 
     So a move is REFUSED while there is unsaved work rather than confirmed — this repo has no
     shared confirm dialog, and inventing one here would be new machinery guarding one control. The
-    buttons carry the reason in a tooltip (§31, disable-don't-hide) and the keyboard announces the
-    same sentence. `§248 KB-9` asks the live pass whether that is too strict; it is a judgement no
-    file can settle.
+    buttons carry the reason in a `title` and the keyboard announces the same sentence. `§248 KB-9`
+    asks the live pass whether that is too strict; it is a judgement no file can settle.
   */
   const unsavedWork = markedSomeStep || typedSomething || untickedAPrecondition;
   const moveRefusal = unsavedWork
@@ -585,10 +736,40 @@ function ExecutionForm({
       return;
     }
     const suffix = modeParam ? `?mode=${modeParam}` : '';
-    // The arrival announcement belongs to the destination and is raised by PageHeader — see
+    // The arrival announcement belongs to the destination and is raised on arrival — see
     // `arrival` above. Announcing here as well was the defect: this sentence was replaced by the
-    // header's a moment later, so the progress it carries never reached anybody.
+    // destination's a moment later, so the progress it carries never reached anybody.
     navigate(`/projects/${projectId}/runs/${runId}/executions/${target.id}${suffix}`);
+  };
+
+  const setStepVerdict = (stepId: string, statusId: string | null) =>
+    setStepResults((previous) => ({ ...previous, [stepId]: statusId }));
+
+  /**
+   * A number key: record the step the tester is on, and move to the next one.
+   *
+   * Refused on a frozen run for the same reason the verdict buttons are disabled there — a mark
+   * that can never be saved is a control that appears to work. Every other refusal the case
+   * verdict carries is absent on purpose: marking a step writes nothing, so neither the result
+   * permission nor an unreadable duration has any say over it.
+   */
+  const markCurrentStep = (verdict: VerdictKind) => {
+    if (frozen) {
+      announce('This run has ended, so its results can no longer change.');
+      return;
+    }
+    if (currentStepIndex < 0) {
+      announce(
+        steps.length === 0
+          ? 'This version has no steps. Record the overall result instead.'
+          : 'Every step is marked. Record the case result.',
+      );
+      return;
+    }
+    const status = byKind(verdict);
+    if (!status) return;
+    setStepVerdict(steps[currentStepIndex].stepId ?? '', status.id);
+    announce(`Step ${currentStepIndex + 1} marked ${statusLabels[verdict]}.`);
   };
 
   /**
@@ -619,7 +800,7 @@ function ExecutionForm({
       return;
     }
 
-    // A verdict, and the four gates the buttons already carry, in the same order.
+    // A verdict, and the gates the buttons already carry, in the same order.
     if (frozen) {
       announce('This run has ended, so its results can no longer change.');
       return;
@@ -639,6 +820,10 @@ function ExecutionForm({
       // `executionKeys.ts` and this file's own header for the rule.
       setBlockedDialog(true);
       announce('Blocked. Say which precondition did not hold.');
+      return;
+    }
+    if (failureNeedsDescription) {
+      announce(failureRefusal);
       return;
     }
     const status = byKind(action.verdict);
@@ -665,6 +850,17 @@ function ExecutionForm({
   */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const stepVerdict =
+        !event.ctrlKey && !event.metaKey && !event.altKey && !isTypingTarget(event.target)
+          ? STEP_VERDICT_KEYS[event.key as keyof typeof STEP_VERDICT_KEYS]
+          : undefined;
+      if (stepVerdict) {
+        // Only after a match, exactly as below: an unbound key, or one typed into a box, must
+        // reach the page untouched.
+        event.preventDefault();
+        markCurrentStep(stepVerdict);
+        return;
+      }
       const shortcut = matchShortcut(event);
       if (!shortcut) return;
       // Only after a match: an unbound key, or one typed into a box, must reach the page
@@ -677,438 +873,455 @@ function ExecutionForm({
   });
 
   return (
-    <Stack sx={{ gap: 3 }}>
-      {conflict && (
-        <Alert
-          severity="warning"
-          role="alert"
-          data-testid="Execution.Conflict"
-          action={
-            <Button size="small" color="warning" onClick={() => window.location.reload()}>
-              Reload
-            </Button>
-          }
-        >
-          <Typography variant="body2">{conflict}</Typography>
-        </Alert>
-      )}
+    <div className="flex min-w-0 flex-1 flex-col lg:flex-row">
+      {/*
+        THE DOCUMENT COLUMN — `renders/03-execution.html` frame A. The tester is reading a
+        procedure, so it gets the case editor's own 74ch measure and the same ink: what a case
+        looks like when it is written is what it looks like when it is run.
+      */}
+      <DocumentSurface measure="procedure" className="min-w-0 flex-1">
+        {conflict && (
+          <div role="alert" className="mb-4">
+            <Banner tone="warn" data-testid="Execution.Conflict">
+              <span className="flex w-full flex-wrap items-center gap-2">
+                <span className="flex-1">{conflict}</span>
+                <Button size="sm" onClick={() => window.location.reload()}>
+                  Reload
+                </Button>
+              </span>
+            </Banner>
+          </div>
+        )}
 
-      {execution.status && (
-        <Alert severity="info" data-testid="Execution.AlreadyRecorded">
-          <Typography variant="body2">
-            A result was already recorded here — {execution.status.name} by{' '}
-            {execution.executedBy?.displayName ?? 'CI'} on {formatDateTime(execution.executedAt)}. Saving
-            again amends it and is kept in the audit trail.
-          </Typography>
-        </Alert>
-      )}
+        {execution.status && (
+          <Banner tone="steel" data-testid="Execution.AlreadyRecorded" className="mb-4">
+            <span>
+              A result was already recorded here — {execution.status.name} by{' '}
+              {execution.executedBy?.displayName ?? 'CI'} on {formatDateTime(execution.executedAt)}.
+              Saving again amends it and is kept in the audit trail.
+            </span>
+          </Banner>
+        )}
 
-      <Stack direction={{ xs: 'column', lg: 'row' }} sx={{ gap: 3, alignItems: 'flex-start' }}>
-        <Stack sx={{ gap: 3, flex: 1, minWidth: 0, width: '100%' }}>
-          {/*
-            The precondition checklist. Unticking one is how a tester says "the environment
-            wasn't right", and that is precisely the information the Blocked result needs.
-          */}
-          {(execution.preconditions ?? []).length > 0 && (
-            <Panel
-              title="Before you start"
-              testId="Execution.Preconditions"
-              actions={
-                unmetPreconditions.length > 0 && (
-                  <Chip
-                    size="small"
-                    label={`${unmetPreconditions.length} not met`}
-                    data-testid="Execution.Preconditions.UnmetCount"
-                    sx={{
-                      bgcolor: 'transparent',
-                      color: 'var(--color-blocked)',
-                      border: '1px solid color-mix(in srgb, var(--color-blocked) 45%, transparent)',
-                    }}
-                  />
-                )
-              }
-            >
-              <Stack sx={{ gap: 1.5 }}>
-                {(execution.preconditions ?? []).map((condition) => (
-                  <Box key={condition.id} data-testid="Execution.Preconditions.Item">
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          size="small"
-                          checked={metPreconditions[condition.id] ?? false}
-                          onChange={(event) =>
-                            setMetPreconditions((previous) => ({
-                              ...previous,
-                              [condition.id]: event.target.checked,
-                            }))
-                          }
-                          data-testid="Execution.Preconditions.Checkbox"
-                        />
+        {/*
+          The precondition checklist, drawn as the render's *Before you start* banner rather than
+          as a titled panel. Unticking one is how a tester says "the environment wasn't right", and
+          that is precisely the information the Blocked result needs — so the ticks stay real
+          controls inside it (UX#117: what looks like a summary must not secretly be a form, and
+          what is a form must look like one).
+        */}
+        {(execution.preconditions ?? []).length > 0 && (
+          <Banner tone="neutral" data-testid="Execution.Preconditions" className="mb-5">
+            <div className="min-w-0 flex-1">
+            <div className="flex w-full items-center gap-2">
+              <b className="text-[12.5px] font-medium text-ink">Before you start</b>
+              {unmetPreconditions.length > 0 && (
+                <Badge tone="blocked" data-testid="Execution.Preconditions.UnmetCount">
+                  {unmetPreconditions.length} not met
+                </Badge>
+              )}
+            </div>
+            <ul className="m-0 mt-2 flex w-full list-none flex-col gap-2 p-0">
+              {(execution.preconditions ?? []).map((condition) => (
+                <li key={condition.id} data-testid="Execution.Preconditions.Item">
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id={`Execution.Precondition.${condition.id}`}
+                      checked={metPreconditions[condition.id] ?? false}
+                      onCheckedChange={(checked) =>
+                        setMetPreconditions((previous) => ({
+                          ...previous,
+                          [condition.id]: checked === true,
+                        }))
                       }
-                      label={
-                        <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            {condition.title}
-                          </Typography>
-                          {condition.inherited && (
-                            <Chip
-                              size="small"
-                              label={`from ${condition.inheritedFrom}`}
-                              sx={{
-                                bgcolor: 'transparent',
-                                color: 'var(--color-info)',
-                                border: '1px solid color-mix(in srgb, var(--color-info) 45%, transparent)',
-                              }}
-                            />
-                          )}
-                        </Stack>
-                      }
+                      data-testid="Execution.Preconditions.Checkbox"
+                      aria-label={condition.title}
+                      className="mt-0.5"
                     />
-                    <Stack component="ol" sx={{ m: 0, pl: 5.5, gap: 0.25 }}>
-                      {condition.body.map((line, i) => (
-                        <Box component="li" key={`${condition.id}-${i}`}>
-                          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                            {line}
-                          </Typography>
-                        </Box>
-                      ))}
-                    </Stack>
-                  </Box>
-                ))}
-              </Stack>
-            </Panel>
-          )}
-
-          <Panel
-            title="Steps"
-            testId="Execution.Steps"
-            actions={
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                {allStepsMarked ? 'All steps marked' : 'Mark each step as you go'}
-              </Typography>
-            }
-          >
-            {(execution.steps ?? []).length === 0 ? (
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                {/*
-                  §255 removed the other half of this sentence, which said "structured" and meant
-                  "the case is Gherkin, so there is nothing to tick". A case is step rows in either
-                  lens now, so the only version of the pinned snapshot with no rows is one written
-                  before the backfill reached it — and that is not something the tester can act on
-                  beyond recording the overall result, which is what this says.
-                */}
-                The version being executed has no steps — record the overall result below.
-              </Typography>
-            ) : (
-              <Stack sx={{ gap: 2 }}>
-                {(execution.steps ?? []).map((step, index) => (
-                  <StepRow
-                    key={step.stepId ?? index}
-                    step={step}
-                    index={index}
-                    statuses={statuses}
-                    value={stepResults[step.stepId ?? ''] ?? null}
-                    comment={stepComments[step.stepId ?? ''] ?? ''}
-                    onChange={(statusId) =>
-                      setStepResults((previous) => ({ ...previous, [step.stepId ?? '']: statusId }))
-                    }
-                    onComment={(text) =>
-                      setStepComments((previous) => ({ ...previous, [step.stepId ?? '']: text }))
-                    }
-                    projectId={projectId}
-                    runId={runId}
-                    executionId={execution.id}
-                    frozen={frozen}
-                  />
-                ))}
-              </Stack>
-            )}
-          </Panel>
-
-          <Panel title="Notes" testId="Execution.Notes">
-            <Stack spacing={2}>
-              <TextField
-                label="What happened"
-                fullWidth
-                multiline
-                minRows={3}
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-                /*
-                  The one binding that must fire while a text field has focus, which is why it has
-                  its own scope in the map and its own matcher. Handled here rather than in the
-                  screen listener because that listener refuses typing targets on purpose — asking
-                  it to make an exception would be a hole in the guard this whole feature is about.
-
-                  `stopPropagation`, so Escape here does not also close a dialog open above the
-                  form.
-                */
-                onKeyDown={(event) => {
-                  const shortcut = matchNotesShortcut(event);
-                  if (!shortcut) return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  runShortcutAction(shortcut.action);
-                }}
-                helperText="Anything the next reader needs — an error message, the data you used, what you tried."
-                // `inputRef`, not a `ref` smuggled through `slotProps.htmlInput`: this field is
-                // `multiline`, so the node `n` must focus is the textarea MUI renders inside, and
-                // `inputRef` is the documented handle on exactly that element.
-                inputRef={commentRef}
-                slotProps={{ htmlInput: { 'data-testid': 'Execution.CommentField' } }}
-              />
-              {/* Seconds here, milliseconds on the wire — `lib/format.ts` owns the conversion.
-                  Beside the note rather than beside the verdict buttons: how long it took is part
-                  of describing the run, and a control on the verdict row would read as something
-                  the tester must fill in before they may record anything. */}
-              <TextField
-                label="How long it took (seconds)"
-                type="number"
-                sx={{ maxWidth: 260 }}
-                value={durationSeconds}
-                onChange={(event) => setDurationSeconds(event.target.value)}
-                error={durationIsNonsense}
-                helperText={
-                  durationIsNonsense
-                    ? 'Give a number of seconds, or leave it empty.'
-                    : 'Optional. Leave it empty if you did not time this run — an empty box clears a duration that was there.'
-                }
-                slotProps={{
-                  htmlInput: { min: 0, step: 'any', 'data-testid': 'Execution.DurationField' },
-                }}
-              />
-            </Stack>
-          </Panel>
-
-          {/* Below Notes rather than beside the result buttons: attaching a screenshot is part of
-              describing what happened, not part of choosing the verdict. */}
-          <EvidencePanel
-            projectId={projectId}
-            runId={runId}
-            executionId={execution.id}
-            evidence={execution.evidence}
-            frozen={frozen}
-          />
-
-          {/* Below Evidence: linking a defect is what a tester does AFTER describing the failure
-              and attaching the proof of it, and it is the one control here that writes somewhere
-              else's record into this one. */}
-          <DefectPanel
-            projectId={projectId}
-            runId={runId}
-            executionId={execution.id}
-            defects={execution.defects}
-            frozen={frozen}
-            /*
-              What a filed defect would say (004 Phase 3), composed here because this is the screen
-              that knows it. Omitted while the run is still loading rather than filled with
-              placeholders: a defect report naming an empty environment is worse than a button that
-              appears a beat late.
-            */
-            filing={
-              run.data && {
-                caseKey: execution.caseKey,
-                caseTitle: execution.caseTitle,
-                runName: run.data.name,
-                environment: run.data.configuration?.name ?? null,
-                releaseVersion: execution.releaseVersion ?? run.data.releaseVersion,
-                verdict: execution.status?.name ?? null,
-                failedStep: firstUnpassedStep(execution, statuses),
-              }
-            }
-          />
-        </Stack>
-
-        {/* The result actions. Sticky, because on a long case the tester is at the bottom of
-            the steps when they're ready to record. */}
-        <Box sx={{ width: { xs: '100%', lg: 300 }, flexShrink: 0, position: { lg: 'sticky' }, top: { lg: 68 } }}>
-          <Panel title="Record the result" testId="Execution.Actions">
-            <Stack sx={{ gap: 1 }}>
-              {frozen && (
-                <Alert severity="info" sx={{ mb: 0.5 }} data-testid="Execution.RunClosed">
-                  <Typography variant="body2">
-                    This run has ended, so its results can no longer change. A test lead can reopen
-                    it from the run page.
-                  </Typography>
-                </Alert>
-              )}
-
-              {/*
-                Replaces a bare "A step is marked failed." alert. That sentence stated a fact the
-                tester had just entered themselves and asked nothing of them; this names the
-                verdict the marks point at and leaves every button live (see `suggestedKind`).
-              */}
-              {suggestedKind && (
-                <Typography
-                  variant="caption"
-                  sx={{ color: 'text.secondary', mb: 0.5 }}
-                  data-testid="Execution.SuggestedVerdict"
-                >
-                  {anyStepFailed
-                    ? `A step failed, so the steps point at ${statusLabels[suggestedKind]}.`
-                    : `Every step is marked, and they point at ${statusLabels[suggestedKind]}.`}{' '}
-                  Record whichever verdict is right.
-                </Typography>
-              )}
-
-              {(['PASSED', 'FAILED', 'BLOCKED', 'SKIPPED'] as const).map((kind) => {
-                const status = byKind(kind);
-                if (!status) return null;
-                const suggested = kind === suggestedKind;
-
-                // Blocked goes through a dialog that requires naming the unmet precondition;
-                // everything else records directly.
-                const isBlocked = kind === 'BLOCKED';
-                return (
-                  // All four verdicts ride ONE permission, but WHICH one depends on the row: a
-                  // first result needs `result:submit`, and changing one that is already there
-                  // needs `result:amend` — a separate key, held by Test Engineer since V52 and
-                  // still separately grantable. The server decides the same way, so the disabled
-                  // state and the refusal cannot disagree; gating both on `result:submit` would
-                  // show a caller holding only that key four enabled buttons, every one of which
-                  // 403s.
-                  //
-                  // Gated per button rather than around the group so each keeps its own
-                  // `data-testid` and its own tooltip anchor.
-                  <PermissionGate
-                    key={kind}
-                    projectId={projectId}
-                    permission={execution.status ? 'result:amend' : 'result:submit'}
-                  >
-                    {({ allowed }) => (
-                      <Button
-                        variant={kind === 'PASSED' ? 'contained' : 'outlined'}
-                        fullWidth
-                        // `durationIsNonsense` joins the three: the duration is sent on every
-                        // save, so recording with unreadable text in that box would quietly
-                        // clear it rather than refuse. The field carries the sentence saying so.
-                        disabled={!allowed || submit.isPending || frozen || durationIsNonsense}
-                        onClick={() => (isBlocked ? setBlockedDialog(true) : void record(status.id))}
-                        data-testid={`Execution.Action.${kind}`}
-                        sx={{
-                          justifyContent: 'flex-start',
-                          ...(kind === 'PASSED'
-                            ? { bgcolor: 'var(--color-passed)', '&:hover': { bgcolor: 'var(--color-passed)', filter: 'brightness(0.92)' } }
-                            : {
-                                color: `var(--color-${kind.toLowerCase()})`,
-                                borderColor: `color-mix(in srgb, var(--color-${kind.toLowerCase()}) 45%, transparent)`,
-                              }),
-                          // The suggestion is a weight, not a state: a thicker border on the
-                          // verdict the steps point at. Deliberately NOT a colour change, a
-                          // disabled sibling or a preselection — the tester's judgement outranks
-                          // the arithmetic, and every other verdict stays exactly as clickable.
-                          ...(suggested && {
-                            borderWidth: 2,
-                            borderStyle: 'solid',
-                            borderColor: `var(--color-${kind.toLowerCase()})`,
-                          }),
-                        }}
-                      >
-                        {submit.isPending ? 'Saving…' : statusLabels[kind]}
-                        {suggested && (
-                          <Typography
-                            component="span"
-                            variant="caption"
-                            sx={{ ml: 'auto', pl: 1, opacity: 0.75, textTransform: 'none' }}
-                          >
-                            suggested
-                          </Typography>
-                        )}
-                      </Button>
-                    )}
-                  </PermissionGate>
-                );
-              })}
-
-              {/*
-                The visible half of `j` and `k`. Every shortcut on this screen has one — an
-                accelerator is a second route to something, never the only route to it — and this
-                pair matters most: Focus mode has no queue rail at all, and Split drops the rail
-                below `lg`. Without these two buttons, "next case" would be keyboard-only on the
-                narrowest screen, which is the one most likely to be a tablet on a test bench.
-
-                The `Box` inside each `Tooltip` is not decoration: MUI puts `pointer-events: none`
-                on a disabled button, so a tooltip wrapped directly around one greys out and
-                explains nothing — the trap `PermissionGate.tsx` documents and solves the same way.
-              */}
-              <Stack direction="row" sx={{ gap: 1, mt: 1 }}>
-                <Tooltip title={moveRefusal ?? (position <= 0 ? 'This is the first case in the run.' : 'Previous case (K)')}>
-                  <Box sx={{ flex: 1 }}>
-                    <Button
-                      fullWidth
-                      size="small"
-                      disabled={position <= 0 || !!moveRefusal}
-                      onClick={() => moveBy(-1)}
-                      data-testid="Execution.Nav.Previous"
+                    <label
+                      htmlFor={`Execution.Precondition.${condition.id}`}
+                      className="flex cursor-pointer flex-wrap items-center gap-2 text-[13px] font-medium text-ink"
                     >
-                      Previous case
-                    </Button>
-                  </Box>
-                </Tooltip>
-                <Tooltip
-                  title={
-                    moveRefusal ??
-                    (position < 0 || position >= queue.length - 1
-                      ? 'This is the last case in the run.'
-                      : 'Next case (J)')
-                  }
-                >
-                  <Box sx={{ flex: 1 }}>
-                    <Button
-                      fullWidth
-                      size="small"
-                      disabled={position < 0 || position >= queue.length - 1 || !!moveRefusal}
-                      onClick={() => moveBy(1)}
-                      data-testid="Execution.Nav.Next"
-                    >
-                      Next case
-                    </Button>
-                  </Box>
-                </Tooltip>
-              </Stack>
+                      {condition.title}
+                      {condition.inherited && <Badge tone="steel">from {condition.inheritedFrom}</Badge>}
+                    </label>
+                  </div>
+                  <ol className="m-0 mt-0.5 list-none pl-6 text-[12.5px] text-ink-4">
+                    {condition.body.map((line, i) => (
+                      <li key={`${condition.id}-${i}`}>{line}</li>
+                    ))}
+                  </ol>
+                </li>
+              ))}
+            </ul>
+            </div>
+          </Banner>
+        )}
 
-              <Button
-                onClick={() => navigate(`/projects/${projectId}/runs/${runId}`)}
-                data-testid="Execution.Cancel"
-                sx={{ mt: 1 }}
-              >
-                Back to the run
-              </Button>
+        <DocumentTitle>{execution.caseTitle}</DocumentTitle>
 
+        <div data-testid="Execution.Steps">
+          {steps.length === 0 ? (
+            <p className="m-0 text-[13px] text-ink-4">
               {/*
-                The visible route to the help, and it is not optional: an overlay reachable only by
-                a keyboard shortcut is circular help for precisely the people who do not yet know
-                the shortcuts.
+                §255 removed the other half of this sentence, which said "structured" and meant
+                "the case is Gherkin, so there is nothing to tick". A case is step rows in either
+                lens now, so the only version of the pinned snapshot with no rows is one written
+                before the backfill reached it — and that is not something the tester can act on
+                beyond recording the overall result, which is what this says.
               */}
-              <Button
-                size="small"
-                onClick={() => setShortcutsOpen(true)}
-                data-testid="Execution.Shortcuts.Open"
-                sx={{ mt: 0.5 }}
-              >
-                Keyboard shortcuts (?)
-              </Button>
-            </Stack>
-          </Panel>
-
-          {/*
-            A4. A panel of its own below the verdicts rather than a row inside them: it is not part
-            of recording a result — a different key gates it (`run:execute`, not `result:*`), it
-            writes a different column, and a control mixed into that stack would read as a fifth
-            thing to do before saving.
-          */}
-          <Box sx={{ mt: 3 }}>
-            <Panel title="Assignment" testId="Execution.AssignmentPanel">
-              <ExecutionAssignee
+              The version being executed has no steps — record the overall result below.
+            </p>
+          ) : (
+            steps.map((step, index) => (
+              <StepLine
+                key={step.stepId ?? index}
+                step={step}
+                index={index}
+                statuses={statuses}
+                value={stepResults[step.stepId ?? ''] ?? null}
+                current={index === currentStepIndex}
+                frozen={frozen}
+                onChange={(statusId) => setStepVerdict(step.stepId ?? '', statusId)}
                 projectId={projectId}
                 runId={runId}
-                execution={execution}
-                frozen={frozen}
+                executionId={execution.id}
               />
-            </Panel>
-          </Box>
-        </Box>
-      </Stack>
+            ))
+          )}
+        </div>
+
+        {/*
+          The render's footer strip, kept inside the document because the shell's own footer is not
+          this screen's to write into. It is where the number keys are printed for a reader who has
+          not yet noticed them on the current step.
+        */}
+        {steps.length > 0 && (
+          <p className="mt-5 flex flex-wrap items-center gap-3 border-t border-white/8 pt-3 text-[12px] text-ink-4">
+            <span>
+              Recorded{' '}
+              <b className="font-medium text-ink-3">
+                {markedCount} of {steps.length} steps
+              </b>
+            </span>
+            <span className="ml-auto font-mono text-[11px]">1–4 verdict · J/K case · N notes · ? help</span>
+          </p>
+        )}
+      </DocumentSurface>
+
+      {/* THE RAIL — the render's right `.side`: record, describe, attach, assign. */}
+      <aside className="w-full shrink-0 border-white/8 bg-panel lg:w-[300px] lg:border-l">
+        <RailSection
+          title={failedStep ? `Failed at step ${failedStepIndex + 1}` : 'Record the result'}
+          testId="Execution.Actions"
+          className={failedStep ? 'bg-[color-mix(in_oklab,var(--color-failed)_6%,transparent)]' : undefined}
+        >
+          {frozen && (
+            <Banner tone="warn" data-testid="Execution.RunClosed" className="mb-2.5">
+              <span>
+                This run has ended, so its results can no longer change. A test lead can reopen it
+                from the run page.
+              </span>
+            </Banner>
+          )}
+
+          {/*
+            Replaces a bare "A step is marked failed." alert. That sentence stated a fact the
+            tester had just entered themselves and asked nothing of them; this names the
+            verdict the marks point at and leaves every button live (see `suggestedKind`).
+          */}
+          {suggestedKind && !failedStep && (
+            <p className="m-0 mb-2.5 text-[12px] text-ink-4" data-testid="Execution.SuggestedVerdict">
+              {anyStepFailed
+                ? `A step failed, so the steps point at ${statusLabels[suggestedKind]}.`
+                : `Every step is marked, and they point at ${statusLabels[suggestedKind]}.`}{' '}
+              Record whichever verdict is right.
+            </p>
+          )}
+
+          {/* The render's `.verdicts` — four buttons in one row, each printing its own key. */}
+          <div className="flex gap-[7px]">
+            {VERDICT_KINDS.map((kind) => {
+              const status = byKind(kind);
+              if (!status) return null;
+              const suggested = kind === suggestedKind;
+              const lit = failedStep !== null && kind === 'FAILED';
+
+              // Blocked goes through a dialog that requires naming the unmet precondition;
+              // everything else records directly.
+              const isBlocked = kind === 'BLOCKED';
+              return (
+                // All four verdicts ride ONE permission, but WHICH one depends on the row: a
+                // first result needs `result:submit`, and changing one that is already there
+                // needs `result:amend` — a separate key, held by Test Engineer since V52 and
+                // still separately grantable. The server decides the same way, so the disabled
+                // state and the refusal cannot disagree; gating both on `result:submit` would
+                // show a caller holding only that key four enabled buttons, every one of which
+                // 403s.
+                //
+                // Gated per button rather than around the group so each keeps its own
+                // `data-testid` and its own title.
+                <PermissionGate
+                  key={kind}
+                  projectId={projectId}
+                  permission={execution.status ? 'result:amend' : 'result:submit'}
+                >
+                  {({ allowed }) => (
+                    <button
+                      type="button"
+                      // `durationIsNonsense` joins the three: the duration is sent on every
+                      // save, so recording with unreadable text in that box would quietly
+                      // clear it rather than refuse. The field carries the sentence saying so.
+                      //
+                      // `failureNeedsDescription` is the fourth, and it is the render's refusal:
+                      // a failed step whose description is empty cannot be recorded, and the
+                      // sentence why sits under the box it is about.
+                      disabled={
+                        !allowed
+                        || submit.isPending
+                        || frozen
+                        || durationIsNonsense
+                        || (failureNeedsDescription && !isBlocked)
+                      }
+                      onClick={() => (isBlocked ? setBlockedDialog(true) : void record(status.id))}
+                      data-testid={`Execution.Action.${kind}`}
+                      style={
+                        lit || suggested
+                          ? {
+                              color: `var(--color-${kind.toLowerCase()})`,
+                              borderColor: `color-mix(in oklab, var(--color-${kind.toLowerCase()}) 45%, transparent)`,
+                              backgroundColor: lit
+                                ? `color-mix(in oklab, var(--color-${kind.toLowerCase()}) 13%, transparent)`
+                                : undefined,
+                            }
+                          : undefined
+                      }
+                      className={cn(
+                        'flex-1 cursor-pointer rounded-md border border-white/8 px-1.5 py-2 text-center',
+                        'text-[12.5px] font-medium text-ink-2 hover:border-white/14 hover:bg-white/4',
+                        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
+                        'disabled:cursor-not-allowed disabled:opacity-45',
+                        // The suggestion is a weight, not a state: a heavier border on the verdict
+                        // the steps point at. Deliberately NOT a colour change, a disabled sibling
+                        // or a preselection — the tester's judgement outranks the arithmetic, and
+                        // every other verdict stays exactly as clickable.
+                        suggested && 'border-2',
+                      )}
+                    >
+                      {submit.isPending ? 'Saving…' : statusLabels[kind]}
+                      <span className="mt-[3px] block font-mono text-[10px] text-ink-4">
+                        {verdictKey(kind)}
+                      </span>
+                    </button>
+                  )}
+                </PermissionGate>
+              );
+            })}
+          </div>
+
+          {failedStep ? (
+            <div className="mt-3">
+              <Field
+                label="What actually happened"
+                htmlFor="Execution.FailureDescription"
+                error={failureNeedsDescription ? failureRefusal : undefined}
+                help="This travels with the step, not with the case, so the next reader finds it where it happened."
+              >
+                <Textarea
+                  id="Execution.FailureDescription"
+                  rows={4}
+                  value={failureDescription}
+                  onChange={(event) =>
+                    setStepComments((previous) => ({
+                      ...previous,
+                      [failedStep.stepId ?? '']: event.target.value,
+                    }))
+                  }
+                  data-testid="Execution.Steps.Row.CommentField"
+                />
+              </Field>
+            </div>
+          ) : (
+            <p className="m-0 mt-2.5 text-[12px] leading-[1.55] text-ink-4">
+              {allStepsMarked
+                ? 'Every step is marked. Recording the case result closes it and returns to the run.'
+                : 'Press 1–4 to record the step you are on. The case result below is what the run counts.'}
+            </p>
+          )}
+
+          {/* Seconds here, milliseconds on the wire — `lib/format.ts` owns the conversion. */}
+          <div className="mt-3">
+            <Field
+              label="How long it took"
+              htmlFor="Execution.Duration"
+              error={durationIsNonsense ? 'Give a number of seconds, or leave it empty.' : undefined}
+              help="Optional. Leave it empty if you did not time this run — an empty box clears a duration that was there."
+            >
+              <Input
+                id="Execution.Duration"
+                type="number"
+                min={0}
+                step="any"
+                value={durationSeconds}
+                onChange={(event) => setDurationSeconds(event.target.value)}
+                data-testid="Execution.DurationField"
+              />
+            </Field>
+          </div>
+
+          {/*
+            The visible half of `j` and `k`. Every shortcut on this screen has one — an
+            accelerator is a second route to something, never the only route to it — and this
+            pair matters most: Focus mode has no queue rail at all, and Split drops the rail
+            below `lg`. Without these two buttons, "next case" would be keyboard-only on the
+            narrowest screen, which is the one most likely to be a tablet on a test bench.
+
+            ~~The `Box` inside each `Tooltip` is not decoration: MUI puts `pointer-events: none` on
+            a disabled button, so a tooltip wrapped directly around one greys out and explains
+            nothing.~~ → **superseded by 007 T12**: the hint is a native `title` on a wrapping
+            `<span>`, which a disabled button does not suppress.
+          */}
+          <div className="mt-3 flex gap-2">
+            <span
+              className="flex-1"
+              title={moveRefusal ?? (position <= 0 ? 'This is the first case in the run.' : 'Previous case (K)')}
+            >
+              <Button
+                size="sm"
+                className="w-full"
+                disabled={position <= 0 || !!moveRefusal}
+                onClick={() => moveBy(-1)}
+                data-testid="Execution.Nav.Previous"
+              >
+                Previous case
+              </Button>
+            </span>
+            <span
+              className="flex-1"
+              title={
+                moveRefusal ??
+                (position < 0 || position >= queue.length - 1
+                  ? 'This is the last case in the run.'
+                  : 'Next case (J)')
+              }
+            >
+              <Button
+                size="sm"
+                className="w-full"
+                disabled={position < 0 || position >= queue.length - 1 || !!moveRefusal}
+                onClick={() => moveBy(1)}
+                data-testid="Execution.Nav.Next"
+              >
+                Next case
+              </Button>
+            </span>
+          </div>
+
+          <div className="mt-2 flex gap-2">
+            <Button
+              size="sm"
+              variant="quiet"
+              className="flex-1"
+              onClick={() => navigate(`/projects/${projectId}/runs/${runId}`)}
+              data-testid="Execution.Cancel"
+            >
+              Back to the run
+            </Button>
+            {/*
+              The visible route to the help, and it is not optional: an overlay reachable only by
+              a keyboard shortcut is circular help for precisely the people who do not yet know
+              the shortcuts.
+            */}
+            <Button
+              size="sm"
+              variant="quiet"
+              className="flex-1"
+              onClick={() => setShortcutsOpen(true)}
+              data-testid="Execution.Shortcuts.Open"
+            >
+              Shortcuts (?)
+            </Button>
+          </div>
+        </RailSection>
+
+        <RailSection title="Notes" testId="Execution.Notes">
+          <Textarea
+            aria-label="What happened"
+            rows={3}
+            placeholder="Anything the next person should know"
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            /*
+              The one binding that must fire while a text field has focus, which is why it has
+              its own scope in the map and its own matcher. Handled here rather than in the
+              screen listener because that listener refuses typing targets on purpose — asking
+              it to make an exception would be a hole in the guard this whole feature is about.
+
+              `stopPropagation`, so Escape here does not also close a dialog open above the form.
+            */
+            onKeyDown={(event) => {
+              const shortcut = matchNotesShortcut(event);
+              if (!shortcut) return;
+              event.preventDefault();
+              event.stopPropagation();
+              runShortcutAction(shortcut.action);
+            }}
+            ref={commentRef}
+            data-testid="Execution.CommentField"
+          />
+          <p className="m-0 mt-1 text-xs text-ink-4">
+            An error message, the data you used, what you tried.
+          </p>
+        </RailSection>
+
+        {/* Below Notes rather than beside the verdicts: attaching a screenshot is part of
+            describing what happened, not part of choosing the verdict. */}
+        <EvidencePanel
+          projectId={projectId}
+          runId={runId}
+          executionId={execution.id}
+          evidence={execution.evidence}
+          frozen={frozen}
+        />
+
+        {/* Below Evidence: linking a defect is what a tester does AFTER describing the failure
+            and attaching the proof of it, and it is the one control here that writes somewhere
+            else's record into this one. */}
+        <DefectPanel
+          projectId={projectId}
+          runId={runId}
+          executionId={execution.id}
+          defects={execution.defects}
+          frozen={frozen}
+          /*
+            What a filed defect would say (004 Phase 3), composed here because this is the screen
+            that knows it. Omitted while the run is still loading rather than filled with
+            placeholders: a defect report naming an empty environment is worse than a button that
+            appears a beat late.
+          */
+          filing={
+            run.data && {
+              caseKey: execution.caseKey,
+              caseTitle: execution.caseTitle,
+              runName: run.data.name,
+              environment: run.data.configuration?.name ?? null,
+              releaseVersion: execution.releaseVersion ?? run.data.releaseVersion,
+              verdict: execution.status?.name ?? null,
+              failedStep: firstUnpassedStep(execution, statuses),
+            }
+          }
+        />
+
+        {/*
+          A4. A section of its own below the verdicts rather than a row inside them: it is not part
+          of recording a result — a different key gates it (`run:execute`, not `result:*`), it
+          writes a different column, and a control mixed into that stack would read as a fifth
+          thing to do before saving.
+        */}
+        <RailSection title="Assignment" testId="Execution.AssignmentPanel">
+          <ExecutionAssignee projectId={projectId} runId={runId} execution={execution} frozen={frozen} />
+        </RailSection>
+      </aside>
 
       <ShortcutOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
@@ -1123,103 +1336,163 @@ function ExecutionForm({
           });
         }}
       />
-    </Stack>
+    </div>
   );
 }
 
-function StepRow({
+/**
+ * One line of the procedure, with the verdict gutter the runner adds to it.
+ *
+ * The keyword and the number stay `kit/ProcedureLine`'s: the component owns the word as well as
+ * the hue, and two spellings of *Given* on two screens is the drift design language rule 5 exists
+ * to stop. What this adds is the 26px medallion column beside it, which is the whole difference
+ * between reading a case and running one.
+ */
+function StepLine({
   step,
   index,
   statuses,
   value,
-  comment,
+  current,
+  frozen,
   onChange,
-  onComment,
   projectId,
   runId,
   executionId,
-  frozen,
 }: {
   step: StepResult;
   index: number;
   statuses: CaseStatus[];
   value: string | null;
-  comment: string;
+  current: boolean;
+  frozen: boolean;
   onChange: (statusId: string | null) => void;
-  onComment: (text: string) => void;
   projectId: string;
   runId: string;
   executionId: string;
-  frozen: boolean;
 }) {
-  const failedId = statuses.find((s) => s.kind === 'FAILED')?.id;
-  const isFailed = value === failedId;
+  const kind = value ? (statuses.find((s) => s.id === value)?.kind ?? null) : null;
+  const failed = kind === 'FAILED';
 
   return (
-    <Box
+    <div
       data-testid="Execution.Steps.Row"
-      sx={{
-        p: 1.5,
-        border: '1px solid',
-        borderColor: isFailed ? 'color-mix(in srgb, var(--color-failed) 45%, transparent)' : 'divider',
-        borderRadius: 1,
-      }}
+      style={
+        current || failed
+          ? { boxShadow: `inset 2px 0 0 var(--color-${failed ? 'failed' : 'steel'})` }
+          : undefined
+      }
+      className={cn(
+        'grid grid-cols-[26px_1fr] gap-3 rounded-[5px] py-[7px]',
+        // The current step is the only one at full ink, and the ones ahead stay legible — a
+        // tester reads ahead to know what is coming, so nothing here is hidden.
+        current && '-mx-3 bg-[color-mix(in_oklab,var(--color-steel)_12%,transparent)] px-3',
+        failed && 'bg-[color-mix(in_oklab,var(--color-failed)_8%,transparent)]',
+        !current && !kind && 'text-ink-3',
+      )}
     >
-      <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 2 }}>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, mb: 0.5 }}>
-            <Identifier variant="muted">{index + 1}</Identifier>
-            {step.keyword && (
-              <Typography
-                variant="caption"
-                data-testid="Execution.Steps.Row.Keyword"
-                // THEN is the assertion — the row that says what should happen is the one a tester
-                // is checking against, so it reads differently from the actions around it. Same
-                // colour split as the case detail's step table, for the same reason.
-                sx={{ color: step.keyword === 'THEN' ? 'success.main' : 'primary.main', fontWeight: 600 }}
-              >
-                {stepKeywordLabels[step.keyword]}
-              </Typography>
-            )}
-            <Typography variant="body2" sx={{ fontWeight: 500 }} data-testid="Execution.Steps.Row.Action">
-              {step.action}
-            </Typography>
-          </Stack>
+      <StepMedallion kind={kind} />
+
+      <div className="min-w-0">
+        <ProcedureLine
+          line={index + 1}
+          keyword={step.keyword ? KEYWORD[step.keyword] : undefined}
+          keywordTestId="Execution.Steps.Row.Keyword"
+          className="py-0"
+        >
+          <span data-testid="Execution.Steps.Row.Action">{step.action}</span>
           {/*
             The two block arguments, from the PINNED snapshot like every other authored field on
             this row. `StepDataView` is the case detail's renderer — one component, because the
             tester and the author must read the same table, and a version written before §255 has
             neither key and renders nothing.
           */}
-          <Box sx={{ pl: 3 }}>
-            <StepDataView
-              docString={step.docString}
-              dataTable={step.dataTable}
-              testId="Execution.Steps.Row.Data"
-            />
-          </Box>
+          <StepDataView
+            docString={step.docString}
+            dataTable={step.dataTable}
+            testId="Execution.Steps.Row.Data"
+          />
           {step.testData && (
-            <Typography variant="body2" sx={{ color: 'text.secondary', pl: 3 }}>
-              Data: {step.testData}
-            </Typography>
+            <span className="mt-0.5 block font-mono text-[12px] text-ink-4">{step.testData}</span>
           )}
           {step.expectedResult && (
-            <Typography variant="body2" sx={{ pl: 3, mt: 0.5 }} data-testid="Execution.Steps.Row.Expected">
-              Expected: {step.expectedResult}
-            </Typography>
+            <span className="mt-0.5 block text-[13px] text-ink-3" data-testid="Execution.Steps.Row.Expected">
+              {'→ '}
+              {step.expectedResult}
+            </span>
           )}
-          {isFailed && (
-            <TextField
-              label="What actually happened"
-              fullWidth
-              multiline
-              size="small"
-              value={comment}
-              onChange={(event) => onComment(event.target.value)}
-              sx={{ mt: 1.5 }}
-              slotProps={{ htmlInput: { 'data-testid': 'Execution.Steps.Row.CommentField' } }}
-            />
-          )}
+        </ProcedureLine>
+
+        {/* The marks and the evidence sit BELOW the line rather than inside it: `ProcedureLine`'s
+            body is a `<span>`, and a control column nested in one is markup a browser is entitled
+            to reparent. `pl-10` is the component's own 26px gutter plus its gap, so the two align. */}
+        <div className="mt-1.5 pl-10">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {VERDICT_KINDS.map((verdict) => {
+              const status = statuses.find((s) => s.kind === verdict);
+              if (!status) return null;
+              const selected = value === status.id;
+              const key = Object.entries(STEP_VERDICT_KEYS).find(([, k]) => k === verdict)?.[0];
+              return (
+                <button
+                  key={verdict}
+                  type="button"
+                  // Clicking the selected result again clears it — otherwise a mis-click is
+                  // unrecoverable without reloading.
+                  onClick={() => onChange(selected ? null : status.id)}
+                  aria-pressed={selected}
+                  aria-label={`Mark step ${index + 1} as ${statusLabels[verdict]}`}
+                  title={statusLabels[verdict]}
+                  disabled={frozen}
+                  data-testid={`Execution.Steps.Row.Mark.${verdict}`}
+                  style={
+                    selected
+                      ? {
+                          color: `var(--color-${verdict.toLowerCase()})`,
+                          borderColor: `var(--color-${verdict.toLowerCase()})`,
+                          backgroundColor: `color-mix(in oklab, var(--color-${verdict.toLowerCase()}) 12%, transparent)`,
+                        }
+                      : undefined
+                  }
+                  className={cn(
+                    // A fixed square rather than text-sized padding: four marks per step,
+                    // fifteen steps, and a ragged right edge makes the column unscannable — the
+                    // tester is aiming down it, not reading it.
+                    'grid h-6 w-[30px] cursor-pointer place-items-center rounded-[3px] border',
+                    'border-white/8 font-mono text-[11px] font-semibold text-ink-3',
+                    'hover:border-white/14 hover:text-ink',
+                    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
+                    'disabled:cursor-not-allowed disabled:opacity-45',
+                  )}
+                >
+                  {/*
+                    The initial, not `statusLabels[kind].slice(0, 4)` — which rendered "Bloc", a
+                    word that is not a word, four times per step row. Derived from the shared label
+                    rather than a second map (`test-ids` rule 7's reasoning applies to display
+                    too): a renamed status renames its key with it. The `title` and the
+                    `aria-label` carry the full label, so the letter is never the only thing
+                    identifying the button.
+                  */}
+                  {statusLabels[verdict].charAt(0)}
+                  {/* The number key, printed on the control it drives, and only on the step it
+                      would act on — a digit on every row would name four keys that do nothing.
+                      `aria-hidden`: the button's `aria-label` is its whole accessible name, so a
+                      bare digit inside it would be read out as part of the label or not at all. */}
+                  {current && key && (
+                    <span aria-hidden className="ml-1 text-[9px] font-normal text-ink-4">
+                      {key}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+            {kind && (
+              <Badge tone={badgeTone(kind)} data-testid={`Execution.Step.${index + 1}.Verdict`}>
+                {statusLabels[kind]}
+              </Badge>
+            )}
+          </div>
+
           {step.stepId && (
             <StepEvidence
               projectId={projectId}
@@ -1233,66 +1506,39 @@ function StepRow({
               frozen={frozen}
             />
           )}
-        </Box>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-        <Stack direction="row" sx={{ gap: 0.5, flexShrink: 0, alignItems: 'flex-start' }}>
-          {(['PASSED', 'FAILED', 'BLOCKED', 'SKIPPED'] as const).map((kind) => {
-            const status = statuses.find((s) => s.kind === kind);
-            if (!status) return null;
-            const selected = value === status.id;
-            return (
-              <Tooltip key={kind} title={statusLabels[kind]}>
-                <Box
-                  component="button"
-                  type="button"
-                  // Clicking the selected result again clears it — otherwise a mis-click is
-                  // unrecoverable without reloading.
-                  onClick={() => onChange(selected ? null : status.id)}
-                  aria-pressed={selected}
-                  aria-label={`Mark step ${index + 1} as ${statusLabels[kind]}`}
-                  data-testid={`Execution.Steps.Row.Mark.${kind}`}
-                  sx={{
-                    // A fixed square rather than text-sized padding: four marks per step row,
-                    // fifteen rows, and a ragged right edge makes the column unscannable — the
-                    // tester is aiming down it, not reading it.
-                    font: 'inherit',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '0.6875rem',
-                    fontWeight: 600,
-                    width: 30,
-                    height: 24,
-                    display: 'grid',
-                    placeItems: 'center',
-                    cursor: 'pointer',
-                    borderRadius: 0.5,
-                    border: '1px solid',
-                    borderColor: selected
-                      ? `var(--color-${kind.toLowerCase()})`
-                      : 'divider',
-                    color: selected ? `var(--color-${kind.toLowerCase()})` : 'text.secondary',
-                    bgcolor: selected
-                      ? `color-mix(in srgb, var(--color-${kind.toLowerCase()}) 12%, transparent)`
-                      : 'transparent',
-                  }}
-                >
-                  {/*
-                    The initial, not `statusLabels[kind].slice(0, 4)` — which rendered "Bloc",
-                    a word that is not a word, four times per step row.
+/** The render's `.vm` — a tick for a pass, a cross for a failure, the status initial for the two
+ *  that have no glyph, and an empty ring for a step nobody has reached. */
+function StepMedallion({ kind }: { kind: StatusKind | null }) {
+  const tone = kind === 'PASSED' || kind === 'FAILED' ? `var(--color-${kind.toLowerCase()})` : undefined;
 
-                    Derived from the shared label rather than a second map (`test-ids` rule 7's
-                    reasoning applies to display too): a renamed status renames its key with it.
-                    The four kinds are the literal tuple below, and their initials — P F B S — are
-                    distinct; the tooltip and the `aria-label` above carry the full label, so the
-                    letter is never the only thing identifying the button.
-                  */}
-                  {statusLabels[kind].charAt(0)}
-                </Box>
-              </Tooltip>
-            );
-          })}
-        </Stack>
-      </Stack>
-    </Box>
+  return (
+    <span
+      aria-hidden
+      style={
+        tone
+          ? {
+              color: tone,
+              borderColor: `color-mix(in oklab, ${tone} 42%, transparent)`,
+              backgroundColor: `color-mix(in oklab, ${tone} 12%, transparent)`,
+            }
+          : undefined
+      }
+      className="mt-[5px] grid size-5 place-items-center rounded-full border border-white/14 font-mono text-[10px] text-ink-4"
+    >
+      {kind === 'PASSED' ? (
+        <Check className="size-2.5" strokeWidth={3} />
+      ) : kind === 'FAILED' ? (
+        <X className="size-2.5" strokeWidth={3} />
+      ) : (
+        kind && statusLabels[kind].charAt(0)
+      )}
+    </span>
   );
 }
 

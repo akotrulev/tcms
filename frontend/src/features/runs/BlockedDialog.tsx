@@ -1,19 +1,17 @@
+import { useState } from 'react';
+import type { CaseConditionRef } from '../../api/types';
+import { Field } from '../../components/kit/Field';
 import {
   Button,
   Checkbox,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  FormControlLabel,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
-import { useState } from 'react';
-import type { CaseConditionRef } from '../../api/types';
-import { inputTestId } from '../../lib/muiTestIds';
+  Textarea,
+} from '../../components/ui';
 
 /**
  * Blocked is the one result that requires an explanation, because it is a statement about the
@@ -34,6 +32,15 @@ import { inputTestId } from '../../lib/muiTestIds';
  *
  * A case with no preconditions is a real and ordinary state in both callers — then there is no
  * checklist to show and the free-text reason is the whole of it.
+ *
+ * <h3>Why this one stayed a dialog when the failure panel did not (007 T12)</h3>
+ *
+ * `renders/03-execution.html` frame B replaces a modal with a rail section, and the runner's
+ * *failure* capture follows it: the step being described stays on screen. Blocked is the opposite
+ * shape. Grid mode is a second caller with **no rail at all**, and the checklist is a gate rather
+ * than a description — the point is that the tester cannot record Blocked while looking past the
+ * question. Two spellings of Blocked, one per mode, would be the drift the component was extracted
+ * to prevent.
  */
 export function BlockedDialog({
   open,
@@ -77,65 +84,75 @@ export function BlockedDialog({
   };
 
   return (
-    <Dialog open={open} onClose={close} maxWidth="sm" fullWidth data-testid="Execution.BlockedDialog">
-      <DialogTitle>Record this as blocked</DialogTitle>
-      <DialogContent>
-        <DialogContentText sx={{ mb: 2, fontSize: '0.875rem' }}>
-          Blocked means the test couldn't be run — not that the software failed. It's excluded
-          from the pass rate and shown separately, so say what stopped you.
-        </DialogContentText>
+    <Dialog open={open} onOpenChange={(next) => !next && close()}>
+      <DialogContent data-testid="Execution.BlockedDialog">
+        <DialogHeader>
+          <DialogTitle>Record this as blocked</DialogTitle>
+          <DialogDescription>
+            Blocked means the test couldn&rsquo;t be run — not that the software failed. It&rsquo;s
+            excluded from the pass rate and shown separately, so say what stopped you.
+          </DialogDescription>
+        </DialogHeader>
 
         {ownChecklist && (conditions ?? []).length > 0 && (
-          <Stack sx={{ mb: 2 }} data-testid="Execution.BlockedDialog.Conditions">
-            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5 }}>
-              Tick the preconditions that did not hold
-            </Typography>
+          <div className="mt-4 flex flex-col gap-2" data-testid="Execution.BlockedDialog.Conditions">
+            <p className="m-0 text-xs text-ink-4">Tick the preconditions that did not hold</p>
             {(conditions ?? []).map((condition) => (
-              <FormControlLabel
-                key={condition.id}
-                control={
-                  <Checkbox
-                    size="small"
-                    checked={failedHere[condition.id] ?? false}
-                    onChange={(event) =>
-                      setFailedHere((previous) => ({ ...previous, [condition.id]: event.target.checked }))
-                    }
-                    // `inputTestId`, not a bare `data-testid`: on a MUI Checkbox that lands on
-                    // the wrapper span where `toBeChecked` cannot see it — §62's lesson, and the
-                    // reason `lib/muiTestIds.ts` exists.
-                    slotProps={inputTestId('Execution.BlockedDialog.Condition', condition.title)}
-                  />
-                }
-                label={<Typography variant="body2">{condition.title}</Typography>}
-              />
+              <div key={condition.id} className="flex items-start gap-2">
+                {/*
+                  ~~`inputTestId`, not a bare `data-testid`: on a MUI Checkbox that landed on the
+                  wrapper span, where `toBeChecked` could not see it — §62's lesson.~~ →
+                  **superseded by 007 T12 (D3)**: this checkbox is the control, so the attribute
+                  goes straight on it and the workaround's premise is gone with the library.
+                */}
+                <Checkbox
+                  id={`Execution.BlockedDialog.Condition.${condition.id}`}
+                  checked={failedHere[condition.id] ?? false}
+                  onCheckedChange={(checked) =>
+                    setFailedHere((previous) => ({ ...previous, [condition.id]: checked === true }))
+                  }
+                  aria-label={condition.title}
+                  data-testid="Execution.BlockedDialog.Condition"
+                  className="mt-0.5"
+                />
+                <label
+                  htmlFor={`Execution.BlockedDialog.Condition.${condition.id}`}
+                  className="cursor-pointer text-[13px] text-ink-2"
+                >
+                  {condition.title}
+                </label>
+              </div>
             ))}
-          </Stack>
+          </div>
         )}
 
-        <TextField
-          label="What blocked this test"
-          fullWidth
-          multiline
-          minRows={3}
-          value={value}
-          onChange={(event) => setReason(event.target.value)}
-          slotProps={{ htmlInput: { 'data-testid': 'Execution.BlockedDialog.ReasonField' } }}
-        />
+        <div className="mt-4">
+          <Field label="What blocked this test" htmlFor="Execution.BlockedDialog.Reason">
+            <Textarea
+              id="Execution.BlockedDialog.Reason"
+              rows={3}
+              value={value}
+              onChange={(event) => setReason(event.target.value)}
+              data-testid="Execution.BlockedDialog.ReasonField"
+            />
+          </Field>
+        </div>
+
+        <DialogFooter>
+          <Button onClick={close} data-testid="Execution.BlockedDialog.Cancel">
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={!value.trim() || pending}
+            onClick={() => onConfirm(value)}
+            data-testid="Execution.BlockedDialog.Confirm"
+            style={{ backgroundColor: 'var(--color-blocked)' }}
+          >
+            {pending ? 'Saving…' : 'Record blocked'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={close} data-testid="Execution.BlockedDialog.Cancel">
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          disabled={!value.trim() || pending}
-          onClick={() => onConfirm(value)}
-          data-testid="Execution.BlockedDialog.Confirm"
-          sx={{ bgcolor: 'var(--color-blocked)', '&:hover': { bgcolor: 'var(--color-blocked)', filter: 'brightness(0.92)' } }}
-        >
-          {pending ? 'Saving…' : 'Record blocked'}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

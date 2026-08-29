@@ -484,3 +484,90 @@ describe('ExecutionPage — the step row (§255)', () => {
     expect(screen.getByText(/version being executed has no steps/i)).toBeInTheDocument()
   })
 })
+
+/**
+ * The number keys (007 T12).
+ *
+ * `1`–`4` are the render's headline rule — *"the verdict is one keystroke"* — and they bind the
+ * **step the tester is on**, not the case verdict its four letters bind. The arms are the three
+ * ways that can be wrong: it marks the wrong step, it fires while somebody is typing, or the
+ * failure it records asks for its description in a dialog that covers the step it is about.
+ */
+describe('ExecutionPage number keys', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const threeSteps = () =>
+    anExecution({
+      id: EX_2,
+      caseKey: 'TC-2',
+      caseTitle: 'The TC-2 case',
+      lockVersion: 3,
+      stepFormat: 'GHERKIN',
+      steps: [
+        aStepResult({ stepId: 's1', position: 0, keyword: 'GIVEN', action: 'a settled payment exists' }),
+        aStepResult({ stepId: 's2', position: 1, keyword: 'WHEN', action: 'the operator refunds it' }),
+        aStepResult({ stepId: 's3', position: 2, keyword: 'THEN', action: 'the balance falls to zero' }),
+      ],
+    })
+
+  it('records a verdict from the number key for that verdict', async () => {
+    const user = userEvent.setup()
+    mockReads({ execution: threeSteps() })
+    mockSubmit()
+    await renderScreen()
+
+    await user.keyboard('1')
+
+    expect(await screen.findByTestId('Execution.Step.1.Verdict')).toHaveTextContent('Passed')
+  })
+
+  it('marks the step the tester is on, and moves on to the next one', async () => {
+    const user = userEvent.setup()
+    mockReads({ execution: threeSteps() })
+    mockSubmit()
+    await renderScreen()
+
+    // Three presses walk the procedure. The second must land on step 2 — a key that always marked
+    // the first unmarked step from the top would look identical on one press and be wrong on two.
+    await user.keyboard('1')
+    await user.keyboard('4')
+
+    expect(await screen.findByTestId('Execution.Step.1.Verdict')).toHaveTextContent('Passed')
+    expect(await screen.findByTestId('Execution.Step.2.Verdict')).toHaveTextContent('Skipped')
+    expect(screen.queryByTestId('Execution.Step.3.Verdict')).not.toBeInTheDocument()
+  })
+
+  it('marks nothing while the notes box has focus — a digit there is a digit', async () => {
+    const user = userEvent.setup()
+    mockReads({ execution: threeSteps() })
+    mockSubmit()
+    await renderScreen()
+
+    await user.click(screen.getByTestId('Execution.CommentField'))
+    await user.keyboard('failed 1 of 4 times')
+
+    expect(screen.queryByTestId('Execution.Step.1.Verdict')).not.toBeInTheDocument()
+    expect(screen.getByTestId('Execution.CommentField')).toHaveValue('failed 1 of 4 times')
+  })
+
+  it('answers a failure in the rail rather than a dialog, and refuses one with no description', async () => {
+    const user = userEvent.setup()
+    mockReads({ execution: threeSteps() })
+    const sent = mockSubmit()
+    await renderScreen()
+
+    await user.keyboard('2')
+
+    // In place, beside the step it is about (UX#55) — a modal would have covered the evidence.
+    expect(await screen.findByText('Failed at step 1')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('Execution.Action.FAILED')).toBeDisabled()
+
+    await user.type(screen.getByTestId('Execution.Steps.Row.CommentField'), 'the ledger accepted it twice')
+
+    expect(screen.getByTestId('Execution.Action.FAILED')).toBeEnabled()
+    expect(sent).toHaveLength(0)
+  })
+})

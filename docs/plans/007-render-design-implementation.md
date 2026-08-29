@@ -153,7 +153,7 @@ import when it ports the control, and T16's grep is what proves none survived. W
 | `cases/CaseEditorPage.tsx:67`, `cases/ConditionEditDialog.tsx:40` | T7 |
 | ~~`runs/RunSchedulePage.tsx:39`~~ | T10 — **done** (`b2b1509e`) |
 | `runs/RunDetailPage.tsx:30`, `review/ReviewPanel.tsx:43` | T11 |
-| `runs/BlockedDialog.tsx:16` (+ the `:105` citation) | T12 |
+| ~~`runs/BlockedDialog.tsx:16` (+ the `:105` citation)~~ | T12 — **done** |
 | `cases/ClassificationPicker.tsx:19` | T13 |
 | `settings/ReviewSettingsPage.tsx:32`, `settings/TrackerSettingsPage.tsx:46`, `settings/NotificationChannelDialog.tsx:40`, `admin/TeamDialog.tsx:20`, `admin/TeamMembersDialog.tsx:24`, `admin/ProviderFormDialog.tsx:21` | T15 |
 | `components/ui/ui.test.tsx:20` (citation only) | T16 | (Checked: `corpus.ts`
@@ -203,7 +203,7 @@ pointing at the drawing would produce a second, drifting design source — which
 | 9 | T9 — TanStack Table | **done** `6de8c9a9` | `CaseGrid` renders on TanStack Table with server-side paging/sort/filter; `@mui/x-data-grid` unimported | T3 |
 | 10 | T10 — Family 1, Index & table | **done** `b2b1509e` | The 10 index screens render on the kit's Table; `@mui` unimported by all ten | T9 |
 | 11 | T11 — Family 2, Record as document | **done** | The 7 document screens render at the 74ch measure | T7 |
-| 12 | T12 — Family 3, Execution | open | `ExecutionPage` renders with the collapsed rail and number-key verdicts | T5, T11 |
+| 12 | T12 — Family 3, Execution | **done** | `ExecutionPage` renders with the collapsed rail and number-key verdicts; the failure panel is a rail section, ~~*last time*~~ is a named follow-up | T5, T11 |
 | 13 | T13 — Family 4, Board & people | **done** | Board · MyWork · TeamBoard · OrgChart; the MUI tree-view package unimported | T3, T8 |
 | 14 | T14 — Family 5, Authoring | open | Docs · DocPageEditor · FeatureImport at the 70ch prose measure | T11 |
 | 15 | T15 — Family 6 & 7, Analytics and Settings | **done** | Dashboard · PlanStatistics per §6; the **11** settings/account screens (§8's nine plus the two it does not list) | T10 |
@@ -1202,11 +1202,11 @@ each checked to be referenced by nothing in the repository. No test file was edi
 
 ---
 
-### T12 — Family 3, Execution
+### T12 — Family 3, Execution — **DONE**
 
 **Deliverable:** `ExecutionPage` renders against `renders/03-execution.html` with the collapsed rail
 from T5, number keys for verdicts, the current step at full ink, the failure panel in place of a
-dialog, and *last time* on screen before it is needed.
+dialog, and ~~*last time* on screen before it is needed~~ — **not built; see 5 below.**
 **Depends on:** T5, T11
 
 **Files:** `frontend/src/features/runs/ExecutionPage.tsx` and its test; the route is
@@ -1214,7 +1214,59 @@ dialog, and *last time* on screen before it is needed.
 collapses the rail on it. The failure panel replaces `features/runs/BlockedDialog.tsx`'s dialog
 form — the file whose comment cites `muiTestIds` (D3); its `inputTestId` import goes here.
 
-- [ ] **Step 1:** Port. **Step 2:** Assert the keyboard contract:
+**What landed, and the five things the code disproved.**
+
+**1. The rail's four verdict buttons record the CASE here, so the number keys had to bind the
+step.** The render draws one verdict control, in the rail, and its caption says *"Records step 3
+and moves to step 4"* — one result model, where this app has two: a per-step mark (`stepResults[]`)
+and the case verdict the run counts (`statusId`). `p f b s` are the case verdict and the existing
+suite pins them, so `1`–`4` bind **the step the tester is on** and advance, exactly as the plan's
+own Step-2 assertion (`Execution.Step.1.Verdict`) says. They are therefore printed on that step's
+own marks rather than on the rail's four buttons, where the digit would name a key that records
+something else. The rail buttons print `P F B S`, read from `EXECUTION_SHORTCUTS`.
+
+**2. The number keys are a second source of key truth, and `executionKeys.ts` was not this task's
+to open.** That module's whole argument is that a shortcut written twice drifts, and the overlay
+renders the map — so `1`–`4` are absent from the help. The render's own note argues for exactly
+that (*"printed on the buttons, not hidden in a help page"*), and the existing overlay arm asserts
+`rows === EXECUTION_SHORTCUTS.length`, so four more rows would have needed the test file edited too.
+**Follow-up:** fold the four into `EXECUTION_SHORTCUTS` with a `markStep` action when that file is
+next open, and delete the local map in `ExecutionPage.tsx`.
+
+**3. The failure panel replaced a dialog, but not `BlockedDialog`'s — Blocked stays modal.** Frame
+B is about verdict **2**: marking a step Failed turns the rail's *Record the result* section into
+*Failed at step N*, with the description field, the inline refusal, and the step still on screen
+(UX#55). `BlockedDialog` is the other shape and stays a dialog: **Grid mode is a second caller with
+no rail at all**, the checklist is a gate rather than a description, and the existing suite pins
+`b` → `findByRole('dialog')`. Two spellings of Blocked, one per mode, is the drift the component
+was extracted to prevent. It is ported to Radix + the kit, and both the `inputTestId` import and the
+comment citing it are gone, as D3 assigns.
+
+**4. Recording Failed is now refused without a description, and only when there is a failed step to
+describe.** The render's *"a failure without a description is refused, and says so"* is scoped to
+the panel: with a step marked Failed and its box empty, the case's Failed button is disabled and
+`f` announces the refusal. With no failed step there is nothing the panel is about, and `f` records
+as before — widening it further would have made a documented shortcut lie.
+
+**5. *Last time* could not be built without editing an unedited test, so it is not built.** It needs
+the previous run's verdict for this case, which is `GET /projects/{id}/cases/{caseId}/history` —
+a read this screen does not make. Adding it fails **every** arm of `ExecutionPage.test.tsx`: the
+double ends in `throw new Error('unmocked read')`, and since §202 an unexcused failed read fails the
+test that caused it. The arm belongs in that file's `mockReads`, which T12 was told not to touch.
+Nothing was faked in its place. **Follow-up:** add the `/cases/[^/]+/history` arm and the rail
+section together, in one change that may edit the test.
+
+Data test ids are byte-identical apart from the six `PageHeader` minted, which this screen drops for
+T11's reason (crumb and lens in the top strip, the case's own title as the document's subject):
+`Execution.Header`, `.Header.Breadcrumbs`, `.Header.Breadcrumb`, `.Header.Title`, `.Header.Meta`,
+`.Header.Actions` — each checked to be referenced by nothing in the repository. `Execution.CaseLink`
+and `Execution.Quarantined` moved with the meta into the top strip and kept their names;
+`Execution.Breadcrumbs` and `Execution.Step.<n>.Verdict` are new. No existing test was edited.
+`ShortcutOverlay.tsx`, `ExecutionQueue.tsx`, `ExecutionGrid.tsx`, `EvidencePanel.tsx`,
+`DefectPanel.tsx`, `ExecutionAssignee.tsx` and `StepEvidence.tsx` stay MUI and stay imported —
+T16's, like T11's item 5.
+
+- [x] **Step 1:** Port. **Step 2:** Assert the keyboard contract:
 
 ```tsx
 it('records a verdict from the number key for that verdict', async () => {
@@ -1224,7 +1276,11 @@ it('records a verdict from the number key for that verdict', async () => {
 });
 ```
 
-- [ ] **Step 3:** Commit — no gate here; T17 runs it.
+  *Landed as written, plus three arms the port earned: that the second press marks the second step
+  and not the first again, that a digit typed into the notes box is a digit, and that `2` opens the
+  failure panel in the rail with no dialog and refuses until it is described.*
+
+- [x] **Step 3:** Commit — no gate here; T17 runs it.
 
 ---
 
