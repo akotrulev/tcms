@@ -1,27 +1,5 @@
-import {
-  Alert,
-  AlertTitle,
-  Box,
-  Button,
-  Chip,
-  MenuItem,
-  Select,
-  Stack,
-  Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tabs,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined';
-import { useEffect, useState } from 'react';
+import { CircleAlert, CircleCheck, CircleHelp, ExternalLink } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import type { AggregationPolicy, Criterion, PlanStatistics, PlanStatus, TestPlan } from '../../api/types';
@@ -52,24 +30,32 @@ import { PlanFieldsTab } from './PlanFieldsTab';
 import { usePlanSave, type SaveOutcome } from './usePlanSave';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { PageHeader } from '../../components/PageHeader';
 import { PlanDocumentPanel } from './PlanDocumentPanel';
 import { ReviewPanel } from '../review/ReviewPanel';
 import { PermissionGate } from '../../components/PermissionGate';
-import { DenominatorToggle, PassRateSummary, ResultBar, ResultCountsCell } from '../../components/ResultBar';
+import { DenominatorToggle, PassRateSummary, ResultCountsCell } from '../../components/ResultBar';
+import {
+  Badge,
+  Banner,
+  type BadgeTone,
+  ResultBar,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '../../components/kit';
+import { FigurePanel } from '../../components/kit/FigurePanel';
+import { Button, Textarea } from '../../components/ui';
 import { criterionColor, criterionState, type Denominator } from '../../lib/results';
 import { StatusChip } from '../../components/StatusChip';
 import { describeError } from '../../lib/describeError';
 import { EM_DASH, formatComputedAt, formatCount, formatDateTime, formatPercent, plural } from '../../lib/format';
-import {
-  aggregationHelp,
-  aggregationLabels,
-  planStatusColors,
-  planStatusLabels,
-} from '../../lib/labels';
+import { aggregationHelp, aggregationLabels, planStatusLabels } from '../../lib/labels';
 import { PlanCloneDialog } from './PlanCloneDialog';
 import { PlanDeleteDialog } from './PlanDeleteDialog';
-import { ScrollX } from '../../components/ScrollX';
 
 /**
  * Plan statistics (plan §6p).
@@ -84,6 +70,12 @@ import { ScrollX } from '../../components/ScrollX';
  *      teams reading "89%" mean different things and neither knows it.
  *   3. **Blockers and unexecuted cases are listed, not counted.** "21 failed" is a number;
  *      the 21 named cases with their defect links are a work list.
+ *
+ * The second of the two analytics screens (007 T15), so design language §6 binds the drawings:
+ * the trend is **the one line chart in the product** and carries a crosshair by default, its y
+ * axis starts at zero and says so, and every stacked bar here is the kit's — where *untested is
+ * the empty track rather than a fill*, because as a fill it sat 10.7 ΔE from `skipped` and the two
+ * were adjacent in every bar on this page.
  */
 export function PlanStatisticsPage() {
   const { projectId = '', planId = '' } = useParams();
@@ -117,7 +109,7 @@ export function PlanStatisticsPage() {
   const statistics = usePlanStatistics(projectId, planId, aggregation);
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId="PlanStats.Header"
         title={plan.data?.name ?? 'Test plan'}
@@ -131,32 +123,38 @@ export function PlanStatisticsPage() {
           plan.data && (
             <>
               <Identifier variant="strong">{plan.data.key}</Identifier>
-              <Chip
-                size="small"
-                variant="outlined"
-                data-testid="PlanStats.Status"
-                label={planStatusLabels[plan.data.status]}
-                sx={{ color: planStatusColors[plan.data.status] }}
-              />
+              {/* A badge, not a chip: the plan's status is state the system owns and moving it is
+                  the ladder of buttons below, never a click on the label (design language §5). */}
+              <Badge tone={PLAN_TONE[plan.data.status]} data-testid="PlanStats.Status">
+                {planStatusLabels[plan.data.status]}
+              </Badge>
               {plan.data.milestoneName && (
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                <span className="text-[13px] text-ink-3">
                   {plan.data.milestoneName}
                   {plan.data.milestoneDate && ` · due ${plan.data.milestoneDate}`}
-                </Typography>
+                </span>
               )}
             </>
           )
         }
         subtitle={plan.data?.description}
         actions={
-          <Stack sx={{ gap: 1, alignItems: 'flex-end' }}>
+          <div className="flex flex-col items-end gap-2">
             {plan.data && (
               <PlanLifecycleActions projectId={projectId} plan={plan.data} />
             )}
-            <Box sx={{ minWidth: 260, display: tab === 'progress' ? 'block' : 'none' }}>
-              <Select
-                size="small"
-                fullWidth
+            {/*
+              A native `<select>`, not a listbox widget. It picks one value from four fixed
+              arithmetic policies, it is on the report a reader is about to screenshot, and the
+              platform control is the one that is already keyboard-operable, screen-reader-labelled
+              and usable on a phone. Styled as the render's `.fld` so it reads as a field rather
+              than as a button.
+            */}
+            <label
+              className={tab === 'progress' ? 'flex min-w-[260px] flex-col gap-1' : 'hidden'}
+            >
+              <span className="sr-only">How results are aggregated</span>
+              <select
                 value={aggregation}
                 onChange={(event) => {
                   const next = new URLSearchParams(params);
@@ -164,31 +162,50 @@ export function PlanStatisticsPage() {
                   setParams(next, { replace: true });
                 }}
                 data-testid="PlanStats.AggregationSelect"
-                inputProps={{ 'aria-label': 'How results are aggregated' }}
+                className="w-full rounded-[6px] border border-white/8 bg-field px-2.5 py-1.5 text-[12.5px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
               >
                 {Object.entries(aggregationLabels).map(([value, label]) => (
-                  <MenuItem key={value} value={value}>
+                  <option key={value} value={value}>
                     {label}
-                  </MenuItem>
+                  </option>
                 ))}
-              </Select>
-            </Box>
-          </Stack>
+              </select>
+            </label>
+          </div>
         }
       />
 
-      <Tabs
-        value={tab}
-        onChange={(_event, next: string) => selectTab(next)}
-        variant="scrollable"
-        scrollButtons="auto"
-        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+      {/*
+        A tablist of real buttons rather than a tab widget. The panels these tabs select are not
+        siblings of the list — the form spine below renders one, the statistics region renders
+        another — so a component that owns both halves would have to be given a hole to render
+        through. `role="tab"` with `aria-selected` is what a screen reader needs, and it is the
+        whole of what the widget was adding.
+      */}
+      <div
+        role="tablist"
+        aria-label="Plan"
+        className="mb-4 flex gap-1 overflow-x-auto border-b border-white/8"
         data-testid="PlanStats.Tabs"
       >
         {PLAN_TABS.map((id) => (
-          <Tab key={id} value={id} label={planTabLabels[id]} data-testid={`PlanStats.Tab.${id}`} />
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => selectTab(id)}
+            data-testid={`PlanStats.Tab.${id}`}
+            className={
+              tab === id
+                ? 'whitespace-nowrap border-b-2 border-steel px-3 py-2 text-[13px] font-medium text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]'
+                : 'whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-[13px] text-ink-3 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]'
+            }
+          >
+            {planTabLabels[id]}
+          </button>
         ))}
-      </Tabs>
+      </div>
 
       {/*
         Progress keeps its own lifecycle and is the one tab outside the form: it is a report, it
@@ -225,15 +242,61 @@ export function PlanStatisticsPage() {
         `currentVersionNo` is passed so the panel can say the SCOPE has changed since the sign-off
         was asked for, which is exactly what a plan version is (§74).
       */}
-      <Box sx={{ mt: 3 }}>
+      <div className="mt-6">
         <ReviewPanel
           projectId={projectId}
           subjectType="PLAN"
           subjectId={planId}
           currentVersionNo={plan.data?.currentVersionNo}
         />
-      </Box>
-    </Box>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The ladder, in one palette with the results — design language rule 5.
+ *
+ * **This is a second copy of `PlanListPage`'s `PLAN_TONE` and it is one on purpose, for now.** The
+ * two screens were ported in different tasks of 007 and the list's map is private to its file, so
+ * there was nothing to import; the pair belongs in `lib/labels.ts` beside `planStatusLabels`, where
+ * `planStatusColors` already sits under the comment *"so a status cannot be worded in one place and
+ * coloured in another"*. Collapsing them is a one-file change nobody should have to rediscover.
+ */
+const PLAN_TONE = {
+  DRAFT: 'plain',
+  IN_REVIEW: 'retest',
+  APPROVED: 'passed',
+} as const satisfies Record<PlanStatus, BadgeTone>;
+
+/**
+ * A region that is not a figure — a heading in the render's uppercase mono, and its rows directly
+ * under it.
+ *
+ * Rule 1 of the design language: *no card wrapping a table, no panel around the only thing on
+ * screen.* Everything below that used to be a bordered `Panel` and is a list or a table is this
+ * instead; the figures keep their border because a grid of them needs one number-set separated
+ * from the next.
+ */
+function Section({
+  title,
+  actions,
+  children,
+  testId,
+}: {
+  title: string;
+  actions?: ReactNode;
+  children: ReactNode;
+  testId?: string;
+}) {
+  return (
+    <section data-testid={testId}>
+      <div className="mb-2.5 flex items-baseline justify-between gap-3">
+        <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">{title}</h2>
+        {actions}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -324,16 +387,35 @@ function PlanForm({
     }
   };
 
+  // Two reasons a Save can be refused before it is pressed, and they are told apart: the
+  // permission is about the caller, the problem is about the draft and names the tab holding it
+  // (§31 — disabled, never hidden, always with a reason). The reason is the button's `title`
+  // rather than a hover card, because a disabled control receives no pointer events in every
+  // engine and a tooltip on one is a reason nobody can read.
+  const saveReason = (allowed: boolean) =>
+    !allowed
+      ? 'You need plan:edit on this project.'
+      : problems.length > 0
+        ? problems.map((problem) => `${problem.message} (${planTabLabels[problem.tab]})`).join(' ')
+        : undefined;
+
   return (
-    <Stack sx={{ gap: 2 }}>
+    <div className="flex flex-col gap-4">
       {dirty.length > 0 && (
-        <Alert
-          severity="info"
-          data-testid="PlanStats.Dirty"
-          action={
-            <Stack direction="row" sx={{ gap: 1 }}>
+        <Banner tone="neutral" data-testid="PlanStats.Dirty">
+          <span className="flex flex-1 flex-wrap items-center justify-between gap-3">
+            <span>
+              Unsaved changes in {dirty.map((id) => planTabLabels[id]).join(', ')}.
+              {problems.length > 0 && (
+                <span data-testid="PlanStats.Blocked">
+                  {' '}
+                  {problems.map((problem) => problem.message).join(' ')}
+                </span>
+              )}
+            </span>
+            <span className="flex shrink-0 gap-2">
               <Button
-                size="small"
+                size="sm"
                 data-testid="PlanStats.Discard"
                 disabled={saving}
                 onClick={() => {
@@ -346,45 +428,22 @@ function PlanForm({
               {/* Disabled with a reason, never hidden (§31) — and the reason is the permission,
                   which is why the gate wraps the button rather than the banner. */}
               <PermissionGate projectId={projectId} permission="plan:edit">
-                {({ allowed }) => {
-                  // Two reasons a Save can be refused before it is pressed, and they are told
-                  // apart: the permission is about the caller, the problem is about the draft and
-                  // names the tab holding it (§31 — disabled, never hidden, always with a reason).
-                  const reason = !allowed
-                    ? 'You need plan:edit on this project.'
-                    : problems.length > 0
-                      ? problems
-                          .map((problem) => `${problem.message} (${planTabLabels[problem.tab]})`)
-                          .join(' ')
-                      : '';
-                  return (
-                    <Tooltip title={reason}>
-                      <Box>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          data-testid="PlanStats.Save"
-                          disabled={!allowed || saving || problems.length > 0}
-                          onClick={() => void submit()}
-                        >
-                          {saving ? 'Saving…' : 'Save'}
-                        </Button>
-                      </Box>
-                    </Tooltip>
-                  );
-                }}
+                {({ allowed }) => (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    title={saveReason(allowed)}
+                    data-testid="PlanStats.Save"
+                    disabled={!allowed || saving || problems.length > 0}
+                    onClick={() => void submit()}
+                  >
+                    {saving ? 'Saving…' : 'Save'}
+                  </Button>
+                )}
               </PermissionGate>
-            </Stack>
-          }
-        >
-          Unsaved changes in {dirty.map((id) => planTabLabels[id]).join(', ')}.
-          {problems.length > 0 && (
-            <Box component="span" data-testid="PlanStats.Blocked">
-              {' '}
-              {problems.map((problem) => problem.message).join(' ')}
-            </Box>
-          )}
-        </Alert>
+            </span>
+          </span>
+        </Banner>
       )}
 
       {outcome && <SaveReport outcome={outcome} onDismiss={() => setOutcome(null)} />}
@@ -421,7 +480,7 @@ function PlanForm({
           onChange={setDraft}
         />
       )}
-    </Stack>
+    </div>
   );
 }
 
@@ -438,38 +497,56 @@ function SaveReport({ outcome, onDismiss }: { outcome: SaveOutcome; onDismiss: (
 
   if (outcome.kind === 'saved') {
     return (
-      <Alert severity="success" onClose={onDismiss} data-testid="PlanStats.SaveReport">
-        Plan saved
-        {outcome.created.length > 0 && ` — ${plural(outcome.created.length, 'case')} created (${created})`}.
-      </Alert>
+      <Banner tone="neutral" data-testid="PlanStats.SaveReport">
+        <span className="flex flex-1 items-start justify-between gap-3">
+          <span>
+            Plan saved
+            {outcome.created.length > 0 && ` — ${plural(outcome.created.length, 'case')} created (${created})`}.
+          </span>
+          <DismissReport onDismiss={onDismiss} />
+        </span>
+      </Banner>
     );
   }
 
   return (
-    <Alert severity="error" role="alert" onClose={onDismiss} data-testid="PlanStats.SaveReport">
-      <AlertTitle>
-        {outcome.kind === 'planFailed' ? 'The plan was not saved' : 'The cases were not all created'}
-      </AlertTitle>
-      {outcome.kind === 'planFailed' ? (
-        <>
-          {describeError(outcome.error).body}
-          {outcome.created.length > 0 && (
+    <Banner tone="bad" data-testid="PlanStats.SaveReport">
+      <span className="flex flex-1 items-start justify-between gap-3" role="alert">
+        <span>
+          <b className="block font-semibold text-ink">
+            {outcome.kind === 'planFailed' ? 'The plan was not saved' : 'The cases were not all created'}
+          </b>
+          {outcome.kind === 'planFailed' ? (
             <>
-              {' '}
-              {plural(outcome.created.length, 'case')} were created before this failed
-              ({created}) — they are in the project but not in this plan. Pressing Save again
-              will not create them a second time.
+              {describeError(outcome.error).body}
+              {outcome.created.length > 0 && (
+                <>
+                  {' '}
+                  {plural(outcome.created.length, 'case')} were created before this failed
+                  ({created}) — they are in the project but not in this plan. Pressing Save again
+                  will not create them a second time.
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {describeError(outcome.error).body} Stopped at “{outcome.failedTitle}”.
+              {outcome.created.length > 0
+                && ` ${plural(outcome.created.length, 'case')} before it were created (${created}).`}
             </>
           )}
-        </>
-      ) : (
-        <>
-          {describeError(outcome.error).body} Stopped at “{outcome.failedTitle}”.
-          {outcome.created.length > 0
-            && ` ${plural(outcome.created.length, 'case')} before it were created (${created}).`}
-        </>
-      )}
-    </Alert>
+        </span>
+        <DismissReport onDismiss={onDismiss} />
+      </span>
+    </Banner>
+  );
+}
+
+function DismissReport({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <Button size="sm" variant="quiet" onClick={onDismiss}>
+      Dismiss
+    </Button>
   );
 }
 
@@ -488,18 +565,18 @@ function ScopeTextTab({
   onChange: (value: string) => void;
 }) {
   return (
-    <Panel title={title} testId={`${testId}.Panel`}>
-      <TextField
-        multiline
-        minRows={8}
-        fullWidth
-        label={title}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        helperText={hint}
-        slotProps={{ htmlInput: { 'data-testid': testId } }}
-      />
-    </Panel>
+    <Section title={title} testId={`${testId}.Panel`}>
+      <label className="flex flex-col gap-1.5">
+        <span className="sr-only">{title}</span>
+        <Textarea
+          rows={8}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          data-testid={testId}
+        />
+        <span className="text-[12px] text-ink-4">{hint}</span>
+      </label>
+    </Section>
   );
 }
 
@@ -523,9 +600,9 @@ function ArtefactsTab({ projectId, planId }: { projectId: string; planId: string
   const [registering, setRegistering] = useState(false);
 
   return (
-    <Panel
+    <Section
+      title="Test artefacts"
       testId="PlanStats.Artefacts"
-      dense
       actions={
         /*
           Enabled on the key alone. ~~Which is honest here in a way it is not on the Artifacts
@@ -538,8 +615,7 @@ function ArtefactsTab({ projectId, planId }: { projectId: string; planId: string
         <PermissionGate projectId={projectId} permission="artifact:edit">
           {({ allowed }) => (
             <Button
-              size="small"
-              variant="outlined"
+              size="sm"
               disabled={!allowed}
               onClick={() => setRegistering(true)}
               data-testid="PlanStats.Artefacts.Register"
@@ -573,7 +649,7 @@ function ArtefactsTab({ projectId, planId }: { projectId: string; planId: string
       >
         {(rows) => <ArtifactTable rows={rows} showInheritance projectId={projectId} />}
       </DataRegion>
-    </Panel>
+    </Section>
   );
 }
 
@@ -644,8 +720,8 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
   };
 
   return (
-    <Stack sx={{ gap: 0.5, alignItems: 'flex-end' }}>
-      <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex flex-wrap justify-end gap-2">
         {/*
           ~~An Edit button opening `PlanEditDialog`.~~ → **removed in §97 phase 5.** Every field it
           held is on the Plan tab, saved by the page's own Save, so a button here would open a
@@ -653,13 +729,16 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
           two could disagree about which write won. What still protects a sign-off is §6g's
           edit-after-approval rule, which the server applies: editing an approved plan on a
           review-enabled project demotes it to DRAFT rather than refusing the save.
+
+          The last move in the list is the primary one — the render puts **Approve plan** in the
+          top strip as the screen's single filled button, with everything else quiet beside it.
         */}
-        {planMoves[status].map((option) => (
+        {planMoves[status].map((option, index) => (
           <PermissionGate key={option.target} projectId={projectId} permission={option.permission}>
             {({ allowed }) => (
               <Button
-                size="small"
-                variant="outlined"
+                size="sm"
+                variant={index === 0 ? 'primary' : 'ghost'}
                 data-testid={`PlanStats.Move.${option.target}`}
                 disabled={!allowed || setStatus.isPending}
                 onClick={() => move(option.target)}
@@ -678,8 +757,7 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
         <PermissionGate projectId={projectId} permission="plan:create">
           {({ allowed }) => (
             <Button
-              size="small"
-              variant="outlined"
+              size="sm"
               data-testid="PlanStats.CloneButton"
               disabled={!allowed}
               onClick={() => setCloning(true)}
@@ -691,9 +769,8 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
         <PermissionGate projectId={projectId} permission="plan:delete">
           {({ allowed }) => (
             <Button
-              size="small"
-              variant="outlined"
-              color="error"
+              size="sm"
+              variant="danger"
               data-testid="PlanStats.Delete"
               disabled={!allowed}
               onClick={() => setConfirmingDelete(true)}
@@ -702,11 +779,11 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
             </Button>
           )}
         </PermissionGate>
-      </Stack>
+      </div>
       {error && (
-        <Typography variant="caption" sx={{ color: 'var(--color-danger)' }} data-testid="PlanStats.StatusError">
+        <p className="text-[11.5px] text-[color:var(--color-failed)]" data-testid="PlanStats.StatusError">
           {error}
-        </Typography>
+        </p>
       )}
       {cloning && (
         <PlanCloneDialog
@@ -729,7 +806,7 @@ function PlanLifecycleActions({ projectId, plan }: { projectId: string; plan: Te
           onDeleted={() => navigate(`/projects/${projectId}/plans`)}
         />
       )}
-    </Stack>
+    </div>
   );
 }
 
@@ -746,37 +823,51 @@ function StatisticsBody({
   const notExecuted = data.counts.total === 0 || data.counts.total === data.counts.notRun;
 
   return (
-    <Stack sx={{ gap: 3 }}>
+    <div className="flex flex-col gap-3.5">
       {/*
         The policy statement is part of the report, not a control's side effect. Anyone
         reading a screenshot of this page can tell which arithmetic produced the numbers.
+
+        `steel` rather than amber: this is the instance telling the reader how it counted, not a
+        state that is currently wrong — and design language §5 reserves amber for the second.
       */}
-      <Alert severity="info" icon={false} data-testid="PlanStats.AggregationNotice">
-        <Typography variant="body2">
-          <strong>{aggregationLabels[aggregation]}.</strong> {aggregationHelp[aggregation]}
-        </Typography>
-      </Alert>
+      <Banner tone="steel" data-testid="PlanStats.AggregationNotice">
+        <span>
+          <b className="font-semibold text-ink">{aggregationLabels[aggregation]}.</b>{' '}
+          {aggregationHelp[aggregation]}
+        </span>
+      </Banner>
 
       {notExecuted ? (
-        <Panel testId="PlanStats.NotExecuted">
-          <Typography variant="h4" sx={{ mb: 0.5 }}>
-            Not executed yet
-          </Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        <section data-testid="PlanStats.NotExecuted">
+          <h2 className="mb-1 text-[15px] font-semibold text-ink">Not executed yet</h2>
+          <p className="max-w-[74ch] text-[13px] leading-[1.55] text-ink-3">
             This plan has {plural(data.counts.total, 'case')} in scope and no results. Start a run
             to begin recording them.
-          </Typography>
-        </Panel>
+          </p>
+        </section>
       ) : (
         <>
-          <Panel testId="PlanStats.Summary">
-            <Stack sx={{ gap: 2 }}>
+          <FigurePanel
+            title="Progress"
+            subtitle={`${formatCount(data.counts.total)} in scope`}
+            testId="PlanStats.Summary"
+          >
+            <div className="flex flex-col gap-3">
               <PassRateSummary
                 counts={data.counts}
                 coveragePercent={data.coveragePercent}
                 testId="PlanStats.PassRate"
               />
-              <ResultBar counts={data.counts} height={14} showLegend testId="PlanStats.ResultBar" />
+              <ResultBar
+                passed={data.counts.passed}
+                failed={data.counts.failed}
+                blocked={data.counts.blocked}
+                skipped={data.counts.skipped}
+                untested={data.counts.notRun}
+                className="h-2"
+              />
+              <ResultLegend counts={data.counts} />
               {data.latestExecutionAt && (
                 /*
                   This caption used to read "the read model is catching up, so counts may lag by
@@ -792,16 +883,16 @@ function StatisticsBody({
                   sentence back — it was wrong then and would be wrong now, because it conflated
                   two ages. The lag has its own line below, its own field, and its own subject.
                 */
-                <Typography
-                  variant="caption"
-                  sx={{ color: data.stale ? 'var(--color-warning)' : 'text.secondary' }}
+                <p
+                  style={data.stale ? { color: 'var(--color-blocked)' } : undefined}
+                  className="text-[11.5px] leading-[1.5] text-ink-4"
                   data-testid="PlanStats.Freshness"
                 >
                   Latest result {formatDateTime(data.latestExecutionAt)}
                   {data.stale
                     && ' — nothing has been executed against this plan in over two weeks. These'
                       + ' numbers describe the past, not the build you are about to ship.'}
-                </Typography>
+                </p>
               )}
               {/*
                 The OTHER age, and a separate line on purpose. `stale` above is about the
@@ -812,78 +903,108 @@ function StatisticsBody({
                 warning: a screen that says nothing when it is current is a screen where the reader
                 cannot tell current from unlabelled.
               */}
-              <Typography
-                variant="caption"
-                sx={{ color: 'text.secondary' }}
-                data-testid="PlanStats.ComputedAt"
-              >
+              <p className="text-[11.5px] text-ink-4" data-testid="PlanStats.ComputedAt">
                 {formatComputedAt(data.computedAt)}
                 {data.computedAt && ' — updated every 15 minutes'}
-              </Typography>
-            </Stack>
-          </Panel>
+              </p>
+            </div>
+          </FigurePanel>
 
-          <ExitCriteria criteria={data.exitCriteria ?? []} />
+          <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            <TrendChart trend={data.trend ?? []} />
+            <ExitCriteria criteria={data.exitCriteria ?? []} />
+          </div>
 
-          <Stack direction={{ xs: 'column', lg: 'row' }} sx={{ gap: 3, alignItems: 'stretch' }}>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Panel
-                title="By configuration"
+          <div className="grid gap-3.5 lg:grid-cols-2">
+            <FigurePanel
+              title="By configuration"
+              subtitle="one row per configuration the plan ran on"
+              testId="PlanStats.ByConfiguration"
+              actions={
+                <DenominatorToggle
+                  value={denominator}
+                  onChange={setDenominator}
+                  testId="PlanStats.Denominator"
+                />
+              }
+            >
+              <BreakdownTable
+                rows={(data.byConfiguration ?? []).map((row) => ({
+                  id: row.configuration,
+                  label: row.configuration,
+                  counts: row.counts,
+                }))}
+                denominator={denominator}
                 testId="PlanStats.ByConfiguration"
-                actions={
-                  <DenominatorToggle
-                    value={denominator}
-                    onChange={setDenominator}
-                    testId="PlanStats.Denominator"
-                  />
-                }
-              >
-                <BreakdownTable
-                  rows={(data.byConfiguration ?? []).map((row) => ({
-                    id: row.configuration,
-                    label: row.configuration,
-                    counts: row.counts,
-                  }))}
-                  denominator={denominator}
-                  testId="PlanStats.ByConfiguration"
-                  emptyBody="No results recorded per configuration yet."
-                />
-              </Panel>
-            </Box>
+                emptyBody="No results recorded per configuration yet."
+              />
+            </FigurePanel>
 
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Panel title="By suite" testId="PlanStats.BySuite">
-                <BreakdownTable
-                  rows={(data.bySuite ?? []).map((row) => ({
-                    // All three suite fields are null together for the in-scope cases filed in no
-                    // suite. The row is rendered rather than dropped — dropping it would make this
-                    // panel stop summing to the counts above it, with nothing on screen to say why
-                    // — and its link is the grid's unfiled filter, which is where those cases are.
-                    id: row.suiteId ?? 'unfiled',
-                    label: row.suiteName ?? 'Not filed',
-                    identifier: row.suiteKey ?? undefined,
-                    href:
-                      row.suiteId === null
-                        ? `/projects/${projectId}/cases?unfiled=true`
-                        : `/projects/${projectId}/cases?suiteId=${row.suiteId}`,
-                    counts: row.counts,
-                  }))}
-                  denominator={denominator}
-                  testId="PlanStats.BySuite"
-                  emptyBody="No suites in scope."
-                />
-              </Panel>
-            </Box>
-          </Stack>
-
-          <TrendChart trend={data.trend ?? []} />
+            <FigurePanel title="By suite" subtitle="the same cases, grouped by where they are filed" testId="PlanStats.BySuite">
+              <BreakdownTable
+                rows={(data.bySuite ?? []).map((row) => ({
+                  // All three suite fields are null together for the in-scope cases filed in no
+                  // suite. The row is rendered rather than dropped — dropping it would make this
+                  // panel stop summing to the counts above it, with nothing on screen to say why
+                  // — and its link is the grid's unfiled filter, which is where those cases are.
+                  id: row.suiteId ?? 'unfiled',
+                  label: row.suiteName ?? 'Not filed',
+                  identifier: row.suiteKey ?? undefined,
+                  href:
+                    row.suiteId === null
+                      ? `/projects/${projectId}/cases?unfiled=true`
+                      : `/projects/${projectId}/cases?suiteId=${row.suiteId}`,
+                  counts: row.counts,
+                }))}
+                denominator={denominator}
+                testId="PlanStats.BySuite"
+                emptyBody="No suites in scope."
+              />
+            </FigurePanel>
+          </div>
 
           <Blockers blockers={data.blockers ?? []} projectId={projectId} />
 
           <NotRun cases={data.notRun ?? []} projectId={projectId} />
         </>
       )}
-    </Stack>
+    </div>
+  );
+}
+
+/**
+ * The words under the headline bar, and the one place `--color-untested` still speaks.
+ *
+ * Design language §6 took `untested` out of the fills, which leaves a reader looking at a track
+ * that ends early with no way to know whether that is "not run" or "the bar stops here". The
+ * legend answers it once, in words, with the never-run swatch drawn as the empty track it is.
+ */
+function ResultLegend({ counts }: { counts: PlanStatistics['counts'] }) {
+  const entries = [
+    { label: 'Passed', count: counts.passed, color: 'var(--color-passed)' },
+    { label: 'Failed', count: counts.failed, color: 'var(--color-failed)' },
+    { label: 'Blocked', count: counts.blocked, color: 'var(--color-blocked)' },
+    { label: 'Skipped', count: counts.skipped, color: 'var(--color-skipped)' },
+    { label: 'Never run', count: counts.notRun, color: null },
+  ];
+
+  return (
+    <div className="flex flex-wrap gap-3.5 text-[11.5px] text-ink-3">
+      {entries.map((entry) => (
+        <span key={entry.label} className="flex items-center gap-1.5">
+          <i
+            aria-hidden
+            style={entry.color ? { backgroundColor: entry.color } : undefined}
+            className={
+              entry.color
+                ? 'block size-2.5 rounded-[2px]'
+                : 'block size-2.5 rounded-[2px] border border-white/14 bg-field'
+            }
+          />
+          {entry.label} <Identifier variant="muted">{formatCount(entry.count)}</Identifier>
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -903,109 +1024,81 @@ function ExitCriteria({ criteria }: { criteria: Criterion[] }) {
   const unevaluated = criteria.filter((c) => criterionState(c) === 'NOT_EVALUATED');
 
   return (
-    <Panel
-      title="Exit criteria"
+    <FigurePanel
+      title="What's blocking this plan"
+      subtitle={`${formatCount(criteria.length)} exit criteria · ${formatCount(criteria.length - unmet.length - unevaluated.length)} met`}
       testId="PlanStats.ExitCriteria"
       actions={
-        <Stack direction="row" sx={{ gap: 0.75, alignItems: 'center' }}>
-          <Chip
-            size="small"
-            label={unmet.length === 0 ? 'All met' : `${unmet.length} unmet`}
-            data-testid="PlanStats.ExitCriteria.Summary"
-            sx={{
-              bgcolor: 'transparent',
-              color: unmet.length === 0 ? 'var(--color-success)' : 'var(--color-danger)',
-              border: `1px solid color-mix(in srgb, ${
-                unmet.length === 0 ? 'var(--color-success)' : 'var(--color-danger)'
-              } 45%, transparent)`,
-            }}
-          />
+        <div className="flex items-center gap-1.5">
+          <Badge tone={unmet.length === 0 ? 'passed' : 'failed'} data-testid="PlanStats.ExitCriteria.Summary">
+            {unmet.length === 0 ? 'All met' : `${unmet.length} unmet`}
+          </Badge>
           {unevaluated.length > 0 && (
-            <Chip
-              size="small"
-              label={`${unevaluated.length} not evaluated`}
-              data-testid="PlanStats.ExitCriteria.Unevaluated"
-              sx={{
-                bgcolor: 'transparent',
-                color: 'text.secondary',
-                border: '1px solid color-mix(in srgb, currentColor 30%, transparent)',
-              }}
-            />
+            <Badge tone="plain" data-testid="PlanStats.ExitCriteria.Unevaluated">
+              {unevaluated.length} not evaluated
+            </Badge>
           )}
-        </Stack>
+        </div>
       }
     >
-      <Stack sx={{ gap: 1 }}>
-        {/*
-          Without this line the panel contradicts the headline: a pass-rate criterion is
-          evaluated against every case in scope, so it reads 89.1% while the summary above
-          shows 91.1% "of executed". Both are right; the difference is the denominator, and
-          leaving the reader to work that out is precisely the ambiguity this screen exists
-          to remove.
-        */}
-        {criteria.some((c) => c.metric === 'pass_rate') && (
-          <Typography
-            variant="caption"
-            sx={{ color: 'text.secondary', mb: 0.5 }}
-            data-testid="PlanStats.ExitCriteria.DenominatorNotice"
-          >
-            Criteria are evaluated against every case in scope, not only those executed — so a
-            pass-rate figure here is lower than the "of executed" rate above until coverage
-            reaches 100%.
-          </Typography>
-        )}
-        {criteria.map((criterion, index) => {
-          // Three states, not two. A criterion the server could not evaluate is grey and says so,
-          // rather than borrowing the failed colour and reading as a blocker.
-          //
-          // The mapping moved to `lib/results.ts` in §100, when the plan LIST grew a second
-          // reader of it (`CriteriaStrip`). It was correct here and a second inline copy there is
-          // how the two would come to draw the same unevaluated gate in different colours.
-          const state = criterionState(criterion);
-          const color = criterionColor(state);
+      {/*
+        Without this line the panel contradicts the headline: a pass-rate criterion is
+        evaluated against every case in scope, so it reads 89.1% while the summary above
+        shows 91.1% "of executed". Both are right; the difference is the denominator, and
+        leaving the reader to work that out is precisely the ambiguity this screen exists
+        to remove.
+      */}
+      {criteria.some((c) => c.metric === 'pass_rate') && (
+        <p
+          className="mb-2 max-w-[74ch] text-[11.5px] leading-[1.5] text-ink-4"
+          data-testid="PlanStats.ExitCriteria.DenominatorNotice"
+        >
+          Criteria are evaluated against every case in scope, not only those executed — so a
+          pass-rate figure here is lower than the "of executed" rate above until coverage
+          reaches 100%.
+        </p>
+      )}
+      {criteria.map((criterion, index) => {
+        // Three states, not two. A criterion the server could not evaluate is grey and says so,
+        // rather than borrowing the failed colour and reading as a blocker.
+        //
+        // The mapping moved to `lib/results.ts` in §100, when the plan LIST grew a second
+        // reader of it (`CriteriaStrip`). It was correct here and a second inline copy there is
+        // how the two would come to draw the same unevaluated gate in different colours.
+        const state = criterionState(criterion);
+        const color = criterionColor(state);
+        const Mark = state === 'NOT_EVALUATED' ? CircleHelp : state === 'MET' ? CircleCheck : CircleAlert;
 
-          return (
-            <Stack
-              // Metric is not unique — a plan may gate on pass_rate per configuration — so the
-              // index is part of the key rather than the whole of it being the metric.
-              key={`${criterion.metric}-${index}`}
-              direction="row"
-              sx={{ alignItems: 'center', gap: 1.5 }}
-              data-testid="PlanStats.ExitCriteria.Item"
-            >
-              <Box sx={{ display: 'flex', color }}>
-                {state === 'NOT_EVALUATED' ? (
-                  <HelpOutlineIcon fontSize="small" />
-                ) : state === 'MET' ? (
-                  <CheckCircleOutlineIcon fontSize="small" />
-                ) : (
-                  <ErrorOutlineIcon fontSize="small" />
-                )}
-              </Box>
-              <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
-                {criterion.label}
-                {state === 'NOT_EVALUATED' && (
-                  <Typography
-                    component="span"
-                    variant="caption"
-                    sx={{ color: 'text.secondary', ml: 1 }}
-                    data-testid="PlanStats.ExitCriteria.Item.NotEvaluated"
-                  >
-                    — not evaluated: nothing in TCMS measures this yet
-                  </Typography>
-                )}
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+        return (
+          <div
+            // Metric is not unique — a plan may gate on pass_rate per configuration — so the
+            // index is part of the key rather than the whole of it being the metric.
+            key={`${criterion.metric}-${index}`}
+            className="flex items-start gap-[11px] border-b border-white/8 py-2.5 text-[13px] last:border-b-0"
+            data-testid="PlanStats.ExitCriteria.Item"
+          >
+            <Mark aria-hidden style={{ color }} className="mt-px size-4 shrink-0" />
+            <span className="min-w-0 flex-1 text-ink-2">
+              {criterion.label}
+              {state === 'NOT_EVALUATED' && (
+                <span
+                  className="block text-[12px] text-ink-4"
+                  data-testid="PlanStats.ExitCriteria.Item.NotEvaluated"
+                >
+                  not evaluated: nothing in TCMS measures this yet
+                </span>
+              )}
+              <span className="block text-[12px] text-ink-4">
                 target <Identifier variant="muted">{criterion.op} {criterion.value}</Identifier>
-              </Typography>
-              <Identifier sx={{ minWidth: 64, textAlign: 'right', color, fontWeight: 600 }}>
-                {criterion.actual ?? EM_DASH}
-              </Identifier>
-            </Stack>
-          );
-        })}
-      </Stack>
-    </Panel>
+              </span>
+            </span>
+            <span style={{ color }} className="shrink-0 font-mono text-[15px] font-medium tabular-nums">
+              {criterion.actual ?? EM_DASH}
+            </span>
+          </div>
+        );
+      })}
+    </FigurePanel>
   );
 }
 
@@ -1029,124 +1122,190 @@ function BreakdownTable({
   emptyBody: string;
 }) {
   if (rows.length === 0) {
-    return (
-      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-        {emptyBody}
-      </Typography>
-    );
+    return <p className="text-[12.5px] text-ink-3">{emptyBody}</p>;
   }
 
   return (
-    <ScrollX>
-      <Table size="small" data-testid={`${testId}.Grid`}>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.id} data-testid={`${testId}.Row`}>
-              <TableCell sx={{ border: 0, pl: 0, width: '40%' }}>
-                <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}>
-                  {row.identifier && <Identifier variant="muted">{row.identifier}</Identifier>}
-                  {row.href ? (
-                    <RouterLink to={row.href} data-testid={`${testId}.Row.Link`}>
-                      <Typography variant="body2" component="span">
-                        {row.label}
-                      </Typography>
-                    </RouterLink>
-                  ) : (
-                    <Typography variant="body2">{row.label}</Typography>
-                  )}
-                </Stack>
-              </TableCell>
-              <TableCell sx={{ border: 0, width: '35%' }}>
-                <ResultBar counts={row.counts} />
-              </TableCell>
-              <TableCell sx={{ border: 0, pr: 0 }} align="right">
-                <ResultCountsCell
-                  counts={row.counts}
-                  denominator={denominator}
-                  testId={`${testId}.Row.PassRate`}
-                />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </ScrollX>
+    <div data-testid={`${testId}.Grid`}>
+      {rows.map((row) => (
+        <div
+          key={row.id}
+          className="grid grid-cols-[minmax(0,1fr)_minmax(70px,110px)_auto] items-center gap-[11px] border-b border-white/8 py-2 text-[12.5px] last:border-b-0"
+          data-testid={`${testId}.Row`}
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            {row.identifier && <Identifier variant="muted">{row.identifier}</Identifier>}
+            {row.href ? (
+              <RouterLink to={row.href} data-testid={`${testId}.Row.Link`} className="truncate text-ink-2 hover:text-ink">
+                {row.label}
+              </RouterLink>
+            ) : (
+              <span className="truncate text-ink-2">{row.label}</span>
+            )}
+          </span>
+          <ResultBar
+            passed={row.counts.passed}
+            failed={row.counts.failed}
+            blocked={row.counts.blocked}
+            skipped={row.counts.skipped}
+            untested={row.counts.notRun}
+          />
+          <ResultCountsCell
+            counts={row.counts}
+            denominator={denominator}
+            testId={`${testId}.Row.PassRate`}
+          />
+        </div>
+      ))}
+    </div>
   );
 }
 
 /**
- * Pass-rate trend across the plan's runs. A sparkline, drawn as an inline SVG polyline —
- * six points do not justify a charting dependency, and the run keys underneath make each
- * point identifiable, which is what turns "it dropped" into "it dropped at TR-415".
+ * Pass-rate trend across the plan's runs — **the one line chart in the product**, and the only
+ * place a chart library would ever have been considered.
+ *
+ * Three things here are design language §6 rather than taste:
+ *
+ * - **The y axis starts at zero and the figure says so.** A truncated axis turns a six-point
+ *   recovery into a cliff, and a reader cannot tell one from the other without being told.
+ * - **A crosshair and a readout by default, not on request.** An SVG chart in a browser *is*
+ *   interactive; shipping one without a hover layer makes the reader estimate against gridlines.
+ * - **One series, in steel.** There is no categorical palette in this product, so there is no
+ *   second line to add here without faceting.
+ *
+ * Six points still do not justify a charting dependency, and the run keys underneath are what turn
+ * "it dropped" into "it dropped at TR-415".
  */
 function TrendChart({ trend }: { trend: NonNullable<PlanStatistics['trend']> }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+
   if (trend.length < 2) return null;
 
-  const width = 100;
-  const height = 32;
-  const points = trend
-    .map((point, i) => {
-      const x = (i / (trend.length - 1)) * width;
-      const y = height - (point.passRate / 100) * height;
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(' ');
+  const width = 520;
+  const height = 130;
+  const inset = 20;
+  const span = width - inset * 2;
+  const x = (index: number) => inset + (index / (trend.length - 1)) * span;
+  // Zero-based, and the whole reason this expression is not `(rate - min) / (max - min)`.
+  const y = (rate: number) => height - (rate / 100) * height;
 
+  const line = trend.map((point, index) => `${x(index).toFixed(1)} ${y(point.passRate).toFixed(1)}`).join(' L ');
   const latest = trend[trend.length - 1];
   const previous = trend[trend.length - 2];
   const delta = latest.passRate - previous.passRate;
+  const readout = hovered === null ? latest : trend[hovered];
+  const readoutIndex = hovered ?? trend.length - 1;
 
   return (
-    <Panel title="Pass rate over the plan's runs" testId="PlanStats.Trend">
-      <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 3, alignItems: { sm: 'center' } }}>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Box
-            component="svg"
-            viewBox={`0 0 ${width} ${height}`}
-            preserveAspectRatio="none"
-            role="img"
-            aria-label={`Pass rate across ${trend.length} runs, most recently ${formatPercent(latest.passRate)}`}
-            data-testid="PlanStats.Trend.Chart"
-            sx={{ width: '100%', height: 64, overflow: 'visible' }}
-          >
-            <polyline
-              points={points}
-              fill="none"
-              stroke="var(--color-action-primary)"
-              strokeWidth={1.5}
-              vectorEffect="non-scaling-stroke"
-            />
-            {trend.map((point, i) => (
-              <circle
-                key={point.runKey}
-                cx={(i / (trend.length - 1)) * width}
-                cy={height - (point.passRate / 100) * height}
-                r={2}
-                fill="var(--color-action-primary)"
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-          </Box>
-          <Stack direction="row" sx={{ justifyContent: 'space-between', mt: 0.5 }}>
-            <Identifier variant="muted">{trend[0].runKey}</Identifier>
-            <Identifier variant="muted">{latest.runKey}</Identifier>
-          </Stack>
-        </Box>
+    <FigurePanel
+      title="Pass rate over the plan's runs"
+      subtitle="one series · each point is a completed run"
+      testId="PlanStats.Trend"
+    >
+      <div className="flex items-baseline gap-2.5">
+        <span className="font-mono text-[30px] leading-none font-medium tracking-[-.03em] tabular-nums text-ink">
+          {formatPercent(latest.passRate)}
+        </span>
+        <span
+          style={{ color: delta >= 0 ? 'var(--color-passed)' : 'var(--color-failed)' }}
+          className="text-[12px]"
+        >
+          {delta >= 0 ? '+' : ''}
+          {formatPercent(delta)} vs {previous.runKey}
+        </span>
+      </div>
 
-        <Box sx={{ flexShrink: 0 }}>
-          <Typography className="identifier" sx={{ fontSize: '1.5rem', fontWeight: 600, lineHeight: 1 }}>
-            {formatPercent(latest.passRate)}
-          </Typography>
-          <Typography
-            variant="caption"
-            sx={{ color: delta >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}
-          >
-            {delta >= 0 ? '+' : ''}
-            {formatPercent(delta)} vs {previous.runKey}
-          </Typography>
-        </Box>
-      </Stack>
-    </Panel>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={`Pass rate across ${trend.length} runs, most recently ${formatPercent(latest.passRate)}. The vertical axis runs from 0 to 100 per cent.`}
+        data-testid="PlanStats.Trend.Chart"
+        className="mt-2.5 h-[130px] w-full overflow-visible"
+        onMouseLeave={() => setHovered(null)}
+      >
+        <defs>
+          <linearGradient id="planTrendFade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--color-steel)" stopOpacity=".22" />
+            <stop offset="100%" stopColor="var(--color-steel)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {[0, 50, 100].map((rate) => (
+          <line
+            key={rate}
+            x1={0}
+            y1={y(rate)}
+            x2={width}
+            y2={y(rate)}
+            stroke="var(--color-border)"
+            strokeWidth={1}
+          />
+        ))}
+        <path d={`M ${line} L ${x(trend.length - 1)} ${height} L ${x(0)} ${height} Z`} fill="url(#planTrendFade)" />
+        <path
+          d={`M ${line}`}
+          fill="none"
+          stroke="var(--color-steel)"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        <line
+          x1={x(readoutIndex)}
+          y1={0}
+          x2={x(readoutIndex)}
+          y2={height}
+          stroke="var(--color-border-strong)"
+          strokeWidth={1}
+          strokeDasharray="3 3"
+          vectorEffect="non-scaling-stroke"
+        />
+        {trend.map((point, index) => (
+          <circle
+            key={point.runKey}
+            cx={x(index)}
+            cy={y(point.passRate)}
+            r={index === readoutIndex ? 5 : 3.5}
+            fill="var(--color-steel)"
+            stroke="var(--color-panel)"
+            strokeWidth={2}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+        {/*
+          The hit areas are the last children so they sit above the drawing, and they are one
+          column per point rather than a mousemove handler doing arithmetic: a column is a real
+          target a pointer can rest in, and it needs no scale inversion to know which run it is.
+        */}
+        {trend.map((point, index) => (
+          <rect
+            key={`${point.runKey}-hit`}
+            x={x(index) - span / (trend.length - 1) / 2}
+            y={0}
+            width={span / (trend.length - 1)}
+            height={height}
+            fill="transparent"
+            onMouseEnter={() => setHovered(index)}
+          />
+        ))}
+      </svg>
+
+      <p className="mt-1.5 flex justify-between font-mono text-[10px] text-ink-4">
+        <span>{trend[0].runKey}</span>
+        <span>{latest.runKey}</span>
+      </p>
+
+      <p className="mt-2.5 text-[12px] text-ink-3" data-testid="PlanStats.Trend.Readout">
+        <Identifier variant="muted">{readout.runKey}</Identifier> — pass rate{' '}
+        <Identifier>{formatPercent(readout.passRate)}</Identifier>
+      </p>
+      <p className="mt-1 text-[11.5px] text-ink-4">
+        The vertical axis starts at <b className="font-medium text-ink-3">0</b>, not at the lowest
+        point. A truncated axis turns a six-point recovery into a cliff.
+      </p>
+    </FigurePanel>
   );
 }
 
@@ -1158,103 +1317,86 @@ function Blockers({
   projectId: string;
 }) {
   return (
-    <Panel
-      title="What's blocking this plan"
+    <Section
+      title="What failed or was blocked"
       testId="PlanStats.Blockers"
       actions={
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          {formatCount(blockers.length)} failed or blocked
-        </Typography>
+        <span className="text-[11.5px] text-ink-4">{formatCount(blockers.length)} failed or blocked</span>
       }
     >
       {blockers.length === 0 ? (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        <p className="max-w-[74ch] text-[12.5px] leading-[1.55] text-ink-3">
           Nothing failed or blocked. Anything unmet in the exit criteria above is about coverage,
           not defects.
-        </Typography>
+        </p>
       ) : (
-        <ScrollX>
-          <Table size="small" data-testid="PlanStats.Blockers.Grid">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ color: 'text.secondary' }}>Case</TableCell>
-                <TableCell sx={{ color: 'text.secondary', width: 110 }}>Result</TableCell>
-                <TableCell sx={{ color: 'text.secondary', width: 130 }}>Defects</TableCell>
-                <TableCell sx={{ color: 'text.secondary', width: 150 }}>Executed</TableCell>
+        <Table data-testid="PlanStats.Blockers.Grid">
+          <TableHead>
+            <TableRow>
+              <TableHeaderCell>Case</TableHeaderCell>
+              <TableHeaderCell className="w-[110px]">Result</TableHeaderCell>
+              <TableHeaderCell className="w-[130px]">Defects</TableHeaderCell>
+              <TableHeaderCell className="w-[150px]">Executed</TableHeaderCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {blockers.map((blocker) => (
+              <TableRow key={blocker.id} data-testid="PlanStats.Blockers.Row">
+                {/*
+                  The title is the cell's own line and the key sits above it — UX#113's quiet
+                  second line rather than a twelfth column, and it is what lets the title stop
+                  being truncated to an ellipsis nobody can read.
+                */}
+                <TableCell variant="title" subtitle={blocker.caseTitle}>
+                  <span className="flex items-center gap-2">
+                    <RouterLink
+                      to={`/projects/${projectId}/cases/${blocker.caseId}`}
+                      data-testid="PlanStats.Blockers.Row.CaseLink"
+                    >
+                      <Identifier>{blocker.caseKey}</Identifier>
+                    </RouterLink>
+                    {/* The version that failed, not the current one — a case edited since
+                        would otherwise silently rewrite what this row means. */}
+                    <Identifier variant="muted">
+                      <span title="The case version this run executed">v{blocker.caseVersionNo}</span>
+                    </Identifier>
+                  </span>
+                </TableCell>
+                <TableCell>
+                  {blocker.status?.kind && <StatusChip kind={blocker.status.kind} />}
+                </TableCell>
+                <TableCell>
+                  {blocker.defects.length === 0 ? (
+                    <span className="text-[11.5px] text-[color:var(--color-blocked)]">No defect linked</span>
+                  ) : (
+                    <span className="flex flex-col gap-0.5">
+                      {blocker.defects.map((defect) => (
+                        <a
+                          key={defect.id}
+                          href={defect.url}
+                          target="_blank"
+                          rel="noopener"
+                          data-testid="PlanStats.Blockers.Row.DefectLink"
+                          className="inline-flex items-center gap-1 text-[12px] text-steel hover:underline"
+                        >
+                          <Identifier>{defect.externalKey}</Identifier>
+                          {defect.statusCache && <span className="text-ink-4">{defect.statusCache}</span>}
+                          <ExternalLink aria-hidden className="size-3 text-ink-4" />
+                          <span className="sr-only">(opens in a new tab)</span>
+                        </a>
+                      ))}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="text-[11.5px] text-ink-4">
+                  {formatDateTime(blocker.executedAt)}
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {blockers.map((blocker) => (
-                <TableRow key={blocker.id} data-testid="PlanStats.Blockers.Row">
-                  <TableCell>
-                    <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}>
-                      <RouterLink
-                        to={`/projects/${projectId}/cases/${blocker.caseId}`}
-                        data-testid="PlanStats.Blockers.Row.CaseLink"
-                      >
-                        <Identifier>{blocker.caseKey}</Identifier>
-                      </RouterLink>
-                      <Tooltip title={blocker.caseTitle}>
-                        <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {blocker.caseTitle}
-                        </Box>
-                      </Tooltip>
-                      {/* The version that failed, not the current one — a case edited since
-                          would otherwise silently rewrite what this row means. */}
-                      <Tooltip title="The case version this run executed">
-                        <Box>
-                          <Identifier variant="muted">v{blocker.caseVersionNo}</Identifier>
-                        </Box>
-                      </Tooltip>
-                    </Stack>
-                  </TableCell>
-                  <TableCell>
-                    {blocker.status?.kind && <StatusChip kind={blocker.status.kind} />}
-                  </TableCell>
-                  <TableCell>
-                    {blocker.defects.length === 0 ? (
-                      <Typography variant="caption" sx={{ color: 'var(--color-warning)' }}>
-                        No defect linked
-                      </Typography>
-                    ) : (
-                      <Stack sx={{ gap: 0.25 }}>
-                        {blocker.defects.map((defect) => (
-                          <Box
-                            key={defect.id}
-                            component="a"
-                            href={defect.url}
-                            target="_blank"
-                            rel="noopener"
-                            data-testid="PlanStats.Blockers.Row.DefectLink"
-                            sx={{ fontSize: '0.75rem' }}
-                          >
-                            <Identifier>{defect.externalKey}</Identifier>
-                            {defect.statusCache && (
-                              <Box component="span" sx={{ color: 'text.secondary', ml: 0.5 }}>
-                                {defect.statusCache}
-                              </Box>
-                            )}
-                            <Box component="span" sx={{ ml: 0.5, color: 'text.secondary' }} aria-hidden="true">
-                              ↗
-                            </Box>
-                            <Box component="span" className="sr-only">
-                              (opens in a new tab)
-                            </Box>
-                          </Box>
-                        ))}
-                      </Stack>
-                    )}
-                  </TableCell>
-                  <TableCell sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
-                    {formatDateTime(blocker.executedAt)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </ScrollX>
+            ))}
+          </TableBody>
+        </Table>
       )}
-    </Panel>
+    </Section>
   );
 }
 
@@ -1268,27 +1410,22 @@ function NotRun({
   if (cases.length === 0) return null;
 
   return (
-    <Panel title="Still to execute" testId="PlanStats.NotRun">
-      <Stack sx={{ gap: 0.75 }}>
+    <Section title="Still to execute" testId="PlanStats.NotRun">
+      <div className="flex flex-col">
         {cases.map((testCase) => (
-          <Stack
+          <div
             key={testCase.id}
-            direction="row"
-            sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}
+            className="flex min-w-0 items-center gap-2 border-b border-white/8 py-1.5 text-[12.5px] last:border-b-0"
             data-testid="PlanStats.NotRun.Row"
           >
             <RouterLink to={`/projects/${projectId}/cases/${testCase.id}`} data-testid="PlanStats.NotRun.Row.CaseLink">
               <Identifier>{testCase.key}</Identifier>
             </RouterLink>
-            <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.8125rem' }}>
-              {testCase.title}
-            </Box>
-            <Typography variant="caption" sx={{ color: 'text.secondary', ml: 'auto', flexShrink: 0 }}>
-              {testCase.suiteName}
-            </Typography>
-          </Stack>
+            <span className="truncate text-ink-2">{testCase.title}</span>
+            <span className="ml-auto shrink-0 text-[11.5px] text-ink-4">{testCase.suiteName}</span>
+          </div>
         ))}
-      </Stack>
-    </Panel>
+      </div>
+    </Section>
   );
 }
