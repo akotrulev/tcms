@@ -52,6 +52,20 @@ describe('StateBlock', () => {
     expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
   });
 
+  /**
+   * The common path on this codebase, not an edge case: `005-renders-backend-support` C1b dropped
+   * the endpoint that would answer *who can grant this here*, so there is usually no name to give.
+   * The permission is still named — that is the clause the reader can repeat to somebody — and the
+   * ask degrades to the role rather than to nothing.
+   */
+  it('still names the permission when no individual can be named', () => {
+    render(<StateBlock kind="refused" permission="case:edit" />);
+
+    expect(screen.getByText(/case:edit/)).toBeInTheDocument();
+    expect(screen.getByText(/Company Admin/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
+  });
+
   it('does not dress a refusal as a failure', () => {
     const { container } = render(
       <StateBlock kind="refused" permission="case:edit" grantee="M. Kalcheva" />,

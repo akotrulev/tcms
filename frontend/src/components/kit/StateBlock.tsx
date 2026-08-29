@@ -54,10 +54,26 @@ export interface StaleStateProps extends BaseProps {
   onRetry?: () => void;
 }
 
+/**
+ * `grantee` is optional, and that is a concession to reality rather than a softening of §7.
+ *
+ * The design language says a refusal names *"the name of somebody in this company who holds it"*.
+ * The endpoint that would answer *who can grant this here* was **deliberately dropped** by
+ * `005-renders-backend-support` C1b, so on this codebase there is no named individual to offer.
+ * `describeError` already degrades the way C1b decided: it names the permission from
+ * `Problem.permission` and says *"Ask a Company Admin"*, and `DataRegion` renders a link to the
+ * org chart — a screen every member may open, which already discloses a company's administrators.
+ *
+ * So: pass `grantee` where a name is genuinely known, and `action` where the best available answer
+ * is a way to go and find one. A refusal that names neither is still correct — it names the
+ * permission, which is the part the reader can repeat to somebody.
+ */
 export interface RefusedStateProps extends BaseProps {
   kind: 'refused';
   permission: string;
-  grantee: string;
+  grantee?: string;
+  /** How to find someone who can grant it, when no individual can be named. */
+  action?: ReactNode;
 }
 
 export type StateBlockProps =
@@ -166,7 +182,12 @@ export function StateBlock(props: StateBlockProps) {
       <Shell
         icon={Lock}
         title="You don't have access"
-        description={`This needs the ${props.permission} permission. Ask ${props.grantee} to grant it.`}
+        description={
+          props.grantee
+            ? `This needs the ${props.permission} permission. Ask ${props.grantee} to grant it.`
+            : `This needs the ${props.permission} permission. Ask a Company Admin to grant it.`
+        }
+        actions={props.action}
         className={className}
         data-testid={props['data-testid']}
       />
