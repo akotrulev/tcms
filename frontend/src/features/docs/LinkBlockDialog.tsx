@@ -1,22 +1,19 @@
-import {
-  Alert,
-  Autocomplete,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-  ToggleButton,
-  ToggleButtonGroup,
-} from '@mui/material';
 import { useEffect, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { useCases, useLinkBlock, useSuites } from '../../api/queries';
 import type { BlockLink, DocBlock, LinkRelationship, Suite, TestCaseSummary } from '../../api/types';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
+import { cn } from '../../lib/cn';
 import { describeError } from '../../lib/describeError';
 import { docBlockTypeLabel, linkRelationshipHelp, linkRelationshipLabels, linkSourceTypeLabels } from '../../lib/labels';
 
@@ -28,6 +25,20 @@ type SourceType = BlockLink['sourceType'];
  * against the wrong element for ever.
  */
 const TestIdPrefix = 'Docs.Block.LinkDialog';
+
+const FIELD =
+  'w-full rounded-[6px] border border-white/8 bg-field px-3 py-1.5 text-left text-[13px] text-ink ' +
+  'placeholder:text-ink-4 focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  'focus-visible:outline-[color:var(--color-given)]';
+
+const POPOVER =
+  'absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border border-white/8 bg-panel p-1 ' +
+  'shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]';
+
+const OPTION =
+  'block w-full cursor-pointer rounded-[4px] px-2.5 py-1.5 text-left text-[13px] text-ink-2 ' +
+  'hover:bg-white/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] ' +
+  'focus-visible:outline-[color:var(--color-given)]';
 
 /**
  * Claiming that a case — or a whole suite — verifies one block of a specification (§172; plan §6i).
@@ -51,9 +62,19 @@ const TestIdPrefix = 'Docs.Block.LinkDialog';
  *
  * A project has thousands of cases and a handful of suites, so the case arm is `BindTestDialog`'s
  * server-side type-ahead (open on the first twenty, filter on the server, never re-filter the
- * answer client-side) and the suite arm is a plain select over the whole list. Both queries stay
+ * answer client-side) and the suite arm is a plain list over the whole set. Both queries stay
  * mounted across the toggle: they are two cheap list reads, and gating one on the toggle would make
  * switching kinds show a spinner over data that was already in the cache.
+ *
+ * ## Both pickers are disclosures this file owns, not `ui/select`
+ *
+ * ~~MUI's `Autocomplete` and a `TextField select`.~~ → **superseded by 007 T14.** What replaces
+ * them is not the kit's Radix `Select` either: that primitive calls `hasPointerCapture` on its
+ * trigger, jsdom implements neither it nor a polyfill, and `src/test/setup.ts` is deliberately not
+ * a place where the application is bent to suit the harness — `ReviewPanel` records the same call
+ * for the same reason. So each picker is a real `role="combobox"` over a real `role="listbox"`:
+ * native focus, native keys, and nothing to stub. The case arm's combobox is the **input itself**,
+ * because typing into it is what narrows the list.
  *
  * ## Linking twice is not an error, so this dialog does not treat it as one
  *
@@ -71,9 +92,8 @@ const TestIdPrefix = 'Docs.Block.LinkDialog';
  * search box, because the input is controlled and a `value` with an empty `inputValue` renders as a
  * selection nobody can see.
  *
- * It is **merged into the options** when the server's answer for that query does not contain it.
- * Without that the picker holds a value matching no option, which MUI renders and warns about, and
- * which a `filterOptions` that trusts the server cannot repair.
+ * It is **merged into the options** when the server's answer for that query does not contain it, so
+ * the carried case is choosable from the list it is already the value of.
  */
 export function LinkBlockDialog({
   open,
@@ -100,6 +120,8 @@ export function LinkBlockDialog({
   const [query, setQuery] = useState(intendedCase ? caseLabel(intendedCase) : '');
   const [pickedCase, setPickedCase] = useState<TestCaseSummary | null>(intendedCase);
   const [pickedSuite, setPickedSuite] = useState<string>('');
+  const [caseListOpen, setCaseListOpen] = useState(false);
+  const [suiteListOpen, setSuiteListOpen] = useState(false);
 
   const cases = useCases(projectId, { q: query.trim() || undefined, size: 20 }, 'key,asc');
   const suites = useSuites(projectId);
@@ -120,6 +142,8 @@ export function LinkBlockDialog({
       setQuery(intendedCase ? caseLabel(intendedCase) : '');
       setPickedCase(intendedCase);
       setPickedSuite('');
+      setCaseListOpen(false);
+      setSuiteListOpen(false);
     }
     /*
       `intendedCase?.id` is deliberately narrower than `intendedCase`: a parent that rebuilds the
@@ -135,6 +159,7 @@ export function LinkBlockDialog({
   const unnamedFailure = write.isError && !named.some((field) => fieldError(field) !== undefined);
 
   const sourceId = sourceType === 'TEST_CASE' ? (pickedCase?.id ?? '') : pickedSuite;
+  const chosenSuite = (suites.data ?? []).find((suite: Suite) => suite.id === pickedSuite);
 
   const submit = () => {
     if (!sourceId) return;
@@ -142,132 +167,223 @@ export function LinkBlockDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestIdPrefix}>
-      <DialogTitle>Link something to this block</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 0.5 }}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-xl" data-testid={TestIdPrefix}>
+        <DialogHeader>
+          <DialogTitle>Link something to this block</DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-4 flex flex-col gap-4">
           {/*
             The block restated, because the page has many and the dialog covers the one that was
             clicked. Its type is named as well as its words: a caption and a paragraph read the same
             in one line of prose, and on a `table` the text IS the caption — which is what the
             coverage matrix reads as the statement.
           */}
-          <DialogContentText component="div" data-testid={`${TestIdPrefix}.Subject`}>
+          <p className="m-0 text-[13px] text-ink-3" data-testid={`${TestIdPrefix}.Subject`}>
             {docBlockTypeLabel[block.blockType]} — {excerpt(block.text)}
-          </DialogContentText>
+          </p>
 
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            value={sourceType}
-            onChange={(_event, chosen: SourceType | null) => chosen && setSourceType(chosen)}
+          <div
+            role="group"
             aria-label="What is being linked"
+            className="inline-flex w-fit gap-0.5 rounded-lg bg-white/4 p-0.5"
           >
             {(Object.keys(linkSourceTypeLabels) as SourceType[]).map((value) => (
-              <ToggleButton key={value} value={value} data-testid={`${TestIdPrefix}.Kind.${value}`}>
+              <button
+                key={value}
+                type="button"
+                aria-pressed={sourceType === value}
+                onClick={() => setSourceType(value)}
+                data-testid={`${TestIdPrefix}.Kind.${value}`}
+                className={cn(
+                  'cursor-pointer rounded-md border-0 px-[11px] py-1 text-xs font-medium',
+                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
+                  sourceType === value
+                    ? 'bg-panel text-ink shadow-[0_1px_2px_rgb(0_0_0/40%)]'
+                    : 'bg-transparent text-ink-3 hover:text-ink-2',
+                )}
+              >
                 {linkSourceTypeLabels[value]}
-              </ToggleButton>
+              </button>
             ))}
-          </ToggleButtonGroup>
+          </div>
 
           {sourceType === 'TEST_CASE' ? (
-            <Autocomplete
-              size="small"
-              options={options}
-              // The server has already filtered. Filtering again client-side would hide rows that
-              // matched on a field the option label does not show — `BindTestDialog`'s note.
-              filterOptions={(all) => all}
-              getOptionLabel={caseLabel}
-              // By id, because the carried case and the served row are two objects: the default
-              // identity comparison would call a pre-selected case "not one of the options".
-              isOptionEqualToValue={(option, value) => option.id === value.id}
-              inputValue={query}
-              onInputChange={(_event, next) => setQuery(next)}
-              value={pickedCase}
-              onChange={(_event, next) => setPickedCase(next)}
-              noOptionsText={cases.isPending ? 'Searching…' : 'No case matches.'}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Case"
-                  error={fieldError('sourceId') !== undefined}
-                  helperText={fieldError('sourceId') ?? 'By key or title.'}
-                  slotProps={{
-                    ...params.slotProps,
-                    htmlInput: {
-                      ...params.slotProps.htmlInput,
-                      'data-testid': `${TestIdPrefix}.Case`,
-                    },
-                  }}
-                />
-              )}
-            />
-          ) : (
-            <TextField
-              select
-              label="Suite"
-              value={pickedSuite}
-              onChange={(event) => setPickedSuite(event.target.value)}
-              error={fieldError('sourceId') !== undefined}
-              helperText={
-                fieldError('sourceId') ??
-                'Every case the suite resolves to counts, including ones a tag rule pulls in later.'
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Suite` } }}
+            <Field
+              label="Case"
+              htmlFor="link-block-case"
+              error={fieldError('sourceId')}
+              help="By key or title."
             >
-              {(suites.data ?? []).map((suite: Suite) => (
-                <MenuItem key={suite.id} value={suite.id}>
-                  {suite.key} — {suite.name}
-                </MenuItem>
-              ))}
-            </TextField>
+              <div className="relative">
+                <input
+                  id="link-block-case"
+                  type="text"
+                  role="combobox"
+                  aria-expanded={caseListOpen}
+                  aria-controls={caseListOpen ? "link-block-case-options" : undefined}
+                  aria-autocomplete="list"
+                  value={query}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setCaseListOpen(true);
+                  }}
+                  onClick={() => setCaseListOpen(true)}
+                  data-testid={`${TestIdPrefix}.Case`}
+                  className={FIELD}
+                />
+                {caseListOpen && (
+                  <>
+                    <div aria-hidden className="fixed inset-0 z-40" onClick={() => setCaseListOpen(false)} />
+                    <div
+                      id="link-block-case-options"
+                      role="listbox"
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') setCaseListOpen(false);
+                      }}
+                      className={POPOVER}
+                    >
+                      {options.length === 0 ? (
+                        <p className="m-0 px-2.5 py-1.5 text-[12.5px] text-ink-4">
+                          {cases.isPending ? 'Searching…' : 'No case matches.'}
+                        </p>
+                      ) : (
+                        // The server has already filtered. Filtering again client-side would hide
+                        // rows that matched on a field the label does not show — `BindTestDialog`'s
+                        // note.
+                        options.map((row) => (
+                          <button
+                            key={row.id}
+                            type="button"
+                            role="option"
+                            aria-selected={row.id === pickedCase?.id}
+                            onClick={() => {
+                              setPickedCase(row);
+                              setQuery(caseLabel(row));
+                              setCaseListOpen(false);
+                            }}
+                            className={OPTION}
+                          >
+                            {caseLabel(row)}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </Field>
+          ) : (
+            <Field
+              label="Suite"
+              htmlFor="link-block-suite"
+              error={fieldError('sourceId')}
+              help="Every case the suite resolves to counts, including ones a tag rule pulls in later."
+            >
+              <div className="relative">
+                <button
+                  type="button"
+                  id="link-block-suite"
+                  role="combobox"
+                  aria-expanded={suiteListOpen}
+                  aria-haspopup="listbox"
+                  aria-controls={suiteListOpen ? "link-block-suite-options" : undefined}
+                  onClick={() => setSuiteListOpen((current) => !current)}
+                  data-testid={`${TestIdPrefix}.Suite`}
+                  className={FIELD}
+                >
+                  {chosenSuite ? (
+                    `${chosenSuite.key} — ${chosenSuite.name}`
+                  ) : (
+                    <span className="text-ink-4">No suite chosen</span>
+                  )}
+                </button>
+                {suiteListOpen && (
+                  <>
+                    <div aria-hidden className="fixed inset-0 z-40" onClick={() => setSuiteListOpen(false)} />
+                    <div
+                      id="link-block-suite-options"
+                      role="listbox"
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') setSuiteListOpen(false);
+                      }}
+                      className={POPOVER}
+                    >
+                      {(suites.data ?? []).map((suite: Suite) => (
+                        <button
+                          key={suite.id}
+                          type="button"
+                          role="option"
+                          aria-selected={suite.id === pickedSuite}
+                          onClick={() => {
+                            setPickedSuite(suite.id);
+                            setSuiteListOpen(false);
+                          }}
+                          className={OPTION}
+                        >
+                          {suite.key} — {suite.name}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </Field>
           )}
 
           {/*
             Offered rather than defaulted, though the server defaults it — `ExternalLinkDialog`'s
-            argument, and it bites harder here: this is the screen that fills the coverage marker,
-            so a form that always sent VERIFIES would make every link on every specification read as
+            argument, and it bites harder here: this is the screen that fills the coverage line, so
+            a form that always sent VERIFIES would make every link on every specification read as
             proof, including the ones somebody meant as context.
           */}
-          <TextField
-            select
+          <Field
             label="What it does with this block"
-            value={relationship}
-            onChange={(event) => setRelationship(event.target.value as LinkRelationship)}
-            error={fieldError('relationship') !== undefined}
-            helperText={fieldError('relationship') ?? linkRelationshipHelp[relationship]}
-            slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Relationship` } }}
+            htmlFor="link-block-relationship"
+            error={fieldError('relationship')}
+            help={linkRelationshipHelp[relationship]}
           >
-            {(Object.keys(linkRelationshipLabels) as LinkRelationship[]).map((value) => (
-              <MenuItem key={value} value={value}>
-                {linkRelationshipLabels[value]}
-              </MenuItem>
-            ))}
-          </TextField>
+            <NativeSelect
+              id="link-block-relationship"
+              value={relationship}
+              onChange={(event) => setRelationship(event.target.value as LinkRelationship)}
+              data-testid={`${TestIdPrefix}.Relationship`}
+            >
+              {(Object.keys(linkRelationshipLabels) as LinkRelationship[]).map((value) => (
+                <option key={value} value={value}>
+                  {linkRelationshipLabels[value]}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
 
           {unnamedFailure && (
-            <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.Error`}>
-              {describeError(write.error).body}
-            </Alert>
+            <div data-testid={`${TestIdPrefix}.Error`}>
+              <Banner tone="bad">
+                <span role="alert">{describeError(write.error).body}</span>
+              </Banner>
+            </div>
           )}
-        </Stack>
+        </div>
+
+        <DialogFooter>
+          <Button variant="quiet" onClick={onClose} data-testid={`${TestIdPrefix}.Cancel`}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            // Nothing chosen is not a refusal worth a round trip — the server's 404 for a missing
+            // source says "the project, page, block or source is not visible here", which is the
+            // right answer to a wrong id and a baffling one to an empty picker.
+            disabled={!sourceId || write.isPending}
+            onClick={submit}
+            data-testid={`${TestIdPrefix}.Confirm`}
+          >
+            {write.isPending ? 'Linking…' : 'Link'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid={`${TestIdPrefix}.Cancel`}>
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          // Nothing chosen is not a refusal worth a round trip — the server's 404 for a missing
-          // source says "the project, page, block or source is not visible here", which is the
-          // right answer to a wrong id and a baffling one to an empty picker.
-          disabled={!sourceId || write.isPending}
-          onClick={submit}
-          data-testid={`${TestIdPrefix}.Confirm`}
-        >
-          {write.isPending ? 'Linking…' : 'Link'}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

@@ -1,36 +1,27 @@
-import {
-  Alert,
-  Box,
-  Button,
-  IconButton,
-  Link as MuiLink,
-  MenuItem,
-  Stack,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/AddOutlined';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownwardOutlined';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpwardOutlined';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ArrowDown, ArrowUp, GripVertical, Trash2 } from 'lucide-react';
+import { useEffect } from 'react';
 import { Controller, useFieldArray, useForm } from 'react-hook-form';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
+import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
 import { useDocPage, useProject, useUpdateDocPage } from '../../api/queries';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { Banner, DocumentSurface } from '../../components/kit';
+import { Button, Textarea } from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
+import { cn } from '../../lib/cn';
 import { describeError } from '../../lib/describeError';
-import { docBlockTypeLabel } from '../../lib/labels';
+import { docBlockTypeLabel, docPageStatusLabel } from '../../lib/labels';
 import type { DocPage } from '../../api/types';
 import { toast } from '../../notifications/toast';
 
 /**
- * Editing a documentation page — the title and the blocks.
+ * Editing a documentation page — the title and the blocks, against `renders/05-authoring.html`
+ * frame B at the 70ch prose measure.
  *
  * A route rather than a dialog: this is a long, multi-block form that benefits from a URL, which
  * is `ui-rules`' own test. It follows `CaseEditorPage`, down to registering with
@@ -56,11 +47,21 @@ import { toast } from '../../notifications/toast';
  * `field.id` gives the framework's key. It would look completely right, submit a fresh uuid for
  * every block on every save, and pass any test that only checks the text came back. Naming the
  * data field differently makes the mistake unavailable rather than merely discouraged.
+ *
+ * # Blocks get a gutter, not a toolbar each
+ *
+ * The render's one new component for this screen: a 22px gutter holding the drag handle and the
+ * block's type, at 35% opacity until the row is hovered or focused within. *"The affordance
+ * arrives where the work is"* — the same idea as the case editor's caret completion. The controls
+ * live in that gutter rather than in a *This block* rail, because every block on the page is
+ * editable at once here and a rail can only ever describe one.
  */
 
 const MAX_TITLE = 200;
 
 const BLOCK_TYPES = ['heading', 'paragraph', 'list', 'code', 'table', 'image'] as const;
+
+type BlockType = (typeof BLOCK_TYPES)[number];
 
 const BlockSchema = z.object({
   /** Null for a block being added here. See the header: NOT `id`. */
@@ -94,6 +95,10 @@ type PageFormInput = z.infer<typeof PageSchema>;
 
 const TestIdPrefix = 'DocEditor';
 
+/** `.sec h3` from `renders/tcms.css` — one spelling of a rail section heading on this screen. */
+const SECTION_HEADING =
+  'm-0 mb-2.5 flex items-baseline gap-2 text-[11px] font-semibold tracking-[.08em] text-ink-3 uppercase';
+
 /**
  * What `text` is called, per type — because it is three different fields wearing one name.
  *
@@ -107,7 +112,7 @@ const TEXT_LABEL = {
   code: 'Code',
   table: 'Caption',
   image: 'Alt text',
-} as const satisfies Record<(typeof BLOCK_TYPES)[number], string>;
+} as const satisfies Record<BlockType, string>;
 
 const TEXT_HINT = {
   heading: undefined,
@@ -116,33 +121,69 @@ const TEXT_HINT = {
   code: undefined,
   table: 'Names the table for anyone reading it, and is what a case links to.',
   image: 'Required. What a reader who cannot see the image gets instead.',
-} as const satisfies Record<(typeof BLOCK_TYPES)[number], string | undefined>;
+} as const satisfies Record<BlockType, string | undefined>;
+
+/** The gutter's type label — the render's `.ty`, upper-cased mono, never the full word. */
+const GUTTER_LABEL = {
+  heading: 'H',
+  paragraph: 'P',
+  list: 'List',
+  code: 'Code',
+  table: 'Table',
+  image: 'Image',
+} as const satisfies Record<BlockType, string>;
 
 export function DocPageEditorPage() {
   const { projectId = '', pageId = '' } = useParams();
   const project = useProject(projectId);
   const page = useDocPage(projectId, pageId);
 
+  /*
+    ~~Raised by `PageHeader`.~~ → superseded by 007 T14, which replaced that header with the
+    render's own top strip. Kept rather than dropped: a route change that announces nothing leaves
+    a screen-reader user on a page they have no way to know has changed.
+  */
+  const announce = useAnnounce();
+  useEffect(() => {
+    announce('Edit page loaded');
+  }, [announce]);
+
   return (
-    <Box>
-      <PageHeader
-        testId={`${TestIdPrefix}.Header`}
-        title="Edit page"
-        documentTitle={page.data ? `Edit · ${page.data.title}` : 'Edit page'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Documentation', to: `/projects/${projectId}/docs` },
-          { label: page.data?.title ?? 'Page', to: `/projects/${projectId}/docs/${pageId}` },
-          { label: 'Edit' },
-        ]}
-      />
+    <div>
+      <title>{page.data ? `Edit · ${page.data.title} · TCMS` : 'Edit page · TCMS'}</title>
+
+      <nav aria-label="Breadcrumb" className="mb-3 text-[12.5px] text-ink-3">
+        <RouterLink
+          to={`/projects/${projectId}`}
+          className="text-ink-3 no-underline hover:text-ink-2"
+        >
+          {project.data?.name ?? 'Project'}
+        </RouterLink>
+        <span className="px-1.5 text-ink-4">/</span>
+        <RouterLink
+          to={`/projects/${projectId}/docs`}
+          className="text-ink-3 no-underline hover:text-ink-2"
+        >
+          Documentation
+        </RouterLink>
+        <span className="px-1.5 text-ink-4">/</span>
+        <RouterLink
+          to={`/projects/${projectId}/docs/${pageId}`}
+          className="text-ink-3 no-underline hover:text-ink-2"
+        >
+          {page.data?.title ?? 'Page'}
+        </RouterLink>
+        <span className="px-1.5 text-ink-4">/</span>
+        <b className="font-medium text-ink-2">Edit</b>
+      </nav>
+
       <DataRegion
         testId={`${TestIdPrefix}.Region`}
         state={{ ...page, refetch: () => void page.refetch() }}
       >
         {(data) => <DocPageEditor projectId={projectId} page={data} />}
       </DataRegion>
-    </Box>
+    </div>
   );
 }
 
@@ -190,6 +231,11 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
   const blocks = useFieldArray({ control, name: 'blocks' });
   const watched = watch('blocks');
 
+  /** What already claims a block on this page — the render's *What links here*. */
+  const linkedCases = new Set(
+    (page.blocks ?? []).flatMap((block) => block.links.map((link) => link.sourceKey)),
+  );
+
   const submit = handleSubmit(async (values) => {
     try {
       const saved = await update.mutateAsync({
@@ -219,8 +265,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
               : null,
           text: block.text,
           rows: block.blockType === 'table' ? block.rows : null,
-          attachmentId:
-            block.blockType === 'image' ? block.attachmentId || null : null,
+          attachmentId: block.blockType === 'image' ? block.attachmentId || null : null,
         })),
       });
       toast(`Saved ${saved.key} as v${saved.currentVersionNo}`, { variant: 'success' });
@@ -251,168 +296,126 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
 
   return (
     <form onSubmit={submit} noValidate aria-busy={isSubmitting}>
-      <Panel
-        testId={`${TestIdPrefix}.Panel`}
-        title={
-          <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1 }}>
-            <Identifier variant="muted">{page.key}</Identifier>
-            <Typography variant="h4" component="h2">
-              Edit page
-            </Typography>
-            <Identifier variant="muted">v{page.currentVersionNo}</Identifier>
-          </Stack>
-        }
-        actions={
-          <Stack direction="row" sx={{ gap: 1 }}>
-            <Button
-              onClick={() => navigate(`/projects/${projectId}/docs/${page.id}`)}
-              data-testid={`${TestIdPrefix}.Cancel`}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={isSubmitting}
-              data-testid={`${TestIdPrefix}.Save`}
-            >
-              {isSubmitting ? 'Saving…' : 'Save page'}
-            </Button>
-          </Stack>
-        }
-      >
-        <Stack spacing={3}>
+      <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-white/8 pb-3">
+        <Identifier variant="muted">{page.key}</Identifier>
+        <span className="flex-1" />
+        <Button
+          onClick={() => navigate(`/projects/${projectId}/docs/${page.id}`)}
+          data-testid={`${TestIdPrefix}.Cancel`}
+        >
+          Discard
+        </Button>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={isSubmitting}
+          data-testid={`${TestIdPrefix}.Save`}
+        >
+          {isSubmitting ? 'Saving…' : `Save · v${page.currentVersionNo + 1}`}
+        </Button>
+      </div>
+
+      <div className="flex flex-col items-start gap-4 xl:flex-row">
+        <DocumentSurface
+          measure="prose"
+          className="min-w-0 flex-1 rounded-lg border border-white/8"
+        >
           {errors.root && (
-            <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.Error`}>
-              {errors.root.message}
-            </Alert>
+            <div className="mb-4" data-testid={`${TestIdPrefix}.Error`}>
+              <Banner tone="bad">
+                <span role="alert">{errors.root.message}</span>
+              </Banner>
+            </div>
           )}
 
-          <TextField
+          {/*
+            The title, as the title — no box and no label. It is the first line of the page's
+            content rather than a field about it, and the reader who presses Edit should find the
+            words they were reading in the place they were reading them.
+          */}
+          <input
             {...register('title')}
-            label="Title"
-            fullWidth
+            aria-label="Title"
             required
-            error={!!errors.title}
-            helperText={errors.title?.message}
-            slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Title`, maxLength: MAX_TITLE } }}
+            maxLength={MAX_TITLE}
+            data-testid={`${TestIdPrefix}.Title`}
+            className={
+              'w-full border-0 bg-transparent p-0 text-2xl leading-[1.25] font-[620] ' +
+              'tracking-[-.02em] text-ink placeholder:text-ink-4 ' +
+              'focus-visible:outline-2 focus-visible:outline-offset-4 ' +
+              'focus-visible:outline-[color:var(--color-given)]'
+            }
           />
+          {errors.title && (
+            <p role="alert" className="m-0 mt-1 text-xs text-[color:var(--color-failed)]">
+              {errors.title.message}
+            </p>
+          )}
+          <div className="my-[18px] h-px bg-white/8" />
 
-          <Stack spacing={2} data-testid={`${TestIdPrefix}.Blocks`}>
+          <div data-testid={`${TestIdPrefix}.Blocks`}>
             {blocks.fields.length === 0 && (
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              <p className="m-0 mb-3 text-[13px] text-ink-3">
                 This page has no content yet. Add a block to start writing — a case can only link
                 to a block, so what you split out here is what becomes traceable.
-              </Typography>
+              </p>
             )}
 
             {blocks.fields.map((field, index) => {
               const type = watched?.[index]?.blockType ?? 'paragraph';
               const blockErrors = errors.blocks?.[index];
               return (
-                <Stack
+                <div
                   // `field.id` is react-hook-form's render key, which is exactly what it is for.
                   // The DATA id is `blocks[index].blockId` and is never read from here.
                   key={field.id}
-                  direction={{ xs: 'column', md: 'row' }}
-                  spacing={1}
                   data-testid={`${TestIdPrefix}.Block`}
-                  sx={{
-                    alignItems: 'flex-start',
-                    p: 1.5,
-                    borderRadius: 1,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                  }}
+                  className="group grid grid-cols-[22px_minmax(0,1fr)] gap-3 py-1"
                 >
-                  <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
-                    <Controller
-                      control={control}
-                      name={`blocks.${index}.blockType`}
-                      render={({ field: select }) => (
-                        <TextField
-                          {...select}
-                          select
-                          size="small"
-                          label="Type"
-                          sx={{ width: 140 }}
-                          slotProps={{
-                            htmlInput: { 'data-testid': `${TestIdPrefix}.Block.Type` },
-                          }}
-                        >
-                          {BLOCK_TYPES.map((value) => (
-                            <MenuItem key={value} value={value}>
-                              {docBlockTypeLabel[value]}
-                            </MenuItem>
-                          ))}
-                        </TextField>
-                      )}
-                    />
-                    {/*
-                      Rendered for the two types that HAVE a depth — the server refuses a level on
-                      the other four rather than ignoring it, so offering the control everywhere
-                      would invite a rejection the client could have prevented.
+                  {/*
+                    The render's `.gut` — quiet at 35% and full at hover or focus-within, so the
+                    handle and the type are there when the author reaches for them and out of the
+                    way of the words when they are not.
+                  */}
+                  <div className="flex flex-col items-center gap-1 pt-1.5 opacity-35 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                    <GripVertical aria-hidden className="size-3.5 text-ink-4" />
+                    <span className="font-mono text-[9px] tracking-[.04em] text-ink-4 uppercase">
+                      {GUTTER_LABEL[type]}
+                    </span>
+                  </div>
 
-                      The list arm is §93's other half arriving: a bullet's indent is what makes a
-                      nested scenario outline authorable, the reader has rendered it since, and
-                      this control was heading-only, so the depth could be read and never written.
-                      The label differs because the two are different things — H3 is a rank, an
-                      indent is a position.
-                    */}
-                    {(type === 'heading' || type === 'list') && (
-                      <Controller
-                        control={control}
-                        name={`blocks.${index}.level`}
-                        render={({ field: select }) => (
-                          <TextField
-                            {...select}
-                            value={select.value || '1'}
-                            select
-                            size="small"
-                            label={type === 'heading' ? 'Depth' : 'Indent'}
-                            sx={{ width: 96 }}
-                            error={!!blockErrors?.level}
-                            slotProps={{
-                              htmlInput: { 'data-testid': `${TestIdPrefix}.Block.Level` },
-                            }}
-                          >
-                            {[1, 2, 3, 4, 5, 6].map((value) => (
-                              <MenuItem key={value} value={String(value)}>
-                                {type === 'heading' ? `H${value}` : value}
-                              </MenuItem>
-                            ))}
-                          </TextField>
-                        )}
-                      />
-                    )}
-                  </Stack>
-
-                  <Stack sx={{ flex: 1, gap: 1, minWidth: 0 }}>
+                  <div className="min-w-0">
                     {/*
                       `text` means three different things across the six types, so the label says
                       which one. On a table it is the caption and on an image the alt text — and
                       the alt text is the field the server refuses when blank, which a control
                       labelled "Text" gives somebody no reason to fill in.
                     */}
-                    <TextField
+                    <Textarea
                       {...register(`blocks.${index}.text`)}
-                      label={TEXT_LABEL[type]}
-                      fullWidth
-                      multiline
-                      minRows={type === 'heading' || type === 'image' ? 1 : 2}
-                      size="small"
+                      aria-label={TEXT_LABEL[type]}
                       required={type === 'image'}
-                      error={!!blockErrors?.text}
-                      helperText={blockErrors?.text?.message ?? TEXT_HINT[type]}
-                      slotProps={{
-                        htmlInput: {
-                          'data-testid': `${TestIdPrefix}.Block.Text`,
-                          // The monospace face follows the content, so a code block is edited in
-                          // the shape it is read in — two clicks away on the same page.
-                          style: type === 'code' ? { fontFamily: 'var(--font-mono)' } : undefined,
-                        },
-                      }}
+                      rows={type === 'heading' || type === 'image' ? 1 : 3}
+                      data-testid={`${TestIdPrefix}.Block.Text`}
+                      className={cn(
+                        'resize-y',
+                        // The monospace face follows the content, so a code block is edited in
+                        // the shape it is read in — two clicks away on the same page.
+                        type === 'code' && 'font-mono text-[12.5px]',
+                        type === 'heading' && 'text-[17px] font-semibold',
+                      )}
                     />
+                    {(blockErrors?.text?.message || TEXT_HINT[type]) && (
+                      <p
+                        role={blockErrors?.text ? 'alert' : undefined}
+                        className={cn(
+                          'm-0 mt-1 text-xs',
+                          blockErrors?.text ? 'text-[color:var(--color-failed)]' : 'text-ink-4',
+                        )}
+                      >
+                        {blockErrors?.text?.message ?? TEXT_HINT[type]}
+                      </p>
+                    )}
 
                     {type === 'table' && (
                       <Controller
@@ -443,72 +446,191 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
                         )}
                       />
                     )}
-                  </Stack>
 
-                  <Stack direction="row" sx={{ flexShrink: 0 }}>
-                    <IconButton
-                      aria-label="Move block up"
-                      size="small"
-                      disabled={index === 0}
-                      onClick={() => blocks.move(index, index - 1)}
-                      data-testid={`${TestIdPrefix}.Block.Up`}
-                    >
-                      <ArrowUpwardIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      aria-label="Move block down"
-                      size="small"
-                      disabled={index === blocks.fields.length - 1}
-                      onClick={() => blocks.move(index, index + 1)}
-                      data-testid={`${TestIdPrefix}.Block.Down`}
-                    >
-                      <ArrowDownwardIcon fontSize="small" />
-                    </IconButton>
-                    {/*
-                      Removing a block here is a local edit until Save; the server is what refuses
-                      it when something links to it, and that refusal arrives in the banner above.
-                      Warning here instead would mean the client holding a second, staler copy of
-                      the rule.
-                    */}
-                    <Tooltip title="Remove this block">
-                      <IconButton
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 opacity-45 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                      <Controller
+                        control={control}
+                        name={`blocks.${index}.blockType`}
+                        render={({ field: select }) => (
+                          <NativeSelect
+                            {...select}
+                            aria-label="Block type"
+                            data-testid={`${TestIdPrefix}.Block.Type`}
+                            className="w-[130px]"
+                          >
+                            {BLOCK_TYPES.map((value) => (
+                              <option key={value} value={value}>
+                                {docBlockTypeLabel[value]}
+                              </option>
+                            ))}
+                          </NativeSelect>
+                        )}
+                      />
+                      {/*
+                        Rendered for the two types that HAVE a depth — the server refuses a level
+                        on the other four rather than ignoring it, so offering the control
+                        everywhere would invite a rejection the client could have prevented.
+
+                        The list arm is §93's other half arriving: a bullet's indent is what makes
+                        a nested scenario outline authorable, the reader has rendered it since, and
+                        this control was heading-only, so the depth could be read and never
+                        written. The label differs because the two are different things — H3 is a
+                        rank, an indent is a position.
+                      */}
+                      {(type === 'heading' || type === 'list') && (
+                        <Controller
+                          control={control}
+                          name={`blocks.${index}.level`}
+                          render={({ field: select }) => (
+                            <NativeSelect
+                              {...select}
+                              value={select.value || '1'}
+                              aria-label={type === 'heading' ? 'Depth' : 'Indent'}
+                              data-testid={`${TestIdPrefix}.Block.Level`}
+                              className="w-[86px]"
+                            >
+                              {[1, 2, 3, 4, 5, 6].map((value) => (
+                                <option key={value} value={String(value)}>
+                                  {type === 'heading' ? `H${value}` : value}
+                                </option>
+                              ))}
+                            </NativeSelect>
+                          )}
+                        />
+                      )}
+
+                      <span className="flex-1" />
+
+                      <Button
+                        size="icon"
+                        variant="quiet"
+                        aria-label="Move block up"
+                        disabled={index === 0}
+                        onClick={() => blocks.move(index, index - 1)}
+                        data-testid={`${TestIdPrefix}.Block.Up`}
+                      >
+                        <ArrowUp aria-hidden className="size-3.5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="quiet"
+                        aria-label="Move block down"
+                        disabled={index === blocks.fields.length - 1}
+                        onClick={() => blocks.move(index, index + 1)}
+                        data-testid={`${TestIdPrefix}.Block.Down`}
+                      >
+                        <ArrowDown aria-hidden className="size-3.5" />
+                      </Button>
+                      {/*
+                        Removing a block here is a local edit until Save; the server is what
+                        refuses it when something links to it, and that refusal arrives in the
+                        banner above. Warning here instead would mean the client holding a second,
+                        staler copy of the rule.
+                      */}
+                      <Button
+                        size="icon"
+                        variant="quiet"
                         aria-label="Remove block"
-                        size="small"
+                        title="Remove this block"
                         onClick={() => blocks.remove(index)}
                         data-testid={`${TestIdPrefix}.Block.Remove`}
                       >
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                </Stack>
+                        <Trash2 aria-hidden className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               );
             })}
 
-            <Box>
-              <Button
-                startIcon={<AddIcon />}
-                onClick={() =>
-                  // blockId null — the server issues one. This is the ONLY way a new id is
-                  // created, which is what keeps "the client sent no id" and "this is new" the
-                  // same fact.
-                  blocks.append({
-                    blockId: null,
-                    blockType: 'paragraph',
-                    level: '',
-                    text: '',
-                    rows: [],
-                    attachmentId: '',
-                  })
-                }
-                data-testid={`${TestIdPrefix}.AddBlock`}
-              >
-                Add block
-              </Button>
-            </Box>
-          </Stack>
-        </Stack>
-      </Panel>
+            {/*
+              The render's insert row — a hairline with the six types on it, rather than one
+              "Add block" that always means paragraph and leaves the author to change it after.
+              Paragraph keeps the `AddBlock` locator because it is the same act the old single
+              button performed.
+            */}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span aria-hidden className="h-px flex-1 bg-white/8" />
+              {BLOCK_TYPES.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() =>
+                    // blockId null — the server issues one. This is the ONLY way a new id is
+                    // created, which is what keeps "the client sent no id" and "this is new" the
+                    // same fact.
+                    blocks.append({
+                      blockId: null,
+                      blockType: value,
+                      level: value === 'heading' || value === 'list' ? '1' : '',
+                      text: '',
+                      rows: [],
+                      attachmentId: '',
+                    })
+                  }
+                  data-testid={
+                    value === 'paragraph'
+                      ? `${TestIdPrefix}.AddBlock`
+                      : `${TestIdPrefix}.AddBlock.${value}`
+                  }
+                  className={
+                    'cursor-pointer rounded-[6px] border border-dashed border-white/14 px-2.5 py-0.5 ' +
+                    'font-mono text-[11px] text-ink-4 hover:border-white/25 hover:text-ink-2 ' +
+                    'focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+                    'focus-visible:outline-[color:var(--color-given)]'
+                  }
+                >
+                  + {docBlockTypeLabel[value].toLowerCase()}
+                </button>
+              ))}
+              <span aria-hidden className="h-px flex-1 bg-white/8" />
+            </div>
+          </div>
+        </DocumentSurface>
+
+        <aside className="w-full shrink-0 rounded-lg border border-white/8 bg-panel p-4 xl:w-[280px]">
+          {linkedCases.size > 0 && (
+            <section className="mb-5">
+              <h2 className={SECTION_HEADING}>
+                What links here
+                <span className="font-sans text-[11px] font-normal tracking-normal text-ink-4 normal-case">
+                  {linkedCases.size === 1 ? '1 case' : `${linkedCases.size} cases`}
+                </span>
+              </h2>
+              {/*
+                The consequence of saving, counted against the page in front of the author — not a
+                warning about something that is currently wrong, but the render's own sentence
+                about what this act will cause. Amber because a *Linked spec changed* signal is a
+                state somebody then has to clear.
+              */}
+              <Banner tone="warn">
+                <span>
+                  Saving marks the cases that cite these blocks as <em>Linked spec changed</em>.
+                  They stay approved; they gain a health signal.
+                </span>
+              </Banner>
+            </section>
+          )}
+
+          <section>
+            <h2 className={SECTION_HEADING}>Publishing</h2>
+            <div className="flex items-baseline justify-between gap-2 py-1 text-[12.5px]">
+              <span className="text-ink-3">Currently</span>
+              <span className="text-ink">
+                {docPageStatusLabel[page.status]} · v{page.currentVersionNo}
+              </span>
+            </div>
+            <p className="mt-2 mb-0 text-[12px] leading-[1.5] text-ink-4">
+              Saving creates v{page.currentVersionNo + 1}. Publishing it is a separate act, on the
+              page itself.
+            </p>
+          </section>
+
+          <p className="mt-5 border-t border-white/8 pt-3 text-[12px] text-ink-4">
+            {blocks.fields.length === 1 ? '1 block' : `${blocks.fields.length} blocks`}
+          </p>
+        </aside>
+      </div>
     </form>
   );
 }
@@ -560,82 +682,77 @@ function TableRowsEditor({
 
   if (rows.length === 0) {
     return (
-      <Stack sx={{ gap: 1, alignItems: 'flex-start' }}>
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+      <div className="mt-2 flex flex-col items-start gap-2">
+        <p className="m-0 text-[13px] text-ink-3">
           This table has no rows yet. The first row you add names the columns.
-        </Typography>
-        <Button
-          size="small"
-          startIcon={<AddIcon />}
-          onClick={() => onChange([['', '']])}
-          data-testid={`${testId}.Start`}
-        >
+        </p>
+        <Button size="sm" onClick={() => onChange([['', '']])} data-testid={`${testId}.Start`}>
           Start the table
         </Button>
-      </Stack>
+      </div>
     );
   }
 
   return (
-    <Stack sx={{ gap: 1 }} data-testid={testId}>
+    <div className="mt-2 flex flex-col gap-1.5" data-testid={testId}>
       {rows.map((row, rowIndex) => (
-        <Stack
+        <div
           // Index keys, and correct here: a cell is a bare string with no identity, and rows are
           // only ever appended or removed — there is no reorder for a key to attach to the wrong
           // row, and the inputs are controlled by the value above rather than by their own state.
           key={rowIndex}
-          direction="row"
-          sx={{ gap: 1, alignItems: 'center' }}
+          className="flex items-center gap-1.5"
           data-testid={`${testId}.Row`}
         >
           {row.map((cell, cellIndex) => (
-            <TextField
+            <input
               key={cellIndex}
+              type="text"
               value={cell}
               onChange={(event) => setCell(rowIndex, cellIndex, event.target.value)}
-              size="small"
               // The header row labels itself, which is how the author learns the rule without a
               // switch that could disagree with it.
-              label={rowIndex === 0 ? `Column ${cellIndex + 1}` : undefined}
+              aria-label={rowIndex === 0 ? `Column ${cellIndex + 1}` : `Row ${rowIndex}, cell ${cellIndex + 1}`}
               placeholder={rowIndex === 0 ? 'Column name' : undefined}
-              sx={{ flex: 1, minWidth: 90 }}
-              slotProps={{ htmlInput: { 'data-testid': `${testId}.Cell` } }}
+              data-testid={`${testId}.Cell`}
+              className={
+                'min-w-[90px] flex-1 rounded-[6px] border border-white/8 bg-field px-2 py-1 ' +
+                'font-mono text-[12px] text-ink placeholder:text-ink-4 ' +
+                'focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+                'focus-visible:outline-[color:var(--color-given)]'
+              }
             />
           ))}
-          <Tooltip title={rowIndex === 0 ? 'The header row cannot be removed' : 'Remove this row'}>
-            {/* A span, because a disabled button fires no events and MUI's tooltip needs one to
-                listen to — so the reason for the refusal would otherwise be unreachable. */}
-            <span>
-              <IconButton
-                aria-label="Remove row"
-                size="small"
-                disabled={rowIndex === 0}
-                onClick={() => removeRow(rowIndex)}
-                data-testid={`${testId}.RemoveRow`}
-              >
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
-        </Stack>
+          <Button
+            size="icon"
+            variant="quiet"
+            aria-label="Remove row"
+            title={rowIndex === 0 ? 'The header row cannot be removed' : 'Remove this row'}
+            disabled={rowIndex === 0}
+            onClick={() => removeRow(rowIndex)}
+            data-testid={`${testId}.RemoveRow`}
+          >
+            <Trash2 aria-hidden className="size-3.5" />
+          </Button>
+        </div>
       ))}
-      <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap' }}>
-        <Button size="small" onClick={addRow} data-testid={`${testId}.AddRow`}>
+      <div className="flex flex-wrap gap-1.5">
+        <Button size="sm" onClick={addRow} data-testid={`${testId}.AddRow`}>
           Add row
         </Button>
-        <Button size="small" onClick={addColumn} data-testid={`${testId}.AddColumn`}>
+        <Button size="sm" onClick={addColumn} data-testid={`${testId}.AddColumn`}>
           Add column
         </Button>
         <Button
-          size="small"
+          size="sm"
           disabled={columns <= 1}
           onClick={removeColumn}
           data-testid={`${testId}.RemoveColumn`}
         >
           Remove last column
         </Button>
-      </Stack>
-    </Stack>
+      </div>
+    </div>
   );
 }
 
@@ -673,33 +790,47 @@ function ImageFilePicker({
 }) {
   if (attachments.length === 0) {
     return (
-      <Alert severity="info" data-testid={`${testId}.None`}>
-        This page has no files yet. Attach the image on the{' '}
-        <MuiLink component={RouterLink} to={`/projects/${projectId}/docs/${pageId}`}>
-          page itself
-        </MuiLink>
-        , then come back and choose it here.
-      </Alert>
+      <div className="mt-2" data-testid={`${testId}.None`}>
+        <Banner tone="steel">
+          <span>
+            This page has no files yet. Attach the image on the{' '}
+            <RouterLink
+              to={`/projects/${projectId}/docs/${pageId}`}
+              className="text-steel underline-offset-4 hover:underline"
+            >
+              page itself
+            </RouterLink>
+            , then come back and choose it here.
+          </span>
+        </Banner>
+      </div>
     );
   }
 
   return (
-    <TextField
-      select
-      name={name}
-      value={value}
-      onChange={onChange}
-      onBlur={onBlur}
-      size="small"
-      label="File"
-      helperText="One of this page's attachments."
-      slotProps={{ htmlInput: { 'data-testid': testId } }}
-    >
-      {attachments.map((attachment) => (
-        <MenuItem key={attachment.id} value={attachment.id}>
-          {attachment.filename}
-        </MenuItem>
-      ))}
-    </TextField>
+    <div className="mt-2">
+      <NativeSelect
+        name={name}
+        value={value}
+        onChange={onChange}
+        onBlur={onBlur}
+        aria-label="File"
+        data-testid={testId}
+      >
+        {/*
+          An explicit empty option, because a native `<select>` has no null: without it a block
+          whose `attachmentId` is still `''` would *look* like the first file was chosen while the
+          form held nothing, and Save would send null for an image the author believed they had
+          picked. ~~MUI's `displayEmpty` rendered a blank row for this.~~ → 007 T14.
+        */}
+        <option value="">Choose a file</option>
+        {attachments.map((attachment) => (
+          <option key={attachment.id} value={attachment.id}>
+            {attachment.filename}
+          </option>
+        ))}
+      </NativeSelect>
+      <p className="m-0 mt-1 text-xs text-ink-4">One of this page&rsquo;s attachments.</p>
+    </div>
   );
 }

@@ -205,7 +205,7 @@ pointing at the drawing would produce a second, drifting design source — which
 | 11 | T11 — Family 2, Record as document | **done** | The 7 document screens render at the 74ch measure | T7 |
 | 12 | T12 — Family 3, Execution | **done** | `ExecutionPage` renders with the collapsed rail and number-key verdicts; the failure panel is a rail section, ~~*last time*~~ is a named follow-up | T5, T11 |
 | 13 | T13 — Family 4, Board & people | **done** | Board · MyWork · TeamBoard · OrgChart; the MUI tree-view package unimported | T3, T8 |
-| 14 | T14 — Family 5, Authoring | open | Docs · DocPageEditor · FeatureImport at the 70ch prose measure | T11 |
+| 14 | T14 — Family 5, Authoring | **done** | Docs · DocPageEditor · FeatureImport at the 70ch prose measure | T11 |
 | 15 | T15 — Family 6 & 7, Analytics and Settings | **done** | Dashboard · PlanStatistics per §6; the **11** settings/account screens (§8's nine plus the two it does not list) | T10 |
 | 16 | T16 — MUI removed, preflight on | open | No `@mui`/`@emotion`/`notistack` in `package.json` or any import; Preflight imported; `muiTestIds.ts` deleted with **both** citations | T6–T15 |
 | 17 | T17 — Gates and bundle measurement | open | The four gates green on `shanks` (the **only** gate pass for T6–T16 — see the directive in the header); before/after bundle numbers recorded; preflight layout damage fixed | T16 |
@@ -1343,7 +1343,7 @@ under `features/board/**` or `features/org-chart/**`.
 
 ---
 
-### T14 — Family 5, Authoring
+### T14 — Family 5, Authoring — **DONE**
 
 **Deliverable:** Docs · DocPageEditor · FeatureImport render against `renders/05-authoring.html` at
 the 70ch prose measure.
@@ -1351,10 +1351,57 @@ the 70ch prose measure.
 
 The three rules the render carries: coverage is **per paragraph, not per page**; draft pages stay in
 the tree, dimmed; and *Write one* sits on the untested clause, opening the case editor pre-seeded
-with that paragraph as the objective. The import shows the **diff, not the count**, never deletes,
-and its button counts what it will do.
+with that paragraph as the objective. The import shows the ~~**diff, not the count**~~ — see item 2
+below — never deletes, and its button counts what it will do.
 
-- [ ] **Steps 1–3:** One screen per step. **Step 4:** Commit — no gate here; T17 runs it.
+- [x] **Steps 1–3:** One screen per step. **Step 4:** Commit — no gate here; T17 runs it.
+
+**What landed, and the four things the code disproved.**
+
+**1. *Write one* carries the objective and nothing reads it — the one half of a rule this task
+could not finish.** The button is on the untested clause, it opens
+`/projects/:projectId/cases/new?objective=<the paragraph>`, and `CaseEditorPage` reads **`suiteId`
+from the URL and nothing else** (`CaseEditorPage.tsx`'s `carriedSuiteId`). Seeding the objective is
+one more line in that file's `defaultValues` — T7's file, outside this task's ownership, so the link
+is written carrying the parameter and the line is all that is left to add. Recorded rather than
+reached across for, per the lane's file list.
+
+**2. The render's per-step diff is not on the wire, and the contract is what would have to change.**
+`ImportRow` in `openapi.yaml` is `path · line · feature · scenario · automationKey · action ·
+reason · caseKey · preconditions` — **no steps and no diff**, so *"struck-through old text beside
+the new, per changed step"* cannot be built from any answer the server gives. What the port does
+instead is drop the five-column table for the render's `.scn` card: verdict, name and case key in
+the header; the reason verbatim and the provenance under it; the preconditions the row would gain
+listed by title. That is "not a count" as far as the wire allows — every scenario says what will
+happen to it and why — and the counts move to the right rail where the render puts them. §4 says
+the *spec* is amended where the build disagrees with a render; this is one for it, and the step diff
+belongs in the plan that widens `ImportRow`.
+
+**3. Three MUI-shaped widgets could not become Radix ones, for T11's reason and one more.** The
+link dialog's case type-ahead and suite picker are a `role="combobox"` over a `role="listbox"` this
+file owns — `@radix-ui/react-select` calls `hasPointerCapture`, jsdom implements neither it nor a
+polyfill, and `BlockLinks.test.tsx` drives both pickers by role, unedited. The editor's block-type
+and depth pickers are **native `<select>`s** (`ui/native-select`, T15's lane), which is also what
+made the one test-helper change below possible. The **Radix `Dialog` is proven again** — all three
+dialogs here are `ui/dialog`.
+
+**4. One test helper changed, body only, and no assertion moved.**
+`DocPageEditorPage.test.tsx`'s `choose()` reached through `.MuiInputBase-root` to a portalled
+listbox; it now calls `userEvent.selectOptions`. Exactly the shape T15 took with
+`NotificationSettingsPage.test`'s `chooseFrom`, and for the same reason: a helper whose body is the
+MUI DOM cannot survive the MUI DOM going away. `DocsPage.test.tsx`, `DocsSearch.test.tsx`,
+`BlockLinks.test.tsx` and `FeatureImportPage.test.tsx` are untouched.
+
+**Also worth keeping.** The coverage margin is gone: the verdict is a line **under** the clause, and
+the page aggregate survives only in the rail and only as a count, never a percentage — a ratio there
+would put back exactly the averaging the render's note calls out. All four screens render their own
+`.top` strip, raise their own `<title>` and arrival announcement, and drop `PageHeader`/`Panel`
+(T13's precedent; T16 owns those two). Data test ids are byte-identical apart from four that named a
+wrapper this port deletes — `Docs.Header`, `DocEditor.Header`, `DocEditor.Panel`,
+`FeatureImport.Header` — each checked to be referenced by nothing in the repository; two families
+were **added**, `Docs.Block.Coverage.WriteOne` and `DocEditor.AddBlock.<type>` for the render's
+six-way insert row. `lib/muiTestIds.ts` is imported by no file under `features/docs/**`, which it
+never was.
 
 ---
 

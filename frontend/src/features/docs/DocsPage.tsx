@@ -1,22 +1,7 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  IconButton,
-  InputAdornment,
-  Stack,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/AddOutlined';
-import AddLinkIcon from '@mui/icons-material/AddLinkOutlined';
-import ClearIcon from '@mui/icons-material/CloseOutlined';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
-import SearchIcon from '@mui/icons-material/SearchOutlined';
+import { Link2, Plus, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useAnnounce } from '../../a11y/useAnnounce';
 import type {
   BlockLink,
   DocPage,
@@ -43,17 +28,32 @@ import { DocBlockBody } from '../../components/DocBlockBody';
 import { ReviewPanel } from '../review/ReviewPanel';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { Badge, Banner, DocumentSurface, ResultBar } from '../../components/kit';
 import { LinkRelationshipControl } from '../../components/LinkRelationshipControl';
 import { PermissionGate } from '../../components/PermissionGate';
 import { UnlinkDialog } from '../../components/UnlinkDialog';
+import { Button } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { formatCount, formatDateTime } from '../../lib/format';
 import { docPageStatusLabel } from '../../lib/labels';
 import { CreateDocPageDialog, DeleteDocPageDialog } from './DocPageDialogs';
 import { LinkBlockDialog } from './LinkBlockDialog';
 
 /**
- * The documentation space (plan §6i).
+ * The render's `.r.on` — the tint marking the page currently open, in both the tree and the
+ * results. An inline style rather than an arbitrary Tailwind value, matching `kit/Table`'s
+ * selected row: one spelling of `color-mix` per surface, and the kit already chose this one.
+ */
+const SELECTED_ROW = {
+  backgroundColor: 'color-mix(in oklab, var(--color-steel) 12%, transparent)',
+} as const;
+
+/** `.sec h3` from `renders/tcms.css` — one spelling of a rail section heading on this screen. */
+const SECTION_HEADING =
+  'm-0 mb-2.5 flex items-baseline gap-2 text-[11px] font-semibold tracking-[.08em] text-ink-3 uppercase';
+
+/**
+ * The documentation space (plan §6i), against `renders/05-authoring.html` frame A.
  *
  * Requirements are documentation blocks — there is no separate requirement entity — so this
  * screen is where traceability is actually visible, and the mechanism that makes people
@@ -61,6 +61,14 @@ import { LinkBlockDialog } from './LinkBlockDialog';
  * verify it and how those cases last did. A paragraph with no linked cases is visibly
  * untested right there in the spec, which is far more motivating than a coverage report
  * somebody has to go and look for.
+ *
+ * ## Coverage is per paragraph, not per page — and it moved under the clause to say so
+ *
+ * ~~The marker was a 132px right margin beside the block.~~ → **superseded by 007 T14.** The render
+ * puts the verdict *under the sentence it judges*, because a margin is something a reader scanning
+ * prose skips and a line under the clause is something they have already read. The page-level
+ * aggregate survives, but only in the rail and only as a count — *"a page-level percentage would
+ * have averaged the one gap away"*.
  *
  * Block anchors are stable ids, never derived from heading text. A link to
  * `#b-204` survives someone fixing a typo in the heading; a link to `#full-refund` breaks
@@ -89,6 +97,16 @@ export function DocsPage() {
   const project = useProject(projectId);
   const pages = useDocPages(projectId);
   const page = useDocPage(projectId, pageId);
+
+  /*
+    ~~Raised by `PageHeader`.~~ → superseded by 007 T14, which replaced that header with the
+    render's own top strip. Kept rather than dropped: a route change that announces nothing leaves
+    a screen-reader user on a page they have no way to know has changed.
+  */
+  const announce = useAnnounce();
+  useEffect(() => {
+    announce('Documentation page loaded');
+  }, [announce]);
 
   /*
     A8 — the case somebody arrived here to claim coverage for.
@@ -149,33 +167,56 @@ export function DocsPage() {
     }
   }, [pageMissing, projectId, suffix, navigate]);
 
+  const openPage = pages.data?.find((row) => row.id === pageId);
+
   return (
-    <Box>
-      <PageHeader
-        testId="Docs.Header"
-        title="Documentation"
-        documentTitle={project.data ? `Documentation · ${project.data.name}` : 'Documentation'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Documentation' },
-        ]}
-        subtitle="Specifications live here. Cases link to individual blocks, and each block shows what verifies it."
-        actions={
-          <PermissionGate projectId={projectId} permission="doc:edit">
-            {({ allowed }) => (
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                disabled={!allowed}
-                onClick={() => setCreating(true)}
-                data-testid="Docs.NewPage"
-              >
-                New page
-              </Button>
+    <div>
+      <title>
+        {project.data ? `Documentation · ${project.data.name} · TCMS` : 'Documentation · TCMS'}
+      </title>
+
+      <header className="mb-3 flex flex-wrap items-start gap-3 border-b border-white/8 pb-3">
+        <div className="min-w-0 flex-1">
+          <nav aria-label="Breadcrumb" className="mb-1 text-[12.5px] text-ink-3">
+            <RouterLink
+              to={`/projects/${projectId}`}
+              className="text-ink-3 no-underline hover:text-ink-2"
+            >
+              {project.data?.name ?? 'Project'}
+            </RouterLink>
+            <span className="px-1.5 text-ink-4">/</span>
+            <b className="font-medium text-ink-2">Documentation</b>
+            {openPage && (
+              <>
+                <span className="px-1.5 text-ink-4">/</span>
+                <b className="font-medium text-ink-2">{openPage.title}</b>
+              </>
             )}
-          </PermissionGate>
-        }
-      />
+          </nav>
+          <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">
+            Documentation
+          </h1>
+          <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
+            Specifications live here. Cases link to individual blocks, and each block shows what
+            verifies it.
+          </p>
+        </div>
+
+        <PermissionGate projectId={projectId} permission="doc:edit">
+          {({ allowed }) => (
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!allowed}
+              onClick={() => setCreating(true)}
+              data-testid="Docs.NewPage"
+            >
+              <Plus aria-hidden className="size-3.5" />
+              New page
+            </Button>
+          )}
+        </PermissionGate>
+      </header>
 
       {/*
         The carried case, named. It is a banner rather than a highlighted control somewhere in the
@@ -185,33 +226,35 @@ export function DocsPage() {
         matters. It says how to finish and how to stop, which are the only two ways out.
       */}
       {intendedCaseId && (
-        <Alert
-          severity="info"
-          data-testid="Docs.LinkIntent"
-          sx={{ mb: 2 }}
-          action={
-            <Button color="inherit" size="small" onClick={stopLinking} data-testid="Docs.LinkIntent.Stop">
-              Stop linking
-            </Button>
-          }
-        >
-          {intended.data ? (
-            <>
-              Linking{' '}
-              {/* The way back, on the name itself: the reader came from this case and will want to
-                  return to it, and a banner that can only be dismissed strands them here. */}
-              <RouterLink
-                to={`/projects/${projectId}/cases/${intended.data.id}`}
-                data-testid="Docs.LinkIntent.Case"
-              >
-                {intended.data.key}
-              </RouterLink>{' '}
-              — {intended.data.title}. Open the page it verifies and press Link on that block.
-            </>
-          ) : (
-            'Linking a case. Open the page it verifies and press Link on that block.'
-          )}
-        </Alert>
+        <div className="mb-3" data-testid="Docs.LinkIntent">
+          <Banner tone="steel">
+            <span className="flex flex-1 flex-wrap items-center gap-2">
+              <span className="flex-1">
+                {intended.data ? (
+                  <>
+                    Linking{' '}
+                    {/* The way back, on the name itself: the reader came from this case and will
+                        want to return to it, and a banner that can only be dismissed strands them
+                        here. */}
+                    <RouterLink
+                      to={`/projects/${projectId}/cases/${intended.data.id}`}
+                      data-testid="Docs.LinkIntent.Case"
+                      className="text-steel underline-offset-4 hover:underline"
+                    >
+                      {intended.data.key}
+                    </RouterLink>{' '}
+                    — {intended.data.title}. Open the page it verifies and press Link on that block.
+                  </>
+                ) : (
+                  'Linking a case. Open the page it verifies and press Link on that block.'
+                )}
+              </span>
+              <Button size="sm" onClick={stopLinking} data-testid="Docs.LinkIntent.Stop">
+                Stop linking
+              </Button>
+            </span>
+          </Banner>
+        </div>
       )}
 
       {creating && (
@@ -235,57 +278,59 @@ export function DocsPage() {
         />
       )}
 
-      <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 2, alignItems: 'flex-start' }}>
-        <Box sx={{ width: { xs: '100%', md: 260 }, flexShrink: 0 }}>
-          <Panel title={searchQuery ? 'Results' : 'Pages'} testId="Docs.TreePanel" dense>
-            <Box sx={{ p: 1 }}>
-              <DocsSearchField
-                query={searchQuery}
-                onSearch={(next) => {
-                  const params = new URLSearchParams(searchParams);
-                  if (next) params.set('q', next);
-                  else params.delete('q');
-                  setSearchParams(params);
-                }}
-              />
+      {/* The render's `.split.three`: the tree, the reading column, and the page's own facts. */}
+      <div className="flex flex-col items-start gap-4 lg:flex-row">
+        <aside
+          className="w-full shrink-0 rounded-lg border border-white/8 bg-panel p-3 lg:w-[260px]"
+          data-testid="Docs.TreePanel"
+        >
+          <h2 className={SECTION_HEADING}>{searchQuery ? 'Results' : 'Pages'}</h2>
 
-              {searchQuery ? (
-                <DataRegion
-                  testId="Docs.Results"
-                  state={{ ...hits, refetch: () => void hits.refetch() }}
-                  isEmpty={(rows) => rows.length === 0}
-                  empty={{
-                    kind: 'no-filter-match',
-                    title: 'No pages match',
-                    body: 'Whole words only — a half-typed one finds nothing. Try a different term.',
-                  }}
-                >
-                  {(rows) => (
-                    <SearchResults
-                      hits={rows}
-                      projectId={projectId}
-                      activeId={pageId}
-                      suffix={suffix}
-                    />
-                  )}
-                </DataRegion>
-              ) : (
-                <DataRegion
-                  testId="Docs.Tree"
-                  state={{ ...pages, refetch: () => void pages.refetch() }}
-                  isEmpty={(rows) => rows.length === 0}
-                  empty={{ kind: 'no-records', title: 'No pages', body: 'Write the first specification page.' }}
-                >
-                  {(rows) => (
-                    <PageTree pages={rows} projectId={projectId} activeId={pageId} suffix={suffix} />
-                  )}
-                </DataRegion>
+          <DocsSearchField
+            query={searchQuery}
+            count={pages.data?.length}
+            onSearch={(next) => {
+              const params = new URLSearchParams(searchParams);
+              if (next) params.set('q', next);
+              else params.delete('q');
+              setSearchParams(params);
+            }}
+          />
+
+          {searchQuery ? (
+            <DataRegion
+              testId="Docs.Results"
+              state={{ ...hits, refetch: () => void hits.refetch() }}
+              isEmpty={(rows) => rows.length === 0}
+              empty={{
+                kind: 'no-filter-match',
+                title: 'No pages match',
+                body: 'Whole words only — a half-typed one finds nothing. Try a different term.',
+              }}
+            >
+              {(rows) => (
+                <SearchResults hits={rows} projectId={projectId} activeId={pageId} suffix={suffix} />
               )}
-            </Box>
-          </Panel>
-        </Box>
+            </DataRegion>
+          ) : (
+            <DataRegion
+              testId="Docs.Tree"
+              state={{ ...pages, refetch: () => void pages.refetch() }}
+              isEmpty={(rows) => rows.length === 0}
+              empty={{
+                kind: 'no-records',
+                title: 'No pages',
+                body: 'Write the first specification page.',
+              }}
+            >
+              {(rows) => (
+                <PageTree pages={rows} projectId={projectId} activeId={pageId} suffix={suffix} />
+              )}
+            </DataRegion>
+          )}
+        </aside>
 
-        <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
+        <div className="min-w-0 flex-1">
           {/*
             No page selected means no page to load, and a query that is not enabled is *pending* —
             which `DataRegion` renders, correctly, as a loading skeleton. On a project with pages
@@ -299,46 +344,55 @@ export function DocsPage() {
           {pageId ? (
             <DataRegion testId="Docs.Page" state={{ ...page, refetch: () => void page.refetch() }}>
               {(data) => (
-                <Stack sx={{ gap: 2 }}>
-                  <PageView
-                    page={data}
-                    projectId={projectId}
-                    onDelete={setDeleting}
-                    intendedCase={intended.data ?? null}
-                  />
-                  <PageAttachments page={data} projectId={projectId} />
-                  {/*
-                    §6g's reviewer apparatus, now that a page is a reviewable subject (005 S9b).
-                    Below the attachments for the same reason a case's sits below its steps: it is
-                    about the page rather than part of it.
+                <div className="flex min-w-0 flex-col items-start gap-4 xl:flex-row">
+                  <div className="min-w-0 flex-1">
+                    <PageView
+                      page={data}
+                      projectId={projectId}
+                      onDelete={setDeleting}
+                      intendedCase={intended.data ?? null}
+                    />
+                    <div className="mt-6">
+                      <PageAttachments page={data} projectId={projectId} />
+                    </div>
+                    {/*
+                      §6g's reviewer apparatus, now that a page is a reviewable subject (005 S9b).
+                      Below the attachments for the same reason a case's sits below its steps: it is
+                      about the page rather than part of it.
 
-                    Mounted unconditionally — `ReviewPanel` renders **nothing** when
-                    `reviewEnabledDoc` is off, which is §6g's "a project that never turns it on
-                    should see no extra UI at all" enforced in one place rather than at each of the
-                    four call sites. `currentVersionNo` is passed so the panel can say the page has
-                    moved on since the reviewer was asked.
-                  */}
-                  <ReviewPanel
-                    projectId={projectId}
-                    subjectType="DOC"
-                    subjectId={data.id}
-                    currentVersionNo={data.currentVersionNo}
-                  />
-                </Stack>
+                      Mounted unconditionally — `ReviewPanel` renders **nothing** when
+                      `reviewEnabledDoc` is off, which is §6g's "a project that never turns it on
+                      should see no extra UI at all" enforced in one place rather than at each of
+                      the four call sites. `currentVersionNo` is passed so the panel can say the
+                      page has moved on since the reviewer was asked.
+                    */}
+                    <div className="mt-6">
+                      <ReviewPanel
+                        projectId={projectId}
+                        subjectType="DOC"
+                        subjectId={data.id}
+                        currentVersionNo={data.currentVersionNo}
+                      />
+                    </div>
+                  </div>
+
+                  <PageFacts page={data} />
+                </div>
               )}
             </DataRegion>
           ) : (
-            <Panel testId="Docs.NoSelection">
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                {(pages.data?.length ?? 0) === 0
-                  ? 'No pages yet. A specification here is what test cases link to — start with one page per area of the product.'
-                  : 'Pick a page from the list to read it.'}
-              </Typography>
-            </Panel>
+            <p
+              className="m-0 rounded-lg border border-white/8 bg-panel p-4 text-[13px] text-ink-3"
+              data-testid="Docs.NoSelection"
+            >
+              {(pages.data?.length ?? 0) === 0
+                ? 'No pages yet. A specification here is what test cases link to — start with one page per area of the product.'
+                : 'Pick a page from the list to read it.'}
+            </p>
           )}
-        </Box>
-      </Stack>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -356,56 +410,60 @@ export function DocsPage() {
  */
 function DocsSearchField({
   query,
+  count,
   onSearch,
 }: {
   query: string;
+  /** The size of the space, in the placeholder — the render's *Filter 37 pages*. */
+  count: number | undefined;
   onSearch: (next: string) => void;
 }) {
   const [draft, setDraft] = useState(query);
   useEffect(() => setDraft(query), [query]);
 
   return (
-    <Box
-      component="form"
+    <form
+      className="relative mb-2.5"
       onSubmit={(event) => {
         event.preventDefault();
         onSearch(draft.trim());
       }}
-      sx={{ mb: 1 }}
     >
-      <TextField
-        size="small"
-        fullWidth
+      <Search
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-ink-4"
+      />
+      <input
+        type="text"
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
-        placeholder="Search documentation"
-        slotProps={{
-          htmlInput: { 'aria-label': 'Search documentation', 'data-testid': 'Docs.Search.Input' },
-          input: {
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
-              </InputAdornment>
-            ),
-            endAdornment: draft ? (
-              <InputAdornment position="end">
-                <IconButton
-                  size="small"
-                  aria-label="Clear search"
-                  data-testid="Docs.Search.Clear"
-                  onClick={() => {
-                    setDraft('');
-                    onSearch('');
-                  }}
-                >
-                  <ClearIcon fontSize="small" />
-                </IconButton>
-              </InputAdornment>
-            ) : undefined,
-          },
-        }}
+        aria-label="Search documentation"
+        data-testid="Docs.Search.Input"
+        placeholder={count === undefined ? 'Search documentation' : `Filter ${count} pages`}
+        className={
+          'w-full rounded-[6px] border border-white/8 bg-field py-1.5 pr-8 pl-8 text-[12.5px] ' +
+          'text-ink placeholder:text-ink-4 focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+          'focus-visible:outline-[color:var(--color-given)]'
+        }
       />
-    </Box>
+      {draft && (
+        <button
+          type="button"
+          aria-label="Clear search"
+          data-testid="Docs.Search.Clear"
+          onClick={() => {
+            setDraft('');
+            onSearch('');
+          }}
+          className={
+            'absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer text-ink-4 hover:text-ink ' +
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]'
+          }
+        >
+          <X aria-hidden className="size-3.5" />
+        </button>
+      )}
+    </form>
   );
 }
 
@@ -428,65 +486,45 @@ function SearchResults({
   suffix: string;
 }) {
   return (
-    <Stack component="ul" sx={{ listStyle: 'none', m: 0, p: 0, gap: 0.25 }}>
+    <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
       {hits.map((hit) => {
         const active = hit.id === activeId;
         return (
-          <Box component="li" key={hit.id}>
+          <li key={hit.id}>
             <RouterLink
               to={`/projects/${projectId}/docs/${hit.id}${suffix}`}
               data-testid="Docs.Results.Item"
-              style={{ textDecoration: 'none' }}
+              aria-current={active ? 'page' : undefined}
+              style={active ? SELECTED_ROW : undefined}
+              className="block rounded-md px-2 py-1.5 no-underline hover:bg-white/5"
             >
-              <Box
-                aria-current={active ? 'page' : undefined}
-                sx={{
-                  px: 1,
-                  py: 0.75,
-                  borderRadius: 1,
-                  color: active ? 'primary.main' : 'text.primary',
-                  bgcolor: active ? 'action.selected' : 'transparent',
-                  '&:hover': { bgcolor: 'action.hover' },
-                }}
-              >
-                <Box
-                  sx={{
-                    fontSize: '0.8125rem',
-                    fontWeight: active ? 600 : 500,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {hit.title}
-                </Box>
-                <Identifier variant="muted">{hit.key}</Identifier>
-                {/*
-                  Clamped rather than truncated to one line: the fragment exists to show WHICH
-                  mention this is, and a single ellipsised line is usually the words either side of
-                  the match and none of the match itself.
-                */}
-                {hit.snippet && (
-                  <Typography
-                    variant="caption"
-                    data-testid="Docs.Results.Snippet"
-                    sx={{
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                      color: 'text.secondary',
-                    }}
-                  >
-                    {hit.snippet}
-                  </Typography>
+              <span
+                className={cn(
+                  'block truncate text-[13px]',
+                  active ? 'font-semibold text-ink' : 'font-medium text-ink-2',
                 )}
-              </Box>
+              >
+                {hit.title}
+              </span>
+              <Identifier variant="muted">{hit.key}</Identifier>
+              {/*
+                Clamped rather than truncated to one line: the fragment exists to show WHICH
+                mention this is, and a single ellipsised line is usually the words either side of
+                the match and none of the match itself.
+              */}
+              {hit.snippet && (
+                <span
+                  data-testid="Docs.Results.Snippet"
+                  className="mt-0.5 line-clamp-2 block text-[11.5px] text-ink-4"
+                >
+                  {hit.snippet}
+                </span>
+              )}
             </RouterLink>
-          </Box>
+          </li>
         );
       })}
-    </Stack>
+    </ul>
   );
 }
 
@@ -522,57 +560,73 @@ function PageTree({
   }, [pages]);
 
   return (
-    <Stack component="ul" sx={{ listStyle: 'none', m: 0, p: 0, gap: 0.25 }}>
+    <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
       {tree.map(({ page, depth }) => {
         const active = page.id === activeId;
+        /*
+          Rule 3 of the render: **a draft stays in the tree, dimmed.** Hiding drafts made people
+          write the same page twice — so the row is quieter, never absent, and it says which state
+          it is in rather than only that it is not published.
+
+          Any status but PUBLISHED, not just DRAFT. ARCHIVED became reachable when the status
+          endpoint landed, and the old `=== 'DRAFT'` check would have rendered an archived page with
+          no chip at all — indistinguishable from a published one, in the tree that is the only way
+          back to it.
+        */
+        const unpublished = page.status !== 'PUBLISHED';
         return (
-          <Box component="li" key={page.id}>
+          <li key={page.id}>
             <RouterLink
               to={`/projects/${projectId}/docs/${page.id}${suffix}`}
               data-testid="Docs.Tree.Item"
-              style={{ textDecoration: 'none' }}
+              aria-current={active ? 'page' : undefined}
+              style={{ paddingLeft: `${8 + depth * 14}px`, ...(active ? SELECTED_ROW : {}) }}
+              className={cn(
+                'flex items-center gap-2 rounded-md py-1 pr-2 text-[13px] no-underline hover:bg-white/5',
+                active ? 'font-semibold text-ink' : 'text-ink-2',
+                unpublished && !active && 'opacity-60',
+              )}
             >
-              <Box
-                aria-current={active ? 'page' : undefined}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  pl: 1 + depth * 1.5,
-                  pr: 1,
-                  py: 0.625,
-                  borderRadius: 1,
-                  fontSize: '0.8125rem',
-                  color: active ? 'primary.main' : 'text.primary',
-                  fontWeight: active ? 600 : 400,
-                  bgcolor: active ? 'action.selected' : 'transparent',
-                  '&:hover': { bgcolor: 'action.hover' },
-                }}
-              >
-                <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {page.title}
-                </Box>
-                {/*
-                  Any status but PUBLISHED, not just DRAFT. ARCHIVED became reachable when the
-                  status endpoint landed, and the old `=== 'DRAFT'` check would have rendered an
-                  archived page with no chip at all — indistinguishable from a published one, in
-                  the tree that is the only way back to it.
-                */}
-                {page.status !== 'PUBLISHED' && (
-                  <Chip
-                    size="small"
-                    variant="outlined"
-                    label={docPageStatusLabel[page.status].toLowerCase()}
-                    sx={{ flexShrink: 0 }}
-                  />
-                )}
-              </Box>
+              <span className="min-w-0 flex-1 truncate">{page.title}</span>
+              {unpublished && (
+                <span className="shrink-0 font-mono text-[10.5px] text-ink-4">
+                  {docPageStatusLabel[page.status].toLowerCase()}
+                </span>
+              )}
             </RouterLink>
-          </Box>
+          </li>
         );
       })}
-    </Stack>
+    </ul>
   );
+}
+
+/**
+ * A page's coverage, counted **per block** and never turned into a percentage.
+ *
+ * Headings are excluded because they are structure, not requirements — counting them as
+ * uncovered would make every page look worse than it is.
+ *
+ * `block.coverage != null` is the half the live pass added, and it is the same distinction the
+ * server makes one layer down: the field is **absent** until something can create a `doc_link`,
+ * because a zeroed marker states that nothing verifies this block when the true statement is
+ * that nothing has asked. Reading absent as zero put that claim back — as an amber "1 of 1
+ * unlinked" on a page whose only heading demonstrably *had* a link.
+ */
+function coverageOf(page: DocPage) {
+  const blocks = [...(page.blocks ?? [])].sort((a, b) => a.position - b.position);
+  const coverable = blocks.filter((block) => block.blockType !== 'heading' && block.coverage != null);
+  const untested = coverable.filter((block) => (block.coverage?.linkedCases ?? 0) === 0);
+  const failing = coverable.filter((block) => (block.coverage?.failed ?? 0) > 0);
+  const passing = coverable.filter(
+    (block) =>
+      (block.coverage?.linkedCases ?? 0) > 0 &&
+      (block.coverage?.failed ?? 0) === 0 &&
+      (block.coverage?.notRun ?? 0) === 0,
+  );
+  const notRun = coverable.length - untested.length - failing.length - passing.length;
+
+  return { blocks, coverable, untested, failing, passing, notRun };
 }
 
 function PageView({
@@ -590,98 +644,139 @@ function PageView({
    */
   intendedCase: TestCaseSummary | null;
 }) {
-  const blocks = [...(page.blocks ?? [])].sort((a, b) => a.position - b.position);
-
-  /*
-    Coverage summed over blocks that can be covered AND have actually been measured.
-
-    Headings are excluded because they are structure, not requirements — counting them as
-    uncovered would make every page look worse than it is.
-
-    `block.coverage != null` is the half the live pass added, and it is the same distinction the
-    server makes one layer down: the field is **absent** until something can create a `doc_link`,
-    because a zeroed marker states that nothing verifies this block when the true statement is
-    that nothing has asked. Reading absent as zero put that claim back — as an amber "1 of 1
-    unlinked" on a page whose only heading demonstrably *had* a link. The per-block marker was
-    already correct (it renders nothing without coverage); this aggregate was the one place the
-    decision had not been applied, which is exactly the shape §47 and §49 kept finding.
-  */
-  const coverable = blocks.filter(
-    (block) => block.blockType !== 'heading' && block.coverage != null,
-  );
-  const uncovered = coverable.filter((block) => (block.coverage?.linkedCases ?? 0) === 0);
+  const { blocks } = coverageOf(page);
 
   return (
-    <Panel
-      testId="Docs.Content"
-      title={
-        <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
-          <Identifier variant="muted">{page.key}</Identifier>
-          <Typography variant="h4" component="h2">
-            {page.title}
-          </Typography>
-          <Identifier variant="muted">v{page.currentVersionNo}</Identifier>
-          {page.status !== 'PUBLISHED' && (
-            <Chip size="small" variant="outlined" label={docPageStatusLabel[page.status].toLowerCase()} />
-          )}
-        </Stack>
-      }
-      actions={
-        <Stack direction="row" sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-          {coverable.length > 0 && (
-            <Tooltip
-              title={
-                uncovered.length === 0
-                  ? 'Every substantive block on this page has at least one case linked to it.'
-                  : `${uncovered.length} blocks on this page have no case verifying them.`
-              }
-            >
-              <Chip
-                size="small"
-                label={
-                  uncovered.length === 0
-                    ? 'Fully linked'
-                    : `${formatCount(uncovered.length)} of ${formatCount(coverable.length)} unlinked`
-                }
-                data-testid="Docs.Content.CoverageSummary"
-                sx={{
-                  bgcolor: 'transparent',
-                  color: uncovered.length === 0 ? 'var(--color-success)' : 'var(--color-warning)',
-                  border: `1px solid color-mix(in srgb, ${
-                    uncovered.length === 0 ? 'var(--color-success)' : 'var(--color-warning)'
-                  } 45%, transparent)`,
-                }}
-              />
-            </Tooltip>
-          )}
-          <PageActions page={page} projectId={projectId} onDelete={onDelete} />
-        </Stack>
-      }
+    <DocumentSurface
+      measure="prose"
+      data-testid="Docs.Content"
+      className="rounded-lg border border-white/8"
     >
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Identifier variant="strong">{page.key}</Identifier>
+        <Identifier variant="muted">v{page.currentVersionNo}</Identifier>
+        {page.status !== 'PUBLISHED' && (
+          <Badge tone="plain">{docPageStatusLabel[page.status].toLowerCase()}</Badge>
+        )}
+      </div>
+
+      <h1 className="m-0 mb-1.5 text-2xl leading-[1.25] font-[620] tracking-[-.02em] text-ink text-balance">
+        {page.title}
+      </h1>
+      <p className="m-0 text-[12.5px] text-ink-4">Updated {formatDateTime(page.updatedAt)}</p>
+
+      <div className="my-[18px] flex flex-wrap items-center gap-2 border-t border-white/8 pt-3">
+        <PageActions page={page} projectId={projectId} onDelete={onDelete} />
+      </div>
+
       {blocks.length === 0 ? (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid="Docs.Content.Empty">
+        <p className="m-0 text-[13px] text-ink-3" data-testid="Docs.Content.Empty">
           This page has no content yet.
-        </Typography>
+        </p>
       ) : (
-        <>
-          <Box sx={{ maxWidth: '78ch' }}>
-            {blocks.map((block) => (
-              <BlockView
-                key={block.id}
-                block={block}
-                projectId={projectId}
-                pageId={page.id}
-                attachments={page.attachments}
-                intendedCase={intendedCase}
-              />
-            ))}
-          </Box>
-          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 3 }}>
-            Updated {formatDateTime(page.updatedAt)}
-          </Typography>
-        </>
+        blocks.map((block) => (
+          <BlockView
+            key={block.id}
+            block={block}
+            projectId={projectId}
+            pageId={page.id}
+            attachments={page.attachments}
+            intendedCase={intendedCase}
+          />
+        ))
       )}
-    </Panel>
+    </DocumentSurface>
+  );
+}
+
+/**
+ * The render's right column — what the page's coverage adds up to, who claims it, and where it is
+ * in its publication life.
+ *
+ * A **count, never a percentage.** The whole reason the verdict moved under each clause is that a
+ * page-level ratio averages the one gap away; putting the ratio back in the rail would undo it in
+ * the one place a reader looks for a summary.
+ */
+function PageFacts({ page }: { page: DocPage }) {
+  const { coverable, untested, failing, passing, notRun } = coverageOf(page);
+
+  const linked = new Map<string, BlockLink>();
+  for (const block of page.blocks ?? []) {
+    for (const link of block.links) linked.set(link.id, link);
+  }
+
+  return (
+    <aside className="w-full shrink-0 rounded-lg border border-white/8 bg-panel p-4 xl:w-[280px]">
+      {coverable.length > 0 && (
+        <section className="mb-5">
+          <h2 className={SECTION_HEADING}>
+            Coverage
+            <span className="font-sans text-[11px] font-normal tracking-normal text-ink-4 normal-case">
+              <span data-testid="Docs.Content.CoverageSummary">
+                {formatCount(coverable.length - untested.length)} of{' '}
+                {formatCount(coverable.length)}
+              </span>
+            </span>
+          </h2>
+          <ResultBar
+            className="mb-3"
+            passed={passing.length}
+            failed={failing.length}
+            blocked={notRun}
+            untested={untested.length}
+          />
+          <FactRow label="Tested and passing" value={formatCount(passing.length)} />
+          <FactRow
+            label="Tested and failing"
+            value={formatCount(failing.length)}
+            tone="var(--color-failed)"
+          />
+          <FactRow
+            label="Not tested"
+            value={formatCount(untested.length)}
+            tone="var(--color-blocked)"
+          />
+        </section>
+      )}
+
+      {linked.size > 0 && (
+        <section className="mb-5">
+          <h2 className={SECTION_HEADING}>
+            Cases linked here
+            <span className="font-sans text-[11px] font-normal tracking-normal text-ink-4 normal-case">
+              {formatCount(linked.size)}
+            </span>
+          </h2>
+          {[...linked.values()].map((link) => (
+            <p key={link.id} className="m-0 truncate py-1 text-[12.5px] text-ink-3">
+              <Identifier variant="muted">{link.sourceKey}</Identifier> {link.sourceTitle}
+            </p>
+          ))}
+          <p className="mt-2 mb-0 text-[12px] leading-[1.5] text-ink-4">
+            Editing a block marks the cases that cite it <em>Linked spec changed</em> until someone
+            re-reads them.
+          </p>
+        </section>
+      )}
+
+      <section>
+        <h2 className={SECTION_HEADING}>History</h2>
+        <FactRow label={`Version v${page.currentVersionNo}`} value={docPageStatusLabel[page.status]} />
+        <FactRow label="Updated" value={formatDateTime(page.updatedAt)} />
+      </section>
+    </aside>
+  );
+}
+
+/** The render's `.kv` — a claim on the left, its number on the right. */
+function FactRow({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 py-1 text-[12.5px]">
+      <span className="text-ink-3">{label}</span>
+      <span className="font-mono text-[12px] tabular-nums text-ink" style={tone ? { color: tone } : undefined}>
+        {value}
+      </span>
+    </div>
   );
 }
 
@@ -702,40 +797,6 @@ function PageView({
  * own verb, and only the ones that make sense from the current state are offered — from `DRAFT`
  * there is nothing to unpublish.
  */
-/**
- * A page's files.
- *
- * **Its own `Panel` beneath the page rather than a section inside `Docs.Content`**, because the page
- * body is prose with a coverage margin and an attachment strip is neither — dropping rows into the
- * block flow would put a file list where a reader is scanning for the next paragraph. Below the
- * content for the same reason a case's sits below its steps: it is supporting material.
- *
- * Mounted only for a loaded page, so `pageId` is real and both hooks have something to write to.
- */
-function PageAttachments({ page, projectId }: { page: DocPage; projectId: string }) {
-  const attach = useAttachDocPageFile(projectId, page.id);
-  const remove = useDeleteDocPageFile(projectId, page.id);
-
-  return (
-    <AttachmentsPanel
-      projectId={projectId}
-      // `doc:edit` — the key that already rewrites every block on this page. Not `doc:publish`:
-      // an image is part of what the page says, and publication is a separate act. (~~which Test
-      // Engineer does not hold~~ → both are a contributor's since `V52`, so the choice is about
-      // which act this is, not about who may perform it — see the header above.)
-      permission="doc:edit"
-      attachments={page.attachments}
-      onAttach={(file) => attach.mutate(file)}
-      attaching={attach.isPending}
-      attachError={attach.isError ? attach.error : null}
-      onDelete={(id) => remove.mutate(id)}
-      deleting={remove.isPending}
-      testId="Docs.Attachments"
-      emptyBody="No files attached. Diagrams, exports and anything this specification refers to go here."
-    />
-  );
-}
-
 function PageActions({
   page,
   projectId,
@@ -770,8 +831,8 @@ function PageActions({
       <PermissionGate projectId={projectId} permission="doc:edit">
         {({ allowed }) => (
           <Button
-            size="small"
-            variant="outlined"
+            size="sm"
+            variant="primary"
             disabled={!allowed}
             onClick={() => navigate(`/projects/${projectId}/docs/${page.id}/edit`)}
             data-testid="Docs.Content.Edit"
@@ -785,7 +846,7 @@ function PageActions({
         <PermissionGate key={transition.to} projectId={projectId} permission="doc:publish">
           {({ allowed }) => (
             <Button
-              size="small"
+              size="sm"
               disabled={!allowed || setStatus.isPending}
               onClick={() => setStatus.mutate(transition.to)}
               data-testid={`Docs.Content.Status.${transition.to}`}
@@ -799,18 +860,53 @@ function PageActions({
       <PermissionGate projectId={projectId} permission="doc:edit">
         {({ allowed }) => (
           <Button
-            size="small"
-            color="error"
+            size="sm"
+            variant="danger"
             disabled={!allowed}
             onClick={() => onDelete(page)}
             data-testid="Docs.Content.Delete"
           >
+            <Trash2 aria-hidden className="size-3.5" />
             Delete
           </Button>
         )}
       </PermissionGate>
-
     </>
+  );
+}
+
+/**
+ * A page's files.
+ *
+ * **Its own region beneath the page rather than a section inside `Docs.Content`**, because the page
+ * body is prose with a coverage line under every clause and an attachment strip is neither —
+ * dropping rows into the block flow would put a file list where a reader is scanning for the next
+ * paragraph. Below the content for the same reason a case's sits below its steps: it is supporting
+ * material.
+ *
+ * Mounted only for a loaded page, so `pageId` is real and both hooks have something to write to.
+ */
+function PageAttachments({ page, projectId }: { page: DocPage; projectId: string }) {
+  const attach = useAttachDocPageFile(projectId, page.id);
+  const remove = useDeleteDocPageFile(projectId, page.id);
+
+  return (
+    <AttachmentsPanel
+      projectId={projectId}
+      // `doc:edit` — the key that already rewrites every block on this page. Not `doc:publish`:
+      // an image is part of what the page says, and publication is a separate act. (~~which Test
+      // Engineer does not hold~~ → both are a contributor's since `V52`, so the choice is about
+      // which act this is, not about who may perform it — see the header above.)
+      permission="doc:edit"
+      attachments={page.attachments}
+      onAttach={(file) => attach.mutate(file)}
+      attaching={attach.isPending}
+      attachError={attach.isError ? attach.error : null}
+      onDelete={(id) => remove.mutate(id)}
+      deleting={remove.isPending}
+      testId="Docs.Attachments"
+      emptyBody="No files attached. Diagrams, exports and anything this specification refers to go here."
+    />
   );
 }
 
@@ -830,60 +926,43 @@ function BlockView({
   const isHeading = block.blockType === 'heading';
 
   return (
-    <Box
+    <div
       // The stable block id is the anchor. It never changes when the text does, which is the
       // whole reason a case's link to it can be trusted years later.
       id={block.id}
       data-testid="Docs.Block"
-      sx={{
-        scrollMarginTop: 72,
-        mb: isHeading ? 1 : 2,
-        mt: isHeading ? 3 : 0,
-        '&:target': {
-          // A deep-linked block identifies itself, so arriving from a case's traceability
-          // panel lands the reader on the exact paragraph rather than near it.
-          outline: '2px solid var(--color-action-primary)',
-          outlineOffset: 6,
-          borderRadius: '2px',
-        },
-      }}
-    >
-      {isHeading ? (
-        // No coverage margin on a heading, which is not a styling choice: a heading is structure
-        // rather than a requirement, and the page's own aggregate excludes it for the same reason.
-        <DocBlockBody block={block} attachments={attachments} testId="Docs.Block" />
-      ) : (
-        <Stack direction="row" sx={{ gap: 2, alignItems: 'flex-start' }}>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <DocBlockBody block={block} attachments={attachments} testId="Docs.Block" />
-          </Box>
-          <CoverageMarker coverage={block.coverage} projectId={projectId} />
-        </Stack>
+      className={cn(
+        'scroll-mt-[72px] target:rounded-[2px] target:outline-2 target:outline-offset-[6px]',
+        'target:outline-[color:var(--color-action-primary)]',
+        isHeading ? 'mt-6 mb-1' : 'mb-4',
       )}
-      <BlockLinks
-        block={block}
-        projectId={projectId}
-        pageId={pageId}
-        intendedCase={intendedCase}
-      />
-    </Box>
+    >
+      <DocBlockBody block={block} attachments={attachments} testId="Docs.Block" />
+      {/*
+        No coverage line on a heading, which is not a styling choice: a heading is structure rather
+        than a requirement, and the page's own aggregate excludes it for the same reason.
+      */}
+      {!isHeading && <CoverageLine block={block} projectId={projectId} />}
+      <BlockLinks block={block} projectId={projectId} pageId={pageId} intendedCase={intendedCase} />
+    </div>
   );
 }
 
 /**
  * What claims to verify this block, and the only way in the product to say so (§172).
  *
- * ## Below the body and outside the coverage margin
+ * ## Below the body, under the coverage line
  *
- * The margin is 132px of annotation and a case reads `TC-1284 — Refund is refused after 30 days`;
- * one does not fit in the other. So the links sit under the block at full width, and the margin
- * keeps saying how the linked cases are *doing* — two different questions, which is the same split
- * `DocBlock.links` and `DocBlock.coverage` make on the wire: `links` is present and possibly empty
- * because the server knows exactly who claims this, `coverage` is null when nobody does.
+ * ~~The margin is 132px of annotation and a case reads `TC-1284 — Refund is refused after 30 days`;
+ * one does not fit in the other.~~ → **superseded by 007 T14**, which deleted the margin: the
+ * verdict is now a line under the clause and the claims are the line under that. The two are still
+ * two different questions, which is the same split `DocBlock.links` and `DocBlock.coverage` make on
+ * the wire: `links` is present and possibly empty because the server knows exactly who claims this,
+ * `coverage` is null when nobody does.
  *
  * ## Offered on a heading too
  *
- * A heading gets no coverage marker — it is structure, not a requirement — and it gets a Link
+ * A heading gets no coverage line — it is structure, not a requirement — and it gets a Link
  * button anyway, because the server accepts a link to any block and a control the client withholds
  * on its own authority is the client holding a second, staler copy of the rule (the block editor's
  * Remove makes the same argument one file over). Withholding it would also make an existing
@@ -896,7 +975,7 @@ function BlockView({
  * landed.** Both ends now raise the same {@link UnlinkDialog}, which is the fix at the level the
  * defect lived at: one act, one behaviour, one component, so a third link surface inherits it.
  * The consequence sentence is this screen's own, because withdrawing a link here changes what the
- * block's coverage marker says and withdrawing one from the case end does not.
+ * block's coverage line says and withdrawing one from the case end does not.
  */
 function BlockLinks({
   block,
@@ -917,24 +996,15 @@ function BlockLinks({
   const relabel = useRelabelBlockLink(projectId, pageId);
 
   return (
-    <Stack
-      direction="row"
-      sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap', mt: 0.5 }}
-      data-testid="Docs.Block.Links"
-    >
+    <div className="mt-1 flex flex-wrap items-center gap-2" data-testid="Docs.Block.Links">
       {block.links.map((link) => (
-        <Stack
+        <span
           // A static row locator: the set is addressed by index, never by the link's id.
           key={link.id}
-          direction="row"
-          sx={{ gap: 0.5, alignItems: 'center' }}
+          className="flex items-center gap-1"
           data-testid="Docs.Block.Links.Item"
         >
-          <Chip
-            size="small"
-            variant="outlined"
-            component={RouterLink}
-            clickable
+          <RouterLink
             // The source's own screen, not a filtered list: a case has a detail route and a suite
             // does not, so the suite arm lands on the case list narrowed to it — the same two
             // destinations the board and the plan statistics page already use for the same pair.
@@ -943,13 +1013,14 @@ function BlockLinks({
                 ? `/projects/${projectId}/cases/${link.sourceId}`
                 : `/projects/${projectId}/cases?suiteId=${link.sourceId}`
             }
-            label={
-              <>
-                <Identifier variant="muted">{link.sourceKey}</Identifier> {link.sourceTitle}
-              </>
-            }
             data-testid="Docs.Block.Links.Item.Source"
-          />
+            className={
+              'inline-flex items-center gap-1.5 rounded-[5px] border border-white/8 px-2.5 py-[3px] ' +
+              'text-xs text-ink-2 no-underline hover:border-white/14 hover:bg-white/4 hover:text-ink'
+            }
+          >
+            <Identifier variant="muted">{link.sourceKey}</Identifier> {link.sourceTitle}
+          </RouterLink>
           {/*
             Beside the chip and not inside its label (§174). The source chip is a router link, and
             an interactive control nested in an anchor is invalid markup whose click target depends
@@ -969,23 +1040,21 @@ function BlockLinks({
           <PermissionGate projectId={projectId} permission="doc:edit">
             {({ allowed }) =>
               allowed ? (
-                <Tooltip title={`Withdraw ${link.sourceKey}'s claim on this block`}>
-                  <span>
-                    <IconButton
-                      aria-label={`Remove the link to ${link.sourceKey}`}
-                      size="small"
-                      disabled={remove.isPending}
-                      onClick={() => setWithdrawing(link)}
-                      data-testid="Docs.Block.Links.Remove"
-                    >
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </span>
-                </Tooltip>
+                <Button
+                  size="icon"
+                  variant="quiet"
+                  aria-label={`Remove the link to ${link.sourceKey}`}
+                  title={`Withdraw ${link.sourceKey}'s claim on this block`}
+                  disabled={remove.isPending}
+                  onClick={() => setWithdrawing(link)}
+                  data-testid="Docs.Block.Links.Remove"
+                >
+                  <Trash2 aria-hidden className="size-3.5" />
+                </Button>
               ) : null
             }
           </PermissionGate>
-        </Stack>
+        </span>
       ))}
 
       {/* Disabled rather than hidden (§31) — a Viewer should be able to see that this is a thing
@@ -994,13 +1063,13 @@ function BlockLinks({
       <PermissionGate projectId={projectId} permission="doc:edit">
         {({ allowed }) => (
           <Button
-            size="small"
-            startIcon={<AddLinkIcon />}
+            size="sm"
+            variant="quiet"
             disabled={!allowed}
             onClick={() => setLinking(true)}
-            sx={{ color: 'text.secondary' }}
             data-testid="Docs.Block.Links.AddButton"
           >
+            <Link2 aria-hidden className="size-3.5" />
             {/* Named while a case is being carried: the reader is scanning a page of paragraphs
                 for the one their case verifies, and every Link on it does something different
                 from what it did before they arrived. */}
@@ -1031,102 +1100,90 @@ function BlockLinks({
           open
           onClose={() => setWithdrawing(null)}
           target={`${withdrawing.sourceKey} — ${withdrawing.sourceTitle}`}
-          // This screen's own sentence: the marginal marker is computed from these rows, so a
+          // This screen's own sentence: the line under the clause is computed from these rows, so a
           // withdrawal here has a visible effect on the page the reader is looking at. The `OWN`
           // of the two consequences that is worth spending a line on.
           consequence="The link is withdrawn and this block's coverage is recounted. The case itself is not touched."
-          onConfirm={() =>
-            remove.mutate(withdrawing.id, { onSuccess: () => setWithdrawing(null) })
-          }
+          onConfirm={() => remove.mutate(withdrawing.id, { onSuccess: () => setWithdrawing(null) })}
           pending={remove.isPending}
           error={remove.isError ? remove.error : null}
           reset={remove.reset}
           testId="Docs.Block.Links.Unlink"
         />
       )}
-    </Stack>
+    </div>
   );
 }
 
 /**
- * The inline coverage marker. Deliberately small and in the margin — the spec text is what
- * the reader came for, and the marker is an annotation on it. But an *uncovered* block says
- * so in words rather than showing a zero, because "0" reads as a data point and "Not tested"
- * reads as a problem.
+ * The verdict on **this clause**, under it — the render's central rule for family 5.
+ *
+ * *"The chip sits under the clause it judges, so a reader learns which sentence is untested without
+ * leaving the sentence. A page-level percentage would have averaged the one gap away."*
+ *
+ * An *uncovered* block says so in words rather than showing a zero, because "0" reads as a data
+ * point and "Not tested" reads as a problem — and it carries **the button that fixes it** (UX#80),
+ * so the gap and its remedy are never more than one click apart.
+ *
+ * Null and zero are ONE branch since §168, and the server only ever sends the first. It sends
+ * `coverage: null` for a block no case claims to verify and never a row of zeros — the absence of
+ * a claim is not a claim.
  */
-function CoverageMarker({
-  coverage,
-  projectId,
-}: {
-  coverage: DocBlock['coverage'];
-  projectId: string;
-}) {
-  // Null and zero are ONE branch since §168, and the server only ever sends the first. It sends
-  // `coverage: null` for a block no case claims to verify and never a row of zeros — the absence of
-  // a claim is not a claim — so this component owns the wording that turns that absence into
-  // something a reader can act on. Rendering an empty margin for it instead, which is what this did
-  // while the field was served by nothing, would hide the marker in exactly the case plan §6i
-  // built it for: the statement nobody has linked.
+function CoverageLine({ block, projectId }: { block: DocBlock; projectId: string }) {
+  const coverage = block.coverage;
+
   if (!coverage || coverage.linkedCases === 0) {
     return (
-      <Tooltip title="No test case verifies this statement. Nothing would catch it if the behaviour broke.">
-        <Box sx={{ width: 132, flexShrink: 0 }}>
-          <Chip
-            size="small"
-            label="Not tested"
-            data-testid="Docs.Block.Coverage.Untested"
-            sx={{
-              bgcolor: 'transparent',
-              color: 'var(--color-warning)',
-              border: '1px solid color-mix(in srgb, var(--color-warning) 45%, transparent)',
-            }}
-          />
-        </Box>
-      </Tooltip>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        <Badge tone="blocked" data-testid="Docs.Block.Coverage.Untested">
+          Not tested
+        </Badge>
+        <span className="text-[12px] text-ink-4">no case links to this paragraph</span>
+        {/*
+          `objective`, carried on the query string. `CaseEditorPage` reads `suiteId` from the URL
+          today and not this — the seeding half is one line in a file 007 T7 owns, recorded as T14's
+          one open item. The link is written carrying it so that line is all that is left to add.
+        */}
+        <Button asChild size="sm" data-testid="Docs.Block.Coverage.WriteOne">
+          <RouterLink
+            to={`/projects/${projectId}/cases/new?objective=${encodeURIComponent(block.text)}`}
+          >
+            Write one
+          </RouterLink>
+        </Button>
+      </div>
     );
   }
 
   const { linkedCases, passed, failed, notRun, caseKeys } = coverage;
-
-  const state = failed > 0 ? 'failed' : notRun > 0 ? 'partial' : 'passed';
-  const color =
-    state === 'failed' ? 'var(--color-failed)' : state === 'partial' ? 'var(--color-blocked)' : 'var(--color-passed)';
+  const tone = failed > 0 ? 'failed' : notRun > 0 ? 'blocked' : 'passed';
+  const label = failed > 0 ? 'Failing' : notRun > 0 ? 'Not run' : 'Tested';
 
   return (
-    <Tooltip
-      title={
-        <Box>
-          <Box sx={{ mb: 0.5 }}>
-            {formatCount(passed)} passed · {formatCount(failed)} failed · {formatCount(notRun)} not run
-          </Box>
-          <Box sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem' }}>{caseKeys.join(', ')}</Box>
-        </Box>
-      }
-    >
-      {/* Links to the case list filtered to the cases linked here, so the marker is an
-          entrance to the work and not just a readout. */}
-      <Box
-        component={RouterLink}
+    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+      <Badge tone={tone}>{label}</Badge>
+      {/* Links to the case list filtered to the cases linked here, so the line is an entrance to
+          the work and not just a readout. */}
+      <RouterLink
         to={`/projects/${projectId}/cases?q=${encodeURIComponent(caseKeys[0] ?? '')}`}
         data-testid="Docs.Block.Coverage"
-        sx={{ width: 132, flexShrink: 0, textDecoration: 'none' }}
+        className="text-[12px] text-ink-4 no-underline hover:text-ink-3"
       >
-        <Stack direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
-          <Box
-            aria-hidden="true"
-            sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: color, flexShrink: 0 }}
-          />
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            <Identifier variant="muted">{formatCount(linkedCases)}</Identifier>{' '}
-            {linkedCases === 1 ? 'case' : 'cases'}
-            {failed > 0 && (
-              <Box component="span" sx={{ color: 'var(--color-failed)', display: 'block' }}>
-                {formatCount(failed)} failing
-              </Box>
-            )}
-          </Typography>
-        </Stack>
-      </Box>
-    </Tooltip>
+        by{' '}
+        {caseKeys.length > 0 ? (
+          caseKeys.map((key, index) => (
+            <span key={key}>
+              {index > 0 && ', '}
+              <Identifier variant="muted">{key}</Identifier>
+            </span>
+          ))
+        ) : (
+          <>
+            {formatCount(linkedCases)} {linkedCases === 1 ? 'case' : 'cases'}
+          </>
+        )}{' '}
+        · {formatCount(passed)} passed · {formatCount(failed)} failed · {formatCount(notRun)} not run
+      </RouterLink>
+    </div>
   );
 }

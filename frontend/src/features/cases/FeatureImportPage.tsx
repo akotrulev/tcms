@@ -1,25 +1,7 @@
-import {
-  Alert,
-  AlertTitle,
-  Box,
-  Button,
-  Chip,
-  MenuItem,
-  Select,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography,
-} from '@mui/material';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import { useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { FileText, Trash2, Upload } from 'lucide-react';
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
+import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
 import { useFeatureImport, useProject, useSuites } from '../../api/queries';
 import type {
@@ -32,8 +14,11 @@ import type {
 } from '../../api/types';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
-import { ScrollX } from '../../components/ScrollX';
+import { Badge, Banner, type BadgeTone } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import { Button } from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
+import { cn } from '../../lib/cn';
 import { formatBytes, formatCount, plural } from '../../lib/format';
 import { conditionActionLabels, importActionLabels, suiteActionLabels } from '../../lib/labels';
 import {
@@ -45,8 +30,14 @@ import {
   type PickedFile,
 } from './featureFiles';
 
+/** `.sec h3` from `renders/tcms.css` — one spelling of a rail section heading on this screen. */
+const SECTION_HEADING =
+  'm-0 mb-2.5 flex items-baseline gap-2 text-[11px] font-semibold tracking-[.08em] text-ink-3 uppercase';
+
 /**
- * **Import `.feature` files** (§255) — area D's screen, and capability 3's only surface.
+ * **Import `.feature` files** (§255) — area D's screen, and capability 3's only surface, drawn as
+ * `renders/05-authoring.html` frame C: *a review before commit — files left, what will happen
+ * centre, what it costs right.*
  *
  * ## One request, two modes, one rendering
  *
@@ -80,13 +71,22 @@ import {
  * The two agree except on the scenario count, which no client can compute exactly — `countScenarios`
  * says what that costs.
  *
- * ## Not a `DataGrid`
+ * ## A scenario is a card, not a table row
  *
- * The delivery plan asked for one. §241 measured what that costs: **DataGrid does not render in
- * jsdom** — its virtualization measures through a `ResizeObserver` the test shim never fires, so
- * the scroller is 0×0 with no rows, which is why `CaseListPage` (the repo's only DataGrid screen)
- * has no component test at all. Every acceptance criterion here is about what a row says, so this
- * is `Table` + `ScrollX`, as `features/audit/AuditLogPage.tsx` is and for the same reason.
+ * ~~`Table` + `ScrollX`, as `features/audit/AuditLogPage.tsx` is — the delivery plan asked for a
+ * `DataGrid` and §241 measured what that costs.~~ → **superseded by 007 T14.** Five columns made
+ * the reader carry a scenario's verdict, its reason and its preconditions across a horizontal
+ * scroll; the render's `.scn` card puts the three under each other, which is what "a review before
+ * commit" needs. The DataGrid finding stands and is now doubly moot — 007 T9 replaced that engine
+ * anyway.
+ *
+ * **What the render asks for and the contract cannot give:** a per-step diff, struck-through old
+ * text beside new. `ImportRow` in `docs/specs/openapi.yaml` carries no steps and no diff — path,
+ * line, feature, scenario, automationKey, action, reason, caseKey, preconditions, and nothing
+ * else. So the "diff not count" rule is honoured as far as the wire allows: every scenario is
+ * named with what will happen to it and why, the preconditions it would gain are listed by title,
+ * and the counts are a summary beside the rows rather than a substitute for them. The step diff is
+ * a contract change and belongs in the plan that makes it.
  */
 
 export function FeatureImportPage() {
@@ -105,6 +105,16 @@ export function FeatureImportPage() {
 
   const folderInput = useRef<HTMLInputElement | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
+
+  /*
+    ~~Raised by `PageHeader`.~~ → superseded by 007 T14, which replaced that header with the
+    render's own top strip. Kept rather than dropped: a route change that announces nothing leaves
+    a screen-reader user on a page they have no way to know has changed.
+  */
+  const announce = useAnnounce();
+  useEffect(() => {
+    announce('Import feature files page loaded');
+  }, [announce]);
 
   /*
     Any change to what would be SENT discards the plan on screen, and resets the mutation with it.
@@ -210,36 +220,94 @@ export function FeatureImportPage() {
   */
   const unfielded = importer.isError && !fileErrors && !suiteErrors;
 
-  const canApply = plan !== null && !plan.applied && plan.totals.create + plan.totals.update > 0;
+  const willWrite = plan ? plan.totals.create + plan.totals.update : 0;
+  const canApply = plan !== null && !plan.applied && willWrite > 0;
 
   return (
-    <Box>
-      <PageHeader
-        testId="FeatureImport.Header"
-        title="Import feature files"
-        documentTitle={
-          project.data ? `Import feature files · ${project.data.name}` : 'Import feature files'
-        }
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test cases', to: `/projects/${projectId}/cases` },
-          { label: 'Import' },
-        ]}
-        subtitle="Drop a folder of .feature files, read what would happen, then apply it. Nothing is written until you press Apply."
-        actions={
-          <Button
-            component={RouterLink}
-            to={`/projects/${projectId}/cases`}
-            data-testid="FeatureImport.BackToCases"
-          >
-            Back to test cases
-          </Button>
-        }
-      />
+    <div>
+      <title>
+        {project.data
+          ? `Import feature files · ${project.data.name} · TCMS`
+          : 'Import feature files · TCMS'}
+      </title>
 
-      <Stack sx={{ gap: 2 }}>
-        <Panel title="Files" testId="FeatureImport.FilesPanel">
-          <Box sx={{ p: 2 }}>
+      <header className="mb-3 flex flex-wrap items-center gap-2 border-b border-white/8 pb-3">
+        <div className="min-w-0 flex-1">
+          <nav aria-label="Breadcrumb" className="mb-1 text-[12.5px] text-ink-3">
+            <RouterLink
+              to={`/projects/${projectId}/cases`}
+              className="text-ink-3 no-underline hover:text-ink-2"
+            >
+              Test cases
+            </RouterLink>
+            <span className="px-1.5 text-ink-4">/</span>
+            <b className="font-medium text-ink-2">Import feature files</b>
+          </nav>
+          <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">
+            Import feature files
+          </h1>
+        </div>
+
+        {/* The render's quiet promise beside the two buttons, so it is read at the moment of
+            deciding rather than in a paragraph above the fold. */}
+        <span className="text-[12px] text-ink-4">Nothing is written until you import</span>
+        <Button asChild size="sm" data-testid="FeatureImport.BackToCases">
+          <RouterLink to={`/projects/${projectId}/cases`}>Cancel</RouterLink>
+        </Button>
+        <Button
+          size="sm"
+          disabled={files.length === 0 || refusals.length > 0 || importer.isPending}
+          onClick={() => void send('PREVIEW')}
+          data-testid="FeatureImport.Preview"
+        >
+          Preview
+        </Button>
+        {/*
+          **The button counts what it will do.** *"A verb with no quantity is the same button
+          whether it writes nothing or rewrites a suite."* The quantity is the rows it would
+          WRITE — creates plus updates — because that is the blast radius; the skipped rows are
+          named in the caption beside the totals, where they belong.
+        */}
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={!canApply || importer.isPending}
+          onClick={() => void send('APPLY')}
+          data-testid="FeatureImport.Apply"
+        >
+          {plan ? `Import ${plural(willWrite, 'scenario')}` : 'Import'}
+        </Button>
+      </header>
+
+      {plan && !plan.applied && !canApply && (
+        <p className="mt-0 mb-3 text-[13px] text-ink-3" data-testid="FeatureImport.NothingToApply">
+          Nothing in this plan would be created or updated.
+        </p>
+      )}
+
+      {plan?.applied && (
+        <div className="mb-3" data-testid="FeatureImport.Applied">
+          <Banner tone="steel">
+            <span>
+              <b className="text-ink">Imported.</b> {formatCount(plan.totals.create)} created,{' '}
+              {formatCount(plan.totals.update)} updated. Every row below carries the key of the case
+              it names.
+            </span>
+          </Banner>
+        </div>
+      )}
+
+      <div className="flex flex-col items-start gap-4 xl:flex-row">
+        {/* ── The render's left `.side`: what was picked, and how it will be filed ───────── */}
+        <aside className="w-full shrink-0 rounded-lg border border-white/8 bg-panel p-4 xl:w-[280px]">
+          <section className="mb-5" data-testid="FeatureImport.FilesPanel">
+            <h2 className={SECTION_HEADING}>
+              Files
+              <span className="font-sans text-[11px] font-normal tracking-normal text-ink-4 normal-case">
+                {files.length}
+              </span>
+            </h2>
+
             {/*
               A drop target and two pickers, because a drop is the gesture and a picker is the way
               back for anybody who cannot make one — a keyboard user, and a browser with no entry
@@ -247,7 +315,7 @@ export function FeatureImportPage() {
               thing that can open a file dialog, so hiding the button instead would leave the
               screen unusable without a mouse.
             */}
-            <Box
+            <div
               data-testid="FeatureImport.DropZone"
               onDragOver={(event) => {
                 event.preventDefault();
@@ -255,39 +323,35 @@ export function FeatureImportPage() {
               }}
               onDragLeave={() => setDragging(false)}
               onDrop={(event) => void handleDrop(event)}
-              sx={{
-                border: '2px dashed',
-                borderColor: dragging ? 'primary.main' : 'divider',
-                borderRadius: 1,
-                bgcolor: dragging ? 'action.hover' : 'transparent',
-                p: 3,
-                textAlign: 'center',
-              }}
+              className={cn(
+                'rounded-lg border-2 border-dashed p-4 text-center',
+                dragging ? 'border-steel bg-white/5' : 'border-white/14',
+              )}
             >
-              <UploadFileIcon sx={{ color: 'text.secondary' }} />
-              <Typography variant="body2" sx={{ mt: 1 }}>
+              <Upload aria-hidden className="mx-auto size-5 text-ink-4" />
+              <p className="m-0 mt-1.5 text-[12.5px] text-ink-2">
                 Drop a folder of <Identifier>.feature</Identifier> files here.
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+              </p>
+              <p className="m-0 mt-1 text-[11.5px] leading-[1.5] text-ink-4">
                 Only <Identifier variant="muted">.feature</Identifier> files are read. The path you
                 drop is stored on every case as provenance — nothing here fetches it back.
-              </Typography>
-              <Stack direction="row" sx={{ gap: 1, justifyContent: 'center', mt: 1.5 }}>
+              </p>
+              <div className="mt-2 flex flex-wrap justify-center gap-1.5">
                 <Button
-                  size="small"
+                  size="sm"
                   onClick={() => folderInput.current?.click()}
                   data-testid="FeatureImport.PickFolder"
                 >
                   Choose a folder
                 </Button>
                 <Button
-                  size="small"
+                  size="sm"
                   onClick={() => fileInput.current?.click()}
                   data-testid="FeatureImport.PickFiles"
                 >
                   Choose files
                 </Button>
-              </Stack>
+              </div>
               <input
                 type="file"
                 multiple
@@ -314,218 +378,194 @@ export function FeatureImportPage() {
                 data-testid="FeatureImport.FileInput"
                 aria-label="Choose feature files"
               />
-            </Box>
+            </div>
 
             {files.length > 0 && (
-              <Box sx={{ mt: 2 }} data-testid="FeatureImport.FileList">
-                <Typography variant="body2" sx={{ mb: 1 }} data-testid="FeatureImport.FileSummary">
+              <div className="mt-3" data-testid="FeatureImport.FileList">
+                <p className="m-0 mb-1.5 text-[12px] text-ink-4" data-testid="FeatureImport.FileSummary">
                   {plural(files.length, 'file')} · {formatBytes(totalBytes)} ·{' '}
                   {plural(totalScenarios, 'scenario')}
-                </Typography>
-                <ScrollX>
-                  <Table size="small">
-                    <TableBody>
-                      {files.map((file) => (
-                        <TableRow key={file.path} data-testid="FeatureImport.File">
-                          <TableCell>
-                            <Identifier>{file.path}</Identifier>
-                          </TableCell>
-                          <TableCell sx={{ width: 120, color: 'text.secondary' }}>
-                            {formatBytes(file.bytes)}
-                          </TableCell>
-                          <TableCell sx={{ width: 80 }}>
-                            <Button
-                              size="small"
-                              startIcon={<DeleteOutlineIcon fontSize="small" />}
-                              onClick={() => removeFile(file.path)}
-                              data-testid="FeatureImport.RemoveFile"
-                              aria-label={`Remove ${file.path}`}
-                            >
-                              Remove
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </ScrollX>
-              </Box>
+                </p>
+                {/* The render's `.fileln` — path, then its scenario count in the mono gutter. */}
+                {files.map((file) => (
+                  <div
+                    key={file.path}
+                    data-testid="FeatureImport.File"
+                    className="flex items-center gap-2 rounded-md px-1.5 py-1 text-[12.5px] text-ink-2 hover:bg-white/4"
+                  >
+                    <FileText aria-hidden className="size-3.5 shrink-0 text-ink-4" />
+                    <span className="min-w-0 flex-1 truncate" title={file.path}>
+                      {file.path}
+                    </span>
+                    <span className="shrink-0 font-mono text-[10.5px] text-ink-4">
+                      {file.scenarios}
+                    </span>
+                    <Button
+                      size="icon"
+                      variant="quiet"
+                      onClick={() => removeFile(file.path)}
+                      data-testid="FeatureImport.RemoveFile"
+                      aria-label={`Remove ${file.path}`}
+                    >
+                      <Trash2 aria-hidden className="size-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
             )}
 
             {refusals.length > 0 && (
-              <Alert severity="error" sx={{ mt: 2 }} data-testid="FeatureImport.CapRefusal">
-                <AlertTitle sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
-                  These files cannot be sent
-                </AlertTitle>
-                {refusals.map((sentence) => (
-                  <Typography variant="body2" key={sentence}>
-                    {sentence}
-                  </Typography>
-                ))}
-              </Alert>
+              <div className="mt-3" data-testid="FeatureImport.CapRefusal">
+                <Banner tone="bad">
+                  <span>
+                    <b className="text-ink">These files cannot be sent.</b>{' '}
+                    {refusals.map((sentence) => (
+                      <span key={sentence} className="block">
+                        {sentence}
+                      </span>
+                    ))}
+                  </span>
+                </Banner>
+              </div>
             )}
 
             {/* The server's own `errors.files` — it knows things the caps above cannot. */}
             {fileErrors && (
-              <Alert severity="error" sx={{ mt: 2 }} data-testid="FeatureImport.FileErrors">
-                {fileErrors.map((sentence) => (
-                  <Typography variant="body2" key={sentence}>
-                    {sentence}
-                  </Typography>
-                ))}
-              </Alert>
+              <div className="mt-3" data-testid="FeatureImport.FileErrors">
+                <Banner tone="bad">
+                  <span>
+                    {fileErrors.map((sentence) => (
+                      <span key={sentence} className="block">
+                        {sentence}
+                      </span>
+                    ))}
+                  </span>
+                </Banner>
+              </div>
             )}
-          </Box>
-        </Panel>
+          </section>
 
-        <Panel title="Options" testId="FeatureImport.OptionsPanel">
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            sx={{ gap: 3, p: 2, alignItems: 'flex-start' }}
-          >
-            <Box sx={{ minWidth: 280 }}>
-              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                Where the cases are filed
-              </Typography>
-              {/*
-                The default is "match a suite by feature name", which is what the endpoint does when
-                no `suiteId` is sent — and naming one here is the interesting branch: EVERY scenario
-                files into it, no suite is matched or created, and `suites[]` comes back empty. That
-                belongs on the option rather than in a tooltip nobody opens.
-              */}
-              <Select
-                size="small"
-                fullWidth
-                displayEmpty
+          <section data-testid="FeatureImport.OptionsPanel">
+            <h2 className={SECTION_HEADING}>Options</h2>
+
+            {/*
+              The default is "match a suite by feature name", which is what the endpoint does when
+              no `suiteId` is sent — and naming one here is the interesting branch: EVERY scenario
+              files into it, no suite is matched or created, and `suites[]` comes back empty. That
+              belongs on the option rather than in a tooltip nobody opens.
+            */}
+            <Field label="Where the cases are filed" htmlFor="feature-import-suite">
+              <NativeSelect
+                id="feature-import-suite"
                 value={suiteId}
                 onChange={(event) => {
                   discardPlan();
                   setSuiteId(event.target.value);
                 }}
-                error={!!suiteErrors}
+                aria-label="Which suite the imported cases are filed in"
                 data-testid="FeatureImport.Suite"
-                inputProps={{ 'aria-label': 'Which suite the imported cases are filed in' }}
               >
-                <MenuItem value="">Match a suite by feature name</MenuItem>
+                <option value="">Match a suite by feature name</option>
                 {(suites.data ?? []).map((suite) => (
-                  <MenuItem key={suite.id} value={suite.id}>
+                  <option key={suite.id} value={suite.id}>
                     {suite.name}
-                  </MenuItem>
+                  </option>
                 ))}
-              </Select>
-              {suiteErrors && (
-                <Typography
-                  variant="caption"
-                  sx={{ color: 'error.main', display: 'block', mt: 0.5 }}
-                  data-testid="FeatureImport.SuiteError"
-                >
-                  {suiteErrors.join(' ')}
-                </Typography>
-              )}
-            </Box>
-
-            <Box>
-              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                A scenario whose case already exists
-              </Typography>
-              <ToggleButtonGroup
-                exclusive
-                size="small"
-                value={onExisting}
-                onChange={(_, next: OnExisting | null) => {
-                  if (!next) return;
-                  discardPlan();
-                  setOnExisting(next);
-                }}
-                aria-label="What to do with a scenario that already has a case"
+              </NativeSelect>
+            </Field>
+            {/*
+              Its own element rather than `Field`'s `error` slot, because the locator has to land
+              on the sentence: `Field` renders the message it is given and has nowhere to put a
+              `data-testid`, and a refusal the suite select caused is the one a caller re-reads.
+            */}
+            {suiteErrors && (
+              <p
+                role="alert"
+                data-testid="FeatureImport.SuiteError"
+                className="m-0 mt-1 text-xs text-[color:var(--color-failed)]"
               >
-                <ToggleButton value="SKIP" data-testid="FeatureImport.OnExisting.SKIP">
-                  Leave it alone
-                </ToggleButton>
-                <ToggleButton value="UPDATE" data-testid="FeatureImport.OnExisting.UPDATE">
-                  Rewrite it from the file
-                </ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
-          </Stack>
-        </Panel>
+                {suiteErrors.join(' ')}
+              </p>
+            )}
 
-        <Stack direction="row" sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Button
-            variant="contained"
-            disabled={files.length === 0 || refusals.length > 0 || importer.isPending}
-            onClick={() => void send('PREVIEW')}
-            data-testid="FeatureImport.Preview"
-          >
-            Preview
-          </Button>
-          <Button
-            variant="contained"
-            color="secondary"
-            disabled={!canApply || importer.isPending}
-            onClick={() => void send('APPLY')}
-            data-testid="FeatureImport.Apply"
-          >
-            Apply
-          </Button>
-          {plan && !plan.applied && !canApply && (
-            <Typography
-              variant="body2"
-              sx={{ color: 'text.secondary' }}
-              data-testid="FeatureImport.NothingToApply"
+            <p className="mt-3 mb-1 text-[12px] text-ink-4">
+              A scenario whose case already exists
+            </p>
+            <div
+              role="group"
+              aria-label="What to do with a scenario that already has a case"
+              className="inline-flex gap-0.5 rounded-lg bg-white/4 p-0.5"
             >
-              Nothing in this plan would be created or updated.
-            </Typography>
+              {(
+                [
+                  { value: 'SKIP', label: 'Leave it alone' },
+                  { value: 'UPDATE', label: 'Rewrite it from the file' },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={onExisting === option.value}
+                  onClick={() => {
+                    discardPlan();
+                    setOnExisting(option.value);
+                  }}
+                  data-testid={`FeatureImport.OnExisting.${option.value}`}
+                  className={cn(
+                    'cursor-pointer rounded-md border-0 px-[11px] py-1 text-xs font-medium',
+                    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
+                    onExisting === option.value
+                      ? 'bg-panel text-ink shadow-[0_1px_2px_rgb(0_0_0/40%)]'
+                      : 'bg-transparent text-ink-3 hover:text-ink-2',
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </section>
+        </aside>
+
+        {/* ── The centre pane: what will happen, one card per scenario ───────────────────── */}
+        <div className="min-w-0 flex-1" data-testid="FeatureImport.PlanPanel">
+          {importer.isPending || plan !== null || unfielded ? (
+            /*
+              Mounted only once a request is in flight or an answer exists. `DataRegion` reads an
+              undefined `data` as "still loading", which is right for a query that always runs and
+              wrong for a mutation nobody has pressed yet — an unconditional region would show a
+              skeleton over an empty screen from the moment the page opened.
+            */
+            <DataRegion
+              testId="FeatureImport.Plan"
+              state={{
+                data: plan ?? undefined,
+                isPending: importer.isPending,
+                isError: unfielded,
+                error: importer.error,
+                refetch: () => void send(lastMode.current),
+              }}
+              isEmpty={(current) => current.scenarios.length === 0}
+              skeleton={<GridSkeleton />}
+              empty={{
+                kind: 'no-records',
+                title: 'No scenarios',
+                body: 'These files parsed, and none of them holds a scenario to import.',
+              }}
+            >
+              {(current) => <ImportPlanView plan={current} />}
+            </DataRegion>
+          ) : (
+            <p className="m-0 rounded-lg border border-white/8 bg-panel p-4 text-[13px] text-ink-3">
+              Pick some files and press Preview. Every scenario in them gets a card here saying what
+              would happen to it and why, before anything is written.
+            </p>
           )}
-        </Stack>
+        </div>
 
-        {plan?.applied && (
-          <Alert severity="success" data-testid="FeatureImport.Applied">
-            <AlertTitle sx={{ fontSize: '0.875rem', fontWeight: 600 }}>Imported</AlertTitle>
-            <Typography variant="body2">
-              {formatCount(plan.totals.create)} created, {formatCount(plan.totals.update)} updated.
-              Every row below carries the key of the case it names.
-            </Typography>
-          </Alert>
-        )}
-
-        {(importer.isPending || plan !== null || unfielded) && (
-          <Panel
-            title={plan?.applied ? 'What was imported' : 'What would be imported'}
-            testId="FeatureImport.PlanPanel"
-            dense
-          >
-            <Box sx={{ p: 1.5 }}>
-              {/*
-                Mounted only once a request is in flight or an answer exists. `DataRegion` reads an
-                undefined `data` as "still loading", which is right for a query that always runs and
-                wrong for a mutation nobody has pressed yet — an unconditional region would show a
-                skeleton over an empty screen from the moment the page opened.
-              */}
-              <DataRegion
-                testId="FeatureImport.Plan"
-                state={{
-                  data: plan ?? undefined,
-                  isPending: importer.isPending,
-                  isError: unfielded,
-                  error: importer.error,
-                  refetch: () => void send(lastMode.current),
-                }}
-                isEmpty={(current) => current.scenarios.length === 0}
-                skeleton={<GridSkeleton />}
-                empty={{
-                  kind: 'no-records',
-                  title: 'No scenarios',
-                  body: 'These files parsed, and none of them holds a scenario to import.',
-                }}
-              >
-                {(current) => <ImportPlanView plan={current} />}
-              </DataRegion>
-            </Box>
-          </Panel>
-        )}
-      </Stack>
-    </Box>
+        {/* ── The render's right `.side`: what it costs ──────────────────────────────────── */}
+        {plan && <ImportCost plan={plan} />}
+      </div>
+    </div>
   );
 }
 
@@ -533,229 +573,101 @@ export function FeatureImportPage() {
  * The plan — **the same component for a preview and for a committed apply**.
  *
  * Nothing here branches on `mode`. `applied` changes one sentence above this component and the
- * `caseKey`s fill in; the rows, the suites, the conditions, the orphans and the totals are read
- * identically, because the server computes them identically. A second rendering keyed on the mode
- * is how a preview starts describing something the apply does not do.
+ * `caseKey`s fill in; the rows, the suites, the conditions and the totals are read identically,
+ * because the server computes them identically. A second rendering keyed on the mode is how a
+ * preview starts describing something the apply does not do.
  */
 function ImportPlanView({ plan }: { plan: FeatureImportPlan }) {
   return (
-    <Stack sx={{ gap: 2 }}>
-      <Stack
-        direction="row"
-        sx={{ gap: 1, flexWrap: 'wrap', alignItems: 'center' }}
-        data-testid="FeatureImport.Totals"
-        aria-live="polite"
-      >
-        <Chip
-          size="small"
-          color="success"
-          label={`${formatCount(plan.totals.create)} create`}
-          data-testid="FeatureImport.Totals.Create"
-        />
-        <Chip
-          size="small"
-          color="info"
-          label={`${formatCount(plan.totals.update)} update`}
-          data-testid="FeatureImport.Totals.Update"
-        />
-        <Chip
-          size="small"
-          label={`${formatCount(plan.totals.skip)} skip`}
-          data-testid="FeatureImport.Totals.Skip"
-        />
-        <Chip
-          size="small"
-          color="warning"
-          label={`${formatCount(plan.totals.refuse)} refused`}
-          data-testid="FeatureImport.Totals.Refuse"
-        />
-      </Stack>
-
-      <ScrollX>
-        <Table size="small" data-testid="FeatureImport.Rows">
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ color: 'text.secondary' }}>Scenario</TableCell>
-              <TableCell sx={{ color: 'text.secondary', width: 110 }}>Action</TableCell>
-              <TableCell sx={{ color: 'text.secondary' }}>Why</TableCell>
-              <TableCell sx={{ color: 'text.secondary' }}>Preconditions</TableCell>
-              <TableCell sx={{ color: 'text.secondary', width: 110 }}>Case</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {plan.scenarios.map((row, index) => (
-              <ScenarioRow key={`${row.path}:${row.line ?? 'file'}:${index}`} row={row} />
-            ))}
-          </TableBody>
-        </Table>
-      </ScrollX>
+    <div className="flex flex-col gap-4">
+      <div data-testid="FeatureImport.Rows" className="flex flex-col gap-2.5">
+        {plan.scenarios.map((row, index) => (
+          <ScenarioCard key={`${row.path}:${row.line ?? 'file'}:${index}`} row={row} />
+        ))}
+      </div>
 
       {plan.suites.length > 0 && (
-        <Panel title="Suites" testId="FeatureImport.Suites" dense>
-          <ScrollX>
-            <Table size="small">
-              <TableBody>
-                {plan.suites.map((suite) => (
-                  <SuiteRow key={suite.name} suite={suite} />
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollX>
-        </Panel>
+        <section
+          className="rounded-lg border border-white/8 bg-panel p-4"
+          data-testid="FeatureImport.Suites"
+        >
+          <h2 className={SECTION_HEADING}>Suites</h2>
+          {plan.suites.map((suite) => (
+            <SuiteLine key={suite.name} suite={suite} />
+          ))}
+        </section>
       )}
 
       {plan.conditions.length > 0 && (
-        <Panel title="Preconditions from the Background" testId="FeatureImport.Conditions" dense>
-          <ScrollX>
-            <Table size="small">
-              <TableBody>
-                {plan.conditions.map((condition) => (
-                  <ConditionRow key={condition.importedKey} condition={condition} />
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollX>
-        </Panel>
+        <section
+          className="rounded-lg border border-white/8 bg-panel p-4"
+          data-testid="FeatureImport.Conditions"
+        >
+          <h2 className={SECTION_HEADING}>Preconditions from the Background</h2>
+          {plan.conditions.map((condition) => (
+            <ConditionLine key={condition.importedKey} condition={condition} />
+          ))}
+        </section>
       )}
-
-      {plan.orphans.length > 0 && (
-        <Panel title="Cases these files do not name" testId="FeatureImport.Orphans" dense>
-          <Box sx={{ p: 1.5 }}>
-            {/*
-              Listed, never touched — and saying so is the point of the panel. Whether a missing
-              scenario is a rename or a retirement is a question only a person can answer, and
-              deleting the case would destroy the runs it appears in on the strength of a file
-              somebody edited.
-            */}
-            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-              Nothing is done to these. They are cases in the target suites whose automation key is
-              not in the files you picked — a renamed scenario looks exactly like a retired one.
-            </Typography>
-            <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap' }}>
-              {plan.orphans.map((orphan) => (
-                <Chip
-                  key={orphan.caseKey}
-                  size="small"
-                  variant="outlined"
-                  data-testid="FeatureImport.Orphan"
-                  label={
-                    <>
-                      <Identifier>{orphan.caseKey}</Identifier> · {orphan.automationKey}
-                    </>
-                  }
-                />
-              ))}
-            </Stack>
-          </Box>
-        </Panel>
-      )}
-    </Stack>
+    </div>
   );
 }
 
-/** `CREATE`/`UPDATE` read as progress, `SKIP` as neutral, `REFUSE` as the one that wants attention. */
-const actionColor = {
-  CREATE: 'success',
-  UPDATE: 'info',
-  SKIP: 'default',
-  REFUSE: 'warning',
-} as const;
+/**
+ * `CREATE`/`UPDATE` read as progress, `SKIP` as neutral, `REFUSE` as the one that wants attention.
+ *
+ * Steel for a create, because it is the instance telling the reader what it will make rather than
+ * a result; amber for an update and for a refusal, which are the two the reader has to decide
+ * about. ~~`success`/`info`/`default`/`warning`.~~ → 007 T14: the kit has no `info`, and a green
+ * `Create` would have borrowed the hue the runner spends on *passed*.
+ */
+const actionTone = {
+  CREATE: 'steel',
+  UPDATE: 'blocked',
+  SKIP: 'plain',
+  REFUSE: 'blocked',
+} as const satisfies Record<ImportRow['action'], BadgeTone>;
 
-function ScenarioRow({ row }: { row: ImportRow }) {
+/**
+ * One scenario, as the render's `.scn`: the verdict and the name in the header, the reason and the
+ * provenance under it, the preconditions it would gain beneath that.
+ *
+ * A refused card is distinguished by more than its badge's colour: a tint on the card is the
+ * second cue and the badge's own TEXT is the non-colour one WCAG 1.4.1 asks for. It never blocks
+ * anything — Import is enabled off the totals, so forty importable scenarios import beside any
+ * number of refusals. A skipped card is dimmed, per the render's `.scn.skip`: it is on screen
+ * because *not touching something* is an outcome, and it is quiet because it is the outcome
+ * nobody has to read.
+ */
+function ScenarioCard({ row }: { row: ImportRow }) {
   const [expanded, setExpanded] = useState(false);
   const shown = expanded ? row.preconditions : row.preconditions.slice(0, 2);
   const hidden = row.preconditions.length - shown.length;
 
   return (
-    <TableRow
-      hover
+    <article
       data-testid="FeatureImport.Row"
       data-action={row.action}
-      /*
-        A refused row is distinguished by more than its chip's colour: a tint on the row is the
-        second cue, and the chip's own TEXT is the non-colour one WCAG 1.4.1 asks for. It never
-        blocks anything — Apply is enabled off the totals, so forty importable scenarios import
-        beside any number of refusals.
-      */
-      sx={row.action === 'REFUSE' ? { bgcolor: 'action.hover' } : undefined}
+      className={cn(
+        'overflow-hidden rounded-lg border border-white/8 bg-panel',
+        row.action === 'SKIP' && 'opacity-60',
+      )}
+      style={
+        row.action === 'REFUSE'
+          ? { backgroundColor: 'color-mix(in oklab, var(--color-blocked) 6%, transparent)' }
+          : undefined
+      }
     >
-      <TableCell>
-        <Typography
-          variant="body2"
-          sx={{ fontWeight: 500 }}
+      <header className="flex flex-wrap items-center gap-2.5 border-b border-white/8 px-3 py-2">
+        <Badge tone={actionTone[row.action]} data-testid="FeatureImport.Row.Action">
+          {importActionLabels[row.action]}
+        </Badge>
+        <span
+          className="min-w-0 flex-1 text-[13px] text-ink"
           data-testid="FeatureImport.Row.Scenario"
         >
           {row.scenario ?? 'The whole file'}
-        </Typography>
-        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-          {row.feature ? `${row.feature} · ` : ''}
-          <Identifier variant="muted">
-            {row.path}
-            {row.line === null ? '' : `:${row.line}`}
-          </Identifier>
-        </Typography>
-        {row.automationKey && (
-          <Identifier variant="muted" testId="FeatureImport.Row.Key">
-            {row.automationKey}
-          </Identifier>
-        )}
-      </TableCell>
-      <TableCell>
-        <Chip
-          size="small"
-          color={actionColor[row.action]}
-          label={importActionLabels[row.action]}
-          data-testid="FeatureImport.Row.Action"
-        />
-      </TableCell>
-      <TableCell>
-        {/*
-          VERBATIM. These sentences are the server's, fixed, listed on `ImportRow.reason` in
-          `docs/specs/openapi.yaml`, and clients may match on them — they are the stability a `type`
-          slug carries on an error, applied to an outcome that is not one. Re-wording "needs
-          library:manage for the Background" through `describeError` would take the permission key
-          out of the one place a caller can read it, and `describeError` is for failures: an import
-          that refuses a row succeeded.
-        */}
-        <Typography variant="body2" data-testid="FeatureImport.Row.Reason">
-          {row.reason}
-        </Typography>
-      </TableCell>
-      <TableCell>
-        {row.preconditions.length === 0 ? (
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            None
-          </Typography>
-        ) : (
-          <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
-            {/*
-              Rendered from the ROW, in the order it arrived — the import-owned titles in Background
-              order, then the case's human-attached ones. Re-deriving this from the plan's
-              `conditions[]` would attach every Background step in the request to every case in it,
-              because that list is per REQUEST and this one is per row.
-            */}
-            {shown.map((title, index) => (
-              <Chip
-                key={`${title}:${index}`}
-                size="small"
-                variant="outlined"
-                label={title}
-                data-testid="FeatureImport.Row.Precondition"
-              />
-            ))}
-            {hidden > 0 && (
-              <Button
-                size="small"
-                onClick={() => setExpanded(true)}
-                data-testid="FeatureImport.Row.MorePreconditions"
-              >
-                +{hidden} more
-              </Button>
-            )}
-          </Stack>
-        )}
-      </TableCell>
-      <TableCell>
+        </span>
         {row.caseKey ? (
           /*
             `/search?q=TC-12`, not `/projects/:projectId/cases/:caseId`, because the plan carries the
@@ -768,60 +680,228 @@ function ScenarioRow({ row }: { row: ImportRow }) {
           <RouterLink
             to={`/search?q=${encodeURIComponent(row.caseKey)}`}
             data-testid="FeatureImport.Row.CaseKey"
+            className="shrink-0 no-underline"
           >
             <Identifier>{row.caseKey}</Identifier>
           </RouterLink>
-        ) : (
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            —
-          </Typography>
+        ) : null}
+      </header>
+
+      <div className="px-3 py-2.5">
+        <p className="m-0 text-[12.5px] text-ink-4">
+          {row.feature ? `${row.feature} · ` : ''}
+          <Identifier variant="muted">
+            {row.path}
+            {row.line === null ? '' : `:${row.line}`}
+          </Identifier>
+          {row.automationKey && (
+            <>
+              {' · '}
+              <Identifier variant="muted" testId="FeatureImport.Row.Key">
+                {row.automationKey}
+              </Identifier>
+            </>
+          )}
+        </p>
+
+        {/*
+          VERBATIM. These sentences are the server's, fixed, listed on `ImportRow.reason` in
+          `docs/specs/openapi.yaml`, and clients may match on them — they are the stability a `type`
+          slug carries on an error, applied to an outcome that is not one. Re-wording "needs
+          library:manage for the Background" through `describeError` would take the permission key
+          out of the one place a caller can read it, and `describeError` is for failures: an import
+          that refuses a row succeeded.
+        */}
+        {row.reason && (
+          <p className="m-0 mt-1.5 text-[13px] text-ink-2" data-testid="FeatureImport.Row.Reason">
+            {row.reason}
+          </p>
         )}
-      </TableCell>
-    </TableRow>
+
+        {row.preconditions.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="font-mono text-[10.5px] tracking-[.04em] text-ink-4 uppercase">
+              Preconditions
+            </span>
+            {/*
+              Rendered from the ROW, in the order it arrived — the import-owned titles in Background
+              order, then the case's human-attached ones. Re-deriving this from the plan's
+              `conditions[]` would attach every Background step in the request to every case in it,
+              because that list is per REQUEST and this one is per row.
+            */}
+            {shown.map((title, index) => (
+              <span
+                key={`${title}:${index}`}
+                data-testid="FeatureImport.Row.Precondition"
+                className="rounded-[5px] border border-white/8 px-2 py-[2px] text-[11.5px] text-ink-2"
+              >
+                {title}
+              </span>
+            ))}
+            {hidden > 0 && (
+              <Button
+                size="sm"
+                variant="quiet"
+                onClick={() => setExpanded(true)}
+                data-testid="FeatureImport.Row.MorePreconditions"
+              >
+                +{hidden} more
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    </article>
   );
 }
 
-function SuiteRow({ suite }: { suite: SuiteAction }) {
+function SuiteLine({ suite }: { suite: SuiteAction }) {
   return (
-    <TableRow data-testid="FeatureImport.SuiteRow">
-      <TableCell>{suite.name}</TableCell>
-      <TableCell sx={{ width: 140 }}>
-        <Chip
-          size="small"
-          color={
-            suite.action === 'REFUSE' ? 'warning' : suite.action === 'CREATE' ? 'success' : 'default'
-          }
-          label={suiteActionLabels[suite.action]}
-          data-testid="FeatureImport.SuiteRow.Action"
-        />
-      </TableCell>
-      <TableCell sx={{ color: 'text.secondary' }}>{suite.reason}</TableCell>
-    </TableRow>
+    <div
+      className="flex flex-wrap items-center gap-2 border-b border-white/8 py-2 last:border-b-0"
+      data-testid="FeatureImport.SuiteRow"
+    >
+      <Badge
+        tone={suite.action === 'REFUSE' ? 'blocked' : suite.action === 'CREATE' ? 'steel' : 'plain'}
+        data-testid="FeatureImport.SuiteRow.Action"
+      >
+        {suiteActionLabels[suite.action]}
+      </Badge>
+      <span className="text-[13px] text-ink">{suite.name}</span>
+      {suite.reason && <span className="text-[12.5px] text-ink-4">{suite.reason}</span>}
+    </div>
   );
 }
 
-function ConditionRow({ condition }: { condition: ConditionAction }) {
+function ConditionLine({ condition }: { condition: ConditionAction }) {
   return (
-    <TableRow data-testid="FeatureImport.ConditionRow">
-      <TableCell>
-        <Typography variant="body2">{condition.title}</Typography>
-        <Identifier variant="muted">{condition.importedKey}</Identifier>
-      </TableCell>
-      <TableCell sx={{ width: 140 }}>
-        <Chip
-          size="small"
-          color={
-            condition.action === 'REFUSE'
-              ? 'warning'
-              : condition.action === 'CREATE'
-                ? 'success'
-                : 'default'
-          }
-          label={conditionActionLabels[condition.action]}
-          data-testid="FeatureImport.ConditionRow.Action"
+    <div
+      className="flex flex-wrap items-center gap-2 border-b border-white/8 py-2 last:border-b-0"
+      data-testid="FeatureImport.ConditionRow"
+    >
+      <Badge
+        tone={
+          condition.action === 'REFUSE'
+            ? 'blocked'
+            : condition.action === 'CREATE'
+              ? 'steel'
+              : 'plain'
+        }
+        data-testid="FeatureImport.ConditionRow.Action"
+      >
+        {conditionActionLabels[condition.action]}
+      </Badge>
+      <span className="min-w-0 flex-1 text-[13px] text-ink">{condition.title}</span>
+      <Identifier variant="muted">{condition.importedKey}</Identifier>
+      {condition.reason && <span className="text-[12.5px] text-ink-4">{condition.reason}</span>}
+    </div>
+  );
+}
+
+/**
+ * What this import does, and what it deliberately leaves alone.
+ *
+ * **Import never deletes, and the render says so twice** — once as a panel naming the orphans, once
+ * as a sentence under it (UX#35). *"A destructive default hidden in a toggle is the failure this
+ * panel exists to prevent."*
+ */
+function ImportCost({ plan }: { plan: FeatureImportPlan }) {
+  const { create, update, skip, refuse } = plan.totals;
+
+  return (
+    <aside className="w-full shrink-0 rounded-lg border border-white/8 bg-panel p-4 xl:w-[260px]">
+      <section className="mb-5" data-testid="FeatureImport.Totals" aria-live="polite">
+        <h2 className={SECTION_HEADING}>What this import does</h2>
+        <CostRow
+          label="New cases"
+          value={`${formatCount(create)} create`}
+          tone="var(--color-steel)"
+          testId="FeatureImport.Totals.Create"
         />
-      </TableCell>
-      <TableCell sx={{ color: 'text.secondary' }}>{condition.reason}</TableCell>
-    </TableRow>
+        <CostRow
+          label="Cases updated"
+          value={`${formatCount(update)} update`}
+          tone="var(--color-blocked)"
+          testId="FeatureImport.Totals.Update"
+        />
+        <CostRow
+          label="Left alone"
+          value={`${formatCount(skip)} skip`}
+          testId="FeatureImport.Totals.Skip"
+        />
+        <CostRow
+          label="Refused"
+          value={`${formatCount(refuse)} refused`}
+          tone="var(--color-blocked)"
+          testId="FeatureImport.Totals.Refuse"
+        />
+        <p className="mt-2 mb-0 text-[12px] leading-[1.5] text-ink-4">
+          Creates {formatCount(create)}, updates {formatCount(update)}, leaves{' '}
+          {formatCount(skip)} alone.
+        </p>
+      </section>
+
+      {plan.orphans.length > 0 && (
+        <section data-testid="FeatureImport.Orphans">
+          <h2 className={SECTION_HEADING}>
+            Cases these files do not name
+            <span className="font-sans text-[11px] font-normal tracking-normal text-ink-4 normal-case">
+              {plan.orphans.length}
+            </span>
+          </h2>
+          {/*
+            Listed, never touched — and saying so is the point of the panel. Whether a missing
+            scenario is a rename or a retirement is a question only a person can answer, and
+            deleting the case would destroy the runs it appears in on the strength of a file
+            somebody edited.
+          */}
+          <p className="m-0 mb-2 text-[12px] leading-[1.5] text-ink-4">
+            These are cases in the target suites whose automation key is not in the files you
+            picked — a renamed scenario looks exactly like a retired one.
+          </p>
+          {plan.orphans.map((orphan) => (
+            <div
+              key={orphan.caseKey}
+              data-testid="FeatureImport.Orphan"
+              className="flex items-baseline justify-between gap-2 py-1 text-[12.5px]"
+            >
+              <span className="min-w-0 truncate text-ink-3">
+                <Identifier variant="muted">{orphan.caseKey}</Identifier> {orphan.automationKey}
+              </span>
+              <span className="shrink-0 text-ink-4">kept</span>
+            </div>
+          ))}
+          <p className="mt-2 mb-0 text-[12px] leading-[1.5] text-ink-4">
+            Import never deletes. Deprecate them yourself if the repository dropped them on purpose.
+          </p>
+        </section>
+      )}
+    </aside>
+  );
+}
+
+/** The render's `.kv` — a claim on the left, its number on the right. */
+function CostRow({
+  label,
+  value,
+  tone,
+  testId,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+  testId: string;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 py-1 text-[12.5px]">
+      <span className="text-ink-3">{label}</span>
+      <span
+        data-testid={testId}
+        className="font-mono text-[12px] tabular-nums text-ink"
+        style={tone ? { color: tone } : undefined}
+      >
+        {value}
+      </span>
+    </div>
   );
 }

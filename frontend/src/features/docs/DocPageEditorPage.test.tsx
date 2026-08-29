@@ -95,16 +95,20 @@ function renderEditor(subject: DocPage = page) {
 }
 
 /**
- * Opens a MUI select and picks an option.
+ * Picks an option by its visible name.
  *
- * The `data-testid` sits on the hidden `<input>` (`slotProps.htmlInput`), which carries
- * `pointer-events: none` — so clicking it throws rather than opening the menu. The visible control
- * is the sibling `combobox`, and the options render into a portal on the document.
+ * ~~Opens a MUI select: the `data-testid` sits on the hidden `<input>` (`slotProps.htmlInput`),
+ * which carries `pointer-events: none` — so clicking it throws rather than opening the menu. The
+ * visible control is the sibling `combobox`, and the options render into a portal on the
+ * document.~~ → **superseded (007 T14).** Both pickers on this form are native `<select>`s now —
+ * one of six fixed words, so the platform control, which is also the one `@radix-ui`'s select
+ * cannot be under jsdom. Their options are children of the box rather than a portal. This helper
+ * is the only line of this file the port touched; every assertion below is unchanged.
  */
 async function choose(testId: string, optionName: string | RegExp) {
-  const select = screen.getByTestId(testId).closest('.MuiInputBase-root')!
-  await userEvent.click(within(select as HTMLElement).getByRole('combobox'))
-  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+  const select = screen.getByTestId(testId)
+  const option = within(select).getByRole('option', { name: optionName }) as HTMLOptionElement
+  await userEvent.selectOptions(select, option)
 }
 
 /** The body of the one PATCH the editor sent. */

@@ -1,15 +1,3 @@
-import {
-  Alert,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-} from '@mui/material';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -17,6 +5,18 @@ import { z } from 'zod';
 import type { DocPageSummary } from '../../api/types';
 import { ApiError } from '../../api/client';
 import { Identifier } from '../../components/Identifier';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { useCreateDocPage, useDeleteDocPage } from '../../api/queries';
 import { describeError } from '../../lib/describeError';
 
@@ -130,64 +130,68 @@ export function CreateDocPageDialog({
   });
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      fullWidth
-      maxWidth="sm"
-      data-testid={`${TestIdPrefix}.Create`}
-    >
-      <form onSubmit={submit} noValidate aria-busy={create.isPending}>
-        <DialogTitle>New page</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={`${TestIdPrefix}.Create`}>
+        <form onSubmit={submit} noValidate aria-busy={create.isPending}>
+          <DialogHeader>
+            <DialogTitle>New page</DialogTitle>
+          </DialogHeader>
+
+          <div className="mt-4 flex flex-col gap-4">
             {errors.root && (
-              <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.Error`}>
-                {errors.root.message}
-              </Alert>
+              <div data-testid={`${TestIdPrefix}.Error`}>
+                <Banner tone="bad">
+                  <span role="alert">{errors.root.message}</span>
+                </Banner>
+              </div>
             )}
-            <TextField
-              {...register('title')}
-              label="Title"
-              fullWidth
-              required
-              error={!!errors.title}
-              helperText={errors.title?.message}
-              slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Title`, maxLength: MAX_TITLE } }}
-            />
-            <TextField
-              {...register('parentId')}
-              select
+
+            <Field label="Title" htmlFor="doc-page-title" error={errors.title?.message}>
+              <Input
+                {...register('title')}
+                id="doc-page-title"
+                required
+                maxLength={MAX_TITLE}
+                data-testid={`${TestIdPrefix}.Title`}
+              />
+            </Field>
+
+            <Field
               label="Parent page"
-              fullWidth
-              defaultValue=""
-              error={!!errors.parentId}
-              helperText={errors.parentId?.message ?? 'Leave empty for a top-level page.'}
-              slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Parent` } }}
+              htmlFor="doc-page-parent"
+              error={errors.parentId?.message}
+              help="Leave empty for a top-level page."
             >
-              <MenuItem value="">No parent</MenuItem>
-              {pages.map((page) => (
-                <MenuItem key={page.id} value={page.id}>
-                  {page.title}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} data-testid={`${TestIdPrefix}.Cancel`}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={create.isPending}
-            data-testid={`${TestIdPrefix}.Submit`}
-          >
-            {create.isPending ? 'Creating…' : 'Create page'}
-          </Button>
-        </DialogActions>
-      </form>
+              <NativeSelect
+                {...register('parentId')}
+                id="doc-page-parent"
+                data-testid={`${TestIdPrefix}.Parent`}
+              >
+                <option value="">No parent</option>
+                {pages.map((page) => (
+                  <option key={page.id} value={page.id}>
+                    {page.title}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+          </div>
+
+          <DialogFooter>
+            <Button variant="quiet" onClick={onClose} data-testid={`${TestIdPrefix}.Cancel`}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={create.isPending}
+              data-testid={`${TestIdPrefix}.Submit`}
+            >
+              {create.isPending ? 'Creating…' : 'Create page'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
     </Dialog>
   );
 }
@@ -198,7 +202,7 @@ export function CreateDocPageDialog({
  * The 409 it can receive is the interesting one and it is rendered **in place**: "3 links point at
  * content you are removing… archive the page instead". That message names an action the UI
  * genuinely offers — `ui-rules` calls an error naming an action the UI does not offer a design
- * bug, and Archive is right there in the page's own header.
+ * bug, and Archive is right there in the page's own action row.
  */
 export function DeleteDocPageDialog({
   open,
@@ -227,42 +231,41 @@ export function DeleteDocPageDialog({
   };
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      fullWidth
-      maxWidth="sm"
-      data-testid={`${TestIdPrefix}.Delete`}
-    >
-      <DialogTitle>Delete “{page.title}”?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={`${TestIdPrefix}.Delete`}>
+        <DialogHeader>
+          <DialogTitle>Delete “{page.title}”?</DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-4 flex flex-col gap-4">
           {remove.error && (
-            <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.Delete.Error`}>
-              {describeError(remove.error).body}
-            </Alert>
+            <div data-testid={`${TestIdPrefix}.Delete.Error`}>
+              <Banner tone="bad">
+                <span role="alert">{describeError(remove.error).body}</span>
+              </Banner>
+            </div>
           )}
-          <DialogContentText>
+          <p className="m-0 text-[13px] leading-[1.6] text-ink-2">
             <Identifier variant="muted">{page.key}</Identifier> and everything written on it are
             removed from the space. Past links to its blocks are not rewritten, which is why a page
             anything still points at cannot be deleted — archive it instead.
-          </DialogContentText>
-        </Stack>
+          </p>
+        </div>
+
+        <DialogFooter>
+          <Button variant="quiet" onClick={onClose} data-testid={`${TestIdPrefix}.Delete.Cancel`}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={confirm}
+            disabled={remove.isPending}
+            data-testid={`${TestIdPrefix}.Delete.Submit`}
+          >
+            {remove.isPending ? 'Deleting…' : 'Delete page'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid={`${TestIdPrefix}.Delete.Cancel`}>
-          Cancel
-        </Button>
-        <Button
-          onClick={confirm}
-          color="error"
-          variant="contained"
-          disabled={remove.isPending}
-          data-testid={`${TestIdPrefix}.Delete.Submit`}
-        >
-          {remove.isPending ? 'Deleting…' : 'Delete page'}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }
