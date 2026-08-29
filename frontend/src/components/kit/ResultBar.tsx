@@ -17,7 +17,7 @@ import { cn } from '../../lib/cn';
  *    segment at 6px tall; the gap is what makes the boundary survive a CVD reader.
  *
  * So `untested` is deliberately absent from `FILLS`. Adding it back as a fill re-creates the
- * measured failure, which is why `ResultBar.test.tsx` counts the fills.
+ * measured failure, which is why `kitRules.test.tsx` counts the fills.
  */
 export interface ResultBarProps {
   passed?: number;
