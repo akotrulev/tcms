@@ -106,67 +106,96 @@
  */
 
 :root {
+  /*
+   * ~~The light palette put pure white (`#ffffff`) on `--color-surface`, which `bg-panel` paints
+   * across 49 files, over a `#eaeef3` ground, and hung the two lowest ink weights at `#8593a5`
+   * and `#a8b2c0` — 3.1:1 and 2.1:1 against that white.~~ → **superseded.** Both halves were
+   * wrong in the same direction and reinforced each other: a maximum-luminance field under
+   * near-minimum-contrast text. The reading surface is now an off-white (`#f7f9fc`, ~5% below
+   * white) and every ink weight clears 4.5:1 on it, with `--color-text-ghost` — the one tier
+   * that is deliberately not body text — held at the 3:1 non-text floor instead.
+   *
+   * Pure white did not move to nothing: it moved to `--color-surface-raised`, which is what
+   * white is actually good for — small elevated surfaces (menus, popovers) that need to read as
+   * *above* the panel. A page-sized white is a light source, not a surface.
+   *
+   * The ground/panel/field/rail ramp was re-spaced at the same time, because dropping the panel
+   * without dropping the ground under it would have collapsed the shell's depth to nothing.
+   * Status hues moved with the surfaces rather than staying put: they were chosen to carry on
+   * `#ffffff` and each lost roughly a tenth of its contrast against the new panel, so amber
+   * (`#b7791f`, the weakest at 3.5:1) and the two greys are darkened. Their *identities* are
+   * untouched — rule 5's Given/When/Then pairing and the outcome/progress/viz tier split hold,
+   * and `app/tokenSystem.test.ts` still checks both.
+   *
+   * The dark palette is not touched by any of this.
+   */
+
   /* --- brand: recessive by design --- */
-  --color-ink: #1b2a41;
-  --color-action-primary: #2e6e8e;
-  --color-action-primary-hover: #24596f;
+  --color-ink: #16202e;
+  --color-action-primary: #2b6883;
+  --color-action-primary-hover: #1f5169;
 
   /* --- surfaces & structure --- */
-  --color-surface: #ffffff;
-  --color-surface-sunken: #f5f7fa;
+  --color-surface: #f7f9fc;
+  --color-surface-sunken: #e9edf4;
   --color-surface-raised: #ffffff;
-  --color-border: #dde3ea;
-  --color-border-strong: #c3ccd8;
+  --color-border: #ccd4e0;
+  --color-border-strong: #aab5c5;
 
   /*
-   * Ink-tinted rather than pure black: a neutral grey wash over a white panel reads as dirt,
+   * Ink-tinted rather than pure black: a neutral grey wash over a pale panel reads as dirt,
    * where a wash carrying the text hue reads as the same material one step forward. Same
    * reasoning as the dark palette's refusal of pure black.
+   *
+   * The alphas are two points heavier than they were, for the reason the panel change forced:
+   * an alpha rule is a fraction of the distance between the surface and the ink, and the
+   * surface moved toward the ink. The old 12%/20% over `#ffffff` and the new 14%/24% over
+   * `#f7f9fc` land on the same rendered greys.
    */
-  --color-rule: rgb(27 42 65 / 12%);
-  --color-rule-strong: rgb(27 42 65 / 20%);
-  --color-overlay-1: rgb(27 42 65 / 4%);
-  --color-overlay-2: rgb(27 42 65 / 6%);
-  --color-overlay-3: rgb(27 42 65 / 10%);
-  --color-surface-rail: #eef1f5;
+  --color-rule: rgb(22 32 46 / 14%);
+  --color-rule-strong: rgb(22 32 46 / 24%);
+  --color-overlay-1: rgb(22 32 46 / 4%);
+  --color-overlay-2: rgb(22 32 46 / 7%);
+  --color-overlay-3: rgb(22 32 46 / 11%);
+  --color-surface-rail: #e6ebf3;
 
   /* --- text --- */
-  --color-text: #1b2a41;
-  --color-text-muted: #5b6b80;
-  --color-text-faint: #8593a5;
+  --color-text: #16202e;
+  --color-text-muted: #4a586c;
+  --color-text-faint: #5d6b7f;
   --color-on-action: #ffffff;
 
   /* --- status: the saturation budget lives here --- */
-  --color-passed: #2e7d5b;
-  --color-failed: #c0392b;
-  --color-blocked: #b7791f;
-  --color-skipped: #6b7280;
-  --color-untested: #9ca3af;
+  --color-passed: #2c7a58;
+  --color-failed: #bd3a2b;
+  --color-blocked: #8a5f0d;
+  --color-skipped: #5c6674;
+  --color-untested: #646d7a;
   /* Blue, not the former purple: design language rule 5 makes `Then` and `Retest` one hue, and
      that is a claim about what a colour MEANS, so it holds in both palettes. Darkened from the
-     dark theme's #8fa9e0 to carry on white. */
-  --color-retest: #3f5aa6;
+     dark theme's #8fa9e0 to carry on the light panel. */
+  --color-retest: #3d57a0;
 
   /* The Gherkin keyword hues — the same three values as passed/blocked/retest, by rule 5. */
-  --color-given: #2e7d5b;
-  --color-when: #b7791f;
-  --color-then: #3f5aa6;
+  --color-given: #2c7a58;
+  --color-when: #8a5f0d;
+  --color-then: #3d57a0;
 
   /* The two surfaces the app had no name for; see the dark block for what each is. */
-  --color-surface-ground: #eaeef3;
-  --color-surface-field: #f0f3f7;
+  --color-surface-ground: #dbe2eb;
+  --color-surface-field: #eef1f7;
 
   /* The fourth ink weight — ghosts, placeholders, gutters, disabled. */
-  --color-text-ghost: #a8b2c0;
+  --color-text-ghost: #7d8798;
   /* §97/M9. Matches the colour V32's seed writes into case_status.color — status colour is
      load-bearing data in a TCMS and must not be invented twice. */
-  --color-wip: #2563eb;
+  --color-wip: #2159d4;
 
   /* --- semantic feedback (distinct from status-of-a-test) --- */
-  --color-success: #2e7d5b;
-  --color-warning: #b7791f;
-  --color-danger: #c0392b;
-  --color-info: #2e6e8e;
+  --color-success: #2c7a58;
+  --color-warning: #8a5f0d;
+  --color-danger: #bd3a2b;
+  --color-info: #2b6883;
 
   /* --- data visualisation: chart series, and nothing else ---
      Status colour is reserved. Charts had been borrowing it — the activity chart's two series
@@ -177,7 +206,7 @@
      analytic hue at two steps — disjoint from status by chroma rather than by hue, which is
      also what the file's own thesis asks for: status owns the saturation budget. */
   --color-viz-1: #33566f;
-  --color-viz-2: #8aa6bd;
+  --color-viz-2: #6d8ba8;
 
   /* --- progress: a JOB's own lifecycle, never the outcome of what it ran --- */
   /* A finished run is not a passing run. `--color-passed` on a COMPLETED chip put a green
@@ -186,10 +215,10 @@
   --color-progress-done: #4b5b73;
 
   /* --- lifecycle --- */
-  --color-draft: #8593a5;
-  --color-in-review: #b7791f;
-  --color-approved: #2e7d5b;
-  --color-deprecated: #9ca3af;
+  --color-draft: #5d6b7f;
+  --color-in-review: #8a5f0d;
+  --color-approved: #2c7a58;
+  --color-deprecated: #646d7a;
 
   /* --- type --- */
   --font-body: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
