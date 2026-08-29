@@ -1,6 +1,6 @@
 import { Skeleton } from '../components/ui';
-import { Suspense, lazy } from 'react';
-import { Navigate, Outlet, Route, Routes, useMatch } from 'react-router-dom';
+import { Fragment, Suspense, lazy, type ReactNode } from 'react';
+import { Navigate, Outlet, Route, Routes, useMatch, useParams } from 'react-router-dom';
 import { AppShell } from './AppShell';
 import { useProject } from '../api/queries/projects';
 import { describeError } from '../lib/describeError';
@@ -176,6 +176,20 @@ const HelpPage = lazy(() => import('../features/help/HelpPage').then((m) => ({ d
 const AuditLogPage = lazy(() =>
   import('../features/audit/AuditLogPage').then((m) => ({ default: m.AuditLogPage })),
 );
+
+/**
+ * Remounts the case editor when the address names a different case.
+ *
+ * React Router reuses a route's component across a change of params, so moving from one case's
+ * editor straight to another's kept the first case's document text, its `seeded` latch and its
+ * dirty state while `caseTextKey` had already switched to the second case — and the autosave
+ * effect then wrote case A's Gherkin into case B's local draft buffer. A `key` is the framework's
+ * own answer to "this is a different subject, not new props for the same one".
+ */
+function KeyedByCase({ children }: { children: ReactNode }) {
+  const { caseId } = useParams();
+  return <Fragment key={caseId}>{children}</Fragment>;
+}
 
 /** Route-level fallback, shaped like a page so the shell doesn't jump while a chunk loads. */
 function RouteFallback() {
@@ -445,7 +459,9 @@ function AppRoutes() {
             path="/projects/:projectId/cases/:caseId/edit"
             element={
               <Suspense fallback={<RouteFallback />}>
-                <CaseEditorPage mode="edit" />
+                <KeyedByCase>
+                  <CaseEditorPage mode="edit" />
+                </KeyedByCase>
               </Suspense>
             }
           />

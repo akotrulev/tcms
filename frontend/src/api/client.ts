@@ -18,7 +18,7 @@
  */
 
 import { maybeFault } from '../lib/devFaults';
-import { safeStorage } from '../lib/safeStorage';
+import { accessToken } from '../auth/accessToken';
 
 /**
  * The API's own prefix, relative so the dev proxy and the deployment both reach it.
@@ -191,11 +191,7 @@ export function budget(ms: number, external?: AbortSignal): AbortSignal {
 }
 
 function authHeader(): Record<string, string> {
-  // Read through `safeStorage`, not `localStorage` directly. `AuthProvider` *writes* the token
-  // through the guarded wrapper, which falls back to an in-memory map when localStorage throws
-  // (private mode, quota, a locked-down profile). Reading raw would then find nothing and send
-  // every request unauthenticated — a session that appears to work until the first API call.
-  const token = safeStorage.get('tcms.token');
+  const token = accessToken.get();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

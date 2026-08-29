@@ -69,7 +69,7 @@ describe('sessionChannel', () => {
     const listener = vi.fn()
     subscribeSession(listener)
 
-    publishSession({ type: 'signed-in', email: 'a@acme.test' })
+    publishSession({ type: 'signed-in', email: 'a@acme.test', token: 'tok-broadcast' })
     await delivered()
 
     expect(listener).not.toHaveBeenCalled()
@@ -80,11 +80,11 @@ describe('sessionChannel', () => {
     const channel = new BroadcastChannel(CHANNEL_NAME)
     channel.onmessage = (event) => received.push(event.data)
 
-    publishSession({ type: 'signed-in', email: 'a@acme.test' })
+    publishSession({ type: 'signed-in', email: 'a@acme.test', token: 'tok-broadcast' })
     await delivered()
     channel.close()
 
-    expect(received).toEqual([{ type: 'signed-in', email: 'a@acme.test' }])
+    expect(received).toEqual([{ type: 'signed-in', email: 'a@acme.test', token: 'tok-broadcast' }])
   })
 
   it('stops delivering after unsubscribe', async () => {

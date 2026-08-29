@@ -257,3 +257,33 @@ describe('lines and washes are tokens, not literals', () => {
     expect(offenders, 'use border-line / border-line-strong / bg-wash-1..3 / bg-line').toEqual([]);
   });
 });
+
+/**
+ * `lib/statusColors.ts` names only properties `index.css` declares.
+ *
+ * `Record<Union, string>` over there already makes a *missing enum member* a compile error, which
+ * is the half the compiler can see. It cannot see the other half: the values are strings, so
+ * `var(--color-pased)` typechecks, lints, and paints **transparent** — a status chip that vanishes
+ * rather than an error anything reports. Same failure this file was written for at the bridge,
+ * one layer out.
+ *
+ * The table is read as TEXT rather than imported, for the reason the breakpoint check gives: a
+ * test that imports it is comparing the module to itself, and a `node:fs` read keeps this file's
+ * dependency graph at zero.
+ */
+describe('the status colour tables resolve', () => {
+  const table = readFileSync(resolve(HERE, '../lib/statusColors.ts'), 'utf8');
+  const referenced = [...new Set([...table.matchAll(/var\((--[a-z0-9-]+)\)/g)].map((m) => m[1]!))];
+
+  it('parsed the tables at all', () => {
+    expect(referenced.length).toBeGreaterThan(12);
+  });
+
+  it.each(referenced)('%s is declared in both palettes', (property) => {
+    expect(cssBlock(':root'), `${property} missing from :root`).toContain(`${property}:`);
+    expect(
+      cssBlock("[data-color-scheme='dark']"),
+      `${property} missing from the dark palette`,
+    ).toContain(`${property}:`);
+  });
+});

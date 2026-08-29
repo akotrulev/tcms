@@ -1218,14 +1218,8 @@ function ExecutionForm({
           </div>
 
           <div className="mt-2 flex gap-2">
-            <Button
-              size="sm"
-              variant="quiet"
-              className="flex-1"
-              onClick={() => navigate(`/projects/${projectId}/runs/${runId}`)}
-              data-testid="Execution.Cancel"
-            >
-              Back to the run
+            <Button asChild size="sm" variant="quiet" className="flex-1" data-testid="Execution.Cancel">
+              <RouterLink to={`/projects/${projectId}/runs/${runId}`}>Back to the run</RouterLink>
             </Button>
             {/*
               The visible route to the help, and it is not optional: an overlay reachable only by

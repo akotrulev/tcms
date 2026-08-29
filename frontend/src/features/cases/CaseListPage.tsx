@@ -1,6 +1,6 @@
 import { FileUp, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useCases, useClassification, useProject, useSuites } from '../../api/queries';
 import { useCan } from '../../auth/useCan';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
@@ -36,7 +36,6 @@ import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
  */
 export function CaseListPage() {
   const { projectId = '' } = useParams();
-  const navigate = useNavigate();
 
   const filterState = useCaseFilters();
   const { filters, sort, hasActiveFilters, setFilter, setPage, setSize, setSort, clearFilters } = filterState;
@@ -97,28 +96,36 @@ export function CaseListPage() {
             */}
             <PermissionGate projectId={projectId} permission={['case:create', 'case:edit']}>
               {({ allowed }) => (
-                <Button
-                  variant="ghost"
-                  disabled={!allowed}
-                  onClick={() => navigate(`/projects/${projectId}/cases/import`)}
-                  data-testid="Cases.ImportFeaturesButton"
-                >
-                  <FileUp aria-hidden className="size-4" />
-                  Import feature files
-                </Button>
+                allowed ? (
+                  <Button asChild variant="ghost" data-testid="Cases.ImportFeaturesButton">
+                    <RouterLink to={`/projects/${projectId}/cases/import`}>
+                      <FileUp aria-hidden className="size-4" />
+                      Import feature files
+                    </RouterLink>
+                  </Button>
+                ) : (
+                  <Button variant="ghost" disabled data-testid="Cases.ImportFeaturesButton">
+                    <FileUp aria-hidden className="size-4" />
+                    Import feature files
+                  </Button>
+                )
               )}
             </PermissionGate>
             <PermissionGate projectId={projectId} permission="case:create">
               {({ allowed }) => (
-                <Button
-                  variant="primary"
-                  disabled={!allowed}
-                  onClick={() => navigate(newCasePath)}
-                  data-testid="Cases.NewCaseButton"
-                >
-                  <Plus aria-hidden className="size-4" />
-                  New case
-                </Button>
+                allowed ? (
+                  <Button asChild variant="primary" data-testid="Cases.NewCaseButton">
+                    <RouterLink to={newCasePath}>
+                      <Plus aria-hidden className="size-4" />
+                      New case
+                    </RouterLink>
+                  </Button>
+                ) : (
+                  <Button variant="primary" disabled data-testid="Cases.NewCaseButton">
+                    <Plus aria-hidden className="size-4" />
+                    New case
+                  </Button>
+                )
               )}
             </PermissionGate>
           </div>
@@ -258,15 +265,15 @@ export function CaseListPage() {
                       action: (
                         <PermissionGate projectId={projectId} permission="case:create">
                           {({ allowed }) => (
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              disabled={!allowed}
-                              onClick={() => navigate(newCasePath)}
-                              data-testid="Cases.List.Empty.NewCaseButton"
-                            >
-                              New case
-                            </Button>
+                            allowed ? (
+                              <Button asChild variant="primary" size="sm" data-testid="Cases.List.Empty.NewCaseButton">
+                                <RouterLink to={newCasePath}>New case</RouterLink>
+                              </Button>
+                            ) : (
+                              <Button variant="primary" size="sm" disabled data-testid="Cases.List.Empty.NewCaseButton">
+                                New case
+                              </Button>
+                            )
                           )}
                         </PermissionGate>
                       ),

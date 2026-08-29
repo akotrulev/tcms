@@ -80,7 +80,52 @@ export function Combobox<T>({
   ...rest
 }: ComboboxProps<T>) {
   const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
   const listId = `${id}-options`;
+  const activeId = options[active] ? `${listId}-${optionKey(options[active])}` : undefined;
+
+  const close = () => {
+    setOpen(false);
+    setActive(0);
+  };
+
+  const commit = (option: T) => {
+    onSelect(option);
+    close();
+  };
+
+  /**
+   * The keyboard lives on the INPUT, which is the element that holds focus.
+   *
+   * Bound to the listbox — where it was until this pass — `Escape` never fires: the popup is a
+   * sibling of the input inside the wrapper below, so a keydown from the input bubbles past it,
+   * not through it. Nothing moves focus into the list either, by design (the header explains why
+   * this control must not trap focus), so `aria-activedescendant` is what tells a screen reader
+   * which option is current while focus stays where the typing goes.
+   */
+  const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      close();
+      return;
+    }
+    if (!open || options.length === 0) {
+      if (event.key === 'ArrowDown') setOpen(true);
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActive((current) => (current + 1) % options.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActive((current) => (current - 1 + options.length) % options.length);
+    } else if (event.key === 'Enter') {
+      const option = options[active];
+      if (option) {
+        event.preventDefault();
+        commit(option);
+      }
+    }
+  };
 
   return (
     <div className="relative">
@@ -90,43 +135,37 @@ export function Combobox<T>({
         role="combobox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
+        aria-activedescendant={open ? activeId : undefined}
         aria-autocomplete="list"
         value={query}
         placeholder={placeholder}
         disabled={disabled}
         onChange={(event) => {
           onQueryChange(event.target.value);
+          setActive(0);
           setOpen(true);
         }}
         onClick={() => setOpen(true)}
+        onKeyDown={onKeyDown}
         className={COMBOBOX_FIELD}
         {...rest}
       />
       {open && (
         <>
-          <div aria-hidden className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div
-            id={listId}
-            role="listbox"
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') setOpen(false);
-            }}
-            className={POPOVER}
-          >
+          <div aria-hidden className="fixed inset-0 z-40" onClick={close} />
+          <div id={listId} role="listbox" className={POPOVER}>
             {options.length === 0 ? (
               <p className="m-0 px-2.5 py-1.5 text-[12.5px] text-ink-4">{emptyLabel}</p>
             ) : (
-              options.map((option) => (
+              options.map((option, index) => (
                 <button
                   key={optionKey(option)}
+                  id={`${listId}-${optionKey(option)}`}
                   type="button"
                   role="option"
                   aria-selected={selected !== null && optionKey(option) === optionKey(selected)}
-                  onClick={() => {
-                    onSelect(option);
-                    setOpen(false);
-                  }}
-                  className={cn(OPTION)}
+                  onClick={() => commit(option)}
+                  className={cn(OPTION, index === active && 'bg-wash-2 text-ink')}
                 >
                   {optionLabel(option)}
                 </button>

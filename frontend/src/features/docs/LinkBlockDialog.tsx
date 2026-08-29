@@ -216,7 +216,9 @@ export function LinkBlockDialog({
               error={fieldError('sourceId')}
               help="By key or title."
             >
-              <div className="relative">
+              <div className="relative" onKeyDown={(event) => {
+                  if (event.key === 'Escape') setCaseListOpen(false);
+                }}>
                 <input
                   id="link-block-case"
                   type="text"
@@ -239,9 +241,6 @@ export function LinkBlockDialog({
                     <div
                       id="link-block-case-options"
                       role="listbox"
-                      onKeyDown={(event) => {
-                        if (event.key === 'Escape') setCaseListOpen(false);
-                      }}
                       className={POPOVER}
                     >
                       {options.length === 0 ? (
@@ -281,7 +280,9 @@ export function LinkBlockDialog({
               error={fieldError('sourceId')}
               help="Every case the suite resolves to counts, including ones a tag rule pulls in later."
             >
-              <div className="relative">
+              <div className="relative" onKeyDown={(event) => {
+                  if (event.key === 'Escape') setSuiteListOpen(false);
+                }}>
                 <button
                   type="button"
                   id="link-block-suite"
@@ -305,9 +306,6 @@ export function LinkBlockDialog({
                     <div
                       id="link-block-suite-options"
                       role="listbox"
-                      onKeyDown={(event) => {
-                        if (event.key === 'Escape') setSuiteListOpen(false);
-                      }}
                       className={POPOVER}
                     >
                       {(suites.data ?? []).map((suite: Suite) => (

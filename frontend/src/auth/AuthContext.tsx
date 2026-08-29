@@ -1,29 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ApiError, api } from '../api/client';
 import type { AuthResult, CurrentUser } from '../api/types';
-import { safeStorage } from '../lib/safeStorage';
+import { accessToken } from './accessToken';
 import { AuthContext, type AuthValue, type SessionStatus } from './authContextValue';
 import { publishSession, subscribeSession } from './sessionChannel';
-
-const TOKEN_KEY = 'tcms.token';
-const USER_KEY = 'tcms.user';
-
-/**
- * The stored session, or null.
- *
- * A user without a token is not a session. A half-written pair is discarded rather than allowed
- * to render a signed-in shell that cannot make a single successful request.
- *
- * This is the *optimistic first paint* only — it exists so a reload shows a name without waiting
- * for a round trip. Whether the session is real is settled below, by the server.
- */
-function readStoredSession(): CurrentUser | null {
-  if (!safeStorage.get(TOKEN_KEY)) {
-    safeStorage.remove(USER_KEY);
-    return null;
-  }
-  return safeStorage.getJSON<CurrentUser>(USER_KEY);
-}
 
 /**
  * Session state only — never server data (state-management skill). Cross-cutting and
@@ -46,17 +26,23 @@ function readStoredSession(): CurrentUser | null {
  * simultaneous session-expired dialogs.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Read once at mount rather than in render — storage access in render is a hydration
-  // hazard, and safeStorage degrades to in-memory when localStorage throws.
-  const [user, setUser] = useState<CurrentUser | null>(readStoredSession);
+  /*
+    A fresh tab starts signed out, because the token lives in memory and this module was just
+    evaluated — see `accessToken.ts` for the trade and what M4 changes about it. So there is no
+    stored user to paint optimistically any more; the name arrives with `/me` or not at all.
 
+    The mount-time confirmation below is kept rather than deleted even though a real page load
+    can never satisfy it: it is the seam a recovered token comes back through, and it is what
+    M4's refresh rung will hand a session to. Costing one branch to keep the restore path alive
+    is cheaper than rediscovering it.
+  */
+  const [user, setUser] = useState<CurrentUser | null>(null);
   const [status, setStatus] = useState<SessionStatus>(() =>
-    safeStorage.get(TOKEN_KEY) ? 'restoring' : 'ready',
+    accessToken.get() ? 'restoring' : 'ready',
   );
 
   const clearSession = useCallback(() => {
-    safeStorage.remove(TOKEN_KEY);
-    safeStorage.remove(USER_KEY);
+    accessToken.clear();
     setUser(null);
   }, []);
 
@@ -68,9 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [restoreNonce, setRestoreNonce] = useState(0);
 
   useEffect(() => {
-    // On mount, no token means no session to confirm. After a cross-tab sign-in it means the
-    // opposite — see the note at the broadcast handler on why the write may not be visible yet.
-    if (restoreNonce === 0 && !safeStorage.get(TOKEN_KEY)) return;
+    // No token, nothing to confirm. `restoreNonce` re-runs this when a sibling tab hands one over.
+    if (!accessToken.get()) return;
 
     // The ignore flag is the cleanup guard the data-fetching skill requires of any effect
     // fetch: this effect runs twice under StrictMode, and without it the abandoned first
@@ -81,9 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .get<CurrentUser>('/me')
       .then((fresh) => {
         if (ignore) return;
-        // Adopt the server's answer wholesale. A display name is per-membership (plan §6u) and
-        // an admin may have changed it since sign-in — the cached copy is the stale one.
-        safeStorage.setJSON(USER_KEY, fresh);
+        // Adopt the server's answer wholesale — a display name is per-membership (plan §6u) and
+        // an admin may have changed it since sign-in.
         setUser(fresh);
       })
       .catch((error: unknown) => {
@@ -114,9 +98,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () =>
       subscribeSession((message) => {
         if (message.type === 'signed-out') {
-          // The token is already gone from shared storage, so this tab could not make a single
-          // successful request even if it wanted to. Clearing sends it through `RequireAuth` to
-          // the login screen with its location in navigation state.
+          // This tab holds its own copy of the token, so clearing is what actually ends the
+          // session here. It sends this tab through `RequireAuth` to the login screen with its
+          // location in navigation state.
           //
           // This is the one place the session ends without the user pressing anything *in this
           // tab* — and it is correct precisely because they pressed it in another one. It is not
@@ -127,25 +111,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         /*
-          Someone signed in elsewhere. The token in shared storage is now theirs, so continuing
-          to render the previous user's name over it is a false claim about who is looking at
-          the data — and if it is a different person, the data is not theirs to see.
+          Someone signed in elsewhere, and the message carries the token because this tab has no
+          copy of its own to read — see `accessToken.ts`.
 
-          **This deliberately does not adopt by reading storage, and that cost a browser pass to
+          ~~**This deliberately does not adopt by reading storage, and that cost a browser pass to
           learn.** `localStorage` is shared between tabs but it is not synchronously consistent
           between the renderer *processes* they run in: a `BroadcastChannel` message routes
           through the browser process and can arrive before the sibling's view of the write has
-          caught up. Reading storage here returned `null` on roughly half the runs, so the
-          sibling adopted "no session" and sat on the login form holding a perfectly valid token.
-          Nothing in the unit tests could see it — one jsdom process has one storage.
+          caught up. Reading storage here returned `null` on roughly half the runs.~~ → the race
+          is gone with the shared copy it was about: the credential arrives *in* the message, so
+          there is no second view of it to be stale.
 
-          So the session is re-confirmed against `/me` instead, which is the mechanism this
-          provider already documents as correct ("restoring a session is a server question") and
-          which is immune to the race by construction: the request is at least a macrotask away,
-          it carries whatever token storage holds *at request time*, and the server's answer —
-          not the browser's — decides who this is. A genuinely absent token 401s and clears,
-          which is the same fail-closed outcome as before.
+          The session is still re-confirmed against `/me` rather than trusted, which is the
+          mechanism this provider already documents as correct ("restoring a session is a server
+          question"): the sign-in may be a different person, and the server's answer — not the
+          broadcast — decides whose name and whose projects this tab renders. A token the server
+          rejects 401s and clears, the same fail-closed outcome as before.
         */
+        accessToken.set(message.token);
         setStatus('restoring');
         setRestoreNonce((nonce) => nonce + 1);
       }),
@@ -154,13 +137,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string, rememberMe: boolean) => {
     const result = await api.post<AuthResult>('/auth/login', { email, password, rememberMe });
-    safeStorage.set(TOKEN_KEY, result.token);
-    safeStorage.setJSON(USER_KEY, result.user);
+    accessToken.set(result.token);
     setUser(result.user);
     setStatus('ready');
-    // Published after storage is written, never before: a sibling adopts by *reading* storage,
-    // so a broadcast that overtook the write would have it adopt the session it already had.
-    publishSession({ type: 'signed-in', email: result.user.email });
+    // The token travels with the message: siblings hold no copy of their own, so this is the
+    // only thing that gives them one.
+    publishSession({ type: 'signed-in', email: result.user.email, token: result.token });
     return result.user;
   }, []);
 
@@ -181,16 +163,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const adoptSession = useCallback(
     async (token: string) => {
-      safeStorage.set(TOKEN_KEY, token);
+      accessToken.set(token);
       setStatus('restoring');
       try {
         const fresh = await api.get<CurrentUser>('/me');
-        safeStorage.setJSON(USER_KEY, fresh);
         setUser(fresh);
-        // After storage is written, never before — `login` says why: a sibling re-confirms the
-        // session storage holds at request time, so a broadcast that overtook the write would have
-        // it confirm the session it already had.
-        publishSession({ type: 'signed-in', email: fresh.email });
+        publishSession({ type: 'signed-in', email: fresh.email, token });
         return fresh;
       } catch (error) {
         clearSession();

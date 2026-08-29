@@ -75,8 +75,8 @@ const SECTION_HEADING =
  * *silently* the moment the word changes, and nobody finds out until an audit.
  */
 export function DocsPage() {
-  const { projectId = '', pageId } = useParams();
   const navigate = useNavigate();
+  const { projectId = '', pageId } = useParams();
   const [creating, setCreating] = useState(false);
   /*
     The page being deleted lives HERE, not inside the panel that renders it — and that placement
@@ -807,7 +807,6 @@ function PageActions({
   /** Raised to the page, which owns the dialog — see `DocsPage`. */
   onDelete: (page: DocPageSummary) => void;
 }) {
-  const navigate = useNavigate();
   const setStatus = useSetDocPageStatus(projectId, page.id);
 
   // From each state, the transitions that mean something. ARCHIVED offers only the way back,
@@ -830,15 +829,15 @@ function PageActions({
     <>
       <PermissionGate projectId={projectId} permission="doc:edit">
         {({ allowed }) => (
-          <Button
-            size="sm"
-            variant="primary"
-            disabled={!allowed}
-            onClick={() => navigate(`/projects/${projectId}/docs/${page.id}/edit`)}
-            data-testid="Docs.Content.Edit"
-          >
-            Edit
-          </Button>
+          allowed ? (
+            <Button asChild size="sm" variant="primary" data-testid="Docs.Content.Edit">
+              <RouterLink to={`/projects/${projectId}/docs/${page.id}/edit`}>Edit</RouterLink>
+            </Button>
+          ) : (
+            <Button size="sm" variant="primary" disabled data-testid="Docs.Content.Edit">
+              Edit
+            </Button>
+          )
         )}
       </PermissionGate>
 

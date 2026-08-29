@@ -1,3 +1,5 @@
+import { safeStorage } from '../../lib/safeStorage';
+
 /**
  * The Write surface's raw text, buffered in the browser — 003 C4's last clause.
  *
@@ -39,44 +41,27 @@ export interface BufferedText {
 }
 
 export function readCaseText(key: string): BufferedText | null {
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    /*
-      Decoded defensively, `fromCasePayload`'s rule: this value was never validated and may have
-      been written by an older build. A shape that is not the envelope reads as no buffer rather
-      than throwing on the one screen whose job is not losing work.
-    */
-    if (
-      typeof parsed !== 'object'
-      || parsed === null
-      || typeof (parsed as BufferedText).text !== 'string'
-      || typeof (parsed as BufferedText).updatedAt !== 'string'
-    ) {
-      return null;
-    }
-    return parsed as BufferedText;
-  } catch {
+  const parsed: unknown = safeStorage.getJSON(key);
+  if (parsed === null) return null;
+  /*
+    Decoded defensively, `fromCasePayload`'s rule: this value was never validated and may have
+    been written by an older build. A shape that is not the envelope reads as no buffer rather
+    than throwing on the one screen whose job is not losing work.
+  */
+  if (
+    typeof parsed !== 'object'
+    || typeof (parsed as BufferedText).text !== 'string'
+    || typeof (parsed as BufferedText).updatedAt !== 'string'
+  ) {
     return null;
   }
+  return parsed as BufferedText;
 }
 
 export function writeCaseText(key: string, text: string): void {
-  try {
-    const buffered: BufferedText = { updatedAt: new Date().toISOString(), text };
-    window.localStorage.setItem(key, JSON.stringify(buffered));
-  } catch {
-    // See the header. `CaseDraftStatus` already reports a failed *payload* backup, and a second
-    // sentence about a second buffer would tell the author the same unactionable thing twice.
-  }
+  safeStorage.setJSON(key, { updatedAt: new Date().toISOString(), text } satisfies BufferedText);
 }
 
 export function clearCaseText(key: string): void {
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    // Nothing to say: the offer is a mount-time snapshot, so a removal that failed re-offers at
-    // worst once, on a future visit.
-  }
+  safeStorage.remove(key);
 }

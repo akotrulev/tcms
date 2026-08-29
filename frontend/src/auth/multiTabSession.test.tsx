@@ -5,6 +5,7 @@ import { ApiError, api } from '../api/client'
 import type { CurrentUser } from '../api/types'
 import { anAuthResult } from '../test/fixtures'
 import { createTestQueryClient } from '../test/queryClient'
+import { accessToken } from './accessToken'
 import { AuthProvider } from './AuthContext'
 import { SessionRecoveryProvider, SessionReplayBridge } from './SessionRecoveryProvider'
 import { resetSessionChannelForTests, subscribeSession, type SessionBroadcast } from './sessionChannel'
@@ -26,8 +27,6 @@ import { useSessionRecovery } from './useSessionRecovery'
  * the bridge's listener runs). A rearranged tree would test a program that does not exist.
  */
 
-const TOKEN_KEY = 'tcms.token'
-const USER_KEY = 'tcms.user'
 
 const alice: CurrentUser = {
   id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
@@ -45,15 +44,13 @@ const bob: CurrentUser = {
   displayName: 'Bob',
 }
 
-/** Puts a session in shared storage — which is what another tab signing in actually does. */
+/** Gives this tab a session, the way a sign-in or a sibling's broadcast does. */
 function storeSession(user: CurrentUser) {
-  localStorage.setItem(TOKEN_KEY, `token-for-${user.email}`)
-  localStorage.setItem(USER_KEY, JSON.stringify(user))
+  accessToken.set(`token-for-${user.email}`)
 }
 
 function clearStoredSession() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(USER_KEY)
+  accessToken.clear()
 }
 
 /**
@@ -131,7 +128,7 @@ beforeEach(() => {
   */
   vi.spyOn(api, 'get').mockImplementation(async (path: string) => {
     if (path !== '/me') throw new Error(`unexpected GET ${path}`)
-    const token = localStorage.getItem(TOKEN_KEY)
+    const token = accessToken.get()
     const owner = [alice, bob].find((candidate) => token === `token-for-${candidate.email}`)
     if (!owner) throw new ApiError(401, 'no session')
     return owner as never
@@ -140,6 +137,8 @@ beforeEach(() => {
 
 afterEach(() => {
   resetSessionChannelForTests()
+  // The token is module state now, not storage the harness clears for us.
+  accessToken.clear()
   vi.restoreAllMocks()
 })
 
@@ -198,7 +197,7 @@ describe('a session transition in another tab', () => {
 
       // The user gave up on this tab, signed in on the other one, and came back.
       storeSession(alice)
-      await fromAnotherTab({ type: 'signed-in', email: alice.email })
+      await fromAnotherTab({ type: 'signed-in', email: alice.email, token: `token-for-${alice.email}` })
 
       await waitFor(() => expect(screen.queryByTestId('SessionExpired.Dialog')).not.toBeInTheDocument())
       expect(screen.getByTestId('Probe.User')).toHaveTextContent('alice@acme.test')
@@ -210,7 +209,7 @@ describe('a session transition in another tab', () => {
       await waitFor(() => expect(screen.getByTestId('Probe.User')).toHaveTextContent('alice@acme.test'))
       client.setQueryData(['projects'], [{ id: 'p1' }])
 
-      await fromAnotherTab({ type: 'signed-in', email: alice.email })
+      await fromAnotherTab({ type: 'signed-in', email: alice.email, token: `token-for-${alice.email}` })
 
       // Discarding it would be safe and wasteful: every mounted region would drop to a skeleton
       // for a session that never actually changed hands.
@@ -225,7 +224,7 @@ describe('a session transition in another tab', () => {
       await waitFor(() => expect(screen.getByTestId('Probe.User')).toHaveTextContent('alice@acme.test'))
 
       storeSession(bob)
-      await fromAnotherTab({ type: 'signed-in', email: bob.email })
+      await fromAnotherTab({ type: 'signed-in', email: bob.email, token: `token-for-${bob.email}` })
 
       await waitFor(() => expect(screen.getByTestId('Probe.User')).toHaveTextContent('bob@acme.test'))
     })
@@ -239,7 +238,7 @@ describe('a session transition in another tab', () => {
       client.setQueryData(['me', 'permissions', 'p1'], { permissions: ['case:delete'] })
 
       storeSession(bob)
-      await fromAnotherTab({ type: 'signed-in', email: bob.email })
+      await fromAnotherTab({ type: 'signed-in', email: bob.email, token: `token-for-${bob.email}` })
 
       await waitFor(() => expect(client.getQueryData(['projects'])).toBeUndefined())
       expect(client.getQueryData(['me', 'permissions', 'p1'])).toBeUndefined()
@@ -257,10 +256,9 @@ describe('a session transition in another tab', () => {
       renderTab()
       await waitFor(() => expect(screen.getByTestId('Probe.User')).toHaveTextContent('alice@acme.test'))
 
-      // The state a lagging renderer process is in: the new token has landed, the cached user
-      // record it was written beside has not.
-      localStorage.setItem(TOKEN_KEY, `token-for-${bob.email}`)
-      await fromAnotherTab({ type: 'signed-in', email: bob.email })
+      // The broadcast names Bob and carries Bob's token; what settles it is the server's answer
+      // to that token, not the `email` the message asserts.
+      await fromAnotherTab({ type: 'signed-in', email: bob.email, token: `token-for-${bob.email}` })
 
       await waitFor(() => expect(screen.getByTestId('Probe.User')).toHaveTextContent('bob@acme.test'))
     })
@@ -270,10 +268,10 @@ describe('a session transition in another tab', () => {
       renderTab()
       await waitFor(() => expect(screen.getByTestId('Probe.User')).toHaveTextContent('alice@acme.test'))
 
-      // No token at all — `safeStorage` degraded to an in-memory map, say. `/me` answers 401 and
-      // the tab signs itself out rather than rendering a shell that cannot make a request.
-      localStorage.removeItem(TOKEN_KEY)
-      await fromAnotherTab({ type: 'signed-in', email: bob.email })
+      // A token the server refuses — revoked between the sibling's sign-in and this tab hearing
+      // about it, or a `pv` bump in between. `/me` answers 401 and the tab signs itself out
+      // rather than rendering a shell that cannot make a single request.
+      await fromAnotherTab({ type: 'signed-in', email: bob.email, token: 'revoked-token' })
 
       await waitFor(() => expect(screen.getByTestId('Probe.User')).toHaveTextContent('signed-out'))
     })

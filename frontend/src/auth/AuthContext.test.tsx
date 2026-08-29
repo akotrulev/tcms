@@ -2,6 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../api/client'
 import { aCurrentUser } from '../test/fixtures'
+import { accessToken } from './accessToken'
 import { AuthProvider } from './AuthContext'
 import { resetSessionChannelForTests, type SessionBroadcast } from './sessionChannel'
 import { useAuth } from './useAuth'
@@ -24,7 +25,6 @@ import { useAuth } from './useAuth'
  * through a probe component is what `multiTabSession.test.tsx` does for the same tree.
  */
 
-const TOKEN_KEY = 'tcms.token'
 
 /** The provider's own context value, reachable from a test, plus the last error it threw. */
 let adopt: (token: string) => Promise<unknown>
@@ -65,7 +65,7 @@ describe('adoptSession', () => {
     })
 
     expect(get).toHaveBeenCalledWith('/me')
-    expect(localStorage.getItem(TOKEN_KEY)).toBe('a-session-token')
+    expect(accessToken.get()).toBe('a-session-token')
     await waitFor(() => expect(screen.getByTestId('Probe.User')).toHaveTextContent('kim@acme.test'))
   })
 
@@ -83,7 +83,7 @@ describe('adoptSession', () => {
 
     expect(adoptionError).toBeInstanceOf(ApiError)
     expect(screen.getByTestId('Probe.User')).toHaveTextContent('signed-out')
-    expect(localStorage.getItem(TOKEN_KEY)).toBeNull()
+    expect(accessToken.get()).toBeNull()
   })
 
   it('tells sibling tabs, so a second tab does not keep rendering signed out', async () => {
@@ -107,7 +107,11 @@ describe('adoptSession', () => {
     })
 
     await waitFor(() =>
-      expect(published).toContainEqual({ type: 'signed-in', email: 'kim@acme.test' }),
+      expect(published).toContainEqual({
+        type: 'signed-in',
+        email: 'kim@acme.test',
+        token: 'a-session-token',
+      }),
     )
     sibling.close()
   })

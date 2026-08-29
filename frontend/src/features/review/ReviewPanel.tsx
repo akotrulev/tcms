@@ -460,7 +460,9 @@ function AssignForm({
         so the control is a plain disclosure over a real `role="listbox"` — native focus, native
         keys, and nothing to stub.
       */}
-      <div className="relative min-w-[240px]">
+      <div className="relative min-w-[240px]" onKeyDown={(event) => {
+        if (event.key === 'Escape') setOpen(false);
+      }}>
         <label
           htmlFor="Review.Assign.Choice"
           className="mb-1 block text-[12px] font-medium text-ink-2"
@@ -493,9 +495,6 @@ function AssignForm({
             <div
               id="Review.Assign.Options"
               role="listbox"
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') setOpen(false);
-              }}
               className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border border-line bg-panel p-1 shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]"
             >
               {options.length === 0 ? (

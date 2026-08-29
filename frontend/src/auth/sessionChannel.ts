@@ -32,9 +32,15 @@
  */
 
 export type SessionBroadcast =
-  /** Someone signed in on another tab. `email` identifies *who*, which decides what siblings do. */
-  | { type: 'signed-in'; email: string }
-  /** Someone deliberately signed out on another tab. The token is already gone from storage. */
+  /**
+   * Someone signed in on another tab. `email` identifies *who*, which decides what siblings do.
+   *
+   * `token` rides along because the credential no longer lives in shared storage — see
+   * `accessToken.ts`. Transient by construction: a script that starts after the message was
+   * posted has nothing to read, which is the property `localStorage` could not offer.
+   */
+  | { type: 'signed-in'; email: string; token: string }
+  /** Someone deliberately signed out on another tab. */
   | { type: 'signed-out' };
 
 const CHANNEL_NAME = 'tcms.session';

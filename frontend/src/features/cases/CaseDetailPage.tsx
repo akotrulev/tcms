@@ -682,7 +682,12 @@ function LifecycleMenu({
   const moves = caseMoves[testCase.lifecycleStatus];
 
   return (
-    <div className="relative">
+    <div
+      className="relative"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') setOpen(false);
+      }}
+    >
       <Button
         size="sm"
         onClick={() => setOpen((current) => !current)}
@@ -700,16 +705,13 @@ function LifecycleMenu({
             A scrim rather than a document listener: the menu closes on the next click anywhere,
             and the element that swallows that click is a real one in the tree, so nothing has to
             be registered, removed, or reasoned about across a re-render. It is `aria-hidden`
-            because it is a dismissal surface and not a control — Escape is the keyboard's way out
-            and the menu itself carries it.
+            because it is a dismissal surface and not a control — Escape is the keyboard's way out,
+            and it is bound on the wrapper above rather than on the menu, which never holds focus.
           */}
           <div aria-hidden className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div
             role="menu"
             data-testid="CaseDetail.StatusMenu"
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') setOpen(false);
-            }}
             className="absolute right-0 z-50 mt-1 min-w-[200px] rounded-md border border-line bg-panel p-1 shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]"
           >
             {moves.map((option) => (
@@ -1215,7 +1217,6 @@ function DocLinksPanel({
   const [withdrawing, setWithdrawing] = useState<DocLink | null>(null);
   const remove = useUnlinkCaseExternal(projectId, caseId);
   const relabel = useRelabelCaseExternalLink(projectId, caseId);
-  const navigate = useNavigate();
 
   return (
     <section data-testid="CaseDetail.DocLinks">
@@ -1233,16 +1234,19 @@ function DocLinksPanel({
         */}
         <PermissionGate projectId={projectId} permission="doc:edit">
           {({ allowed }) => (
-            <Button
-              size="sm"
-              variant="quiet"
-              disabled={!allowed}
-              onClick={() => navigate(`/projects/${projectId}/docs?linkCase=${encodeURIComponent(caseId)}`)}
-              data-testid="CaseDetail.DocLinks.LinkSpecButton"
-            >
-              <Link2 aria-hidden className="size-3.5" />
-              Link a specification
-            </Button>
+            allowed ? (
+              <Button asChild size="sm" variant="quiet" data-testid="CaseDetail.DocLinks.LinkSpecButton">
+                <RouterLink to={`/projects/${projectId}/docs?linkCase=${encodeURIComponent(caseId)}`}>
+                  <Link2 aria-hidden className="size-3.5" />
+                  Link a specification
+                </RouterLink>
+              </Button>
+            ) : (
+              <Button size="sm" variant="quiet" disabled data-testid="CaseDetail.DocLinks.LinkSpecButton">
+                <Link2 aria-hidden className="size-3.5" />
+                Link a specification
+              </Button>
+            )
           )}
         </PermissionGate>
         <PermissionGate projectId={projectId} permission="case:edit">
