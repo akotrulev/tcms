@@ -27,7 +27,7 @@ import java.util.UUID;
  * client can set is a claim the client can make. {@code enabled} is <em>not</em> in that group — it
  * is the operator's own switch, and pausing a cadence is a thing only a person can mean.
  */
-record RunScheduleWriteRequest(
+public record RunScheduleWriteRequest(
         String name,
         String cronExpression,
         String zoneId,

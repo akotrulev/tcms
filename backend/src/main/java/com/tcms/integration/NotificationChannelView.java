@@ -21,7 +21,7 @@ import java.util.UUID;
  * @param secretHint null when the kind has no credential of its own, which is how an email channel
  *                   and an unconfigured webhook are told apart on the screen
  */
-record NotificationChannelView(
+public record NotificationChannelView(
         UUID id,
         UUID projectId,
         NotificationChannelKind kind,

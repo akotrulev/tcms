@@ -24,7 +24,14 @@ import java.util.List;
  * @param secret      the incoming-webhook URL in plaintext, on the way in only. Encrypted before
  *                    it is stored and never returned by anything
  */
-record NotificationChannelInput(
+/**
+ * A channel and the events it subscribes to.
+ *
+ * <p>Public, with {@link NotificationChannelService#create}, for the composition root's
+ * {@code DemoWorkspaceSeeder} — a seeded channel has to be one that service made, because it is
+ * what encrypts the webhook secret and writes the subscription rows beside the channel.
+ */
+public record NotificationChannelInput(
         NotificationChannelKind kind,
         String name,
         boolean enabled,
@@ -38,6 +45,6 @@ record NotificationChannelInput(
      * @param minFailures 0 for every occurrence. Meaningless for an event type with no verdicts,
      *                    where it is inert rather than a filter that never matches
      */
-    record SubscriptionInput(String eventType, int minFailures) {
+    public record SubscriptionInput(String eventType, int minFailures) {
     }
 }

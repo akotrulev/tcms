@@ -13,5 +13,13 @@ import com.tcms.storage.BlobUpload;
  * one. A case attachment is described by its filename; a caption on it would be a second name for
  * the same thing.
  */
-record EvidenceUpload(BlobUpload file, String caption) {
+/**
+ * The bytes and the caption of one piece of evidence.
+ *
+ * <p>Public, unlike most of this module's inputs, because the composition root's
+ * {@code DemoExecutionSeeder} builds one: it seeds through the same {@code EvidenceService} the
+ * controller calls rather than writing an {@code evidence} row and a blob itself, and a second
+ * implementation of "what attaching evidence means" is exactly what that avoids.
+ */
+public record EvidenceUpload(BlobUpload file, String caption) {
 }

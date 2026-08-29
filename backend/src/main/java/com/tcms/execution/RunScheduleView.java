@@ -33,7 +33,7 @@ import java.util.UUID;
  * rather than a precondition a client could have checked — so serving the counter would offer a
  * header nothing reads, which is §205's finding from the client side.
  */
-record RunScheduleView(
+public record RunScheduleView(
         UUID id,
         UUID projectId,
         String name,

@@ -56,7 +56,7 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code tenancy.OutboxLedger.claim}).
  */
 @Service
-class RunScheduleService {
+public class RunScheduleService {
 
     private static final String AUDIT_TARGET = "run_schedule";
     private static final String AUDIT_CREATED = "run_schedule.created";
@@ -95,7 +95,7 @@ class RunScheduleService {
     }
 
     /** {@code RunCreateService.Outcome}'s shapes, minus the two a schedule cannot produce. */
-    sealed interface Outcome {
+    public sealed interface Outcome {
 
         record NotFound() implements Outcome {
         }
@@ -137,7 +137,13 @@ class RunScheduleService {
     }
 
     @Transactional
-    Outcome create(UUID userId, UUID projectId, RunScheduleWriteRequest request) {
+    /**
+     * Public, with the class and the two types below it, for the composition root's
+     * {@code DemoExecutionSeeder}: a seeded schedule has to be one this service made, because the
+     * cron expression, the zone and the first {@code next_fire_at} are computed here and a row
+     * assembled elsewhere would be one the firing service never picks up.
+     */
+    public Outcome create(UUID userId, UUID projectId, RunScheduleWriteRequest request) {
         return gated(userId, projectId, project -> {
             RunScheduleEdit.Outcome validated = validate(project, request);
             if (validated instanceof RunScheduleEdit.Outcome.Invalid invalid) {

@@ -72,7 +72,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * a generated report says.
  */
 @Service
-class ReportJobRunner {
+public class ReportJobRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ReportJobRunner.class);
 
@@ -164,7 +164,7 @@ class ReportJobRunner {
      *     answering zero rows, and "the reports stopped generating" is far harder to trace back
      *     here than a stack trace is.
      */
-    int runPendingJobs() {
+    public int runPendingJobs() {
         CompanyContext.require();
 
         // Counted separately from the tick's budget: reaping is not generating, and a company that

@@ -190,7 +190,7 @@ public class NotificationChannelService {
 
     /** A new channel, with its subscriptions. */
     @Transactional
-    Outcome create(UUID userId, UUID projectId, NotificationChannelInput input) {
+    public Outcome create(UUID userId, UUID projectId, NotificationChannelInput input) {
         GateResult<Outcome> gated = projects.writeGranted(userId, projectId, MANAGE, project -> {
             Map<String, List<String>> errors = validate(input, true);
             if (!errors.isEmpty()) {

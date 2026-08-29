@@ -48,9 +48,14 @@ cp .env.example .env         # required: compose fails fast rather than defaulti
 docker compose up --build    # http://localhost:8080/actuator/health
 docker compose down -v       # -v also drops pgdata + tcmsblobs, so initdb re-runs the role script
 
-# The operator CLI is the same image — five verbs (see provisioning/OperatorCommands.java)
+# The operator CLI is the same image — six verbs (see provisioning/OperatorCommands.java)
 docker compose run --rm backend provision-company --slug=acme --name="Acme" \
   --admin-email=ops@acme.test --admin-name="A. Admin"
+
+# Fill an instance with two demo companies and everything under them, so every screen can be
+# looked at against real data. Idempotent; no --reset, because this ships in the production
+# image. Prints the sign-in addresses and the one shared password on the way out.
+docker compose run --rm backend seed-demo-data          # lab: same command on the lab host
 ```
 
 ```bash
