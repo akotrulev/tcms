@@ -46,7 +46,14 @@ import MenuIcon from '@mui/icons-material/Menu';
 import PlaylistAddCheckOutlinedIcon from '@mui/icons-material/PlaylistAddCheckOutlined';
 import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
 import { useState, type ReactNode } from 'react';
-import { Link as RouterLink, NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
+import {
+  Link as RouterLink,
+  NavLink,
+  Outlet,
+  useMatch,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
 import { useProjects } from '../api/queries';
 import { useCan, useCanInCompany } from '../auth/useCan';
 import { useRouteFocus } from '../a11y/useRouteFocus';
@@ -90,6 +97,30 @@ const RAIL_WIDTH_COLLAPSED = 64;
  * contexts degrade to in-memory instead of throwing inside a render.
  */
 const RAIL_COLLAPSED_KEY = 'tcms.nav.railCollapsed';
+
+/**
+ * The routes where the rail collapses because of what the screen *is*, not because of what the
+ * reader chose — `docs/specs/2026-08-28-design-language.md` §4.
+ *
+ * Both are surfaces where the reader is following a procedure at a measure, and the rail is
+ * navigation they are demonstrably not doing: the case document editor (the case redesign's
+ * decision — the document wants the width) and the execution runner (§4's addition, for the same
+ * reason). §9.2 listed "the shell reads the route" as an open problem, because it did not; this
+ * is the line that closes it.
+ *
+ * **Three patterns, not the two §4 counts**, because the case document editor is reachable at two
+ * routes: `/cases/new` is the same editor with no case behind it yet, and it is exactly what the
+ * origin render draws as frame B. Collapsing on `edit` but not on `new` would put the rail at two
+ * widths either side of the first save.
+ *
+ * This forces the collapse; it does not overwrite the stored preference. Someone who has chosen
+ * the collapsed rail everywhere still has it everywhere, and finds it unchanged when they leave.
+ */
+const COLLAPSED_RAIL_ROUTES = [
+  '/projects/:projectId/cases/new',
+  '/projects/:projectId/cases/:caseId/edit',
+  '/projects/:projectId/runs/:runId/executions/:executionId',
+] as const;
 
 interface NavItem {
   label: string;
@@ -457,6 +488,18 @@ export function AppShell() {
     () => safeStorage.get(RAIL_COLLAPSED_KEY) === 'true',
   );
 
+  /*
+    `useMatch` is a hook, so it is called once per pattern at the top level rather than inside a
+    loop — the array is a module constant precisely so this list cannot go out of step with it.
+  */
+  const documentRoute = [
+    useMatch(COLLAPSED_RAIL_ROUTES[0]),
+    useMatch(COLLAPSED_RAIL_ROUTES[1]),
+    useMatch(COLLAPSED_RAIL_ROUTES[2]),
+  ].some((match) => match !== null);
+
+  const collapsed = railCollapsed || documentRoute;
+
   const toggleRail = () => {
     setRailCollapsed((collapsed) => {
       const next = !collapsed;
@@ -488,11 +531,11 @@ export function AppShell() {
           button names a state, and a screen reader needs the element that state is *about*. The
           testid says which variant is showing; this says how wide it currently is.
         */
-        data-collapsed={railCollapsed ? 'true' : 'false'}
+        data-collapsed={collapsed ? 'true' : 'false'}
         sx={{
           display: { xs: 'none', md: 'flex' },
           flexDirection: 'column',
-          width: railCollapsed ? RAIL_WIDTH_COLLAPSED : RAIL_WIDTH,
+          width: collapsed ? RAIL_WIDTH_COLLAPSED : RAIL_WIDTH,
           flexShrink: 0,
           borderRight: '1px solid',
           borderColor: 'divider',
@@ -506,7 +549,7 @@ export function AppShell() {
           '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
         }}
       >
-        <RailContent collapsed={railCollapsed} onToggleCollapse={toggleRail} />
+        <RailContent collapsed={collapsed} onToggleCollapse={documentRoute ? undefined : toggleRail} />
       </Box>
 
       {/* Small-screen drawer — the same content, mounted only while open. */}

@@ -216,3 +216,55 @@ describe('AppShell — the credential entries (005 C2)', () => {
     expect(rail().getByRole('link', { name: 'Access & roles' })).toBeInTheDocument()
   })
 })
+
+/**
+ * `docs/specs/2026-08-28-design-language.md` §4 — the rail collapses on the routes where the
+ * reader is following a procedure at a measure, and the rail is navigation they are not doing.
+ *
+ * §9.2 recorded this as an open problem on the grounds that "the shell reads the route, which
+ * `AppShell` does not do today". These are the tests that say it does, and — the half that is
+ * easier to lose — that it still does not on everything else. A collapse rule that quietly widened
+ * to every project route would look like a nicer shell and would take 168px off forty screens.
+ */
+describe('the rail collapses on the document routes (design language §4)', () => {
+  const widthOf = () => screen.getByTestId('Nav.Rail').getAttribute('data-collapsed')
+
+  it.each([
+    [`/projects/${OLB}/cases/new`, 'the case editor, with no case behind it yet'],
+    [`/projects/${OLB}/cases/case-1/edit`, 'the case document editor'],
+    [`/projects/${OLB}/runs/run-1/executions/exec-1`, 'the execution runner'],
+  ])('collapses on %s — %s', async (route) => {
+    renderShell(route)
+    await railReady()
+    expect(widthOf()).toBe('true')
+  })
+
+  it.each([
+    [`/projects/${OLB}/cases`],
+    [`/projects/${OLB}/cases/case-1`],
+    [`/projects/${OLB}/runs/run-1`],
+    [`/projects/${OLB}/docs`],
+  ])('stays expanded on %s', async (route) => {
+    renderShell(route)
+    await railReady()
+    expect(widthOf()).toBe('false')
+  })
+
+  /**
+   * The route forces the collapse, so a toggle offering to expand it would be a control that
+   * appears to do nothing. Hiding it is the honest option — and it is why `onToggleCollapse` is
+   * passed as `undefined` rather than the rail being told to ignore the click.
+   */
+  it('offers no collapse toggle where the route is what collapsed it', async () => {
+    renderShell(`/projects/${OLB}/cases/new`)
+    await railReady()
+    expect(rail().queryByTestId('Nav.CollapseToggle')).toBeNull()
+  })
+
+  /** Proves the assertion above discriminates: the toggle IS there on an ordinary route. */
+  it('offers the collapse toggle everywhere else', async () => {
+    renderShell(`/projects/${OLB}/cases`)
+    await railReady()
+    expect(rail().getByTestId('Nav.CollapseToggle')).toBeInTheDocument()
+  })
+})
