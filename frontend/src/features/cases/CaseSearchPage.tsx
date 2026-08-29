@@ -1,27 +1,27 @@
-import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
-import {
-  Box,
-  Chip,
-  InputAdornment,
-  Link,
-  MenuItem,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Search, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { Link as RouterLink } from 'react-router-dom';
 import { isSearchable, useCaseSearch, useProjects } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
+import {
+  Badge,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '../../components/kit';
 import { PageHeader } from '../../components/PageHeader';
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  Input,
+} from '../../components/ui';
 import { formatCount, formatDateTime } from '../../lib/format';
 import { useDebouncedValue } from '../../lib/useDebouncedValue';
 import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
@@ -76,7 +76,10 @@ const SEARCH_DEBOUNCE_MS = 300;
  * re-derived the count would discard the one number the area was built for.
  *
  * **`Table`, not `DataGrid`** — §241 measured why: DataGrid does not render in jsdom, so a
- * component test of this screen is only possible on a `Table`.
+ * component test of this screen is only possible on a `Table`. That table is now `kit/Table`, and
+ * the pager `TablePagination` used to draw is `Pager` below; both are ports of
+ * `renders/01-index-tables.html` frame B, whose one distinguishing mark is that Project is a
+ * column here and nowhere else.
  */
 export function CaseSearchPage() {
   const [params, setParams] = useSearchParams();
@@ -155,7 +158,7 @@ export function CaseSearchPage() {
   };
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId={`${TestId}.Header`}
         title="Search cases"
@@ -163,26 +166,25 @@ export function CaseSearchPage() {
         subtitle="Across every project you can open."
       />
 
-      <Box>
-        <TextField
-          fullWidth
-          value={q}
-          onChange={(event) => setParam('q', event.target.value)}
-          placeholder="Title, description, or a case key such as TC-412"
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchOutlinedIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            },
-            htmlInput: { 'data-testid': `${TestId}.Query`, 'aria-label': 'Search cases' },
-          }}
-          sx={{ mb: 2 }}
-        />
+      <div>
+        <div className="relative mb-3 max-w-[760px]">
+          <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-4" />
+          <Input
+            value={q}
+            onChange={(event) => setParam('q', event.target.value)}
+            placeholder="Title, description, or a case key such as TC-412"
+            className="min-h-10 pl-9 text-[14px]"
+            data-testid={`${TestId}.Query`}
+            aria-label="Search cases"
+          />
+        </div>
 
-        <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', rowGap: 1 }}>
+        {/*
+          One row of chips under the box — design language rule 2, and rule 3's *a quiet control is
+          still a control*: every one is a real button with a name and a focus ring, and an applied
+          filter carries its own remove, so a table filtered to nothing always names what emptied it.
+        */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
           <EnumFilter
             testId={`${TestId}.Lifecycle`}
             label="Status"
@@ -204,18 +206,18 @@ export function CaseSearchPage() {
             selected={priority}
             onChange={(next) => setMultiParam('priority', next)}
           />
-        </Stack>
+        </div>
 
         {!isSearchable(filters) ? (
           /*
             Not an EmptyState: nothing was searched for, so nothing is empty. Saying "no results"
             here would report a result for a question nobody asked.
           */
-          <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid={`${TestId}.Prompt`}>
+          <p className="text-[13px] text-ink-4" data-testid={`${TestId}.Prompt`}>
             {q.trim().length === 1
               ? 'Type at least two characters — a single letter matches most of the repository.'
               : 'Type something to search for.'}
-          </Typography>
+          </p>
         ) : (
           <DataRegion
             testId={TestId}
@@ -253,90 +255,156 @@ export function CaseSearchPage() {
           >
             {(data) => (
               <>
-                <Typography
-                  variant="body2"
-                  sx={{ color: 'text.secondary', mb: 1 }}
-                  data-testid={`${TestId}.Count`}
-                >
+                <p className="mb-2 text-[12px] text-ink-4" data-testid={`${TestId}.Count`}>
                   {formatCount(data.total)} matching {data.total === 1 ? 'case' : 'cases'}
-                </Typography>
+                </p>
 
-                <TableContainer sx={{ overflowX: 'auto' }}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ color: 'text.secondary', width: 110 }}>Case</TableCell>
-                        <TableCell sx={{ color: 'text.secondary' }}>Title</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 210 }}>Project</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 110 }}>Status</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 130 }}>Automation</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 90 }}>Priority</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 150 }}>Updated</TableCell>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell className="w-[110px]">Case</TableHeaderCell>
+                      <TableHeaderCell>Title</TableHeaderCell>
+                      <TableHeaderCell className="w-[210px]">Project</TableHeaderCell>
+                      <TableHeaderCell className="w-[110px]">Status</TableHeaderCell>
+                      <TableHeaderCell className="w-[130px]">Automation</TableHeaderCell>
+                      <TableHeaderCell className="w-[90px]">Priority</TableHeaderCell>
+                      <TableHeaderCell className="w-[150px]">Updated</TableHeaderCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {data.items.map((hit) => (
+                      <TableRow key={hit.id} data-testid={`${TestId}.Row`}>
+                        <TableCell>
+                          <Identifier>{hit.key}</Identifier>
+                        </TableCell>
+                        <TableCell variant="title">
+                          <RouterLink
+                            to={`/projects/${hit.projectId}/cases/${hit.id}`}
+                            className="text-steel underline-offset-4 hover:underline"
+                            data-testid={`${TestId}.Row.Link`}
+                          >
+                            {hit.title}
+                          </RouterLink>
+                        </TableCell>
+                        {/*
+                          The project is part of every row rather than a column somebody can
+                          hide: the reader does not know which project a hit is from, and that
+                          is the premise of the screen.
+                        */}
+                        <TableCell>
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <Identifier variant="muted">{hit.projectKey}</Identifier>
+                            <span className="truncate" title={hit.projectName}>
+                              {hit.projectName}
+                            </span>
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge tone="plain">{lifecycleLabels[hit.lifecycleStatus]}</Badge>
+                        </TableCell>
+                        <TableCell>{automationLabels[hit.automationStatus]}</TableCell>
+                        <TableCell>{priorityLabels[hit.priority]}</TableCell>
+                        <TableCell className="font-mono text-[12px] tabular-nums text-ink-4">
+                          {formatDateTime(hit.updatedAt)}
+                        </TableCell>
                       </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {data.items.map((hit) => (
-                        <TableRow key={hit.id} data-testid={`${TestId}.Row`} hover>
-                          <TableCell>
-                            <Identifier>{hit.key}</Identifier>
-                          </TableCell>
-                          <TableCell>
-                            <Link
-                              component={RouterLink}
-                              to={`/projects/${hit.projectId}/cases/${hit.id}`}
-                              data-testid={`${TestId}.Row.Link`}
-                            >
-                              {hit.title}
-                            </Link>
-                          </TableCell>
-                          {/*
-                            The project is part of every row rather than a column somebody can
-                            hide: the reader does not know which project a hit is from, and that
-                            is the premise of the screen.
-                          */}
-                          <TableCell>
-                            <Stack direction="row" sx={{ alignItems: 'center', gap: 0.75, minWidth: 0 }}>
-                              <Identifier variant="muted">{hit.projectKey}</Identifier>
-                              <Typography variant="body2" noWrap title={hit.projectName}>
-                                {hit.projectName}
-                              </Typography>
-                            </Stack>
-                          </TableCell>
-                          <TableCell>
-                            <Chip size="small" label={lifecycleLabels[hit.lifecycleStatus]} />
-                          </TableCell>
-                          <TableCell>{automationLabels[hit.automationStatus]}</TableCell>
-                          <TableCell>{priorityLabels[hit.priority]}</TableCell>
-                          <TableCell>{formatDateTime(hit.updatedAt)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
+                    ))}
+                  </TableBody>
+                </Table>
 
                 {/* Driven by the server's total — see the header. */}
-                <TablePagination
-                  component="div"
-                  count={data.total}
+                <Pager
+                  total={data.total}
                   page={data.page}
-                  rowsPerPage={data.size}
-                  rowsPerPageOptions={[25, 50, 100]}
-                  onPageChange={(_, next) => setParam('page', String(next))}
-                  onRowsPerPageChange={(event) => setParam('size', event.target.value)}
-                  data-testid={`${TestId}.Pager`}
+                  size={data.size}
+                  onPage={(next) => setParam('page', String(next))}
+                  onSize={(next) => setParam('size', String(next))}
                 />
               </>
             )}
           </DataRegion>
         )}
-      </Box>
-    </Box>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The pager `TablePagination` used to supply.
+ *
+ * It states the range and the total in words rather than drawing a page-number strip: the total is
+ * the server's, computed over the same narrowed set as the page (§249), and a strip of numbers
+ * over an unknown number of pages is the one thing this screen must not invent.
+ */
+function Pager({
+  total,
+  page,
+  size,
+  onPage,
+  onSize,
+}: {
+  total: number;
+  page: number;
+  size: number;
+  onPage: (next: number) => void;
+  onSize: (next: number) => void;
+}) {
+  const first = total === 0 ? 0 : page * size + 1;
+  const last = Math.min(total, (page + 1) * size);
+  const lastPage = Math.max(0, Math.ceil(total / size) - 1);
+
+  return (
+    <div
+      className="flex flex-wrap items-center justify-end gap-3 border-t border-white/8 px-3 py-2 text-[12px] text-ink-4"
+      data-testid={`${TestId}.Pager`}
+    >
+      <label className="flex items-center gap-1.5">
+        Rows
+        <select
+          value={size}
+          onChange={(event) => onSize(Number(event.target.value))}
+          className="rounded-[5px] border border-white/8 bg-field px-1.5 py-0.5 font-mono text-[12px] text-ink-2"
+          data-testid={`${TestId}.Pager.Size`}
+        >
+          {[25, 50, 100].map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <span className="font-mono tabular-nums">
+        {first}–{last} of {formatCount(total)}
+      </span>
+      <Button
+        size="sm"
+        onClick={() => onPage(page - 1)}
+        disabled={page <= 0}
+        data-testid={`${TestId}.Pager.Prev`}
+      >
+        Previous
+      </Button>
+      <Button
+        size="sm"
+        onClick={() => onPage(page + 1)}
+        disabled={page >= lastPage}
+        data-testid={`${TestId}.Pager.Next`}
+      >
+        Next
+      </Button>
+    </div>
   );
 }
 
 /**
  * One multi-select over an enum's label map, so the three read identically and a new member of any
  * of them appears here the moment `labels.ts` names it.
+ *
+ * ~~A `TextField select` with `multiple`.~~ → **superseded** by `renders/01-index-tables.html`: an
+ * applied filter is a *chip* the reader can see and remove, not a value folded inside a closed
+ * select. The chip is two sibling buttons — the menu trigger and the remove — which is exactly
+ * `kit/Chip`'s removable shape; it is rebuilt here rather than reused because the first of the two
+ * has to be the Radix trigger itself, and a Radix trigger cannot be nested inside another button.
  */
 function EnumFilter({
   testId,
@@ -351,35 +419,61 @@ function EnumFilter({
   selected: string[];
   onChange: (next: string[]) => void;
 }) {
+  const applied = selected.length > 0;
+  const summary = applied
+    ? selected.length === 1
+      ? `${label} \u00b7 ${labels[selected[0]!] ?? selected[0]}`
+      : `${label} \u00b7 ${selected.length} selected`
+    : label;
+
+  const toggle = (key: string) =>
+    onChange(selected.includes(key) ? selected.filter((value) => value !== key) : [...selected, key]);
+
   return (
-    <TextField
-      select
-      size="small"
-      label={label}
-      value={selected}
-      onChange={(event) => {
-        const raw = event.target.value as unknown as string[] | string;
-        onChange(typeof raw === 'string' ? raw.split(',').filter(Boolean) : raw);
-      }}
-      sx={{ minWidth: 170 }}
-      slotProps={{
-        select: {
-          multiple: true,
-          renderValue: (value) =>
-            (value as string[]).map((key) => labels[key] ?? key).join(', ') || 'Any',
-          displayEmpty: true,
-        },
-        // `displayEmpty` renders "Any" while the selection is empty, but the label only shrinks
-        // off a non-empty *value* — so it stayed over the text and the control read "Anyomation".
-        inputLabel: { shrink: true },
-        htmlInput: { 'data-testid': testId },
-      }}
+    <span
+      style={
+        applied
+          ? {
+              borderColor: 'color-mix(in oklab, var(--color-steel) 22%, transparent)',
+              backgroundColor: 'color-mix(in oklab, var(--color-steel) 12%, transparent)',
+              color: 'var(--color-steel)',
+            }
+          : undefined
+      }
+      className="inline-flex items-center gap-1.5 rounded-[5px] border border-white/8 px-2.5 py-[3px] font-sans text-xs text-ink-2"
     >
-      {Object.entries(labels).map(([key, text]) => (
-        <MenuItem key={key} value={key} data-testid={`${testId}.${key}`}>
-          {text}
-        </MenuItem>
-      ))}
-    </TextField>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          className="inline-flex items-center text-inherit focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]"
+          data-testid={testId}
+        >
+          {summary}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {Object.entries(labels).map(([key, text]) => (
+            <DropdownMenuCheckboxItem
+              key={key}
+              checked={selected.includes(key)}
+              onCheckedChange={() => toggle(key)}
+              onSelect={(event) => event.preventDefault()}
+              data-testid={`${testId}.${key}`}
+            >
+              {text}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {applied && (
+        <button
+          type="button"
+          onClick={() => onChange([])}
+          aria-label={`Remove ${label} filter`}
+          className="text-ink-4 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]"
+          data-testid={`${testId}.Remove`}
+        >
+          <X aria-hidden className="size-3" />
+        </button>
+      )}
+    </span>
   );
 }

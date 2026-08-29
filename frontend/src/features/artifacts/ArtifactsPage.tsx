@@ -1,5 +1,4 @@
-import { Box, Button, MenuItem, Select, Stack } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
+import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useArtifacts, useDocPages, usePlans, useProject } from '../../api/queries';
@@ -7,7 +6,8 @@ import { PermissionGate } from '../../components/PermissionGate';
 import { RegisterArtifactDialog } from './ArtifactDialogs';
 import { ArtifactTable } from './ArtifactTable';
 import { DataRegion } from '../../components/DataRegion';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { PageHeader } from '../../components/PageHeader';
+import { Button } from '../../components/ui';
 
 /**
  * The artifact register (plan §6n).
@@ -30,7 +30,7 @@ export function ArtifactsPage() {
   const pages = useDocPages(projectId);
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId="Artifacts.Header"
         title="Artifacts"
@@ -41,25 +41,21 @@ export function ArtifactsPage() {
         ]}
         subtitle="Strategy, environment, test data and sign-off documents. Plan artifacts sit alongside the project's, which they inherit."
         actions={
-          <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
-            <Box sx={{ minWidth: 260 }}>
-            <Select
-              size="small"
-              fullWidth
-              displayEmpty
+          <div className="flex items-center gap-2">
+            <select
               value={planId}
               onChange={(event) => setPlanId(event.target.value)}
+              aria-label="Which scope to show"
+              className="min-w-[260px] rounded-[6px] border border-white/8 bg-field px-3 py-1.5 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
               data-testid="Artifacts.ScopeSelect"
-              inputProps={{ 'aria-label': 'Which scope to show' }}
             >
-              <MenuItem value="">Project scope only</MenuItem>
+              <option value="">Project scope only</option>
               {(plans.data ?? []).map((plan) => (
-                <MenuItem key={plan.id} value={plan.id}>
+                <option key={plan.id} value={plan.id}>
                   {plan.key} — {plan.name}
-                </MenuItem>
+                </option>
               ))}
-            </Select>
-            </Box>
+            </select>
             {/*
               Disabled-with-a-reason rather than hidden (§31). ~~The gate is honest only about
               the half it can see: `artifact:edit` is keys-only on the wire, so a Test Engineer —
@@ -72,17 +68,17 @@ export function ArtifactsPage() {
             <PermissionGate projectId={projectId} permission="artifact:edit">
               {({ allowed }) => (
                 <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
+                  variant="primary"
                   disabled={!allowed}
                   onClick={() => setRegistering(true)}
                   data-testid="Artifacts.Register"
                 >
+                  <Plus aria-hidden className="size-4" />
                   Register
                 </Button>
               )}
             </PermissionGate>
-          </Stack>
+          </div>
         }
       />
 
@@ -100,24 +96,31 @@ export function ArtifactsPage() {
         />
       )}
 
-      <Panel testId="Artifacts.Panel" dense>
+      <section data-testid="Artifacts.Panel">
         <DataRegion
           testId="Artifacts.List"
           state={{ ...artifacts, refetch: () => void artifacts.refetch() }}
           isEmpty={(rows) => rows.length === 0}
+          /*
+            The render's own note on this screen (`renders/01-index-tables.html` frame H) is that
+            *empty is a sentence about the product*: the honest answer to "no artifacts" is that you
+            cannot make one here — they arrive attached to an execution or an ingested report. The
+            body below says that rather than apologising, and it is the whole reason this screen
+            keeps an empty state with no upload control in it.
+          */
           empty={{
             kind: 'no-records',
-            title: 'No artifacts',
+            title: 'No artifacts in this project',
             body: planId
               ? 'This plan has no artifacts of its own, and the project has none to inherit.'
-              : 'Attach the test strategy, environment guide and test data this project depends on.',
+              : 'Artifacts are the files a run leaves behind — screenshots, logs, HAR captures. They arrive attached to an execution or an ingested report; there is nothing to upload here.',
           }}
         >
           {(rows) => (
             <ArtifactTable rows={rows} showInheritance={!!planId} projectId={projectId} />
           )}
         </DataRegion>
-      </Panel>
-    </Box>
+      </section>
+    </div>
   );
 }

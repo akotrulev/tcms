@@ -1,25 +1,4 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  IconButton,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
-import ReplayIcon from '@mui/icons-material/Replay';
+import { FileChartColumn, RotateCcw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
@@ -30,9 +9,26 @@ import {
 } from '../../api/queries';
 import type { ReportDefinition } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import {
+  Banner,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '../../components/kit';
+import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
-import { ScrollX } from '../../components/ScrollX';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui';
 import { describeError } from '../../lib/describeError';
 import { humanize } from '../../lib/labels';
 import { GenerateReportDialog } from './GenerateReportDialog';
@@ -99,7 +95,7 @@ export function ReportsPage() {
   const [deleting, setDeleting] = useState<ReportDefinition | null>(null);
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId="Reports.Header"
         title="Reports"
@@ -113,12 +109,12 @@ export function ReportsPage() {
           <PermissionGate projectId={projectId} permission="report:export">
             {({ allowed }) => (
               <Button
-                variant="contained"
-                startIcon={<AssessmentOutlinedIcon />}
+                variant="primary"
                 disabled={!allowed}
                 onClick={() => setGenerating('adhoc')}
                 data-testid="Reports.GenerateButton"
               >
+                <FileChartColumn aria-hidden className="size-4" />
                 Generate
               </Button>
             )}
@@ -141,7 +137,10 @@ export function ReportsPage() {
         />
       )}
 
-      <Panel testId="Reports.JobsPanel" title="Generated reports" dense>
+      <section data-testid="Reports.JobsPanel" className="mb-6">
+        <h2 className="mb-2 font-mono text-[11px] font-medium uppercase tracking-[.07em] text-ink-4">
+          Generated reports
+        </h2>
         <DataRegion
           testId="Reports.Jobs"
           state={{ ...jobs, refetch: () => void jobs.refetch() }}
@@ -153,14 +152,14 @@ export function ReportsPage() {
           }}
         >
           {(rows) => (
-            <Stack sx={{ gap: 1.5 }} data-testid="Reports.Jobs.List">
+            <div className="flex flex-col gap-3" data-testid="Reports.Jobs.List">
               {rows.map((job) => (
                 <ReportJobCard key={job.jobId} projectId={projectId} job={job} />
               ))}
-            </Stack>
+            </div>
           )}
         </DataRegion>
-      </Panel>
+      </section>
 
       {/*
         "My saved reports", not "Saved reports". `GET /reports/definitions` answers with the
@@ -170,7 +169,10 @@ export function ReportsPage() {
         data loss. The `Owner` column was removed for the same reason rather than kept: it could
         only ever print the reader's own name, so it answered a question it appeared to ask.
       */}
-      <Panel testId="Reports.DefinitionsPanel" title="My saved reports" dense>
+      <section data-testid="Reports.DefinitionsPanel">
+        <h2 className="mb-2 font-mono text-[11px] font-medium uppercase tracking-[.07em] text-ink-4">
+          My saved reports
+        </h2>
         <DataRegion
           testId="Reports.Definitions"
           state={{ ...definitions, refetch: () => void definitions.refetch() }}
@@ -190,7 +192,7 @@ export function ReportsPage() {
             />
           )}
         </DataRegion>
-      </Panel>
+      </section>
 
       {deleting && (
         <DeleteDefinitionDialog
@@ -205,7 +207,7 @@ export function ReportsPage() {
           reset={remove.reset}
         />
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -243,38 +245,37 @@ function DeleteDefinitionDialog({
   }, [definition.id, reset]);
 
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="xs" data-testid="Reports.Definitions.Confirm">
-      <DialogTitle>Delete this saved report?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2}>
-          <DialogContentText data-testid="Reports.Definitions.Confirm.Target">
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-sm" data-testid="Reports.Definitions.Confirm">
+        <DialogHeader>
+          <DialogTitle>Delete this saved report?</DialogTitle>
+          <DialogDescription data-testid="Reports.Definitions.Confirm.Target">
             “{definition.name}” — {humanize(definition.type)}.
-          </DialogContentText>
-          <DialogContentText variant="body2">
-            The reports it has already produced stay where they are and remain downloadable. Only
-            the saved settings go, and they cannot be recovered.
-          </DialogContentText>
-          {error != null && (
-            <Alert severity="error" role="alert" data-testid="Reports.Definitions.Confirm.Error">
-              {describeError(error).body}
-            </Alert>
-          )}
-        </Stack>
+          </DialogDescription>
+        </DialogHeader>
+        <p className="mt-3 text-[13px] leading-[1.55] text-ink-3">
+          The reports it has already produced stay where they are and remain downloadable. Only the
+          saved settings go, and they cannot be recovered.
+        </p>
+        {error != null && (
+          <Banner tone="bad" className="mt-3" data-testid="Reports.Definitions.Confirm.Error">
+            <span role="alert">{describeError(error).body}</span>
+          </Banner>
+        )}
+        <DialogFooter>
+          <Button onClick={onClose} data-testid="Reports.Definitions.Confirm.Cancel">
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            disabled={pending}
+            onClick={onConfirm}
+            data-testid="Reports.Definitions.Confirm.Submit"
+          >
+            {pending ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid="Reports.Definitions.Confirm.Cancel">
-          Cancel
-        </Button>
-        <Button
-          color="error"
-          variant="contained"
-          disabled={pending}
-          onClick={onConfirm}
-          data-testid="Reports.Definitions.Confirm.Submit"
-        >
-          {pending ? 'Deleting…' : 'Delete'}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }
@@ -295,85 +296,73 @@ function DefinitionTable({
   const sorted = [...rows].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 
   return (
-    <ScrollX>
-      <Table size="small" data-testid="Reports.Definitions.Grid">
-        <TableHead>
-          <TableRow>
-            <TableCell sx={{ color: 'text.secondary' }}>Report</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 200 }}>Kind</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 110 }} align="right">
-              Actions
+    <Table data-testid="Reports.Definitions.Grid">
+      <TableHead>
+        <TableRow>
+          <TableHeaderCell>Report</TableHeaderCell>
+          <TableHeaderCell className="w-[200px]">Kind</TableHeaderCell>
+          <TableHeaderCell align="right" className="w-[110px]">
+            Actions
+          </TableHeaderCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {sorted.map((definition) => (
+          <TableRow key={definition.id} data-testid="Reports.Definitions.Row">
+            <TableCell variant="title" className="font-medium">
+              {definition.name}
+            </TableCell>
+            <TableCell className="text-[12px] text-ink-4">{humanize(definition.type)}</TableCell>
+            <TableCell align="right">
+              {/*
+                Disabled-with-a-reason rather than hidden (§31), and the two controls ask different
+                keys — see the page header. ~~A tooltip on a disabled MUI button needs a wrapping
+                span, or the tooltip never fires and the reason is unreachable.~~ → superseded: the
+                reason is the native `title`, which a disabled control still shows and which needs
+                no wrapper.
+              */}
+              <PermissionGate projectId={projectId} permission="report:export">
+                {({ allowed }) => (
+                  <Button
+                    variant="quiet"
+                    size="icon"
+                    disabled={!allowed}
+                    onClick={() => onGenerate(definition)}
+                    aria-label={`Generate ${definition.name}`}
+                    title={
+                      allowed
+                        ? 'Generate this report again'
+                        : 'Generating a report needs report:export on this project.'
+                    }
+                    data-testid="Reports.Definitions.Generate"
+                  >
+                    <RotateCcw aria-hidden className="size-4" />
+                  </Button>
+                )}
+              </PermissionGate>
+              <PermissionGate projectId={projectId} permission="report:view">
+                {({ allowed }) => (
+                  <Button
+                    variant="quiet"
+                    size="icon"
+                    disabled={!allowed}
+                    onClick={() => onDelete(definition)}
+                    aria-label={`Delete ${definition.name}`}
+                    title={
+                      allowed
+                        ? 'Delete this saved report'
+                        : 'Deleting a saved report needs report:view on this project.'
+                    }
+                    data-testid="Reports.Definitions.Delete"
+                  >
+                    <Trash2 aria-hidden className="size-4" />
+                  </Button>
+                )}
+              </PermissionGate>
             </TableCell>
           </TableRow>
-        </TableHead>
-        <TableBody>
-          {sorted.map((definition) => (
-            <TableRow key={definition.id} data-testid="Reports.Definitions.Row" hover>
-              <TableCell>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {definition.name}
-                </Typography>
-              </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                {humanize(definition.type)}
-              </TableCell>
-              <TableCell align="right">
-                {/*
-                  Disabled-with-a-reason rather than hidden (§31), and the two controls ask
-                  different keys — see the page header. A tooltip on a disabled MUI button needs the
-                  wrapping span; without it the tooltip never fires and the reason is unreachable.
-                */}
-                <PermissionGate projectId={projectId} permission="report:export">
-                  {({ allowed }) => (
-                    <Tooltip
-                      title={
-                        allowed
-                          ? 'Generate this report again'
-                          : 'Generating a report needs report:export on this project.'
-                      }
-                    >
-                      <span>
-                        <IconButton
-                          size="small"
-                          disabled={!allowed}
-                          onClick={() => onGenerate(definition)}
-                          aria-label={`Generate ${definition.name}`}
-                          data-testid="Reports.Definitions.Generate"
-                        >
-                          <ReplayIcon fontSize="small" />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                  )}
-                </PermissionGate>
-                <PermissionGate projectId={projectId} permission="report:view">
-                  {({ allowed }) => (
-                    <Tooltip
-                      title={
-                        allowed
-                          ? 'Delete this saved report'
-                          : 'Deleting a saved report needs report:view on this project.'
-                      }
-                    >
-                      <span>
-                        <IconButton
-                          size="small"
-                          disabled={!allowed}
-                          onClick={() => onDelete(definition)}
-                          aria-label={`Delete ${definition.name}`}
-                          data-testid="Reports.Definitions.Delete"
-                        >
-                          <DeleteOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                  )}
-                </PermissionGate>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </ScrollX>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

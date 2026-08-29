@@ -1,25 +1,4 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControlLabel,
-  MenuItem,
-  Stack,
-  Switch,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import {
@@ -32,11 +11,29 @@ import {
 import type { RunSchedule, RunScheduleInput } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import {
+  Banner,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '../../components/kit';
+import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Switch,
+} from '../../components/ui';
 import { describeError } from '../../lib/describeError';
 import { formatDateTime } from '../../lib/format';
-import { inputTestId, selectTestId } from '../../lib/muiTestIds';
 
 /**
  * The project's run schedules — **`V68`'s standing requests, and the screen that keeps them
@@ -47,7 +44,7 @@ import { inputTestId, selectTestId } from '../../lib/muiTestIds';
  * A schedule that silently stops is the failure mode of scheduling anything. The poller records
  * *why* an attempt made no run in `lastFireError` — the owner lost `run:create`, the project was
  * archived, the resolved scope was empty, the approval gate refused — and **this is the only place
- * that string is ever visible**. So it is rendered as an alert on the row rather than as a tooltip
+ * that string is ever visible**. So it is rendered as a banner on the row rather than as a tooltip
  * or a muted caption: everything else here is configuration, and that is a report.
  *
  * `nextFireAt === null` renders the sentence **"Will not fire again"** and never a blank cell. Null
@@ -72,8 +69,21 @@ import { inputTestId, selectTestId } from '../../lib/muiTestIds';
  *
  * `createdByName` is the **authority** every fire is gated as — re-checked each time, so a schedule
  * outlives neither the grant nor the account. The runs it makes carry **no creator at all**. The
- * column header says "Owner" and not "Created by" for exactly that reason: a reader who took this
- * name onto the run list would be reading a lie about who did something at 03:00.
+ * column header says "Fires as" and not "Created by" for exactly that reason: a reader who took
+ * this name onto the run list would be reading a lie about who did something at 03:00.
+ *
+ * ## What the port took from the render, and what it did not
+ *
+ * `renders/01-index-tables.html` frame G is this screen, and its one structural note is that the
+ * switch is the **first column** — this is the only index whose rows have an on/off. That is
+ * deliberately **not** done here: the row's enabled flag is an Edit-dialog field, and promoting it
+ * to a row control is a write on every click with no confirmation and no field-level endpoint, so
+ * it is a behaviour change rather than a port. The rest of the frame is applied — the paused row
+ * stays in the table at reduced weight with its reason (*disable, don't hide*), and its next run is
+ * the sentence rather than a stale time.
+ *
+ * This file also dropped the MUI slot-prop test-id helper, whose whole reason for existing was that
+ * MUI types slot props too narrowly to accept a `data-*`. A Radix switch takes one directly.
  */
 export function RunSchedulePage() {
   const { projectId = '' } = useParams();
@@ -86,7 +96,7 @@ export function RunSchedulePage() {
   const [editing, setEditing] = useState<RunSchedule | 'new' | null>(null);
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId="RunSchedules.Header"
         title="Run schedules"
@@ -103,8 +113,8 @@ export function RunSchedulePage() {
           <PermissionGate projectId={projectId} permission="run:create">
             {({ allowed, reason }) => (
               <Button
-                variant="contained"
-                size="small"
+                variant="primary"
+                size="sm"
                 disabled={!allowed}
                 title={reason}
                 onClick={() => setEditing('new')}
@@ -117,26 +127,23 @@ export function RunSchedulePage() {
         }
       />
 
-      <Panel testId="RunSchedules.Panel">
-        <FormControlLabel
-          sx={{ mb: 1 }}
-          control={
-            <Switch
-              size="small"
-              checked={enabledOnly}
-              slotProps={inputTestId('RunSchedules.EnabledOnly', 'Only active schedules')}
-              onChange={(event) => {
-                // Straight into the URL, never into component state. A coordinator sharing
-                // "here are the paused ones" has to be able to send the link.
-                const next = new URLSearchParams(params);
-                if (event.target.checked) next.set('enabled', 'true');
-                else next.delete('enabled');
-                setParams(next, { replace: true });
-              }}
-            />
-          }
-          label={<Typography variant="body2">Only active schedules</Typography>}
-        />
+      <section data-testid="RunSchedules.Panel">
+        <label className="mb-3 flex w-fit items-center gap-2 text-[13px] text-ink-3">
+          <Switch
+            checked={enabledOnly}
+            aria-label="Only active schedules"
+            data-testid="RunSchedules.EnabledOnly"
+            onCheckedChange={(checked) => {
+              // Straight into the URL, never into component state. A coordinator sharing
+              // "here are the paused ones" has to be able to send the link.
+              const next = new URLSearchParams(params);
+              if (checked) next.set('enabled', 'true');
+              else next.delete('enabled');
+              setParams(next, { replace: true });
+            }}
+          />
+          Only active schedules
+        </label>
 
         <DataRegion
           testId="RunSchedules.Region"
@@ -168,13 +175,13 @@ export function RunSchedulePage() {
           }
         >
           {(rows) => (
-            <Table size="small" data-testid="RunSchedules.Table">
+            <Table data-testid="RunSchedules.Table">
               <TableHead>
                 <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Cadence</TableCell>
-                  <TableCell>Next run</TableCell>
-                  <TableCell>Last run</TableCell>
+                  <TableHeaderCell>Name</TableHeaderCell>
+                  <TableHeaderCell className="w-[230px]">Cadence</TableHeaderCell>
+                  <TableHeaderCell className="w-[170px]">Next run</TableHeaderCell>
+                  <TableHeaderCell className="w-[170px]">Last run</TableHeaderCell>
                   {/*
                     ~~"Owner"~~ → **"Fires as" (005 §6, item 11).** The design change asked for this
                     column to be drawn against `updatedAt` / `updatedBy` — who last changed the
@@ -184,8 +191,8 @@ export function RunSchedulePage() {
                     column says what the value IS — the authority every fire is gated as, re-checked
                     each time — rather than "owner", which reads as a person to ask and is not.
                   */}
-                  <TableCell>Fires as</TableCell>
-                  <TableCell />
+                  <TableHeaderCell className="w-[150px]">Fires as</TableHeaderCell>
+                  <TableHeaderCell align="right" className="w-[150px]" />
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -203,7 +210,7 @@ export function RunSchedulePage() {
             </Table>
           )}
         </DataRegion>
-      </Panel>
+      </section>
 
       {editing !== null && (
         <ScheduleDialog
@@ -212,7 +219,7 @@ export function RunSchedulePage() {
           onClose={() => setEditing(null)}
         />
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -228,69 +235,74 @@ function ScheduleRow({
   const remove = useDeleteRunSchedule(projectId);
 
   return (
-    <TableRow data-testid="RunSchedules.Row" hover>
-      <TableCell>
-        <Stack sx={{ gap: 0.5 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {schedule.name}
-          </Typography>
-          {!schedule.enabled && (
-            <Chip size="small" label="Paused" data-testid="RunSchedules.Row.Paused" />
-          )}
-          {/*
-            The feature's honesty, and the reason it is an Alert rather than a caption. This is the
-            only place the poller's reason for making no run is ever visible, and a schedule that
-            stopped silently is what the whole column exists to prevent.
-          */}
-          {schedule.lastFireError && (
-            <Alert severity="warning" sx={{ py: 0 }} data-testid="RunSchedules.Row.Error">
-              <Typography variant="caption">{schedule.lastFireError}</Typography>
-            </Alert>
-          )}
-        </Stack>
+    <TableRow
+      data-testid="RunSchedules.Row"
+      /*
+        A paused schedule keeps its row at reduced weight rather than leaving the table — rule 7,
+        and the render draws exactly this. Opacity rather than a colour, so the whole row dims
+        together including its marks; recolouring the text alone reads as a rendering fault.
+      */
+      className={schedule.enabled ? undefined : 'opacity-60'}
+    >
+      <TableCell
+        variant="title"
+        subtitle={
+          !schedule.enabled || schedule.lastFireError ? (
+            <>
+              {!schedule.enabled && <span data-testid="RunSchedules.Row.Paused">Paused</span>}
+              {/*
+                The feature's honesty, and the reason it is a banner rather than a caption. This is
+                the only place the poller's reason for making no run is ever visible, and a
+                schedule that stopped silently is what the whole column exists to prevent.
+              */}
+              {schedule.lastFireError && (
+                <Banner tone="warn" className="mt-1.5" data-testid="RunSchedules.Row.Error">
+                  <span>{schedule.lastFireError}</span>
+                </Banner>
+              )}
+            </>
+          ) : undefined
+        }
+      >
+        <span className="font-semibold">{schedule.name}</span>
       </TableCell>
       <TableCell>
-        <Stack sx={{ gap: 0.25 }}>
-          <Identifier variant="muted">{schedule.cronExpression}</Identifier>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {schedule.zoneId}
-          </Typography>
-        </Stack>
+        <Identifier variant="muted">{schedule.cronExpression}</Identifier>
+        <span className="mt-0.5 block text-[11.5px] text-ink-4">{schedule.zoneId}</span>
       </TableCell>
-      <TableCell data-testid="RunSchedules.Row.NextFire">
+      <TableCell
+        className="font-mono text-[12px] tabular-nums text-ink-4"
+        data-testid="RunSchedules.Row.NextFire"
+      >
         {schedule.nextFireAt ? (
           formatDateTime(schedule.nextFireAt)
         ) : (
           // Never a blank cell. Null means the expression yields nothing further, and an empty
           // cell reads as "loading" or "soon" — both false.
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            Will not fire again
-          </Typography>
+          <span className="font-sans">Will not fire again</span>
         )}
       </TableCell>
-      <TableCell>
+      <TableCell className="text-[12px] text-ink-4">
         {schedule.lastRunId && schedule.lastRunKey ? (
           <Identifier>{schedule.lastRunKey}</Identifier>
         ) : (
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {schedule.lastFiredAt ? formatDateTime(schedule.lastFiredAt) : 'Never'}
-          </Typography>
+          <span>{schedule.lastFiredAt ? formatDateTime(schedule.lastFiredAt) : 'Never'}</span>
         )}
       </TableCell>
-      <TableCell>
+      <TableCell className="text-[12px]">
         {/*
           The AUTHORITY every fire is gated as, never the author of the runs — those have none.
           A null name is not evidence about the id: an owner whose membership row is gone still
           owns the schedule, and the fire still runs their grant.
         */}
-        <Typography variant="caption">{schedule.createdByName ?? 'Unknown'}</Typography>
+        {schedule.createdByName ?? 'Unknown'}
       </TableCell>
       <TableCell align="right">
-        <Stack direction="row" sx={{ gap: 1, justifyContent: 'flex-end' }}>
+        <span className="flex justify-end gap-2">
           <PermissionGate projectId={projectId} permission="run:create">
             {({ allowed, reason }) => (
               <Button
-                size="small"
+                size="sm"
                 disabled={!allowed}
                 title={reason}
                 onClick={onEdit}
@@ -303,8 +315,8 @@ function ScheduleRow({
           <PermissionGate projectId={projectId} permission="run:create">
             {({ allowed, reason }) => (
               <Button
-                size="small"
-                color="error"
+                size="sm"
+                variant="danger"
                 disabled={!allowed || remove.isPending}
                 title={reason}
                 onClick={() => remove.mutate(schedule.id)}
@@ -314,7 +326,7 @@ function ScheduleRow({
               </Button>
             )}
           </PermissionGate>
-        </Stack>
+        </span>
       </TableCell>
     </TableRow>
   );
@@ -330,7 +342,7 @@ function ScheduleRow({
  * **A curated list, and deliberately not `Intl.supportedValuesOf('timeZone')`.** That is the
  * complete answer and it is not in this project's `lib` (`ES2023`), so reaching for it means either
  * widening the lib for one control or a `typeof` guard whose fallback is this list anyway. Six
- * hundred zones in a plain `Select` is also not a better control than fourteen — a real picker with
+ * hundred zones in a plain select is also not a better control than fourteen — a real picker with
  * search is its own slice.
  *
  * **The schedule's own value is always offered**, first, whatever it is. Without that, editing a
@@ -373,6 +385,39 @@ function parseTags(raw: string): string[] {
     .filter((tag) => tag.length > 0);
 }
 
+/**
+ * One field, one column, the label above the control and its help or its refusal below.
+ *
+ * Written here rather than reached for: `TextField`'s `label` + `helperText` pair went with MUI,
+ * this dialog is the only place in the ten index screens that needs it back, and a shared form
+ * field earns its place on the second caller, not the first.
+ */
+function Field({
+  label,
+  help,
+  error,
+  children,
+}: {
+  label: string;
+  help: string;
+  error?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-[12px] font-medium text-ink-2">{label}</span>
+      {children}
+      <span
+        className={
+          error ? 'text-[11.5px] text-[color:var(--color-failed)]' : 'text-[11.5px] text-ink-4'
+        }
+      >
+        {error ?? help}
+      </span>
+    </label>
+  );
+}
+
 function ScheduleDialog({
   projectId,
   schedule,
@@ -405,123 +450,123 @@ function ScheduleDialog({
   const failure = save.error && !fieldErrors ? describeError(save.error) : null;
 
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="sm" data-testid="RunSchedules.Dialog">
-      <DialogTitle>{schedule ? 'Edit schedule' : 'New schedule'}</DialogTitle>
-      <DialogContent>
-        <Stack sx={{ gap: 2, mt: 1 }}>
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid="RunSchedules.Dialog">
+        <DialogHeader>
+          <DialogTitle>{schedule ? 'Edit schedule' : 'New schedule'}</DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-4 flex flex-col gap-4">
           {failure && (
-            <Alert severity="error" data-testid="RunSchedules.Dialog.Error">
-              {failure.body}
-            </Alert>
+            <Banner tone="bad" data-testid="RunSchedules.Dialog.Error">
+              <span>{failure.body}</span>
+            </Banner>
           )}
 
-          <TextField
+          <Field
             label="Name"
-            size="small"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            error={!!fieldErrors?.name}
-            helperText={
-              fieldErrors?.name?.[0] ??
-              'Every run this makes is named "<name> — <date>", so a year of them reads as one series.'
-            }
-            slotProps={{ htmlInput: { 'data-testid': 'RunSchedules.Dialog.Name' } }}
-          />
-
-          <TextField
-            label="Cadence"
-            size="small"
-            value={cronExpression}
-            onChange={(event) => setCronExpression(event.target.value)}
-            error={!!fieldErrors?.cronExpression}
-            helperText={
-              fieldErrors?.cronExpression?.[0] ??
-              'Six fields: second minute hour day-of-month month day-of-week. "0 0 3 * * MON-FRI" is 03:00 on weekdays.'
-            }
-            slotProps={{ htmlInput: { 'data-testid': 'RunSchedules.Dialog.Cron' } }}
-          />
-
-          <TextField
-            select
-            label="Time zone"
-            size="small"
-            value={zoneId}
-            onChange={(event) => setZoneId(event.target.value)}
-            error={!!fieldErrors?.zoneId}
-            helperText={
-              fieldErrors?.zoneId?.[0] ??
-              '"Every weekday at 07:00" is not a time without one — the cadence is read in this zone.'
-            }
-            slotProps={{ select: { SelectDisplayProps: selectTestId('RunSchedules.Dialog.Zone') } }}
+            error={fieldErrors?.name?.[0]}
+            help='Every run this makes is named "<name> — <date>", so a year of them reads as one series.'
           >
-            {zoneOptions(schedule?.zoneId).map((zone) => (
-              <MenuItem key={zone} value={zone}>
-                {zone}
-              </MenuItem>
-            ))}
-          </TextField>
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              data-testid="RunSchedules.Dialog.Name"
+            />
+          </Field>
 
-          <TextField
+          <Field
+            label="Cadence"
+            error={fieldErrors?.cronExpression?.[0]}
+            help='Six fields: second minute hour day-of-month month day-of-week. "0 0 3 * * MON-FRI" is 03:00 on weekdays.'
+          >
+            <Input
+              value={cronExpression}
+              onChange={(event) => setCronExpression(event.target.value)}
+              className="font-mono"
+              data-testid="RunSchedules.Dialog.Cron"
+            />
+          </Field>
+
+          <Field
+            label="Time zone"
+            error={fieldErrors?.zoneId?.[0]}
+            help='"Every weekday at 07:00" is not a time without one — the cadence is read in this zone.'
+          >
+            <select
+              value={zoneId}
+              onChange={(event) => setZoneId(event.target.value)}
+              className="w-full rounded-[6px] border border-white/8 bg-field px-3 py-1.5 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
+              data-testid="RunSchedules.Dialog.Zone"
+            >
+              {zoneOptions(schedule?.zoneId).map((zone) => (
+                <option key={zone} value={zone}>
+                  {zone}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field
             label="Tags to run"
-            size="small"
-            value={tags}
-            onChange={(event) => setTags(event.target.value)}
-            error={!!fieldErrors?.scope}
-            helperText={
-              fieldErrors?.scope?.[0] ??
-              'Comma separated. Re-resolved on every fire, so "smoke" means tonight’s smoke cases.'
-            }
-            slotProps={{ htmlInput: { 'data-testid': 'RunSchedules.Dialog.Tags' } }}
-          />
+            error={fieldErrors?.scope?.[0]}
+            help="Comma separated. Re-resolved on every fire, so “smoke” means tonight’s smoke cases."
+          >
+            <Input
+              value={tags}
+              onChange={(event) => setTags(event.target.value)}
+              data-testid="RunSchedules.Dialog.Tags"
+            />
+          </Field>
 
-          <FormControlLabel
-            control={
-              <Switch
-                checked={enabled}
-                slotProps={inputTestId('RunSchedules.Dialog.Enabled', 'Active')}
-                onChange={(event) => setEnabled(event.target.checked)}
-              />
-            }
-            label={<Typography variant="body2">Active</Typography>}
-          />
-        </Stack>
+          <label className="flex w-fit items-center gap-2 text-[13px] text-ink-2">
+            <Switch
+              checked={enabled}
+              aria-label="Active"
+              data-testid="RunSchedules.Dialog.Enabled"
+              onCheckedChange={setEnabled}
+            />
+            Active
+          </label>
+        </div>
+
+        <DialogFooter>
+          <Button onClick={onClose} data-testid="RunSchedules.Dialog.Cancel">
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={save.isPending}
+            data-testid="RunSchedules.Dialog.Save"
+            onClick={() => {
+              /*
+                EVERY field the schema declares, including the two this form has no control for.
+                The PUT states the whole schedule and the server reads an omission as a CLEAR, so a
+                field left out here would not fail to save — it would silently drop an assignee or a
+                configuration somebody set elsewhere. That is the same rule §244 had to apply to two
+                execution screens, and the same defect it prevents.
+              */
+              const input: RunScheduleInput = {
+                name,
+                cronExpression,
+                zoneId,
+                scope: {
+                  planId: schedule?.scope.planId ?? null,
+                  caseIds: schedule?.scope.caseIds ?? [],
+                  suiteIds: schedule?.scope.suiteIds ?? [],
+                  tags: parseTags(tags),
+                },
+                configurationId: schedule?.configurationId ?? null,
+                assigneeId: schedule?.assigneeId ?? null,
+                enabled,
+              };
+              save.mutate(input, { onSuccess: () => onClose() });
+            }}
+          >
+            Save
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid="RunSchedules.Dialog.Cancel">
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          disabled={save.isPending}
-          data-testid="RunSchedules.Dialog.Save"
-          onClick={() => {
-            /*
-              EVERY field the schema declares, including the two this form has no control for.
-              The PUT states the whole schedule and the server reads an omission as a CLEAR, so a
-              field left out here would not fail to save — it would silently drop an assignee or a
-              configuration somebody set elsewhere. That is the same rule §244 had to apply to two
-              execution screens, and the same defect it prevents.
-            */
-            const input: RunScheduleInput = {
-              name,
-              cronExpression,
-              zoneId,
-              scope: {
-                planId: schedule?.scope.planId ?? null,
-                caseIds: schedule?.scope.caseIds ?? [],
-                suiteIds: schedule?.scope.suiteIds ?? [],
-                tags: parseTags(tags),
-              },
-              configurationId: schedule?.configurationId ?? null,
-              assigneeId: schedule?.assigneeId ?? null,
-              enabled,
-            };
-            save.mutate(input, { onSuccess: () => onClose() });
-          }}
-        >
-          Save
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

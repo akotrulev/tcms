@@ -1,34 +1,28 @@
+import { Archive, ArchiveRestore } from 'lucide-react';
+import { useState } from 'react';
+import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
+import type { PlanStatus, TestPlan } from '../../api/types';
+import { usePlans, useProject, useSetPlanArchived } from '../../api/queries';
+import { DataRegion } from '../../components/DataRegion';
+import { Identifier } from '../../components/Identifier';
 import {
-  Box,
-  Button,
-  Chip,
-  FormControlLabel,
-  IconButton,
-  Stack,
-  Switch,
+  Badge,
+  Banner,
   Table,
   TableBody,
   TableCell,
   TableHead,
+  TableHeaderCell,
   TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
-import UnarchiveOutlinedIcon from '@mui/icons-material/UnarchiveOutlined';
-import { useState } from 'react';
-import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
-import type { TestPlan } from '../../api/types';
-import { usePlans, useProject, useSetPlanArchived } from '../../api/queries';
-import { DataRegion } from '../../components/DataRegion';
-import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+  type BadgeTone,
+} from '../../components/kit';
+import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { CriteriaStrip } from '../../components/CriteriaStrip';
-import { formatCount, formatPercent } from '../../lib/format';
-import { planStatusColors, planStatusLabels } from '../../lib/labels';
+import { Button, Switch } from '../../components/ui';
+import { EM_DASH, formatCount, formatPercent } from '../../lib/format';
+import { planStatusLabels } from '../../lib/labels';
 import { PlanCreateDialog } from './PlanCreateDialog';
-import { ScrollX } from '../../components/ScrollX';
 import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
 
 /**
@@ -60,7 +54,7 @@ export function PlanListPage() {
   const [creating, setCreating] = useState(false);
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId="Plans.Header"
         title="Test plans"
@@ -71,31 +65,24 @@ export function PlanListPage() {
         ]}
         subtitle="A plan fixes the scope, configurations and exit criteria for a release. Runs execute against it."
         actions={
-          <Stack direction="row" sx={{ gap: 2, alignItems: 'center' }}>
+          <div className="flex items-center gap-4">
             {/*
               Ungated: showing archived plans discloses nothing a plan list does not already, and
               somebody who cannot archive still has to be able to FIND the plan somebody else did.
             */}
-            <FormControlLabel
-              control={
-                <Switch
-                  size="small"
-                  checked={showArchived}
-                  onChange={(event) => {
-                    const next = new URLSearchParams(params);
-                    if (event.target.checked) next.set('archived', 'true');
-                    else next.delete('archived');
-                    setParams(next, { replace: true });
-                  }}
-                  data-testid="Plans.ShowArchived"
-                />
-              }
-              label={
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Show archived
-                </Typography>
-              }
-            />
+            <label className="flex items-center gap-2 text-[13px] text-ink-3">
+              <Switch
+                checked={showArchived}
+                onCheckedChange={(checked) => {
+                  const next = new URLSearchParams(params);
+                  if (checked) next.set('archived', 'true');
+                  else next.delete('archived');
+                  setParams(next, { replace: true });
+                }}
+                data-testid="Plans.ShowArchived"
+              />
+              Show archived
+            </label>
             {/*
               Disabled with a reason rather than hidden (§31): a Viewer seeing a greyed "New plan"
               learns the capability exists and is worth asking for. `plan:create` is PROJECT scope —
@@ -105,7 +92,7 @@ export function PlanListPage() {
             <PermissionGate projectId={projectId} permission="plan:create">
               {({ allowed }) => (
                 <Button
-                  variant="contained"
+                  variant="primary"
                   disabled={!allowed}
                   onClick={() => setCreating(true)}
                   data-testid="Plans.New"
@@ -114,7 +101,7 @@ export function PlanListPage() {
                 </Button>
               )}
             </PermissionGate>
-          </Stack>
+          </div>
         }
       />
 
@@ -141,7 +128,7 @@ export function PlanListPage() {
         />
       )}
 
-      <Panel testId="Plans.Panel" dense>
+      <section data-testid="Plans.Panel">
         <DataRegion
           testId="Plans.List"
           state={{ ...plans, refetch: () => void plans.refetch() }}
@@ -154,8 +141,8 @@ export function PlanListPage() {
         >
           {(rows) => <PlanTable rows={rows} projectId={projectId} />}
         </DataRegion>
-      </Panel>
-    </Box>
+      </section>
+    </div>
   );
 }
 
@@ -168,6 +155,10 @@ export function PlanListPage() {
  *
  * Its own component so the mutation hook is per row rather than one hook the table threads a plan
  * id through — the hook keys its cache updates on the plan it was built for.
+ *
+ * ~~A MUI `Tooltip` around a `<span>`, because MUI drops the tooltip on a disabled button.~~ →
+ * superseded by the T9 precedent: the reason is the native `title` attribute, which a disabled
+ * control still shows and a screen reader still reaches, with no wrapper element in between.
  */
 function ArchiveToggle({ projectId, plan }: { projectId: string; plan: TestPlan }) {
   const setArchived = useSetPlanArchived(projectId, plan.id);
@@ -176,7 +167,12 @@ function ArchiveToggle({ projectId, plan }: { projectId: string; plan: TestPlan 
   return (
     <PermissionGate projectId={projectId} permission="plan:edit">
       {({ allowed }) => (
-        <Tooltip
+        <Button
+          variant="quiet"
+          size="icon"
+          disabled={!allowed || setArchived.isPending}
+          onClick={() => setArchived.mutate(!archived)}
+          aria-label={archived ? `Restore ${plan.key}` : `Archive ${plan.key}`}
           title={
             allowed
               ? archived
@@ -184,28 +180,25 @@ function ArchiveToggle({ projectId, plan }: { projectId: string; plan: TestPlan 
                 : 'Archive: take this plan out of the list. Nothing is deleted, and it can still be run.'
               : 'You do not have permission to edit test plans in this project'
           }
+          data-testid="Plans.Row.ArchiveToggle"
         >
-          {/* A span, because MUI drops the tooltip on a disabled button. */}
-          <span>
-            <IconButton
-              size="small"
-              disabled={!allowed || setArchived.isPending}
-              onClick={() => setArchived.mutate(!archived)}
-              aria-label={archived ? `Restore ${plan.key}` : `Archive ${plan.key}`}
-              data-testid="Plans.Row.ArchiveToggle"
-            >
-              {archived ? (
-                <UnarchiveOutlinedIcon fontSize="small" />
-              ) : (
-                <ArchiveOutlinedIcon fontSize="small" />
-              )}
-            </IconButton>
-          </span>
-        </Tooltip>
+          {archived ? (
+            <ArchiveRestore aria-hidden className="size-4" />
+          ) : (
+            <Archive aria-hidden className="size-4" />
+          )}
+        </Button>
       )}
     </PermissionGate>
   );
 }
+
+/** The ladder, in one palette with the results — design language rule 5. */
+const PLAN_TONE = {
+  DRAFT: 'plain',
+  IN_REVIEW: 'retest',
+  APPROVED: 'passed',
+} as const satisfies Record<PlanStatus, BadgeTone>;
 
 function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string }) {
   // Deterministic order with a unique tiebreaker: the plans still being written first, then by
@@ -221,48 +214,53 @@ function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string })
     );
   });
 
+  /*
+    The render (`renders/01-index-tables.html` frame D) draws this banner, and the condition is what
+    keeps it from becoming a permanent decoration: it appears only while EVERY row is null in both
+    columns, which is the state the server is in today and the state the sentence describes. The
+    day one plan carries a real pass rate, the banner is wrong and disappears on its own.
+  */
+  const nothingComputed = sorted.every((plan) => plan.passRate === null && plan.coverage === null);
+
   return (
-    <ScrollX>
-      <Table size="small" data-testid="Plans.Grid">
+    <>
+      <Table data-testid="Plans.Grid">
         <TableHead>
           <TableRow>
-            <TableCell sx={{ color: 'text.secondary' }}>Plan</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 110 }}>Status</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 170 }}>Milestone</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 80 }} align="right">
+            <TableHeaderCell>Plan</TableHeaderCell>
+            <TableHeaderCell className="w-[110px]">Status</TableHeaderCell>
+            <TableHeaderCell className="w-[170px]">Milestone</TableHeaderCell>
+            <TableHeaderCell align="right" className="w-[80px]">
               Cases
-            </TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 100 }} align="right">
+            </TableHeaderCell>
+            <TableHeaderCell align="right" className="w-[100px]">
               Pass rate
-            </TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 100 }} align="right">
+            </TableHeaderCell>
+            <TableHeaderCell align="right" className="w-[100px]">
               Coverage
-            </TableCell>
+            </TableHeaderCell>
             {/*
               Left-aligned and wider since §100: the cell is a strip of marks read left-to-right
               followed by its count, not a number. Right-aligning it would put the marks against
               the table's edge and the count in the middle, which reads as two columns.
             */}
-            <TableCell sx={{ color: 'text.secondary', width: 210 }}>Exit criteria</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 56 }} align="right" />
+            <TableHeaderCell className="w-[210px]">Exit criteria</TableHeaderCell>
+            <TableHeaderCell align="right" className="w-[56px]" />
           </TableRow>
         </TableHead>
         <TableBody>
-          {sorted.map((plan) => {
-            return (
-              <TableRow key={plan.id} data-testid="Plans.Row" hover>
-                <TableCell>
-                  <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>
-                    <RouterLink to={`/projects/${projectId}/plans/${plan.id}`} data-testid="Plans.Row.Link">
-                      <Identifier>{plan.key}</Identifier>
-                    </RouterLink>
+          {sorted.map((plan) => (
+            <TableRow key={plan.id} data-testid="Plans.Row">
+              <TableCell
+                variant="title"
+                subtitle={
+                  <>
                     <RouterLink
                       to={`/projects/${projectId}/plans/${plan.id}`}
-                      style={{ color: 'inherit', textDecoration: 'none', minWidth: 0 }}
+                      className="text-inherit hover:text-ink"
+                      data-testid="Plans.Row.Link"
                     >
-                      <Typography variant="body2" sx={{ fontWeight: 500 }} data-testid="Plans.Row.Name">
-                        {plan.name}
-                      </Typography>
+                      <Identifier variant="muted">{plan.key}</Identifier>
                     </RouterLink>
                     {/*
                       Beside the name rather than in the status column: archiving is orthogonal to
@@ -270,90 +268,94 @@ function PlanTable({ rows, projectId }: { rows: TestPlan[]; projectId: string })
                       — the exact conflation the column was kept out of the ladder to avoid.
                     */}
                     {plan.archived && (
-                      <Chip
-                        size="small"
-                        label="Archived"
-                        variant="outlined"
-                        data-testid="Plans.Row.Archived"
-                      />
+                      <>
+                        {' · '}
+                        <span data-testid="Plans.Row.Archived">Archived</span>
+                      </>
                     )}
-                  </Stack>
-                </TableCell>
-                <TableCell>
-                  <Chip
-                    size="small"
-                    label={planStatusLabels[plan.status]}
-                    data-testid="Plans.Row.Status"
-                    sx={{
-                      bgcolor: 'transparent',
-                      color: planStatusColors[plan.status],
-                      border: `1px solid color-mix(in srgb, ${planStatusColors[plan.status]} 45%, transparent)`,
-                    }}
-                  />
-                </TableCell>
-                <TableCell sx={{ fontSize: '0.75rem' }}>
-                  {plan.milestoneName ? (
-                    <>
-                      {plan.milestoneName}
-                      {plan.milestoneDate && (
-                        <Box sx={{ color: 'text.secondary' }}>
-                          <Identifier variant="muted">{plan.milestoneDate}</Identifier>
-                        </Box>
-                      )}
-                    </>
-                  ) : (
-                    <Box sx={{ color: 'text.secondary' }}>—</Box>
-                  )}
-                </TableCell>
-                <TableCell align="right">
-                  <Identifier>{formatCount(plan.caseCount)}</Identifier>
-                </TableCell>
+                  </>
+                }
+              >
+                <RouterLink
+                  to={`/projects/${projectId}/plans/${plan.id}`}
+                  className="font-medium text-inherit hover:text-steel"
+                >
+                  <span data-testid="Plans.Row.Name">{plan.name}</span>
+                </RouterLink>
+              </TableCell>
+              <TableCell>
+                <Badge tone={PLAN_TONE[plan.status]} data-testid="Plans.Row.Status">
+                  {planStatusLabels[plan.status]}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-[12px]">
+                {plan.milestoneName ? (
+                  <>
+                    {plan.milestoneName}
+                    {plan.milestoneDate && (
+                      <span className="block text-ink-4">
+                        <Identifier variant="muted">{plan.milestoneDate}</Identifier>
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-ink-4">{EM_DASH}</span>
+                )}
+              </TableCell>
+              <TableCell align="right">
+                <Identifier>{formatCount(plan.caseCount)}</Identifier>
+              </TableCell>
+              {/*
+                Both are nullable and the two nulls are different claims (005 S5), which is why
+                each carries its own title rather than sharing one em dash with no explanation:
+
+                  - `passRate === null` — nothing in scope has a result. A plan nobody has run has
+                    no pass rate, and `0` would say every case failed.
+                  - `coverage === null` — the scope is empty, so the denominator is zero.
+
+                `formatPercent` renders both as an em dash, which is right for the cell; the
+                title is what stops the em dash reading as "we could not load this".
+              */}
+              <TableCell align="right">
+                <span title={plan.passRate === null ? 'Nothing in this plan has been run yet.' : undefined}>
+                  <Identifier>{formatPercent(plan.passRate)}</Identifier>
+                </span>
+              </TableCell>
+              <TableCell align="right">
+                <span title={plan.coverage === null ? 'This plan’s scope is empty.' : undefined}>
+                  <Identifier>{formatPercent(plan.coverage)}</Identifier>
+                </span>
+              </TableCell>
+              <TableCell>
                 {/*
-                  Both are nullable and the two nulls are different claims (005 S5), which is why
-                  each carries its own tooltip rather than sharing one em dash with no explanation:
-
-                    - `passRate === null` — nothing in scope has a result. A plan nobody has run has
-                      no pass rate, and `0` would say every case failed.
-                    - `coverage === null` — the scope is empty, so the denominator is zero.
-
-                  `formatPercent` renders both as an em dash, which is right for the cell; the
-                  tooltip is what stops the em dash reading as "we could not load this".
+                  The counts come from the summary (005 S5) and the marks from the criteria: the
+                  server evaluates the gates in one batched pass over the page, but does not say
+                  per criterion which one passed — so the sentence is authoritative and the marks
+                  stay honestly grey.
                 */}
-                <TableCell align="right">
-                  <Tooltip title={plan.passRate === null ? 'Nothing in this plan has been run yet.' : ''}>
-                    <span>
-                      <Identifier>{formatPercent(plan.passRate)}</Identifier>
-                    </span>
-                  </Tooltip>
-                </TableCell>
-                <TableCell align="right">
-                  <Tooltip title={plan.coverage === null ? 'This plan’s scope is empty.' : ''}>
-                    <span>
-                      <Identifier>{formatPercent(plan.coverage)}</Identifier>
-                    </span>
-                  </Tooltip>
-                </TableCell>
-                <TableCell>
-                  {/*
-                    The counts come from the summary (005 S5) and the marks from the criteria: the
-                    server evaluates the gates in one batched pass over the page, but does not say
-                    per criterion which one passed — so the sentence is authoritative and the marks
-                    stay honestly grey.
-                  */}
-                  <CriteriaStrip
-                    criteria={plan.exitCriteria ?? []}
-                    summary={{ met: plan.exitCriteriaMet, total: plan.exitCriteriaTotal }}
-                    testId="Plans.Row.ExitCriteria"
-                  />
-                </TableCell>
-                <TableCell align="right">
-                  <ArchiveToggle projectId={projectId} plan={plan} />
-                </TableCell>
-              </TableRow>
-            );
-          })}
+                <CriteriaStrip
+                  criteria={plan.exitCriteria ?? []}
+                  summary={{ met: plan.exitCriteriaMet, total: plan.exitCriteriaTotal }}
+                  testId="Plans.Row.ExitCriteria"
+                />
+              </TableCell>
+              <TableCell align="right">
+                <ArchiveToggle projectId={projectId} plan={plan} />
+              </TableCell>
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
-    </ScrollX>
+
+      {nothingComputed && (
+        <Banner tone="warn" className="mt-3.5" data-testid="Plans.NotComputed">
+          <span>
+            <b>Pass rate and Coverage are an em dash on every row.</b> The server does not compute
+            them for a plan yet — the columns stay because the table is built for the scan they
+            enable, and the dash says <em>not computed</em> rather than <em>zero</em>.
+          </span>
+        </Banner>
+      )}
+    </>
   );
 }

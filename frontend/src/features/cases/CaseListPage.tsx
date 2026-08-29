@@ -1,13 +1,12 @@
-import { Box, Button, Stack, Typography } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
+import { FileUp, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCases, useClassification, useProject, useSuites } from '../../api/queries';
 import { useCan } from '../../auth/useCan';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
 import { PermissionGate } from '../../components/PermissionGate';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { PageHeader } from '../../components/PageHeader';
+import { Button } from '../../components/ui';
 import { formatCount } from '../../lib/format';
 import { toast } from '../../notifications/toast';
 import { BulkActionDialog } from './BulkActionDialog';
@@ -28,6 +27,12 @@ import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
  *
  * The classification lookup is an *optional* call: the grid is meaningful without the
  * feature/type dropdowns, so its failure degrades those selects rather than the page.
+ *
+ * ~~Both regions sat in a `Panel`.~~ → **superseded** by design language rule 1, *the subject of
+ * the page is the page*: `renders/01-index-tables.html` draws the table with nothing around it,
+ * and the panel put a card border, a panel border and the table's own head rule between the reader
+ * and the first row. The `Cases.SuitePanel` / `Cases.GridPanel` test ids survive on the plain
+ * sections that replaced them, because they name the regions, not the chrome.
  */
 export function CaseListPage() {
   const { projectId = '' } = useParams();
@@ -67,7 +72,7 @@ export function CaseListPage() {
   }`;
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId="Cases.Header"
         title="Test cases"
@@ -82,7 +87,7 @@ export function CaseListPage() {
             : 'Everything in this project. Pick a suite to narrow it, or filter below.'
         }
         actions={
-          <Stack direction="row" sx={{ gap: 1 }}>
+          <div className="flex gap-2">
             {/*
               The `.feature` import (§255). **Two keys, either of which is enough**: a folder of
               feature files plans `CREATE` rows and `UPDATE` rows, and a caller holding one of
@@ -93,12 +98,12 @@ export function CaseListPage() {
             <PermissionGate projectId={projectId} permission={['case:create', 'case:edit']}>
               {({ allowed }) => (
                 <Button
-                  variant="outlined"
-                  startIcon={<UploadFileIcon />}
+                  variant="ghost"
                   disabled={!allowed}
                   onClick={() => navigate(`/projects/${projectId}/cases/import`)}
                   data-testid="Cases.ImportFeaturesButton"
                 >
+                  <FileUp aria-hidden className="size-4" />
                   Import feature files
                 </Button>
               )}
@@ -106,25 +111,28 @@ export function CaseListPage() {
             <PermissionGate projectId={projectId} permission="case:create">
               {({ allowed }) => (
                 <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
+                  variant="primary"
                   disabled={!allowed}
                   onClick={() => navigate(newCasePath)}
                   data-testid="Cases.NewCaseButton"
                 >
+                  <Plus aria-hidden className="size-4" />
                   New case
                 </Button>
               )}
             </PermissionGate>
-          </Stack>
+          </div>
         }
       />
 
-      <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 2, alignItems: 'flex-start' }}>
+      <div className="flex flex-col items-start gap-4 md:flex-row">
         {/* The tree is its own region — its failure must not empty the grid beside it. */}
-        <Box sx={{ width: { xs: '100%', md: 260 }, flexShrink: 0 }}>
-          <Panel title="Suites" testId="Cases.SuitePanel" dense>
-            <Box sx={{ p: 1, maxHeight: { md: '70vh' }, overflowY: 'auto' }}>
+        <div className="w-full shrink-0 md:w-[260px]">
+          <section data-testid="Cases.SuitePanel" className="border-b border-white/8 pb-3 md:border-b-0 md:pb-0">
+            <h2 className="mb-2 px-1 font-mono text-[11px] font-medium uppercase tracking-[.07em] text-ink-4">
+              Suites
+            </h2>
+            <div className="overflow-y-auto md:max-h-[70vh]">
               <DataRegion
                 testId="Cases.SuiteList"
                 state={{ ...suites, refetch: () => void suites.refetch() }}
@@ -148,11 +156,11 @@ export function CaseListPage() {
                   />
                 )}
               </DataRegion>
-            </Box>
-          </Panel>
-        </Box>
+            </div>
+          </section>
+        </div>
 
-        <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
+        <div className="w-full min-w-0 flex-1">
           {/*
             The selected suite's own standing — §227/A7. Above the filters rather than below them
             because it is about the thing the list is scoped TO, not about the narrowing: a reader
@@ -187,29 +195,25 @@ export function CaseListPage() {
           />
 
           {selection.length > 0 && (
-            <Stack
-              direction="row"
-              sx={{
-                alignItems: 'center',
-                gap: 1.5,
-                mb: 1,
-                px: 1.5,
-                py: 1,
-                border: '1px solid',
-                borderColor: 'primary.main',
-                borderRadius: 1,
-                bgcolor: 'action.selected',
+            <div
+              style={{
+                borderColor: 'color-mix(in oklab, var(--color-steel) 22%, transparent)',
+                backgroundColor: 'color-mix(in oklab, var(--color-steel) 10%, transparent)',
               }}
+              className="mb-2 flex flex-wrap items-center gap-3 rounded-md border px-3 py-2"
               data-testid="Cases.SelectionBar"
             >
-              <Typography variant="body2" sx={{ fontWeight: 600 }} data-testid="Cases.SelectionCount">
+              <b
+                className="font-mono text-[12.5px] font-medium tabular-nums text-ink"
+                data-testid="Cases.SelectionCount"
+              >
                 {formatCount(selection.length)} selected
-              </Typography>
+              </b>
               <PermissionGate projectId={projectId} permission="case:edit">
                 {({ allowed }) => (
                   <Button
-                    size="small"
-                    variant="contained"
+                    size="sm"
+                    variant="primary"
                     disabled={!allowed}
                     onClick={() => setBulkOpen(true)}
                     data-testid="Cases.BulkEditButton"
@@ -218,18 +222,18 @@ export function CaseListPage() {
                   </Button>
                 )}
               </PermissionGate>
-              <Button size="small" onClick={() => setSelection([])} data-testid="Cases.ClearSelection">
+              <Button size="sm" onClick={() => setSelection([])} data-testid="Cases.ClearSelection">
                 Clear selection
               </Button>
               {/* Select-all only ever reaches the rows in view; saying so prevents the
                   assumption that it spans the whole filtered result set. */}
-              <Typography variant="caption" sx={{ color: 'text.secondary', ml: 'auto' }}>
+              <span className="ml-auto text-[11.5px] text-ink-4">
                 Selection covers the rows on this page.
-              </Typography>
-            </Stack>
+              </span>
+            </div>
           )}
 
-          <Panel testId="Cases.GridPanel" dense>
+          <section data-testid="Cases.GridPanel">
             <DataRegion
               testId="Cases.List"
               state={{ ...cases, refetch: () => void cases.refetch() }}
@@ -255,8 +259,8 @@ export function CaseListPage() {
                         <PermissionGate projectId={projectId} permission="case:create">
                           {({ allowed }) => (
                             <Button
-                              variant="contained"
-                              size="small"
+                              variant="primary"
+                              size="sm"
                               disabled={!allowed}
                               onClick={() => navigate(newCasePath)}
                               data-testid="Cases.List.Empty.NewCaseButton"
@@ -286,9 +290,9 @@ export function CaseListPage() {
                 />
               )}
             </DataRegion>
-          </Panel>
-        </Box>
-      </Stack>
+          </section>
+        </div>
+      </div>
 
       <BulkActionDialog
         open={bulkOpen}
@@ -313,6 +317,6 @@ export function CaseListPage() {
           setSelection([]);
         }}
       />
-    </Box>
+    </div>
   );
 }

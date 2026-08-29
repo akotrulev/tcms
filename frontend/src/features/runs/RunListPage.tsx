@@ -1,30 +1,27 @@
+import { useState } from 'react';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import type { ResultCounts, RunStatus, TestRun } from '../../api/types';
+import { useProject, useRuns } from '../../api/queries';
+import { DataRegion } from '../../components/DataRegion';
+import { Identifier } from '../../components/Identifier';
 import {
-  Box,
-  Button,
-  Chip,
-  Stack,
+  Badge,
+  ResultBar,
   Table,
   TableBody,
   TableCell,
   TableHead,
+  TableHeaderCell,
   TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import { useState } from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
-import type { TestRun } from '../../api/types';
-import { useProject, useRuns } from '../../api/queries';
-import { DataRegion } from '../../components/DataRegion';
-import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+  type BadgeTone,
+} from '../../components/kit';
+import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
-import { ResultBar } from '../../components/ResultBar';
+import { Button } from '../../components/ui';
 import { RunCreateDialog } from './RunCreateDialog';
 import { executedCount, passRate } from '../../lib/results';
 import { EM_DASH, formatAge, formatCount, formatDateTime, formatDuration, formatPercent } from '../../lib/format';
-import { runSourceLabels, runStatusColors, runStatusLabels } from '../../lib/labels';
-import { ScrollX } from '../../components/ScrollX';
+import { runSourceLabels, runStatusLabels } from '../../lib/labels';
 import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
 
 /**
@@ -48,7 +45,7 @@ export function RunListPage() {
   const [creating, setCreating] = useState(false);
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId="Runs.Header"
         title="Test runs"
@@ -68,7 +65,7 @@ export function RunListPage() {
           <PermissionGate projectId={projectId} permission="run:create">
             {({ allowed }) => (
               <Button
-                variant="contained"
+                variant="primary"
                 disabled={!allowed}
                 onClick={() => setCreating(true)}
                 data-testid="Runs.New"
@@ -90,7 +87,7 @@ export function RunListPage() {
         />
       )}
 
-      <Panel testId="Runs.Panel" dense>
+      <section data-testid="Runs.Panel">
         <DataRegion
           testId="Runs.List"
           state={{ ...runs, refetch: () => void runs.refetch() }}
@@ -103,122 +100,137 @@ export function RunListPage() {
         >
           {(rows) => <RunTable rows={rows} projectId={projectId} />}
         </DataRegion>
-      </Panel>
-    </Box>
+      </section>
+    </div>
   );
+}
+
+/**
+ * A run's badge tone is its *result*, not its lifecycle — `renders/01-index-tables.html` frame C
+ * draws two rows both reading **Complete**, one green and one red, and that is the point: design
+ * language rule 5 gives results and keywords one palette, so a completed run whose executions
+ * failed is the red that `Failed` is. Colouring both green would make the column say only "it
+ * finished", which the Started column already implies.
+ */
+function statusTone(status: RunStatus, counts: ResultCounts): BadgeTone {
+  if (status === 'IN_PROGRESS') return 'blocked';
+  if (status === 'ABORTED') return 'skipped';
+  if (status === 'COMPLETED') return counts.failed > 0 ? 'failed' : 'passed';
+  return 'plain';
 }
 
 function RunTable({ rows, projectId }: { rows: TestRun[]; projectId: string }) {
   return (
-    <ScrollX>
-      <Table size="small" data-testid="Runs.Grid">
-        <TableHead>
-          <TableRow>
-            <TableCell sx={{ color: 'text.secondary' }}>Run</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 120 }}>Status</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 160 }}>Configuration</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 130 }}>Release</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 180 }}>Result</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 90 }} align="right">
-              Pass rate
-            </TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 130 }}>Started</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {rows.map((run) => {
-            const executed = executedCount(run.counts);
-            return (
-              <TableRow key={run.id} data-testid="Runs.Row" hover>
-                <TableCell>
-                  <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>
-                    <RouterLink to={`/projects/${projectId}/runs/${run.id}`} data-testid="Runs.Row.Link">
-                      <Identifier>{run.key}</Identifier>
+    <Table data-testid="Runs.Grid">
+      <TableHead>
+        <TableRow>
+          <TableHeaderCell>Run</TableHeaderCell>
+          <TableHeaderCell className="w-[120px]">Status</TableHeaderCell>
+          <TableHeaderCell className="w-[160px]">Configuration</TableHeaderCell>
+          <TableHeaderCell className="w-[130px]">Release</TableHeaderCell>
+          <TableHeaderCell className="w-[180px]">Result</TableHeaderCell>
+          <TableHeaderCell align="right" className="w-[90px]">
+            Pass rate
+          </TableHeaderCell>
+          <TableHeaderCell className="w-[130px]">Started</TableHeaderCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {rows.map((run) => {
+          const executed = executedCount(run.counts);
+          return (
+            <TableRow key={run.id} data-testid="Runs.Row">
+              <TableCell
+                variant="title"
+                subtitle={
+                  <>
+                    <RouterLink
+                      to={`/projects/${projectId}/runs/${run.id}`}
+                      className="text-inherit hover:text-ink"
+                      data-testid="Runs.Row.Link"
+                    >
+                      <Identifier variant="muted">{run.key}</Identifier>
                     </RouterLink>
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="body2" data-testid="Runs.Row.Name">
-                        {run.name}
-                      </Typography>
-                      {run.planKey && (
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                          <Identifier variant="muted">{run.planKey}</Identifier>
-                        </Typography>
-                      )}
-                    </Box>
-                  </Stack>
-                </TableCell>
-                <TableCell>
-                  <Stack sx={{ gap: 0.25 }}>
-                    <Chip
-                      size="small"
-                      label={runStatusLabels[run.status]}
-                      data-testid="Runs.Row.Status"
-                      sx={{
-                        bgcolor: 'transparent',
-                        color: runStatusColors[run.status],
-                        border: `1px solid color-mix(in srgb, ${runStatusColors[run.status]} 45%, transparent)`,
-                        alignSelf: 'flex-start',
-                      }}
-                    />
+                    {run.planKey && (
+                      <>
+                        {' \u00b7 '}
+                        <Identifier variant="muted">{run.planKey}</Identifier>
+                      </>
+                    )}
+                    {' \u00b7 '}
                     {/* Where the results came from changes how much a reader trusts them and
                         who to ask about a failure, so it's shown rather than implied. */}
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      {runSourceLabels[run.source]}
-                    </Typography>
-                  </Stack>
-                </TableCell>
-                <TableCell sx={{ fontSize: '0.75rem' }}>{run.configuration?.name ?? EM_DASH}</TableCell>
-                <TableCell sx={{ fontSize: '0.75rem' }}>
-                  {run.releaseVersion ? (
-                    <>
-                      <Identifier>{run.releaseVersion}</Identifier>
-                      {run.buildNumber && (
-                        <Box sx={{ color: 'text.secondary' }}>
-                          <Identifier variant="muted">{run.buildNumber}</Identifier>
-                        </Box>
-                      )}
-                    </>
-                  ) : (
-                    <Box sx={{ color: 'text.secondary' }}>—</Box>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Tooltip
-                    title={`${formatCount(run.counts.passed)} passed · ${formatCount(run.counts.failed)} failed · ${formatCount(
-                      run.counts.blocked,
-                    )} blocked · ${formatCount(run.counts.notRun)} not run`}
-                  >
-                    <Box>
-                      <ResultBar counts={run.counts} testId="Runs.Row.ResultBar" />
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        {formatCount(executed)} of {formatCount(run.counts.total)} executed
-                      </Typography>
-                    </Box>
-                  </Tooltip>
-                </TableCell>
-                <TableCell align="right">
-                  {/* Of what ran — an in-progress run at 12 passed of 15 executed is at 80%,
-                      not at 29% of its 42-case scope. Both readings are available on the run. */}
-                  <Identifier>{formatPercent(passRate(run.counts, 'EXECUTED'), 0)}</Identifier>
-                </TableCell>
-                <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                  <Tooltip title={formatDateTime(run.startedAt)}>
-                    <Box component="span">{formatAge(run.startedAt)}</Box>
-                  </Tooltip>
-                  {run.completedAt && run.startedAt && (
-                    <Box>
-                      took{' '}
-                      <Identifier variant="muted">
-                        {formatDuration(new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime())}
-                      </Identifier>
-                    </Box>
-                  )}
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </ScrollX>
+                    {runSourceLabels[run.source]}
+                  </>
+                }
+              >
+                <span data-testid="Runs.Row.Name">{run.name}</span>
+              </TableCell>
+              <TableCell>
+                <Badge tone={statusTone(run.status, run.counts)} data-testid="Runs.Row.Status">
+                  {runStatusLabels[run.status]}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-[12px]">{run.configuration?.name ?? EM_DASH}</TableCell>
+              <TableCell className="text-[12px]">
+                {run.releaseVersion ? (
+                  <>
+                    <Identifier>{run.releaseVersion}</Identifier>
+                    {run.buildNumber && (
+                      <span className="block text-ink-4">
+                        <Identifier variant="muted">{run.buildNumber}</Identifier>
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-ink-4">{EM_DASH}</span>
+                )}
+              </TableCell>
+              <TableCell>
+                {/*
+                  Proportion first, number second — the bar carries its own screen-reader label, so
+                  the tooltip `Tooltip` used to hold is the `title` on the counts beside it rather
+                  than a component per cell.
+                */}
+                <span
+                  data-testid="Runs.Row.ResultBar"
+                  title={`${formatCount(run.counts.passed)} passed \u00b7 ${formatCount(run.counts.failed)} failed \u00b7 ${formatCount(
+                    run.counts.blocked,
+                  )} blocked \u00b7 ${formatCount(run.counts.notRun)} not run`}
+                >
+                  <ResultBar
+                    passed={run.counts.passed}
+                    failed={run.counts.failed}
+                    blocked={run.counts.blocked}
+                    skipped={run.counts.skipped}
+                    untested={run.counts.notRun}
+                    className="w-[96px] min-w-0"
+                  />
+                  <span className="mt-1 block font-mono text-[11.5px] tabular-nums text-ink-4">
+                    {formatCount(executed)} of {formatCount(run.counts.total)} executed
+                  </span>
+                </span>
+              </TableCell>
+              <TableCell align="right">
+                {/* Of what ran — an in-progress run at 12 passed of 15 executed is at 80%,
+                    not at 29% of its 42-case scope. Both readings are available on the run. */}
+                <Identifier>{formatPercent(passRate(run.counts, 'EXECUTED'), 0)}</Identifier>
+              </TableCell>
+              <TableCell className="text-[12px] text-ink-4">
+                <span title={formatDateTime(run.startedAt)}>{formatAge(run.startedAt)}</span>
+                {run.completedAt && run.startedAt && (
+                  <span className="block">
+                    took{' '}
+                    <Identifier variant="muted">
+                      {formatDuration(new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime())}
+                    </Identifier>
+                  </span>
+                )}
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
   );
 }

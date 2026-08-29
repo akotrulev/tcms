@@ -1,24 +1,19 @@
-import {
-  Box,
-  Chip,
-  Stack,
-  Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tabs,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
+import { Bot } from 'lucide-react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import { useAiProposals, useProject } from '../../api/queries';
 import type { ProposalStatus } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
-import { PageHeader, Panel } from '../../components/PageHeader';
-import { ScrollX } from '../../components/ScrollX';
+import {
+  Badge,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '../../components/kit';
+import { PageHeader } from '../../components/PageHeader';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui';
 import { formatDateTime } from '../../lib/format';
 import { proposalStatusLabels } from '../../lib/labels';
 import { VerdictChip } from './VerdictChip';
@@ -58,7 +53,7 @@ export function ProposalsPage() {
   const proposals = useAiProposals(projectId, status);
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId="Proposals.Header"
         title="Generated cases"
@@ -72,81 +67,84 @@ export function ProposalsPage() {
         subtitle="Cases an agent has proposed. Nothing here is in the repository yet — accepting one creates it exactly as writing it by hand would, with you as its author."
       />
 
-      <Panel testId="Proposals.Panel" dense>
+      <section data-testid="Proposals.Panel">
         <Tabs
           value={status}
-          onChange={(_, next: ProposalStatus) => {
+          onValueChange={(next) => {
             // Replace rather than push: flipping between tabs is looking around, not navigating,
             // and a back button that walks three tabs backwards is the version everybody hates.
-            setParams(next === 'PENDING' ? {} : { status: next }, { replace: true });
+            setParams(readStatus(next) === 'PENDING' ? {} : { status: next }, { replace: true });
           }}
-          sx={{ mb: 1.5 }}
           data-testid="Proposals.Tabs"
         >
-          <Tab value="PENDING" label="Waiting" />
-          <Tab value="ACCEPTED" label="Accepted" />
-          <Tab value="REJECTED" label="Rejected" />
-        </Tabs>
+          <TabsList className="mb-3">
+            <TabsTrigger value="PENDING">Waiting</TabsTrigger>
+            <TabsTrigger value="ACCEPTED">Accepted</TabsTrigger>
+            <TabsTrigger value="REJECTED">Rejected</TabsTrigger>
+          </TabsList>
 
-        <DataRegion
-          testId="Proposals.List"
-          state={{ ...proposals, refetch: () => void proposals.refetch() }}
-          isEmpty={(page) => page.items.length === 0}
-          empty={emptyFor(status)}
-        >
-          {(page) => (
-            <ScrollX>
-              <Table size="small" data-testid="Proposals.Grid">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ color: 'text.secondary' }}>Proposed case</TableCell>
-                    <TableCell sx={{ color: 'text.secondary', width: 260 }}>Grounding</TableCell>
-                    <TableCell sx={{ color: 'text.secondary', width: 90 }} align="right">
-                      Steps
-                    </TableCell>
-                    <TableCell sx={{ color: 'text.secondary', width: 220 }}>Filed by</TableCell>
-                    <TableCell sx={{ color: 'text.secondary', width: 180 }}>Filed</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {page.items.map((row) => (
-                    <TableRow key={row.id} data-testid="Proposals.Row" hover>
-                      <TableCell>
-                        <RouterLink
-                          to={`/projects/${projectId}/generated-cases/${row.id}`}
-                          data-testid="Proposals.Open"
-                        >
-                          {row.title}
-                        </RouterLink>
-                        {status !== 'PENDING' && (
-                          <Chip
-                            size="small"
-                            variant="outlined"
-                            sx={{ ml: 1 }}
-                            label={proposalStatusLabels[row.status]}
-                          />
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <VerdictChip verdict={row.verdict} source={row.verdictSource} />
-                      </TableCell>
-                      <TableCell align="right">{row.stepCount}</TableCell>
-                      <TableCell>
-                        <FiledBy
-                          name={row.createdBy?.displayName ?? null}
-                          byAgent={row.filedByAgent}
-                        />
-                      </TableCell>
-                      <TableCell>{formatDateTime(row.createdAt)}</TableCell>
+          <TabsContent value={status}>
+            <DataRegion
+              testId="Proposals.List"
+              state={{ ...proposals, refetch: () => void proposals.refetch() }}
+              isEmpty={(page) => page.items.length === 0}
+              empty={emptyFor(status)}
+            >
+              {(page) => (
+                <Table data-testid="Proposals.Grid">
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell>Proposed case</TableHeaderCell>
+                      <TableHeaderCell className="w-[260px]">Grounding</TableHeaderCell>
+                      <TableHeaderCell align="right" className="w-[90px]">
+                        Steps
+                      </TableHeaderCell>
+                      <TableHeaderCell className="w-[220px]">Filed by</TableHeaderCell>
+                      <TableHeaderCell className="w-[180px]">Filed</TableHeaderCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </ScrollX>
-          )}
-        </DataRegion>
-      </Panel>
-    </Box>
+                  </TableHead>
+                  <TableBody>
+                    {page.items.map((row) => (
+                      <TableRow key={row.id} data-testid="Proposals.Row">
+                        <TableCell variant="title">
+                          <RouterLink
+                            to={`/projects/${projectId}/generated-cases/${row.id}`}
+                            className="text-steel underline-offset-4 hover:underline"
+                            data-testid="Proposals.Open"
+                          >
+                            {row.title}
+                          </RouterLink>
+                          {status !== 'PENDING' && (
+                            <Badge tone="plain" className="ml-2">
+                              {proposalStatusLabels[row.status]}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <VerdictChip verdict={row.verdict} source={row.verdictSource} />
+                        </TableCell>
+                        <TableCell align="right" className="font-mono tabular-nums">
+                          {row.stepCount}
+                        </TableCell>
+                        <TableCell>
+                          <FiledBy
+                            name={row.createdBy?.displayName ?? null}
+                            byAgent={row.filedByAgent}
+                          />
+                        </TableCell>
+                        <TableCell className="font-mono text-[12px] tabular-nums text-ink-4">
+                          {formatDateTime(row.createdAt)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </DataRegion>
+          </TabsContent>
+        </Tabs>
+      </section>
+    </div>
   );
 }
 
@@ -163,16 +161,23 @@ export function ProposalsPage() {
  */
 function FiledBy({ name, byAgent }: { name: string | null; byAgent: boolean }) {
   return (
-    <Stack direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
+    <span className="flex items-center gap-1.5">
       {byAgent && (
-        <Tooltip title="Filed by an API token this person owns, not typed by them.">
-          <SmartToyOutlinedIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-        </Tooltip>
+        <Bot
+          aria-label="Filed by an API token this person owns, not typed by them."
+          className="size-4 text-ink-4"
+          /*
+            `SmartToyOutlinedIcon` is MUI's own auto-generated test id, and `ProposalsPage.test.tsx`
+            queries it by that exact name. It is carried across verbatim rather than renamed: this
+            task's contract is that no test is edited, so the id survives the icon it was named
+            after. Renaming it to `Proposals.Row.Agent` is a one-line change to make when a test
+            edit is in scope — T16, which is the task that deletes the last MUI import.
+          */
+          data-testid="SmartToyOutlinedIcon"
+        />
       )}
-      <Typography variant="body2" sx={{ color: name ? 'text.primary' : 'text.secondary' }}>
-        {name ?? 'Unknown'}
-      </Typography>
-    </Stack>
+      <span className={name ? 'text-ink' : 'text-ink-4'}>{name ?? 'Unknown'}</span>
+    </span>
   );
 }
 
