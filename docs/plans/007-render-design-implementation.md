@@ -204,7 +204,7 @@ pointing at the drawing would produce a second, drifting design source — which
 | 10 | T10 — Family 1, Index & table | **done** `b2b1509e` | The 10 index screens render on the kit's Table; `@mui` unimported by all ten | T9 |
 | 11 | T11 — Family 2, Record as document | open | The 7 document screens render at the 74ch measure | T7 |
 | 12 | T12 — Family 3, Execution | open | `ExecutionPage` renders with the collapsed rail and number-key verdicts | T5, T11 |
-| 13 | T13 — Family 4, Board & people | open | Board · MyWork · TeamBoard · OrgChart; `@mui/x-tree-view` unimported | T3, T8 |
+| 13 | T13 — Family 4, Board & people | **done** | Board · MyWork · TeamBoard · OrgChart; the MUI tree-view package unimported | T3, T8 |
 | 14 | T14 — Family 5, Authoring | open | Docs · DocPageEditor · FeatureImport at the 70ch prose measure | T11 |
 | 15 | T15 — Family 6 & 7, Analytics and Settings | open | Dashboard · PlanStatistics per §6; the **11** settings/account screens (§8's nine plus the two it does not list) | T10 |
 | 16 | T16 — MUI removed, preflight on | open | No `@mui`/`@emotion`/`notistack` in `package.json` or any import; Preflight imported; `muiTestIds.ts` deleted with **both** citations | T6–T15 |
@@ -1179,7 +1179,7 @@ it('records a verdict from the number key for that verdict', async () => {
 
 ---
 
-### T13 — Family 4, Board & people
+### T13 — Family 4, Board & people — **DONE**
 
 **Deliverable:** Board · MyWork · TeamBoard · OrgChart render against `renders/04-board-and-people.html`;
 `@mui/x-tree-view` is imported by no file.
@@ -1198,8 +1198,43 @@ port. **Depends on T8** as well, because `BoardPage.tsx:15` calls `useSnackbar` 
 **Files:** `features/board/{BoardPage,MyWorkPage,TeamBoardPage}.tsx`,
 `features/org-chart/OrgChartPage.tsx`, `features/cases/ClassificationPicker.tsx`, their tests.
 
-- [ ] **Step 1–4:** One screen per step. **Step 5:** `grep -rn "x-tree-view" frontend/src` → no
-matches, then commit — no gate here; T17 runs it.
+- [x] **Step 1–4:** One screen per step. **Step 5:** the tree-view grep returns no matches, then
+commit — no gate here; T17 runs it.
+
+**What landed, where it differs from the steps above:**
+
+**The picker is not a `command` combobox, and the reason is the test suite, not taste.** Three of
+`ClassificationPicker`'s own tests — unedited, per the task — click a value and assert `toBeChecked()`
+on the **initial render**, so the vocabulary cannot live behind a popover at all; and `cmdk` selects
+its first item on mount and calls `scrollIntoView`, which jsdom does not implement and
+`src/test/setup.ts` (not this task's file) does not polyfill. So a SINGLE dimension is a native
+`<details>` disclosure over a `role="listbox"` of `role="option"` buttons — the render's quiet rail
+row, with an expanded state the browser reports for free — and a MULTI dimension is a flat checkbox
+list indented by depth. **`kit/RailRow` is deliberately not the trigger:** its props cannot carry
+`aria-expanded`, and a `<button>` is not a native disclosure. **The checkbox is a native `<input>`,
+not `components/ui/checkbox`:** the kit primitive is a Radix `<button>`, which a wrapping `<label>`
+can only reach through label-activation forwarding — the one path whose double-fire behaviour
+differs between environments, on the exact control three tests drive directly. The props contract
+is byte-identical, so the `CaseEditorPage` port running in parallel (T7) needed no coordination.
+
+**The org chart drops the render's legend.** Frame C decodes its three fills with one; our cells
+carry the arm **in words** on a second line, so the legend would print those three phrases twice
+— and `OrgChartPage.test.tsx` asserts `getByText('Direct grant')` in the singular. Colour is
+therefore never the only carrier of the arm, which is the stronger reading of the render's own note.
+`Teams` and `Gaps` move into the render's `.side` column beside a **bare** matrix pane (rule 1);
+they are not put behind the render's lens tabs, because gaps are *"the point of the screen"* and a
+tab is where you put what you are content for the reader not to see.
+
+**Both headers are local, not `PageHeader`.** Four pages now render the render's `.top` strip
+themselves — crumb, `<h1>`, subtitle, actions — and raise their own arrival announcement and
+`<title>`, the way `HelpPage` has since T8. `PageHeader` and `Panel` are still MUI and still
+imported by ~40 other screens; T16 owns them.
+
+**`features/board/TaskCreateDialog.tsx` is deliberately untouched** and still imports
+`@mui/material`. It is not in this task's file list, no render draws it, and its test drives an MUI
+`Select` through `getByRole('combobox')` — a port has to decide what replaces that widget under
+jsdom, which is a decision for the lane that owns the other dialogs. It is the only MUI import left
+under `features/board/**` or `features/org-chart/**`.
 
 ---
 
