@@ -935,8 +935,15 @@ structurally cannot observe.
 > branch once a day at 01:17 UTC, so between a push and the next morning nothing downstream runs a
 > backend test. `gh workflow run tests.yml` is the on-demand form.
 
-**Schema.** Flyway head is **`V48__doc_link_relabelled.sql`** (§174); **`V49` is the next free
-number**. ~~`V44` … `V45` is the next free number~~ → **corrected in §184, four migrations late.**
+**Schema.** ~~Flyway head is `V48__doc_link_relabelled.sql` (§174); `V49` is the next free
+number.~~ → **superseded 2026-08-29: the whole chain was collapsed.** V2–V75 are absorbed into
+`V1__initial_schema.sql` and deleted, so there is one migration, the next free number is **`V2`**,
+and V1 only ever runs on an empty database. Everything below this line describes the chain as it
+was and is kept for the reasoning, not for the numbers. The paragraph's own warning still holds for
+whatever is written next: take the number from `ls backend/src/main/resources/db/migration`, not
+from here.
+
+The original paragraph: ~~`V44` … `V45` is the next free number~~ → **corrected in §184, four migrations late.**
 This paragraph is the one place in this repo where a stale number is a *runtime* failure rather than
 a documentation defect: `out-of-order` is unset, so a `V45` written today lands behind `V48` and is
 **refused on any already-migrated database** while passing every Testcontainers run, which migrates

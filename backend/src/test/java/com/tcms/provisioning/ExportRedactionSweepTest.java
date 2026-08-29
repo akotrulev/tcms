@@ -115,8 +115,8 @@ class ExportRedactionSweepTest extends IntegrationTestBase {
         // instead — which would take a table's non-secret columns with it.
         //
         // FIVE, not six: this list named `api_token.token_hash` until the sweep above was first
-        // executed and failed on it. `V36__api_token_lookup.sql:75` dropped that column and moved
-        // the digest to `api_token_lookup`, which is excluded WHOLESALE as CREDENTIAL_ONLY — so
+        // executed and failed on it. That column is gone: the digest lives in
+        // `api_token_lookup`, which is excluded WHOLESALE as CREDENTIAL_ONLY — so
         // api_token has no secret to drop, and the arm below is the one that proves the digest's
         // real home is still covered. That exclusion is deliberate here rather than the
         // over-exclusion this arm guards against: the table holds a digest and a foreign key and

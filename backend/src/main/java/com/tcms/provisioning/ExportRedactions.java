@@ -24,10 +24,10 @@ final class ExportRedactions {
 
     /** {@code table -> columns dropped from every exported row of it}. */
     static final Map<String, Set<String>> DROPPED_COLUMNS = Map.of(
-            // A bcrypt digest of a password people reuse. V1:81.
+            // A bcrypt digest of a password people reuse. V1:104.
             "app_user", Set.of("password_hash"),
-            // ~~The digest an API token is checked against. V1:337.~~ → THE COLUMN IS GONE.
-            // `V36__api_token_lookup.sql:75` DROPPED `api_token.token_hash` and moved the digest
+            // ~~The digest an API token is checked against.~~ → THE COLUMN IS GONE:
+            // `api_token.token_hash` was dropped and the digest moved
             // to `api_token_lookup.token_hash`, which `ExportTables` excludes WHOLESALE as
             // CREDENTIAL_ONLY — so the secret is not exported and never was. What this entry was,
             // by the time it was written, is a redaction of a column that does not exist: it made
@@ -84,8 +84,8 @@ final class ExportRedactions {
             // They are the "which credential did this" half of §132's attribution, and dropping
             // them would make an exported audit trail unable to answer the question it exists for.
             Map.entry("audit_event.actor_token_id", "an api_token id — attribution, not a secret"),
-            Map.entry("test_execution.executed_by_token", "an api_token id (V1:843)"),
-            Map.entry("ai_proposal.created_token_id", "an api_token id (V43:129)"),
+            Map.entry("test_execution.executed_by_token", "an api_token id (V1:1663)"),
+            Map.entry("ai_proposal.created_token_id", "an api_token id (V1:1301)"),
             Map.entry("company.logo_storage_key", "a blob key, not a credential"),
             Map.entry("attachment.storage_key", "a blob key — it is how the archive's bytes are found"),
             Map.entry("report_artifact.storage_key", "a blob key"),

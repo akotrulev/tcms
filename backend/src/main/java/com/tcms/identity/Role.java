@@ -10,7 +10,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * One of the six built-in roles, seeded by {@code V3__seed_permissions_and_roles.sql}
+ * One of the six built-in roles, seeded by {@code V1__initial_schema.sql}
  * from the authoritative
  * {@code docs/specs/2026-07-30-tcms-roles-permissions-naming.md} — plus two rows that are
  * deliberately <em>not</em> among them: {@link #COMPANY_MEMBER_ID}, the membership baseline V15

@@ -191,6 +191,6 @@ class PermissionSetTest {
 
         assertThatThrownBy(() -> catalogue.keys())
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("V3__seed_permissions_and_roles.sql");
+                .hasMessageContaining("V1__initial_schema.sql");
     }
 }

@@ -373,7 +373,7 @@ public class ExportCompanyService {
         // ARTIFACT) because it is the polymorphic parent — one table, one column.
         collectKeys(connection, refs, BlobRoot.EVIDENCE, "attachment", "storage_key", companyId);
         collectKeys(connection, refs, BlobRoot.REPORTS, "report_artifact", "storage_key", companyId);
-        // raw_storage_key is NULLABLE (V1:1342). A null is not a missing blob, and the IS NOT NULL
+        // raw_storage_key is NULLABLE (V1:2918). A null is not a missing blob, and the IS NOT NULL
         // below is what keeps it from being reported as one.
         collectKeys(connection, refs, BlobRoot.RAW_REPORTS, "ingestion_job", "raw_storage_key",
                 companyId);

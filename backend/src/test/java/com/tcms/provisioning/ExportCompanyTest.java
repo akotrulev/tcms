@@ -524,10 +524,10 @@ class ExportCompanyTest extends IntegrationTestBase {
         try (Connection connection = appConnection(companyId)) {
             UUID ownerId = firstMember(connection, companyId);
             UUID roleId = anyRole(connection);
-            // ~~api_token carries the digest.~~ → NOT SINCE `V36__api_token_lookup.sql:75`, which
-            // DROPPED `api_token.token_hash` and moved the digest to its own table. This fixture
-            // was written against V1's DDL and never ran, so it seeded a column that has not
-            // existed for thirty-two migrations — every arm in the class died on it.
+            // ~~api_token carries the digest.~~ → NOT ANY MORE: `api_token.token_hash` is gone
+            // and the digest lives in `api_token_lookup`. This fixture was written against an
+            // earlier cut of the schema and never ran, so it seeded a column that no longer
+            // exists — every arm in the class died on it.
             //
             // The policed row now holds no secret at all, so the credential this class hunts for is
             // seeded where it actually lives. That is a STRONGER test than the original: the digest

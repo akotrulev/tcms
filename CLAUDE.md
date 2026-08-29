@@ -205,8 +205,13 @@ enforces it (`backend/src/test/java/com/tcms/architecture/`). The Javadoc on
 decision that needs a paragraph, not an import.
 
 Flyway owns all DDL (`hibernate.ddl-auto: validate`, `baseline-on-migrate: false` so V1's RLS block
-always executes). `V1__initial_schema.sql` is 64 tables / 56 forced RLS policies, and its comments
-carry the *why*. Booting the real context in a test is itself a gate — `validate` catches entity
+always executes). **There is exactly one migration.** `V1__initial_schema.sql` is 87 tables / 74
+forced RLS policies / the reference data, and its comments carry the *why*. The 73 files that
+followed the first cut of it were absorbed back into it on 2026-08-29 and deleted — verified by
+building a database from each and diffing `pg_dump` — so **this file only ever runs on an empty
+database**, and any instance that ran the old chain must be rebuilt rather than repaired. A `Vnn`
+inside a comment names an absorbed migration, findable in git history before that commit; the next
+new migration is `V2`. Booting the real context in a test is itself a gate — `validate` catches entity
 drift at startup. Java compiles with `-Werror`; each suppressed lint in `build.gradle.kts` has a
 recorded reason.
 

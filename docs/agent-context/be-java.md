@@ -15,8 +15,9 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 - Spring Modulith monolith, modules are packages under `com.tcms`; foundation modules `api ·
   tenancy · identity · project · storage`, everything else crosses via `CompanyScopedEvent`.
   `project` imports only `api` + `tenancy`.
-- Flyway `backend/src/main/resources/db/migration`, head **`V71`** (B2). `V72–V74` reserved for
-  B3/B4; `V70` reserved for initiative 002.
+- Flyway `backend/src/main/resources/db/migration` holds **one file**, `V1__initial_schema.sql`:
+  V2–V75 were absorbed into it 2026-08-29 and deleted. ~~head `V71` (B2), `V72–V74` reserved~~ →
+  superseded; the next number is **`V2`**. V1 only ever runs on an empty database.
 
 ## Seams to reuse
 - `ProjectService.readVisible / readGranted / writeGranted` → `GateResult` (Unreachable/Denied/Allowed).

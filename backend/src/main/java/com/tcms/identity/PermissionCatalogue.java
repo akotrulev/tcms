@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
  *
  * <h2>Why it is cached, and why lazily</h2>
  *
- * <p>The catalogue is reference data owned by {@code V3__seed_permissions_and_roles.sql}
+ * <p>The catalogue is reference data owned by {@code V1__initial_schema.sql}
  * and cannot change while the process runs — a new permission arrives as a migration and
  * therefore a restart. Loading it per check would put a query on every authorization
  * decision for data that is constant.
@@ -68,7 +68,7 @@ public class PermissionCatalogue {
                     .collect(Collectors.toUnmodifiableSet());
             if (loaded.isEmpty()) {
                 throw new IllegalStateException(
-                        "The permission catalogue is empty. V3__seed_permissions_and_roles.sql has not "
+                        "The permission catalogue is empty. V1__initial_schema.sql has not "
                                 + "run — every authorization check would deny, which reads as a grants "
                                 + "problem rather than a migration one.");
             }
@@ -92,7 +92,7 @@ public class PermissionCatalogue {
             throw new IllegalArgumentException(
                     "Unknown permission key '" + permissionKey + "'. It is not in the catalogue, so this "
                             + "check would have silently denied forever. Add it to "
-                            + "V3__seed_permissions_and_roles.sql and to openapi.yaml's PermissionKey, or "
+                            + "V1__initial_schema.sql and to openapi.yaml's PermissionKey, or "
                             + "fix the typo.");
         }
     }

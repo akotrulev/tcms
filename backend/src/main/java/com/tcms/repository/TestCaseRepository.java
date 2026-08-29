@@ -218,7 +218,7 @@ public interface TestCaseRepository extends JpaRepository<TestCase, UUID> {
      *
      * <p>The {@code .feature} import's central lookup, and the one query in this interface that is
      * deliberately NOT narrowed to a project. {@code test_case_automation_key_idx} is unique per
-     * COMPANY ({@code V1:542-543}), so a scenario whose key is already taken by a case in a sibling
+     * COMPANY ({@code V1:1028}), so a scenario whose key is already taken by a case in a sibling
      * project cannot be created here — the insert would fail — and a plan that only looked inside
      * the target project would report {@code CREATE} for a row that is going to raise a constraint
      * violation and roll the whole request back. Returning the case lets the service answer

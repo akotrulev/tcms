@@ -30,7 +30,7 @@ import org.junit.jupiter.api.Test;
  * <p>The permission catalogue is transcribed three times by necessity — the spec
  * ({@code docs/specs/2026-07-30-tcms-roles-permissions-naming.md}, authoritative), the
  * REST contract ({@code docs/specs/openapi.yaml}, which the frontend generates types
- * from), and {@code V3__seed_permissions_and_roles.sql}, which is what the running
+ * from), and {@code V1__initial_schema.sql}, which is what the running
  * system actually enforces. Three transcriptions drift, and a drifted <em>permission</em>
  * list is worse than a drifted label: it decides what an admin screen claims a role can
  * do, and it decides what the evaluator lets that role actually do. Only one of those two
