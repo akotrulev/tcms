@@ -151,7 +151,7 @@ import when it ports the control, and T16's grep is what proves none survived. W
 | Importer | Removed by |
 |---|---|
 | `cases/CaseEditorPage.tsx:67`, `cases/ConditionEditDialog.tsx:40` | T7 |
-| `runs/RunSchedulePage.tsx:39` | T10 |
+| ~~`runs/RunSchedulePage.tsx:39`~~ | T10 — **done** (`b2b1509e`) |
 | `runs/RunDetailPage.tsx:30`, `review/ReviewPanel.tsx:43` | T11 |
 | `runs/BlockedDialog.tsx:16` (+ the `:105` citation) | T12 |
 | `cases/ClassificationPicker.tsx:19` | T13 |
@@ -201,7 +201,7 @@ pointing at the drawing would produce a second, drifting design source — which
 | 8 | T8 — Family 9, States **(runs before T7)** | **done** | NotFound · Help; notistack → `sonner` across all 14 files; the refusal/notification matrix all 42 inherit | T4, T6 |
 | 7 | T7 — Case editor, both frames | open | `CaseEditorPage` matches `case-authoring-redesign.html` frames A and B, incl. the seven items of §0 | T5, T8 |
 | 9 | T9 — TanStack Table | **done** `6de8c9a9` | `CaseGrid` renders on TanStack Table with server-side paging/sort/filter; `@mui/x-data-grid` unimported | T3 |
-| 10 | T10 — Family 1, Index & table | open | The 10 index screens render on the kit's Table | T9 |
+| 10 | T10 — Family 1, Index & table | **done** `b2b1509e` | The 10 index screens render on the kit's Table; `@mui` unimported by all ten | T9 |
 | 11 | T11 — Family 2, Record as document | open | The 7 document screens render at the 74ch measure | T7 |
 | 12 | T12 — Family 3, Execution | open | `ExecutionPage` renders with the collapsed rail and number-key verdicts | T5, T11 |
 | 13 | T13 — Family 4, Board & people | open | Board · MyWork · TeamBoard · OrgChart; `@mui/x-tree-view` unimported | T3, T8 |
@@ -1031,7 +1031,7 @@ column* (UX#113 / UX#111) — is the one visual change. Everything else is a mec
 
 ---
 
-### T10 — Family 1, Index & table
+### T10 — Family 1, Index & table — **DONE** (`b2b1509e`)
 
 **Deliverable:** CaseList · CaseSearch · RunList · PlanList · Proposals · Reports · Ingestions ·
 RunSchedule · Artifacts · Projects all render on `kit/Table`, against `renders/01-index-tables.html`.
@@ -1042,8 +1042,47 @@ toolbar; **proportion before number**; an em dash meaning *no value* rather than
 *a count is a link to its rows, and the URL carries the filter*. Filter state lives in the URL
 (`useSearchParams`) and that does not change.
 
-- [ ] **Step 1–10:** One screen per step.
-- [ ] **Step 11:** Commit. No gate here — the build, lint and suite run once in T17.
+**What landed, where it differs from the steps above:**
+
+- **`PageHeader` stays on all ten**, and the render says it should not — *no page heading repeating
+  the rail's active item*. It is a **shared** component (54 callers), it owns the `<title>` element
+  and the route-change announcement, and nothing replaces either. Removing it from ten screens with
+  no substitute is an a11y and tab-title regression, so it is **T16's** call, alongside the rest of
+  the shared MUI tier. `Panel` **is** gone from every one of the ten — that one is rule 1's exact
+  prohibition and cost nothing, and each panel's `data-testid` survives on the plain `<section>`
+  that replaced it.
+- **`CaseFilterBar` is untouched**, so *filters as removable chips* is delivered on `CaseSearchPage`
+  (which owns its filter row) and **not** on `CaseListPage` (which delegates it). The bar is not one
+  of the ten files this task owns.
+- **`ReportJobCard` is untouched**, so *Generated reports* stays a card list rather than the render's
+  table. Same reason.
+- **`RunSchedulePage` did not move its switch to the first column**, which is the render's one
+  structural note on frame G. The row's enabled flag is an Edit-dialog field; promoting it to a row
+  control is a write per click with no confirmation, which is a behaviour change and not a port. The
+  rest of frame G is applied — the paused row stays at reduced weight with its reason.
+- **`ProposalsPage` carries `data-testid="SmartToyOutlinedIcon"` on a lucide `Bot`.** That is MUI's
+  own auto-generated id, and `ProposalsPage.test.tsx` queries it by that exact name; no test may be
+  edited here, so the id outlived the icon it was named after. Renaming it is a one-line change for
+  whichever task may edit that test.
+- **`RunSchedulePage` dropped the MUI slot-prop test-id helper** — a Radix switch takes a `data-*`
+  directly. Two citations of that module remain elsewhere, as T16's D3 expects; this task added no
+  third.
+- **Three tone maps are page-local**, not in `lib/labels.ts`: a run's badge tone (which is its
+  *result*, so a completed run with failures is red — the render draws exactly that), a plan's, and
+  an ingestion's. Each has one caller; the shared layer is earned on the second.
+- **`ProjectsPage` draws one `HBar` per card, not the render's three.** `Automated` and `Last run`
+  are not on `ProjectSummary`, and a bar over a number the response does not carry is §9.3's defect.
+  The one bar's denominator is the largest project in the list, which is the only proportion the
+  data supports.
+- **`PlanListPage` gained the render's amber banner** about Pass rate and Coverage, conditional on
+  every row being null in both — so it disappears by itself the day the server computes one.
+- **`CaseSearchPage` and `IngestionsPage` grew rule 8 where they had it missing**: the search pager
+  is now the page's own (`TablePagination` went with MUI), and an ingestion's non-zero `Unmatched`
+  count is a link to the job that lists them. Zero is not a link — a link to an empty list is a
+  promise the row cannot keep.
+
+- [x] **Step 1–10:** One screen per step.
+- [x] **Step 11:** Commit. No gate here — the build, lint and suite run once in T17.
 
 ---
 
