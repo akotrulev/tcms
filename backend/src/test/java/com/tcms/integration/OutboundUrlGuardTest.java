@@ -146,19 +146,12 @@ class OutboundUrlGuardTest {
         }
     }
 
-    @Test
-    @DisplayName("allows() and check() cannot disagree")
-    void theBooleanFormAgrees() {
-        // Two entry points, one decision. A caller with no message to render uses allows(), and the
-        // day the two are implemented separately is the day one of them stops refusing something.
-        List<String> sample = List.of(
-                "https://acme.atlassian.net", "http://acme.atlassian.net", "https://10.1.2.3", "");
-        for (String url : sample) {
-            assertThat(strict.allows(url))
-                    .as(url)
-                    .isEqualTo(strict.check(url) == OutboundUrlGuard.Verdict.ALLOWED);
-        }
-    }
+    // ~~"allows() and check() cannot disagree"~~ -> the boolean form was deleted in B7. It had no
+    // production caller: every real site needs the VERDICT, because the verdict is the refusal's
+    // message and a bare false has nothing to say. It was a convenience whose only caller was this
+    // test, which is the shape ArchitectureRulesTest's unexercised-bean rule exists to report, and
+    // §121's findQuarantined is the precedent for deleting rather than exempting. Two lines to
+    // write again on the day a caller with no message appears.
 
     @Test
     @DisplayName("fixture precondition: the matrix actually contains refusals of each kind")

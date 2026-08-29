@@ -610,9 +610,15 @@ class ProjectEndpointTest extends IntegrationTestBase {
             Response response = archiveAs(TEAM_MEMBER, NORTH, NORTH_MOBILE, "true");
 
             assertThat(response.status()).isEqualTo(403);
+            // <s>The refusal never names the permission key.</s> -> superseded by 005 C1a, which
+            // added `permission` and `scope` to Problem for exactly this body. The old assertion
+            // was about not leaking; naming the key the CALLER LACKS leaks nothing they could not
+            // read off the roles matrix, and withholding it is what made the SPA's refusal say
+            // "not allowed" and stop. The screen now says which key and who can grant it.
             assertThat(response.body())
-                    .as("the refusal never names the permission key")
-                    .doesNotContain("project:settings");
+                    .as("005 C1a: the refusal names the key the caller lacks, and its scope")
+                    .contains("\"permission\":\"project:settings\"")
+                    .contains("\"scope\":\"PROJECT\"");
             assertThat(archivedAtOf(NORTH_MOBILE)).isNull();
         }
 

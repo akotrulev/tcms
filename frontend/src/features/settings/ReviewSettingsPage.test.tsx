@@ -157,6 +157,9 @@ describe('ReviewSettingsPage', () => {
       reviewEnabledCase: true,
       reviewEnabledSuite: true,
       reviewEnabledPlan: true,
+      // The fourth subject (005 S9b). It is here because "EVERY setting" is this test's claim: a
+      // field the form carries but omits from the PUT is one the server reads as switched off.
+      reviewEnabledDoc: false,
       requiredPeerReviews: 2,
       authorMayApproveOwnWork: true,
       editAfterApproval: 'RE_REVIEW',

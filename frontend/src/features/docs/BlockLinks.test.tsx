@@ -7,7 +7,7 @@ import type { BlockLink, DocPage, DocPageSummary, PermissionKey } from '../../ap
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
-import { aCase, aCaseSummary, aProject, aSuite } from '../../test/fixtures'
+import { aCase, aCaseSummary, aProject, aSuite, projectSettings } from '../../test/fixtures'
 import { DocsPage } from './DocsPage'
 
 /**
@@ -88,6 +88,10 @@ function mockReads(keys: PermissionKey[]) {
     }
     if (path.endsWith('/suites')) return [aSuite({ id: 'suite-3', key: 'TS-3', name: 'Refunds' })]
     if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
+    // A doc page is a review subject since 005 S9b, so ReviewPanel reads the project's policy on
+    // every page here. Without the arm the catch-all answers `[]` — an ARRAY where the contract
+    // declares an object, which is the shape the conformance check exists to catch.
+    if (/^\/projects\/[^/]+\/settings$/.test(path)) return projectSettings({ projectId: PROJECT })
     return []
   }) as never)
 }
@@ -345,6 +349,10 @@ describe('a case carried in from its own screen is already chosen', () => {
       if (path.includes('/cases')) return { items: [], facets: [], page: 0, size: 20, total: 1 }
       if (path.endsWith('/suites')) return [aSuite({ id: 'suite-3', key: 'TS-3', name: 'Refunds' })]
       if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
+      // A doc page is a review subject since 005 S9b, so ReviewPanel reads the project's policy on
+      // every page here. Without the arm the catch-all answers `[]` — an ARRAY where the contract
+      // declares an object, which is the shape the conformance check exists to catch.
+      if (/^\/projects\/[^/]+\/settings$/.test(path)) return projectSettings({ projectId: PROJECT })
       return []
     }) as never)
   }

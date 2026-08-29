@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
@@ -76,7 +76,13 @@ describe('IssueLinksPanel', () => {
     mockApi(['case:read', 'case:edit'], [], { state: 'NOT_CONNECTED', issues: [] })
     renderPanel()
 
-    await userEvent.click(await screen.findByTestId('CaseDetail.IssueLinks.AddButton'))
+    // Enabled, not merely present: PermissionGate fails closed while `/me/permissions` is in
+    // flight, so the button exists — and is disabled for a reason this test is not about — before
+    // the answer lands.
+    await waitFor(() =>
+      expect(screen.getByTestId('CaseDetail.IssueLinks.AddButton')).toBeEnabled(),
+    )
+    await userEvent.click(screen.getByTestId('CaseDetail.IssueLinks.AddButton'))
     await userEvent.type(await screen.findByTestId('CaseDetail.IssueLinks.Search'), 'rounding')
 
     expect(await screen.findByTestId('CaseDetail.IssueLinks.Connect')).toBeInTheDocument()

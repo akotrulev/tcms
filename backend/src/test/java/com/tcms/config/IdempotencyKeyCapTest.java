@@ -91,8 +91,14 @@ class IdempotencyKeyCapTest {
      * proposed: §205 found {@code packages/mcp} declaring and sending a key this endpoint
      * discarded, which is a header that looks right and does nothing — the failure the paragraph
      * above is about, arriving from the client side.
+     *
+     * <p><strong>TEN became ELEVEN at 004 ({@code TrackerIssueService}).</strong> Its duplicate is
+     * the most expensive on the list and the only one this instance cannot undo: a second row is
+     * an issue in <em>somebody else's</em> tracker, filed under the caller's own credential, which
+     * no migration and no operator command here can withdraw. A double-clicked "File a defect" is
+     * the ordinary way to produce it.
      */
-    private static final int EXPECTED_DECLARATIONS = 10;
+    private static final int EXPECTED_DECLARATIONS = 11;
 
     private static final Pattern DECLARATION = Pattern.compile(
             "\\bstatic final int MAX_IDEMPOTENCY_KEY\\s*=\\s*(\\d+)\\s*;");
@@ -112,7 +118,7 @@ class IdempotencyKeyCapTest {
     }
 
     @Test
-    @DisplayName("the declarations are exactly the ten services known to accept the header")
+    @DisplayName("the declarations are exactly the eleven services known to accept the header")
     void theCountIsPinned() {
         assertThat(declarations())
                 .as("a create endpoint that accepts Idempotency-Key without capping it indexes "

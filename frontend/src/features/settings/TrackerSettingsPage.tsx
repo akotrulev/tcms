@@ -43,6 +43,7 @@ import {
   trackerConnectionStateLabels,
   trackerProviderLabels,
 } from '../../lib/labels';
+import { inputTestId } from '../../lib/muiTestIds';
 
 /**
  * Where this project files defects (004 Phase 1) — its **bindings**, and who on the team has
@@ -273,7 +274,6 @@ function BindingRow({
           size="small"
           checked={binding.isDefault}
           disabled={update.isPending}
-          inputProps={{ 'aria-label': 'Default binding' }}
           onChange={(_e, checked) =>
             update.mutate({
               bindingId: binding.id,
@@ -281,7 +281,10 @@ function BindingRow({
               patch: { isDefault: checked },
             })
           }
-          data-testid={`${TestId}.Default`}
+          // `slotProps`, not `inputProps` — muiTestIds owns the shape, and the id belongs on the
+          // INPUT slot: on a Switch's root it lands on the wrapper span, where checked is not
+          // readable and a test can click successfully while asserting nothing.
+          slotProps={inputTestId(`${TestId}.Default`, 'Default binding')}
         />
       </TableCell>
       <TableCell>
@@ -289,7 +292,6 @@ function BindingRow({
           size="small"
           checked={binding.enabled}
           disabled={update.isPending}
-          inputProps={{ 'aria-label': 'Enabled' }}
           onChange={(_e, checked) =>
             update.mutate({
               bindingId: binding.id,
@@ -297,7 +299,7 @@ function BindingRow({
               patch: { enabled: checked },
             })
           }
-          data-testid={`${TestId}.Enabled`}
+          slotProps={inputTestId(`${TestId}.Enabled`, 'Enabled')}
         />
       </TableCell>
       <TableCell align="right">
@@ -411,8 +413,7 @@ function BindingDialog({ projectId, onClose }: { projectId: string; onClose: () 
             <Switch
               checked={isDefault}
               onChange={(_e, checked) => setIsDefault(checked)}
-              inputProps={{ 'aria-label': 'Default binding' }}
-              data-testid={`${TestId}.DialogDefault`}
+              slotProps={inputTestId(`${TestId}.DialogDefault`, 'Default binding')}
             />
             <Typography variant="body2">
               File here when nothing names a binding. The first binding becomes the default

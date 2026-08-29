@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.tcms.api.UserRef;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -23,6 +24,7 @@ public record TestRunDetailView(
         String commitSha,
         String branch,
         RunSource source,
+        UserRef createdBy,
         Instant startedAt,
         Instant completedAt,
         ResultCountsView counts,
@@ -43,6 +45,7 @@ public record TestRunDetailView(
                 run.commitSha(),
                 run.branch(),
                 run.source(),
+                run.createdBy(),
                 run.startedAt(),
                 run.completedAt(),
                 run.counts(),

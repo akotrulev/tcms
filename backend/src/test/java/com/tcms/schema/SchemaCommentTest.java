@@ -94,7 +94,14 @@ class SchemaCommentTest extends IntegrationTestBase {
             // A value inside a JSON example on `test_plan.exit_criteria`:
             // {"metric":"pass_rate","op":">=","value":95}. It is data the product stores, and the
             // one token here that no namespace question can settle — it has no namespace at all.
-            "pass_rate", "a metric name inside the exit-criteria JSON example, not an identifier");
+            "pass_rate", "a metric name inside the exit-criteria JSON example, not an identifier",
+            // The one token on this list that IS shaped like an identifier and is named precisely
+            // because it is not one. `doc_link.external_issue_id`'s comment says "THERE IS NO
+            // external_issue_key COLUMN and there must not be: a key moves" (004 D17, V75:130).
+            // Rewording it to dodge this rule would cost the sentence its force, and the rule is
+            // right that the token names nothing — that is the claim.
+            "external_issue_key",
+            "a column V75 argues must NOT exist; the comment names it to forbid it");
 
     /** {@code word.word}, both halves lowercase — the way this schema writes a column reference. */
     private static final Pattern QUALIFIED = Pattern.compile("\\b([a-z][a-z0-9_]*)\\.([a-z][a-z0-9_]*)\\b");

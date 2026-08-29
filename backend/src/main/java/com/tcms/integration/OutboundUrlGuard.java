@@ -144,10 +144,6 @@ public class OutboundUrlGuard {
         return Verdict.ALLOWED;
     }
 
-    /** True when {@code url} may be dialled — the boolean form, for a caller that has no message. */
-    public boolean allows(String url) {
-        return check(url) == Verdict.ALLOWED;
-    }
 
     /**
      * Everything that is not somebody else's public server.

@@ -806,14 +806,19 @@ class OrgChartEndpointTest extends IntegrationTestBase {
     class ContractShape {
 
         @Test
-        @DisplayName("the document has exactly teams, people and projects, all present")
+        @DisplayName("the document has exactly teams, people, projects and gaps, all present")
         void theTopLevelShape() throws Exception {
             JsonNode chart = chartAs(VIEWER);
 
-            assertThat(fieldsOf(chart)).containsExactlyInAnyOrder("teams", "people", "projects");
+            // `gaps` is the fourth member since 005 S6 — required in the contract, so an absent
+            // key is the SERVER-ONLY/CONTRACT-ONLY divergence ContractConventionTest exists for,
+            // not an empty panel.
+            assertThat(fieldsOf(chart))
+                    .containsExactlyInAnyOrder("teams", "people", "projects", "gaps");
             assertThat(chart.get("teams").isArray()).isTrue();
             assertThat(chart.get("people").isArray()).isTrue();
             assertThat(chart.get("projects").isArray()).isTrue();
+            assertThat(chart.get("gaps").isArray()).isTrue();
         }
 
         @Test

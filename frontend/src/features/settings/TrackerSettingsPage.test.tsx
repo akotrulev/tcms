@@ -4,6 +4,7 @@ import { api } from '../../api/client'
 import type { PermissionKey } from '../../api/types'
 import { aProject, aTrackerBinding, aTrackerConnectedMember, aUserRef } from '../../test/fixtures'
 import { heldPermissions } from '../../test/permissions'
+import { Route, Routes } from 'react-router-dom'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TrackerSettingsPage } from './TrackerSettingsPage'
@@ -33,7 +34,12 @@ function mockApi(keys: PermissionKey[], overrides: Record<string, unknown> = {})
 function renderPage() {
   return render(
     <TestProviders client={createTestQueryClient()} route={`/projects/${PROJECT}/settings/trackers`}>
-      <TrackerSettingsPage />
+      {/* The route pattern, not a bare element: the page reads `projectId` from useParams, and
+          TestProviders' MemoryRouter matches nothing on its own — so every gate saw an EMPTY id
+          and the whole page rendered as unreachable rather than as refused. */}
+      <Routes>
+        <Route path="/projects/:projectId/settings/trackers" element={<TrackerSettingsPage />} />
+      </Routes>
     </TestProviders>,
   )
 }

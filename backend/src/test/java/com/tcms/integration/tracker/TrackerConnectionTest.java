@@ -64,21 +64,23 @@ import org.springframework.transaction.support.TransactionTemplate;
  * {@code NotificationChannelTest}'s precedent: that class is about the mechanism and its two traps,
  * and a feature's tables are asserted beside the feature that writes them.
  *
- * <p>Ids are unique to this class — {@code dc…}.
+ * <p>Ids are unique to this class — {@code de…}. Not {@code dc…}: {@code DocPageEndpointTest}
+ * owns that prefix, and sharing it made the same person hold the same role on the same project
+ * twice, which {@code V13}’s {@code uq_role_assignment_user} refuses.
  */
 @DisplayName("Tracker connections — the gate, the credential, and RLS on three new tables")
 class TrackerConnectionTest extends IntegrationTestBase {
 
-    private static final UUID ACME = UUID.fromString("dc000000-0000-4000-8000-00000000000a");
-    private static final UUID UMBRA = UUID.fromString("dc000000-0000-4000-8000-00000000000b");
+    private static final UUID ACME = UUID.fromString("de000000-0000-4000-8000-00000000000a");
+    private static final UUID UMBRA = UUID.fromString("de000000-0000-4000-8000-00000000000b");
 
-    private static final UUID ACME_BANKING = UUID.fromString("dc001000-0000-4000-8000-000000000001");
-    private static final UUID ACME_PAYMENTS = UUID.fromString("dc001000-0000-4000-8000-000000000002");
-    private static final UUID UMBRA_BANKING = UUID.fromString("dc002000-0000-4000-8000-000000000001");
+    private static final UUID ACME_BANKING = UUID.fromString("de001000-0000-4000-8000-000000000001");
+    private static final UUID ACME_PAYMENTS = UUID.fromString("de001000-0000-4000-8000-000000000002");
+    private static final UUID UMBRA_BANKING = UUID.fromString("de002000-0000-4000-8000-000000000001");
 
-    private static final UUID LEAD = UUID.fromString("dc003000-0000-4000-8000-000000000001");
-    private static final UUID ENGINEER = UUID.fromString("dc003000-0000-4000-8000-000000000002");
-    private static final UUID OUTSIDER = UUID.fromString("dc003000-0000-4000-8000-000000000003");
+    private static final UUID LEAD = UUID.fromString("de003000-0000-4000-8000-000000000001");
+    private static final UUID ENGINEER = UUID.fromString("de003000-0000-4000-8000-000000000002");
+    private static final UUID OUTSIDER = UUID.fromString("de003000-0000-4000-8000-000000000003");
 
     private static final String JIRA = "https://acme.atlassian.net";
     private static final String TOKEN = "atl-token-EnDsWiThThIs";

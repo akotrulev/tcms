@@ -7,7 +7,7 @@ import type { DocPage, DocPageSearchHit, DocPageSummary } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
-import { aDocPageSearchHit, aDocPageSummary, aProject } from '../../test/fixtures'
+import { aDocPageSearchHit, aDocPageSummary, aProject, projectSettings } from '../../test/fixtures'
 import { DocsPage } from './DocsPage'
 
 /**
@@ -51,6 +51,10 @@ function mockReads(hits: DocPageSearchHit[]) {
     if (path.includes('/doc-pages/')) return detail()
     if (path.endsWith('/doc-pages')) return tree
     if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
+    // A doc page is a review subject since 005 S9b, so ReviewPanel reads the project's policy on
+    // every page here. Without the arm the catch-all answers `[]` — an ARRAY where the contract
+    // declares an object, which is the shape the conformance check exists to catch.
+    if (/^\/projects\/[^/]+\/settings$/.test(path)) return projectSettings({ projectId: PROJECT })
     return []
   }) as never)
   return searched

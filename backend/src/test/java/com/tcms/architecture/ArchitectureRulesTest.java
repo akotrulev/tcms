@@ -513,8 +513,38 @@ class ArchitectureRulesTest {
      * removed rather than being left as an argument about code that is now exercised, which is what
      * {@code everyExemptionStillExemptsSomething} exists to prevent one file over. The map stays
      * because the next unexercised seam should still cost a sentence somebody has to defend.
+     *
+     * <p><strong>It refilled at 004, with five methods of one class and a different argument.</strong>
+     * {@code FakeTrackerAdapter} is a {@code @Profile("tracker-fake")} bean, and the real adapters
+     * are {@code @Profile("!tracker-fake")} — so the product never has this bean at all, and
+     * "give it a production caller" is not an option the rule can offer here. That is not this
+     * map's usual shape (a seam built ahead of its consumer) and it is why each entry says which
+     * behaviour it is the only way to reach: the tracker being down, a person not being entitled,
+     * and the cache actually caching, none of which any response body reveals.
      */
-    private static final Map<String, String> UNEXERCISED_BY_DECISION = Map.of();
+    private static final Map<String, String> UNEXERCISED_BY_DECISION = Map.of(
+            "FakeTrackerAdapter.breakHost",
+            "the only way to drive a tracker that is down. A real outage is not reproducible and "
+                    + "the transport doubles (MockRestServiceServer) prove the ADAPTER, not what "
+                    + "the service above it does with TrackerUnavailableException — the 502, the "
+                    + "FAILED ledger row, and the connection-health update that makes a dead token "
+                    + "visible on the person's own page",
+            "FakeTrackerAdapter.entitle",
+            "the per-user boundary, which is 004's whole D2 argument: an adapter knows whose token "
+                    + "this is and nothing else, so the map is keyed on (accountId, issueId) and "
+                    + "not on a TCMS user id. Without this there is no way to build the case that "
+                    + "matters — two people, one issue, one of them allowed to see it",
+            "FakeTrackerAdapter.countCalls",
+            "how the cache's effect is observed. It is the only way: a cached read and a fresh one "
+                    + "serve byte-identical bodies, so a cache that silently stopped caching would "
+                    + "pass every assertion about what a caller receives",
+            "FakeTrackerAdapter.register",
+            "the fixture's issues. A fake with no corpus answers 404 to everything, which would "
+                    + "make every read test agree with a broken adapter",
+            "FakeTrackerAdapter.reset",
+            "per-test isolation for the four above, all of which are static-lived module state. "
+                    + "Without it an entitlement or a broken host leaks into the next test and the "
+                    + "suite's failures depend on ordering");
 
     @Test
     @DisplayName("every public bean method is exercised by the product, not only by a test")
@@ -818,6 +848,36 @@ class ArchitectureRulesTest {
                             + "because giving it a reader is §6q's latest-release view and a "
                             + "feature. What §151 bought was that the eventual reader is not "
                             + "written against three tables of keys that order releases backwards"),
+            Map.entry("CaseDocLink.externalProvider",
+                    "004's mirror, and the three below are one decision. `repository` keeps a copy "
+                            + "of doc_link so it never joins across the module boundary; 004 then "
+                            + "EXCLUDED issue links from TestCase.relatedDocuments, because "
+                            + "DocLink.targetKind's closed set is [DOC_BLOCK, EXTERNAL_GIT, "
+                            + "EXTERNAL_URL] and an EXTERNAL_ISSUE row is not a document. So the "
+                            + "six EXTERNAL_GIT columns beside these three have readers and these "
+                            + "three cannot: the Links panel reads documentation's DocLink, where "
+                            + "the same three columns DO have getters. Dropping them here would "
+                            + "make the mirror stop mirroring, which is the property that keeps "
+                            + "the boundary intact — so this is the rare case where the reader "
+                            + "arriving would be the defect"),
+            Map.entry("CaseDocLink.externalIssueId",
+                    "externalProvider's decision, and the one a reader would most plausibly reach "
+                            + "for: it is the only thing a degraded chip can render, because a key "
+                            + "moves (004 D17) and no label is ever derived from the href. The "
+                            + "chip is rendered one table over"),
+            Map.entry("CaseDocLink.externalHost",
+                    "externalProvider's decision. The host is what a reader matches against the "
+                            + "project's bindings to resolve bindingId at read time — there is no "
+                            + "binding id on either side of the mirror (004 D18) — and that match "
+                            + "runs in documentation, against its copy"),
+            Map.entry("TrackerIssueCreation.completedAt",
+                    "written by succeeded() and failed(), read by nobody, on a table whose header "
+                            + "argues it is diagnostic and not recovery. Recovery reads `status`: "
+                            + "a row still PENDING is an attempt that vanished mid-flight, which "
+                            + "is why the row is written BEFORE the call. This column is for a "
+                            + "human with psql asking how long a create took, and giving it a "
+                            + "reader means an operator screen over somebody else's tracker — a "
+                            + "contract change, not a wiring fix"),
             Map.entry("TestExecution.releaseSortKey",
                     "TestRun's, one table along, and the one whose absence of a reader was hardest "
                             + "to see: ExecutionSource DOES select it — into execution_fact's own "

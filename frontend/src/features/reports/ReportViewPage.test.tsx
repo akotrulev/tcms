@@ -51,6 +51,8 @@ const job = (over: Record<string, unknown> = {}) => ({
   downloadUrl: DOWNLOAD_URL,
   modelUrl: MODEL_URL,
   error: null,
+  // COMPLETED, so the artifact exists and has a size — required since 005 S1.
+  sizeBytes: 4096,
   ...over,
 })
 

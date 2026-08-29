@@ -38,11 +38,4 @@ public interface TrackerBindingRepository extends JpaRepository<TrackerBinding, 
     Optional<TrackerBinding> findByProjectIdAndProviderAndBaseUrlAndExternalProject(
             UUID projectId, TrackerProvider provider, String baseUrl, String externalProject);
 
-    /**
-     * Whether any identity could still be pointed at this host by this project.
-     *
-     * <p>Used by the delete and by the refusal to edit a host: see {@link TrackerBinding}'s header
-     * for why a binding's host is immutable.
-     */
-    List<TrackerBinding> findByProjectIdAndEnabledIsTrue(UUID projectId);
 }

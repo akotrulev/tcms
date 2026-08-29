@@ -180,6 +180,19 @@ class DashboardEndpointTest extends IntegrationTestBase {
         seedTrees();
         seedCases();
         seedClassifications();
+        // `recordLastResult` writes case_health and the row outlives the test that wrote it. Two
+        // arms here are ABOUT an empty case_health — the honest null `healthComputedAt` and the
+        // never-run segment — so without this they pass or fail on the order JUnit happened to
+        // choose, which is the worst shape a suite can have: green until somebody adds a test.
+        clearCaseHealth();
+    }
+
+    /** Empties {@code case_health} for this class's company, so every arm starts unmeasured. */
+    private void clearCaseHealth() throws SQLException {
+        try (Connection connection = appConnection(ACME);
+                var statement = connection.prepareStatement("DELETE FROM case_health")) {
+            statement.execute();
+        }
     }
 
     // =====================================================================

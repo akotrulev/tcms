@@ -45,7 +45,13 @@ final class ExportRedactions {
             // client recognise WHICH webhook was configured.
             "notification_channel", Set.of("secret"),
             // The OIDC confidential-client secret (V53:37) and the LDAP bind password (V57:31).
-            "identity_provider", Set.of("client_secret_encrypted", "bind_password_encrypted"));
+            "identity_provider", Set.of("client_secret_encrypted", "bind_password_encrypted"),
+            // A person's own tracker PAT and its OAuth successor, both AES-GCM ciphertext (V73:175,
+            // V73:178). `notification_channel`'s shape exactly, and one degree worse: this
+            // credential is not the instance's, it is an individual's, and it authenticates them in
+            // somebody else's Jira. `secret_hint` is KEPT — see DELIBERATELY_KEPT, and V73's own
+            // column comment: "Recognition, never a credential."
+            "tracker_identity", Set.of("secret", "refresh_token"));
 
     /**
      * Columns the sweep would flag that are exported deliberately. <strong>Every entry needs a
@@ -62,6 +68,13 @@ final class ExportRedactions {
             Map.entry("suite_version.content_hash", "content address of the client's own suite"),
             Map.entry("test_plan_version.content_hash", "content address of the client's own plan"),
             Map.entry("doc_page_version.content_hash", "content address of the client's own page"),
+            Map.entry("tracker_identity.secret_hint",
+                    "four end-anchored characters, and V73's column comment states the rule the "
+                            + "name only hints at: \"Recognition, never a credential.\" It is "
+                            + "notification_channel.secret_hint's decision one table over — a "
+                            + "client reading their own export must be able to tell WHICH token a "
+                            + "person had connected, and four characters is the least that answers "
+                            + "it"),
             Map.entry("api_token.token_prefix",
                     "the displayed first characters — V36 added it precisely so a token can be "
                             + "named without being reproduced"),

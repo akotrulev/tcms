@@ -107,6 +107,11 @@ function mockReads({
     // never assigns — but a missing arm is a failed read, and a failed read on this screen took
     // every arm in the file down before a key was pressed.
     if (/^\/projects\/[^/]+\/members$/.test(path)) return [aUserRef()]
+    // The defect panel asks whether this person has a tracker connection at all (004 Phase 3), so
+    // it reads on every render of this screen. Empty is the honest default here: none of the arms
+    // below files a defect, and an EMPTY list is what hides the file-a-defect control rather than
+    // what breaks it.
+    if (path === '/me/tracker-identities') return []
     throw new Error(`unmocked read: ${path}`)
   }) as never)
 }

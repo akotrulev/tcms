@@ -489,11 +489,27 @@ class ExecutionEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("passRate and coverage are null rather than an invented zero")
-        void aggregatesAreNull() throws Exception {
+        @DisplayName("passRate and coverage are measured once results exist")
+        void aggregatesAreMeasured() throws Exception {
+            // <s>They are null rather than an invented zero.</s> -> superseded by 005 S5, which
+            // built the writer this assertion was waiting for (`PlanListStatistics`). The decision
+            // it guarded is unchanged and still asserted where it still applies: a plan with an
+            // empty scope reports null, not zero -- `PlanCreateEndpointTest.theShapeOfACreatedPlan`.
+            // This plan has recorded results, so a null here would now be the missing writer.
             JsonNode plan = body(get(LEAD, ACME, "/projects/" + ACME_BANKING + "/plans/" + PLAN));
-            assertThat(plan.get("passRate").isNull()).isTrue();
-            assertThat(plan.get("coverage").isNull()).isTrue();
+
+            assertThat(plan.get("passRate").isNumber())
+                    .as("something in scope is recorded, so the pass rate has a denominator")
+                    .isTrue();
+            assertThat(plan.get("coverage").isNumber())
+                    .as("the scope is non-empty, which is coverage's whole denominator condition")
+                    .isTrue();
+            assertThat(plan.get("passRate").asDouble()).isBetween(0.0, 100.0);
+            assertThat(plan.get("coverage").asDouble()).isBetween(0.0, 100.0);
+            assertThat(plan.get("passRate").asDouble())
+                    .as("both are over the SCOPE, and a passing case is a covered one -- so a pass "
+                            + "rate above coverage means the two denominators drifted apart")
+                    .isLessThanOrEqualTo(plan.get("coverage").asDouble());
         }
 
         @Test

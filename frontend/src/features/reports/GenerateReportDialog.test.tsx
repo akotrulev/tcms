@@ -126,6 +126,8 @@ function queued(type: string) {
     downloadUrl: null,
     modelUrl: null,
     error: null,
+    // PENDING, so there is no artifact to have a size — null, and required, per 005 S1.
+    sizeBytes: null,
   } as never
 }
 
@@ -160,6 +162,7 @@ describe('GenerateReportDialog', () => {
       downloadUrl: null,
       modelUrl: null,
       error: null,
+      sizeBytes: null,
     } as never)
     const onQueued = vi.fn()
 

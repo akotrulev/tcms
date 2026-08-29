@@ -87,6 +87,16 @@ public class TrackerIssueCreation {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    /**
+     * When the attempt stopped being in flight, set by both {@link #succeeded} and {@link #failed}.
+     *
+     * <p><strong>Readerless by decision.</strong> This table is diagnostic and not recovery — the
+     * class header argues that at length — and the question this column answers is asked by a human
+     * with {@code psql}, not by the product. What the product reads is {@code status}: an attempt
+     * still {@code PENDING} is one that vanished mid-flight, which is the whole point of writing
+     * the row before the call. A reader here would be an operator screen over somebody else's
+     * tracker, which is not built and is a contract change rather than a wiring fix.
+     */
     @Column(name = "completed_at")
     private Instant completedAt;
 
@@ -134,6 +144,10 @@ public class TrackerIssueCreation {
 
     boolean isCreated() {
         return CREATED.equals(status);
+    }
+
+    UUID getId() {
+        return id;
     }
 
     UUID getBindingId() {

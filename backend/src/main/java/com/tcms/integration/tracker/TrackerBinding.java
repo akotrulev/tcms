@@ -12,6 +12,8 @@ import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.Filter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * {@code tracker_binding} — one project's mapping to one tracker project ({@code V73}, 004 D1).
@@ -72,8 +74,16 @@ public class TrackerBinding {
      * the keys are the <em>adapter's</em>, so a typed mapping here would be this module declaring a
      * shape it does not own, and a fourth adapter would be an entity change. It is parsed once, at
      * the boundary, by {@link TrackerBindingService}.
+     *
+     * <p><strong>{@code @JdbcTypeCode(JSON)}, not {@code columnDefinition = "jsonb"}</strong> —
+     * {@code InstanceAuditEvent.changes} records the trap at length and this field walked into it:
+     * {@code columnDefinition} satisfies {@code ddl-auto: validate} while the parameter is still
+     * bound as {@code varchar}, and Postgres does not implicitly cast {@code varchar} to
+     * {@code jsonb}. Every insert failed with "column config is of type jsonb but expression is of
+     * type character varying", which no compile and no schema check can see.
      */
-    @Column(name = "config", nullable = false, columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "config", nullable = false)
     private String config;
 
     @Column(name = "is_default", nullable = false)

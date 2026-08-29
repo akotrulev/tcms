@@ -66,8 +66,12 @@ export interface ScannedLine {
   spans: Span[];
 }
 
-const stepPattern = new RegExp(`^(\\s*)(${STEP_KEYWORDS.join('|')}|\\*)(\\s+)(.*)$`);
-const sectionPattern = new RegExp(`^(\\s*)(${SECTION_KEYWORDS.join('|')}:)(.*)$`);
+const stepPattern = new RegExp(`^(\\s*)((?:${STEP_KEYWORDS.join('|')})|\\*)(\\s+)(.*)$`);
+// The alternation is grouped before the colon is appended. Without `(?:…)`, `|` binds looser than
+// the trailing `:` and the pattern reads as `Feature | … | Rule:` — so only the LAST keyword
+// required its colon, `Feature` matched bare, and the keyword span came back without the character
+// the type says it includes.
+const sectionPattern = new RegExp(`^(\\s*)((?:${SECTION_KEYWORDS.join('|')}):)(.*)$`);
 
 /**
  * The text as coloured lines, one entry per line, **always at least one**.

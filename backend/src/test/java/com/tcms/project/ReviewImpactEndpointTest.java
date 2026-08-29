@@ -319,13 +319,16 @@ class ReviewImpactEndpointTest extends IntegrationTestBase {
     }
 
     private UUID openReviewOn(UUID projectId, ReviewSubjectType type, UUID submitter) {
-        return tx.execute(status -> {
-            try (var ignored = CompanyContext.open(ACME)) {
+        // Context OUTSIDE the transaction, like every other helper here. CompanyAwareTransactionManager
+        // hooks doBegin, so `app.current_company` is set when the transaction STARTS — opening the
+        // scope inside it is too late, the GUC stays unset and RLS refuses the insert outright.
+        try (var ignored = CompanyContext.open(ACME)) {
+            return tx.execute(status -> {
                 Review review = Review.open(
                         ACME, projectId, type, UUID.randomUUID(), 1, 1, submitter, Instant.now());
                 return reviews.saveAndFlush(review).getId();
-            }
-        });
+            });
+        }
     }
 
     private void verdict(UUID reviewId, UUID reviewer, ReviewParticipation.Verdict verdict) {

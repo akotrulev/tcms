@@ -3,6 +3,7 @@ package com.tcms.integration.tracker;
 import com.tcms.integration.OutboundUrlGuard;
 import java.time.Duration;
 import java.util.function.Function;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
 import org.springframework.http.client.ClientHttpRequestFactory;
@@ -61,14 +62,36 @@ public class TrackerClient {
     private final RestClient client;
     private final OutboundUrlGuard guard;
 
+    @Autowired
     TrackerClient(RestClient.Builder builder, OutboundUrlGuard guard) {
-        ClientHttpRequestFactory factory = ClientHttpRequestFactoryBuilder.detect()
+        this(builder.requestFactory(transport()).build(), guard);
+    }
+
+    /**
+     * The transport, already built — and the only way {@code MockRestServiceServer} can be bound.
+     *
+     * <p>It binds by installing its own {@code ClientHttpRequestFactory} on a
+     * {@code RestClient.Builder}, so the constructor above — which installs the real one over the
+     * top — silently un-bound it. That is not a cosmetic test problem: the transport suite was
+     * dialling {@code acme.atlassian.net} over the public internet on every run, and
+     * {@code *.atlassian.net} resolves, so the failures read as parse errors and a real Jira
+     * {@code 400} rather than as "this never reached the double".
+     *
+     * <p>Package-private and second, with {@code @Autowired} on the one above, because two
+     * candidate constructors is a context that will not start.
+     */
+    TrackerClient(RestClient client, OutboundUrlGuard guard) {
+        this.client = client;
+        this.guard = guard;
+    }
+
+    /** Timeouts and no redirects — the class header argues both. */
+    private static ClientHttpRequestFactory transport() {
+        return ClientHttpRequestFactoryBuilder.detect()
                 .build(ClientHttpRequestFactorySettings.defaults()
                         .withConnectTimeout(CONNECT_TIMEOUT)
                         .withReadTimeout(READ_TIMEOUT)
                         .withRedirects(ClientHttpRequestFactorySettings.Redirects.DONT_FOLLOW));
-        this.client = builder.requestFactory(factory).build();
-        this.guard = guard;
     }
 
     /**

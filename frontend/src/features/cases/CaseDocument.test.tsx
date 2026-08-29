@@ -15,6 +15,7 @@ import type {
 } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 import { aCase, aStep } from '../../test/fixtures'
 import { heldPermissions } from '../../test/permissions'
 import { CaseEditorPage } from './CaseEditorPage'
@@ -118,7 +119,10 @@ function savedCase(over: Partial<TestCase> = {}): TestCase {
   })
 }
 
-function mockReads(permissions: PermissionKey[] = ['case:edit', 'case:create', 'library:manage']) {
+function mockReads(
+  permissions: PermissionKey[] = ['case:edit', 'case:create', 'library:manage'],
+  theCase: TestCase = savedCase(),
+) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions, {}, PROJECT)
     if (path.includes('/step-suggestions')) return corpus
@@ -127,8 +131,8 @@ function mockReads(permissions: PermissionKey[] = ['case:edit', 'case:create', '
     if (path.includes('/classification')) return []
     if (path.includes('/tags')) return []
     if (path.includes('/draft')) return null
-    if (path.match(/\/cases\/[^/]+$/)) return savedCase()
-    if (path.includes('/cases')) return { items: [], page: 0, size: 1, total: 0 }
+    if (path.match(/\/cases\/[^/]+$/)) return theCase
+    if (path.includes('/cases')) return { items: [], facets: [], page: 0, size: 1, total: 0 }
     return []
   }) as never)
 }
@@ -287,6 +291,9 @@ describe('CaseDocument — the refusal is the product (003 C4)', () => {
     mockReads()
     vi.spyOn(api, 'postForText').mockResolvedValue(RENDERED as never)
     vi.spyOn(api, 'postText').mockRejectedValue(syntaxRefusal())
+    // The refused parse IS this test's subject (003 C4): the whole feature is what the screen does
+    // with a refusal, so the failed write is the fixture and not an accident.
+    drivingAFailedWrite()
     renderEditor()
 
     const area = await documentReady()
@@ -304,6 +311,9 @@ describe('CaseDocument — the refusal is the product (003 C4)', () => {
     mockReads()
     vi.spyOn(api, 'postForText').mockResolvedValue(RENDERED as never)
     vi.spyOn(api, 'postText').mockRejectedValue(syntaxRefusal())
+    // The refused parse IS this test's subject (003 C4): the whole feature is what the screen does
+    // with a refusal, so the failed write is the fixture and not an accident.
+    drivingAFailedWrite()
     renderEditor()
 
     const area = await documentReady()
@@ -323,6 +333,9 @@ describe('CaseDocument — the refusal is the product (003 C4)', () => {
     mockReads()
     vi.spyOn(api, 'postForText').mockResolvedValue(RENDERED as never)
     vi.spyOn(api, 'postText').mockRejectedValue(syntaxRefusal())
+    // The refused parse IS this test's subject (003 C4): the whole feature is what the screen does
+    // with a refusal, so the failed write is the fixture and not an accident.
+    drivingAFailedWrite()
     const patch = vi.spyOn(api, 'patch').mockResolvedValue(savedCase() as never)
     renderEditor()
 
@@ -332,10 +345,14 @@ describe('CaseDocument — the refusal is the product (003 C4)', () => {
     await user.tab()
     await screen.findByTestId('CaseEditor.Document.Refusal')
 
-    await user.click(screen.getByTestId('CaseEditor.Submit'))
+    // Disabled, not merely inert on click — disable-don't-hide, and it is the stronger guarantee:
+    // "the click posts nothing" is a claim about one code path, while a disabled control says the
+    // same thing about every route to it, keyboard included. The text HAS been edited, so the form
+    // is dirty and the refusal is the only thing that can be holding Save shut.
+    expect(screen.getByTestId('CaseEditor.Submit')).toBeDisabled()
 
     // Not a partial parse, and not the last good steps saved quietly under a success toast.
-    await waitFor(() => expect(screen.getByTestId('CaseEditor.Document.Refusal')).toBeInTheDocument())
+    expect(screen.getByTestId('CaseEditor.Document.Refusal')).toBeInTheDocument()
     expect(patch).not.toHaveBeenCalled()
   })
 })
@@ -398,15 +415,33 @@ describe('CaseDocument — Background: is a library write (003 D6)', () => {
   })
 
   it('says on screen that the rendered .feature omits inherited setup', async () => {
-    mockReads()
+    mockReads(undefined, savedCase({
+      preconditions: [
+        {
+          id: 'pc-1',
+          position: 1,
+          conditionId: 'cond-1',
+          title: 'The operator is signed in',
+          body: ['Sign in as the operator'],
+          inline: false,
+          inherited: true,
+          inheritedFrom: 'Refunds',
+          declineCount: 0,
+        },
+      ],
+    }))
+    // The notice is conditional on purpose — it explains what a `Background:` block does and does
+    // not carry, so on a case with neither a block nor inherited setup there is nothing for it to
+    // be about and a standing caption would be noise. Driven here by the SUITE's own precondition,
+    // which is the half the sentence is actually about.
     vi.spyOn(api, 'postForText').mockResolvedValue(RENDERED as never)
     renderEditor()
 
     await documentReady()
     // The cost of decision (a), where the block is rather than only in the plan.
-    expect(screen.getByTestId('CaseEditor.Document.BackgroundNotice')).toHaveTextContent(
-      /omits setup inherited from the suite/i,
-    )
+    expect(
+      await screen.findByTestId('CaseEditor.Document.BackgroundNotice'),
+    ).toHaveTextContent(/omits setup inherited from the suite/i)
   })
 })
 

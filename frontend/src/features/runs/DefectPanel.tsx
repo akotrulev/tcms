@@ -80,6 +80,7 @@ export function DefectPanel({
   executionId,
   defects,
   frozen = false,
+  filing,
 }: {
   projectId: string;
   runId: string;

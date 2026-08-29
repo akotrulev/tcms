@@ -5,6 +5,7 @@ import { api } from '../../api/client'
 import type { DefectLink, PermissionKey } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
+import { aTrackerIdentity } from '../../test/fixtures'
 import { heldPermissions } from '../../test/permissions'
 import { DefectPanel } from './DefectPanel'
 
@@ -217,19 +218,25 @@ describe('DefectPanel — filing (004 Phase 3)', () => {
   }
 
   it('offers filing to a connected caller', async () => {
-    renderFiling([{ id: 'ti1' }])
+    renderFiling([aTrackerIdentity()])
     await waitFor(() => expect(screen.getByTestId('Execution.Defects.File')).toBeEnabled())
   })
 
   it('disables filing with a way out when the caller has connected nothing', async () => {
     renderFiling([])
-    await waitFor(() => expect(screen.getByTestId('Execution.Defects.File')).toBeDisabled())
-    // Hidden-with-a-reason, not hidden: the reason is actionable and the action is beside it.
-    expect(screen.getByTestId('Execution.Defects.Connect')).toBeInTheDocument()
+    // The Connect prompt FIRST, because it is the only thing here that proves `/me/permissions`
+    // has answered: PermissionGate fails closed while pending, so "File is disabled" is true of
+    // the loading state too and asserting it first would pass without the feature existing.
+    expect(await screen.findByTestId('Execution.Defects.Connect')).toBeInTheDocument()
+    expect(screen.getByTestId('Execution.Defects.File')).toBeDisabled()
   })
 
   it('freezes filing on a closed run, exactly as linking is frozen', async () => {
-    renderFiling([{ id: 'ti1' }], true)
+    // UNCONNECTED and frozen, which is what makes this discriminate. With an identity present the
+    // prompt would be absent because the caller is connected, and the assertion would hold whether
+    // or not `frozen` did anything — the arm above serves exactly this fixture unfrozen and gets
+    // the prompt, so the pair isolates `frozen` as the cause.
+    renderFiling([], true)
     await waitFor(() => expect(screen.getByTestId('Execution.Defects.File')).toBeDisabled())
     // No connect prompt on a frozen run: reopening it is the remedy, not connecting.
     expect(screen.queryByTestId('Execution.Defects.Connect')).not.toBeInTheDocument()
@@ -238,7 +245,7 @@ describe('DefectPanel — filing (004 Phase 3)', () => {
   it('pre-fills the description from the execution, composed client-side', async () => {
     // What a defect report says is a product decision this SPA makes visibly, not a template
     // buried in an adapter — so the content is asserted here rather than trusted to the server.
-    renderFiling([{ id: 'ti1' }])
+    renderFiling([aTrackerIdentity()])
     await waitFor(() => expect(screen.getByTestId('Execution.Defects.File')).toBeEnabled())
     await userEvent.click(screen.getByTestId('Execution.Defects.File'))
 

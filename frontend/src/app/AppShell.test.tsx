@@ -184,8 +184,14 @@ describe('AppShell — the credential entries (005 C2)', () => {
     renderShell(`/projects/${OLB}/cases`, ['integration:manage', 'token:issue', 'company:idp'])
     await railReady()
 
-    expect(rail().getByRole('link', { name: 'Notifications' })).toBeInTheDocument()
-    expect(rail().getByRole('link', { name: 'Issue tracker' })).toBeInTheDocument()
+    // `find`, not `get`, for the two PROJECT-scoped entries. The company gate answers immediately
+    // — `/me/permissions` with no projectId — while the project one cannot even be REQUESTED until
+    // `/projects` has said which project is active, so it is still pending when the rail's groups
+    // first render and `can()` fails closed while pending. The two company entries below are `get`
+    // deliberately: they have no second round trip to wait for, and turning them into `find` would
+    // hide the day one of them acquires one.
+    expect(await rail().findByRole('link', { name: 'Notifications' })).toBeInTheDocument()
+    expect(await rail().findByRole('link', { name: 'Issue tracker' })).toBeInTheDocument()
     expect(rail().getByRole('link', { name: 'API tokens' })).toBeInTheDocument()
     expect(rail().getByRole('link', { name: 'Single sign-on' })).toBeInTheDocument()
   })

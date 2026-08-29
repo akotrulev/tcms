@@ -71,10 +71,17 @@ class TrackerTransportTest {
     void bind() {
         builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
+        // The BUILT client, not the builder. MockRestServiceServer binds by installing its own
+        // request factory on the builder, and TrackerClient's production constructor installs the
+        // real one over the top — so the mock was silently un-bound and this whole class dialled
+        // acme.atlassian.net for real. `*.atlassian.net` resolves, which is why the failures read
+        // as parse errors and a live Jira 400 rather than as "nothing reached the double".
+        //
         // allow-private-hosts: the mock's URLs are ordinary https hosts that never resolve, and the
         // guard resolves before it permits. Turning it on is what lets the transport be exercised
         // without asserting anything about somebody's DNS — OutboundUrlGuardTest owns that half.
-        client = new TrackerClient(builder, new OutboundUrlGuard(new OutboundProperties(true)));
+        client = new TrackerClient(
+                builder.build(), new OutboundUrlGuard(new OutboundProperties(true)));
     }
 
     private static TrackerBindingTarget jiraTarget() {
@@ -373,7 +380,8 @@ class TrackerTransportTest {
             // DNS can start answering differently after the row was written, and a row can predate
             // the guard entirely.
             TrackerClient enforcing =
-                    new TrackerClient(builder, new OutboundUrlGuard(new OutboundProperties(false)));
+                    new TrackerClient(
+                            builder.build(), new OutboundUrlGuard(new OutboundProperties(false)));
 
             assertThatThrownBy(() -> enforcing.exchange(
                             "http://acme.atlassian.net/rest/api/3/myself",
@@ -390,7 +398,8 @@ class TrackerTransportTest {
         @DisplayName("a refusal names the host and not the path somebody typed")
         void aRefusalNamesTheHostOnly() {
             TrackerClient enforcing =
-                    new TrackerClient(builder, new OutboundUrlGuard(new OutboundProperties(false)));
+                    new TrackerClient(
+                            builder.build(), new OutboundUrlGuard(new OutboundProperties(false)));
 
             assertThatThrownBy(() -> enforcing.exchange(
                             "http://acme.atlassian.net/rest/api/3/issue/10042?jql=secret",

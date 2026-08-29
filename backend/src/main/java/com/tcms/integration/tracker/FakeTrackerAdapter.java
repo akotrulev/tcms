@@ -70,7 +70,14 @@ public class FakeTrackerAdapter implements TrackerPort {
         return true;
     }
 
-    /** Registers an issue this fake knows about. Nobody can see it until {@link #entitle} says so. */
+    /**
+     * Registers an issue this fake knows about. Nobody can see it until {@link #entitle} says so.
+     *
+     * <p>Test-only by construction, and in {@code UNEXERCISED_BY_DECISION} for it: this bean exists
+     * only under {@code tracker-fake}, so "give it a production caller" is not an option. A fake
+     * with no corpus answers 404 to everything, which would make every read test agree with a
+     * broken adapter.
+     */
     public void register(TrackerIssue issue) {
         issues.put(issue.id(), issue);
     }
@@ -80,21 +87,46 @@ public class FakeTrackerAdapter implements TrackerPort {
      *
      * <p>Per <em>person</em>, which is the whole reason this class exists rather than a static map
      * of issues: the leak this integration must not have is one viewer's answer served to another.
+     *
+     * <p>In {@code UNEXERCISED_BY_DECISION}. The map is keyed on {@code (accountId, issueId)} and
+     * not on a TCMS user id, because an adapter only ever knows whose token this is (004 D2) —
+     * and without this there is no way to build the case that matters: two people, one issue, one
+     * of them allowed to see it.
      */
     public void entitle(String accountId, String issueId, boolean allowed) {
         entitlements.put(accountId + "|" + issueId, allowed);
     }
 
-    /** Makes a host answer {@link TrackerUnavailableException} — "the tracker is down". */
+    /**
+     * Makes a host answer {@link TrackerUnavailableException} — "the tracker is down".
+     *
+     * <p>In {@code UNEXERCISED_BY_DECISION}, and the entry that most earns it: a real outage is not
+     * reproducible, and the transport doubles prove the ADAPTER rather than what the service above
+     * it does with the exception — the 502, the {@code FAILED} ledger row, and the connection-health
+     * update that makes a dead token visible on the person's own page.
+     */
     public void breakHost(String baseUrl, String message) {
         outages.put(baseUrl, message);
     }
 
-    /** How many calls reached this adapter — the cache's effect, which no response body shows. */
+    /**
+     * How many calls reached this adapter — the cache's effect, which no response body shows.
+     *
+     * <p>In {@code UNEXERCISED_BY_DECISION}. It is the only way to observe the cache at all: a
+     * cached read and a fresh one serve byte-identical bodies, so a cache that silently stopped
+     * caching would pass every assertion about what a caller receives.
+     */
     public int countCalls() {
         return calls.get();
     }
 
+    /**
+     * Drops the corpus, the entitlements and the outages between tests.
+     *
+     * <p>In {@code UNEXERCISED_BY_DECISION}, as the isolation for the four above — all of them
+     * module state that outlives one test. Without it an entitlement or a broken host leaks into
+     * the next test and the suite's failures start depending on ordering.
+     */
     public void reset() {
         issues.clear();
         entitlements.clear();

@@ -506,7 +506,7 @@ class CaseGherkinEndpointTest extends IntegrationTestBase {
 
     @Nested
     @DisplayName("rendering a case the editor has not saved")
-    class Rendering {
+    class RenderingADraft {
 
         @Test
         @DisplayName("the Feature line is the suite's name, resolved server-side")

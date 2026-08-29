@@ -148,7 +148,11 @@ function mockReads({
     if (path.includes('/tags')) return []
     if (path.includes('/draft')) return null
     if (theCase && path.match(/\/cases\/[^/?]+$/)) return theCase
-    if (path.includes('/cases')) return { items: cases, page: 0, size: 1, total: cases.length }
+    // `facets` is required and always sent, empty when the page is — the grid distinguishes "no
+    // facets" from "facets not loaded", so an absent key is not the same body the server writes.
+    if (path.includes('/cases')) {
+      return { items: cases, facets: [], page: 0, size: 1, total: cases.length }
+    }
     return []
   }) as never)
 }
@@ -384,6 +388,10 @@ describe('what reaches the API', () => {
     renderNew()
 
     await screen.findByTestId('CaseEditor.Rail')
+    // The rail renders before `/me/permissions` answers, and PermissionGate fails closed while
+    // pending — so a click here lands on a button that is disabled for the wrong reason. Every
+    // other submit in this file waits the same way.
+    await waitFor(() => expect(screen.getByTestId('CaseEditor.Submit')).toBeEnabled())
     await user.click(screen.getByTestId('CaseEditor.Submit'))
 
     expect(await screen.findByTestId('CaseEditor.ErrorSummary')).toHaveTextContent('Add at least one step.')
