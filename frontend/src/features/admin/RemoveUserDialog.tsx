@@ -1,17 +1,17 @@
-import {
-  Alert,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Stack,
-} from '@mui/material';
 import { useEffect } from 'react';
 import { ApiError } from '../../api/client';
 import type { User } from '../../api/types';
 import { useRemoveUser } from '../../api/queries';
+import { Banner } from '../../components/kit';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui';
 import { describeError } from '../../lib/describeError';
 
 /**
@@ -65,41 +65,43 @@ export function RemoveUserDialog({
     : null;
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs" data-testid="Admin.Users.Remove">
-      <DialogTitle>Remove this person from the company?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2}>
-          <DialogContentText>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-sm" data-testid="Admin.Users.Remove">
+        <DialogHeader>
+          <DialogTitle>Remove this person from the company?</DialogTitle>
+          <DialogDescription>
             {user.displayName} will lose access to every project here, and their session ends
             immediately.
-          </DialogContentText>
-          <DialogContentText variant="body2">
-            Their roles are kept but stop applying, so inviting them back restores the projects they
-            had. Nothing they wrote is deleted.
-          </DialogContentText>
-          {refusal && (
-            <Alert severity="error" role="alert" data-testid="Admin.Users.Remove.Error">
-              {refusal}
-            </Alert>
-          )}
-        </Stack>
+          </DialogDescription>
+        </DialogHeader>
+
+        <p className="mt-3 text-[12.5px] leading-[1.55] text-ink-3">
+          Their roles are kept but stop applying, so inviting them back restores the projects they
+          had. Nothing they wrote is deleted.
+        </p>
+
+        {refusal && (
+          <Banner tone="bad" className="mt-3" data-testid="Admin.Users.Remove.Error">
+            <span role="alert">{refusal}</span>
+          </Banner>
+        )}
+
+        <DialogFooter>
+          <Button variant="quiet" onClick={onClose} data-testid="Admin.Users.Remove.Cancel">
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            disabled={remove.isPending}
+            data-testid="Admin.Users.Remove.Confirm"
+            onClick={() => {
+              remove.mutate(user.id, { onSuccess: () => onClose() });
+            }}
+          >
+            {remove.isPending ? 'Removing…' : 'Remove person'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid="Admin.Users.Remove.Cancel">
-          Cancel
-        </Button>
-        <Button
-          color="error"
-          variant="contained"
-          disabled={remove.isPending}
-          data-testid="Admin.Users.Remove.Confirm"
-          onClick={() => {
-            remove.mutate(user.id, { onSuccess: () => onClose() });
-          }}
-        >
-          {remove.isPending ? 'Removing…' : 'Remove person'}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

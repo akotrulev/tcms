@@ -1,17 +1,17 @@
-import {
-  Alert,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Stack,
-} from '@mui/material';
 import { useState } from 'react';
 import { ApiError } from '../../api/client';
 import { useDeleteTeam } from '../../api/queries';
 import type { Team } from '../../api/types';
+import { Banner } from '../../components/kit';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui';
 import { plural } from '../../lib/format';
 import { describeError } from '../../lib/describeError';
 
@@ -73,48 +73,54 @@ export function DeleteTeamDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
-      <DialogTitle>Delete {team.name}?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2}>
-          {failure && (
-            <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
-              {failure}
-            </Alert>
-          )}
-
-          {blockers && (
-            <Alert severity="warning" role="alert" data-testid={`${TestId}.Blocked`}>
-              <Stack component="ul" sx={{ m: 0, pl: 2 }}>
-                {blockers.map((message) => (
-                  <li key={message}>{message}</li>
-                ))}
-              </Stack>
-            </Alert>
-          )}
-
-          <DialogContentText>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
+        <DialogHeader>
+          <DialogTitle>Delete {team.name}?</DialogTitle>
+          <DialogDescription>
             The team is removed from the org chart.{' '}
             {team.members.length > 0
               ? `Its ${plural(team.members.length, 'member')} stay in the company and lose nothing — being in a team grants nothing on its own.`
               : 'Nobody is in it.'}
-          </DialogContentText>
-        </Stack>
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="mt-4 flex flex-col gap-3">
+          {failure && (
+            <div data-testid={`${TestId}.Error`}>
+              <Banner tone="bad">
+                <span role="alert">{failure}</span>
+              </Banner>
+            </div>
+          )}
+
+          {blockers && (
+            <div data-testid={`${TestId}.Blocked`}>
+              <Banner tone="warn">
+                <ul role="alert" className="m-0 list-disc pl-4">
+                  {blockers.map((message) => (
+                    <li key={message}>{message}</li>
+                  ))}
+                </ul>
+              </Banner>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="quiet" onClick={onClose} data-testid={`${TestId}.Cancel`}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => void submit()}
+            disabled={remove.isPending}
+            data-testid={`${TestId}.Confirm`}
+          >
+            {remove.isPending ? 'Deleting…' : 'Delete team'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
-          Cancel
-        </Button>
-        <Button
-          color="error"
-          variant="contained"
-          onClick={() => void submit()}
-          disabled={remove.isPending}
-          data-testid={`${TestId}.Confirm`}
-        >
-          {remove.isPending ? 'Deleting…' : 'Delete team'}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

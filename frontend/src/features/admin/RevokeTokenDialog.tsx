@@ -1,17 +1,16 @@
-import {
-  Alert,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Stack,
-} from '@mui/material';
 import { useState } from 'react';
 import { useRevokeApiToken } from '../../api/queries';
 import type { ApiToken } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
+import { Banner } from '../../components/kit';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui';
 import { describeError } from '../../lib/describeError';
 import { tokenState } from '../../lib/apiTokens';
 
@@ -66,52 +65,61 @@ export function RevokeTokenDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
-      <DialogTitle>Revoke {token.name}?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
+        <DialogHeader>
+          <DialogTitle>Revoke {token.name}?</DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-4 flex flex-col gap-3 text-[13px] leading-[1.55] text-ink-2">
           {failure && (
-            <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
-              {failure}
-            </Alert>
+            <div data-testid={`${TestId}.Error`}>
+              <Banner tone="bad">
+                <span role="alert">{failure}</span>
+              </Banner>
+            </div>
           )}
 
-          <DialogContentText>
+          <p>
             The credential starting <Identifier variant="strong">{token.tokenPrefix}</Identifier>{' '}
             {expired
               ? 'has already expired, so nothing is using it. Revoking it closes it for good and keeps the row as a record.'
               : 'stops working immediately. Anything using it — a CI job, a script — starts failing on its next run.'}
-          </DialogContentText>
+          </p>
 
-          <DialogContentText>
+          <p>
             This cannot be undone. Issuing a replacement produces a different token that has to be
             stored wherever this one is configured.
-          </DialogContentText>
+          </p>
 
           {/*
             Stated because the row not disappearing is the surprising part, and an administrator
             who expected it gone will otherwise click Revoke a second time looking for the effect.
           */}
-          <Alert severity="info" data-testid={`${TestId}.Kept`}>
-            The row stays in the list, marked revoked — it is the record of what this credential
-            did while it was live.
-          </Alert>
-        </Stack>
+          <div data-testid={`${TestId}.Kept`}>
+            <Banner tone="neutral">
+              <span>
+                The row stays in the list, marked revoked — it is the record of what this credential
+                did while it was live.
+              </span>
+            </Banner>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="quiet" onClick={onClose} data-testid={`${TestId}.Cancel`}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => void submit()}
+            disabled={revoke.isPending}
+            data-testid={`${TestId}.Confirm`}
+          >
+            {revoke.isPending ? 'Revoking…' : 'Revoke token'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
-          Cancel
-        </Button>
-        <Button
-          color="error"
-          variant="contained"
-          onClick={() => void submit()}
-          disabled={revoke.isPending}
-          data-testid={`${TestId}.Confirm`}
-        >
-          {revoke.isPending ? 'Revoking…' : 'Revoke token'}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

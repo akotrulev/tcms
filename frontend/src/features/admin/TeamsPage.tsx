@@ -1,25 +1,22 @@
-import {
-  Box,
-  Button,
-  Chip,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../auth/useAuth';
 import type { Team, User } from '../../api/types';
 import { useRoleAssignments, useRoles, useTeams, useUsers } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
+import {
+  Badge,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '../../components/kit';
+import { Button } from '../../components/ui';
 import { formatAge, formatCount, formatDateTime } from '../../lib/format';
 import { DeleteTeamDialog } from './DeleteTeamDialog';
 import { GrantRoleDialog } from './GrantRoleDialog';
@@ -30,7 +27,6 @@ import { RoleReference } from './RoleReference';
 import { flattenTeamTree } from './teamTree';
 import { TeamDialog } from './TeamDialog';
 import { TeamMembersDialog } from './TeamMembersDialog';
-import { ScrollX } from '../../components/ScrollX';
 
 /**
  * Teams, roles and the org chart (plan §6b, §6k).
@@ -80,7 +76,7 @@ export function TeamsPage() {
   const { user: signedIn } = useAuth();
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId="Admin.Header"
         title="Teams & roles"
@@ -98,7 +94,7 @@ export function TeamsPage() {
             is about the action, and the action is Grant.
           */
           <Button
-            variant="contained"
+            variant="primary"
             onClick={() => setGranting(true)}
             data-testid="Admin.Grant.Open"
           >
@@ -143,8 +139,8 @@ export function TeamsPage() {
         <DeleteTeamDialog open team={deleting} onClose={() => setDeleting(null)} />
       )}
 
-      <Stack sx={{ gap: 3 }}>
-        <Panel
+      <div className="flex flex-col gap-7">
+        <Section
           title="Team structure"
           testId="Admin.Teams"
           actions={
@@ -156,8 +152,8 @@ export function TeamsPage() {
             <PermissionGate projectId="company" permission="company:teams">
               {({ allowed }) => (
                 <Button
-                  size="small"
-                  variant="contained"
+                  size="sm"
+                  variant="primary"
                   disabled={!allowed}
                   onClick={() => setEditing(null)}
                   data-testid="Admin.Teams.New"
@@ -187,9 +183,9 @@ export function TeamsPage() {
               />
             )}
           </DataRegion>
-        </Panel>
+        </Section>
 
-        <Panel title="Role assignments" testId="Admin.Assignments" dense>
+        <Section title="Role assignments" testId="Admin.Assignments">
           <DataRegion
             testId="Admin.Assignments.List"
             state={{ ...assignments, refetch: () => void assignments.refetch() }}
@@ -198,12 +194,11 @@ export function TeamsPage() {
           >
             {(rows) => <RoleAssignmentTable rows={rows} testId="Admin.Assignments" />}
           </DataRegion>
-        </Panel>
+        </Section>
 
-        <Panel
+        <Section
           title="People"
           testId="Admin.Users"
-          dense
           actions={
             /*
               GATED, unlike "Grant a role" above — and the contrast is the point. That button is
@@ -216,8 +211,8 @@ export function TeamsPage() {
             <PermissionGate projectId="company" permission="company:members">
               {({ allowed }) => (
                 <Button
-                  size="small"
-                  variant="contained"
+                  size="sm"
+                  variant="primary"
                   disabled={!allowed}
                   onClick={() => setInviting(true)}
                   data-testid="Admin.Invite.Open"
@@ -235,109 +230,104 @@ export function TeamsPage() {
             empty={{ kind: 'no-records', title: 'No accounts', body: 'No user accounts exist yet.' }}
           >
             {(rows) => (
-              <ScrollX>
-                <Table size="small" data-testid="Admin.Users.Grid">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ color: 'text.secondary' }}>Name</TableCell>
-                      <TableCell sx={{ color: 'text.secondary' }}>Email</TableCell>
-                      <TableCell sx={{ color: 'text.secondary', width: 120 }}>Status</TableCell>
-                      <TableCell sx={{ color: 'text.secondary' }}>Teams</TableCell>
-                      <TableCell sx={{ color: 'text.secondary', width: 140 }}>Last signed in</TableCell>
-                      <TableCell sx={{ color: 'text.secondary', width: 110 }} align="right">
-                        {/* One action per row; the header names the column, not the verb. */}
-                        Membership
-                      </TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {[...rows]
-                      .sort(
-                        (a, b) =>
-                          // Deactivated accounts last — they're reference, not the working set.
-                          Number(a.status === 'DEACTIVATED') - Number(b.status === 'DEACTIVATED') ||
-                          a.displayName.localeCompare(b.displayName),
-                      )
-                      .map((user) => (
-                        <TableRow key={user.id} data-testid="Admin.Users.Row" hover>
-                          <TableCell sx={{ fontWeight: 500 }}>{user.displayName}</TableCell>
-                          <TableCell sx={{ color: 'text.secondary' }}>{user.email}</TableCell>
-                          <TableCell>
-                            <Chip
-                              size="small"
-                              label={user.status.toLowerCase()}
-                              data-testid="Admin.Users.Row.Status"
-                              sx={{
-                                bgcolor: 'transparent',
-                                color:
-                                  user.status === 'ACTIVE' ? 'var(--color-success)' : 'var(--color-text-faint)',
-                                border: `1px solid color-mix(in srgb, ${
-                                  user.status === 'ACTIVE' ? 'var(--color-success)' : 'var(--color-text-faint)'
-                                } 45%, transparent)`,
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell sx={{ fontSize: '0.75rem' }}>
-                            {user.teams.length === 0 ? (
-                              <Box sx={{ color: 'text.secondary' }}>None</Box>
-                            ) : (
-                              user.teams.join(', ')
-                            )}
-                          </TableCell>
-                          <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                            <Tooltip title={formatDateTime(user.lastLoginAt)}>
-                              <Box component="span">{formatAge(user.lastLoginAt)}</Box>
-                            </Tooltip>
-                          </TableCell>
-                          <TableCell align="right">
-                            {/*
-                              Two independent reasons this can be disabled, and they are disabled
-                              with DIFFERENT sentences on purpose (§31 is about the reason as much
-                              as the state): not holding `company:members`, which `PermissionGate`
-                              answers, and naming yourself, which only the session can answer. The
-                              server refuses the second with a 400 either way — the dialog renders
-                              it — but a button that invites a refusal the client could have
-                              predicted is the thing §31 exists to stop.
-                            */}
-                            <PermissionGate projectId="company" permission="company:members">
-                              {({ allowed }) => {
-                                const self = user.id === signedIn?.id;
-                                return (
-                                  <Tooltip
-                                    title={
-                                      self
-                                        ? 'You cannot remove yourself. Ask another administrator.'
-                                        : ''
-                                    }
-                                  >
-                                    {/* A disabled button fires no events, so the tooltip needs a
-                                        wrapper that does — MUI's documented workaround. */}
-                                    <Box component="span">
-                                      <Button
-                                        size="small"
-                                        color="error"
-                                        disabled={!allowed || self}
-                                        onClick={() => setRemoving(user)}
-                                        data-testid="Admin.Users.Row.Remove"
-                                      >
-                                        Remove
-                                      </Button>
-                                    </Box>
-                                  </Tooltip>
-                                );
-                              }}
-                            </PermissionGate>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </ScrollX>
+              <Table data-testid="Admin.Users.Grid">
+                <TableHead>
+                  <TableRow>
+                    <TableHeaderCell>Name</TableHeaderCell>
+                    <TableHeaderCell>Email</TableHeaderCell>
+                    <TableHeaderCell className="w-[120px]">Status</TableHeaderCell>
+                    <TableHeaderCell>Teams</TableHeaderCell>
+                    <TableHeaderCell className="w-[140px]">Last signed in</TableHeaderCell>
+                    <TableHeaderCell className="w-[110px]" align="right">
+                      {/* One action per row; the header names the column, not the verb. */}
+                      Membership
+                    </TableHeaderCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {[...rows]
+                    .sort(
+                      (a, b) =>
+                        // Deactivated accounts last — they're reference, not the working set.
+                        Number(a.status === 'DEACTIVATED') - Number(b.status === 'DEACTIVATED') ||
+                        a.displayName.localeCompare(b.displayName),
+                    )
+                    .map((user) => (
+                      <TableRow
+                        key={user.id}
+                        data-testid="Admin.Users.Row"
+                        /*
+                          Rule 7, disable don't hide: a deactivated account stays listed and reads
+                          as retired rather than being dropped. Somebody asking "who had access in
+                          March" cannot be answered by a list that removes its own history.
+                        */
+                        className={user.status === 'ACTIVE' ? undefined : 'opacity-60'}
+                      >
+                        <TableCell variant="title">{user.displayName}</TableCell>
+                        <TableCell className="text-ink-3">{user.email}</TableCell>
+                        <TableCell>
+                          <Badge
+                            tone={user.status === 'ACTIVE' ? 'passed' : 'plain'}
+                            data-testid="Admin.Users.Row.Status"
+                          >
+                            {user.status.toLowerCase()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-[11.5px]">
+                          {user.teams.length === 0 ? (
+                            <span className="text-ink-4">None</span>
+                          ) : (
+                            user.teams.join(', ')
+                          )}
+                        </TableCell>
+                        <TableCell className="text-[11.5px] text-ink-4">
+                          <span title={formatDateTime(user.lastLoginAt)}>
+                            {formatAge(user.lastLoginAt)}
+                          </span>
+                        </TableCell>
+                        <TableCell align="right">
+                          {/*
+                            Two independent reasons this can be disabled, and they are disabled
+                            with DIFFERENT sentences on purpose (§31 is about the reason as much
+                            as the state): not holding `company:members`, which `PermissionGate`
+                            answers, and naming yourself, which only the session can answer. The
+                            server refuses the second with a 400 either way — the dialog renders
+                            it — but a button that invites a refusal the client could have
+                            predicted is the thing §31 exists to stop.
+                          */}
+                          <PermissionGate projectId="company" permission="company:members">
+                            {({ allowed, reason }) => {
+                              const self = user.id === signedIn?.id;
+                              return (
+                                <Button
+                                  size="sm"
+                                  variant="danger"
+                                  disabled={!allowed || self}
+                                  title={
+                                    self
+                                      ? 'You cannot remove yourself. Ask another administrator.'
+                                      : allowed
+                                        ? undefined
+                                        : reason
+                                  }
+                                  onClick={() => setRemoving(user)}
+                                  data-testid="Admin.Users.Row.Remove"
+                                >
+                                  Remove
+                                </Button>
+                              );
+                            }}
+                          </PermissionGate>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
             )}
           </DataRegion>
-        </Panel>
+        </Section>
 
-        <Panel title="What each role can do" testId="Admin.Roles">
+        <Section title="What each role can do" testId="Admin.Roles">
           <DataRegion
             testId="Admin.Roles.List"
             state={{ ...roles, refetch: () => void roles.refetch() }}
@@ -345,9 +335,39 @@ export function TeamsPage() {
           >
             {(rows) => <RoleReference roles={rows} testId="Admin.Roles" />}
           </DataRegion>
-        </Panel>
-      </Stack>
-    </Box>
+        </Section>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A region heading in the render's uppercase mono, with this region's one action beside it.
+ *
+ * Rule 1 again: the four regions of this page were bordered panels around tables and a tree, and
+ * the border was doing the heading's job.
+ */
+function Section({
+  title,
+  actions,
+  children,
+  testId,
+}: {
+  title: string;
+  actions?: ReactNode;
+  children: ReactNode;
+  testId?: string;
+}) {
+  return (
+    <section data-testid={testId}>
+      <div className="mb-2.5 flex items-center justify-between gap-3">
+        <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
+          {title}
+        </h2>
+        {actions}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -366,28 +386,28 @@ function TeamTree({
   const tree = useMemo(() => flattenTeamTree(teams), [teams]);
 
   return (
-    <Stack sx={{ gap: 1.5 }}>
+    <div className="flex flex-col">
       {tree.map(({ team, depth }) => (
-        <Box
+        <div
           key={team.id}
           data-testid="Admin.Teams.Item"
-          sx={{
-            ml: depth * 3,
-            pl: 1.5,
-            borderLeft: depth > 0 ? '2px solid' : 'none',
-            borderColor: 'divider',
-          }}
+          style={{ marginLeft: depth * 22 }}
+          className={
+            depth > 0
+              ? 'border-b border-l-2 border-white/8 py-2.5 pl-3 last:border-b-0'
+              : 'border-b border-white/8 py-2.5 last:border-b-0'
+          }
         >
-          <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              {team.name}
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-semibold text-ink">{team.name}</span>
+            <span className="text-[11.5px] text-ink-4">
               <Identifier variant="muted">{formatCount(team.members.length)}</Identifier>{' '}
               {team.members.length === 1 ? 'member' : 'members'}
-            </Typography>
+            </span>
             {team.leads.map((lead) => (
-              <Chip key={lead.id} size="small" variant="outlined" label={`lead: ${lead.displayName}`} />
+              <Badge key={lead.id} tone="plain">
+                lead: {lead.displayName}
+              </Badge>
             ))}
 
             {/*
@@ -407,14 +427,8 @@ function TeamTree({
               a rail entry would need a team chosen before there is one, and this list is where a
               team is chosen.
             */}
-            <Button
-              component={RouterLink}
-              to={`/teams/${team.id}/board`}
-              size="small"
-              data-testid="Admin.Teams.Item.Board"
-              sx={{ ml: 'auto' }}
-            >
-              Board
+            <Button asChild size="sm" className="ml-auto" data-testid="Admin.Teams.Item.Board">
+              <RouterLink to={`/teams/${team.id}/board`}>Board</RouterLink>
             </Button>
 
             {/*
@@ -424,78 +438,60 @@ function TeamTree({
             */}
             <PermissionGate projectId="company" permission="company:teams">
               {({ allowed, reason }) => (
-                <Stack direction="row" sx={{ gap: 0.5 }}>
-                  <Tooltip title={allowed ? '' : reason}>
-                    <span>
-                      <Button
-                        size="small"
-                        disabled={!allowed}
-                        onClick={() => onManage(team)}
-                        data-testid="Admin.Teams.Item.Members"
-                      >
-                        Members
-                      </Button>
-                    </span>
-                  </Tooltip>
-                  <Tooltip title={allowed ? '' : reason}>
-                    <span>
-                      <Button
-                        size="small"
-                        disabled={!allowed}
-                        onClick={() => onEdit(team)}
-                        data-testid="Admin.Teams.Item.Edit"
-                      >
-                        Edit
-                      </Button>
-                    </span>
-                  </Tooltip>
-                  <Tooltip title={allowed ? '' : reason}>
-                    <span>
-                      <Button
-                        size="small"
-                        color="error"
-                        disabled={!allowed}
-                        onClick={() => onDelete(team)}
-                        data-testid="Admin.Teams.Item.Delete"
-                      >
-                        Delete
-                      </Button>
-                    </span>
-                  </Tooltip>
-                </Stack>
+                <span className="flex gap-1">
+                  <Button
+                    size="sm"
+                    disabled={!allowed}
+                    title={allowed ? undefined : reason}
+                    onClick={() => onManage(team)}
+                    data-testid="Admin.Teams.Item.Members"
+                  >
+                    Members
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!allowed}
+                    title={allowed ? undefined : reason}
+                    onClick={() => onEdit(team)}
+                    data-testid="Admin.Teams.Item.Edit"
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    disabled={!allowed}
+                    title={allowed ? undefined : reason}
+                    onClick={() => onDelete(team)}
+                    data-testid="Admin.Teams.Item.Delete"
+                  >
+                    Delete
+                  </Button>
+                </span>
               )}
             </PermissionGate>
-          </Stack>
+          </div>
 
           {team.description && (
-            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-              {team.description}
-            </Typography>
+            <p className="mt-0.5 max-w-[74ch] text-[12px] leading-[1.5] text-ink-4">{team.description}</p>
           )}
 
           {team.projects.length > 0 && (
-            <Stack direction="row" sx={{ gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
+            <div className="mt-1 flex flex-wrap gap-1">
               {team.projects.map((project) => (
-                <Tooltip
+                <span
                   key={`${project.projectId}-${project.roleName}`}
                   title={`Everyone in ${team.name} holds ${project.roleName} on ${project.projectName}`}
                 >
-                  <Chip
-                    size="small"
-                    label={`${project.projectName}: ${project.roleName}`}
-                    data-testid="Admin.Teams.Item.ProjectRole"
-                    sx={{
-                      bgcolor: 'transparent',
-                      color: 'var(--color-info)',
-                      border: '1px solid color-mix(in srgb, var(--color-info) 45%, transparent)',
-                    }}
-                  />
-                </Tooltip>
+                  <Badge tone="steel" data-testid="Admin.Teams.Item.ProjectRole">
+                    {project.projectName}: {project.roleName}
+                  </Badge>
+                </span>
               ))}
-            </Stack>
+            </div>
           )}
-        </Box>
+        </div>
       ))}
-    </Stack>
+    </div>
   );
 }

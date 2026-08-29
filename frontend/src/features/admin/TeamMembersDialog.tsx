@@ -1,27 +1,25 @@
-import {
-  Alert,
-  Button,
-  Checkbox,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material';
 import { useMemo, useState } from 'react';
 import { usePutTeamMember, useRemoveTeamMember, useUsers } from '../../api/queries';
 import type { Team } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
-import { ScrollX } from '../../components/ScrollX';
+import {
+  Banner,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '../../components/kit';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui';
 import { describeError } from '../../lib/describeError';
-import { inputTestId } from '../../lib/muiTestIds';
 
 /**
  * Who is in a team, and who leads it.
@@ -93,23 +91,32 @@ export function TeamMembersDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
-      <DialogTitle>{team.name} — members</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
+        <DialogHeader>
+          <DialogTitle>{team.name} — members</DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-4 flex max-h-[62vh] flex-col gap-4 overflow-y-auto pr-1">
           {failure && (
-            <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
-              {failure}
-            </Alert>
+            <div data-testid={`${TestId}.Error`}>
+              <Banner tone="bad">
+                <span role="alert">{failure}</span>
+              </Banner>
+            </div>
           )}
 
           {team.projects.length > 0 && (
-            <Alert severity="warning" data-testid={`${TestId}.GrantsWarning`}>
-              This team holds{' '}
-              {team.projects.length === 1 ? 'a role' : `${team.projects.length} roles`} on{' '}
-              {team.projects.map((p) => p.projectName).join(', ')}. Anyone you add here gets{' '}
-              {team.projects.length === 1 ? 'it' : 'them'} immediately.
-            </Alert>
+            <div data-testid={`${TestId}.GrantsWarning`}>
+              <Banner tone="warn">
+                <span>
+                  This team holds{' '}
+                  {team.projects.length === 1 ? 'a role' : `${team.projects.length} roles`} on{' '}
+                  {team.projects.map((p) => p.projectName).join(', ')}. Anyone you add here gets{' '}
+                  {team.projects.length === 1 ? 'it' : 'them'} immediately.
+                </span>
+              </Banner>
+            </div>
           )}
 
           <DataRegion
@@ -123,91 +130,81 @@ export function TeamMembersDialog({
             }}
           >
             {() => (
-              <ScrollX>
-                <Table size="small" data-testid={`${TestId}.Grid`}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ color: 'text.secondary' }}>Person</TableCell>
-                      <TableCell sx={{ color: 'text.secondary', width: 100 }} align="center">
-                        In team
-                      </TableCell>
-                      <TableCell sx={{ color: 'text.secondary', width: 100 }} align="center">
-                        Leads
-                      </TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {people.map((person) => {
-                      const isMember = memberIds.has(person.id);
-                      const isLead = leadIds.has(person.id);
-                      return (
-                        <TableRow key={person.id} data-testid={`${TestId}.Row`} hover>
-                          <TableCell>
-                            <Typography variant="body2">{person.displayName}</Typography>
-                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                              {person.email}
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="center">
-                            {/*
-                              The testid goes on the INPUT, not the wrapper. A bare `data-testid` on
-                              a MUI Checkbox lands on the wrapper span, where `toBeChecked` cannot
-                              see it and every assertion quietly passes — §68's own lesson, in its
-                              own test.
-                            */}
-                            <Checkbox
-                              size="small"
-                              checked={isMember}
-                              disabled={busy}
-                              onChange={(event) =>
-                                void setMembership(person.id, event.target.checked, false)
-                              }
-                              slotProps={inputTestId(
-                                `${TestId}.Member`,
-                                `${person.displayName} is in ${team.name}`,
-                              )}
-                            />
-                          </TableCell>
-                          <TableCell align="center">
-                            <Tooltip
-                              title={
-                                isMember
-                                  ? 'A lead is a member with a flag — it grants nothing extra.'
-                                  : 'Add them to the team first.'
-                              }
-                            >
-                              <span>
-                                <Checkbox
-                                  size="small"
-                                  checked={isLead}
-                                  disabled={busy || !isMember}
-                                  onChange={(event) =>
-                                    void setMembership(person.id, true, event.target.checked)
-                                  }
-                                  slotProps={inputTestId(
-                                    `${TestId}.Lead`,
-                                    `${person.displayName} leads ${team.name}`,
-                                  )}
-                                />
-                              </span>
-                            </Tooltip>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </ScrollX>
+              <Table data-testid={`${TestId}.Grid`} className="min-w-[420px]">
+                <TableHead>
+                  <TableRow>
+                    <TableHeaderCell>Person</TableHeaderCell>
+                    <TableHeaderCell className="w-[100px]" align="right">
+                      In team
+                    </TableHeaderCell>
+                    <TableHeaderCell className="w-[100px]" align="right">
+                      Leads
+                    </TableHeaderCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {people.map((person) => {
+                    const isMember = memberIds.has(person.id);
+                    const isLead = leadIds.has(person.id);
+                    return (
+                      <TableRow key={person.id} data-testid={`${TestId}.Row`}>
+                        <TableCell variant="title" subtitle={person.email}>
+                          {person.displayName}
+                        </TableCell>
+                        <TableCell align="right">
+                          {/*
+                            ~~The testid goes on the INPUT, not the wrapper: a bare `data-testid` on
+                            a MUI Checkbox lands on the wrapper span, where `toBeChecked` cannot see
+                            it and every assertion quietly passes.~~ → **superseded (007 T15).**
+                            There is no wrapper — this is the platform's checkbox, which is also
+                            the one a test can click without a pointer-API shim.
+                          */}
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-[color:var(--color-steel)]"
+                            checked={isMember}
+                            disabled={busy}
+                            aria-label={`${person.displayName} is in ${team.name}`}
+                            onChange={(event) =>
+                              void setMembership(person.id, event.target.checked, false)
+                            }
+                            data-testid={`${TestId}.Member`}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-[color:var(--color-steel)] disabled:opacity-45"
+                            checked={isLead}
+                            disabled={busy || !isMember}
+                            title={
+                              isMember
+                                ? 'A lead is a member with a flag — it grants nothing extra.'
+                                : 'Add them to the team first.'
+                            }
+                            aria-label={`${person.displayName} leads ${team.name}`}
+                            onChange={(event) =>
+                              void setMembership(person.id, true, event.target.checked)
+                            }
+                            data-testid={`${TestId}.Lead`}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             )}
           </DataRegion>
-        </Stack>
+        </div>
+
+        <DialogFooter>
+          {/* "Done", not "Save": every change here has already been written. */}
+          <Button onClick={onClose} variant="primary" data-testid={`${TestId}.Done`}>
+            Done
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        {/* "Done", not "Save": every change here has already been written. */}
-        <Button onClick={onClose} variant="contained" data-testid={`${TestId}.Done`}>
-          Done
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

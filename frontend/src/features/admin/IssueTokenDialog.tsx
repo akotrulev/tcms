@@ -1,19 +1,19 @@
-import {
-  Alert,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { useIssueApiToken, useProjects, useRoles } from '../../api/queries';
 import type { IssuedApiToken } from '../../api/types';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { describeError } from '../../lib/describeError';
 import { CopyField } from '../../components/CopyField';
 
@@ -182,25 +182,32 @@ export function IssueTokenDialog({ open, onClose }: { open: boolean; onClose: ()
 
   if (issued) {
     return (
-      <Dialog
-        open={open}
-        /*
-          No `onClose`, and this is the one dialog in the app that refuses one. Esc and a click on
-          the backdrop are the two ways a person dismisses a dialog without meaning to, and here
-          that destroys a value nothing can produce again. The Done button is the only exit and it
-          says what pressing it costs.
-        */
-        fullWidth
-        maxWidth="sm"
-        data-testid={`${TestId}.Secret`}
-      >
-        <DialogTitle>Copy the token for {issued.token.name}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Alert severity="warning" role="alert" data-testid={`${TestId}.Secret.Warning`}>
-              This is the only time this token is shown. Store it in your CI system's secret store
-              now — it cannot be recovered, and nothing here can show it again.
-            </Alert>
+      <Dialog open={open}>
+        {/*
+          No `onOpenChange`, and this is the one dialog in the app that refuses one. Esc and a
+          click on the overlay are the two ways a person dismisses a dialog without meaning to,
+          and here that destroys a value nothing can produce again. The Done button is the only
+          exit and it says what pressing it costs.
+        */}
+        <DialogContent
+          className="max-w-lg"
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
+          data-testid={`${TestId}.Secret`}
+        >
+          <DialogHeader>
+            <DialogTitle>Copy the token for {issued.token.name}</DialogTitle>
+          </DialogHeader>
+
+          <div className="mt-4 flex flex-col gap-4">
+            <div data-testid={`${TestId}.Secret.Warning`}>
+              <Banner tone="warn">
+                <span role="alert">
+                  This is the only time this token is shown. Store it in your CI system's secret
+                  store now — it cannot be recovered, and nothing here can show it again.
+                </span>
+              </Banner>
+            </div>
 
             <CopyField
               label="Token"
@@ -214,103 +221,112 @@ export function IssueTokenDialog({ open, onClose }: { open: boolean; onClose: ()
               */
             />
 
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            <p className="text-[12.5px] leading-[1.55] text-ink-3">
               The list will show its first 12 characters —{' '}
-              <strong>{issued.token.tokenPrefix}</strong> — so you can tell which CI configuration
-              this row belongs to. If you lose the token, revoke this one and issue another.
-            </Typography>
-          </Stack>
+              <b className="font-medium text-ink">{issued.token.tokenPrefix}</b> — so you can tell
+              which CI configuration this row belongs to. If you lose the token, revoke this one and
+              issue another.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="primary" onClick={onClose} data-testid={`${TestId}.Secret.Done`}>
+              I've stored it — close
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button
-            variant="contained"
-            onClick={onClose}
-            data-testid={`${TestId}.Secret.Done`}
-          >
-            I've stored it — close
-          </Button>
-        </DialogActions>
       </Dialog>
     );
   }
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
-      <form onSubmit={(event) => void submit(event)} noValidate aria-busy={issue.isPending}>
-        <DialogTitle>Issue an API token</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
+        <form onSubmit={(event) => void submit(event)} noValidate aria-busy={issue.isPending}>
+          <DialogHeader>
+            <DialogTitle>Issue an API token</DialogTitle>
+          </DialogHeader>
+
+          <div className="mt-4 flex flex-col gap-4">
             {formError && (
-              <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
-                {formError}
-              </Alert>
+              <div data-testid={`${TestId}.Error`}>
+                <Banner tone="bad">
+                  <span role="alert">{formError}</span>
+                </Banner>
+              </div>
             )}
 
-            <TextField
+            <Field
               label="Name"
-              required
-              autoFocus
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              error={!!fieldErrors.name}
-              helperText={
-                fieldErrors.name ??
-                'What this token is for — "Nightly regression, staging". You will read this when deciding which one to revoke.'
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Name`, maxLength: MAX_NAME } }}
-            />
-
-            <TextField
-              select
-              label="Role"
-              required
-              value={roleId}
-              onChange={(event) => setRoleId(event.target.value)}
-              error={!!fieldErrors.roleId}
-              helperText={
-                fieldErrors.roleId ??
-                (selectedRole?.description ??
-                  'The role the token carries — not your own. Automation Service is the one built for CI.')
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Role` } }}
+              htmlFor="token-name"
+              error={fieldErrors.name}
+              help='What this token is for — "Nightly regression, staging". You will read this when deciding which one to revoke.'
             >
-              {issuableRoles.map((role) => (
-                <MenuItem key={role.id} value={role.id}>
-                  {role.name}
-                </MenuItem>
-              ))}
-            </TextField>
+              <Input
+                id="token-name"
+                required
+                autoFocus
+                maxLength={MAX_NAME}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                data-testid={`${TestId}.Name`}
+              />
+            </Field>
 
-            <TextField
-              select
+            <Field
+              label="Role"
+              htmlFor="token-role"
+              error={fieldErrors.roleId}
+              help={
+                selectedRole?.description ??
+                'The role the token carries — not your own. Automation Service is the one built for CI.'
+              }
+            >
+              <NativeSelect
+                id="token-role"
+                required
+                value={roleId}
+                onChange={(event) => setRoleId(event.target.value)}
+                data-testid={`${TestId}.Role`}
+              >
+                {issuableRoles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+
+            <Field
               label="Where it works"
-              value={projectId}
-              onChange={(event) => setProjectId(event.target.value)}
-              helperText={
+              htmlFor="token-project"
+              help={
                 projectId === ALL_PROJECTS
                   ? 'Every project you can reach, including ones created later.'
                   : 'A hard limit: the token is inert on every other project.'
               }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Project` } }}
             >
-              <MenuItem value={ALL_PROJECTS}>Every project I can reach</MenuItem>
-              {(projects.data ?? []).map((project) => (
-                <MenuItem key={project.id} value={project.id}>
-                  {project.name}
-                </MenuItem>
-              ))}
-            </TextField>
+              <NativeSelect
+                id="token-project"
+                value={projectId}
+                onChange={(event) => setProjectId(event.target.value)}
+                data-testid={`${TestId}.Project`}
+              >
+                <option value={ALL_PROJECTS}>Every project I can reach</option>
+                {(projects.data ?? []).map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
 
-            <TextField
-              type="datetime-local"
+            <Field
               label="Expires"
-              value={expiresAt}
-              onChange={(event) => setExpiresAt(event.target.value)}
-              error={!!fieldErrors.expiresAt}
-              required={agentSelected}
-              helperText={
-                fieldErrors.expiresAt ??
-                (agentSelected
+              htmlFor="token-expires"
+              error={fieldErrors.expiresAt}
+              help={
+                agentSelected
                   ? 'Required for an agent token, and pre-filled with 90 days. It lives on a machine somebody uses rather than in a pipeline, so it has to have an end.'
                   : /*
                       Empty is the default and the copy says so rather than leaving a blank field
@@ -318,13 +334,18 @@ export function IssueTokenDialog({ open, onClose }: { open: boolean; onClose: ()
                       credential that dies mid-release without anybody deciding to withdraw it is
                       an outage, and the withdrawal that IS a decision is Revoke.
                     */
-                    'Optional. Leave it empty and the token lasts until it is revoked.')
+                    'Optional. Leave it empty and the token lasts until it is revoked.'
               }
-              slotProps={{
-                inputLabel: { shrink: true },
-                htmlInput: { 'data-testid': `${TestId}.Expires` },
-              }}
-            />
+            >
+              <Input
+                id="token-expires"
+                type="datetime-local"
+                required={agentSelected}
+                value={expiresAt}
+                onChange={(event) => setExpiresAt(event.target.value)}
+                data-testid={`${TestId}.Expires`}
+              />
+            </Field>
 
             {/*
               Said before the token exists rather than discovered when a pipeline 403s. The
@@ -332,26 +353,32 @@ export function IssueTokenDialog({ open, onClose }: { open: boolean; onClose: ()
               picking a powerful role does not produce a powerful token if the issuer's own grants
               do not reach that far.
             */}
-            <Alert severity="info" data-testid={`${TestId}.Hint`}>
-              The token can do what this role allows <em>and</em> what you can already do —
-              whichever is narrower. It never exceeds your own access, and it shrinks if yours does.
-            </Alert>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={issue.isPending || !name.trim() || !roleId}
-            data-testid={`${TestId}.Submit`}
-          >
-            {issue.isPending ? 'Issuing…' : 'Issue token'}
-          </Button>
-        </DialogActions>
-      </form>
+            <div data-testid={`${TestId}.Hint`}>
+              <Banner tone="neutral">
+                <span>
+                  The token can do what this role allows <em>and</em> what you can already do —
+                  whichever is narrower. It never exceeds your own access, and it shrinks if yours
+                  does.
+                </span>
+              </Banner>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="quiet" onClick={onClose} data-testid={`${TestId}.Cancel`}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={issue.isPending || !name.trim() || !roleId}
+              data-testid={`${TestId}.Submit`}
+            >
+              {issue.isPending ? 'Issuing…' : 'Issue token'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
     </Dialog>
   );
 }

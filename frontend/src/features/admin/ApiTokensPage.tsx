@@ -1,28 +1,30 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material';
 import { useMemo, useState } from 'react';
 import { useApiTokens, useProjects, useUsers } from '../../api/queries';
 import type { ApiToken } from '../../api/types';
 import { useCanInCompany } from '../../auth/useCan';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
-import { ScrollX } from '../../components/ScrollX';
+import {
+  Badge,
+  Banner,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+  type BadgeTone,
+} from '../../components/kit';
+import { Button } from '../../components/ui';
 import { formatDateTime } from '../../lib/format';
-import { tokenScopeLabel, tokenState, tokenStateColors, tokenStateLabels } from '../../lib/apiTokens';
+import {
+  tokenScopeLabel,
+  tokenState,
+  tokenStateLabels,
+  type ApiTokenState,
+} from '../../lib/apiTokens';
 import { IssueTokenDialog } from './IssueTokenDialog';
 import { RevokeTokenDialog } from './RevokeTokenDialog';
 
@@ -73,6 +75,17 @@ import { RevokeTokenDialog } from './RevokeTokenDialog';
 const TestId = 'Admin.Tokens';
 const RowTestId = `${TestId}.Row`;
 
+/**
+ * The three states, as badge tones. `lib/apiTokens.ts`' `tokenStateColors` beside the labels is
+ * the same three in CSS custom properties and has one consumer, this line; the two collapse when
+ * MUI goes and the labels file stops being shared with lanes that still need the old spelling.
+ */
+const STATE_TONE = {
+  LIVE: 'passed',
+  EXPIRED: 'blocked',
+  REVOKED: 'plain',
+} as const satisfies Record<ApiTokenState, BadgeTone>;
+
 export function ApiTokensPage() {
   const gate = useCanInCompany();
   const allowed = gate.can('token:issue');
@@ -97,7 +110,7 @@ export function ApiTokensPage() {
   );
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId={`${TestId}.Header`}
         title="API tokens"
@@ -113,19 +126,15 @@ export function ApiTokensPage() {
           */
           <PermissionGate projectId="company" permission="token:issue">
             {({ allowed: mayIssue, reason }) => (
-              <Tooltip title={mayIssue ? '' : reason}>
-                {/* A disabled button fires no events, so the tooltip needs a wrapper that does. */}
-                <Box component="span">
-                  <Button
-                    variant="contained"
-                    disabled={!mayIssue}
-                    onClick={() => setIssuing(true)}
-                    data-testid={`${TestId}.Issue`}
-                  >
-                    Issue a token
-                  </Button>
-                </Box>
-              </Tooltip>
+              <Button
+                variant="primary"
+                disabled={!mayIssue}
+                title={mayIssue ? undefined : reason}
+                onClick={() => setIssuing(true)}
+                data-testid={`${TestId}.Issue`}
+              >
+                Issue a token
+              </Button>
             )}
           </PermissionGate>
         }
@@ -139,64 +148,65 @@ export function ApiTokensPage() {
         <RevokeTokenDialog open token={revoking} onClose={() => setRevoking(null)} />
       )}
 
-      <Stack sx={{ gap: 3 }}>
-        <Panel title="Tokens" testId={`${TestId}.Panel`} dense>
-          {gate.pending ? null : !allowed ? (
-            <Alert severity="info" data-testid={`${TestId}.Denied`}>
-              You do not have permission to issue API tokens in this company, so this list is not
-              shown. A company administrator can issue one for you.
-            </Alert>
-          ) : (
-            <DataRegion
-              testId={`${TestId}.List`}
-              state={{ ...tokens, refetch: () => void tokens.refetch() }}
-              isEmpty={(rows) => rows.length === 0}
-              empty={{
-                kind: 'no-records',
-                title: 'No tokens yet',
-                body: 'Issue one so a CI job can post its results into this instance.',
-              }}
-            >
-              {(rows) => (
-                <ScrollX>
-                  <Table size="small" data-testid={`${TestId}.Grid`}>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ color: 'text.secondary' }}>Name</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 150 }}>Starts with</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 150 }}>Role</TableCell>
-                        <TableCell sx={{ color: 'text.secondary' }}>Where it works</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 160 }}>Owner</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 170 }}>Expires</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 150 }}>Last used</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 110 }}>Status</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 110 }} align="right">
-                          {/* One action per row; the header names the column, not the verb. */}
-                          Credential
-                        </TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {rows.map((token) => (
-                        <TokenRow
-                          key={token.id}
-                          token={token}
-                          projectName={
-                            token.projectId ? projectNames.get(token.projectId) : undefined
-                          }
-                          ownerName={userNames.get(token.ownerId)}
-                          onRevoke={() => setRevoking(token)}
-                        />
-                      ))}
-                    </TableBody>
-                  </Table>
-                </ScrollX>
-              )}
-            </DataRegion>
-          )}
-        </Panel>
-      </Stack>
-    </Box>
+      <section data-testid={`${TestId}.Panel`}>
+        <h2 className="mb-2.5 font-mono text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
+          Tokens
+        </h2>
+        {gate.pending ? null : !allowed ? (
+          <Banner tone="neutral" data-testid={`${TestId}.Denied`}>
+            {/* The permission and the role that can grant it — a person cannot be named here. */}
+            <span>
+              Issuing API tokens needs <Identifier variant="muted">token:issue</Identifier>, which
+              you do not hold, so this list is not shown. A company administrator can issue one for
+              you.
+            </span>
+          </Banner>
+        ) : (
+          <DataRegion
+            testId={`${TestId}.List`}
+            state={{ ...tokens, refetch: () => void tokens.refetch() }}
+            isEmpty={(rows) => rows.length === 0}
+            empty={{
+              kind: 'no-records',
+              title: 'No tokens yet',
+              body: 'Issue one so a CI job can post its results into this instance.',
+            }}
+          >
+            {(rows) => (
+              <Table data-testid={`${TestId}.Grid`} className="min-w-[1080px]">
+                <TableHead>
+                  <TableRow>
+                    <TableHeaderCell>Name</TableHeaderCell>
+                    <TableHeaderCell className="w-[150px]">Starts with</TableHeaderCell>
+                    <TableHeaderCell className="w-[150px]">Role</TableHeaderCell>
+                    <TableHeaderCell>Where it works</TableHeaderCell>
+                    <TableHeaderCell className="w-[160px]">Owner</TableHeaderCell>
+                    <TableHeaderCell className="w-[170px]">Expires</TableHeaderCell>
+                    <TableHeaderCell className="w-[150px]">Last used</TableHeaderCell>
+                    <TableHeaderCell className="w-[110px]">Status</TableHeaderCell>
+                    <TableHeaderCell className="w-[110px]" align="right">
+                      {/* One action per row; the header names the column, not the verb. */}
+                      Credential
+                    </TableHeaderCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {rows.map((token) => (
+                    <TokenRow
+                      key={token.id}
+                      token={token}
+                      projectName={token.projectId ? projectNames.get(token.projectId) : undefined}
+                      ownerName={userNames.get(token.ownerId)}
+                      onRevoke={() => setRevoking(token)}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </DataRegion>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -221,18 +231,22 @@ function TokenRow({
   const revoked = state === 'REVOKED';
 
   return (
-    <TableRow data-testid={RowTestId} hover sx={{ opacity: revoked ? 0.6 : 1 }}>
-      <TableCell sx={{ fontWeight: 500 }}>
+    /*
+      Rule 7 of the design language, and the render's own note for this family: *revoked and
+      expired stay on screen, at reduced weight, with the date and the reason.* An administration
+      table that removes dead rows makes an audit impossible and a repeat mistake likely — this
+      row is what explains a log entry from a credential that no longer works.
+    */
+    <TableRow data-testid={RowTestId} className={revoked ? 'opacity-60' : undefined}>
+      <TableCell variant="title">
         {/*
           When it was issued is one hover away rather than a column of its own: a token is
           identified by its name and its prefix, and the date it was minted is a question for the
           audit log, which records it with the actor beside it.
         */}
-        <Tooltip title={`Issued ${formatDateTime(token.createdAt)}`}>
-          <Box component="span" data-testid={`${RowTestId}.Name`}>
-            {token.name}
-          </Box>
-        </Tooltip>
+        <span title={`Issued ${formatDateTime(token.createdAt)}`} data-testid={`${RowTestId}.Name`}>
+          {token.name}
+        </span>
       </TableCell>
       <TableCell>
         {/*
@@ -244,65 +258,53 @@ function TokenRow({
           {token.tokenPrefix}
         </Identifier>
       </TableCell>
-      <TableCell sx={{ fontSize: '0.8125rem' }} data-testid={`${RowTestId}.Role`}>
+      <TableCell data-testid={`${RowTestId}.Role`}>
         {/* The name, expanded by the server, because a uuid says nothing about what a leaked
             credential could do. */}
         {token.roleName}
       </TableCell>
-      <TableCell sx={{ fontSize: '0.75rem' }} data-testid={`${RowTestId}.Scope`}>
+      <TableCell className="text-[11.5px]" data-testid={`${RowTestId}.Scope`}>
         {tokenScopeLabel(token, projectName)}
       </TableCell>
-      <TableCell sx={{ fontSize: '0.75rem' }} data-testid={`${RowTestId}.Owner`}>
+      <TableCell className="text-[11.5px]" data-testid={`${RowTestId}.Owner`}>
         {/* Names, not ids — and a stranger's id rather than a blank, for `tokenScopeLabel`'s
             reason: the owner's own grants cap this token, so an unresolved one is a fact worth
             showing rather than an empty cell. */}
         {ownerName ?? token.ownerId}
       </TableCell>
-      <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }} data-testid={`${RowTestId}.Expires`}>
-        {token.expiresAt ? (
-          formatDateTime(token.expiresAt)
-        ) : (
-          /*
-            "Does not expire" as a positive statement, never an em dash. A blank here reads as a
-            field somebody left empty, when it is in fact the more consequential of the two answers.
-          */
-          <Typography component="span" variant="caption">
-            Does not expire
-          </Typography>
-        )}
+      <TableCell className="text-[11.5px] text-ink-4" data-testid={`${RowTestId}.Expires`}>
+        {/*
+          "Does not expire" as a positive statement, never an em dash. A blank here reads as a
+          field somebody left empty, when it is in fact the more consequential of the two answers.
+        */}
+        {token.expiresAt ? formatDateTime(token.expiresAt) : 'Does not expire'}
       </TableCell>
-      <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }} data-testid={`${RowTestId}.LastUsed`}>
-        {token.lastUsedAt ? (
-          formatDateTime(token.lastUsedAt)
-        ) : (
-          /*
-            "Never used" as a positive statement, for the Expires cell's reason and one more: this
-            is the column an administrator reads to decide what to revoke, and the answer they are
-            looking for is exactly this one. A blank would read as "we don't know".
+      <TableCell className="text-[11.5px] text-ink-4" data-testid={`${RowTestId}.LastUsed`}>
+        {/*
+          "Never used" as a positive statement, for the Expires cell's reason and one more: this
+          is the column an administrator reads to decide what to revoke, and the answer they are
+          looking for is exactly this one. A blank would read as "we don't know".
 
-            The value is coarse by design (`tcms.api-token.last-used-resolution`, an hour by
-            default) — the server does not write it on every request, because a CI token would take
-            one row update per request. Rendered as a date-time and not "3 minutes ago": a relative
-            phrase implies a precision the column does not have.
-          */
-          <Typography component="span" variant="caption">
-            Never used
-          </Typography>
-        )}
+          The value is coarse by design (`tcms.api-token.last-used-resolution`, an hour by
+          default) — the server does not write it on every request, because a CI token would take
+          one row update per request. Rendered as a date-time and not "3 minutes ago": a relative
+          phrase implies a precision the column does not have.
+        */}
+        {token.lastUsedAt ? formatDateTime(token.lastUsedAt) : 'Never used'}
       </TableCell>
       <TableCell>
-        <Tooltip title={token.revokedAt ? `Revoked ${formatDateTime(token.revokedAt)}` : ''}>
-          <Chip
-            size="small"
-            label={tokenStateLabels[state]}
-            data-testid={`${RowTestId}.Status`}
-            sx={{
-              bgcolor: 'transparent',
-              color: tokenStateColors[state],
-              border: `1px solid color-mix(in srgb, ${tokenStateColors[state]} 45%, transparent)`,
-            }}
-          />
-        </Tooltip>
+        {/* The date and the reason travel with the dimmed row — rule 7 asks for both, and the
+            date is the half a revoked row cannot be read without. */}
+        <span title={token.revokedAt ? `Revoked ${formatDateTime(token.revokedAt)}` : undefined}>
+          <Badge tone={STATE_TONE[state]} data-testid={`${RowTestId}.Status`}>
+            {tokenStateLabels[state]}
+          </Badge>
+        </span>
+        {token.revokedAt && (
+          <span className="mt-0.5 block text-[11px] text-ink-4">
+            {formatDateTime(token.revokedAt)}
+          </span>
+        )}
       </TableCell>
       <TableCell align="right">
         {/*
@@ -313,27 +315,22 @@ function TokenRow({
         */}
         <PermissionGate projectId="company" permission="token:issue">
           {({ allowed, reason }) => (
-            <Tooltip
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={!allowed || revoked}
               title={
                 revoked
                   ? 'This token was already revoked. Revoking it again would change nothing.'
                   : allowed
-                    ? ''
+                    ? undefined
                     : reason
               }
+              onClick={onRevoke}
+              data-testid={`${RowTestId}.Revoke`}
             >
-              <Box component="span">
-                <Button
-                  size="small"
-                  color="error"
-                  disabled={!allowed || revoked}
-                  onClick={onRevoke}
-                  data-testid={`${RowTestId}.Revoke`}
-                >
-                  Revoke
-                </Button>
-              </Box>
-            </Tooltip>
+              Revoke
+            </Button>
           )}
         </PermissionGate>
       </TableCell>

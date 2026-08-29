@@ -1,24 +1,21 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControlLabel,
-  MenuItem,
-  Stack,
-  Switch,
-  TextField,
-  Typography,
-} from '@mui/material';
 import { useState } from 'react';
 import { ApiError } from '../../api/client';
 import { useSaveIdentityProvider } from '../../api/queries';
 import type { IdentityProvider, IdentityProviderInput, IdentityProviderKind } from '../../api/types';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Switch,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { describeError } from '../../lib/describeError';
-import { inputTestId, selectTestId } from '../../lib/muiTestIds';
 
 /**
  * Registering a provider, and reconfiguring one — one form, because the only difference between the
@@ -230,332 +227,373 @@ export function ProviderFormDialog({
   };
 
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="sm" data-testid={`${TestId}.Dialog`}>
-      <form onSubmit={(event) => void submit(event)} noValidate aria-busy={save.isPending}>
-        <DialogTitle>
-          {editing ? `Configure ${provider.displayName}` : 'Register an identity provider'}
-        </DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+    <Dialog open onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={`${TestId}.Dialog`}>
+        <form onSubmit={(event) => void submit(event)} noValidate aria-busy={save.isPending}>
+          <DialogHeader>
+            <DialogTitle>
+              {editing ? `Configure ${provider.displayName}` : 'Register an identity provider'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="mt-4 flex max-h-[62vh] flex-col gap-4 overflow-y-auto pr-1">
             {formError && (
-              <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
-                {formError}
-              </Alert>
+              <div data-testid={`${TestId}.Error`}>
+                <Banner tone="bad">
+                  <span role="alert">{formError}</span>
+                </Banner>
+              </div>
             )}
 
-            <TextField
-              select
+            <Field
               label="Kind"
-              required
-              value={kind}
-              onChange={(event) => setKind(event.target.value as IdentityProviderKind)}
-              // A kind is set once at registration, which is why it is disabled on an edit and
-              // live on a registration — `key`'s reason: the server ignores it on the PUT.
-              disabled={editing}
-              helperText={
+              htmlFor="sso-kind"
+              help={
                 editing
                   ? 'A provider’s kind is set once.'
                   : 'Which protocol this provider speaks — everything below follows it.'
               }
-              slotProps={{ select: { SelectDisplayProps: selectTestId(`${TestId}.Kind`) } }}
             >
-              <MenuItem value="OIDC">OpenID Connect</MenuItem>
-              <MenuItem value="LDAP">Directory (LDAP / Active Directory)</MenuItem>
-            </TextField>
+              <NativeSelect
+                id="sso-kind"
+                required
+                value={kind}
+                onChange={(event) => setKind(event.target.value as IdentityProviderKind)}
+                // A kind is set once at registration, which is why it is disabled on an edit and
+                // live on a registration — `key`'s reason: the server ignores it on the PUT.
+                disabled={editing}
+                /*
+                  `aria-disabled` beside the native `disabled`, which is belt and braces on purpose:
+                  a disabled control is removed from the accessibility tree's interaction model but
+                  several screen readers announce the ARIA state where they announce nothing for the
+                  native one, and this is the field whose disabled-ness is the answer to "why can't
+                  I change this".
+                */
+                aria-disabled={editing || undefined}
+                data-testid={`${TestId}.Kind`}
+              >
+                <option value="OIDC">OpenID Connect</option>
+                <option value="LDAP">Directory (LDAP / Active Directory)</option>
+              </NativeSelect>
+            </Field>
 
-            <TextField
+            <Field
               label="Key"
-              required
-              value={editing ? provider.key : key}
-              disabled={editing}
-              onChange={(event) => setKey(event.target.value)}
-              error={!!fieldErrors.key}
-              helperText={
-                fieldErrors.key ??
-                (editing
+              htmlFor="sso-key"
+              error={fieldErrors.key}
+              help={
+                editing
                   ? 'A provider’s key is set once at registration and cannot be changed.'
-                  : 'Your own short name for this provider — “acme-sso”. Lowercase letters, digits and hyphens.')
+                  : 'Your own short name for this provider — “acme-sso”. Lowercase letters, digits and hyphens.'
               }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Key`, maxLength: 60 } }}
-            />
+            >
+              <Input
+                id="sso-key"
+                required
+                maxLength={60}
+                value={editing ? provider.key : key}
+                disabled={editing}
+                onChange={(event) => setKey(event.target.value)}
+                data-testid={`${TestId}.Key`}
+              />
+            </Field>
 
-            <TextField
+            <Field
               label="Name"
-              required
-              autoFocus
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              error={!!fieldErrors.displayName}
-              helperText={
-                fieldErrors.displayName ??
-                'What the sign-in button says. This is the one string this product shows to somebody who has not signed in.'
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.DisplayName`, maxLength: 120 } }}
-            />
+              htmlFor="sso-display-name"
+              error={fieldErrors.displayName}
+              help="What the sign-in button says. This is the one string this product shows to somebody who has not signed in."
+            >
+              <Input
+                id="sso-display-name"
+                required
+                autoFocus
+                maxLength={120}
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                data-testid={`${TestId}.DisplayName`}
+              />
+            </Field>
 
-            <TextField
+            <Field
               label={directory ? 'Directory URL' : 'Issuer URL'}
-              required
-              value={issuerUri}
-              onChange={(event) => setIssuerUri(event.target.value)}
-              error={!!fieldErrors.issuerUri}
-              helperText={
-                fieldErrors.issuerUri ??
-                (directory
+              htmlFor="sso-issuer"
+              error={fieldErrors.issuerUri}
+              help={
+                directory
                   ? 'Like ldaps://dc.acme.test:636. A plain ldap:// URL is only accepted with StartTLS, because a bind sends your people’s own passwords.'
-                  : 'Like https://issuer.acme.test/realms/acme. Its discovery document is what this instance reads the signing keys from, so it must be https.')
+                  : 'Like https://issuer.acme.test/realms/acme. Its discovery document is what this instance reads the signing keys from, so it must be https.'
               }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.IssuerUri` } }}
-            />
+            >
+              <Input
+                id="sso-issuer"
+                required
+                value={issuerUri}
+                onChange={(event) => setIssuerUri(event.target.value)}
+                data-testid={`${TestId}.IssuerUri`}
+              />
+            </Field>
 
             {!directory && (
-              <TextField
+              <Field
                 label="Client id"
-                required
-                value={clientId}
-                onChange={(event) => setClientId(event.target.value)}
-                error={!!fieldErrors.clientId}
-                helperText={fieldErrors.clientId ?? 'The client id this issuer gave you for TCMS.'}
-                slotProps={{ htmlInput: { 'data-testid': `${TestId}.ClientId`, maxLength: 500 } }}
-              />
+                htmlFor="sso-client-id"
+                error={fieldErrors.clientId}
+                help="The client id this issuer gave you for TCMS."
+              >
+                <Input
+                  id="sso-client-id"
+                  required
+                  maxLength={500}
+                  value={clientId}
+                  onChange={(event) => setClientId(event.target.value)}
+                  data-testid={`${TestId}.ClientId`}
+                />
+              </Field>
             )}
 
             {!directory && (
-              <TextField
+              <Field
                 label={provider?.clientSecretSet ? 'Replace the client secret' : 'Client secret'}
-                type="password"
-                value={clientSecret}
-                onChange={(event) => setClientSecret(event.target.value)}
-                error={!!fieldErrors.clientSecret}
-                helperText={
-                  fieldErrors.clientSecret ??
-                  (provider?.clientSecretSet
+                htmlFor="sso-client-secret"
+                error={fieldErrors.clientSecret}
+                help={
+                  provider?.clientSecretSet
                     ? /*
                         The sentence the dialog rests on. An administrator who reads "leave blank to
                         keep" and does so must be right — and they are, because the property goes out
                         as null, which the server reads as unchanged.
                       */
                       'Leave blank to keep the stored secret. Type a new one only to replace it — this product will never show you the current value.'
-                    : 'Public clients have none. Leave blank if this issuer authenticates TCMS with PKCE alone.')
+                    : 'Public clients have none. Leave blank if this issuer authenticates TCMS with PKCE alone.'
                 }
-                slotProps={{ htmlInput: { 'data-testid': `${TestId}.ClientSecret` } }}
-              />
+              >
+                <Input
+                  id="sso-client-secret"
+                  type="password"
+                  value={clientSecret}
+                  onChange={(event) => setClientSecret(event.target.value)}
+                  data-testid={`${TestId}.ClientSecret`}
+                />
+              </Field>
             )}
 
             {directory && (
               <>
-                <TextField
+                <Field
                   label="Bind DN"
-                  value={bindDn}
-                  onChange={(event) => setBindDn(event.target.value)}
-                  error={!!fieldErrors.bindDn}
-                  helperText={
-                    fieldErrors.bindDn ??
-                    'The service account this instance searches as — “cn=tcms,ou=services,dc=acme,dc=test”. Leave blank for an anonymous search, which Active Directory does not permit.'
-                  }
-                  slotProps={{ htmlInput: { 'data-testid': `${TestId}.BindDn`, maxLength: 500 } }}
-                />
+                  htmlFor="sso-bind-dn"
+                  error={fieldErrors.bindDn}
+                  help="The service account this instance searches as — “cn=tcms,ou=services,dc=acme,dc=test”. Leave blank for an anonymous search, which Active Directory does not permit."
+                >
+                  <Input
+                    id="sso-bind-dn"
+                    maxLength={500}
+                    value={bindDn}
+                    onChange={(event) => setBindDn(event.target.value)}
+                    data-testid={`${TestId}.BindDn`}
+                  />
+                </Field>
 
-                <TextField
+                <Field
                   label={provider?.bindPasswordSet ? 'Replace the bind password' : 'Bind password'}
-                  type="password"
-                  value={bindPassword}
-                  onChange={(event) => setBindPassword(event.target.value)}
-                  error={!!fieldErrors.bindPassword}
-                  helperText={
-                    fieldErrors.bindPassword ??
-                    (provider?.bindPasswordSet
+                  htmlFor="sso-bind-password"
+                  error={fieldErrors.bindPassword}
+                  help={
+                    provider?.bindPasswordSet
                       ? 'Leave blank to keep the stored password. Type a new one only to replace it — this product will never show you the current value.'
-                      : 'The service account’s password. Leave blank for an anonymous search.')
+                      : 'The service account’s password. Leave blank for an anonymous search.'
                   }
-                  slotProps={{ htmlInput: { 'data-testid': `${TestId}.BindPassword` } }}
-                />
+                >
+                  <Input
+                    id="sso-bind-password"
+                    type="password"
+                    value={bindPassword}
+                    onChange={(event) => setBindPassword(event.target.value)}
+                    data-testid={`${TestId}.BindPassword`}
+                  />
+                </Field>
 
-                <FormControlLabel
-                  sx={{ alignItems: 'flex-start' }}
-                  control={
-                    <Switch
-                      checked={startTls}
-                      onChange={(event) => setStartTls(event.target.checked)}
-                      slotProps={inputTestId(`${TestId}.StartTls`)}
-                    />
-                  }
-                  label={
-                    <Box sx={{ pt: 0.75 }}>
-                      <Typography variant="body2">StartTLS</Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        Upgrades a plain ldap:// connection to an encrypted one. An ldaps:// URL is
-                        already encrypted and does not use this.
-                      </Typography>
-                    </Box>
-                  }
-                />
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[13px] text-ink-2">StartTLS</p>
+                    <p className="text-[12px] leading-[1.5] text-ink-4">
+                      Upgrades a plain ldap:// connection to an encrypted one. An ldaps:// URL is
+                      already encrypted and does not use this.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={startTls}
+                    onCheckedChange={setStartTls}
+                    aria-label="StartTLS"
+                    data-testid={`${TestId}.StartTls`}
+                  />
+                </div>
 
-                <TextField
+                <Field
                   label="User search base"
-                  required
-                  value={userSearchBase}
-                  onChange={(event) => setUserSearchBase(event.target.value)}
-                  error={!!fieldErrors.userSearchBase}
-                  helperText={
-                    fieldErrors.userSearchBase ??
-                    'The subtree searched for the person signing in — “ou=people,dc=acme,dc=test”.'
-                  }
-                  slotProps={{
-                    htmlInput: { 'data-testid': `${TestId}.UserSearchBase`, maxLength: 500 },
-                  }}
-                />
+                  htmlFor="sso-user-search-base"
+                  error={fieldErrors.userSearchBase}
+                  help="The subtree searched for the person signing in — “ou=people,dc=acme,dc=test”."
+                >
+                  <Input
+                    id="sso-user-search-base"
+                    required
+                    maxLength={500}
+                    value={userSearchBase}
+                    onChange={(event) => setUserSearchBase(event.target.value)}
+                    data-testid={`${TestId}.UserSearchBase`}
+                  />
+                </Field>
 
-                <TextField
+                <Field
                   label="User search filter"
-                  required
-                  value={userSearchFilter}
-                  onChange={(event) => setUserSearchFilter(event.target.value)}
-                  error={!!fieldErrors.userSearchFilter}
-                  helperText={
-                    fieldErrors.userSearchFilter ??
-                    'Must contain {0}, where the typed address is substituted with escaping applied. The default matches Active Directory.'
-                  }
-                  slotProps={{
-                    htmlInput: { 'data-testid': `${TestId}.UserSearchFilter`, maxLength: 500 },
-                  }}
-                />
+                  htmlFor="sso-user-search-filter"
+                  error={fieldErrors.userSearchFilter}
+                  help="Must contain {0}, where the typed address is substituted with escaping applied. The default matches Active Directory."
+                >
+                  <Input
+                    id="sso-user-search-filter"
+                    required
+                    maxLength={500}
+                    value={userSearchFilter}
+                    onChange={(event) => setUserSearchFilter(event.target.value)}
+                    data-testid={`${TestId}.UserSearchFilter`}
+                  />
+                </Field>
 
-                <TextField
+                <Field
                   label="User id attribute"
-                  required
-                  value={userIdAttribute}
-                  onChange={(event) => setUserIdAttribute(event.target.value)}
-                  error={!!fieldErrors.userIdAttribute}
-                  helperText={
-                    fieldErrors.userIdAttribute ??
-                    '“objectGUID” on Active Directory, “entryUUID” on OpenLDAP. Never a DN — a DN changes when somebody moves between OUs.'
-                  }
-                  slotProps={{
-                    htmlInput: { 'data-testid': `${TestId}.UserIdAttribute`, maxLength: 100 },
-                  }}
-                />
+                  htmlFor="sso-user-id-attribute"
+                  error={fieldErrors.userIdAttribute}
+                  help="“objectGUID” on Active Directory, “entryUUID” on OpenLDAP. Never a DN — a DN changes when somebody moves between OUs."
+                >
+                  <Input
+                    id="sso-user-id-attribute"
+                    required
+                    maxLength={100}
+                    value={userIdAttribute}
+                    onChange={(event) => setUserIdAttribute(event.target.value)}
+                    data-testid={`${TestId}.UserIdAttribute`}
+                  />
+                </Field>
 
-                <TextField
+                <Field
                   label="Email attribute"
-                  value={emailAttribute}
-                  onChange={(event) => setEmailAttribute(event.target.value)}
-                  error={!!fieldErrors.emailAttribute}
-                  helperText={
-                    fieldErrors.emailAttribute ??
-                    'Which attribute carries the address — “mail” on both common directories.'
-                  }
-                  slotProps={{
-                    htmlInput: { 'data-testid': `${TestId}.EmailAttribute`, maxLength: 100 },
-                  }}
-                />
+                  htmlFor="sso-email-attribute"
+                  error={fieldErrors.emailAttribute}
+                  help="Which attribute carries the address — “mail” on both common directories."
+                >
+                  <Input
+                    id="sso-email-attribute"
+                    maxLength={100}
+                    value={emailAttribute}
+                    onChange={(event) => setEmailAttribute(event.target.value)}
+                    data-testid={`${TestId}.EmailAttribute`}
+                  />
+                </Field>
 
-                <TextField
+                <Field
                   label="Display name attribute"
-                  value={displayNameAttribute}
-                  onChange={(event) => setDisplayNameAttribute(event.target.value)}
-                  helperText="Which attribute carries the person’s name, for the membership a sign-in creates."
-                  slotProps={{
-                    htmlInput: { 'data-testid': `${TestId}.DisplayNameAttribute`, maxLength: 100 },
-                  }}
-                />
+                  htmlFor="sso-display-name-attribute"
+                  help="Which attribute carries the person’s name, for the membership a sign-in creates."
+                >
+                  <Input
+                    id="sso-display-name-attribute"
+                    maxLength={100}
+                    value={displayNameAttribute}
+                    onChange={(event) => setDisplayNameAttribute(event.target.value)}
+                    data-testid={`${TestId}.DisplayNameAttribute`}
+                  />
+                </Field>
               </>
             )}
 
             {!directory && (
-              <TextField
+              <Field
                 label="Group claim"
-                value={groupClaim}
-                onChange={(event) => setGroupClaim(event.target.value)}
-                error={!!fieldErrors.groupClaim}
-                helperText={
-                  fieldErrors.groupClaim ??
-                  'Optional. Stored and not yet consulted — mapping groups to roles is its own slice, and this is the field it will read.'
-                }
-                slotProps={{ htmlInput: { 'data-testid': `${TestId}.GroupClaim` } }}
-              />
+                htmlFor="sso-group-claim"
+                error={fieldErrors.groupClaim}
+                help="Optional. Stored and not yet consulted — mapping groups to roles is its own slice, and this is the field it will read."
+              >
+                <Input
+                  id="sso-group-claim"
+                  value={groupClaim}
+                  onChange={(event) => setGroupClaim(event.target.value)}
+                  data-testid={`${TestId}.GroupClaim`}
+                />
+              </Field>
             )}
 
-            <FormControlLabel
-              sx={{ alignItems: 'flex-start' }}
-              control={
-                <Switch
-                  checked={jitProvisioning}
-                  onChange={(event) => setJitProvisioning(event.target.checked)}
-                  slotProps={inputTestId(`${TestId}.JitProvisioning`)}
-                />
-              }
-              label={
-                <Box sx={{ pt: 0.75 }}>
-                  <Typography variant="body2">Create accounts on first sign-in</Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    {/* Off by default, and the sentence says which direction is the safe one. */}
-                    Anyone this provider authenticates gets an account here, with exactly what
-                    accepting an invitation grants and nothing more. Off means only people who were
-                    invited can get in.
-                  </Typography>
-                </Box>
-              }
-            />
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[13px] text-ink-2">Create accounts on first sign-in</p>
+                <p className="text-[12px] leading-[1.5] text-ink-4">
+                  {/* Off by default, and the sentence says which direction is the safe one. */}
+                  Anyone this provider authenticates gets an account here, with exactly what
+                  accepting an invitation grants and nothing more. Off means only people who were
+                  invited can get in.
+                </p>
+              </div>
+              <Switch
+                checked={jitProvisioning}
+                onCheckedChange={setJitProvisioning}
+                aria-label="Create accounts on first sign-in"
+                data-testid={`${TestId}.JitProvisioning`}
+              />
+            </div>
 
-            <FormControlLabel
-              sx={{ alignItems: 'flex-start' }}
-              control={
-                <Switch
-                  checked={autoLinkVerifiedEmail}
-                  onChange={(event) => setAutoLinkVerifiedEmail(event.target.checked)}
-                  slotProps={inputTestId(`${TestId}.AutoLink`)}
-                />
-              }
-              label={
-                <Box sx={{ pt: 0.75 }}>
-                  <Typography variant="body2">Link by verified email address</Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    This provider’s word about an email address is enough to reach an account that
-                    already exists here. An unverified address never links, whatever this says.
-                  </Typography>
-                </Box>
-              }
-            />
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[13px] text-ink-2">Link by verified email address</p>
+                <p className="text-[12px] leading-[1.5] text-ink-4">
+                  This provider’s word about an email address is enough to reach an account that
+                  already exists here. An unverified address never links, whatever this says.
+                </p>
+              </div>
+              <Switch
+                checked={autoLinkVerifiedEmail}
+                onCheckedChange={setAutoLinkVerifiedEmail}
+                aria-label="Link by verified email address"
+                data-testid={`${TestId}.AutoLink`}
+              />
+            </div>
 
             {editing && (
-              <FormControlLabel
-                sx={{ alignItems: 'flex-start' }}
-                control={
-                  <Switch
-                    checked={enabled}
-                    onChange={(event) => setEnabled(event.target.checked)}
-                    slotProps={inputTestId(`${TestId}.Enabled`)}
-                  />
-                }
-                label={
-                  <Box sx={{ pt: 0.75 }}>
-                    <Typography variant="body2">Live sign-in route</Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      Turning this on makes it a live sign-in route for everyone at your claimed
-                      domains. Turning it off stops new sign-ins through it and keeps every account
-                      that already came in.
-                    </Typography>
-                  </Box>
-                }
-              />
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[13px] text-ink-2">Live sign-in route</p>
+                  <p className="text-[12px] leading-[1.5] text-ink-4">
+                    Turning this on makes it a live sign-in route for everyone at your claimed
+                    domains. Turning it off stops new sign-ins through it and keeps every account
+                    that already came in.
+                  </p>
+                </div>
+                <Switch
+                  checked={enabled}
+                  onCheckedChange={setEnabled}
+                  aria-label="Live sign-in route"
+                  data-testid={`${TestId}.Enabled`}
+                />
+              </div>
             )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={!submittable}
-            data-testid={`${TestId}.Save`}
-          >
-            {save.isPending ? 'Saving…' : editing ? 'Save provider' : 'Register provider'}
-          </Button>
-        </DialogActions>
-      </form>
+          </div>
+
+          <DialogFooter>
+            <Button variant="quiet" onClick={onClose} data-testid={`${TestId}.Cancel`}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!submittable}
+              data-testid={`${TestId}.Save`}
+            >
+              {save.isPending ? 'Saving…' : editing ? 'Save provider' : 'Register provider'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
     </Dialog>
   );
 }

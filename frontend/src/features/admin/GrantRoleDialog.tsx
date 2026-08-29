@@ -1,19 +1,19 @@
-import {
-  Alert,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-} from '@mui/material';
 import { useMemo, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { useGrantRole, useProjects, useRoles, useTeams, useUsers } from '../../api/queries';
 import type { RoleAssignment } from '../../api/types';
 import { PermissionGate } from '../../components/PermissionGate';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { describeError } from '../../lib/describeError';
 
 /**
@@ -161,127 +161,143 @@ export function GrantRoleDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
-      <form onSubmit={submit} noValidate aria-busy={grant.isPending}>
-        <DialogTitle>Grant a role</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
+        <form onSubmit={submit} noValidate aria-busy={grant.isPending}>
+          <DialogHeader>
+            <DialogTitle>Grant a role</DialogTitle>
+          </DialogHeader>
+
+          <div className="mt-4 flex flex-col gap-4">
             {formError && (
-              <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
-                {formError}
-              </Alert>
+              <div data-testid={`${TestId}.Error`}>
+                <Banner tone="bad">
+                  <span role="alert">{formError}</span>
+                </Banner>
+              </div>
             )}
 
-            <TextField
-              select
+            <Field
               label="Where"
-              value={scope}
-              // Locked, not hidden: the project screen's grant is still a scoped act and the field
-              // is what says which scope. Removing it would make the one company-wide-capable
-              // control on that page invisible rather than fixed.
-              disabled={!!lockedProjectId}
-              // Clearing the role is the point: the role list is scope-dependent, so a role chosen
-              // under the old scope is one the server would refuse with a 400 on a select the user
-              // did not touch.
-              onChange={(event) => {
-                setScope(event.target.value);
-                setRoleId('');
-              }}
-              helperText={
+              htmlFor="grant-scope"
+              help={
                 projectId
                   ? 'The role applies to this project only.'
                   : 'A company role applies everywhere. A project role granted here becomes the default on every project — including ones created later.'
               }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Scope` } }}
             >
-              <MenuItem value={COMPANY_SCOPE}>The whole company</MenuItem>
-              {(projects.data ?? []).map((project) => (
-                <MenuItem key={project.id} value={project.id}>
-                  {project.name}
-                </MenuItem>
-              ))}
-            </TextField>
+              <NativeSelect
+                id="grant-scope"
+                value={scope}
+                // Locked, not hidden: the project screen's grant is still a scoped act and the field
+                // is what says which scope. Removing it would make the one company-wide-capable
+                // control on that page invisible rather than fixed.
+                disabled={!!lockedProjectId}
+                // Clearing the role is the point: the role list is scope-dependent, so a role chosen
+                // under the old scope is one the server would refuse with a 400 on a select the user
+                // did not touch.
+                onChange={(event) => {
+                  setScope(event.target.value);
+                  setRoleId('');
+                }}
+                data-testid={`${TestId}.Scope`}
+              >
+                <option value={COMPANY_SCOPE}>The whole company</option>
+                {(projects.data ?? []).map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
 
-            <TextField
-              select
+            <Field
               label="Role"
-              value={roleId}
-              onChange={(event) => setRoleId(event.target.value)}
-              error={!!fieldErrors.roleId}
-              helperText={
-                fieldErrors.roleId ??
+              htmlFor="grant-role"
+              error={fieldErrors.roleId}
+              help={
                 /*
                   The inheritance warning wins over the role's own description, because it is the
                   consequence the administrator cannot see from the two selects: at company scope a
                   PROJECT-scope role is not "this role, here" but "this role on everything that
                   does not say otherwise", and the projects it reaches are not on this screen.
                 */
-                (!projectId && selectedRole?.scope === 'PROJECT'
+                !projectId && selectedRole?.scope === 'PROJECT'
                   ? `Applies to every project that has not granted them a role of its own — a project grant replaces this one there, even when it confers less. ${selectedRole.description}`
                   : (selectedRole?.description ??
-                    'Only the roles that fit the scope above are offered.'))
+                    'Only the roles that fit the scope above are offered.')
               }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Role` } }}
             >
-              {grantableRoles.map((role) => (
-                <MenuItem key={role.id} value={role.id}>
-                  {role.name}
-                </MenuItem>
-              ))}
-            </TextField>
-
-            <TextField
-              select
-              label="To"
-              value={subject}
-              onChange={(event) => setSubject(event.target.value)}
-              error={!!fieldErrors.userId}
-              helperText={
-                fieldErrors.userId ??
-                'A team grant reaches everyone in it — including people who join later.'
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Subject` } }}
-            >
-              {(users.data ?? []).map((user) => (
-                <MenuItem key={user.id} value={`user:${user.id}`}>
-                  {user.displayName}
-                </MenuItem>
-              ))}
-              {(teams.data ?? []).map((team) => (
-                <MenuItem key={team.id} value={`team:${team.id}`}>
-                  {team.name} (team)
-                </MenuItem>
-              ))}
-            </TextField>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
-            Cancel
-          </Button>
-          {/*
-            The gate follows the scope select: `company` asks the company-wide question, a project
-            id asks that project's. This is the only `PermissionGate` in the app whose `projectId`
-            is a piece of form state, and it is why the gate is on Grant rather than on the button
-            that opened this dialog.
-          */}
-          <PermissionGate
-            projectId={projectId ?? 'company'}
-            permission={projectId ? 'project:members' : 'company:members'}
-          >
-            {({ allowed }) => (
-              <Button
-                type="submit"
-                variant="contained"
-                disabled={!allowed || grant.isPending || !roleId || !subject}
-                data-testid={`${TestId}.Submit`}
+              <NativeSelect
+                id="grant-role"
+                value={roleId}
+                onChange={(event) => setRoleId(event.target.value)}
+                data-testid={`${TestId}.Role`}
               >
-                {grant.isPending ? 'Granting…' : 'Grant role'}
-              </Button>
-            )}
-          </PermissionGate>
-        </DialogActions>
-      </form>
+                <option value="">Choose a role</option>
+                {grantableRoles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+
+            <Field
+              label="To"
+              htmlFor="grant-subject"
+              error={fieldErrors.userId}
+              help="A team grant reaches everyone in it — including people who join later."
+            >
+              <NativeSelect
+                id="grant-subject"
+                value={subject}
+                onChange={(event) => setSubject(event.target.value)}
+                data-testid={`${TestId}.Subject`}
+              >
+                <option value="">Choose a person or a team</option>
+                {(users.data ?? []).map((user) => (
+                  <option key={user.id} value={`user:${user.id}`}>
+                    {user.displayName}
+                  </option>
+                ))}
+                {(teams.data ?? []).map((team) => (
+                  <option key={team.id} value={`team:${team.id}`}>
+                    {team.name} (team)
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+          </div>
+
+          <DialogFooter>
+            <Button variant="quiet" onClick={onClose} data-testid={`${TestId}.Cancel`}>
+              Cancel
+            </Button>
+            {/*
+              The gate follows the scope select: `company` asks the company-wide question, a project
+              id asks that project's. This is the only `PermissionGate` in the app whose `projectId`
+              is a piece of form state, and it is why the gate is on Grant rather than on the button
+              that opened this dialog.
+            */}
+            <PermissionGate
+              projectId={projectId ?? 'company'}
+              permission={projectId ? 'project:members' : 'company:members'}
+            >
+              {({ allowed }) => (
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={!allowed || grant.isPending || !roleId || !subject}
+                  data-testid={`${TestId}.Submit`}
+                >
+                  {grant.isPending ? 'Granting…' : 'Grant role'}
+                </Button>
+              )}
+            </PermissionGate>
+          </DialogFooter>
+        </form>
+      </DialogContent>
     </Dialog>
   );
 }

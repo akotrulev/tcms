@@ -1,14 +1,3 @@
-import {
-  Alert,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-} from '@mui/material';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
@@ -16,8 +5,20 @@ import { z } from 'zod';
 import { ApiError } from '../../api/client';
 import { useCreateTeam, useUpdateTeam } from '../../api/queries';
 import type { Team } from '../../api/types';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Textarea,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { describeError } from '../../lib/describeError';
-import { selectTestId } from '../../lib/muiTestIds';
 
 /**
  * Creating and editing a team — **the org chart's first write affordance.**
@@ -166,64 +167,79 @@ export function TeamDialog({
   });
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
-      <form onSubmit={submit} noValidate aria-busy={pending}>
-        <DialogTitle>{team ? `Edit ${team.name}` : 'New team'}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
+        <form onSubmit={submit} noValidate aria-busy={pending}>
+          <DialogHeader>
+            <DialogTitle>{team ? `Edit ${team.name}` : 'New team'}</DialogTitle>
+          </DialogHeader>
+
+          <div className="mt-4 flex flex-col gap-4">
             {errors.root && (
-              <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
-                {errors.root.message}
-              </Alert>
+              <div data-testid={`${TestId}.Error`}>
+                <Banner tone="bad">
+                  <span role="alert">{errors.root.message}</span>
+                </Banner>
+              </div>
             )}
 
-            <TextField
+            <Field
               label="Name"
-              required
-              autoComplete="off"
-              error={!!errors.name}
-              helperText={
-                errors.name?.message ?? 'Unique in this company. "QA" and "qa" count as the same name.'
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Name`, maxLength: MAX_NAME } }}
-              {...register('name')}
-            />
-
-            <TextField
-              label="Description"
-              multiline
-              minRows={2}
-              error={!!errors.description}
-              helperText={errors.description?.message ?? 'Optional. What this team is responsible for.'}
-              slotProps={{
-                htmlInput: { 'data-testid': `${TestId}.Description`, maxLength: MAX_DESCRIPTION },
-              }}
-              {...register('description')}
-            />
-
-            <TextField
-              select
-              label="Sits under"
-              defaultValue={team?.parentTeamId ?? ''}
-              error={!!errors.parentTeamId}
-              helperText={
-                errors.parentTeamId?.message ??
-                'Where this team is drawn in the chart. Nesting does not pass roles down.'
-              }
-              /* On the DISPLAY element, not `htmlInput`. A test id on a MUI Select's hidden
-                 native input cannot be clicked to open the menu — `pointer-events: none` — so the
-                 first draft of this test failed on the affordance rather than on the assertion.
-                 `selectTestId` exists for exactly this and now lives in the shared layer. */
-              slotProps={{ select: { SelectDisplayProps: selectTestId(`${TestId}.Parent`) } }}
-              {...register('parentTeamId')}
+              htmlFor="team-name"
+              error={errors.name?.message}
+              help='Unique in this company. "QA" and "qa" count as the same name.'
             >
-              <MenuItem value="">No parent — a top-level team</MenuItem>
-              {parentOptions.map((option) => (
-                <MenuItem key={option.id} value={option.id}>
-                  {option.name}
-                </MenuItem>
-              ))}
-            </TextField>
+              <Input
+                id="team-name"
+                required
+                autoComplete="off"
+                maxLength={MAX_NAME}
+                data-testid={`${TestId}.Name`}
+                {...register('name')}
+              />
+            </Field>
+
+            <Field
+              label="Description"
+              htmlFor="team-description"
+              error={errors.description?.message}
+              help="Optional. What this team is responsible for."
+            >
+              <Textarea
+                id="team-description"
+                rows={2}
+                maxLength={MAX_DESCRIPTION}
+                data-testid={`${TestId}.Description`}
+                {...register('description')}
+              />
+            </Field>
+
+            <Field
+              label="Sits under"
+              htmlFor="team-parent"
+              error={errors.parentTeamId?.message}
+              help="Where this team is drawn in the chart. Nesting does not pass roles down."
+            >
+              {/*
+                ~~A test id on a MUI Select's hidden native input cannot be clicked to open the
+                menu — `pointer-events: none` — so `selectTestId` put it on the display element.~~
+                → **superseded (007 T15).** The control *is* the native select now, so the id is on
+                the element the reader operates and the options are its children.
+              */}
+              <NativeSelect
+                id="team-parent"
+                defaultValue={team?.parentTeamId ?? ''}
+                data-testid={`${TestId}.Parent`}
+                {...register('parentTeamId')}
+              >
+                <option value="">No parent — a top-level team</option>
+                {parentOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
 
             {/*
               Said where the decision is made rather than learned later. Nesting is org-chart
@@ -231,21 +247,26 @@ export function TeamDialog({
               inheritance hierarchy will nest a team expecting it to gain the parent's access, and
               nothing about the resulting screen would correct them.
             */}
-            <Alert severity="info" data-testid={`${TestId}.Hint`}>
-              A team grants nothing on its own. Give it a role on a project from “Grant a role”, and
-              everyone in it — including people who join later — gets that role.
-            </Alert>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="contained" disabled={pending} data-testid={`${TestId}.Submit`}>
-            {pending ? 'Saving…' : team ? 'Save changes' : 'Create team'}
-          </Button>
-        </DialogActions>
-      </form>
+            <div data-testid={`${TestId}.Hint`}>
+              <Banner tone="neutral">
+                <span>
+                  A team grants nothing on its own. Give it a role on a project from “Grant a role”,
+                  and everyone in it — including people who join later — gets that role.
+                </span>
+              </Banner>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="quiet" onClick={onClose} data-testid={`${TestId}.Cancel`}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" disabled={pending} data-testid={`${TestId}.Submit`}>
+              {pending ? 'Saving…' : team ? 'Save changes' : 'Create team'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
     </Dialog>
   );
 }

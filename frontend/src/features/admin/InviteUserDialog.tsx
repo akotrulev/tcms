@@ -1,19 +1,20 @@
-import {
-  Alert,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  TextField,
-} from '@mui/material';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
 import { useInviteUser } from '../../api/queries';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+} from '../../components/ui';
 import { describeError } from '../../lib/describeError';
 
 /**
@@ -154,62 +155,76 @@ export function InviteUserDialog({ open, onClose }: { open: boolean; onClose: ()
   const outcome = invite.data;
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
-      <form onSubmit={submit} noValidate aria-busy={invite.isPending}>
-        <DialogTitle>Invite a person</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
+        <form onSubmit={submit} noValidate aria-busy={invite.isPending}>
+          <DialogHeader>
+            <DialogTitle>Invite a person</DialogTitle>
+          </DialogHeader>
+
+          <div className="mt-4 flex flex-col gap-4">
             {errors.root && (
-              <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
-                {errors.root.message}
-              </Alert>
+              <div data-testid={`${TestId}.Error`}>
+                <Banner tone="bad">
+                  <span role="alert">{errors.root.message}</span>
+                </Banner>
+              </div>
             )}
 
             {outcome && !outcome.emailed && (
-              <Alert severity="warning" role="status" data-testid={`${TestId}.NotEmailed`}>
-                {/*
-                  Three states, not two, and reading them off `emailed` alone is the defect the
-                  live pass found: on an install WITH a relay, a second click answers
-                  `emailed: false` and the copy claimed the mail was broken. `issued` is what
-                  separates "there was nowhere to send it" from "there was nothing to send".
-                */}
-                {outcome.issued
-                  ? `${outcome.user.displayName} is invited, but this instance has no mail relay ` +
-                    'configured — nothing was sent. Ask your operator for the activation link.'
-                  : outcome.expiresAt
-                    ? `${outcome.user.displayName} was already invited, so their existing link is ` +
-                      'still valid and nothing new was sent.'
-                    : `${outcome.user.displayName} is already a member here, so nothing was sent.`}
-              </Alert>
+              <div data-testid={`${TestId}.NotEmailed`}>
+                <Banner tone="warn">
+                  {/*
+                    Three states, not two, and reading them off `emailed` alone is the defect the
+                    live pass found: on an install WITH a relay, a second click answers
+                    `emailed: false` and the copy claimed the mail was broken. `issued` is what
+                    separates "there was nowhere to send it" from "there was nothing to send".
+                  */}
+                  <span role="status">
+                    {outcome.issued
+                      ? `${outcome.user.displayName} is invited, but this instance has no mail relay ` +
+                        'configured — nothing was sent. Ask your operator for the activation link.'
+                      : outcome.expiresAt
+                        ? `${outcome.user.displayName} was already invited, so their existing link is ` +
+                          'still valid and nothing new was sent.'
+                        : `${outcome.user.displayName} is already a member here, so nothing was sent.`}
+                  </span>
+                </Banner>
+              </div>
             )}
 
-            <TextField
+            <Field
               label="Email"
-              type="email"
-              required
-              autoComplete="off"
-              error={!!errors.email}
-              helperText={
-                errors.email?.message ?? 'Where the activation link goes. They choose their own password.'
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Email`, maxLength: MAX_EMAIL } }}
-              {...register('email')}
-            />
+              htmlFor="invite-email"
+              error={errors.email?.message}
+              help="Where the activation link goes. They choose their own password."
+            >
+              <Input
+                id="invite-email"
+                type="email"
+                required
+                autoComplete="off"
+                maxLength={MAX_EMAIL}
+                data-testid={`${TestId}.Email`}
+                {...register('email')}
+              />
+            </Field>
 
-            <TextField
+            <Field
               label="Name in this company"
-              required
-              autoComplete="off"
-              error={!!errors.displayName}
-              helperText={
-                errors.displayName?.message ??
-                'How colleagues here will see them — only this company sees this name.'
-              }
-              slotProps={{
-                htmlInput: { 'data-testid': `${TestId}.DisplayName`, maxLength: MAX_DISPLAY_NAME },
-              }}
-              {...register('displayName')}
-            />
+              htmlFor="invite-display-name"
+              error={errors.displayName?.message}
+              help="How colleagues here will see them — only this company sees this name."
+            >
+              <Input
+                id="invite-display-name"
+                required
+                autoComplete="off"
+                maxLength={MAX_DISPLAY_NAME}
+                data-testid={`${TestId}.DisplayName`}
+                {...register('displayName')}
+              />
+            </Field>
 
             {/*
               Said before the invitation is sent rather than discovered afterwards. Membership
@@ -217,25 +232,28 @@ export function InviteUserDialog({ open, onClose }: { open: boolean; onClose: ()
               stops here has added somebody who signs in to an empty product and reasonably
               concludes it is broken.
             */}
-            <Alert severity="info" data-testid={`${TestId}.Hint`}>
-              They will be able to sign in and see nothing until you grant them a role.
-            </Alert>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
-            {outcome ? 'Done' : 'Cancel'}
-          </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={invite.isPending}
-            data-testid={`${TestId}.Submit`}
-          >
-            {invite.isPending ? 'Inviting…' : 'Send invitation'}
-          </Button>
-        </DialogActions>
-      </form>
+            <div data-testid={`${TestId}.Hint`}>
+              <Banner tone="neutral">
+                <span>They will be able to sign in and see nothing until you grant them a role.</span>
+              </Banner>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="quiet" onClick={onClose} data-testid={`${TestId}.Cancel`}>
+              {outcome ? 'Done' : 'Cancel'}
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={invite.isPending}
+              data-testid={`${TestId}.Submit`}
+            >
+              {invite.isPending ? 'Inviting…' : 'Send invitation'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
     </Dialog>
   );
 }

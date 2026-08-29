@@ -108,20 +108,22 @@ function renderDialog() {
   )
 }
 
-/** MUI renders a select's options into a portal, so the listbox is found on the document. */
+/**
+ * ~~MUI renders a select's options into a portal, so the listbox is found on the document.~~ →
+ * **superseded (007 T15).** All three fields here are native selects, so the options are the box's
+ * own children. Only these two helpers and one `closest()` in the assertion below changed; no
+ * expectation in this file moved.
+ */
 async function chooseFrom(testId: string, optionName: string | RegExp) {
-  const select = screen.getByTestId(testId).closest('.MuiInputBase-root')!
-  await userEvent.click(within(select as HTMLElement).getByRole('combobox'))
-  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+  const select = screen.getByTestId(testId)
+  await userEvent.selectOptions(select, within(select).getByRole('option', { name: optionName }))
 }
 
 async function optionNames(testId: string) {
-  const select = screen.getByTestId(testId).closest('.MuiInputBase-root')!
-  await userEvent.click(within(select as HTMLElement).getByRole('combobox'))
-  const listbox = await screen.findByRole('listbox')
-  return within(listbox)
+  return within(screen.getByTestId(testId))
     .getAllByRole('option')
     .map((option) => option.textContent)
+    .filter((name) => name !== 'Choose a role' && name !== 'Choose a person or a team')
 }
 
 describe('GrantRoleDialog', () => {
@@ -156,7 +158,7 @@ describe('GrantRoleDialog', () => {
 
     // The consequence the two selects cannot show: the projects it reaches are not on this screen,
     // and §A1.1 is replace-not-union, so the sentence has to say both.
-    const role = screen.getByTestId('Admin.Grant.Role').closest('.MuiFormControl-root')!
+    const role = screen.getByTestId('Admin.Grant.Role').closest('div')!
     expect(role.textContent).toMatch(/every project that has not granted them a role of its own/i)
     expect(role.textContent).toMatch(/even when it confers less/i)
   })

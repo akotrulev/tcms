@@ -119,18 +119,18 @@ function renderDialog() {
   )
 }
 
-/** MUI renders a select's options into a portal, so the listbox is found on the document. */
+/**
+ * ~~MUI renders a select's options into a portal, so the listbox is found on the document.~~ →
+ * **superseded (007 T15).** These are native selects, so the options are the box's own children.
+ * Only these two helpers changed; no expectation in this file moved.
+ */
 async function chooseFrom(testId: string, optionName: string | RegExp) {
-  const select = screen.getByTestId(testId).closest('.MuiInputBase-root')!
-  await userEvent.click(within(select as HTMLElement).getByRole('combobox'))
-  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+  const select = screen.getByTestId(testId)
+  await userEvent.selectOptions(select, within(select).getByRole('option', { name: optionName }))
 }
 
 async function optionNames(testId: string) {
-  const select = screen.getByTestId(testId).closest('.MuiInputBase-root')!
-  await userEvent.click(within(select as HTMLElement).getByRole('combobox'))
-  const listbox = await screen.findByRole('listbox')
-  return within(listbox)
+  return within(screen.getByTestId(testId))
     .getAllByRole('option')
     .map((option) => option.textContent)
 }

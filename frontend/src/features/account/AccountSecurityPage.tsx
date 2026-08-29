@@ -1,17 +1,3 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Skeleton,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -25,9 +11,22 @@ import {
 } from '../../api/queries';
 import { ApiError } from '../../api/client';
 import { useAuth } from '../../auth/useAuth';
-import { Panel } from '../../components/PageHeader';
 import type { SocialIdentity, SocialProvider } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import { SettingGroup, SettingRow } from '../../components/kit/SettingRow';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Skeleton,
+} from '../../components/ui';
 import { describeError } from '../../lib/describeError';
 import { formatDateTime } from '../../lib/format';
 import { socialProviderLabels } from '../../lib/labels';
@@ -87,78 +86,83 @@ export function AccountSecurityPage() {
   const [confirming, setConfirming] = useState<SocialProvider | null>(null);
 
   return (
-    <Stack sx={{ gap: 3, maxWidth: 720 }} data-testid={TestIdPrefix}>
+    <div className="flex max-w-[820px] flex-col gap-4" data-testid={TestIdPrefix}>
       <title>Security · TCMS</title>
-      <Stack sx={{ gap: 0.5 }}>
-        <Typography variant="h1">Security</Typography>
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          How you sign in to this account.
-        </Typography>
-      </Stack>
+      {/*
+        This page raises its own `<title>` and heading rather than taking `PageHeader`: it sits
+        outside every project and company segment, so it has no breadcrumb trail to render, and it
+        is the one screen in the product that is about the reader rather than about the work.
+      */}
+      <header>
+        <h1 className="text-[19px] font-semibold tracking-[-.01em] text-ink">Security</h1>
+        <p className="mt-1 text-[13px] text-ink-3">How you sign in to this account.</p>
+      </header>
 
       {welcome && (
-        <Alert severity="info" data-testid={`${TestIdPrefix}.Welcome`}>
-          <Stack sx={{ gap: 1, alignItems: 'flex-start' }}>
-            <Typography variant="body2">
-              Your account is ready. Want to sign in with GitHub, GitLab or Google next time?
-              Link one now — or skip this; your password always works.
-            </Typography>
+        <Banner tone="neutral" data-testid={`${TestIdPrefix}.Welcome`}>
+          <span className="flex flex-wrap items-center gap-3">
+            <span>
+              Your account is ready. Want to sign in with GitHub, GitLab or Google next time? Link
+              one now — or skip this; your password always works.
+            </span>
             <Button
-              size="small"
+              size="sm"
               data-testid={`${TestIdPrefix}.Skip`}
               onClick={() => navigate('/', { replace: true })}
             >
               Skip for now
             </Button>
-          </Stack>
-        </Alert>
+          </span>
+        </Banner>
       )}
 
       {justLinked !== null && (
-        <Alert severity="success" data-testid={`${TestIdPrefix}.Linked`}>
-          {labelFor(justLinked)} is now linked to your account. You can use it to sign in.
-        </Alert>
+        <Banner tone="steel" data-testid={`${TestIdPrefix}.Linked`}>
+          <span>{labelFor(justLinked)} is now linked to your account. You can use it to sign in.</span>
+        </Banner>
       )}
 
-      <DataRegion
-        testId={`${TestIdPrefix}.Providers`}
-        state={providers}
-        isEmpty={(data) => data.providers.length === 0}
-        empty={{
-          kind: 'by-design',
-          title: 'No social sign-in here',
-          body: 'This instance has no social sign-in providers configured, so your password '
-            + 'is how you sign in. An operator can enable GitHub, GitLab or Google.',
-        }}
-        skeleton={<Skeleton variant="rounded" height={160} />}
-      >
-        {(data) => (
-          <DataRegion
-            testId={`${TestIdPrefix}.Identities`}
-            state={identities}
-            skeleton={<Skeleton variant="rounded" height={160} />}
-          >
-            {(mine) => (
-              <Stack sx={{ gap: 1.5 }}>
-                {data.providers.map((provider) => (
-                  <ProviderRow
-                    key={provider}
-                    provider={provider}
-                    identity={mine.identities.find((i) => i.provider === provider) ?? null}
-                    onLink={() =>
-                      startLink.mutate(provider, {
-                        onSuccess: ({ url }) => window.location.assign(url),
-                      })
-                    }
-                    linkPending={startLink.isPending && startLink.variables === provider}
-                    onUnlink={() => setConfirming(provider)}
-                  />
-                ))}
-              </Stack>
-            )}
-          </DataRegion>
-        )}
-      </DataRegion>
+      <SettingGroup title="Social sign-in">
+        <DataRegion
+          testId={`${TestIdPrefix}.Providers`}
+          state={providers}
+          isEmpty={(data) => data.providers.length === 0}
+          empty={{
+            kind: 'by-design',
+            title: 'No social sign-in here',
+            body: 'This instance has no social sign-in providers configured, so your password '
+              + 'is how you sign in. An operator can enable GitHub, GitLab or Google.',
+          }}
+          skeleton={<Skeleton className="h-40 w-full" />}
+        >
+          {(data) => (
+            <DataRegion
+              testId={`${TestIdPrefix}.Identities`}
+              state={identities}
+              skeleton={<Skeleton className="h-40 w-full" />}
+            >
+              {(mine) => (
+                <>
+                  {data.providers.map((provider) => (
+                    <ProviderRow
+                      key={provider}
+                      provider={provider}
+                      identity={mine.identities.find((i) => i.provider === provider) ?? null}
+                      onLink={() =>
+                        startLink.mutate(provider, {
+                          onSuccess: ({ url }) => window.location.assign(url),
+                        })
+                      }
+                      linkPending={startLink.isPending && startLink.variables === provider}
+                      onUnlink={() => setConfirming(provider)}
+                    />
+                  ))}
+                </>
+              )}
+            </DataRegion>
+          )}
+        </DataRegion>
+      </SettingGroup>
 
       <PasswordPanel />
       <SignOutOthersPanel />
@@ -173,7 +177,7 @@ export function AccountSecurityPage() {
         error={unlink.error}
         reset={unlink.reset}
       />
-    </Stack>
+    </div>
   );
 }
 
@@ -196,57 +200,31 @@ function ProviderRow({
   onUnlink: () => void;
 }) {
   return (
-    <Box
+    <SettingRow
       data-testid={`${TestIdPrefix}.Row`}
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 2,
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 1,
-        bgcolor: 'background.paper',
-        px: 2,
-        py: 1.5,
-      }}
-    >
-      <Stack sx={{ flex: 1, gap: 0.25 }}>
-        <Typography variant="body1" sx={{ fontWeight: 600 }}>
-          {socialProviderLabels[provider]}
-        </Typography>
-        {identity ? (
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            Linked {formatDateTime(identity.linkedAt)}
-            {identity.emailAtLink ? ` · ${identity.emailAtLink}` : ''}
-          </Typography>
+      label={socialProviderLabels[provider]}
+      description={
+        identity
+          ? `Linked ${formatDateTime(identity.linkedAt)}${identity.emailAtLink ? ` · ${identity.emailAtLink}` : ''}`
+          : 'Not linked'
+      }
+      consequence={
+        identity
+          ? 'Unlinking removes a way in; it never removes the others.'
+          : 'Linking one adds a way in; it never removes the others.'
+      }
+      control={
+        identity ? (
+          <Button variant="danger" size="sm" onClick={onUnlink} data-testid={`${TestIdPrefix}.Unlink`}>
+            Unlink
+          </Button>
         ) : (
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            Not linked
-          </Typography>
-        )}
-      </Stack>
-      {identity ? (
-        <Button
-          variant="outlined"
-          color="error"
-          size="small"
-          onClick={onUnlink}
-          data-testid={`${TestIdPrefix}.Unlink`}
-        >
-          Unlink
-        </Button>
-      ) : (
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={onLink}
-          disabled={linkPending}
-          data-testid={`${TestIdPrefix}.Link`}
-        >
-          Link
-        </Button>
-      )}
-    </Box>
+          <Button size="sm" onClick={onLink} disabled={linkPending} data-testid={`${TestIdPrefix}.Link`}>
+            Link
+          </Button>
+        )
+      }
+    />
   );
 }
 
@@ -280,41 +258,36 @@ function UnlinkIdentityDialog({
   }, [open, provider, reset]);
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      fullWidth
-      maxWidth="xs"
-      data-testid={`${TestIdPrefix}.UnlinkDialog`}
-    >
-      <DialogTitle>Unlink {provider ? socialProviderLabels[provider] : ''}?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2}>
-          <DialogContentText variant="body2">
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-sm" data-testid={`${TestIdPrefix}.UnlinkDialog`}>
+        <DialogHeader>
+          <DialogTitle>Unlink {provider ? socialProviderLabels[provider] : ''}?</DialogTitle>
+          <DialogDescription>
             You will no longer be able to sign in with it. Linking it again later re-runs the
             provider's authorization.
-          </DialogContentText>
-          {error != null && (
-            <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.UnlinkError`}>
-              {describeError(error).body}
-            </Alert>
-          )}
-        </Stack>
+          </DialogDescription>
+        </DialogHeader>
+
+        {error != null && (
+          <Banner tone="bad" className="mt-3" data-testid={`${TestIdPrefix}.UnlinkError`}>
+            <span role="alert">{describeError(error).body}</span>
+          </Banner>
+        )}
+
+        <DialogFooter>
+          <Button variant="quiet" onClick={onClose} data-testid={`${TestIdPrefix}.UnlinkCancel`}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            disabled={pending}
+            onClick={() => provider && onConfirm(provider)}
+            data-testid={`${TestIdPrefix}.UnlinkConfirm`}
+          >
+            Unlink
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid={`${TestIdPrefix}.UnlinkCancel`}>
-          Cancel
-        </Button>
-        <Button
-          color="error"
-          variant="contained"
-          disabled={pending}
-          onClick={() => provider && onConfirm(provider)}
-          data-testid={`${TestIdPrefix}.UnlinkConfirm`}
-        >
-          Unlink
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }
@@ -364,57 +337,67 @@ function PasswordPanel() {
   };
 
   return (
-    <Panel title={hasPassword ? 'Change your password' : 'Set a password'} testId={`${TestIdPrefix}.Password`}>
-      <Stack sx={{ gap: 2, p: 2 }}>
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+    <SettingGroup
+      title={hasPassword ? 'Change your password' : 'Set a password'}
+      data-testid={`${TestIdPrefix}.Password`}
+    >
+      <div className="flex max-w-[420px] flex-col gap-3 py-4">
+        <p className="text-[12.5px] leading-[1.55] text-ink-3">
           {hasPassword
             ? 'Your other sessions keep working — sign them out below if you want them gone.'
             : 'You signed in without one. Setting a password gives you a way in that does not depend on a provider.'}
-        </Typography>
+        </p>
         {hasPassword && (
-          <TextField
+          <Field
             label="Current password"
-            type="password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            error={!!fieldErrors?.currentPassword}
-            helperText={fieldErrors?.currentPassword?.join(' ')}
-            slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.CurrentPassword` } }}
-          />
+            htmlFor="account-current-password"
+            error={fieldErrors?.currentPassword?.join(' ')}
+          >
+            <Input
+              id="account-current-password"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              data-testid={`${TestIdPrefix}.CurrentPassword`}
+            />
+          </Field>
         )}
-        <TextField
+        <Field
           label="New password"
-          type="password"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          error={!!fieldErrors?.newPassword}
-          helperText={
-            fieldErrors?.newPassword?.join(' ') ?? 'At least 12 characters.'
-          }
-          slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.NewPassword` } }}
-        />
+          htmlFor="account-new-password"
+          error={fieldErrors?.newPassword?.join(' ')}
+          help="At least 12 characters."
+        >
+          <Input
+            id="account-new-password"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            data-testid={`${TestIdPrefix}.NewPassword`}
+          />
+        </Field>
         {change.isError && !fieldErrors && (
-          <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.PasswordError`}>
-            {describeError(change.error).body}
-          </Alert>
+          <Banner tone="bad" data-testid={`${TestIdPrefix}.PasswordError`}>
+            <span role="alert">{describeError(change.error).body}</span>
+          </Banner>
         )}
         {done && (
-          <Alert severity="success" data-testid={`${TestIdPrefix}.PasswordSaved`}>
-            Your password is set. Nothing was signed out.
-          </Alert>
+          <Banner tone="steel" data-testid={`${TestIdPrefix}.PasswordSaved`}>
+            <span>Your password is set. Nothing was signed out.</span>
+          </Banner>
         )}
-        <Box>
+        <div>
           <Button
-            variant="contained"
+            variant="primary"
             disabled={change.isPending || newPassword.length < 12 || (hasPassword && currentPassword === '')}
             onClick={submit}
             data-testid={`${TestIdPrefix}.SavePassword`}
           >
             {hasPassword ? 'Change password' : 'Set password'}
           </Button>
-        </Box>
-      </Stack>
-    </Panel>
+        </div>
+      </div>
+    </SettingGroup>
   );
 }
 
@@ -452,63 +435,64 @@ function SignOutOthersPanel() {
   };
 
   return (
-    <Panel title="Sign out everywhere else" testId={`${TestIdPrefix}.SignOutOthers`}>
-      <Stack sx={{ gap: 2, p: 2, alignItems: 'flex-start' }}>
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          Ends every other session of this account — every browser, every device. This one keeps
-          working. There is no list of them: nothing here records sessions, so ending all of them at
-          once is the only thing this product can honestly offer.
-        </Typography>
-        {signOutOthers.isError && (
-          <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.SignOutOthersError`}>
-            {describeError(signOutOthers.error).body}
-          </Alert>
-        )}
-        {done && (
-          <Alert severity="success" data-testid={`${TestIdPrefix}.SignedOutOthers`}>
-            Every other session is now signed out. This one carried on with a new token.
-          </Alert>
-        )}
-        <Button
-          variant="outlined"
-          color="error"
-          disabled={signOutOthers.isPending}
-          onClick={() => setConfirming(true)}
-          data-testid={`${TestIdPrefix}.SignOutOthersOpen`}
-        >
-          Sign out other sessions
-        </Button>
-      </Stack>
-
-      <Dialog
-        open={confirming}
-        onClose={() => setConfirming(false)}
-        fullWidth
-        maxWidth="xs"
-        data-testid={`${TestIdPrefix}.SignOutOthersDialog`}
-      >
-        <DialogTitle>Sign out every other session?</DialogTitle>
-        <DialogContent>
-          <DialogContentText variant="body2">
-            Anyone signed in as you anywhere else will have to sign in again. Nothing you have
-            typed here is affected.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirming(false)} data-testid={`${TestIdPrefix}.SignOutOthersCancel`}>
-            Cancel
-          </Button>
+    <SettingGroup title="Active sessions" data-testid={`${TestIdPrefix}.SignOutOthers`}>
+      <SettingRow
+        label="Sign out everywhere else"
+        description="Ends every other session of this account — every browser, every device. This one keeps working."
+        consequence="Immediate, and it cannot be undone from here. There is no list of sessions: nothing in this product records them, so ending all of them at once is the only thing it can honestly offer."
+        control={
           <Button
-            color="error"
-            variant="contained"
+            variant="danger"
+            size="sm"
             disabled={signOutOthers.isPending}
-            onClick={run}
-            data-testid={`${TestIdPrefix}.SignOutOthersConfirm`}
+            onClick={() => setConfirming(true)}
+            data-testid={`${TestIdPrefix}.SignOutOthersOpen`}
           >
-            Sign them out
+            Sign out other sessions
           </Button>
-        </DialogActions>
+        }
+      />
+
+      {signOutOthers.isError && (
+        <Banner tone="bad" className="mt-3" data-testid={`${TestIdPrefix}.SignOutOthersError`}>
+          <span role="alert">{describeError(signOutOthers.error).body}</span>
+        </Banner>
+      )}
+      {done && (
+        <Banner tone="steel" className="mt-3" data-testid={`${TestIdPrefix}.SignedOutOthers`}>
+          <span>Every other session is now signed out. This one carried on with a new token.</span>
+        </Banner>
+      )}
+
+      <Dialog open={confirming} onOpenChange={(next: boolean) => !next && setConfirming(false)}>
+        <DialogContent className="max-w-sm" data-testid={`${TestIdPrefix}.SignOutOthersDialog`}>
+          <DialogHeader>
+            <DialogTitle>Sign out every other session?</DialogTitle>
+            <DialogDescription>
+              Anyone signed in as you anywhere else will have to sign in again. Nothing you have
+              typed here is affected.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button
+              variant="quiet"
+              onClick={() => setConfirming(false)}
+              data-testid={`${TestIdPrefix}.SignOutOthersCancel`}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              disabled={signOutOthers.isPending}
+              onClick={run}
+              data-testid={`${TestIdPrefix}.SignOutOthersConfirm`}
+            >
+              Sign them out
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
-    </Panel>
+    </SettingGroup>
   );
 }

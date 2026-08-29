@@ -1,17 +1,3 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  MenuItem,
-  Skeleton,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
 import { useState } from 'react';
 import {
   useConnectTracker,
@@ -23,7 +9,21 @@ import { ApiError } from '../../api/client';
 import type { TrackerIdentity, TrackerIdentityInput, TrackerProvider } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { PageHeader } from '../../components/PageHeader';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Skeleton,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { describeError } from '../../lib/describeError';
 import { formatDate, formatDateTime } from '../../lib/format';
 import { trackerProviderLabels } from '../../lib/labels';
@@ -64,20 +64,23 @@ export function TrackerConnectionsPage() {
   const [disconnecting, setDisconnecting] = useState<TrackerIdentity | null>(null);
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId={`${TestId}.Header`}
         title="Tracker connections"
         documentTitle="Tracker connections · TCMS"
         subtitle="Your own credentials for the issue trackers your projects file into. Issues are read and filed as you, so what you can see here is what you can see there."
         actions={
-          <Button variant="contained" onClick={() => setConnecting(true)} data-testid={`${TestId}.Connect`}>
+          <Button variant="primary" onClick={() => setConnecting(true)} data-testid={`${TestId}.Connect`}>
             Connect a tracker
           </Button>
         }
       />
 
-      <Panel title="Connected hosts" testId={`${TestId}.Panel`} dense>
+      <section data-testid={`${TestId}.Panel`}>
+        <h2 className="mb-2.5 font-mono text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
+          Connected hosts
+        </h2>
         <DataRegion
           testId={`${TestId}.List`}
           state={{ ...identities, refetch: () => void identities.refetch() }}
@@ -87,10 +90,10 @@ export function TrackerConnectionsPage() {
             title: 'No connections yet',
             body: 'Connect the tracker your project is bound to, and issue links start showing their title and status.',
           }}
-          skeleton={<Skeleton variant="rounded" height={160} />}
+          skeleton={<Skeleton className="h-40 w-full" />}
         >
           {(rows) => (
-            <Stack sx={{ gap: 1.5, p: 1.5 }}>
+            <div className="flex max-w-[820px] flex-col">
               {rows.map((identity) => (
                 <IdentityRow
                   key={identity.id}
@@ -98,17 +101,17 @@ export function TrackerConnectionsPage() {
                   onDisconnect={() => setDisconnecting(identity)}
                 />
               ))}
-            </Stack>
+            </div>
           )}
         </DataRegion>
-      </Panel>
+      </section>
 
       {/* Conditionally mounted so each open starts on a fresh draft rather than the last one's. */}
       {connecting && <ConnectDialog onClose={() => setConnecting(false)} />}
       {disconnecting && (
         <DisconnectDialog identity={disconnecting} onClose={() => setDisconnecting(null)} />
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -130,36 +133,27 @@ function IdentityRow({
   const checked = test.data;
 
   return (
-    <Box
+    <div
       data-testid={`${TestId}.Row`}
-      sx={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: 2,
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 1,
-        px: 2,
-        py: 1.5,
-      }}
+      className="flex items-start gap-4 border-b border-white/8 py-4 last:border-b-0"
     >
-      <Stack sx={{ flex: 1, gap: 0.25 }}>
-        <Typography variant="body1" sx={{ fontWeight: 600 }}>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-[13.5px] font-medium text-ink">
           {trackerProviderLabels[identity.provider]}
-        </Typography>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+        </span>
+        <span className="text-[12px] text-ink-4">
           <Identifier variant="muted">{identity.baseUrl}</Identifier>
           {identity.secretHint ? ` · token ending ${identity.secretHint}` : ''}
-        </Typography>
+        </span>
         {identity.expiresAt && (
-          <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid={`${TestId}.Expiry`}>
+          <span className="text-[12px] text-ink-4" data-testid={`${TestId}.Expiry`}>
             Token expires {formatDate(identity.expiresAt)}
-          </Typography>
+          </span>
         )}
         {identity.lastCheckedAt && (
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          <span className="text-[12px] text-ink-4">
             Last checked {formatDateTime(identity.lastCheckedAt)}
-          </Typography>
+          </span>
         )}
         {/*
           The stored error, and then this session's own check. Both are shown because they answer
@@ -168,46 +162,39 @@ function IdentityRow({
           lose the reason somebody came here.
         */}
         {identity.lastError && (
-          <Alert severity="warning" sx={{ mt: 1 }} data-testid={`${TestId}.LastError`}>
-            {identity.lastError}
-          </Alert>
+          <Banner tone="warn" className="mt-2" data-testid={`${TestId}.LastError`}>
+            <span>{identity.lastError}</span>
+          </Banner>
         )}
         {checked && (
-          <Alert
-            severity={checked.ok ? 'success' : 'error'}
-            sx={{ mt: 1 }}
+          <Banner
+            tone={checked.ok ? 'steel' : 'bad'}
+            className="mt-2"
             data-testid={`${TestId}.CheckResult`}
           >
-            {checked.ok ? 'The tracker answered. This connection works.' : checked.error}
-          </Alert>
+            <span>{checked.ok ? 'The tracker answered. This connection works.' : checked.error}</span>
+          </Banner>
         )}
         {test.isError && (
-          <Alert severity="error" sx={{ mt: 1 }} data-testid={`${TestId}.CheckFailed`}>
-            {describeError(test.error).body}
-          </Alert>
+          <Banner tone="bad" className="mt-2" data-testid={`${TestId}.CheckFailed`}>
+            <span role="alert">{describeError(test.error).body}</span>
+          </Banner>
         )}
-      </Stack>
-      <Stack direction="row" sx={{ gap: 1 }}>
+      </div>
+      <div className="flex shrink-0 gap-2">
         <Button
-          size="small"
-          variant="outlined"
+          size="sm"
           disabled={test.isPending}
           onClick={() => test.mutate(identity.id)}
           data-testid={`${TestId}.Test`}
         >
           Test
         </Button>
-        <Button
-          size="small"
-          variant="outlined"
-          color="error"
-          onClick={onDisconnect}
-          data-testid={`${TestId}.Disconnect`}
-        >
+        <Button size="sm" variant="danger" onClick={onDisconnect} data-testid={`${TestId}.Disconnect`}>
           Disconnect
         </Button>
-      </Stack>
-    </Box>
+      </div>
+    </div>
   );
 }
 
@@ -257,93 +244,109 @@ function ConnectDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="sm" data-testid={`${TestId}.ConnectDialog`}>
-      <DialogTitle>Connect a tracker</DialogTitle>
-      <DialogContent>
-        <Stack sx={{ gap: 2, mt: 1 }}>
-          <TextField
-            select
-            label="Tracker"
-            value={provider}
-            onChange={(e) => setProvider(e.target.value as TrackerProvider)}
-            data-testid={`${TestId}.Provider`}
-          >
-            {(Object.keys(trackerProviderLabels) as TrackerProvider[]).map((key) => (
-              <MenuItem key={key} value={key}>
-                {trackerProviderLabels[key]}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
+    <Dialog open onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={`${TestId}.ConnectDialog`}>
+        <DialogHeader>
+          <DialogTitle>Connect a tracker</DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-4 flex flex-col gap-4">
+          <Field label="Tracker" htmlFor="tracker-identity-provider">
+            <NativeSelect
+              id="tracker-identity-provider"
+              value={provider}
+              onChange={(e) => setProvider(e.target.value as TrackerProvider)}
+              data-testid={`${TestId}.Provider`}
+            >
+              {(Object.keys(trackerProviderLabels) as TrackerProvider[]).map((key) => (
+                <option key={key} value={key}>
+                  {trackerProviderLabels[key]}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+
+          <Field
             label="Site"
-            placeholder="https://acme.atlassian.net"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            error={!!fieldErrors?.baseUrl}
-            helperText={
-              fieldErrors?.baseUrl?.join(' ')
-              ?? 'The same host your project’s binding names. https only.'
-            }
-            slotProps={{ htmlInput: { 'data-testid': `${TestId}.BaseUrl` } }}
-          />
-          {NEEDS_ACCOUNT_ID[provider] && (
-            <TextField
-              label="Your tracker email"
-              value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
-              error={!!fieldErrors?.accountId}
-              helperText={
-                fieldErrors?.accountId?.join(' ')
-                ?? 'Jira Cloud pairs the email with the token when it authenticates.'
-              }
-              data-testid={`${TestId}.AccountId`}
+            htmlFor="tracker-identity-base-url"
+            error={fieldErrors?.baseUrl?.join(' ')}
+            help="The same host your project’s binding names. https only."
+          >
+            <Input
+              id="tracker-identity-base-url"
+              placeholder="https://acme.atlassian.net"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              data-testid={`${TestId}.BaseUrl`}
             />
+          </Field>
+
+          {NEEDS_ACCOUNT_ID[provider] && (
+            <Field
+              label="Your tracker email"
+              htmlFor="tracker-identity-account"
+              error={fieldErrors?.accountId?.join(' ')}
+              help="Jira Cloud pairs the email with the token when it authenticates."
+            >
+              <Input
+                id="tracker-identity-account"
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                data-testid={`${TestId}.AccountId`}
+              />
+            </Field>
           )}
-          <TextField
+
+          <Field
             label="API token"
-            type="password"
-            value={secret}
-            onChange={(e) => setSecret(e.target.value)}
-            error={!!fieldErrors?.secret}
-            helperText={
-              fieldErrors?.secret?.join(' ')
-              ?? 'Stored encrypted and returned by nothing. Rotating is connecting again.'
-            }
-            slotProps={{ htmlInput: { 'data-testid': `${TestId}.Secret` } }}
-          />
-          <TextField
+            htmlFor="tracker-identity-secret"
+            error={fieldErrors?.secret?.join(' ')}
+            help="Stored encrypted and returned by nothing. Rotating is connecting again."
+          >
+            <Input
+              id="tracker-identity-secret"
+              type="password"
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              data-testid={`${TestId}.Secret`}
+            />
+          </Field>
+
+          <Field
             label="Token expires"
-            type="date"
-            value={expiresAt}
-            onChange={(e) => setExpiresAt(e.target.value)}
-            helperText="Optional — but Jira Cloud always shows one, and this page warns you before it lands."
-            slotProps={{
-              // A date input always shows its placeholder, so the label has to stay shrunk or it
-              // sits on top of `dd/mm/yyyy`.
-              inputLabel: { shrink: true },
-              htmlInput: { 'data-testid': `${TestId}.ExpiresAt` },
-            }}
-          />
+            htmlFor="tracker-identity-expires"
+            help="Optional — but Jira Cloud always shows one, and this page warns you before it lands."
+          >
+            <Input
+              id="tracker-identity-expires"
+              type="date"
+              value={expiresAt}
+              onChange={(e) => setExpiresAt(e.target.value)}
+              data-testid={`${TestId}.ExpiresAt`}
+            />
+          </Field>
+
           {failure != null && !fieldErrors && (
-            <Alert severity="error" role="alert" data-testid={`${TestId}.ConnectError`}>
-              {describeError(failure).body}
-            </Alert>
+            <Banner tone="bad" data-testid={`${TestId}.ConnectError`}>
+              <span role="alert">{describeError(failure).body}</span>
+            </Banner>
           )}
-        </Stack>
+        </div>
+
+        <DialogFooter>
+          <Button variant="quiet" onClick={onClose} data-testid={`${TestId}.ConnectCancel`}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={connect.isPending || baseUrl.trim() === '' || secret === ''}
+            onClick={submit}
+            data-testid={`${TestId}.ConnectConfirm`}
+          >
+            Connect
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid={`${TestId}.ConnectCancel`}>
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          disabled={connect.isPending || baseUrl.trim() === '' || secret === ''}
-          onClick={submit}
-          data-testid={`${TestId}.ConnectConfirm`}
-        >
-          Connect
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }
@@ -364,35 +367,36 @@ function DisconnectDialog({
 }) {
   const disconnect = useDisconnectTracker();
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="xs" data-testid={`${TestId}.DisconnectDialog`}>
-      <DialogTitle>Disconnect {trackerProviderLabels[identity.provider]}?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2}>
-          <Typography variant="body2">
+    <Dialog open onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-sm" data-testid={`${TestId}.DisconnectDialog`}>
+        <DialogHeader>
+          <DialogTitle>Disconnect {trackerProviderLabels[identity.provider]}?</DialogTitle>
+          <DialogDescription>
             Issue links stay where they are and keep working — they stop showing their title and
             status until you connect again. Nothing in the tracker changes.
-          </Typography>
-          {disconnect.error != null && (
-            <Alert severity="error" role="alert" data-testid={`${TestId}.DisconnectError`}>
-              {describeError(disconnect.error).body}
-            </Alert>
-          )}
-        </Stack>
+          </DialogDescription>
+        </DialogHeader>
+
+        {disconnect.error != null && (
+          <Banner tone="bad" className="mt-3" data-testid={`${TestId}.DisconnectError`}>
+            <span role="alert">{describeError(disconnect.error).body}</span>
+          </Banner>
+        )}
+
+        <DialogFooter>
+          <Button variant="quiet" onClick={onClose} data-testid={`${TestId}.DisconnectCancel`}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            disabled={disconnect.isPending}
+            onClick={() => disconnect.mutate(identity.id, { onSuccess: onClose })}
+            data-testid={`${TestId}.DisconnectConfirm`}
+          >
+            Disconnect
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid={`${TestId}.DisconnectCancel`}>
-          Cancel
-        </Button>
-        <Button
-          color="error"
-          variant="contained"
-          disabled={disconnect.isPending}
-          onClick={() => disconnect.mutate(identity.id, { onSuccess: onClose })}
-          data-testid={`${TestId}.DisconnectConfirm`}
-        >
-          Disconnect
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

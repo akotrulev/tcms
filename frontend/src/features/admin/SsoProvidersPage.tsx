@@ -1,25 +1,23 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material';
 import { useState } from 'react';
 import { useEmailDomains, useIdentityProviders, useSaveEmailDomains } from '../../api/queries';
 import type { EmailDomains, IdentityProvider } from '../../api/types';
 import { useCanInCompany } from '../../auth/useCan';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
-import { ScrollX } from '../../components/ScrollX';
+import { PageHeader } from '../../components/PageHeader';
+import {
+  Badge,
+  Banner,
+  Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import { Button, Input } from '../../components/ui';
 import { describeError } from '../../lib/describeError';
 import { formatDateTime } from '../../lib/format';
 import { ProviderFormDialog } from './ProviderFormDialog';
@@ -68,7 +66,7 @@ export function SsoProvidersPage() {
   const [editing, setEditing] = useState<IdentityProvider | null | undefined>(undefined);
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId={`${TestId}.Header`}
         title="Single sign-on"
@@ -78,7 +76,7 @@ export function SsoProvidersPage() {
         actions={
           allowed ? (
             <Button
-              variant="contained"
+              variant="primary"
               onClick={() => setEditing(null)}
               data-testid={`${TestId}.Register`}
             >
@@ -92,18 +90,25 @@ export function SsoProvidersPage() {
         <ProviderFormDialog provider={editing} onClose={() => setEditing(undefined)} />
       )}
 
-      <Stack sx={{ gap: 3 }}>
-        <Panel title="Providers" testId={`${TestId}.Panel`} dense>
+      <div className="flex flex-col gap-7">
+        <section data-testid={`${TestId}.Panel`}>
+          <h2 className="mb-2.5 font-mono text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
+            Providers
+          </h2>
           {gate.pending ? null : !allowed ? (
-            <Alert severity="info" data-testid={`${TestId}.Denied`}>
+            <Banner tone="neutral" data-testid={`${TestId}.Denied`}>
               {/*
                 A sentence, not an empty table and not an error. The list is refused rather than
                 narrowed, so "no providers" is a fact this caller is not entitled to and rendering
-                it as one would be a confident falsehood.
+                it as one would be a confident falsehood. It names the permission and the role
+                that holds it — a person cannot be named on this codebase.
               */}
-              Configuring identity providers is a company administrator’s job, so this list is not
-              shown. Ask one of yours to set single sign-on up.
-            </Alert>
+              <span>
+                Configuring single sign-on needs <Identifier variant="muted">company:idp</Identifier>
+                , which you do not hold, so this list is not shown. Ask a company administrator to
+                set it up.
+              </span>
+            </Banner>
           ) : (
             <DataRegion
               testId={`${TestId}.List`}
@@ -116,39 +121,37 @@ export function SsoProvidersPage() {
               }}
             >
               {(rows) => (
-                <ScrollX>
-                  <Table size="small" data-testid={`${TestId}.Grid`}>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ color: 'text.secondary' }}>Name</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 150 }}>Key</TableCell>
-                        <TableCell sx={{ color: 'text.secondary' }}>Issuer</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 110 }}>Status</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 170 }}>Changed</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', width: 120 }} align="right">
-                          Configuration
-                        </TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {rows.map((provider) => (
-                        <ProviderRow
-                          key={provider.id}
-                          provider={provider}
-                          onConfigure={() => setEditing(provider)}
-                        />
-                      ))}
-                    </TableBody>
-                  </Table>
-                </ScrollX>
+                <Table data-testid={`${TestId}.Grid`}>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell>Name</TableHeaderCell>
+                      <TableHeaderCell className="w-[150px]">Key</TableHeaderCell>
+                      <TableHeaderCell>Issuer</TableHeaderCell>
+                      <TableHeaderCell className="w-[110px]">Status</TableHeaderCell>
+                      <TableHeaderCell className="w-[170px]">Changed</TableHeaderCell>
+                      <TableHeaderCell className="w-[120px]" align="right">
+                        Configuration
+                      </TableHeaderCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {rows.map((provider) => (
+                      <ProviderRow
+                        key={provider.id}
+                        provider={provider}
+                        onConfigure={() => setEditing(provider)}
+                      />
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </DataRegion>
           )}
-        </Panel>
+        </section>
 
         {allowed && <EmailDomainsPanel query={domains} />}
-      </Stack>
-    </Box>
+      </div>
+    </div>
   );
 }
 
@@ -169,8 +172,10 @@ function ProviderRow({
   onConfigure: () => void;
 }) {
   return (
-    <TableRow data-testid={RowTestId} hover sx={{ opacity: provider.enabled ? 1 : 0.6 }}>
-      <TableCell sx={{ fontWeight: 500 }} data-testid={`${RowTestId}.Name`}>
+    // Rule 7: a disabled provider stays listed and reads as retired. A list that hid them could
+    // not be used to enable one, and registration always produces a disabled provider.
+    <TableRow data-testid={RowTestId} className={provider.enabled ? undefined : 'opacity-60'}>
+      <TableCell variant="title" data-testid={`${RowTestId}.Name`}>
         {provider.displayName}
       </TableCell>
       <TableCell>
@@ -185,22 +190,19 @@ function ProviderRow({
       </TableCell>
       <TableCell data-testid={`${RowTestId}.Status`}>
         {/*
-          "Disabled" as a positive statement rather than a blank or a missing chip. It is the state
-          every provider starts in, and it is the one an administrator is looking for when they
-          come here wondering why nobody can sign in.
+          "Disabled" as a positive statement rather than a blank or a missing badge. It is the
+          state every provider starts in, and it is the one an administrator is looking for when
+          they come here wondering why nobody can sign in.
         */}
-        <Chip
-          size="small"
-          variant="outlined"
-          color={provider.enabled ? 'success' : 'default'}
-          label={provider.enabled ? 'Live' : 'Disabled'}
-        />
+        <Badge tone={provider.enabled ? 'passed' : 'plain'}>
+          {provider.enabled ? 'Live' : 'Disabled'}
+        </Badge>
       </TableCell>
-      <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }} data-testid={`${RowTestId}.Updated`}>
+      <TableCell className="text-[11.5px] text-ink-4" data-testid={`${RowTestId}.Updated`}>
         {formatDateTime(provider.updatedAt)}
       </TableCell>
       <TableCell align="right">
-        <Button size="small" onClick={onConfigure} data-testid={`${RowTestId}.Configure`}>
+        <Button size="sm" onClick={onConfigure} data-testid={`${RowTestId}.Configure`}>
           Configure
         </Button>
       </TableCell>
@@ -230,18 +232,22 @@ function EmailDomainsPanel({ query }: { query: UseQueryResult<EmailDomains> }) {
   };
 
   return (
-    <Panel title="Claimed email domains" testId={`${TestId}.Domains`} dense>
-      <Stack sx={{ gap: 2 }}>
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+    <section data-testid={`${TestId}.Domains`}>
+      <h2 className="mb-2 font-mono text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
+        Claimed email domains
+      </h2>
+
+      <div className="flex flex-col gap-3">
+        <p className="max-w-[74ch] text-[12.5px] leading-[1.55] text-ink-3">
           Somebody typing an address at one of these domains on the sign-in screen is offered this
           company’s providers. A claim is not proof of ownership — a domain may be claimed by more
           than one company, and each of them is offered its own.
-        </Typography>
+        </p>
 
         {save.isError && (
-          <Alert severity="error" role="alert" data-testid={`${TestId}.Domains.Error`}>
-            {describeError(save.error).body}
-          </Alert>
+          <Banner tone="bad" data-testid={`${TestId}.Domains.Error`}>
+            <span role="alert">{describeError(save.error).body}</span>
+          </Banner>
         )}
 
         <DataRegion
@@ -255,30 +261,44 @@ function EmailDomainsPanel({ query }: { query: UseQueryResult<EmailDomains> }) {
           }}
         >
           {(value) => (
-            <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap' }} data-testid={`${TestId}.Domains.List`}>
+            <div className="flex flex-wrap gap-1.5" data-testid={`${TestId}.Domains.List`}>
+              {/*
+                A chip and not a badge: a claim is a value this reader owns and can take back, and
+                the kit makes that distinction a type rather than a review comment. `onClick` is
+                required by `Chip` and there is nothing behind the label itself, so it selects the
+                domain into the field beside the list — which is also the fastest way to re-add one
+                removed by mistake.
+              */}
               {value.domains.map((domain) => (
                 <Chip
                   key={domain}
-                  label={domain}
                   data-testid={`${TestId}.Domains.Chip`}
-                  onDelete={() => replaceWith(value.domains.filter((other) => other !== domain))}
-                />
+                  onClick={() => setAdding(domain)}
+                  onRemove={() => replaceWith(value.domains.filter((other) => other !== domain))}
+                >
+                  {domain}
+                </Chip>
               ))}
-            </Stack>
+            </div>
           )}
         </DataRegion>
 
-        <Stack direction="row" sx={{ gap: 1, alignItems: 'flex-start' }}>
-          <TextField
-            size="small"
+        <div className="flex items-end gap-2">
+          <Field
             label="Add a domain"
-            value={adding}
-            onChange={(event) => setAdding(event.target.value)}
-            helperText="A bare domain — acme.test, not an address."
-            slotProps={{ htmlInput: { 'data-testid': `${TestId}.Domains.Field` } }}
-          />
+            htmlFor="sso-domain"
+            help="A bare domain — acme.test, not an address."
+            className="w-[260px]"
+          >
+            <Input
+              id="sso-domain"
+              value={adding}
+              onChange={(event) => setAdding(event.target.value)}
+              data-testid={`${TestId}.Domains.Field`}
+            />
+          </Field>
           <Button
-            sx={{ mt: 0.5 }}
+            className="mb-5"
             disabled={adding.trim() === '' || save.isPending}
             onClick={() => {
               const domain = adding.trim().toLowerCase();
@@ -291,8 +311,8 @@ function EmailDomainsPanel({ query }: { query: UseQueryResult<EmailDomains> }) {
           >
             Add
           </Button>
-        </Stack>
-      </Stack>
-    </Panel>
+        </div>
+      </div>
+    </section>
   );
 }
