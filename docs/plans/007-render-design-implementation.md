@@ -202,7 +202,7 @@ pointing at the drawing would produce a second, drifting design source — which
 | 7 | T7 — Case editor, both frames | **done** | `CaseEditorPage` matches `case-authoring-redesign.html` frames A and B, incl. the seven items of §0 | T5, T8 |
 | 9 | T9 — TanStack Table | **done** `6de8c9a9` | `CaseGrid` renders on TanStack Table with server-side paging/sort/filter; `@mui/x-data-grid` unimported | T3 |
 | 10 | T10 — Family 1, Index & table | **done** `b2b1509e` | The 10 index screens render on the kit's Table; `@mui` unimported by all ten | T9 |
-| 11 | T11 — Family 2, Record as document | open | The 7 document screens render at the 74ch measure | T7 |
+| 11 | T11 — Family 2, Record as document | **done** | The 7 document screens render at the 74ch measure | T7 |
 | 12 | T12 — Family 3, Execution | open | `ExecutionPage` renders with the collapsed rail and number-key verdicts | T5, T11 |
 | 13 | T13 — Family 4, Board & people | **done** | Board · MyWork · TeamBoard · OrgChart; the MUI tree-view package unimported | T3, T8 |
 | 14 | T14 — Family 5, Authoring | open | Docs · DocPageEditor · FeatureImport at the 70ch prose measure | T11 |
@@ -1138,7 +1138,7 @@ toolbar; **proportion before number**; an em dash meaning *no value* rather than
 
 ---
 
-### T11 — Family 2, Record as document
+### T11 — Family 2, Record as document — **DONE**
 
 **Deliverable:** CaseDetail · RunDetail · IngestionJob · Proposal · CaseHistory · SuiteHistory ·
 ReportView render at the 74ch measure on `kit/DocumentSurface` and `kit/Timeline`, against
@@ -1149,7 +1149,56 @@ ReportView render at the 74ch measure on `kit/DocumentSurface` and `kit/Timeline
 file being downloaded. It is the one screen in the product that is deliberately not dark, and the
 port must not "fix" it.
 
-- [ ] **Steps 1–7:** One screen per step. **Step 8:** Commit — no gate here; T17 runs it.
+**What landed, and the five things the code disproved.**
+
+**1. Three of the seven drop `PageHeader`; four keep it.** The render draws A (case detail), D
+(proposal) and E (case history) with **no page heading at all** — crumb and lens in the top strip,
+and the document's own title as the subject — so those three follow T7: `<title>` and the arrival
+`useAnnounce()` raised by hand, the breadcrumb rendered into `TopStripSlot`. B, C, F and G keep
+`PageHeader`, because the render draws each of them with a real title row and a table under it, and
+the component is T16's to port. **On `CaseDetailPage` the crumb slot sits OUTSIDE the `DataRegion`
+and the action bar inside it**: the crumb is the only non-rail way back to the list, and a failed
+read that takes it with it is a failure escaping the response-dependent subtree.
+
+**2. `kit/ProcedureLine` could not carry the read view, in two places** — the second kit widening a
+screen task has needed, after T7's `RailRow`, and both additive:
+`ProcedureKeyword` gained **`but`** (`StepKeyword` has five members, and folding `BUT` into `And`
+prints a word the author did not write), and `ProcedureLineProps` gained **`keywordTestId`** (the
+component owns the *word* as well as the hue, so `CaseDetail.Steps.Row.Keyword` — which the existing
+suite asserts on — has nowhere else to live). The four-column steps table is gone with them: read
+and write are the same document or the thesis is empty, so `testData` and `expectedResult` are the
+quiet lines under the action, which is `Table`'s own UX#113 rule applied where the cell became a
+line.
+
+**3. Neither hand-rolled widget could be a Radix primitive, and the reason is the harness.**
+The lifecycle menu (`CaseDetail.StatusMenu`) and the reviewer picker (`Review.Assign.Choice`) are a
+plain disclosure over `role="menu"` / `role="listbox"` with a scrim: `@radix-ui/react-select` calls
+`target.hasPointerCapture`, jsdom implements neither it nor a polyfill, and `src/test/setup.ts` is
+not a place to bend the app to the harness. Both are driven by existing tests. **The Radix
+`Dialog` is proven** — `CaseDetail.Feature` opens, fetches and closes under jsdom, so `ui/dialog`
+needs no such retreat.
+
+**4. `Review.Assignee` is not a `kit/Chip`, and `PermissionGate` still owns the refusal tooltip.**
+§5's chip is *a value the reader owns and is a button*; an assignee is a name with a withdrawal,
+so borrowing the component would have meant inventing a click that does nothing — and its
+`data-testid` lands on the inner button, where `within(chip).getByTestId('Review.Assignee.Remove')`
+cannot reach it. MUI `Tooltip`s became native `title` attributes throughout (`RunListPage`'s
+precedent), except on a gated control, where `PermissionGate` already wraps the denied branch.
+
+**5. `components/ResultBar.tsx`, `StatusChip.tsx`, `PageHeader.tsx`, `Identifier` and `DataRegion`
+stay MUI and stay imported.** They are shared with screens T12/T15 own and are T16's to port;
+importing them costs no `@mui` in these eight files, which is what the task's grep asks. What did
+get replaced in place is `PassRateSummary` / `ResultCountsCell` / `DenominatorToggle` on the two
+screens that used them — inline numbers plus `kit/ResultBar`, keeping every test id including
+`SuiteHistory.Denominator.EXECUTED` / `.TOTAL`. `lib/muiTestIds.ts` is now imported by
+`RunDetailPage` and `ReviewPanel` no longer, as D3 assigns.
+
+Data test ids are byte-identical apart from eight that named a wrapper this port deletes —
+`CaseDetail.Header`, `CaseDetail.Ownership`, `Proposal.Header`, `Proposal.CasePanel`,
+`Proposal.SummaryPanel`, `CaseHistory.Header`, `SuiteHistory.Runs`, `SuiteHistory.Denominator` —
+each checked to be referenced by nothing in the repository. No test file was edited.
+
+- [x] **Steps 1–7:** One screen per step. **Step 8:** Commit — no gate here; T17 runs it.
 
 ---
 
