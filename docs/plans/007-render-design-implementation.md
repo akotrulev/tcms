@@ -199,7 +199,7 @@ pointing at the drawing would produce a second, drifting design source — which
 | 5 | T5 — AppShell | **done** `8127551a` + `5a4d7226` | Rail at 232px, collapsing to the icon rail on the **three** route patterns below (§4's two screens, one of them at two URLs); top strip; footer strip. ~~Slot for a page's commit bar~~ → not built; T7 adds it | T3 |
 | 6 | T6 — Family 8, Threshold | **done** | Login · AcceptInvitation · SsoCallback render from the kit with no MUI import | T5 |
 | 8 | T8 — Family 9, States **(runs before T7)** | **done** | NotFound · Help; notistack → `sonner` across all 14 files; the refusal/notification matrix all 42 inherit | T4, T6 |
-| 7 | T7 — Case editor, both frames | open | `CaseEditorPage` matches `case-authoring-redesign.html` frames A and B, incl. the seven items of §0 | T5, T8 |
+| 7 | T7 — Case editor, both frames | **done** | `CaseEditorPage` matches `case-authoring-redesign.html` frames A and B, incl. the seven items of §0 | T5, T8 |
 | 9 | T9 — TanStack Table | **done** `6de8c9a9` | `CaseGrid` renders on TanStack Table with server-side paging/sort/filter; `@mui/x-data-grid` unimported | T3 |
 | 10 | T10 — Family 1, Index & table | **done** `b2b1509e` | The 10 index screens render on the kit's Table; `@mui` unimported by all ten | T9 |
 | 11 | T11 — Family 2, Record as document | open | The 7 document screens render at the 74ch measure | T7 |
@@ -807,7 +807,7 @@ git commit -m "feat(frontend): T6 — family 8, the threshold, ported to the kit
 
 ---
 
-### T7 — The case editor, both frames
+### T7 — The case editor, both frames — **DONE**
 
 **Deliverable:** `CaseEditorPage` matches `assets/case-authoring-redesign.html` frames A and B, with
 all seven differences of §0 closed except item 6, which §4 defers.
@@ -827,45 +827,97 @@ This is the screen the plan was opened for. Its two specs
 where they and the render disagree — the rail spec's *"Does the render need redrawing?"* section
 lists four places the render is already known to be wrong.
 
-**Files:** `frontend/src/features/cases/CaseEditorPage.tsx`, `CaseDocument.tsx`, and their tests.
+**Files:** `frontend/src/features/cases/CaseEditorPage.tsx`, `CaseDocument.tsx`, `ConditionEditDialog.tsx`
+and their tests, plus `frontend/src/app/topStripSlot.tsx` (new), `app/AppShell.tsx` (+test) for Step 0
+and `components/kit/RailRow.tsx` — see note 2 below.
 
-- [ ] **Step 0: The top-strip slot** (moved from T5). `AppShell.tsx`'s `<header>` gets a
+**What landed, and the four things the code disproved.**
+
+**1. The existing test could not pass unedited, and the reason is the change itself.** The plan
+said the 524-line `CaseEditorPage.test.tsx` would need editing only where it asserts a `Panel`
+title — it asserts none; every region is found by testid, and those survived. What it *did* assert
+was **MUI internals**: `within(rail).getAllByRole('combobox')` counted the rail's outlined
+`Select`s, and two tests reached for `.closest('.MuiInputBase-root')` to open one. Those are
+assertions about the defect §0 item 4 names. Three tests were rewritten (the UX#117 row test now
+proves each row is a native `<button>` with an accessible name and `aria-expanded`; the automation
+and suite interactions drive the disclosure); the other twenty-one pass byte-identical, and
+`CaseDocument.test.tsx` needed one — the placeholder assertion Step 3 deletes.
+
+**2. `RailRow` could not carry `aria-expanded`.** Its props stopped at `data-testid`, so a row that
+opens a disclosure had its state in the chevron and nowhere a screen reader could reach — UX#117's
+*state* clause failed by the component written to satisfy it. `kit/RailRow.tsx` now extends
+`ComponentProps<'button'>` and takes a `className`. **This is the one file outside T7's list that
+was touched**, and it is the kit's first real consumer finding its first gap.
+
+**3. The automation disclosure is inline, not a popover — which is the rail spec's open question 2,
+answered.** A popover is dismissed by a click outside it, and Automation is the one control that
+can put this form into a state only a second control resolves. An inline disclosure has nothing to
+dismiss it, and `rowOpen('automation')` is derived from `errors.automationKey ||
+errors.notAutomatableReason`, so it **cannot be closed while its own refusal stands**. The two
+condition groups stayed inline for a second reason: `ConditionsPanel` carries a portalled MUI
+`Autocomplete` and a DnD context, and clicking a portalled listbox is an outside-click to a
+popover — an untestable dismissal bug in a lane with no browser.
+
+**4. The mirror may not take the render's mono keyword.** Step 5 asked for 15px sans at 1.75 with
+mono for the keyword; the textarea and its colouring mirror must agree on font, size and weight to
+the pixel or the caret drifts from the completion popup, and a mono keyword shifts every character
+after it on its line. So `SHARED` is 15px sans and **the keyword changes colour only** — rule 5's
+hues, `Given`/`When`/`Then` in the three the runner paints results in. The mono half of the rule
+went where nothing is typed: the render's 26px gutter number (absolutely positioned, so it costs
+the shared flow nothing), the `Feature:` chrome, and the blank state's scaffold. The `.blk` step-data
+box and the mauve `--tagc` tag colour are the two render details refused outright — a background
+and a hue this app has no token for; both render as `ink-2`.
+
+Also landed, differing from the steps above: the **top-strip slot renders its children in place**
+when no shell is above it (`app/topStripSlot.tsx`), because every page test in this repository
+mounts the page without `AppShell` and a Save button that exists only under a particular ancestor
+is a Save button that disappears. The strip also carries the **breadcrumb** the deleted
+`PageHeader` used to draw — dropping the `<h1>` per rule 1 must not take the only non-rail way back
+to the list — and the `<title>` and arrival announcement are raised from the page, which is the
+rest of what `PageHeader` was doing that nothing else does. `ConditionEditDialog` was ported off
+MUI whole (it is untested, and it is the second `lib/muiTestIds` importer D3 assigns to T7).
+
+**The rail is 300px**, the render's figure, and open question 1 of the rail spec is answered in that
+document.
+
+
+- [x] **Step 0: The top-strip slot** (moved from T5). `AppShell.tsx`'s `<header>` gets a
 `TopStripSlot` — a context + portal target — so a page can render its commit bar beside the
 breadcrumb (§0 item 7). Test: a child rendered into it appears inside the `<header>`, and nothing
 appears on a route that renders none. This is the only `AppShell.tsx` change in T7.
 
-- [ ] **Step 1: Remove the panel chrome** (§0 item 1). The document column is a bare `paper` surface;
+- [x] **Step 1: Remove the panel chrome** (§0 item 1). The document column is a bare `paper` surface;
 `Start`, `The case` and `Notes` lose their `Panel` wrappers. The rail keeps its section headings —
 those are `tcms.css:.sec h3`, not panels.
 
-- [ ] **Step 2: The three starts become cards** (§0 item 2), each with its sentence and its keyboard
+- [x] **Step 2: The three starts become cards** (§0 item 2), each with its sentence and its keyboard
 hint, `Write it` highlighted — `case-authoring-redesign.html:.starts`.
 
-- [ ] **Step 3: The blank state** (§0 item 3) — a `+ tag` row, the ghost title lead, the subtitle
+- [x] **Step 3: The blank state** (§0 item 3) — a `+ tag` row, the ghost title lead, the subtitle
 *"One sentence stating what is verified"*, the rule, then the numbered scaffold with a ghost hint
 per keyword. This replaces the textarea placeholder at `CaseDocument.tsx:280`; the placeholder is
 what a person sees when there is nothing to see, and the scaffold is what tells them what to write.
 
-- [ ] **Step 4: The rail goes quiet** (§0 item 4). Every row becomes `kit/RailRow`: no outlined
+- [x] **Step 4: The rail goes quiet** (§0 item 4). Every row becomes `kit/RailRow`: no outlined
 `Select`, no permanent border, no persistent helper paragraph. The helper text moves into the
 opened control, where the rail spec puts it. **`notAutomatableReason` must stay reachable and its
 refusal visible** — the rail spec's open question 2 says the automation popover must not close on a
 server refusal, or the error has no visible field.
 
-- [ ] **Step 5: The document reads as a document** (§0 item 5): 15px sans at 1.75 for step text,
+- [x] **Step 5: The document reads as a document** (§0 item 5): 15px sans at 1.75 for step text,
 mono only for the keyword, the gutter number, and step data. `MONO` at `CaseDocument.tsx:70` stops
 applying to the whole mirror — but the textarea and its colouring mirror must still agree on font,
 size, line height, padding, border and wrapping, or the caret drifts from the completion popup. That
 constraint is why the file has one mirror and not two; changing the font makes it *more* important,
 not less. Its `SHARED` block is the place to change, and both halves read from it already.
 
-- [ ] **Step 6: The commit bar moves to the top strip** (§0 item 7) and the `PageHeader` H1 goes —
+- [x] **Step 6: The commit bar moves to the top strip** (§0 item 7) and the `PageHeader` H1 goes —
 rule 1, *"no page heading repeating the rail's active item"*.
 
-- [ ] **Step 7: `Notes` loses its panel but keeps its fields** (§4). Both `TextField`s become kit
+- [x] **Step 7: `Notes` loses its panel but keeps its fields** (§4). Both `TextField`s become kit
 inputs in the document's narrative column, under the procedure.
 
-- [ ] **Step 8: Tests.** The existing `CaseEditorPage.test.tsx` (524 lines) must pass unedited except
+- [x] **Step 8: Tests.** The existing `CaseEditorPage.test.tsx` (524 lines) must pass unedited except
 where it asserts a `Panel` title. Add:
 
 ```tsx
@@ -889,7 +941,7 @@ it('renders the rail rows quiet — no filled input surface at rest', () => {
 });
 ```
 
-- [ ] **Step 9:** Commit. No gate here — the build, lint and suite run once in T17.
+- [x] **Step 9:** Commit. No gate here — the build, lint and suite run once in T17.
 
 ```bash
 git add frontend/src/features/cases/CaseEditorPage.tsx frontend/src/features/cases/CaseDocument.tsx \

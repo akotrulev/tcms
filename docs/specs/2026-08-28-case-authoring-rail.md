@@ -251,7 +251,8 @@ the namespace problem in full. So the syntax goes, but the render's *intent* is 
   document declines to fix it here.
 - **Automation becomes a two-level control.** Status on the face, key or reason one level in. That
   is one more click for the only field on the screen with a conditional requirement, and a place a
-  validation error can hide if the popover closes on refusal. It must not.
+  validation error can hide if the popover closes on refusal. It must not. *(Built in 007 T7 as an
+  inline disclosure held open by its own refusal, so the hazard cannot occur — open question 2.)*
 - **The `Feature:` line is chrome that looks like text.** An author will try to edit it. Whatever
   makes it non-editable has to also explain itself, or it reads as a bug.
 - **Seven rows leaves no headroom.** The next field anyone adds to `test_case` has nowhere obvious
@@ -261,12 +262,32 @@ the namespace problem in full. So the syntax goes, but the render's *intent* is 
 
 ## Open questions
 
-1. **The width arithmetic is arithmetic.** The claim that the document does not need the rail's
-   280px is measured off the render's proportions and a 65–75ch target, not off a browser at 1280px
-   with a fifty-step case. It is the load-bearing input to rejecting the sheet. If it is wrong, the
-   sheet comes back.
-2. **Does the automation popover stay open on a server refusal?** It must, or the error has no
-   visible field. Not specified here because it depends on the picker component chosen.
+1. ~~**The width arithmetic is arithmetic.**~~ **Answered by the build (007 T7), and the answer is
+   the same one — with the arithmetic now done against shipped numbers rather than a drawing's
+   proportions.**
+
+   At 1280px the case editor is one of the three routes where the shell forces the collapsed rail
+   (`AppShell.tsx`'s `COLLAPSED_RAIL_ROUTES`, 007 T5), so the row is **64px nav + 300px rail**,
+   leaving **916px** for the document column; its own padding is 32px a side, so the text box is
+   **852px**. The procedure is 15px IBM Plex Sans, whose average advance is ≈0.5em, so the 74ch
+   measure UX#21/UX#112 want is ≈555px and its 75ch ceiling ≈565px. **The document reaches its
+   measure with roughly 290px to spare, which is more than the rail costs.** A full-width document
+   would not reach the measure, it would exceed it by 50%.
+
+   So the rail is not stealing width the document would use well, the sheet does not come back, and
+   the `max-w-[74ch]` on the document column is what holds the line — remove it and the column, not
+   the rail, is what breaks the measure.
+
+   **Still not a browser observation.** This is arithmetic over the widths the implementation
+   actually uses, taken at 1280px with no case open; it is not a screenshot, and it says nothing
+   about a fifty-step case, about a suite name long enough to wrap the Suite row, or about the
+   `sm`/`md` stack where the rail sits under the document rather than beside it. Those stay open.
+2. ~~**Does the automation popover stay open on a server refusal?**~~ **Answered by the build
+   (007 T7): there is no popover.** The row opens an **inline disclosure** in the rail, and the
+   question disappears with the surface that raised it — a popover is dismissed by a click outside
+   it and an inline panel has nothing to dismiss it. The disclosure's open state is *derived*:
+   `errors.automationKey || errors.notAutomatableReason` holds it open, so it cannot be closed
+   while its own refusal stands. See `frontend/src/features/cases/CaseEditorPage.tsx`.
 3. **Is the suite-from-context parameter in Phase 1 or Phase 2?** It is a `CaseListPage` change with
    no contract impact, so Phase 1 is cheap — but the render puts it on the blank state, which is
    Phase 1's deliverable anyway. Named, not assigned.
