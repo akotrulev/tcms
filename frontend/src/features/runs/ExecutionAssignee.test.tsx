@@ -74,9 +74,8 @@ function renderControl(execution = anExecution(), frozen = false) {
  */
 async function choose(optionTestId: string) {
   const select = () => screen.getByRole('combobox', { name: /assigned to/i })
-  await waitFor(() => expect(select()).not.toHaveAttribute('aria-disabled', 'true'))
-  await userEvent.click(select())
-  await userEvent.click(await screen.findByTestId(optionTestId))
+  await waitFor(() => expect(select()).toBeEnabled())
+  await userEvent.selectOptions(select(), await screen.findByTestId(optionTestId))
 }
 
 describe('ExecutionAssignee', () => {
@@ -125,11 +124,10 @@ describe('ExecutionAssignee', () => {
 
     // Present — §31 — and not usable.
     expect(await screen.findByTestId('Execution.Assignee')).toBeInTheDocument()
+    // The native control's own `disabled`, not an ARIA echo of it: T16's `NativeSelect` is a real
+    // `<select>`, so being disabled is a property of the element rather than a state it announces.
     await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: /assigned to/i })).toHaveAttribute(
-        'aria-disabled',
-        'true',
-      ),
+      expect(screen.getByRole('combobox', { name: /assigned to/i })).toBeDisabled(),
     )
   })
 

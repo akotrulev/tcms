@@ -325,10 +325,10 @@ function SelectFilter({
         {(dimension?.values ?? []).map((option) => (
           <option key={option.id} value={option.id}>
             {/* Hierarchical dimensions are indented by depth so "Refunds" reads as a child
-                of "Payments" rather than as a peer. */}
-            <span style={{ paddingLeft: (option.path.split('.').length - 1) * 12 }}>
-              {option.name}
-            </span>
+                of "Payments" rather than as a peer. An `<option>` may hold text only, so the
+                indent is leading spaces rather than padding. */}
+            {'\u00a0'.repeat((option.path.split('.').length - 1) * 2)}
+            {option.name}
           </option>
         ))}
       </NativeSelect>

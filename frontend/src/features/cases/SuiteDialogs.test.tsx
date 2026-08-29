@@ -179,7 +179,9 @@ describe('SuiteDialogs — tag rules', () => {
     const patch = vi.spyOn(api, 'patch').mockResolvedValue(suite as never)
     renderRename()
 
-    await user.click(await screen.findByTestId('CancelIcon'))
+    // The kit's picker labels each chip's remove button by the tag it takes off — a named control
+    // rather than MUI's unnamed cancel icon, so this names the rule being removed.
+    await user.click(await screen.findByRole('button', { name: 'Remove smoke' }))
     await user.click(screen.getByTestId('Suites.Dialog.Submit'))
 
     await waitFor(() => expect(patch).toHaveBeenCalled())

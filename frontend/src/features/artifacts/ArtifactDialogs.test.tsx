@@ -98,11 +98,14 @@ function renderDialog(defaultPlanId?: string) {
 let onClose: () => void
 let onRegistered: () => void
 
-/** MUI renders a select's options into a portal, so the listbox is found on the document. */
+/**
+ * Picks an option on the platform's own `<select>` — T16's `NativeSelect`, where the options are
+ * children of the control rather than of a portalled listbox.
+ */
 async function choose(testId: string, optionName: string | RegExp) {
-  const select = screen.getByTestId(testId).closest('.MuiInputBase-root')!
-  await userEvent.click(within(select as HTMLElement).getByRole('combobox'))
-  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+  const select = screen.getByTestId(testId) as HTMLSelectElement
+  const option = within(select).getByRole('option', { name: optionName }) as HTMLOptionElement
+  await userEvent.selectOptions(select, option)
 }
 
 describe('RegisterArtifactDialog', () => {
@@ -122,14 +125,12 @@ describe('RegisterArtifactDialog', () => {
   describe('the PLAN_SCOPE qualifier disables the project scope before the submit', () => {
     /** Every option in the "Belongs to" select, by accessible name and disabled state. */
     async function scopeOptions() {
-      const select = screen.getByTestId('Artifacts.Dialog.Scope').closest('.MuiInputBase-root')!
-      await userEvent.click(within(select as HTMLElement).getByRole('combobox'))
-      const listbox = await screen.findByRole('listbox')
-      return within(listbox)
+      const select = await screen.findByTestId('Artifacts.Dialog.Scope')
+      return within(select)
         .getAllByRole('option')
         .map((option) => ({
           name: option.textContent ?? '',
-          disabled: option.getAttribute('aria-disabled') === 'true',
+          disabled: (option as HTMLOptionElement).disabled,
         }))
     }
 
@@ -151,8 +152,11 @@ describe('RegisterArtifactDialog', () => {
       mockPermissions(['artifact:edit'])
       renderDialog()
 
-      const options = await scopeOptions()
-      expect(options.every((o) => !o.disabled)).toBe(true)
+      // Awaited, not snapshotted: the gate is fail-closed while its query is in flight, so the
+      // first paint disables the project option for everybody. What this pins is where it lands.
+      await waitFor(async () => {
+        expect((await scopeOptions()).every((o) => !o.disabled)).toBe(true)
+      })
     })
 
     it('moves the form off PROJECT scope rather than opening on a disabled choice', async () => {
@@ -500,10 +504,9 @@ describe('RegisterArtifactDialog', () => {
       mockPermissions(['artifact:edit'], {}, candidates)
       renderDialog('plan-1')
 
-      const select = screen.getByTestId('Artifacts.Dialog.Supersedes').closest('.MuiInputBase-root')!
-      await userEvent.click(within(select as HTMLElement).getByRole('combobox'))
+      const select = await screen.findByTestId('Artifacts.Dialog.Supersedes')
 
-      expect(await screen.findByRole('option', { name: /Sign-off v1/ })).toBeInTheDocument()
+      expect(await within(select).findByRole('option', { name: /Sign-off v1/ })).toBeInTheDocument()
       // The three the server refuses with `errors.supersedes`: already replaced, archived, and —
       // the one that matters — a PROJECT-scope document a plan-scope registration may not retire.
       expect(screen.queryByRole('option', { name: /Old guide/ })).toBeNull()

@@ -208,7 +208,7 @@ pointing at the drawing would produce a second, drifting design source — which
 | 14 | T14 — Family 5, Authoring | **done** | Docs · DocPageEditor · FeatureImport at the 70ch prose measure | T11 |
 | 15 | T15 — Family 6 & 7, Analytics and Settings | **done** | Dashboard · PlanStatistics per §6; the **11** settings/account screens (§8's nine plus the two it does not list) | T10 |
 | 16 | T16 — MUI removed, preflight on | **done** `98ffb79a` | No `@mui`/`@emotion`/`notistack` in `package.json` or any import; Preflight imported; `muiTestIds.ts` deleted with **both** citations | T6–T15 |
-| 17 | T17 — Gates and bundle measurement | open | The four gates green on `shanks` (the **only** gate pass for T6–T16 — see the directive in the header); before/after bundle numbers recorded; preflight layout damage fixed | T16 |
+| 17 | T17 — Gates and bundle measurement | gates green, browser pass open | The four gates green on `shanks` (the **only** gate pass for T6–T16 — see the directive in the header); before/after bundle numbers recorded; preflight layout damage fixed | T16 |
 
 Seventeen tasks. T6–T15 are the ten screen tasks and are ordered so the cheapest proof of the kit
 (T6, three screens, no rail) lands before the hardest document surface (T7), and so every family
@@ -1651,7 +1651,7 @@ buries you, fix in the order build → lint → tests, since a type error hides 
 `Could not write XML test results` and **zero** assertion failures is an fd-limit problem, not a red
 suite.
 
-- [ ] **Step 1: Sync and run all four**
+- [x] **Step 1: Sync and run all four** — green; see §4.1.
 
 ```bash
 ~/bin/tcms-remote sync
@@ -1666,7 +1666,7 @@ The backend gate is in the list because `backend/build.gradle.kts` declares
 `frontend/src/lib/permissions.ts` as a test input — a backend test asserts over that file's *text*.
 This plan does not touch it, and the run is what proves that.
 
-- [ ] **Step 2: Measure the bundle, before believing anything about it**
+- [x] **Step 2: Measure the bundle, before believing anything about it** — see §4.1.
 
 ```bash
 cd frontend && npm run build -- --mode production
@@ -1678,7 +1678,7 @@ the largest chunk, and CSS, against the `5933ca27` baseline. Removing Emotion's 
 should be a large win; **"should be" is not a measurement**, and a regression here is a finding, not
 a rounding error.
 
-- [ ] **Step 3: Drive the six states in a browser**
+- [ ] **Step 3: Drive the six states in a browser** — **NOT DONE**; see §4.1.
 
 The gates prove it compiles, not that it works — CLAUDE.md's own list of what typechecked and was
 still wrong includes a no-op theme toggle and a provider-ordering bug that rendered nothing but the
@@ -1691,10 +1691,10 @@ tcmsFaults.status(503, 30); tcmsFaults.hang(); tcmsFaults.expire(); tcmsFaults.d
 `drift()` is the one that matters most here: it must read as **FAILED**, not empty, and T3 Step 3
 is the test that claims so. Confirm it on screen.
 
-- [ ] **Step 4: Write the results into this file** under a new *Results* section — gate output, the
-bundle table, and anything the browser pass found that the gates did not.
+- [x] **Step 4: Write the results into this file** under a new *Results* section — gate output, the
+bundle table, and anything the browser pass found that the gates did not. → **§4.1**.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/plans/007-render-design-implementation.md
@@ -1702,6 +1702,94 @@ git commit -m "fix: T17 — gates green on shanks, bundle measured"
 ```
 
 ---
+
+---
+
+## 4.1 Results — T17
+
+Run on `shanks` (`~/bin/tcms-remote`), 2026-08-29, against the tree at T16 plus the fix-ups this
+task made. **All four gates are green.** The bundle was measured against `5933ca27`. The browser
+pass is recorded at the end and is the one part that is *not* complete.
+
+### The four gates
+
+| Gate | Result |
+|---|---|
+| `frontend npm run build` | **PASS** — `tsc -b` + vite, 94 chunks, `✓ built in 626ms` |
+| `frontend npm run lint` | **PASS** — oxlint, 0 warnings / 0 errors on 432 files |
+| `frontend npm run test:run` | **PASS** — **148 files, 2051 tests**, 0 failed |
+| `packages npm run build` + lint + `test:run --workspaces` | **PASS** — client 138, cli 102, mcp 153 tests; 0 lint warnings in all three |
+| `backend ./gradlew build` | **PASS** — `BUILD SUCCESSFUL in 9m 52s`, **3577 PASSED / 0 FAILED**, and zero `Could not write XML test results` lines under `ulimit -n 65535` |
+
+**The first run was red: 18 files, 84 tests.** That is what eleven tasks of unrun gates looks like,
+and it is worth recording what the failures actually were, because only one class of them was the
+preflight damage the task expected.
+
+| What broke | Files | Why |
+|---|---|---|
+| **Rich markup inside `<option>`** | 8 source files, 12 sites | The MUI→native port carried `MenuItem` bodies — a `<div>`, a `<p>`, a `<span>` — straight into `<option>`, which may hold text only. The browser drops the elements and keeps the text, so the *screens* looked right and the accessible name went missing: `getByRole('option', {name})` found nothing. **A real defect, not a test artefact** — the second line of every plan/run/document row (the case count, the run status, the page status) was not being announced at all. |
+| **Tests still driving MUI's portal listbox** | 10 test files | `click(combobox)` then `click(option)`. On a native `<select>` the click selects nothing, so the value never reached react-hook-form and the assertion read `expected "post" to be called at least once`. Replaced with `selectOptions`. |
+| **Assertions on MUI internals** | 5 test files | `aria-disabled="true"` → `toBeDisabled()`, `.MuiInputBase-root` → the testid, `MuiAlert-colorWarning` → a new `data-tone`, `CancelIcon` → the kit's named *Remove* button, `calc(6 * var(--mui-spacing))` → `48px`. |
+| **`git grep` in `tokenSystem.test.ts`** | 1 | Environment, not code: the sync excludes `.git/`, so `git grep` exits 128 on the build tree and the raw-white-alpha invariant reported itself broken rather than unchecked. Replaced with a filesystem walk of `src`. |
+| **Copy pinned by its old wording** | 1 | T15 rewrote the token screen's refusal to name `token:issue`; the test still matched `/do not have permission/i`. Re-pinned on the permission's name, which is the stronger claim. |
+| **A stale excuse in `citedFiles.test.ts`** | 1 | `docs/audits/` was excused as absent and 007's design audit put a report back in it. The rule catching its own excuse is the rule working. |
+
+Four of those fixes changed **behaviour, not just tests**, and all four are improvements the port had
+silently dropped:
+
+- **`HealthChip` and `QuarantineChip` had lost their accessible description.** MUI's `Tooltip`
+  put the help text on the trigger as an `aria-label`; Radix's puts it in content that exists only
+  while hovered. `Pill` now spreads props and is the trigger itself, so the label and the colour are
+  on one element again.
+- **`TableCell` gained `rowHeader`** — `<th scope="row">`. The report provenance block is a
+  label/value table and had been rendering as loose pairs of `<td>`s since the port.
+- **`Banner` gained `data-tone`.** The tone was only in a `color-mix()` inline style, so nothing
+  could read back that the bulk-preview warning is a warning.
+- **`CaseFilterBar`'s hierarchical indent** was `paddingLeft` on a `<span>` inside an `<option>` —
+  dropped by the browser. It is leading `\u00a0` now, which is what an `<option>` can carry.
+
+### The bundle, measured
+
+`npm run build` at `5933ca27` (in a detached worktree) against the same command on this tree.
+Raw bytes of `dist/assets`, and gzip of the same files.
+
+| | `5933ca27` (MUI) | T17 (Tailwind + shadcn) | Change |
+|---|---|---|---|
+| **Total JS** | 2 095.0 kB | **1 545.7 kB** | **−549.3 kB (−26.2%)** |
+| Chunks | 116 | 94 | −22 |
+| **Largest chunk** | `CaseListPage` 434.1 kB | `DataRegion` **409.1 kB** | −25.0 kB (−5.8%) |
+| Second largest | `index` 342.8 kB | `index` 297.6 kB | −45.2 kB |
+| **Total CSS** | 12.9 kB | **67.1 kB** | **+54.2 kB (5.2×)** |
+| Total JS + CSS | 2 107.9 kB | **1 612.8 kB** | −495.1 kB (−23.5%) |
+| **Gzip, JS** | 672.8 kB | **488.8 kB** | −184.0 kB (−27.3%) |
+| Gzip, CSS | 2.3 kB | 12.8 kB | +10.5 kB |
+| **Gzip, total** | 675.1 kB | **501.5 kB** | **−173.6 kB (−25.7%)** |
+
+**The CSS growing 5× is the win, not a regression, and the two halves have to be read together.**
+Under MUI the component styles were `sx` objects living *inside* the JS chunks and serialised by
+Emotion at runtime; the 12.9 kB stylesheet was almost all of `index.css`. They are now static
+utility classes in one stylesheet the browser caches and never re-parses per render. The honest
+number is the pair: **−495 kB raw and −174 kB gzipped across both**, with the runtime style engine
+gone from the critical path entirely.
+
+CLAUDE.md's own warning — *"splitting DataGrid into its own chunk … made total JS ~40% worse by
+defeating tree-shaking"* — is why this was measured rather than asserted. It reads the right way
+here. The largest chunk barely moved, though: `DataRegion` at 409 kB is now the shape of the
+problem, and it is **not** a design-system chunk (React, the router and TanStack Query land in it
+through the shared barrel). That is a finding for a later task, not a regression from this one.
+
+### The browser pass — INCOMPLETE
+
+The stack was brought up (`docker compose up -d --build`, backend `UP`, vite on 5173), a company
+provisioned, and the `/accept-invitation` screen rendered correctly. **The fault-switch pass was not
+run**: completing the invitation means setting a password, which the agent may not do. The four
+switches — `tcmsFaults.status(503, 30)`, `hang()`, `expire()`, `drift()` — are therefore still
+unexercised on this tree, and **`drift()` reading as FAILED rather than empty remains claimed by
+`T3 Step 3`'s test and unconfirmed on screen.**
+
+Per CLAUDE.md: the gates prove it compiles and that 2051 + 3577 assertions hold. **The six
+resilience states are built and unverified**, and T17 does not close that. Whoever signs in should
+run the four switches on `/projects/:id/cases` and record what they see here.
 
 ## 5. Documents this plan changes when it lands
 

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -153,6 +153,12 @@ function renderPage() {
   )
 }
 
+/** Picks a page on the native `<select>` T15 put behind this field. */
+async function choosePage(name: RegExp) {
+  const picker = await screen.findByTestId('PlanDocument.PagePicker')
+  await userEvent.selectOptions(picker, await within(picker).findByRole('option', { name }))
+}
+
 describe('the Business requirements tab', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -170,15 +176,13 @@ describe('the Business requirements tab', () => {
     mockReads(null)
     renderPage()
 
-    await screen.findByTestId('PlanDocument.PagePicker')
-    await userEvent.click(screen.getByRole('combobox', { name: /page/i }))
+    const picker = within(await screen.findByTestId('PlanDocument.PagePicker'))
 
-    const spokenFor = await screen.findByRole('option', { name: /Refunds v2 requirements/ })
-    expect(spokenFor).toHaveAttribute('aria-disabled', 'true')
+    // The native option element carries `disabled` itself — there is no ARIA echo of it.
+    expect(await picker.findByRole('option', { name: /Refunds v2 requirements/ })).toBeDisabled()
     // The free one is the pair that makes the assertion above mean "disabled" and not "the list
     // renders nothing selectable".
-    expect(screen.getByRole('option', { name: /Payments v4 requirements/ }))
-      .not.toHaveAttribute('aria-disabled', 'true')
+    expect(picker.getByRole('option', { name: /Payments v4 requirements/ })).toBeEnabled()
   })
 
   it('adopts the chosen page by id', async () => {
@@ -186,9 +190,7 @@ describe('the Business requirements tab', () => {
     const put = vi.spyOn(api, 'put').mockResolvedValue(LINKED_PAGE as never)
     renderPage()
 
-    await screen.findByTestId('PlanDocument.PagePicker')
-    await userEvent.click(screen.getByRole('combobox', { name: /page/i }))
-    await userEvent.click(await screen.findByRole('option', { name: /Payments v4 requirements/ }))
+    await choosePage(/Payments v4 requirements/)
     await waitFor(() => expect(screen.getByTestId('PlanDocument.Link')).toBeEnabled())
     await userEvent.click(screen.getByTestId('PlanDocument.Link'))
 
@@ -214,9 +216,7 @@ describe('the Business requirements tab', () => {
     )
     renderPage()
 
-    await screen.findByTestId('PlanDocument.PagePicker')
-    await userEvent.click(screen.getByRole('combobox', { name: /page/i }))
-    await userEvent.click(await screen.findByRole('option', { name: /Payments v4 requirements/ }))
+    await choosePage(/Payments v4 requirements/)
     await waitFor(() => expect(screen.getByTestId('PlanDocument.Link')).toBeEnabled())
     await userEvent.click(screen.getByTestId('PlanDocument.Link'))
 

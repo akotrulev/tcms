@@ -135,6 +135,27 @@ async function save() {
   await userEvent.click(screen.getByTestId('PlanStats.Save'))
 }
 
+/**
+ * Takes a reference off through its chip's own Remove button.
+ *
+ * The testid is on the chip's LABEL button; the kit renders the remove control as its sibling, so
+ * this steps out to the chip and asks for the button by name. `querySelector('svg')` was what the
+ * MUI chip's delete icon needed and finds nothing here.
+ */
+async function removeChip(chip: HTMLElement) {
+  await userEvent.click(within(chip.parentElement!).getByRole('button', { name: /remove/i }))
+}
+
+/**
+ * Adds a suite through the group's own picker — a native `<select>` since T16, so the option is a
+ * child of that box. Scoped by group id rather than by label: with a section on screen there are
+ * two of every picker, and an unscoped query silently answers for the unsectioned one.
+ */
+async function pickSuite(group: string, name: string | RegExp) {
+  const select = await screen.findByTestId(`PlanCases.AddSuite.${group}`)
+  await userEvent.selectOptions(select, await within(select).findByRole('option', { name }))
+}
+
 describe('the Test cases tab', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -198,8 +219,7 @@ describe('the Test cases tab', () => {
     const patch = vi.spyOn(api, 'patch').mockResolvedValue(planBody() as never)
     renderPage()
 
-    await userEvent.click(await screen.findByRole('combobox', { name: /add a suite/i }))
-    await userEvent.click(await screen.findByRole('option', { name: 'Payments' }))
+    await pickSuite('unsectioned', 'Payments')
 
     await userEvent.type(screen.getByTestId('PlanCases.AddTag.unsectioned'), 'smo')
     await userEvent.click(await screen.findByRole('option', { name: 'smoke' }))
@@ -229,8 +249,7 @@ describe('the Test cases tab', () => {
     mockReads(planBody())
     renderPage()
 
-    await userEvent.click(await screen.findByRole('combobox', { name: /add a suite/i }))
-    await userEvent.click(await screen.findByRole('option', { name: 'Payments' }))
+    await pickSuite('unsectioned', 'Payments')
 
     await userEvent.type(screen.getByTestId('PlanCases.AddTag.unsectioned'), 'smo')
     await userEvent.click(await screen.findByRole('option', { name: 'smoke' }))
@@ -241,7 +260,7 @@ describe('the Test cases tab', () => {
         .toHaveTextContent('Payments'))
     expect(within(group).getByTestId('PlanCases.TagChip')).toHaveTextContent('smoke')
 
-    await userEvent.click(within(group).getByTestId('PlanCases.TagChip').querySelector('svg')!)
+    await removeChip(within(group).getByTestId('PlanCases.TagChip'))
 
     await waitFor(() =>
       expect(screen.queryByTestId('PlanCases.TagChip')).not.toBeInTheDocument())
@@ -268,8 +287,7 @@ describe('the Test cases tab', () => {
     const section = await screen.findByTestId('PlanCases.Section')
     // Scoped to the section: with one present there are two of every picker on screen, and an
     // unscoped query resolves to the unsectioned group's — testing the path already covered above.
-    await userEvent.click(within(section).getByRole('combobox', { name: /add a suite/i }))
-    await userEvent.click(await screen.findByRole('option', { name: 'Payments' }))
+    await pickSuite('Create', 'Payments')
 
     await userEvent.type(screen.getByTestId('PlanCases.AddTag.Create'), 'smo')
     await userEvent.click(await screen.findByRole('option', { name: 'smoke' }))
@@ -279,7 +297,7 @@ describe('the Test cases tab', () => {
         .toHaveTextContent('Payments'))
     expect(within(section).getByTestId('PlanCases.TagChip')).toHaveTextContent('smoke')
 
-    await userEvent.click(within(section).getByTestId('PlanCases.TagChip').querySelector('svg')!)
+    await removeChip(within(section).getByTestId('PlanCases.TagChip'))
 
     await waitFor(() =>
       expect(screen.queryByTestId('PlanCases.TagChip')).not.toBeInTheDocument())
@@ -307,7 +325,7 @@ describe('the Test cases tab', () => {
     // Resolved to its key through the case list, rather than rendered as a UUID.
     expect(within(group).getByTestId('PlanCases.CaseChip')).toHaveTextContent('TC-2')
 
-    await userEvent.click(within(group).getByTestId('PlanCases.TagChip').querySelector('svg')!)
+    await removeChip(within(group).getByTestId('PlanCases.TagChip'))
     await waitFor(() =>
       expect(screen.queryByTestId('PlanCases.TagChip')).not.toBeInTheDocument())
     expect(await screen.findByTestId('PlanStats.Dirty')).toHaveTextContent('Test cases')
@@ -450,7 +468,7 @@ describe('the Test cases tab', () => {
         .getAllByTestId('PlanCases.Resolved.unsectioned.Row').length).toBeGreaterThan(0))
 
     const group = screen.getByTestId('PlanCases.Unsectioned')
-    await userEvent.click(within(group).getByTestId('PlanCases.TagChip').querySelector('svg')!)
+    await removeChip(within(group).getByTestId('PlanCases.TagChip'))
 
     // No references left, so the whole region goes — not an empty list under a caption about
     // references there are none of.
@@ -462,8 +480,7 @@ describe('the Test cases tab', () => {
     mockReads(planBody())
     renderPage()
 
-    await userEvent.click(await screen.findByRole('combobox', { name: /add a suite/i }))
-    await userEvent.click(await screen.findByRole('option', { name: 'Payments' }))
+    await pickSuite('unsectioned', 'Payments')
 
     // The rows are live server data for a reference the plan does not hold — which is the point,
     // and why the served count beside the heading is hidden while this list is not. The caption is

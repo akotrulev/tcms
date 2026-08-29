@@ -82,8 +82,12 @@ describe('DocBlockBody', () => {
 
     // `pre-wrap`, not a collapsed run: the editor stores the newlines, so a renderer that dropped
     // them would show a different document from the one being edited two clicks away.
+    //
+    // Asserted on the class rather than on the computed style since T16: the whitespace rule is a
+    // Tailwind utility now, and jsdom loads no stylesheet, so `toHaveStyle` would compare against
+    // the empty string and pass for a paragraph that had lost the rule entirely.
     const paragraph = screen.getByText(/First line/)
-    expect(paragraph).toHaveStyle({ whiteSpace: 'pre-wrap' })
+    expect(paragraph).toHaveClass('whitespace-pre-wrap')
   })
 
   it('renders a code block as preformatted source, not as prose', () => {
@@ -107,11 +111,11 @@ describe('DocBlockBody', () => {
       `level` doing its second job (§93). The plan panel indented and the documentation page did
       not — one stored outline, two readings, nothing failing.
 
-      The assertion is on the `calc()` MUI v7 emits rather than on `48px`, because jsdom does not
-      resolve `var(--mui-spacing)` and a resolved-pixel assertion silently compares against an
-      empty string. The multiplier IS the depth arithmetic — 3 → (3-1)*3 = 6 spacing units.
+      ~~The assertion is on the `calc()` MUI v7 emits rather than on `48px`~~ → **superseded in
+      T16**: the indent is a plain inline pixel value now, with no theme spacing unit behind it to
+      go unresolved. The number IS the depth arithmetic — 3 → (3-1)*24px.
     */
-    expect(getComputedStyle(bullet).paddingLeft).toBe('calc(6 * var(--mui-spacing))')
+    expect(getComputedStyle(bullet).paddingLeft).toBe('48px')
   })
 
   it('renders a list bullet with no level at depth 1 rather than crashing', () => {

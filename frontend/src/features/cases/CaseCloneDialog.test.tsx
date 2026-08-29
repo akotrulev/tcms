@@ -165,10 +165,10 @@ describe('CaseCloneDialog', () => {
     renderDialog(sourceCase())
 
     await screen.findByTestId('CaseDetail.Clone.Title')
-    // MUI's select is a listbox behind a button, so the value reaches react-hook-form only by
-    // opening the popover and clicking — `selectOptions` cannot drive it.
-    await userEvent.click(screen.getByRole('combobox', { name: /folder/i }))
-    await userEvent.click(await screen.findByTestId('CaseDetail.Clone.Suite.TS-2'))
+    await userEvent.selectOptions(
+      screen.getByTestId('CaseDetail.Clone.Suite'),
+      await screen.findByTestId('CaseDetail.Clone.Suite.TS-2'),
+    )
     await userEvent.click(screen.getByTestId('CaseDetail.Clone.Submit'))
 
     await waitFor(() => expect(post).toHaveBeenCalled())
@@ -192,8 +192,10 @@ describe('CaseCloneDialog', () => {
 
     async function pickFolder(testId: string) {
       await screen.findByTestId('CaseDetail.Clone.Title')
-      await userEvent.click(screen.getByRole('combobox', { name: /folder/i }))
-      await userEvent.click(await screen.findByTestId(testId))
+      await userEvent.selectOptions(
+        screen.getByTestId('CaseDetail.Clone.Suite'),
+        await screen.findByTestId(testId),
+      )
     }
 
     it('names them once a different folder is picked', async () => {

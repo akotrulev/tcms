@@ -362,11 +362,9 @@ export function RunCloneDialog({
                 {...register('configurationId')}
               >
 
-                              <option value="" data-testid={`${TestId}.Configuration.Keep`}>
-                                <span className="text-ink-2">
-                                  Keep {run.configuration.name}
-                                </span>
-                              </option>
+                <option value="" data-testid={`${TestId}.Configuration.Keep`}>
+                  Keep {run.configuration.name}
+                </option>
                               {(configurations.data ?? [])
                                 // The source's own row is already the first option, under the label that says
                                 // what leaving it does — offering it twice would be two controls' worth of
@@ -395,11 +393,9 @@ export function RunCloneDialog({
                 {...register('assigneeId')}
               >
 
-                              <option value="" data-testid={`${TestId}.Assignee.None`}>
-                                <span className="text-ink-2">
-                                  Nobody — the team picks it up
-                                </span>
-                              </option>
+                <option value="" data-testid={`${TestId}.Assignee.None`}>
+                  Nobody — the team picks it up
+                </option>
                               {(members.data ?? []).map((member) => (
                                 <option key={member.id}
                                   value={member.id}

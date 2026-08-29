@@ -120,9 +120,10 @@ describe('ApiTokensPage', () => {
     const get = mockApi(['company:read', 'company:members'])
     renderPage()
 
-    expect(await screen.findByTestId('Admin.Tokens.Denied')).toHaveTextContent(
-      /do not have permission/i,
-    )
+    // Pinned on the permission's name rather than on "do not have permission": T15 rewrote this
+    // copy to state the grant a reader is missing and who can give it, and a refusal that names
+    // neither is the regression worth catching.
+    expect(await screen.findByTestId('Admin.Tokens.Denied')).toHaveTextContent(/token:issue/)
     expect(screen.queryByTestId('Admin.Tokens.Grid')).not.toBeInTheDocument()
     expect(
       vi.mocked(get).mock.calls.filter(([path]) => String(path).startsWith('/api-tokens')),

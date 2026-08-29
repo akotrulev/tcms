@@ -222,11 +222,8 @@ function CriteriaEditor({
                     rather than as passing. What was missing was any way to know that in advance.
                   */}
                   {label}
-                  {!criterionMetricEvaluated[value as keyof typeof criterionMetricEvaluated] && (
-                    <span className="m-0 text-xs text-ink-2 ml-2">
-                      — not evaluated yet
-                    </span>
-                  )}
+                  {!criterionMetricEvaluated[value as keyof typeof criterionMetricEvaluated] &&
+                    ' — not evaluated yet'}
                 </option>
               ))}
             </NativeSelect>

@@ -416,23 +416,14 @@ export function RunCreateDialog({
                             since §99 a run against no plan is a supported thing to want, and a blank first
                             option reads as a field somebody forgot to fill in.
                           */}
-                          <option value="" data-testid={`${TestId}.Plan.None`}>
-                            <span className="text-ink-2">
-                              No plan — scope it below
-                            </span>
-                          </option>
-                          {available.map((plan) => (
-                            <option key={plan.id} value={plan.id} data-testid={`${TestId}.Plan.${plan.key}`}>
-                              <div className="flex items-baseline gap-2">
-                                <p className="m-0 text-sm">
-                                  {plan.key} · {plan.name}
-                                </p>
-                                <span className="m-0 text-xs text-ink-2">
-                                  {plural(plan.caseCount, 'case')}
-                                </span>
-                              </div>
-                            </option>
-                          ))}
+              <option value="" data-testid={`${TestId}.Plan.None`}>
+                No plan — scope it below
+              </option>
+              {available.map((plan) => (
+                <option key={plan.id} value={plan.id} data-testid={`${TestId}.Plan.${plan.key}`}>
+                  {plan.key} · {plan.name} — {plural(plan.caseCount, 'case')}
+                </option>
+              ))}
             </NativeSelect>
             </Field>
 
@@ -571,11 +562,9 @@ export function RunCreateDialog({
                                 forgot to fill in. Every project has exactly one Default seeded, so this is the
                                 honest label for what an untouched form sends.
                               */}
-                              <option value="" data-testid={`${TestId}.Configuration.Default`}>
-                                <span className="text-ink-2">
-                                  The project’s default
-                                </span>
-                              </option>
+                <option value="" data-testid={`${TestId}.Configuration.Default`}>
+                  The project’s default
+                </option>
                               {(configurations.data ?? []).map((configuration) => (
                                 <option key={configuration.id}
                                   value={configuration.id}
@@ -601,11 +590,9 @@ export function RunCreateDialog({
                 {...register('assigneeId')}
               >
 
-                              <option value="" data-testid={`${TestId}.Assignee.None`}>
-                                <span className="text-ink-2">
-                                  Nobody — the team picks it up
-                                </span>
-                              </option>
+                <option value="" data-testid={`${TestId}.Assignee.None`}>
+                  Nobody — the team picks it up
+                </option>
                               {(members.data ?? []).map((member) => (
                                 <option key={member.id}
                                   value={member.id}

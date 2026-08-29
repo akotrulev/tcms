@@ -639,18 +639,11 @@ export function GenerateReportDialog({
                 {...register('runId')}
               >
 
-                              {available.map((run) => (
-                                <option key={run.id} value={run.id} data-testid={`${TestId}.Run.${run.key}`}>
-                                  <div className="flex items-baseline gap-2">
-                                    <p className="m-0 text-sm">
-                                      {run.key} · {run.name}
-                                    </p>
-                                    <span className="m-0 text-xs text-ink-2">
-                                      {runStatusLabels[run.status]}
-                                    </span>
-                                  </div>
-                                </option>
-                              ))}
+                {available.map((run) => (
+                  <option key={run.id} value={run.id} data-testid={`${TestId}.Run.${run.key}`}>
+                    {run.key} · {run.name} — {runStatusLabels[run.status]}
+                  </option>
+                ))}
               </NativeSelect>
               </Field>
             )}
@@ -669,26 +662,21 @@ export function GenerateReportDialog({
                 {...register('docPageId')}
               >
 
-                              {documents.map((page) => (
-                                <option key={page.id}
-                                  value={page.id}
-                                  data-testid={`${TestId}.Document.${page.key}`}
-                                >
-                                  <div className="flex items-baseline gap-2">
-                                    <p className="m-0 text-sm">
-                                      {page.key} · {page.title}
-                                    </p>
-                                    {/*
-                                      The status, because a coverage report over a DRAFT specification is a
-                                      different claim from one over a PUBLISHED one — the report prints it in its
-                                      own metadata, and the picker says it before the choice rather than after.
-                                    */}
-                                    <span className="m-0 text-xs text-ink-2">
-                                      {docPageStatusLabel[page.status]}
-                                    </span>
-                                  </div>
-                                </option>
-                              ))}
+                {/*
+                  The status is part of the row, because a coverage report over a DRAFT
+                  specification is a different claim from one over a PUBLISHED one — the report
+                  prints it in its own metadata, and the picker says it before the choice rather
+                  than after.
+                */}
+                {documents.map((page) => (
+                  <option
+                    key={page.id}
+                    value={page.id}
+                    data-testid={`${TestId}.Document.${page.key}`}
+                  >
+                    {page.key} · {page.title} — {docPageStatusLabel[page.status]}
+                  </option>
+                ))}
               </NativeSelect>
               </Field>
             )}

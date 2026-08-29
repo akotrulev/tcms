@@ -333,7 +333,7 @@ const CITED_BUT_ABSENT_BY_DECISION: Record<string, string> = {
     + 'in `backend/` that names the mock layer and is right about it.',
 
   /*
-    The thirteen below are one event: `19376dd6` ("Refresh claude files", 2026-08-28) removed the whole
+    The twelve below are one event: `19376dd6` ("Refresh claude files", 2026-08-28) removed the whole
     historical documentation tree — `docs/audits/`, `docs/agent-context/`, the dated plans and
     `docs/plans/001-unified-step-model/` — deliberately, leaving `docs/specs/`, `docs/plans/003…006`
     and `docs/business-model/` as the authorities. Twenty-odd comments across `backend/` and
@@ -348,7 +348,10 @@ const CITED_BUT_ABSENT_BY_DECISION: Record<string, string> = {
     misreading the strikethrough notation exists to prevent.
 
     Both directions still hold: restoring any of these files fails this map, which is the property
-    that stops an entry outliving its absence.
+    that stops an entry outliving its absence. ~~`docs/audits/`~~ was the thirteenth and is gone
+    from this map for exactly that reason: plan 007's design audit put a report back in that
+    directory, so the excuse stopped being true and this rule said so. The two dated files under it
+    are still absent and keep theirs.
 
     THE SECOND SIX WERE FOUND BY CI, NOT BY THE SWEEP THAT WROTE THE FIRST SIX, and that is worth
     recording where the next reader will hit it: this rule reads four corpora and `backend/src` is
@@ -385,11 +388,6 @@ const CITED_BUT_ABSENT_BY_DECISION: Record<string, string> = {
     'Removed with the dated plans in `19376dd6`. The catalogue it specified is `core/shapes.ts` and '
     + '`mcp/src/shape.ts`, which are the two files that cite it — the specification became the '
     + 'implementation, and those two are now the authority on it.',
-  'docs/audits/':
-    'The directory the entry below belonged to, and named by this map\'s own comment above so the '
-    + 'removal reads as one event. Removed in `19376dd6`. Here for the same reason as '
-    + '`docs/plans/001-unified-step-model/`: the directory rule treats a trailing slash as the claim '
-    + 'a filename makes, and this file is in the corpus it scans.',
   'docs/audits/2026-07-30-v1-schema-first-execution.md':
     'Removed with the whole of `docs/audits/` in `19376dd6`. It is where the SYSTEM-scope RLS trap '
     + 'was measured rather than reasoned, and all three citations — `RoleAssignment`, '

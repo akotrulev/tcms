@@ -58,9 +58,9 @@ export function ReportView({ document }: { document: ReportDocument }) {
             <TableBody>
               {headerBlock(document).map((entry) => (
                 <TableRow key={entry.label} data-testid={`${TestId}.Header.Row`}>
-                  <TableCell
-                    className="w-[260px] align-top text-ink-2"
-                  >
+                  {/* `<th scope="row">`: the label IS this row's header, and the block is a
+                      two-column label/value table rather than a grid of data. */}
+                  <TableCell rowHeader className="w-[260px] text-left align-top font-normal text-ink-2">
                     {entry.label}
                   </TableCell>
                   <TableCell>{entry.value}</TableCell>

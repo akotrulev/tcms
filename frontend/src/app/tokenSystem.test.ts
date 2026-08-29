@@ -1,5 +1,4 @@
-import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -234,14 +233,30 @@ describe('lines and washes are tokens, not literals', () => {
     ).toContain(`${token}:`);
   });
 
-  /** `git grep` exits 1 on no matches, which is the passing case — the status is the answer. */
-  function gitGrep(pattern: string): string[] {
-    const result = spawnSync('git', ['grep', '-nE', pattern, '--', 'src'], {
-      cwd: resolve(HERE, '..', '..'),
-      encoding: 'utf8',
-    });
-    expect(result.status, `git grep failed: ${result.stderr}`).toBeLessThan(2);
-    return (result.stdout ?? '').split('\n').filter((line) => line !== '');
+  /**
+   * A walk of `src`, not `git grep`. The gate runs on a build tree synced without `.git/`
+   * (see `docs/specs/shanks-runner-details.md`), where `git grep` exits 128 on every pattern and
+   * would have reported this invariant as broken rather than unchecked.
+   */
+  function sourceGrep(pattern: RegExp): string[] {
+    const root = resolve(HERE, '..');
+    const hits: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = resolve(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(path);
+        } else if (/\.(tsx?|css)$/.test(entry.name)) {
+          readFileSync(path, 'utf8')
+            .split('\n')
+            .forEach((line, index) => {
+              if (pattern.test(line)) hits.push(`${path.slice(root.length + 1)}:${index + 1}:${line}`);
+            });
+        }
+      }
+    };
+    walk(root);
+    return hits;
   }
 
   /**
@@ -250,7 +265,7 @@ describe('lines and washes are tokens, not literals', () => {
    * has no such reading — it is always a light-on-dark assumption.
    */
   it('no component draws a border, fill or divider with a raw white alpha', () => {
-    const offenders = gitGrep('(border|bg|divide|ring|outline)-white/').filter(
+    const offenders = sourceGrep(/(border|bg|divide|ring|outline)-white\//).filter(
       (line) => !/\.(test\.tsx?|css):/.test(line),
     );
 

@@ -352,11 +352,9 @@ export function BulkActionDialog({
                       data-testid={`${TestIdPrefix}.Status.${key}`}
                     >
                       {label}
-                      {key === 'APPROVED' && !mayApprove && (
-                        <span className="m-0 text-xs ml-2 text-ink-2">
-                          — {approveReason ?? 'not yours to grant'}
-                        </span>
-                      )}
+                      {key === 'APPROVED' && !mayApprove
+                        ? ` — ${approveReason ?? 'not yours to grant'}`
+                        : ''}
                     </option>
                   ),
                 )}
@@ -489,11 +487,7 @@ export function BulkActionDialog({
                         usage_count yet, so on a real instance every row would carry it — a label
                         stating a fact the data never made, and one that invites reading the
                         order as a ranking when it is currently just the title. */}
-                    {condition.usageCount > 0 && (
-                      <span className="ml-2 text-ink-2" style={{ fontSize: '0.75rem' }}>
-                        used by {formatCount(condition.usageCount)}
-                      </span>
-                    )}
+                    {condition.usageCount > 0 ? ` — used by ${formatCount(condition.usageCount)}` : ''}
                   </option>
                 ))}
               </NativeSelect>

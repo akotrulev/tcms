@@ -71,10 +71,19 @@ function renderDialog() {
 let onClose: () => void
 let onCommitted: () => void
 
-/** MUI renders a select's options into a portal, so the listbox is found on the document. */
+/**
+ * ~~MUI renders a select's options into a portal, so the listbox is found on the document.~~ →
+ * **superseded (007 T16).** These are native selects, so the options are the box's own children
+ * and there is no menu to open — the helper hands back the scope the options are queried in.
+ */
 async function openSelect(testId: string) {
-  const select = screen.getByTestId(testId).closest('.MuiInputBase-root')!
-  await userEvent.click(within(select as HTMLElement).getByRole('combobox'))
+  return within(await screen.findByTestId(testId))
+}
+
+/** Picks one option on a native select, by its accessible name. */
+async function chooseIn(testId: string, optionName: string | RegExp) {
+  const select = await screen.findByTestId(testId)
+  await userEvent.selectOptions(select, await within(select).findByRole('option', { name: optionName }))
 }
 
 describe('BulkActionDialog', () => {
@@ -90,35 +99,38 @@ describe('BulkActionDialog', () => {
       // THE test of this file. A Test Engineer holds case:edit and every other status is theirs to
       // set; approval is the one the server refuses, so it is the one option that greys out.
       //
-      // Asserted through `role="option"`, NOT through the testid, and that is the whole lesson of
-      // this file's first live pass. MUI's Select clones its DIRECT children to inject the option
-      // role and the handler that selects the value, so a MenuItem wrapped in anything renders as
-      // an inert `role="menuitem"` that cannot be chosen at all. Looked up by testid, that broken
-      // item is findable and carries no `aria-disabled` — so the disabled assertion below passed
-      // and the enabled one below it passed too, on an option nobody could select.
+      // Asserted through `role="option"` inside the select, NOT through the testid, and that is
+      // the whole lesson of this file's first live pass: an option the control never processed is
+      // findable by testid and carries no disabled state either, so both directions passed on an
+      // option nobody could select. The native control cannot produce that shape — the option
+      // element IS the thing that carries `disabled` — and the query stays scoped to it because
+      // three selects on this dialog now put their options in the same document.
       renderDialog()
       await waitFor(() => expect(api.get).toHaveBeenCalled())
 
-      await openSelect('Cases.BulkDialog.Field.LifecycleStatus')
+      const status = await openSelect('Cases.BulkDialog.Field.LifecycleStatus')
 
-      const approved = await screen.findByRole('option', { name: /^Approved/ })
-      expect(approved).toHaveAttribute('aria-disabled', 'true')
+      const approved = await status.findByRole('option', { name: /^Approved/ })
+      expect(approved).toBeDisabled()
     })
 
     it('offers "Approved" as a SELECTABLE option to a caller holding case:approve', async () => {
       // The other direction, and it is not ceremony twice over: a gate that disables the option for
-      // everybody passes the test above, and an option MUI never processed is unselectable for
-      // everybody while looking present. So this asserts the value actually lands in the payload.
+      // everybody passes the test above, and an option that is present but unselectable looks the
+      // same from outside. So this asserts the value actually lands in the payload.
       mockReads(['case:edit', 'case:approve'])
       const post = vi.spyOn(api, 'post').mockResolvedValue(previewResult as never)
       renderDialog()
       await waitFor(() => expect(api.get).toHaveBeenCalled())
 
-      await openSelect('Cases.BulkDialog.Field.LifecycleStatus')
-      const approved = await screen.findByRole('option', { name: /^Approved/ })
-      expect(approved).not.toHaveAttribute('aria-disabled', 'true')
+      const status = await openSelect('Cases.BulkDialog.Field.LifecycleStatus')
+      const approved = await status.findByRole('option', { name: /^Approved/ })
+      expect(approved).toBeEnabled()
 
-      await userEvent.click(approved)
+      await userEvent.selectOptions(
+        screen.getByTestId('Cases.BulkDialog.Field.LifecycleStatus'),
+        approved,
+      )
       await userEvent.click(screen.getByTestId('Cases.BulkDialog.Preview'))
 
       await waitFor(() => expect(post).toHaveBeenCalled())
@@ -134,12 +146,10 @@ describe('BulkActionDialog', () => {
       renderDialog()
       await waitFor(() => expect(api.get).toHaveBeenCalled())
 
-      await openSelect('Cases.BulkDialog.Field.LifecycleStatus')
+      const status = await openSelect('Cases.BulkDialog.Field.LifecycleStatus')
 
       await waitFor(() =>
-        expect(screen.getAllByRole('option')).toHaveLength(
-          Object.keys(lifecycleLabels).length,
-        ),
+        expect(status.getAllByRole('option')).toHaveLength(Object.keys(lifecycleLabels).length),
       )
     })
 
@@ -149,13 +159,10 @@ describe('BulkActionDialog', () => {
       renderDialog()
       await waitFor(() => expect(api.get).toHaveBeenCalled())
 
-      await openSelect('Cases.BulkDialog.Field.LifecycleStatus')
+      const status = await openSelect('Cases.BulkDialog.Field.LifecycleStatus')
 
       for (const name of [/^Draft$/, /^In review$/, /^Deprecated$/]) {
-        expect(await screen.findByRole('option', { name })).not.toHaveAttribute(
-          'aria-disabled',
-          'true',
-        )
+        expect(await status.findByRole('option', { name })).toBeEnabled()
       }
     })
   })
@@ -232,7 +239,10 @@ describe('BulkActionDialog', () => {
       expect(screen.getByText(/moving them back will not bring it back/)).toBeInTheDocument()
       // The warning is on the same footing as a skip: this operation does something the caller
       // did not ask for, so the panel must not read as an ordinary informational preview.
-      expect(screen.getByRole('alert')).toHaveClass('MuiAlert-colorWarning')
+      expect(screen.getByTestId('Cases.BulkDialog.Preview.Result').firstElementChild).toHaveAttribute(
+        'data-tone',
+        'warn',
+      )
     })
 
     it('discards the preview when the argument changes', async () => {
@@ -245,8 +255,7 @@ describe('BulkActionDialog', () => {
       await screen.findByTestId('Cases.BulkDialog.Preview.Result')
       expect(screen.getByTestId('Cases.BulkDialog.Confirm')).toBeEnabled()
 
-      await openSelect('Cases.BulkDialog.Field.LifecycleStatus')
-      await userEvent.click(await screen.findByRole('option', { name: /^Deprecated$/ }))
+      await chooseIn('Cases.BulkDialog.Field.LifecycleStatus', /^Deprecated$/)
 
       await waitFor(() => {
         expect(screen.queryByTestId('Cases.BulkDialog.Preview.Result')).not.toBeInTheDocument()
@@ -263,8 +272,7 @@ describe('BulkActionDialog', () => {
       renderDialog()
       await waitFor(() => expect(api.get).toHaveBeenCalled())
 
-      await openSelect('Cases.BulkDialog.Operation')
-      await userEvent.click(await screen.findByRole('option', { name: 'Submit for review' }))
+      await chooseIn('Cases.BulkDialog.Operation', 'Submit for review')
       await userEvent.click(screen.getByTestId('Cases.BulkDialog.Preview'))
 
       await waitFor(() => expect(post).toHaveBeenCalled())
@@ -278,8 +286,7 @@ describe('BulkActionDialog', () => {
       renderDialog()
       await waitFor(() => expect(api.get).toHaveBeenCalled())
 
-      await openSelect('Cases.BulkDialog.Operation')
-      await userEvent.click(await screen.findByRole('option', { name: 'Assign an owner' }))
+      await chooseIn('Cases.BulkDialog.Operation', 'Assign an owner')
       await userEvent.click(screen.getByTestId('Cases.BulkDialog.Preview'))
 
       await waitFor(() => expect(post).toHaveBeenCalled())
@@ -296,8 +303,7 @@ describe('BulkActionDialog', () => {
       renderDialog()
       await waitFor(() => expect(api.get).toHaveBeenCalled())
 
-      await openSelect('Cases.BulkDialog.Operation')
-      await userEvent.click(await screen.findByRole('option', { name: 'Add tags' }))
+      await chooseIn('Cases.BulkDialog.Operation', 'Add tags')
 
       await userEvent.type(screen.getByTestId('Cases.BulkDialog.Field.Tags'), 'smo')
       await userEvent.click(await screen.findByRole('option', { name: 'smoke' }))
@@ -313,15 +319,13 @@ describe('BulkActionDialog', () => {
       renderDialog()
       await waitFor(() => expect(api.get).toHaveBeenCalled())
 
-      await openSelect('Cases.BulkDialog.Operation')
-      await userEvent.click(await screen.findByRole('option', { name: 'Change automation status' }))
+      await chooseIn('Cases.BulkDialog.Operation', 'Change automation status')
 
       expect(
         screen.queryByTestId('Cases.BulkDialog.Field.NotAutomatableReason'),
       ).not.toBeInTheDocument()
 
-      await openSelect('Cases.BulkDialog.Field.AutomationStatus')
-      await userEvent.click(await screen.findByRole('option', { name: /not automatable/i }))
+      await chooseIn('Cases.BulkDialog.Field.AutomationStatus', /not automatable/i)
 
       expect(
         await screen.findByTestId('Cases.BulkDialog.Field.NotAutomatableReason'),

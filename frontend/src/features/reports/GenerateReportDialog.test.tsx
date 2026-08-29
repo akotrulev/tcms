@@ -112,8 +112,7 @@ function mockReads(
 }
 
 async function chooseType(type: string) {
-  await userEvent.click(screen.getByRole('combobox', { name: /report/i }))
-  await userEvent.click(await screen.findByTestId(`Reports.Generate.Type.${type}`))
+  await pick(/report/i, `Reports.Generate.Type.${type}`)
 }
 
 function queued(type: string) {
@@ -132,18 +131,23 @@ function queued(type: string) {
 }
 
 /**
- * MUI's `select` TextField is a listbox behind a button rather than a native `<select>`, so the
- * value reaches react-hook-form through the hidden input MUI updates on click. Driving it any
- * other way would not exercise the registration at all (`RunCreateDialog.test`'s note).
+ * ~~MUI's `select` TextField is a listbox behind a button rather than a native `<select>`~~ →
+ * **superseded (007 T16).** Every picker here is the platform control, so the option is a child of
+ * the box and `selectOptions` is what puts the value into react-hook-form's registration.
  */
+async function pick(label: RegExp, optionTestId: string) {
+  await userEvent.selectOptions(
+    screen.getByRole('combobox', { name: label }),
+    await screen.findByTestId(optionTestId),
+  )
+}
+
 async function chooseRun() {
-  await userEvent.click(screen.getByRole('combobox', { name: /run/i }))
-  await userEvent.click(await screen.findByTestId('Reports.Generate.Run.TR-1'))
+  await pick(/run/i, 'Reports.Generate.Run.TR-1')
 }
 
 async function chooseFormat(format: string) {
-  await userEvent.click(screen.getByRole('combobox', { name: /format/i }))
-  await userEvent.click(await screen.findByTestId(`Reports.Generate.Format.${format}`))
+  await pick(/format/i, `Reports.Generate.Format.${format}`)
 }
 
 describe('GenerateReportDialog', () => {
@@ -214,7 +218,6 @@ describe('GenerateReportDialog', () => {
     )
 
     await screen.findByTestId('Reports.Generate.Format')
-    await userEvent.click(screen.getByRole('combobox', { name: /format/i }))
 
     expect(await screen.findByTestId('Reports.Generate.Format.HTML')).toBeInTheDocument()
     expect(screen.getByTestId('Reports.Generate.Format.MD')).toBeInTheDocument()
@@ -238,7 +241,6 @@ describe('GenerateReportDialog', () => {
     )
 
     await screen.findByTestId('Reports.Generate.Format')
-    await userEvent.click(screen.getByRole('combobox', { name: /format/i }))
 
     expect(await screen.findByTestId('Reports.Generate.Format.PDF')).toBeInTheDocument()
   })
@@ -334,8 +336,7 @@ describe('GenerateReportDialog', () => {
       await screen.findByTestId('Reports.Generate.Type')
       await chooseType('aggregate_execution')
 
-      await userEvent.click(screen.getByRole('combobox', { name: /aggregation policy/i }))
-      await userEvent.click(await screen.findByTestId('Reports.Generate.Policy.WORST'))
+      await pick(/aggregation policy/i, 'Reports.Generate.Policy.WORST')
       // `fireEvent` rather than `type` for the two date inputs: jsdom's date input takes a whole
       // value and not keystrokes, and react-hook-form registers the same `onChange` either way.
       fireEvent.change(screen.getByTestId('Reports.Generate.From'), {
@@ -414,8 +415,7 @@ describe('GenerateReportDialog', () => {
 
       await screen.findByTestId('Reports.Generate.Type')
       await chooseType('coverage_matrix')
-      await userEvent.click(screen.getByRole('combobox', { name: /document/i }))
-      await userEvent.click(await screen.findByTestId('Reports.Generate.Document.DOC-1'))
+      await pick(/document/i, 'Reports.Generate.Document.DOC-1')
       await userEvent.click(screen.getByTestId('Reports.Generate.Submit'))
 
       await waitFor(() => expect(post).toHaveBeenCalled())

@@ -120,14 +120,18 @@ function gateRefusal() {
  * user does, and a test that faked the value would not exercise the registration at all.
  */
 async function choosePlan() {
-  await userEvent.click(screen.getByRole('combobox', { name: /plan/i }))
-  await userEvent.click(await screen.findByTestId('Runs.Create.Plan.TP-1'))
+  await userEvent.selectOptions(
+    screen.getByTestId('Runs.Create.Plan'),
+    await screen.findByTestId('Runs.Create.Plan.TP-1'),
+  )
 }
 
 /** The same, for A4's two selects — named by their label rather than hard-coded like the plan's. */
 async function chooseSelect(label: RegExp, optionTestId: string) {
-  await userEvent.click(screen.getByRole('combobox', { name: label }))
-  await userEvent.click(await screen.findByTestId(optionTestId))
+  await userEvent.selectOptions(
+    screen.getByRole('combobox', { name: label }),
+    await screen.findByTestId(optionTestId),
+  )
 }
 
 describe('RunCreateDialog', () => {

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
@@ -92,9 +92,10 @@ describe('ProviderFormDialog', () => {
   // control, and everything below it follows the choice.
   // ===================================================================
 
+  /** The Kind field is a native `<select>` since T15, so its options are its own children. */
   async function pickKind(user: ReturnType<typeof userEvent.setup>, name: RegExp) {
-    await user.click(screen.getByTestId('Admin.Sso.Kind'))
-    await user.click(await screen.findByRole('option', { name }))
+    const select = screen.getByTestId('Admin.Sso.Kind')
+    await user.selectOptions(select, within(select).getByRole('option', { name }))
   }
 
   async function fillDirectoryForm(
@@ -108,13 +109,12 @@ describe('ProviderFormDialog', () => {
     if (startTls) await user.click(screen.getByTestId('Admin.Sso.StartTls'))
   }
 
-  it('offers both kinds when registering and neither when editing', async () => {
-    const user = userEvent.setup()
+  it('offers both kinds when registering and neither when editing', () => {
     renderDialog(null)
 
-    expect(screen.getByTestId('Admin.Sso.Kind')).not.toHaveAttribute('aria-disabled', 'true')
-    await user.click(screen.getByTestId('Admin.Sso.Kind'))
-    expect(await screen.findByRole('option', { name: /directory/i })).toBeInTheDocument()
+    const select = screen.getByTestId('Admin.Sso.Kind')
+    expect(select).toBeEnabled()
+    expect(within(select).getByRole('option', { name: /directory/i })).toBeInTheDocument()
   })
 
   it('locks the kind on an edit, because the server ignores it there', () => {

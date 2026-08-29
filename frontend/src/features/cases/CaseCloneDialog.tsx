@@ -262,16 +262,14 @@ export function CaseCloneDialog({
                             in — `RunCreateDialog`'s reason: a blank option reads as a field somebody forgot to
                             fill in, and here it would hide the whole default.
                           */}
-                          <option value="" data-testid={`${TestId}.Suite.Source`}>
-                            <span className="text-ink-2">
-                              Same as the source — {sourceFolder}
-                            </span>
-                          </option>
-                          {(suites.data ?? []).map((suite) => (
-                            <option key={suite.id} value={suite.id} data-testid={`${TestId}.Suite.${suite.key}`}>
-                              {suite.key} · {suite.name}
-                            </option>
-                          ))}
+              <option value="" data-testid={`${TestId}.Suite.Source`}>
+                Same as the source — {sourceFolder}
+              </option>
+              {(suites.data ?? []).map((suite) => (
+                <option key={suite.id} value={suite.id} data-testid={`${TestId}.Suite.${suite.key}`}>
+                  {suite.key} · {suite.name}
+                </option>
+              ))}
             </NativeSelect>
             </Field>
 

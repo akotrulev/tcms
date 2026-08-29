@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type { EmailDomains, IdentityProvider, PermissionKey } from '../../api/types'
@@ -69,7 +69,11 @@ describe('SsoProvidersPage', () => {
     renderPage()
 
     await screen.findByText('Acme Corporate SSO')
-    expect(screen.queryByRole('button', { name: /delete|remove/i })).not.toBeInTheDocument()
+    // Scoped to the provider table. The domain claims below it are chips with a "Remove" button
+    // each — taking a claim back is a supported act — so a document-wide query answers a different
+    // question from the one this test asks.
+    const grid = await screen.findByTestId('Admin.Sso.Grid')
+    expect(within(grid).queryByRole('button', { name: /delete|remove/i })).not.toBeInTheDocument()
   })
 
   it('never shows the secret and never offers to reveal it', async () => {

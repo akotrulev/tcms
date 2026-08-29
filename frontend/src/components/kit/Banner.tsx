@@ -49,6 +49,10 @@ export function Banner({ tone, children, className, ...rest }: BannerProps) {
 
   return (
     <div
+      // The tone, as data. It is carried in `style` otherwise — a `color-mix()` a test cannot read
+      // back and a class name it should not couple to — and the tone IS the claim on the two
+      // banners whose whole point is that they are not ordinary information.
+      data-tone={tone}
       style={
         toneStyle
           ? { borderColor: toneStyle.border, backgroundColor: toneStyle.bg }

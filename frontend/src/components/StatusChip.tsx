@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui';
 import { cn } from '../lib/cn';
 import type {
@@ -53,6 +53,8 @@ function Pill({
   size = 'small',
   children,
   testId,
+  className,
+  ...rest
 }: {
   /** A `var(--color-…)` reference from `lib/statusColors.ts`. */
   colorVar: string;
@@ -61,19 +63,21 @@ function Pill({
   size?: 'small' | 'medium';
   children: ReactNode;
   testId?: string;
-}) {
+} & Omit<ComponentPropsWithoutRef<'span'>, 'color' | 'children'>) {
   return (
     <span
       data-testid={testId}
       className={cn(
         'inline-flex items-center rounded-full border whitespace-nowrap',
         size === 'medium' ? 'px-3 py-1 text-[13px]' : 'px-2 py-0.5 text-[11.5px]',
+        className,
       )}
       style={{
         color: colorVar,
         borderColor: `color-mix(in srgb, ${colorVar} ${tinted ? 40 : 45}%, transparent)`,
         backgroundColor: tinted ? `color-mix(in srgb, ${colorVar} 12%, transparent)` : 'transparent',
       }}
+      {...rest}
     >
       {children}
     </span>
@@ -268,6 +272,10 @@ const healthHelp: Record<HealthSignal, string> = {
     'This case is owned by somebody who no longer works here, so nobody is maintaining it. Reassign it to give it an owner.',
 };
 
+const quarantineHelp =
+  'Somebody has quarantined this case — its results are not trusted, and the reports print a ' +
+  'pass rate that leaves it out. Run it and record a verdict as normal.';
+
 /**
  * A case somebody has pulled out of the trusted set — §237, `case_flake.quarantined`.
  *
@@ -290,16 +298,11 @@ export function QuarantineChip({ testId }: { testId?: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span data-testid={testId}>
-          <Pill colorVar={color} tinted={false}>
-            Quarantined
-          </Pill>
-        </span>
+        <Pill colorVar={color} tinted={false} testId={testId} aria-label={quarantineHelp}>
+          Quarantined
+        </Pill>
       </TooltipTrigger>
-      <TooltipContent>
-        Somebody has quarantined this case — its results are not trusted, and the reports print a
-        pass rate that leaves it out. Run it and record a verdict as normal.
-      </TooltipContent>
+      <TooltipContent>{quarantineHelp}</TooltipContent>
     </Tooltip>
   );
 }
@@ -331,11 +334,9 @@ export function HealthChip({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span data-testid={testId}>
-          <Pill colorVar={color} tinted={false}>
-            {healthLabels[signal]}
-          </Pill>
-        </span>
+        <Pill colorVar={color} tinted={false} testId={testId} aria-label={healthHelp[signal]}>
+          {healthLabels[signal]}
+        </Pill>
       </TooltipTrigger>
       <TooltipContent>{healthHelp[signal]}</TooltipContent>
     </Tooltip>

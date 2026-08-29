@@ -125,12 +125,20 @@ function renderDialog() {
  * Only these two helpers changed; no expectation in this file moved.
  */
 async function chooseFrom(testId: string, optionName: string | RegExp) {
-  const select = screen.getByTestId(testId)
-  await userEvent.selectOptions(select, within(select).getByRole('option', { name: optionName }))
+  const select = await screen.findByTestId(testId)
+  await userEvent.selectOptions(
+    select,
+    await within(select).findByRole('option', { name: optionName }),
+  )
 }
 
+/** Awaited for `GrantRoleDialog.test`'s reason: the role list arrives from a query, not at mount. */
 async function optionNames(testId: string) {
-  return within(screen.getByTestId(testId))
+  const select = await screen.findByTestId(testId)
+  await waitFor(() => {
+    expect(within(select).getAllByRole('option').length).toBeGreaterThan(1)
+  })
+  return within(select)
     .getAllByRole('option')
     .map((option) => option.textContent)
 }

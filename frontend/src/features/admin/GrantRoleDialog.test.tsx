@@ -115,12 +115,24 @@ function renderDialog() {
  * expectation in this file moved.
  */
 async function chooseFrom(testId: string, optionName: string | RegExp) {
-  const select = screen.getByTestId(testId)
-  await userEvent.selectOptions(select, within(select).getByRole('option', { name: optionName }))
+  const select = await screen.findByTestId(testId)
+  await userEvent.selectOptions(
+    select,
+    await within(select).findByRole('option', { name: optionName }),
+  )
 }
 
+/**
+ * Awaited, not snapshotted. Every list here is served by a query, so the box paints with its
+ * placeholder alone and fills in a tick later — a synchronous read returns `[]` for a control that
+ * is about to be correct. Under MUI the click that opened the portal supplied that wait for free.
+ */
 async function optionNames(testId: string) {
-  return within(screen.getByTestId(testId))
+  const select = await screen.findByTestId(testId)
+  await waitFor(() => {
+    expect(within(select).getAllByRole('option').length).toBeGreaterThan(1)
+  })
+  return within(select)
     .getAllByRole('option')
     .map((option) => option.textContent)
     .filter((name) => name !== 'Choose a role' && name !== 'Choose a person or a team')
@@ -190,10 +202,6 @@ describe('GrantRoleDialog', () => {
       400 on a select the user was invited to use.
     */
     expect(await optionNames('Admin.Grant.Role')).not.toContain('Agent')
-
-    // `optionNames` leaves the menu open, and an open MUI menu makes the rest of the document
-    // inert — so the second scope cannot be chosen until this one is dismissed.
-    await userEvent.keyboard('{Escape}')
 
     await chooseFrom('Admin.Grant.Scope', 'Acme Online Banking')
     expect(await optionNames('Admin.Grant.Role')).not.toContain('Agent')

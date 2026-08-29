@@ -479,18 +479,15 @@ export function RegisterArtifactDialog({
               data-testid={`${TestIdPrefix}.Scope`}
               {...register('scope')}
             >
-
-                          {/*
-                            Disabled on the item, NOT wrapped in a PermissionGate. §62 cost a whole live pass to
-                            learn this: `Select` clones its DIRECT children to inject `role="option"` and
-                            `data-value`, so a wrapped item renders as an inert `role="menuitem"` that is
-                            impossible to choose AND carries no `aria-disabled` — indistinguishable, to a test,
-                            from an item that is merely not disabled.
-                          */}
-                          <option value="PROJECT" disabled={!canProjectScope}>
-                            The project — every plan inherits it
-                          </option>
-                          <option value="PLAN">One plan</option>
+              {/*
+                Disabled on the option, NOT wrapped in a PermissionGate: a gate that removes the
+                option leaves a reader who cannot use it unable to see that the choice exists,
+                which is the "disable, don't hide" rule.
+              */}
+              <option value="PROJECT" disabled={!canProjectScope}>
+                The project — every plan inherits it
+              </option>
+              <option value="PLAN">One plan</option>
             </NativeSelect>
             </Field>
 

@@ -126,13 +126,30 @@ export interface TableCellProps extends TdHTMLAttributes<HTMLTableCellElement> {
   align?: 'left' | 'right';
   variant?: 'default' | 'title';
   subtitle?: ReactNode;
+  /**
+   * Renders the cell as `<th scope="row">` — for a table whose FIRST COLUMN is the label and whose
+   * second is the value, such as the report provenance block. Without it each line reads to a
+   * screen reader as a loose pair of cells rather than as a labelled row, which is the whole
+   * structure of that kind of table.
+   */
+  rowHeader?: boolean;
 }
 
-export function TableCell({ align = 'left', variant = 'default', subtitle, children, className, ...rest }: TableCellProps) {
+export function TableCell({
+  align = 'left',
+  variant = 'default',
+  subtitle,
+  rowHeader = false,
+  children,
+  className,
+  ...rest
+}: TableCellProps) {
   const wraps = variant === 'title' || subtitle != null;
+  const Cell = rowHeader ? 'th' : 'td';
 
   return (
-    <td
+    <Cell
+      scope={rowHeader ? 'row' : undefined}
       className={cn(
         'border-b border-line px-3.5 py-2.5 align-top text-ink-2 group-hover:bg-wash-1',
         wraps ? 'whitespace-normal' : 'whitespace-nowrap',
@@ -144,6 +161,6 @@ export function TableCell({ align = 'left', variant = 'default', subtitle, child
     >
       {children}
       {subtitle && <span className="mt-0.5 block text-[11.5px] text-ink-4">{subtitle}</span>}
-    </td>
+    </Cell>
   );
 }
