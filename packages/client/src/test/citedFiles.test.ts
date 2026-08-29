@@ -333,7 +333,7 @@ const CITED_BUT_ABSENT_BY_DECISION: Record<string, string> = {
     + 'in `backend/` that names the mock layer and is right about it.',
 
   /*
-    The six below are one event: `19376dd6` ("Refresh claude files", 2026-08-28) removed the whole
+    The thirteen below are one event: `19376dd6` ("Refresh claude files", 2026-08-28) removed the whole
     historical documentation tree — `docs/audits/`, `docs/agent-context/`, the dated plans and
     `docs/plans/001-unified-step-model/` — deliberately, leaving `docs/specs/`, `docs/plans/003…006`
     and `docs/business-model/` as the authorities. Twenty-odd comments across `backend/` and
@@ -349,6 +349,13 @@ const CITED_BUT_ABSENT_BY_DECISION: Record<string, string> = {
 
     Both directions still hold: restoring any of these files fails this map, which is the property
     that stops an entry outliving its absence.
+
+    THE SECOND SIX WERE FOUND BY CI, NOT BY THE SWEEP THAT WROTE THE FIRST SIX, and that is worth
+    recording where the next reader will hit it: this rule reads four corpora and `backend/src` is
+    the one whose citations are written as `{@code}`, so a sweep done by grepping for backticks
+    finds `packages/` and `frontend/` and stops one notation short of the largest population. The
+    run that caught them is the packages job, reddened by five files under `backend/src/main` — the
+    cross-corpus reach the header claims, doing the thing it claims, one commit late.
   */
   'docs/plans/001-unified-step-model/':
     'The directory the three below belonged to, named by this map\'s own comment so the six entries '
@@ -378,6 +385,40 @@ const CITED_BUT_ABSENT_BY_DECISION: Record<string, string> = {
     'Removed with the dated plans in `19376dd6`. The catalogue it specified is `core/shapes.ts` and '
     + '`mcp/src/shape.ts`, which are the two files that cite it — the specification became the '
     + 'implementation, and those two are now the authority on it.',
+  'docs/audits/':
+    'The directory the entry below belonged to, and named by this map\'s own comment above so the '
+    + 'removal reads as one event. Removed in `19376dd6`. Here for the same reason as '
+    + '`docs/plans/001-unified-step-model/`: the directory rule treats a trailing slash as the claim '
+    + 'a filename makes, and this file is in the corpus it scans.',
+  'docs/audits/2026-07-30-v1-schema-first-execution.md':
+    'Removed with the whole of `docs/audits/` in `19376dd6`. It is where the SYSTEM-scope RLS trap '
+    + 'was measured rather than reasoned, and all three citations — `RoleAssignment`, '
+    + '`RoleGrantService` and `identity/package-info` — say exactly that about a split that is still '
+    + 'how the schema is built: `instance_role_assignment` is a separate table because a nullable '
+    + '`company_id` is permanently unreachable under RLS.',
+  'docs/handoff/':
+    'The directory the entry below belonged to, named by that entry\'s own reason so the removal '
+    + 'reads as one event — the same shape as `docs/audits/` above and for the same reason: this '
+    + 'file is in the corpus it scans, and a trailing slash is a claim. Removed in `19376dd6`.',
+  'docs/handoff/35-m1-s12-case-versions.md':
+    'Removed with `docs/handoff/` in `19376dd6`. `CaseController` cites it for a divergence that is '
+    + 'still open — the contract declares only a 200 for the versions path and the endpoint serves a '
+    + '404 as well — so the sentence describes today\'s behaviour and the missing document is the '
+    + 'record of who owns closing it, which is the contract holder either way.',
+  'docs/plans/2026-07-30-tcms-invitation-activation-login.md':
+    'Removed with the dated plans in `19376dd6`. `SessionTokens` cites it for why the `sys`/`cmp`/'
+    + '`prj` grant claims are reserved and not issued — an unmeasured optimization against a second '
+    + 'authorization-resolution path — and that is still the token\'s shape, so the reasoning is '
+    + 'live and only its transcript is gone.',
+  'docs/plans/2026-08-04-m2.5-reporting-slice-plan.md':
+    'Removed with the dated plans in `19376dd6`. `reporting/package-info` cites it for the R4–R8 '
+    + 'decomposition of §6e\'s ten reports; R3 is what shipped, so the citation names the plan the '
+    + 'unbuilt half came from rather than a document a reader has to open to understand the module.',
+  'docs/plans/2026-08-08-mcp-server-wip-plan.md':
+    'Removed with the dated plans in `19376dd6`. Its phases are built — `@tcms/client` is phase 4, '
+    + 'the CLI 5 and 7, the MCP server 8 — and `client/src/index.ts` cites it beside '
+    + '`docs/specs/2026-08-08-mcp-tool-and-command-surface.md`, which is the surviving authority on '
+    + 'that surface and the one the sentence sends a reader to.',
 };
 
 describe('a file a comment names', () => {

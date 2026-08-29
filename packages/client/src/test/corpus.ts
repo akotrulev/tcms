@@ -45,9 +45,19 @@ import { fileURLToPath } from 'node:url';
 
 export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
-/** Directories a scan must never descend into — build output, dependencies, VCS. */
+/**
+ * Directories a scan must never descend into — build output, dependencies, VCS.
+ *
+ * `worktrees` is the one that is none of those, and it is here because it made the answer depend on
+ * the machine: `.claude/worktrees/` holds git-ignored checkouts of this repository at other commits,
+ * so a file deleted on `master` still resolves for whoever has a stale worktree and does not for CI.
+ * That is the failure mode a citation rule cannot have — it makes a stale citation green locally and
+ * red only after a push. Pruned by bare name like the rest, so a directory genuinely called
+ * `worktrees` would be invisible to the resolver; there is none, and the alternative is a path rule
+ * for one entry.
+ */
 export const PRUNED = new Set([
-  'node_modules', 'dist', 'build', '.git', '.gradle', '.idea', 'coverage', '.vite',
+  'node_modules', 'dist', 'build', '.git', '.gradle', '.idea', 'coverage', '.vite', 'worktrees',
 ]);
 
 /**
