@@ -1,11 +1,9 @@
-import { ThemeProvider } from '@mui/material/styles'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
-import { theme } from '../../app/theme'
 import type { SocialProvider } from '../../api/types'
 import { AuthContext, type AuthValue } from '../../auth/authContextValue'
 import { aCurrentUser, aSocialProviderList, anAuthResult, anSsoProviderChoice } from '../../test/fixtures'
@@ -56,15 +54,13 @@ function renderLogin(
   }
   return render(
     <AuthContext value={session}>
-      <ThemeProvider theme={theme}>
-        <QueryClientProvider client={createTestQueryClient()}>
-          <MemoryRouter initialEntries={[{ pathname: '/login', state: locationState ?? null }]}>
-            <Routes>
-              <Route path="/login" element={<LoginPage />} />
-            </Routes>
-          </MemoryRouter>
-        </QueryClientProvider>
-      </ThemeProvider>
+      <QueryClientProvider client={createTestQueryClient()}>
+        <MemoryRouter initialEntries={[{ pathname: '/login', state: locationState ?? null }]}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
     </AuthContext>,
   )
 }
@@ -405,17 +401,15 @@ describe('LoginPage — where a password sign-in lands', () => {
     }
     return render(
       <AuthContext value={session}>
-        <ThemeProvider theme={theme}>
-          <QueryClientProvider client={createTestQueryClient()}>
-            <MemoryRouter initialEntries={[{ pathname: '/login', state: locationState ?? null }]}>
-              <Routes>
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/" element={<div data-testid="Landing.Default" />} />
-                <Route path="/account/security" element={<div data-testid="Landing.Security" />} />
-              </Routes>
-            </MemoryRouter>
-          </QueryClientProvider>
-        </ThemeProvider>
+        <QueryClientProvider client={createTestQueryClient()}>
+          <MemoryRouter initialEntries={[{ pathname: '/login', state: locationState ?? null }]}>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/" element={<div data-testid="Landing.Default" />} />
+              <Route path="/account/security" element={<div data-testid="Landing.Security" />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
       </AuthContext>,
     )
   }

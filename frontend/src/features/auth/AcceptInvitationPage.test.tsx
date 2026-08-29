@@ -1,4 +1,3 @@
-import { ThemeProvider } from '@mui/material/styles'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -7,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type { SocialProvider } from '../../api/types'
 import { AuthContext, type AuthValue } from '../../auth/authContextValue'
-import { theme } from '../../app/theme'
 import {
   aCurrentUser,
   anInvitationPreview,
@@ -68,18 +66,16 @@ function renderAccept(
   }
   return render(
     <AuthContext value={session}>
-      <ThemeProvider theme={theme}>
-        <QueryClientProvider client={createTestQueryClient()}>
-          <MemoryRouter initialEntries={['/accept-invitation?token=the-secret']}>
-            <Routes>
-              <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
-              <Route path="/" element={<Landing />} />
-              <Route path="/account/security" element={<Security />} />
-              <Route path="/login" element={<SignIn />} />
-            </Routes>
-          </MemoryRouter>
-        </QueryClientProvider>
-      </ThemeProvider>
+      <QueryClientProvider client={createTestQueryClient()}>
+        <MemoryRouter initialEntries={['/accept-invitation?token=the-secret']}>
+          <Routes>
+            <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
+            <Route path="/" element={<Landing />} />
+            <Route path="/account/security" element={<Security />} />
+            <Route path="/login" element={<SignIn />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
     </AuthContext>,
   )
 }

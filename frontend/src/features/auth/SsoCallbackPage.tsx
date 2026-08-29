@@ -1,8 +1,7 @@
-import { Box, CircularProgress, Stack, Typography } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../auth/useAuth';
-import { Identifier } from '../../components/Identifier';
+import { Skeleton } from '../../components/ui';
 import { consumeSsoReturnPath } from './ssoReturnPath';
 
 /**
@@ -98,31 +97,31 @@ export function SsoCallbackPage() {
     return <Navigate to="/login" replace state={{ ssoFailed: true }} />;
   }
 
+  /*
+    `renders/08-threshold.html` frame D: three pulsing dots, a sentence naming what is happening
+    and a second saying how long it takes. The render names the provider — "Signing you in through
+    Acme Okta" — and this cannot: the fragment carries a token or an opaque failure marker and
+    never an issuer name (§6r), so the sentence stops where the knowledge does.
+  */
   return (
-    <Box
-      component="main"
+    <main
       role="status"
       aria-busy="true"
       data-testid="Sso.Completing"
-      sx={{
-        minHeight: '100%',
-        display: 'grid',
-        placeItems: 'center',
-        px: 2,
-        py: 6,
-        bgcolor: 'background.default',
-      }}
+      className="grid min-h-full place-items-center bg-ground px-4 py-14 text-ink"
     >
       <title>Signing in · TCMS</title>
-      <Stack sx={{ alignItems: 'center', gap: 2 }}>
-        <Identifier variant="strong" sx={{ fontSize: '1.5rem', letterSpacing: '0.06em' }}>
-          TCMS
-        </Identifier>
-        <CircularProgress size={20} aria-hidden />
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          Signing you in…
-        </Typography>
-      </Stack>
-    </Box>
+      <div className="mx-auto max-w-[56ch] px-[34px] text-center">
+        <div aria-hidden className="mb-[18px] flex justify-center gap-[5px]">
+          <Skeleton className="size-[9px] rounded-full" />
+          <Skeleton className="size-[9px] rounded-full" />
+          <Skeleton className="size-[9px] rounded-full" />
+        </div>
+        <h1 className="m-0 mb-[7px] text-base font-semibold text-ink-2">Signing you in</h1>
+        <p className="m-0 text-[13.5px] leading-[1.6] text-ink-4">
+          Checking the response and finding your company. This takes a second or two.
+        </p>
+      </div>
+    </main>
   );
 }

@@ -1,18 +1,27 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Alert, Box, Button, Checkbox, FormControlLabel, Stack, TextField, Typography } from '@mui/material';
 import type { ChangeEvent, FocusEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError, BASE } from '../../api/client';
 import { useDirectoryLogin, useSocialProviders, useSsoProviders } from '../../api/queries';
 import type { SsoProviderChoice } from '../../api/types';
-import { Identifier } from '../../components/Identifier';
+import { Banner } from '../../components/kit';
+import { Button, Input, Switch } from '../../components/ui';
 import { useAuth } from '../../auth/useAuth';
 import { offerToSaveCredentials } from '../../lib/credentials';
 import { socialProviderLabels } from '../../lib/labels';
 import { rememberSsoReturnPath } from './ssoReturnPath';
+import {
+  FieldError,
+  FieldLabel,
+  OrRule,
+  ThresholdFootnote,
+  ThresholdLayout,
+  ThresholdLead,
+  ThresholdTitle,
+} from './ThresholdLayout';
 
 /**
  * One Zod schema, one inferred type. The same schema would validate on the server if this
@@ -98,7 +107,7 @@ export function LoginPage() {
    * Discovery runs on blur, not per keystroke: the endpoint takes a whole address, and asking on
    * every character posts a stranger's half-typed address to the server a dozen times.
    */
-  const onEmailBlur = (event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const onEmailBlur = (event: FocusEvent<HTMLInputElement>) => {
     const email = event.target.value.trim();
     if (email.includes('@')) discovery.mutate(email);
   };
@@ -139,6 +148,7 @@ export function LoginPage() {
 
   const {
     register,
+    control,
     handleSubmit,
     setError,
     setFocus,
@@ -232,81 +242,52 @@ export function LoginPage() {
     }
   });
 
+  const emailField = register('email');
+  const passwordLabel = directory ? 'Directory password' : 'Password';
+
   return (
-    <Box
-      component="main"
-      sx={{
-        minHeight: '100%',
-        display: 'grid',
-        placeItems: 'center',
-        px: 2,
-        py: 6,
-        bgcolor: 'background.default',
-      }}
+    <ThresholdLayout
+      headline="Every case is a document, and every result is evidence."
+      blurb="A self-hosted test case management system. Write the procedure in the words your team already uses, run it, and keep what happened — with the version that ran, the person who ran it, and the defect it found."
+      footnote={`${window.location.host} · ${__APP_VERSION__}`}
     >
       <title>Sign in · TCMS</title>
 
-      <Box sx={{ width: '100%', maxWidth: 400 }}>
-        {/*
-          The wordmark uses the identifier font: the product's own subject matter is keys and
-          versions, so the mono lettering is the brand rather than an accessory on it.
-        */}
-        <Stack sx={{ mb: 4, gap: 0.5 }}>
-          <Identifier variant="strong" sx={{ fontSize: '1.5rem', letterSpacing: '0.06em' }}>
-            TCMS
-          </Identifier>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            Test case management
-          </Typography>
-        </Stack>
+      <form
+        onSubmit={onSubmit}
+        noValidate
+        /*
+          `method`/`action` are never followed — `onSubmit` prevents the default — and they are
+          here for the password managers, not for the network. Safari implements no Credential
+          Management API for passwords, so iCloud Keychain's offer to save is driven entirely by
+          how this form *looks*: a real `<form>` posting to a sign-in path, with a `username`
+          field and a `current-password` field. The declared action is what turns the ambiguous
+          "some form" into "a login form" for that heuristic, and it costs nothing here because
+          submission never reaches it. Chromium is handled explicitly, in `lib/credentials.ts`.
+        */
+        method="post"
+        action="/login"
+        aria-busy={isSubmitting}
+        data-testid={`${TestIdPrefix}.Form`}
+      >
+        <ThresholdTitle>Sign in</ThresholdTitle>
+        <ThresholdLead>Use your work address.</ThresholdLead>
 
-        <Box
-          component="form"
-          onSubmit={onSubmit}
-          noValidate
-          /*
-            `method`/`action` are never followed — `onSubmit` prevents the default — and they are
-            here for the password managers, not for the network. Safari implements no Credential
-            Management API for passwords, so iCloud Keychain's offer to save is driven entirely by
-            how this form *looks*: a real `<form>` posting to a sign-in path, with a `username`
-            field and a `current-password` field. The declared action is what turns the ambiguous
-            "some form" into "a login form" for that heuristic, and it costs nothing here because
-            submission never reaches it. Chromium is handled explicitly, in `lib/credentials.ts`.
-          */
-          method="post"
-          action="/login"
-          aria-busy={isSubmitting}
-          data-testid={`${TestIdPrefix}.Form`}
-          sx={{
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: 1,
-            bgcolor: 'background.paper',
-            p: 3,
-          }}
-        >
-          <Typography variant="h2" component="h1" sx={{ mb: directory ? 1 : 2.5 }}>
-            Sign in
-          </Typography>
+        {directory && (
+          <Banner tone="steel" className="mb-4" data-testid={`${TestIdPrefix}.DirectoryMode`}>
+            <span>Signing in with your {directory.displayName} password.</span>
+          </Banner>
+        )}
 
-          {directory && (
-            <Typography
-              variant="body2"
-              sx={{ mb: 2, color: 'text.secondary' }}
-              data-testid={`${TestIdPrefix}.DirectoryMode`}
-            >
-              Signing in with your {directory.displayName} password.
-            </Typography>
-          )}
+        {acceptedEmail && (
+          <Banner tone="steel" className="mb-4" data-testid={`${TestIdPrefix}.Accepted`}>
+            <span>Your account is ready. Sign in with the password you just chose.</span>
+          </Banner>
+        )}
 
-          {acceptedEmail && (
-            <Alert severity="success" sx={{ mb: 2 }} data-testid={`${TestIdPrefix}.Accepted`}>
-              Your account is ready. Sign in with the password you just chose.
-            </Alert>
-          )}
-
-          {(errors.root ?? ssoFailed) && (
-            <Alert severity="error" role="alert" sx={{ mb: 2 }} data-testid={`${TestIdPrefix}.Error`}>
+        {(errors.root ?? ssoFailed) && (
+          <div role="alert" className="mb-4">
+            <Banner tone="bad" data-testid={`${TestIdPrefix}.Error`}>
               {/*
                 The submitted form's own failure wins when there is one — somebody who has just
                 pressed Sign in is asking about that attempt, not about the redirect that brought
@@ -316,116 +297,128 @@ export function LoginPage() {
                 opaque marker on the wire, and a screen that guessed between them would rebuild the
                 oracle the refusal design exists to close.
               */}
-              {errors.root?.message ?? "We couldn't sign you in with single sign-on."}
-            </Alert>
+              <span>{errors.root?.message ?? "We couldn't sign you in with single sign-on."}</span>
+            </Banner>
+          </div>
+        )}
+
+        <div className="mb-[15px]">
+          <FieldLabel htmlFor="email">Email</FieldLabel>
+          <Input
+            type="email"
+            autoComplete="username"
+            /*
+              `id` and `name` are on Google's list of the signals a manager reads, beside
+              `autocomplete` and `type`. `name` arrives from `register('email')` below.
+            */
+            id="email"
+            className="min-h-[38px]"
+            aria-invalid={!!errors.email}
+            aria-describedby={errors.email ? 'email-error' : undefined}
+            data-testid={`${TestIdPrefix}.EmailField`}
+            {...emailField}
+            /*
+              AFTER the spread, and it calls react-hook-form's own handler itself: `register`
+              supplies an `onBlur` that `mode: 'onBlur'` validation depends on, so a handler that
+              merely replaced it would silently turn validation off for this field.
+            */
+            onBlur={(event: FocusEvent<HTMLInputElement>) => {
+              void emailField.onBlur(event);
+              onEmailBlur(event);
+            }}
+            /*
+              Same arrangement as onBlur, for the same reason: `register` supplies the onChange
+              that keeps react-hook-form's value current, so replacing it would disconnect the
+              field.
+            */
+            onChange={(event: ChangeEvent<HTMLInputElement>) => {
+              void emailField.onChange(event);
+              onEmailChange();
+            }}
+          />
+          {errors.email && <FieldError id="email-error">{errors.email.message}</FieldError>}
+        </div>
+
+        <div className="mb-[15px]">
+          <FieldLabel htmlFor="current-password">{passwordLabel}</FieldLabel>
+          <Input
+            type="password"
+            autoComplete="current-password"
+            id="current-password"
+            className="min-h-[38px]"
+            aria-invalid={!!errors.password}
+            aria-describedby={errors.password ? 'current-password-error' : undefined}
+            data-testid={`${TestIdPrefix}.PasswordField`}
+            {...register('password')}
+          />
+          {errors.password && (
+            <FieldError id="current-password-error">{errors.password.message}</FieldError>
           )}
-
-          <Stack sx={{ gap: 2 }}>
-            <TextField
-              label="Email"
-              type="email"
-              autoComplete="username"
-              /*
-                `id` and `name` are on Google's list of the signals a manager reads, beside
-                `autocomplete` and `type` — and MUI would otherwise generate an opaque `:r3:`-style
-                id. `name` arrives from `register('email')` below.
-              */
-              id="email"
-              fullWidth
-              error={!!errors.email}
-              helperText={errors.email?.message}
-              slotProps={{
-                htmlInput: { 'data-testid': `${TestIdPrefix}.EmailField` },
-                formHelperText: { role: errors.email ? 'alert' : undefined },
-              }}
-              {...register('email')}
-              /*
-                AFTER the spread, and it calls react-hook-form's own handler itself: `register`
-                supplies an `onBlur` that `mode: 'onBlur'` validation depends on, so a handler that
-                merely replaced it would silently turn validation off for this field.
-              */
-              onBlur={(event) => {
-                void register('email').onBlur(event);
-                onEmailBlur(event);
-              }}
-              /*
-                Same arrangement as onBlur, for the same reason: `register` supplies the onChange
-                that keeps react-hook-form's value current, so replacing it would disconnect the
-                field.
-              */
-              onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-                void register('email').onChange(event);
-                onEmailChange();
-              }}
-            />
-
-            <TextField
-              label={directory ? 'Directory password' : 'Password'}
-              type="password"
-              autoComplete="current-password"
-              id="current-password"
-              fullWidth
-              error={!!errors.password}
-              helperText={errors.password?.message}
-              slotProps={{
-                htmlInput: { 'data-testid': `${TestIdPrefix}.PasswordField` },
-                formHelperText: { role: errors.password ? 'alert' : undefined },
-              }}
-              {...register('password')}
-            />
-
-            <FormControlLabel
-              control={
-                <Checkbox
-                  size="small"
-                  defaultChecked
-                  data-testid={`${TestIdPrefix}.RememberMe`}
-                  {...register('rememberMe')}
-                />
-              }
-              label={<Typography variant="body2">Keep me signed in</Typography>}
-            />
-
-            <Button
-              type="submit"
-              variant="contained"
-              size="large"
-              disabled={isSubmitting}
-              data-testid={`${TestIdPrefix}.SubmitButton`}
-            >
-              {isSubmitting ? 'Signing in…' : 'Sign in'}
-            </Button>
-
-            {directory && (
-              <Button
-                size="small"
-                onClick={() => setDirectory(null)}
-                data-testid={`${TestIdPrefix}.UseLocalPassword`}
-              >
-                Use my TCMS password instead
-              </Button>
-            )}
-          </Stack>
-        </Box>
+        </div>
 
         {/*
-          Nothing renders in the empty case and nothing renders in the failed case. That is the
-          whole of the silence this screen owes the discovery endpoint, and it is one `&&`.
-
-          The standing caption that used to sit here — "Single sign-on arrives with the integrations
-          release" — went with this block: it had been false since §217 shipped the flow.
+          The render puts this on the password path only — a switch for a flow that will not
+          happen is noise at the moment noise costs most. It stays unconditional here because the
+          password field does; see the note above `Login.PasswordField`'s sibling in the report.
         */}
-        {providers.length > 0 && (
-          <Stack sx={{ gap: 1, mt: 2 }} data-testid={`${TestIdPrefix}.Providers`}>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              Or continue with
-            </Typography>
+        <div className="mb-[15px] flex items-center gap-[9px]">
+          <Controller
+            name="rememberMe"
+            control={control}
+            render={({ field }) => (
+              <Switch
+                id="remember-me"
+                checked={field.value}
+                onCheckedChange={field.onChange}
+                onBlur={field.onBlur}
+                data-testid={`${TestIdPrefix}.RememberMe`}
+              />
+            )}
+          />
+          <label htmlFor="remember-me" className="cursor-pointer text-[13px] text-ink-2">
+            Keep me signed in
+          </label>
+        </div>
+
+        <Button
+          type="submit"
+          variant="primary"
+          className="min-h-[38px] w-full"
+          disabled={isSubmitting}
+          data-testid={`${TestIdPrefix}.SubmitButton`}
+        >
+          {isSubmitting ? 'Signing in…' : 'Sign in'}
+        </Button>
+
+        {directory && (
+          <Button
+            variant="quiet"
+            size="sm"
+            className="mt-2 w-full"
+            onClick={() => setDirectory(null)}
+            data-testid={`${TestIdPrefix}.UseLocalPassword`}
+          >
+            Use my TCMS password instead
+          </Button>
+        )}
+      </form>
+
+      {/*
+        Nothing renders in the empty case and nothing renders in the failed case. That is the
+        whole of the silence this screen owes the discovery endpoint, and it is one `&&`.
+
+        The standing caption that used to sit here — "Single sign-on arrives with the integrations
+        release" — went with this block: it had been false since §217 shipped the flow.
+      */}
+      {providers.length > 0 && (
+        <div data-testid={`${TestIdPrefix}.Providers`}>
+          <OrRule />
+          <div className="flex flex-col gap-2">
             {providers.map((provider) => (
               <Button
                 key={provider.id}
-                variant="outlined"
-                size="large"
-                fullWidth
+                variant="ghost"
+                className="min-h-[38px] w-full"
                 data-testid={`${TestIdPrefix}.Provider`}
                 /*
                   A NAVIGATION, not a fetch. The endpoint answers 302 to a THIRD-PARTY origin; a
@@ -458,20 +451,19 @@ export function LoginPage() {
                 Continue with {provider.displayName}
               </Button>
             ))}
-          </Stack>
-        )}
+          </div>
+        </div>
+      )}
 
-        {socialProviders.length > 0 && (
-          <Stack sx={{ gap: 1, mt: 2 }} data-testid={`${TestIdPrefix}.SocialProviders`}>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              Or continue with
-            </Typography>
+      {socialProviders.length > 0 && (
+        <div data-testid={`${TestIdPrefix}.SocialProviders`}>
+          <OrRule />
+          <div className="flex flex-col gap-2">
             {socialProviders.map((provider) => (
               <Button
                 key={provider}
-                variant="outlined"
-                size="large"
-                fullWidth
+                variant="ghost"
+                className="min-h-[38px] w-full"
                 data-testid={`${TestIdPrefix}.SocialProvider`}
                 /*
                   A NAVIGATION, not a fetch — the company-SSO buttons' reasoning verbatim: the
@@ -486,9 +478,18 @@ export function LoginPage() {
                 Continue with {socialProviderLabels[provider]}
               </Button>
             ))}
-          </Stack>
-        )}
-      </Box>
-    </Box>
+          </div>
+        </div>
+      )}
+
+      {/*
+        Said, not implied — the render's second note. A missing sign-up link is a puzzle; one
+        sentence naming what actually happens is the difference between a support ticket and none.
+      */}
+      <ThresholdFootnote className="mt-5 text-center">
+        No account here? An administrator has to invite you —{' '}
+        <b className="font-medium text-ink-3">this instance has no sign-up.</b>
+      </ThresholdFootnote>
+    </ThresholdLayout>
   );
 }

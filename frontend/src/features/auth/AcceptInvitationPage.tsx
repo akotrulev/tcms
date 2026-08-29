@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Alert, Box, Button, Skeleton, Stack, TextField, Typography } from '@mui/material';
+import { Check } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link as RouterLink, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
@@ -7,8 +7,17 @@ import { z } from 'zod';
 import { ApiError } from '../../api/client';
 import { useAcceptInvitation, useInvitationPreview, useSocialProviders } from '../../api/queries';
 import { useAuth } from '../../auth/useAuth';
-import { Identifier } from '../../components/Identifier';
+import { Banner } from '../../components/kit';
+import { Button, Input, Skeleton } from '../../components/ui';
 import { offerToSaveCredentials } from '../../lib/credentials';
+import {
+  FieldError,
+  FieldHelp,
+  FieldLabel,
+  ThresholdLayout,
+  ThresholdLead,
+  ThresholdTitle,
+} from './ThresholdLayout';
 
 /**
  * Redeeming an invitation — the other public route, and the only screen a stranger can reach.
@@ -39,6 +48,14 @@ import { offerToSaveCredentials } from '../../lib/credentials';
  *
  * An existing account joining a second company typed no password here, so there is nothing to
  * auto-login with — they keep the sign-in hop, address carried in navigation state.
+ *
+ * ## What the render asks for and the contract cannot answer
+ *
+ * `renders/08-threshold.html` frame C puts the invitation's *story* in the left column — who
+ * invited you, into which company, as which role, with which projects, and what that role can and
+ * cannot do. `GET /auth/invitations/{token}` returns three fields: `email`, `displayName` and
+ * `passwordRequired`. So the story column carries the invitee's own name and nothing invented;
+ * the rest of that copy needs a contract change, not a component.
  */
 
 const TestIdPrefix = 'AcceptInvitation';
@@ -79,59 +96,42 @@ export function AcceptInvitationPage() {
   // memberships the session's token was issued against.
   if (user) return <Navigate to="/" replace />;
 
+  const unusable = token === '' || preview.isError;
+
   return (
-    <Box
-      component="main"
-      sx={{
-        minHeight: '100%',
-        display: 'grid',
-        placeItems: 'center',
-        px: 2,
-        py: 6,
-        bgcolor: 'background.default',
-      }}
+    <ThresholdLayout
+      headline={
+        !unusable && preview.data
+          ? `${preview.data.displayName}, you have been invited.`
+          : 'Every case is a document, and every result is evidence.'
+      }
+      blurb={
+        !unusable && preview.data
+          ? 'Setting a password here creates your account on this instance. From then on this address is how you sign in.'
+          : undefined
+      }
+      footnote={`This link can be used once · ${window.location.host}`}
     >
       <title>Accept your invitation · TCMS</title>
 
-      <Box sx={{ width: '100%', maxWidth: 440 }}>
-        <Stack sx={{ mb: 4, gap: 0.5 }}>
-          <Identifier variant="strong" sx={{ fontSize: '1.5rem', letterSpacing: '0.06em' }}>
-            TCMS
-          </Identifier>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            Test case management
-          </Typography>
-        </Stack>
-
-        <Box
-          sx={{
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: 1,
-            bgcolor: 'background.paper',
-            p: 3,
-          }}
-        >
-          {token === '' || preview.isError ? (
-            <UnusableLink />
-          ) : preview.isPending ? (
-            <Stack sx={{ gap: 2 }} aria-busy="true" data-testid={`${TestIdPrefix}.Loading`}>
-              <Skeleton variant="text" width={220} height={32} />
-              <Skeleton variant="text" width={280} />
-              <Skeleton variant="rounded" height={56} />
-              <Skeleton variant="rounded" height={40} />
-            </Stack>
-          ) : (
-            <AcceptForm
-              token={token}
-              email={preview.data.email}
-              displayName={preview.data.displayName}
-              passwordRequired={preview.data.passwordRequired}
-            />
-          )}
-        </Box>
-      </Box>
-    </Box>
+      {unusable ? (
+        <UnusableLink />
+      ) : preview.isPending ? (
+        <div className="flex flex-col gap-4" aria-busy="true" data-testid={`${TestIdPrefix}.Loading`}>
+          <Skeleton className="h-8 w-[220px]" />
+          <Skeleton className="h-[11px] w-[280px]" />
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      ) : (
+        <AcceptForm
+          token={token}
+          email={preview.data.email}
+          displayName={preview.data.displayName}
+          passwordRequired={preview.data.passwordRequired}
+        />
+      )}
+    </ThresholdLayout>
   );
 }
 
@@ -141,24 +141,16 @@ export function AcceptInvitationPage() {
  */
 function UnusableLink() {
   return (
-    <Stack sx={{ gap: 2 }} data-testid={`${TestIdPrefix}.Unusable`}>
-      <Typography variant="h2" component="h1">
-        This link no longer works
-      </Typography>
-      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+    <div data-testid={`${TestIdPrefix}.Unusable`}>
+      <ThresholdTitle>This link no longer works</ThresholdTitle>
+      <ThresholdLead>
         Invitation links can be used once, and they expire. Ask whoever invited you to send a new
         one — if you have already set up your account, sign in below.
-      </Typography>
-      <Button
-        component={RouterLink}
-        to="/login"
-        variant="contained"
-        data-testid={`${TestIdPrefix}.SignInLink`}
-        sx={{ alignSelf: 'flex-start' }}
-      >
-        Go to sign in
+      </ThresholdLead>
+      <Button asChild variant="primary" className="min-h-[38px] w-full" data-testid={`${TestIdPrefix}.SignInLink`}>
+        <RouterLink to="/login">Go to sign in</RouterLink>
       </Button>
-    </Stack>
+    </div>
   );
 }
 
@@ -181,6 +173,7 @@ function AcceptForm({ token, email, displayName, passwordRequired }: AcceptFormP
 
   const {
     register,
+    watch,
     handleSubmit,
     setError,
     setFocus,
@@ -262,26 +255,28 @@ function AcceptForm({ token, email, displayName, passwordRequired }: AcceptFormP
     await submit(data.password);
   });
 
+  const longEnough = byteLength(watch('password')) >= 12;
+
   return (
-    <Stack sx={{ gap: 2.5 }}>
-      <Stack sx={{ gap: 0.5 }}>
-        <Typography variant="h2" component="h1">
-          Welcome, {displayName}
-        </Typography>
-        <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid={`${TestIdPrefix}.Email`}>
+    <>
+      <ThresholdTitle>{passwordRequired ? 'Set your password' : 'Accept your invitation'}</ThresholdTitle>
+      <ThresholdLead>
+        Signing in as{' '}
+        <span className="font-mono text-[12.5px] tracking-[-.01em] text-ink-2" data-testid={`${TestIdPrefix}.Email`}>
           {email}
-        </Typography>
-      </Stack>
+        </span>
+      </ThresholdLead>
 
       {errors.root && (
-        <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.Error`}>
-          {errors.root.message}
-        </Alert>
+        <div role="alert" className="mb-4">
+          <Banner tone="bad" data-testid={`${TestIdPrefix}.Error`}>
+            <span>{errors.root.message}</span>
+          </Banner>
+        </div>
       )}
 
       {passwordRequired ? (
-        <Box
-          component="form"
+        <form
           onSubmit={onSubmit}
           noValidate
           aria-busy={isSubmitting}
@@ -290,98 +285,114 @@ function AcceptForm({ token, email, displayName, passwordRequired }: AcceptFormP
           method="post"
           action="/accept-invitation"
         >
-          <Stack sx={{ gap: 2 }}>
-            <Typography variant="body2">Choose a password to finish setting up your account.</Typography>
+          {/*
+            The username field, and it exists for the password manager rather than for the
+            invitee — who cannot change it and has already read it in the lead above.
 
-            {/*
-              The username field, and it exists for the password manager rather than for the
-              invitee — who cannot change it and has already read it in the heading above.
-
-              A password form with no username field is the classic reason a manager declines to
-              save, or saves the entry filed under no account at all, which then never autofills.
-              Safari has no Credential Management API for passwords, so for iCloud Keychain this
-              field *is* the mechanism. `readOnly` rather than `disabled`: a disabled input is not
-              submitted and is skipped by the same heuristics this is here to satisfy.
-
-              It also stops being a caption pretending to be data — the address the account is
-              being created under now renders as the field it is.
-            */}
-            <TextField
-              label="Email"
+            A password form with no username field is the classic reason a manager declines to
+            save, or saves the entry filed under no account at all, which then never autofills.
+            Safari has no Credential Management API for passwords, so for iCloud Keychain this
+            field *is* the mechanism. `readOnly` rather than `disabled`: a disabled input is not
+            submitted and is skipped by the same heuristics this is here to satisfy.
+          */}
+          <div className="mb-[15px]">
+            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <Input
               type="email"
               name="email"
               autoComplete="username"
-              /* See `LoginPage` — `id` is one of the four signals, and MUI's generated one is not. */
               id="email"
               value={email}
-              fullWidth
-              slotProps={{
-                htmlInput: { readOnly: true, 'data-testid': `${TestIdPrefix}.EmailField` },
-              }}
-              helperText="Your invitation was sent to this address."
+              readOnly
+              className="min-h-[38px]"
+              aria-describedby="email-help"
+              data-testid={`${TestIdPrefix}.EmailField`}
             />
+            <FieldHelp id="email-help">Your invitation was sent to this address.</FieldHelp>
+          </div>
 
-            <TextField
-              label="Password"
+          <div className="mb-[15px]">
+            <FieldLabel htmlFor="new-password">Password</FieldLabel>
+            <Input
               type="password"
               autoComplete="new-password"
               id="new-password"
-              fullWidth
-              error={!!errors.password}
-              helperText={errors.password?.message ?? 'At least 12 characters.'}
-              slotProps={{
-                htmlInput: { 'data-testid': `${TestIdPrefix}.PasswordField` },
-                formHelperText: { role: errors.password ? 'alert' : undefined },
-              }}
+              className="min-h-[38px]"
+              aria-invalid={!!errors.password}
+              aria-describedby={errors.password ? 'new-password-error' : 'new-password-rule'}
+              data-testid={`${TestIdPrefix}.PasswordField`}
               {...register('password')}
             />
+            {errors.password ? (
+              <FieldError id="new-password-error">{errors.password.message}</FieldError>
+            ) : (
+              /*
+                The render's note: password rules are checks that tick, not a paragraph. One
+                requirement rather than the drawing's two — the second, "not a password seen in a
+                known breach", is a check neither this app nor the contract performs, and drawing a
+                tick for it would be a claim the product cannot make.
+              */
+              <p
+                id="new-password-rule"
+                className={
+                  longEnough
+                    ? 'mt-[5px] flex items-center gap-[7px] text-[11.5px] text-[color:var(--color-passed)]'
+                    : 'mt-[5px] flex items-center gap-[7px] text-[11.5px] text-ink-4'
+                }
+              >
+                <Check aria-hidden className="size-[11px] shrink-0" />
+                At least 12 characters
+              </p>
+            )}
+          </div>
 
-            <TextField
-              label="Confirm password"
+          <div className="mb-[15px]">
+            <FieldLabel htmlFor="confirm-new-password">Confirm password</FieldLabel>
+            <Input
               type="password"
               autoComplete="new-password"
               id="confirm-new-password"
-              fullWidth
-              error={!!errors.confirmPassword}
-              helperText={errors.confirmPassword?.message}
-              slotProps={{
-                htmlInput: { 'data-testid': `${TestIdPrefix}.ConfirmPasswordField` },
-                formHelperText: { role: errors.confirmPassword ? 'alert' : undefined },
-              }}
+              className="min-h-[38px]"
+              aria-invalid={!!errors.confirmPassword}
+              aria-describedby={errors.confirmPassword ? 'confirm-new-password-error' : undefined}
+              data-testid={`${TestIdPrefix}.ConfirmPasswordField`}
               {...register('confirmPassword')}
             />
+            {errors.confirmPassword && (
+              <FieldError id="confirm-new-password-error">{errors.confirmPassword.message}</FieldError>
+            )}
+          </div>
 
-            <Button
-              type="submit"
-              variant="contained"
-              size="large"
-              // The pending state is the double-submit guard: a token is single-use, and two
-              // racing accepts would leave the loser rendering "this link no longer works" to
-              // someone whose account was just created successfully.
-              disabled={isSubmitting}
-              data-testid={`${TestIdPrefix}.SubmitButton`}
-            >
-              {isSubmitting ? 'Setting up…' : 'Set password and continue'}
-            </Button>
-          </Stack>
-        </Box>
+          <Button
+            type="submit"
+            variant="primary"
+            className="min-h-[38px] w-full"
+            // The pending state is the double-submit guard: a token is single-use, and two
+            // racing accepts would leave the loser rendering "this link no longer works" to
+            // someone whose account was just created successfully.
+            disabled={isSubmitting}
+            data-testid={`${TestIdPrefix}.SubmitButton`}
+          >
+            {isSubmitting ? 'Setting up…' : 'Create the account and sign in'}
+          </Button>
+        </form>
       ) : (
-        <Stack sx={{ gap: 2 }} data-testid={`${TestIdPrefix}.NoPasswordForm`}>
-          <Typography variant="body2">
+        <div data-testid={`${TestIdPrefix}.NoPasswordForm`}>
+          <p className="m-0 mb-4 text-[13px] leading-[1.6] text-ink-2">
             You already have an account on this instance, so keep using your existing password.
             Accepting adds this company to it.
-          </Typography>
+          </p>
           <Button
-            variant="contained"
-            size="large"
+            variant="primary"
+            className="min-h-[38px] w-full"
             disabled={accept.isPending}
             onClick={() => void submit(undefined)}
             data-testid={`${TestIdPrefix}.SubmitButton`}
           >
             {accept.isPending ? 'Joining…' : 'Accept invitation'}
           </Button>
-        </Stack>
+        </div>
       )}
-    </Stack>
+    </>
   );
 }

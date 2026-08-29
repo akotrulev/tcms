@@ -1,10 +1,8 @@
-import { ThemeProvider } from '@mui/material/styles'
 import { render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/client'
-import { theme } from '../../app/theme'
 import { AuthContext, type AuthValue } from '../../auth/authContextValue'
 import { aCurrentUser } from '../../test/fixtures'
 import { SsoCallbackPage } from './SsoCallbackPage'
@@ -55,19 +53,17 @@ function renderCallback(adoptSession: AuthValue['adoptSession']) {
   }
   const tree: ReactNode = (
     <AuthContext value={session}>
-      <ThemeProvider theme={theme}>
-        <MemoryRouter initialEntries={['/sso/callback']}>
-          <Routes>
-            <Route path="/sso/callback" element={<SsoCallbackPage />} />
-            <Route path="/" element={<Landing />} />
-            <Route path="/login" element={<SignIn />} />
-            {/* Sentinel for the stashed deep link — see 'returns to the deep link' below. */}
-            <Route path="/projects/p1/runs/r9" element={<div data-testid="Landing.DeepLink" />} />
-            {/* Sentinel for a completed link — the security page has its own tests. */}
-            <Route path="/account/security" element={<Security />} />
-          </Routes>
-        </MemoryRouter>
-      </ThemeProvider>
+      <MemoryRouter initialEntries={['/sso/callback']}>
+        <Routes>
+          <Route path="/sso/callback" element={<SsoCallbackPage />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<SignIn />} />
+          {/* Sentinel for the stashed deep link — see 'returns to the deep link' below. */}
+          <Route path="/projects/p1/runs/r9" element={<div data-testid="Landing.DeepLink" />} />
+          {/* Sentinel for a completed link — the security page has its own tests. */}
+          <Route path="/account/security" element={<Security />} />
+        </Routes>
+      </MemoryRouter>
     </AuthContext>
   )
   return render(tree)
