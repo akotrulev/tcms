@@ -1,24 +1,3 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  MenuItem,
-  Stack,
-  Switch,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
@@ -30,20 +9,43 @@ import {
   useUpdateTrackerBinding,
 } from '../../api/queries';
 import { ApiError } from '../../api/client';
-import type { TrackerBinding, TrackerBindingInput, TrackerProvider } from '../../api/types';
+import type {
+  TrackerBinding,
+  TrackerBindingInput,
+  TrackerConnectionState,
+  TrackerProvider,
+} from '../../api/types';
 import { useCan } from '../../auth/useCan';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
-import { ScrollX } from '../../components/ScrollX';
-import { describeError } from '../../lib/describeError';
 import {
-  trackerConnectionStateColors,
-  trackerConnectionStateLabels,
-  trackerProviderLabels,
-} from '../../lib/labels';
-import { inputTestId } from '../../lib/muiTestIds';
+  Badge,
+  Banner,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+  type BadgeTone,
+} from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Switch,
+  Textarea,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
+import { describeError } from '../../lib/describeError';
+import { trackerConnectionStateLabels, trackerProviderLabels } from '../../lib/labels';
 
 /**
  * Where this project files defects (004 Phase 1) — its **bindings**, and who on the team has
@@ -78,6 +80,21 @@ import { inputTestId } from '../../lib/muiTestIds';
  */
 const TestId = 'TrackerSettings';
 
+/**
+ * The three connection states, as badge tones.
+ *
+ * `lib/labels.ts`' `trackerConnectionStateColors` beside the words is the MUI palette's spelling of
+ * this ('success' / 'warning' / 'default') and has exactly one consumer — this line. It is left
+ * where it is rather than rewritten in place: the labels file is shared with every other lane of
+ * 007, and a tone map there would have to import a type from `components/`, which is the wrong
+ * direction. Collapse the two when MUI goes.
+ */
+const STATE_TONE = {
+  CONNECTED: 'passed',
+  NEEDS_ATTENTION: 'blocked',
+  NOT_CONNECTED: 'plain',
+} as const satisfies Record<TrackerConnectionState, BadgeTone>;
+
 export function TrackerSettingsPage() {
   const { projectId = '' } = useParams();
   const project = useProject(projectId);
@@ -94,7 +111,7 @@ export function TrackerSettingsPage() {
   const [deleting, setDeleting] = useState<TrackerBinding | null>(null);
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId={`${TestId}.Header`}
         title="Issue tracker"
@@ -107,19 +124,15 @@ export function TrackerSettingsPage() {
         actions={
           <PermissionGate projectId={projectId} permission="integration:manage">
             {({ allowed: mayManage, reason }) => (
-              <Tooltip title={mayManage ? '' : reason}>
-                {/* A disabled button fires no events, so the tooltip needs a wrapper that does. */}
-                <Box component="span">
-                  <Button
-                    variant="contained"
-                    disabled={!mayManage}
-                    onClick={() => setAdding(true)}
-                    data-testid={`${TestId}.Add`}
-                  >
-                    Add a binding
-                  </Button>
-                </Box>
-              </Tooltip>
+              <Button
+                variant="primary"
+                disabled={!mayManage}
+                title={mayManage ? undefined : reason}
+                onClick={() => setAdding(true)}
+                data-testid={`${TestId}.Add`}
+              >
+                Add a binding
+              </Button>
             )}
           </PermissionGate>
         }
@@ -134,13 +147,21 @@ export function TrackerSettingsPage() {
         />
       )}
 
-      <Stack sx={{ gap: 3 }}>
-        <Panel title="Bindings" testId={`${TestId}.BindingsPanel`} dense>
+      <div className="flex flex-col gap-7">
+        <section data-testid={`${TestId}.BindingsPanel`}>
+          <h2 className="mb-2.5 font-mono text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
+            Bindings
+          </h2>
           {gate.pending ? null : !allowed ? (
-            <Alert severity="info" data-testid={`${TestId}.Denied`}>
-              You do not have permission to manage integrations in this project, so its tracker
-              bindings are not shown. A test lead or a project administrator can configure them.
-            </Alert>
+            <Banner tone="neutral" data-testid={`${TestId}.Denied`}>
+              {/* The permission and the role that holds it — a person cannot be named on this
+                  codebase (005 C1b dropped the endpoint that would answer it). */}
+              <span>
+                Binding a tracker needs <Identifier variant="muted">integration:manage</Identifier>,
+                which you do not hold, so this project’s tracker bindings are not shown. A test lead
+                or a project administrator can configure them.
+              </span>
+            </Banner>
           ) : (
             <DataRegion
               testId={`${TestId}.Bindings`}
@@ -153,36 +174,37 @@ export function TrackerSettingsPage() {
               }}
             >
               {(rows) => (
-                <ScrollX>
-                  <Table size="small" data-testid={`${TestId}.BindingsTable`}>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Tracker</TableCell>
-                        <TableCell>Site</TableCell>
-                        <TableCell>Project</TableCell>
-                        <TableCell>Default</TableCell>
-                        <TableCell>Enabled</TableCell>
-                        <TableCell />
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {rows.map((binding) => (
-                        <BindingRow
-                          key={binding.id}
-                          projectId={projectId}
-                          binding={binding}
-                          onDelete={() => setDeleting(binding)}
-                        />
-                      ))}
-                    </TableBody>
-                  </Table>
-                </ScrollX>
+                <Table data-testid={`${TestId}.BindingsTable`}>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell>Tracker</TableHeaderCell>
+                      <TableHeaderCell>Site</TableHeaderCell>
+                      <TableHeaderCell>Project</TableHeaderCell>
+                      <TableHeaderCell className="w-[90px]">Default</TableHeaderCell>
+                      <TableHeaderCell className="w-[90px]">Enabled</TableHeaderCell>
+                      <TableHeaderCell className="w-[110px]" align="right" />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {rows.map((binding) => (
+                      <BindingRow
+                        key={binding.id}
+                        projectId={projectId}
+                        binding={binding}
+                        onDelete={() => setDeleting(binding)}
+                      />
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </DataRegion>
           )}
-        </Panel>
+        </section>
 
-        <Panel title="Who has connected" testId={`${TestId}.MembersPanel`} dense>
+        <section data-testid={`${TestId}.MembersPanel`}>
+          <h2 className="mb-1.5 font-mono text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
+            Who has connected
+          </h2>
           {gate.pending || !allowed ? null : (
             <DataRegion
               testId={`${TestId}.Members`}
@@ -195,49 +217,48 @@ export function TrackerSettingsPage() {
               }}
             >
               {(rows) => (
-                <Stack sx={{ gap: 1, p: 1.5 }}>
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                <>
+                  <p className="mb-2.5 max-w-[74ch] text-[12.5px] leading-[1.55] text-ink-3">
                     One row per project member, and one state per host this project’s bindings name.
                     Whether somebody has connected is all this can say — the credential, and why a
                     connection needs attention, are theirs.
-                  </Typography>
-                  <ScrollX>
-                    <Table size="small" data-testid={`${TestId}.MembersTable`}>
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Member</TableCell>
-                          <TableCell>Host</TableCell>
-                          <TableCell>State</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {rows.flatMap((member) =>
-                          member.hosts.map((host) => (
-                            <TableRow key={`${member.user.id}:${host.baseUrl}`} data-testid={`${TestId}.MemberRow`}>
-                              <TableCell>{member.user.displayName}</TableCell>
-                              <TableCell>
-                                <Identifier variant="muted">{host.baseUrl}</Identifier>
-                              </TableCell>
-                              <TableCell>
-                                <Chip
-                                  size="small"
-                                  color={trackerConnectionStateColors[host.state]}
-                                  label={trackerConnectionStateLabels[host.state]}
-                                />
-                              </TableCell>
-                            </TableRow>
-                          )),
-                        )}
-                      </TableBody>
-                    </Table>
-                  </ScrollX>
-                </Stack>
+                  </p>
+                  <Table data-testid={`${TestId}.MembersTable`}>
+                    <TableHead>
+                      <TableRow>
+                        <TableHeaderCell>Member</TableHeaderCell>
+                        <TableHeaderCell>Host</TableHeaderCell>
+                        <TableHeaderCell className="w-[150px]">State</TableHeaderCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {rows.flatMap((member) =>
+                        member.hosts.map((host) => (
+                          <TableRow
+                            key={`${member.user.id}:${host.baseUrl}`}
+                            data-testid={`${TestId}.MemberRow`}
+                          >
+                            <TableCell variant="title">{member.user.displayName}</TableCell>
+                            <TableCell>
+                              <Identifier variant="muted">{host.baseUrl}</Identifier>
+                            </TableCell>
+                            <TableCell>
+                              <Badge tone={STATE_TONE[host.state]}>
+                                {trackerConnectionStateLabels[host.state]}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        )),
+                      )}
+                    </TableBody>
+                  </Table>
+                </>
               )}
             </DataRegion>
           )}
-        </Panel>
-      </Stack>
-    </Box>
+        </section>
+      </div>
+    </div>
   );
 }
 
@@ -248,6 +269,11 @@ export function TrackerSettingsPage() {
  * is a single fact with an immediate consequence: `isDefault` moves where filing goes when no
  * binding is named, and `enabled` takes a binding out of search, preview and filing without
  * deleting anything anybody linked. `If-Match` carries `lockVersion` on both.
+ *
+ * ~~The testid belongs on the INPUT slot: on a Switch's root it lands on the wrapper span, where
+ * checked is not readable.~~ → **superseded (007 T15).** There is no wrapper any more. The switch
+ * is one element with `role="switch"` and `aria-checked`, so the id sits on the control itself and
+ * `toBeChecked` reads the state off it.
  */
 function BindingRow({
   projectId,
@@ -261,8 +287,8 @@ function BindingRow({
   const update = useUpdateTrackerBinding(projectId);
 
   return (
-    <TableRow data-testid={`${TestId}.BindingRow`}>
-      <TableCell>{trackerProviderLabels[binding.provider]}</TableCell>
+    <TableRow data-testid={`${TestId}.BindingRow`} className={binding.enabled ? undefined : 'opacity-60'}>
+      <TableCell variant="title">{trackerProviderLabels[binding.provider]}</TableCell>
       <TableCell>
         <Identifier variant="muted">{binding.baseUrl}</Identifier>
       </TableCell>
@@ -271,39 +297,36 @@ function BindingRow({
       </TableCell>
       <TableCell>
         <Switch
-          size="small"
           checked={binding.isDefault}
           disabled={update.isPending}
-          onChange={(_e, checked) =>
+          aria-label="Default binding"
+          onCheckedChange={(checked) =>
             update.mutate({
               bindingId: binding.id,
               lockVersion: binding.lockVersion,
               patch: { isDefault: checked },
             })
           }
-          // `slotProps`, not `inputProps` — muiTestIds owns the shape, and the id belongs on the
-          // INPUT slot: on a Switch's root it lands on the wrapper span, where checked is not
-          // readable and a test can click successfully while asserting nothing.
-          slotProps={inputTestId(`${TestId}.Default`, 'Default binding')}
+          data-testid={`${TestId}.Default`}
         />
       </TableCell>
       <TableCell>
         <Switch
-          size="small"
           checked={binding.enabled}
           disabled={update.isPending}
-          onChange={(_e, checked) =>
+          aria-label="Enabled"
+          onCheckedChange={(checked) =>
             update.mutate({
               bindingId: binding.id,
               lockVersion: binding.lockVersion,
               patch: { enabled: checked },
             })
           }
-          slotProps={inputTestId(`${TestId}.Enabled`, 'Enabled')}
+          data-testid={`${TestId}.Enabled`}
         />
       </TableCell>
       <TableCell align="right">
-        <Button size="small" color="error" onClick={onDelete} data-testid={`${TestId}.Delete`}>
+        <Button size="sm" variant="danger" onClick={onDelete} data-testid={`${TestId}.Delete`}>
           Remove
         </Button>
       </TableCell>
@@ -355,91 +378,110 @@ function BindingDialog({ projectId, onClose }: { projectId: string; onClose: () 
   };
 
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="sm" data-testid={`${TestId}.Dialog`}>
-      <DialogTitle>Add a binding</DialogTitle>
-      <DialogContent>
-        <Stack sx={{ gap: 2, mt: 1 }}>
-          <TextField
-            select
-            label="Tracker"
-            value={provider}
-            onChange={(e) => setProvider(e.target.value as TrackerProvider)}
-            data-testid={`${TestId}.DialogProvider`}
-          >
-            {(Object.keys(trackerProviderLabels) as TrackerProvider[]).map((key) => (
-              <MenuItem key={key} value={key}>
-                {trackerProviderLabels[key]}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
+    <Dialog open onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={`${TestId}.Dialog`}>
+        <DialogHeader>
+          <DialogTitle>Add a binding</DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-4 flex flex-col gap-4">
+          <Field label="Tracker" htmlFor="tracker-provider">
+            <NativeSelect
+              id="tracker-provider"
+              value={provider}
+              onChange={(e) => setProvider(e.target.value as TrackerProvider)}
+              data-testid={`${TestId}.DialogProvider`}
+            >
+              {(Object.keys(trackerProviderLabels) as TrackerProvider[]).map((key) => (
+                <option key={key} value={key}>
+                  {trackerProviderLabels[key]}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+
+          <Field
             label="Site"
-            placeholder="https://acme.atlassian.net"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            error={!!fieldErrors?.baseUrl}
-            helperText={
-              fieldErrors?.baseUrl?.join(' ')
-              ?? 'https only, and it must be reachable from this instance.'
-            }
-            slotProps={{ htmlInput: { 'data-testid': `${TestId}.DialogBaseUrl` } }}
-          />
-          <TextField
+            htmlFor="tracker-base-url"
+            error={fieldErrors?.baseUrl?.join(' ')}
+            help="https only, and it must be reachable from this instance."
+          >
+            <Input
+              id="tracker-base-url"
+              placeholder="https://acme.atlassian.net"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              data-testid={`${TestId}.DialogBaseUrl`}
+            />
+          </Field>
+
+          <Field
             label="Tracker project"
-            placeholder="PAY, or contoso/Payments"
-            value={externalProject}
-            onChange={(e) => setExternalProject(e.target.value)}
-            error={!!fieldErrors?.externalProject}
-            helperText={
-              fieldErrors?.externalProject?.join(' ')
-              ?? 'The Jira project key, or Azure DevOps’ organisation/team project.'
-            }
-            slotProps={{ htmlInput: { 'data-testid': `${TestId}.DialogProject` } }}
-          />
-          <TextField
+            htmlFor="tracker-external-project"
+            error={fieldErrors?.externalProject?.join(' ')}
+            help="The Jira project key, or Azure DevOps’ organisation/team project."
+          >
+            <Input
+              id="tracker-external-project"
+              placeholder="PAY, or contoso/Payments"
+              value={externalProject}
+              onChange={(e) => setExternalProject(e.target.value)}
+              data-testid={`${TestId}.DialogProject`}
+            />
+          </Field>
+
+          <Field
             label="Adapter settings"
-            value={config}
-            multiline
-            minRows={2}
-            onChange={(e) => setConfig(e.target.value)}
-            error={!!configError || !!fieldErrors?.config}
-            helperText={
-              configError ?? fieldErrors?.config?.join(' ')
-              ?? 'JSON the adapter reads — issue type, area path, the search scope. {} applies its defaults.'
-            }
-            slotProps={{ htmlInput: { 'data-testid': `${TestId}.DialogConfig` } }}
-          />
-          <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
+            htmlFor="tracker-config"
+            error={configError ?? fieldErrors?.config?.join(' ')}
+            help="JSON the adapter reads — issue type, area path, the search scope. {} applies its defaults."
+          >
+            <Textarea
+              id="tracker-config"
+              rows={2}
+              className="font-mono"
+              value={config}
+              onChange={(e) => setConfig(e.target.value)}
+              data-testid={`${TestId}.DialogConfig`}
+            />
+          </Field>
+
+          <div className="flex items-start gap-2.5">
             <Switch
               checked={isDefault}
-              onChange={(_e, checked) => setIsDefault(checked)}
-              slotProps={inputTestId(`${TestId}.DialogDefault`, 'Default binding')}
+              onCheckedChange={setIsDefault}
+              aria-label="Default binding"
+              data-testid={`${TestId}.DialogDefault`}
             />
-            <Typography variant="body2">
+            <p className="text-[12.5px] leading-[1.5] text-ink-3">
               File here when nothing names a binding. The first binding becomes the default
               regardless.
-            </Typography>
-          </Stack>
+            </p>
+          </div>
+
           {create.error != null && !fieldErrors && (
-            <Alert severity="error" role="alert" data-testid={`${TestId}.DialogError`}>
-              {describeError(create.error).body}
-            </Alert>
+            <div data-testid={`${TestId}.DialogError`}>
+              <Banner tone="bad">
+                <span role="alert">{describeError(create.error).body}</span>
+              </Banner>
+            </div>
           )}
-        </Stack>
+        </div>
+
+        <DialogFooter>
+          <Button variant="quiet" onClick={onClose} data-testid={`${TestId}.DialogCancel`}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={create.isPending || baseUrl.trim() === '' || externalProject.trim() === ''}
+            onClick={submit}
+            data-testid={`${TestId}.DialogSave`}
+          >
+            Add
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid={`${TestId}.DialogCancel`}>
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          disabled={create.isPending || baseUrl.trim() === '' || externalProject.trim() === ''}
-          onClick={submit}
-          data-testid={`${TestId}.DialogSave`}
-        >
-          Add
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }
@@ -460,37 +502,40 @@ function DeleteBindingDialog({
   onClose: () => void;
 }) {
   const remove = useDeleteTrackerBinding(projectId);
+
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="xs" data-testid={`${TestId}.DeleteDialog`}>
-      <DialogTitle>Remove this binding?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2}>
-          <Typography variant="body2">
-            Issues already linked to cases stay linked and keep working — they stop showing their
-            title and status. Nobody’s connection is removed, and nothing changes in{' '}
-            {trackerProviderLabels[binding.provider]}.
-          </Typography>
-          {remove.error != null && (
-            <Alert severity="error" role="alert" data-testid={`${TestId}.DeleteError`}>
-              {describeError(remove.error).body}
-            </Alert>
-          )}
-        </Stack>
+    <Dialog open onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-sm" data-testid={`${TestId}.DeleteDialog`}>
+        <DialogHeader>
+          <DialogTitle>Remove this binding?</DialogTitle>
+        </DialogHeader>
+
+        <p className="mt-3 text-[13px] leading-[1.55] text-ink-2">
+          Issues already linked to cases stay linked and keep working — they stop showing their
+          title and status. Nobody’s connection is removed, and nothing changes in{' '}
+          {trackerProviderLabels[binding.provider]}.
+        </p>
+
+        {remove.error != null && (
+          <Banner tone="bad" className="mt-3" data-testid={`${TestId}.DeleteError`}>
+            <span role="alert">{describeError(remove.error).body}</span>
+          </Banner>
+        )}
+
+        <DialogFooter>
+          <Button variant="quiet" onClick={onClose} data-testid={`${TestId}.DeleteCancel`}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            disabled={remove.isPending}
+            onClick={() => remove.mutate(binding.id, { onSuccess: onClose })}
+            data-testid={`${TestId}.DeleteConfirm`}
+          >
+            Remove
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid={`${TestId}.DeleteCancel`}>
-          Cancel
-        </Button>
-        <Button
-          color="error"
-          variant="contained"
-          disabled={remove.isPending}
-          onClick={() => remove.mutate(binding.id, { onSuccess: onClose })}
-          data-testid={`${TestId}.DeleteConfirm`}
-        >
-          Remove
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

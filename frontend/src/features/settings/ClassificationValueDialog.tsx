@@ -1,13 +1,3 @@
-import {
-  Alert,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  TextField,
-} from '@mui/material';
 import { useState } from 'react';
 import {
   useCreateClassificationValue,
@@ -15,6 +5,17 @@ import {
 } from '../../api/queries';
 import type { ClassificationDimension, ClassificationValue } from '../../api/types';
 import { ApiError } from '../../api/client';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+} from '../../components/ui';
 import { describeError } from '../../lib/describeError';
 
 /**
@@ -78,63 +79,75 @@ export function ClassificationValueDialog({
   };
 
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle>
-        {value ? `Rename ${value.name}` : `Add to ${dimension.name}`}
-      </DialogTitle>
-      <DialogContent>
-        <Stack sx={{ gap: 2, pt: 1 }}>
+    <Dialog open onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{value ? `Rename ${value.name}` : `Add to ${dimension.name}`}</DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-4 flex flex-col gap-4">
           {mutation.error && !fieldErrors && (
-            <Alert severity="error" data-testid="ClassificationValueDialog.Error">
-              {forbidden
-                ? 'You do not have permission to edit this vocabulary.'
-                : describeError(mutation.error).body}
-            </Alert>
+            <div data-testid="ClassificationValueDialog.Error">
+              <Banner tone="bad">
+                <span role="alert">
+                  {forbidden
+                    ? 'You do not have permission to edit this vocabulary.'
+                    : describeError(mutation.error).body}
+                </span>
+              </Banner>
+            </div>
           )}
 
           {!value && parent && (
-            <Alert severity="info" variant="outlined">
-              Added under <strong>{parent.name}</strong>. A value cannot be moved afterwards — the
-              cases classified by everything below it depend on where it sits.
-            </Alert>
+            <Banner tone="neutral">
+              <span>
+                Added under <b className="font-medium text-ink">{parent.name}</b>. A value cannot be
+                moved afterwards — the cases classified by everything below it depend on where it
+                sits.
+              </span>
+            </Banner>
           )}
 
-          <TextField
-            label="Name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            error={!!fieldErrors?.name}
-            helperText={fieldErrors?.name?.join(' ')}
-            autoFocus
-            fullWidth
-            slotProps={{ htmlInput: { 'data-testid': 'ClassificationValueDialog.Name' } }}
-          />
+          <Field label="Name" htmlFor="classification-value-name" error={fieldErrors?.name?.join(' ')}>
+            <Input
+              id="classification-value-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              autoFocus
+              data-testid="ClassificationValueDialog.Name"
+            />
+          </Field>
 
-          <TextField
+          <Field
             label="Colour"
-            placeholder="#b7791f"
-            value={color}
-            onChange={(event) => setColor(event.target.value)}
-            error={!!fieldErrors?.color}
-            helperText={fieldErrors?.color?.join(' ') ?? 'Optional. Six hex digits after a hash.'}
-            fullWidth
-            slotProps={{ htmlInput: { 'data-testid': 'ClassificationValueDialog.Color' } }}
-          />
-        </Stack>
+            htmlFor="classification-value-colour"
+            error={fieldErrors?.color?.join(' ')}
+            help="Optional. Six hex digits after a hash."
+          >
+            <Input
+              id="classification-value-colour"
+              placeholder="#b7791f"
+              value={color}
+              onChange={(event) => setColor(event.target.value)}
+              data-testid="ClassificationValueDialog.Color"
+            />
+          </Field>
+        </div>
+
+        <DialogFooter>
+          <Button variant="quiet" onClick={onClose} data-testid="ClassificationValueDialog.Cancel">
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={submit}
+            disabled={mutation.isPending}
+            data-testid="ClassificationValueDialog.Submit"
+          >
+            {value ? 'Save' : 'Add'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid="ClassificationValueDialog.Cancel">
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          onClick={submit}
-          disabled={mutation.isPending}
-          data-testid="ClassificationValueDialog.Submit"
-        >
-          {value ? 'Save' : 'Add'}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

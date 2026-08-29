@@ -1,6 +1,6 @@
-import { Box, Chip, Stack, Tooltip, Typography } from '@mui/material';
 import type { Role, RoleScope } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
+import { Badge } from '../../components/kit';
 import { allPermissions, groupByArea, holdsEveryPermission } from '../../lib/permissions';
 
 /**
@@ -12,6 +12,11 @@ import { allPermissions, groupByArea, holdsEveryPermission } from '../../lib/per
  * over-privileged. That reasoning is identical on both screens, which is why there is one
  * component: the project screen showing a subtly different rendering of the same catalogue is how
  * two answers to "what does Test Lead mean" get into one product.
+ *
+ * The render draws this as a four-column tick grid — Read / Write / Run / Approve — under the
+ * caption *"this is a summary and the spec is authoritative"*. It is **not** ported that way, and
+ * the render's own note is the argument: a convenience copy that drifts is how a permission matrix
+ * starts lying. These rows are the catalogue the server served, so there is nothing to drift.
  */
 export function RoleReference({
   roles,
@@ -42,24 +47,24 @@ export function RoleReference({
   const shown = scope ? grantable.filter((role) => role.scope === scope) : grantable;
 
   return (
-    <Stack sx={{ gap: 2 }}>
+    <div className="flex flex-col">
       {shown.map((role) => (
-        <Box key={role.id} data-testid={`${testId}.Item`}>
-          <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              {role.name}
-            </Typography>
-            <Chip size="small" variant="outlined" label={role.scope.toLowerCase()} />
+        <div
+          key={role.id}
+          className="border-b border-white/8 py-3.5 last:border-b-0"
+          data-testid={`${testId}.Item`}
+        >
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <h3 className="text-[13.5px] font-semibold text-ink">{role.name}</h3>
+            <Badge tone="plain">{role.scope.toLowerCase()}</Badge>
             {role.builtIn && (
-              <Tooltip title="Built in. Its permissions can't be edited, so behaviour stays predictable across projects.">
-                <Chip size="small" variant="outlined" label="built in" />
-              </Tooltip>
+              <span title="Built in. Its permissions can't be edited, so behaviour stays predictable across projects.">
+                <Badge tone="plain">built in</Badge>
+              </span>
             )}
-          </Stack>
+          </div>
 
-          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 0.75 }}>
-            {role.description}
-          </Typography>
+          <p className="mb-2 max-w-[74ch] text-[12.5px] leading-[1.55] text-ink-3">{role.description}</p>
 
           {/*
             Coverage is DERIVED from the catalogue, not read from a sentinel. The previous pass
@@ -68,39 +73,27 @@ export function RoleReference({
             does not hold. Now a gap renders as a gap (lib/permissions.ts).
           */}
           {holdsEveryPermission(role.permissions) ? (
-            <Chip
-              size="small"
-              label={`every permission (${allPermissions.length})`}
-              data-testid={`${testId}.AllPermissions`}
-              sx={{
-                bgcolor: 'color-mix(in srgb, var(--color-danger) 12%, transparent)',
-                color: 'var(--color-danger)',
-                border: '1px solid color-mix(in srgb, var(--color-danger) 40%, transparent)',
-              }}
-            />
+            <Badge tone="failed" data-testid={`${testId}.AllPermissions`}>
+              every permission ({allPermissions.length})
+            </Badge>
           ) : (
-            <Stack sx={{ gap: 0.75 }} data-testid={`${testId}.Permissions`}>
+            <div className="flex flex-col gap-1.5" data-testid={`${testId}.Permissions`}>
               {groupByArea(role.permissions).map((group) => (
-                <Stack key={group.area} direction="row" sx={{ gap: 0.75, alignItems: 'baseline' }}>
-                  <Typography
-                    variant="caption"
-                    sx={{ color: 'text.secondary', minWidth: 96, flexShrink: 0 }}
-                  >
-                    {group.label}
-                  </Typography>
-                  <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap' }}>
+                <div key={group.area} className="flex items-baseline gap-2">
+                  <span className="w-[96px] shrink-0 text-[11.5px] text-ink-4">{group.label}</span>
+                  <span className="flex flex-wrap gap-1.5">
                     {group.permissions.map((permission) => (
                       <Identifier key={permission} variant="muted">
                         {permission}
                       </Identifier>
                     ))}
-                  </Stack>
-                </Stack>
+                  </span>
+                </div>
               ))}
-            </Stack>
+            </div>
           )}
-        </Box>
+        </div>
       ))}
-    </Stack>
+    </div>
   );
 }

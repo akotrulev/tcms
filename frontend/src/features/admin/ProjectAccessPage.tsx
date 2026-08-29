@@ -1,11 +1,12 @@
-import { Alert, Box, Button, Stack, Typography } from '@mui/material';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useProject, useProjectMembers, useRoleAssignments, useRoles, useTeams } from '../../api/queries';
 import type { RoleAssignment } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
+import { Banner } from '../../components/kit';
+import { Button } from '../../components/ui';
 import { useCan } from '../../auth/useCan';
 import { GrantRoleDialog } from './GrantRoleDialog';
 import { RoleAssignmentTable } from './RoleAssignmentTable';
@@ -111,7 +112,7 @@ export function ProjectAccessPage() {
     !!partition && isOverriddenHere(grant, partition.overridden, partition.onProject, projectId);
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId="ProjectAccess.Header"
         title="Access & roles"
@@ -134,7 +135,7 @@ export function ProjectAccessPage() {
           <PermissionGate projectId={projectId} permission="project:members">
             {({ allowed }) => (
               <Button
-                variant="contained"
+                variant="primary"
                 disabled={!allowed}
                 onClick={() => setGranting(true)}
                 data-testid="ProjectAccess.Grant.Open"
@@ -158,7 +159,7 @@ export function ProjectAccessPage() {
         />
       )}
 
-      <Stack sx={{ gap: 3 }}>
+      <div className="flex flex-col gap-7">
         {/*
           Who is on this project — readable by **anybody who can open the project** since 005 Q2
           relaxed `GET /projects/{id}/members` to `project:read`.
@@ -173,7 +174,7 @@ export function ProjectAccessPage() {
           org chart already discloses who is on which project, company-wide, so the endpoint was
           refusing a fact a shipped endpoint serves. The gate on every write is unchanged.
         */}
-        <Panel title="On this project" testId="ProjectAccess.Members" dense>
+        <Section title="On this project" testId="ProjectAccess.Members">
           <DataRegion
             testId="ProjectAccess.Members.List"
             state={{ ...members, refetch: () => void members.refetch() }}
@@ -190,16 +191,16 @@ export function ProjectAccessPage() {
             }}
           >
             {(rows) => (
-              <Stack sx={{ gap: 0.5, p: 1.5 }} data-testid="ProjectAccess.Members.Rows">
+              <div className="flex flex-wrap gap-x-5 gap-y-1" data-testid="ProjectAccess.Members.Rows">
                 {rows.map((member) => (
-                  <Typography key={member.id} variant="body2" data-testid="ProjectAccess.Members.Row">
+                  <span key={member.id} className="text-[13px] text-ink-2" data-testid="ProjectAccess.Members.Row">
                     {member.displayName}
-                  </Typography>
+                  </span>
                 ))}
-              </Stack>
+              </div>
             )}
           </DataRegion>
-        </Panel>
+        </Section>
 
         {!canStaff && (
           /*
@@ -207,14 +208,16 @@ export function ProjectAccessPage() {
             it convincingly on its own. Without it the page reads as "this project has no access
             rules" to precisely the readers who are governed by them.
           */
-          <Alert severity="info" variant="outlined" data-testid="ProjectAccess.ReadOnlyNotice">
-            You can see who is on this project and what each role can do here, but not which role
-            each person holds. The staffing lists below are shown to people who can manage access on
-            this project.
-          </Alert>
+          <Banner tone="neutral" data-testid="ProjectAccess.ReadOnlyNotice">
+            <span>
+              You can see who is on this project and what each role can do here, but not which role
+              each person holds. The staffing lists below are shown to people who can manage access
+              on this project.
+            </span>
+          </Banner>
         )}
 
-        <Panel title="Granted on this project" testId="ProjectAccess.Direct" dense>
+        <Section title="Granted on this project" testId="ProjectAccess.Direct">
           <DataRegion
             testId="ProjectAccess.Direct.List"
             state={{
@@ -246,20 +249,20 @@ export function ProjectAccessPage() {
               />
             )}
           </DataRegion>
-        </Panel>
+        </Section>
 
-        <Panel title="Inherited from the company" testId="ProjectAccess.Inherited" dense>
-          <Stack sx={{ gap: 1.5 }}>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        <Section title="Inherited from the company" testId="ProjectAccess.Inherited">
+          <div className="flex flex-col gap-2.5">
+            <p className="max-w-[74ch] text-[12.5px] leading-[1.55] text-ink-3">
               A role granted across the company applies here too, unless this project grants that
-              person a role of its own — a project grant <strong>replaces</strong> the company-wide
-              one outright, even when it confers less. Company Admins are never replaced. These are
-              managed on{' '}
-              <Box component={RouterLink} to="/admin/teams" sx={{ color: 'primary.main' }}>
+              person a role of its own — a project grant{' '}
+              <b className="font-medium text-ink-2">replaces</b> the company-wide one outright, even
+              when it confers less. Company Admins are never replaced. These are managed on{' '}
+              <RouterLink to="/admin/teams" className="text-steel hover:underline">
                 Teams &amp; roles
-              </Box>
+              </RouterLink>
               .
-            </Typography>
+            </p>
 
             <DataRegion
               testId="ProjectAccess.Inherited.List"
@@ -301,15 +304,17 @@ export function ProjectAccessPage() {
                 />
               )}
             </DataRegion>
-          </Stack>
-        </Panel>
+          </div>
+        </Section>
 
-        <Panel title="What each role can do here" testId="ProjectAccess.Roles">
-          <Stack sx={{ gap: 1.5 }}>
-            <Alert severity="info" variant="outlined" data-testid="ProjectAccess.Roles.Note">
-              Only project roles can be granted on a project. Company Admin is authority over the
-              whole company and is granted on Teams &amp; roles.
-            </Alert>
+        <Section title="What each role can do here" testId="ProjectAccess.Roles">
+          <div className="flex flex-col gap-2.5">
+            <Banner tone="neutral" data-testid="ProjectAccess.Roles.Note">
+              <span>
+                Only project roles can be granted on a project. Company Admin is authority over the
+                whole company and is granted on Teams &amp; roles.
+              </span>
+            </Banner>
             <DataRegion
               testId="ProjectAccess.Roles.List"
               state={{ ...roles, refetch: () => void roles.refetch() }}
@@ -327,9 +332,36 @@ export function ProjectAccessPage() {
                 <RoleReference roles={rows} testId="ProjectAccess.Roles" scope="PROJECT" />
               )}
             </DataRegion>
-          </Stack>
-        </Panel>
-      </Stack>
-    </Box>
+          </div>
+        </Section>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A region heading in the render's uppercase mono, and its rows directly under it.
+ *
+ * Rule 1: no card wrapping a table. All four regions on this page were a bordered `Panel`, which
+ * put a box around a table that is already a grid of lines — and on a page whose whole argument is
+ * that *these three lists are different populations*, the boxes were carrying weight the headings
+ * should.
+ */
+function Section({
+  title,
+  children,
+  testId,
+}: {
+  title: string;
+  children: ReactNode;
+  testId?: string;
+}) {
+  return (
+    <section data-testid={testId}>
+      <h2 className="mb-2.5 font-mono text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
+        {title}
+      </h2>
+      {children}
+    </section>
   );
 }

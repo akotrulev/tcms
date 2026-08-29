@@ -1,21 +1,4 @@
-import {
-  Box,
-  Collapse,
-  IconButton,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TablePagination,
-  TableRow,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import { Bot, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useCompanyAuditEvents, useProject, useProjectAuditEvents } from '../../api/queries';
@@ -24,8 +7,11 @@ import { groupByBulkOperation, type AuditGroup } from './auditGrouping';
 import { useCan, useCanInCompany } from '../../auth/useCan';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
-import { ScrollX } from '../../components/ScrollX';
+import { PageHeader } from '../../components/PageHeader';
+import { Timeline, TimelineEvent } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import { Button, Input } from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { formatAge, formatCount, formatDateTime, plural } from '../../lib/format';
 import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
 import { auditActionLabel, auditTargetTypeLabel } from '../../lib/labels';
@@ -37,7 +23,7 @@ import { useAuditFilters } from './useAuditFilters';
  * One component for two routes, because the two trails differ in their *gate* and in nothing else.
  * `/projects/:projectId/audit` costs `project:audit` and shows that project's acts;
  * `/admin/audit` costs `audit:view` at company scope and shows every act in the company,
- * project-scoped rows included. Two components would be two renderings of the same twelve columns
+ * project-scoped rows included. Two components would be two renderings of the same five columns
  * with nothing keeping them identical, which is what the shared-layer rule exists to prevent.
  *
  * ## A refusal is shown, not hidden
@@ -46,7 +32,7 @@ import { useAuditFilters } from './useAuditFilters';
  * the whole reason the server was built that way: an empty audit trail reads as *"nothing
  * happened"*, which is a false statement about the past that the reader cannot detect, on the one
  * screen whose entire purpose is to be trusted about the past. So the fetch is gated on the
- * permission and the denial renders as a sentence naming who to ask.
+ * permission and the denial renders as a sentence naming the permission and who to ask.
  *
  * ## Both actors are rendered, always
  *
@@ -55,6 +41,15 @@ import { useAuditFilters } from './useAuditFilters';
  * so the person is named and the credential is a marker beside them. `actorUserId` is null only
  * for an unattended job, and a null *name* on a non-null id means the membership is gone entirely
  * — not that the person left, which does not take the name away.
+ *
+ * ## A timeline, not a table (007 T15)
+ *
+ * ~~Five columns in a grid.~~ → **superseded.** Design language §5 gives the timeline three
+ * owners — case history, suite history and this — and the render draws the audit trail as one:
+ * mono stamps in the gutter, one sentence per act. The reason it is the right shape here is that
+ * every row of this screen is *a sentence about a moment*, and a table asks a reader to reassemble
+ * one out of five cells that each say a fragment. The columns are still there in the order they
+ * were, as the clauses of the line.
  *
  * ## What this screen is not
  *
@@ -96,7 +91,7 @@ export function AuditLogPage() {
   const title = scope === 'project' ? 'Project audit trail' : 'Company audit trail';
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId="Audit.Header"
         title={title}
@@ -118,15 +113,15 @@ export function AuditLogPage() {
       />
 
       {!allowed ? (
-        <Panel testId="Audit.Denied">
-          <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid="Audit.DeniedText">
+        <section data-testid="Audit.Denied">
+          <p className="max-w-[74ch] text-[13px] leading-[1.6] text-ink-3" data-testid="Audit.DeniedText">
             {pending
               ? 'Checking your permissions…'
               : scope === 'project'
-                ? 'Reading this project’s audit trail is part of administering the project. Ask a test lead or a company administrator.'
-                : 'The company audit trail is available to company administrators. Ask one of them.'}
-          </Typography>
-        </Panel>
+                ? 'Reading this project’s audit trail needs project:audit, which is part of administering the project. Ask a test lead or a company administrator.'
+                : 'The company audit trail needs audit:view. It is available to company administrators — ask one of them.'}
+          </p>
+        </section>
       ) : (
         <>
           {/*
@@ -134,57 +129,49 @@ export function AuditLogPage() {
             usable — the reader can narrow or clear and try again without a reload. DataRegion's
             own header states the rule.
           */}
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            sx={{ gap: 2, mb: 2 }}
-            data-testid="Audit.Filters"
-          >
-            <TextField
-              size="small"
-              label="Action"
-              placeholder="case.updated"
-              value={filters.action ?? ''}
-              onChange={(event) => setFilter('action', event.target.value || undefined)}
-              sx={{ minWidth: 220 }}
-              slotProps={{ htmlInput: { 'data-testid': 'Audit.Filter.Action' } }}
-            />
-            <TextField
-              size="small"
-              type="date"
-              label="From"
-              value={(filters.occurredAfter ?? '').slice(0, 10)}
-              onChange={(event) =>
-                // A date control gives a day; the contract wants an instant. Widen to the whole
-                // day at both ends so "4th to 9th" includes both, which is what a person means.
-                setFilter(
-                  'occurredAfter',
-                  event.target.value ? `${event.target.value}T00:00:00Z` : undefined,
-                )
-              }
-              slotProps={{
-                inputLabel: { shrink: true },
-                htmlInput: { 'data-testid': 'Audit.Filter.After' },
-              }}
-            />
-            <TextField
-              size="small"
-              type="date"
-              label="To"
-              value={(filters.occurredBefore ?? '').slice(0, 10)}
-              onChange={(event) =>
-                setFilter(
-                  'occurredBefore',
-                  event.target.value ? `${event.target.value}T23:59:59Z` : undefined,
-                )
-              }
-              slotProps={{
-                inputLabel: { shrink: true },
-                htmlInput: { 'data-testid': 'Audit.Filter.Before' },
-              }}
-            />
-          </Stack>
+          <div className="mb-4 flex flex-wrap gap-3" data-testid="Audit.Filters">
+            <Field label="Action" htmlFor="audit-action" className="w-[220px]">
+              <Input
+                id="audit-action"
+                placeholder="case.updated"
+                value={filters.action ?? ''}
+                onChange={(event) => setFilter('action', event.target.value || undefined)}
+                data-testid="Audit.Filter.Action"
+              />
+            </Field>
+            <Field label="From" htmlFor="audit-after" className="w-[170px]">
+              <Input
+                id="audit-after"
+                type="date"
+                value={(filters.occurredAfter ?? '').slice(0, 10)}
+                onChange={(event) =>
+                  // A date control gives a day; the contract wants an instant. Widen to the whole
+                  // day at both ends so "4th to 9th" includes both, which is what a person means.
+                  setFilter(
+                    'occurredAfter',
+                    event.target.value ? `${event.target.value}T00:00:00Z` : undefined,
+                  )
+                }
+                data-testid="Audit.Filter.After"
+              />
+            </Field>
+            <Field label="To" htmlFor="audit-before" className="w-[170px]">
+              <Input
+                id="audit-before"
+                type="date"
+                value={(filters.occurredBefore ?? '').slice(0, 10)}
+                onChange={(event) =>
+                  setFilter(
+                    'occurredBefore',
+                    event.target.value ? `${event.target.value}T23:59:59Z` : undefined,
+                  )
+                }
+                data-testid="Audit.Filter.Before"
+              />
+            </Field>
+          </div>
 
-          <Panel testId="Audit.Panel" dense>
+          <section data-testid="Audit.Panel">
             <DataRegion
               testId="Audit.List"
               state={{ ...trail, refetch: () => void trail.refetch() }}
@@ -210,28 +197,15 @@ export function AuditLogPage() {
             >
               {(page) => (
                 <>
-                  <ScrollX>
-                    <Table size="small" data-testid="Audit.Grid">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell sx={{ color: 'text.secondary', width: 180 }}>When</TableCell>
-                          <TableCell sx={{ color: 'text.secondary', width: 240 }}>Who</TableCell>
-                          <TableCell sx={{ color: 'text.secondary' }}>Act</TableCell>
-                          <TableCell sx={{ color: 'text.secondary', width: 160 }}>On</TableCell>
-                          <TableCell sx={{ color: 'text.secondary', width: 220 }}>Targets</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {groupByBulkOperation(page.items).map((group) =>
-                          group.rows.length === 1 ? (
-                            <PlainRow key={group.key} row={group.rows[0]} />
-                          ) : (
-                            <GroupRow key={group.key} group={group} />
-                          ),
-                        )}
-                      </TableBody>
-                    </Table>
-                  </ScrollX>
+                  <Timeline data-testid="Audit.Grid">
+                    {groupByBulkOperation(page.items).map((group) =>
+                      group.rows.length === 1 ? (
+                        <PlainRow key={group.key} row={group.rows[0]} />
+                      ) : (
+                        <GroupRow key={group.key} group={group} />
+                      ),
+                    )}
+                  </Timeline>
                   {/*
                     The count stays the SERVER's row count. Deriving a count of operations here
                     would make the pager disagree with itself on every page — the server pages
@@ -239,23 +213,85 @@ export function AuditLogPage() {
                     the next page started at offset 25. This is the second-most likely
                     "improvement" somebody will make here, after grouping across a page boundary.
                   */}
-                  <TablePagination
-                    component="div"
-                    count={page.total}
+                  <Pager
+                    total={page.total}
                     page={page.page}
-                    rowsPerPage={page.size}
-                    rowsPerPageOptions={[25, 50, 100]}
-                    onPageChange={(_, next) => setPage(next)}
-                    onRowsPerPageChange={(event) => setSize(Number(event.target.value))}
-                    data-testid="Audit.Pager"
+                    size={page.size}
+                    onPage={setPage}
+                    onSize={setSize}
                   />
                 </>
               )}
             </DataRegion>
-          </Panel>
+          </section>
         </>
       )}
-    </Box>
+    </div>
+  );
+}
+
+/**
+ * Where the reader is in the trail, and the two moves out of it.
+ *
+ * It states the window and the total in words rather than as a widget's caption: *"25 of 1 942"* is
+ * the sentence somebody screenshots into a thread, and a bare pair of arrows is not. The page size
+ * is a native select for the reason every picker on these screens is.
+ */
+function Pager({
+  total,
+  page,
+  size,
+  onPage,
+  onSize,
+}: {
+  total: number;
+  page: number;
+  size: number;
+  onPage: (next: number) => void;
+  onSize: (next: number) => void;
+}) {
+  const first = total === 0 ? 0 : page * size + 1;
+  const last = Math.min(total, (page + 1) * size);
+  const lastPage = Math.max(0, Math.ceil(total / size) - 1);
+
+  return (
+    <div
+      className="mt-3 flex flex-wrap items-center gap-3 border-t border-white/8 pt-3 text-[12px] text-ink-3"
+      data-testid="Audit.Pager"
+    >
+      <span>
+        <Identifier variant="muted">
+          {formatCount(first)}–{formatCount(last)}
+        </Identifier>{' '}
+        of <Identifier variant="muted">{formatCount(total)}</Identifier> acts
+      </span>
+      <label className="ml-auto flex items-center gap-2">
+        <span className="text-ink-4">Per page</span>
+        <NativeSelect
+          className="w-[76px]"
+          value={size}
+          onChange={(event) => onSize(Number(event.target.value))}
+          data-testid="Audit.Pager.Size"
+        >
+          {[25, 50, 100].map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </NativeSelect>
+      </label>
+      <Button size="sm" disabled={page <= 0} onClick={() => onPage(page - 1)} data-testid="Audit.Pager.Previous">
+        Newer
+      </Button>
+      <Button
+        size="sm"
+        disabled={page >= lastPage}
+        onClick={() => onPage(page + 1)}
+        data-testid="Audit.Pager.Next"
+      >
+        Older
+      </Button>
+    </div>
   );
 }
 
@@ -278,87 +314,84 @@ function GroupRow({ group }: { group: AuditGroup }) {
   const targets = group.rows.reduce((total, row) => total + row.targetIds.length, 0);
 
   return (
-    <>
-      <TableRow data-testid="Audit.Group" hover>
-        <TableCell>
-          <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
-            <IconButton
-              size="small"
-              onClick={() => setOpen(!open)}
-              aria-expanded={open}
-              aria-label={open ? 'Hide the rows of this operation' : 'Show the rows of this operation'}
-              data-testid="Audit.Group.Toggle"
-            >
-              {open ? <KeyboardArrowDownIcon fontSize="small" /> : <KeyboardArrowRightIcon fontSize="small" />}
-            </IconButton>
-            <Tooltip title={formatDateTime(first.occurredAt, true)}>
-              <Box sx={{ color: 'text.secondary' }} data-testid="Audit.Group.When">
-                {formatAge(first.occurredAt)}
-              </Box>
-            </Tooltip>
-          </Stack>
-        </TableCell>
-        <TableCell>
-          {/* Every row of one act has one actor, so the group's is the first row's. */}
-          <Actor row={first} />
-        </TableCell>
-        <TableCell data-testid="Audit.Group.Action">
+    <TimelineEvent
+      data-testid="Audit.Group"
+      when={<span title={formatDateTime(first.occurredAt, true)}>{formatAge(first.occurredAt)}</span>}
+      detail={
+        open && (
+          // Nested inside the event rather than as a sibling row, so opening one cannot move the
+          // gutter or the stamp column of anything below it.
+          <ol className="mt-1.5 flex flex-col gap-1.5 border-l border-white/8 pl-3" data-testid="Audit.Group.Rows">
+            {group.rows.map((row) => (
+              <li key={row.id} className="text-[12.5px] text-ink-3" data-testid="Audit.Row">
+                <Actor row={row} /> <span data-testid="Audit.Row.Action">{auditActionLabel(row.action)}</span>{' '}
+                <span data-testid="Audit.Row.TargetType">{auditTargetTypeLabel(row.targetType)}</span>{' '}
+                <Targets ids={row.targetIds} />
+              </li>
+            ))}
+          </ol>
+        )
+      }
+    >
+      <span className="flex flex-wrap items-baseline gap-1.5">
+        <Button
+          size="icon"
+          variant="quiet"
+          className="size-5"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          aria-label={open ? 'Hide the rows of this operation' : 'Show the rows of this operation'}
+          data-testid="Audit.Group.Toggle"
+        >
+          {open ? (
+            <ChevronDown aria-hidden className="size-3.5" />
+          ) : (
+            <ChevronRight aria-hidden className="size-3.5" />
+          )}
+        </Button>
+        {/* Every row of one act has one actor, so the group's is the first row's. */}
+        <Actor row={first} />
+        <span data-testid="Audit.Group.Action">
           {label} — {group.rows.length} of one operation shown here
-        </TableCell>
-        <TableCell data-testid="Audit.Group.TargetType">
+        </span>
+        <span className="text-ink-4" data-testid="Audit.Group.TargetType">
           {auditTargetTypeLabel(first.targetType)}
-        </TableCell>
-        <TableCell>
-          <Typography variant="body2" data-testid="Audit.Group.Targets">
-            {plural(targets, 'item')}
-          </Typography>
-        </TableCell>
-      </TableRow>
-      <TableRow>
-        {/* One cell spanning the table, so the collapse does not disturb the column widths. */}
-        <TableCell colSpan={5} sx={{ py: 0, border: 0 }}>
-          <Collapse in={open} unmountOnExit>
-            <Table size="small" data-testid="Audit.Group.Rows">
-              <TableBody>
-                {group.rows.map((row) => (
-                  <PlainRow key={row.id} row={row} inset />
-                ))}
-              </TableBody>
-            </Table>
-          </Collapse>
-        </TableCell>
-      </TableRow>
-    </>
+        </span>
+        <span className="text-ink-4" data-testid="Audit.Group.Targets">
+          {plural(targets, 'item')}
+        </span>
+      </span>
+    </TimelineEvent>
   );
 }
 
-/** One act, one line — the rendering every row had before §245, unchanged. */
-function PlainRow({ row, inset = false }: { row: AuditEvent; inset?: boolean }) {
+/** One act, one line — the clauses in the order the columns were in before §245. */
+function PlainRow({ row }: { row: AuditEvent }) {
   return (
-    <TableRow data-testid="Audit.Row" hover>
-      <TableCell sx={inset ? { pl: 5, width: 180 } : { width: 180 }}>
-        {/*
-          The age reads at a glance and the exact instant is a hover away — CaseGrid's pairing.
-          Seconds are shown because two acts a second apart are a different story from two acts a
-          minute apart, and this is the screen where that difference is the question.
-        */}
-        <Tooltip title={formatDateTime(row.occurredAt, true)}>
-          <Box sx={{ color: 'text.secondary' }} data-testid="Audit.Row.When">
-            {formatAge(row.occurredAt)}
-          </Box>
-        </Tooltip>
-      </TableCell>
-      <TableCell sx={{ width: 240 }}>
+    <TimelineEvent
+      data-testid="Audit.Row"
+      /*
+        The age reads at a glance and the exact instant is a hover away — CaseGrid's pairing.
+        Seconds are shown because two acts a second apart are a different story from two acts a
+        minute apart, and this is the screen where that difference is the question.
+      */
+      when={
+        <span title={formatDateTime(row.occurredAt, true)} data-testid="Audit.Row.When">
+          {formatAge(row.occurredAt)}
+        </span>
+      }
+      detail={
+        <span className="flex flex-wrap items-baseline gap-1.5">
+          <span data-testid="Audit.Row.TargetType">{auditTargetTypeLabel(row.targetType)}</span>
+          <Targets ids={row.targetIds} />
+        </span>
+      }
+    >
+      <span className="flex flex-wrap items-baseline gap-1.5">
         <Actor row={row} />
-      </TableCell>
-      <TableCell data-testid="Audit.Row.Action">{auditActionLabel(row.action)}</TableCell>
-      <TableCell sx={{ width: 160 }} data-testid="Audit.Row.TargetType">
-        {auditTargetTypeLabel(row.targetType)}
-      </TableCell>
-      <TableCell sx={{ width: 220 }}>
-        <Targets ids={row.targetIds} />
-      </TableCell>
-    </TableRow>
+        <span data-testid="Audit.Row.Action">{auditActionLabel(row.action)}</span>
+      </span>
+    </TimelineEvent>
   );
 }
 
@@ -367,47 +400,40 @@ function PlainRow({ row, inset = false }: { row: AuditEvent; inset?: boolean }) 
  *
  * All three shapes are real and each renders differently. A person alone is a session. A person
  * *with* the robot marker is a pipeline acting under that person's credential, which reads
- * differently from "they typed it" and is exactly the distinction this table exists to preserve.
+ * differently from "they typed it" and is exactly the distinction this trail exists to preserve.
  * Neither is an unattended job, and it says so rather than blaming a person.
  */
 function Actor({ row }: { row: AuditEvent }) {
   if (!row.actorUserId && !row.actorTokenId) {
     return (
-      <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid="Audit.Row.Actor">
+      <span className="text-ink-4" data-testid="Audit.Row.Actor">
         Automatic
-      </Typography>
+      </span>
     );
   }
 
   return (
-    <Stack direction="row" sx={{ alignItems: 'center', gap: 0.75 }} data-testid="Audit.Row.Actor">
+    <span className="inline-flex items-baseline gap-1" data-testid="Audit.Row.Actor">
       {row.actorTokenId && (
-        <Tooltip
+        <span
           title={
             row.actorTokenName
               ? `Performed by the API token “${row.actorTokenName}”, not typed by this person.`
               : 'Performed by an API token this person owns, not typed by them.'
           }
         >
-          <SmartToyOutlinedIcon
-            fontSize="small"
-            sx={{ color: 'text.secondary' }}
-            data-testid="Audit.Row.ByToken"
-          />
-        </Tooltip>
+          <Bot aria-hidden className="size-3.5 self-center text-ink-4" data-testid="Audit.Row.ByToken" />
+        </span>
       )}
-      <Typography
-        variant="body2"
-        sx={{ color: row.actorUserName ? 'text.primary' : 'text.secondary' }}
-      >
+      <b className={row.actorUserName ? 'font-medium text-ink' : 'font-normal text-ink-4'}>
         {/*
           A null name on a non-null id means the membership no longer exists at all. Offboarding
           does NOT do that — a departed colleague still resolves — so this branch is rare and must
           not pretend to know who it was.
         */}
         {row.actorUserName ?? (row.actorUserId ? 'Former member' : 'API token')}
-      </Typography>
-    </Stack>
+      </b>
+    </span>
   );
 }
 
@@ -415,12 +441,12 @@ function Actor({ row }: { row: AuditEvent }) {
  * What was acted on.
  *
  * `targetIds` is an array because **one act may cover many** — a bulk operation over 143 cases is
- * one row reading "143 cases" rather than 143 lines (plan §6f). So the count is the headline and
+ * one line reading "143 cases" rather than 143 lines (plan §6f). So the count is the headline and
  * the single-target case shows its id, which is the one a reader can actually do something with.
  */
 function Targets({ ids }: { ids: string[] }) {
   if (ids.length === 0) {
-    return <Box sx={{ color: 'text.secondary' }}>—</Box>;
+    return <span className="text-ink-4">—</span>;
   }
   if (ids.length === 1) {
     return (
@@ -429,9 +455,5 @@ function Targets({ ids }: { ids: string[] }) {
       </Identifier>
     );
   }
-  return (
-    <Typography variant="body2" data-testid="Audit.Row.Target">
-      {plural(ids.length, 'item')}
-    </Typography>
-  );
+  return <span data-testid="Audit.Row.Target">{plural(ids.length, 'item')}</span>;
 }

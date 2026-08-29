@@ -1,30 +1,22 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  IconButton,
-  Stack,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import SubdirectoryArrowRightIcon from '@mui/icons-material/SubdirectoryArrowRight';
+import { CornerDownRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useClassification, useProject, useRetireClassificationValue } from '../../api/queries';
 import { ApiError } from '../../api/client';
 import type { ClassificationDimension, ClassificationValue, PermissionKey } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
+import { Badge, Banner } from '../../components/kit';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui';
 import { buildValueTree, type ClassificationValueNode } from '../../lib/classification';
 import { ClassificationValueDialog } from './ClassificationValueDialog';
 
@@ -54,6 +46,15 @@ import { ClassificationValueDialog } from './ClassificationValueDialog';
  * would be a page that quietly disagrees with the picker beside it — the case editor offers four
  * axes, and a settings screen listing one implies the other three are not configurable rather than
  * not *yours*. Showing all four with the right control state says the true thing.
+ *
+ * ## Why every dimension is on screen at once (007 T15)
+ *
+ * The render draws this as a left rail of dimensions and one pane (`07-settings-admin.html`, frame
+ * B). It is not ported that way, and the reason is the paragraph above: the point of this screen is
+ * that **one caller sees two different answers on one page** — a Test Lead's own Feature tree
+ * editable beside the company's axes greyed. A rail that shows one dimension at a time hides the
+ * comparison the screen exists to make. What the render's frame is really about is its empty
+ * state, and that is ported exactly, typical values and all.
  */
 export function ClassificationSettingsPage() {
   const { projectId = '' } = useParams();
@@ -72,7 +73,7 @@ export function ClassificationSettingsPage() {
   const [retiring, setRetiring] = useState<ClassificationValue | null>(null);
 
   return (
-    <Box>
+    <div>
       <PageHeader
         testId="Classification.Header"
         title="Classification"
@@ -103,7 +104,7 @@ export function ClassificationSettingsPage() {
         }}
       >
         {(dimensions) => (
-          <Stack sx={{ gap: 3 }}>
+          <div className="flex max-w-[960px] flex-col gap-7">
             {dimensions.map((dimension) => (
               <DimensionPanel
                 key={dimension.id}
@@ -114,7 +115,7 @@ export function ClassificationSettingsPage() {
                 onRetire={setRetiring}
               />
             ))}
-          </Stack>
+          </div>
         )}
       </DataRegion>
 
@@ -147,7 +148,7 @@ export function ClassificationSettingsPage() {
           onClose={() => setRetiring(null)}
         />
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -185,42 +186,51 @@ function DimensionPanel({
   const gateProjectId = gate.projectId === 'company' ? 'company' : projectId;
 
   return (
-    <Panel
-      title={dimension.name}
-      testId={`Classification.${dimension.key}`}
-      dense
-      actions={
-        <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
-          <Chip
-            size="small"
-            variant="outlined"
-            label={dimension.locked ? 'Company-wide' : 'This project'}
-            data-testid={`Classification.${dimension.key}.Scope`}
-          />
-          <PermissionGate projectId={gateProjectId} permission={gate.permission}>
-            {({ allowed }) => (
-              <Button
-                size="small"
-                startIcon={<AddIcon />}
-                disabled={!allowed}
-                onClick={() => onAdd(null)}
-                data-testid={`Classification.${dimension.key}.Add`}
-              >
-                Add value
-              </Button>
-            )}
-          </PermissionGate>
-        </Stack>
-      }
-    >
+    <section data-testid={`Classification.${dimension.key}`}>
+      <div className="mb-2 flex flex-wrap items-center gap-2.5 border-b border-white/8 pb-2">
+        <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
+          {dimension.name}
+        </h2>
+        {/* Whose vocabulary this is — state the system owns, so a badge and not a chip. */}
+        <Badge tone="plain" data-testid={`Classification.${dimension.key}.Scope`}>
+          {dimension.locked ? 'Company-wide' : 'This project'}
+        </Badge>
+        <PermissionGate projectId={gateProjectId} permission={gate.permission}>
+          {({ allowed }) => (
+            <Button
+              size="sm"
+              className="ml-auto"
+              disabled={!allowed}
+              onClick={() => onAdd(null)}
+              data-testid={`Classification.${dimension.key}.Add`}
+            >
+              <Plus aria-hidden className="size-3.5" />
+              Add value
+            </Button>
+          )}
+        </PermissionGate>
+      </div>
+
       {dimension.values.length === 0 ? (
-        <Typography color="text.secondary" data-testid={`Classification.${dimension.key}.Empty`}>
-          {dimension.hierarchical
-            ? 'No features yet. Add the top level of your product’s taxonomy, then add underneath it.'
-            : 'No values yet.'}
-        </Typography>
+        <div className="max-w-[60ch] py-4" data-testid={`Classification.${dimension.key}.Empty`}>
+          <p className="text-[13px] leading-[1.6] text-ink-3">
+            {dimension.hierarchical
+              ? 'No features yet. Add the top level of your product’s taxonomy, then add underneath it.'
+              : 'No values yet.'}{' '}
+            {/*
+              The sentence the render's frame B is about: a dimension with no values is not offered
+              anywhere — the case editor shows no control for it and the case detail shows no row.
+              Nothing is broken; there is simply nothing to choose from yet. It is said here as
+              well as in the editor deliberately, and it is the only sentence in the product that
+              appears twice on purpose.
+            */}
+            A dimension with no values is not offered anywhere — the case editor shows no control
+            for it and a case detail page shows no row. Nothing is broken; there is nothing to
+            choose from yet.
+          </p>
+        </div>
       ) : (
-        <Stack component="ul" sx={{ gap: 0.5, listStyle: 'none', p: 0, m: 0 }}>
+        <ul className="m-0 flex list-none flex-col p-0">
           {buildValueTree(dimension.values).map((node) => (
             <ValueRow
               key={node.value.id}
@@ -234,9 +244,9 @@ function DimensionPanel({
               onRetire={onRetire}
             />
           ))}
-        </Stack>
+        </ul>
       )}
-    </Panel>
+    </section>
   );
 }
 
@@ -250,6 +260,10 @@ function DimensionPanel({
  * "Add underneath" appears only on a hierarchical dimension. On a flat one the server would accept
  * a parent — nothing in the schema forbids it — and the product has no way to show the result, so
  * the control that would create it does not exist.
+ *
+ * The three controls are quiet at rest and named for a screen reader, which is the pair of rules
+ * an icon-only button has to satisfy at once: `aria-label` carries the value's name, so a reader
+ * hears *"Retire Refunds"* rather than eleven buttons all called "Retire".
  */
 function ValueRow({
   node,
@@ -273,88 +287,67 @@ function ValueRow({
   const { value } = node;
 
   return (
-    <Box component="li" sx={{ listStyle: 'none' }}>
-      <Stack
-        direction="row"
-        sx={{
-          gap: 1,
-          alignItems: 'center',
-          pl: depth * 3,
-          py: 0.5,
-          borderRadius: 1,
-          '&:hover': { bgcolor: 'action.hover' },
-        }}
+    <li className="list-none">
+      <div
+        style={{ paddingLeft: depth * 22 }}
+        className="group flex items-center gap-2 rounded-[5px] py-1.5 pr-1 text-[13px] hover:bg-white/[3%]"
         data-testid={`Classification.Value.${value.id}`}
       >
-        {depth > 0 && (
-          <SubdirectoryArrowRightIcon fontSize="small" sx={{ color: 'text.disabled' }} />
-        )}
+        {depth > 0 && <CornerDownRight aria-hidden className="size-3.5 shrink-0 text-ink-4" />}
         {value.color && (
-          <Box
+          <span
             aria-hidden
-            sx={{
-              width: 12,
-              height: 12,
-              borderRadius: '50%',
-              bgcolor: value.color,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
+            style={{ backgroundColor: value.color }}
+            className="block size-3 shrink-0 rounded-full border border-white/14"
           />
         )}
-        <Typography sx={{ flexGrow: 1 }}>{value.name}</Typography>
+        <span className="min-w-0 flex-1 truncate text-ink-2">{value.name}</span>
 
         <PermissionGate projectId={gateProjectId} permission={permission}>
           {({ allowed }) => (
-            <Stack direction="row" sx={{ gap: 0.5 }}>
+            <span className="flex shrink-0 gap-0.5">
               {dimension.hierarchical && (
-                <Tooltip title="Add underneath">
-                  <span>
-                    <IconButton
-                      size="small"
-                      disabled={!allowed}
-                      onClick={() => onAdd(value)}
-                      aria-label={`Add a value under ${value.name}`}
-                      data-testid={`Classification.Value.${value.id}.AddChild`}
-                    >
-                      <AddIcon fontSize="small" />
-                    </IconButton>
-                  </span>
-                </Tooltip>
+                <Button
+                  size="icon"
+                  variant="quiet"
+                  disabled={!allowed}
+                  onClick={() => onAdd(value)}
+                  title="Add underneath"
+                  aria-label={`Add a value under ${value.name}`}
+                  data-testid={`Classification.Value.${value.id}.AddChild`}
+                >
+                  <Plus aria-hidden className="size-4" />
+                </Button>
               )}
-              <Tooltip title="Rename">
-                <span>
-                  <IconButton
-                    size="small"
-                    disabled={!allowed}
-                    onClick={() => onEdit(value)}
-                    aria-label={`Rename ${value.name}`}
-                    data-testid={`Classification.Value.${value.id}.Edit`}
-                  >
-                    <EditOutlinedIcon fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-              <Tooltip title="Retire">
-                <span>
-                  <IconButton
-                    size="small"
-                    disabled={!allowed}
-                    onClick={() => onRetire(value)}
-                    aria-label={`Retire ${value.name}`}
-                    data-testid={`Classification.Value.${value.id}.Retire`}
-                  >
-                    <DeleteOutlineIcon fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            </Stack>
+              <Button
+                size="icon"
+                variant="quiet"
+                disabled={!allowed}
+                onClick={() => onEdit(value)}
+                title="Rename"
+                aria-label={`Rename ${value.name}`}
+                data-testid={`Classification.Value.${value.id}.Edit`}
+              >
+                <Pencil aria-hidden className="size-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="quiet"
+                disabled={!allowed}
+                onClick={() => onRetire(value)}
+                title="Retire"
+                aria-label={`Retire ${value.name}`}
+                data-testid={`Classification.Value.${value.id}.Retire`}
+              >
+                <Trash2 aria-hidden className="size-4" />
+              </Button>
+            </span>
           )}
         </PermissionGate>
-      </Stack>
+      </div>
 
       {node.children.length > 0 && (
-        <Stack component="ul" sx={{ gap: 0.5, listStyle: 'none', p: 0, m: 0 }}>
+        <ul className="m-0 flex list-none flex-col p-0">
           {node.children.map((child) => (
             <ValueRow
               key={child.value.id}
@@ -368,9 +361,9 @@ function ValueRow({
               onRetire={onRetire}
             />
           ))}
-        </Stack>
+        </ul>
       )}
-    </Box>
+    </li>
   );
 }
 
@@ -389,7 +382,7 @@ function ValueRow({
  *
  * The copy says what a retire *is*, because the word does not carry it: cases already classified
  * with the value keep it in their history and past runs still resolve it. The row survives; the
- * vocabulary simply stops offering it.
+ * vocabulary simply stops offering it — which is rule 7, *disable, don't hide*, at the vocabulary.
  */
 function RetireValueDialog({
   projectId,
@@ -405,40 +398,46 @@ function RetireValueDialog({
     retire.error instanceof ApiError ? retire.error.fieldErrors?.children?.[0] : undefined;
 
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle>Retire {value.name}?</DialogTitle>
-      <DialogContent>
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Retire {value.name}?</DialogTitle>
+          {!blocked && !retire.error && (
+            <DialogDescription>
+              It stops being offered when classifying a case. Cases already classified with it keep
+              it, and past runs still resolve it — nothing is deleted.
+            </DialogDescription>
+          )}
+        </DialogHeader>
+
         {blocked ? (
-          <Alert severity="warning" data-testid="Classification.Retire.Blocked">
-            {blocked}
-          </Alert>
+          <Banner tone="warn" className="mt-3" data-testid="Classification.Retire.Blocked">
+            <span>{blocked}</span>
+          </Banner>
         ) : retire.error ? (
-          <Alert severity="error" data-testid="Classification.Retire.Error">
-            {retire.error instanceof ApiError && retire.error.status === 403
-              ? 'You do not have permission to edit this vocabulary.'
-              : 'That did not work. Try again.'}
-          </Alert>
-        ) : (
-          <DialogContentText>
-            It stops being offered when classifying a case. Cases already classified with it keep
-            it, and past runs still resolve it — nothing is deleted.
-          </DialogContentText>
-        )}
+          <Banner tone="bad" className="mt-3" data-testid="Classification.Retire.Error">
+            <span>
+              {retire.error instanceof ApiError && retire.error.status === 403
+                ? 'You do not have permission to edit this vocabulary.'
+                : 'That did not work. Try again.'}
+            </span>
+          </Banner>
+        ) : null}
+
+        <DialogFooter>
+          <Button onClick={onClose} data-testid="Classification.Retire.Cancel">
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            disabled={retire.isPending}
+            onClick={() => retire.mutate(value.id, { onSuccess: () => onClose() })}
+            data-testid="Classification.Retire.Confirm"
+          >
+            Retire
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid="Classification.Retire.Cancel">
-          Cancel
-        </Button>
-        <Button
-          color="error"
-          variant="contained"
-          disabled={retire.isPending}
-          onClick={() => retire.mutate(value.id, { onSuccess: () => onClose() })}
-          data-testid="Classification.Retire.Confirm"
-        >
-          Retire
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

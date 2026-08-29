@@ -1,20 +1,3 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Checkbox,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  FormControlLabel,
-  MenuItem,
-  Stack,
-  Switch,
-  TextField,
-  Typography,
-} from '@mui/material';
 import { useState } from 'react';
 import { ApiError } from '../../api/client';
 import {
@@ -28,6 +11,20 @@ import type {
   NotificationEventType,
 } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Switch,
+  Textarea,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { describeError } from '../../lib/describeError';
 import {
   NOTIFICATION_CHANNEL_KINDS,
@@ -37,7 +34,6 @@ import {
   notificationEventTypeHelp,
   notificationEventTypeLabels,
 } from '../../lib/labels';
-import { inputTestId } from '../../lib/muiTestIds';
 
 /**
  * Adding a notification channel, and editing one — **and the whole slice turns on what this form
@@ -205,139 +201,153 @@ export function NotificationChannelDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
-      <form onSubmit={(event) => void submit(event)} noValidate aria-busy={save.isPending}>
-        <DialogTitle>{editing ? `Edit ${channel.name}` : 'Add a notification channel'}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
+        <form onSubmit={(event) => void submit(event)} noValidate aria-busy={save.isPending}>
+          <DialogHeader>
+            <DialogTitle>{editing ? `Edit ${channel.name}` : 'Add a notification channel'}</DialogTitle>
+          </DialogHeader>
+
+          <div className="mt-4 flex max-h-[62vh] flex-col gap-4 overflow-y-auto pr-1">
             {formError && (
-              <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
-                {formError}
-              </Alert>
+              <div data-testid={`${TestId}.Error`}>
+                <Banner tone="bad">
+                  <span role="alert">{formError}</span>
+                </Banner>
+              </div>
             )}
 
-            <TextField
-              select
+            <Field
               label="Transport"
-              required
-              value={kind}
-              /*
-                DISABLED, not hidden, on an edit — §31 applied to a field rather than to a button.
-                The value is still submitted because the input schema requires it, and the server
-                ignores it. See this file's header for why the transport cannot move.
-              */
-              disabled={editing}
-              onChange={(event) => setKind(event.target.value as NotificationChannelKind)}
-              helperText={
+              htmlFor="notification-kind"
+              help={
                 editing
                   ? 'A channel’s transport cannot be changed. To move these notices somewhere else, delete this channel and add a new one — the delivery history belongs to the transport and goes with it.'
                   : 'Slack and Teams post to a room through an incoming webhook. Email is sent through this instance’s own mail relay.'
               }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Kind` } }}
             >
-              {NOTIFICATION_CHANNEL_KINDS.map((option) => (
-                <MenuItem key={option} value={option} data-testid={`${TestId}.Kind.${option}`}>
-                  {notificationChannelKindLabels[option]}
-                </MenuItem>
-              ))}
-            </TextField>
+              <NativeSelect
+                id="notification-kind"
+                required
+                value={kind}
+                /*
+                  DISABLED, not hidden, on an edit — §31 applied to a field rather than to a button.
+                  The value is still submitted because the input schema requires it, and the server
+                  ignores it. See this file's header for why the transport cannot move.
+                */
+                disabled={editing}
+                onChange={(event) => setKind(event.target.value as NotificationChannelKind)}
+                data-testid={`${TestId}.Kind`}
+              >
+                {NOTIFICATION_CHANNEL_KINDS.map((option) => (
+                  <option key={option} value={option} data-testid={`${TestId}.Kind.${option}`}>
+                    {notificationChannelKindLabels[option]}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
 
-            <TextField
+            <Field
               label="Name"
-              required
-              autoFocus
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              error={!!fieldErrors.name}
-              helperText={
-                fieldErrors.name ??
-                'Your own label — “#qa-alerts”, “Release leads”. Unique in this project, so two channels posting to the same room are told apart by what somebody called them.'
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Name`, maxLength: 200 } }}
-            />
+              htmlFor="notification-name"
+              error={fieldErrors.name}
+              help="Your own label — “#qa-alerts”, “Release leads”. Unique in this project, so two channels posting to the same room are told apart by what somebody called them."
+            >
+              <Input
+                id="notification-name"
+                required
+                autoFocus
+                maxLength={200}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                data-testid={`${TestId}.Name`}
+              />
+            </Field>
 
-            <FormControlLabel
-              sx={{ alignItems: 'flex-start' }}
-              control={
-                <Switch
-                  checked={enabled}
-                  onChange={(event) => setEnabled(event.target.checked)}
-                  slotProps={inputTestId(`${TestId}.Enabled`)}
-                />
-              }
-              label={
-                <Box sx={{ pt: 0.75 }}>
-                  <Typography variant="body2">Deliver to this channel</Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    A switched-off channel is skipped when an event fires. Its configuration and its
-                    history are kept.
-                  </Typography>
-                </Box>
-              }
-            />
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[13px] text-ink-2">Deliver to this channel</p>
+                <p className="text-[12px] text-ink-4">
+                  A switched-off channel is skipped when an event fires. Its configuration and its
+                  history are kept.
+                </p>
+              </div>
+              <Switch
+                checked={enabled}
+                onCheckedChange={setEnabled}
+                aria-label="Deliver to this channel"
+                data-testid={`${TestId}.Enabled`}
+              />
+            </div>
 
             {kind === 'EMAIL' ? (
-              <TextField
+              <Field
                 label="Recipients"
-                required
-                value={recipients}
-                onChange={(event) => setRecipients(event.target.value)}
-                error={!!fieldErrors.recipients}
-                multiline
-                minRows={2}
-                helperText={
-                  fieldErrors.recipients ??
-                  'Email addresses, separated by commas or new lines. At least one — a channel with none delivers to nobody.'
-                }
-                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Recipients` } }}
-              />
+                htmlFor="notification-recipients"
+                error={fieldErrors.recipients}
+                help="Email addresses, separated by commas or new lines. At least one — a channel with none delivers to nobody."
+              >
+                <Textarea
+                  id="notification-recipients"
+                  required
+                  rows={2}
+                  value={recipients}
+                  onChange={(event) => setRecipients(event.target.value)}
+                  data-testid={`${TestId}.Recipients`}
+                />
+              </Field>
             ) : (
-              <TextField
+              <Field
                 label={editing ? 'Replace the webhook URL' : 'Webhook URL'}
-                type="password"
-                required={!editing}
-                value={secret}
-                onChange={(event) => setSecret(event.target.value)}
-                error={!!fieldErrors.secret}
-                helperText={
-                  fieldErrors.secret ??
-                  (editing
+                htmlFor="notification-secret"
+                error={fieldErrors.secret}
+                help={
+                  editing
                     ? /*
                         The sentence the whole slice rests on. An administrator who reads "leave it
                         empty" and does so must be right — and they are, because the property is
                         absent from the payload rather than sent empty.
                       */
                       'Leave this empty to keep the webhook that is configured. Type a new URL only to replace it.'
-                    : notificationChannelCredentialHelp[kind])
+                    : notificationChannelCredentialHelp[kind]
                 }
-                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Secret` } }}
-              />
+              >
+                <Input
+                  id="notification-secret"
+                  type="password"
+                  required={!editing}
+                  value={secret}
+                  onChange={(event) => setSecret(event.target.value)}
+                  data-testid={`${TestId}.Secret`}
+                />
+              </Field>
             )}
 
             {editing && isWebhook && (
-              <Alert severity="info" data-testid={`${TestId}.SecretHint`}>
-                {channel.secretHint ? (
-                  <>
-                    The webhook configured now ends with{' '}
-                    <Identifier variant="muted" testId={`${TestId}.SecretHint.Value`}>
-                      {channel.secretHint}
-                    </Identifier>
-                    . That tail is all this product will ever show — it is enough to recognise which
-                    webhook is set, and far short of enough to post to it.
-                  </>
-                ) : (
-                  'No webhook is configured for this channel, so nothing can be delivered through it until one is set.'
-                )}
-              </Alert>
+              <div data-testid={`${TestId}.SecretHint`}>
+                <Banner tone="neutral">
+                  {channel.secretHint ? (
+                    <span>
+                      The webhook configured now ends with{' '}
+                      <Identifier variant="muted" testId={`${TestId}.SecretHint.Value`}>
+                        {channel.secretHint}
+                      </Identifier>
+                      . That tail is all this product will ever show — it is enough to recognise
+                      which webhook is set, and far short of enough to post to it.
+                    </span>
+                  ) : (
+                    <span>
+                      No webhook is configured for this channel, so nothing can be delivered through
+                      it until one is set.
+                    </span>
+                  )}
+                </Banner>
+              </div>
             )}
 
-            <Divider />
-
-            <Box>
-              <Typography variant="body2" sx={{ mb: 0.5 }}>
-                What this channel is told about
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            <div className="border-t border-white/8 pt-4">
+              <p className="text-[13px] text-ink-2">What this channel is told about</p>
+              <p className="text-[12px] leading-[1.55] text-ink-4">
                 {/*
                   Said before the save rather than discovered afterwards. The array is the COMPLETE
                   set and the server reconciles against it, so an unticked box is an unsubscribe —
@@ -346,9 +356,9 @@ export function NotificationChannelDialog({
                 Whatever is ticked here is the complete list. Unticking one stops this channel being
                 told about it; a channel with nothing ticked is a legal channel that never fires,
                 which is a reasonable state while a webhook is being tested.
-              </Typography>
+              </p>
 
-              <Stack sx={{ mt: 1.5, gap: 2 }}>
+              <div className="mt-3 flex flex-col gap-3">
                 {NOTIFICATION_EVENT_TYPES.map((eventType) => (
                   <EventRow
                     key={eventType}
@@ -359,24 +369,25 @@ export function NotificationChannelDialog({
                     }
                   />
                 ))}
-              </Stack>
-            </Box>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={!submittable}
-            data-testid={`${TestId}.Submit`}
-          >
-            {save.isPending ? 'Saving…' : editing ? 'Save channel' : 'Add channel'}
-          </Button>
-        </DialogActions>
-      </form>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="quiet" onClick={onClose} data-testid={`${TestId}.Cancel`}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!submittable}
+              data-testid={`${TestId}.Submit`}
+            >
+              {save.isPending ? 'Saving…' : editing ? 'Save channel' : 'Add channel'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
     </Dialog>
   );
 }
@@ -397,51 +408,60 @@ function EventRow({
   draft: SubscriptionDraft;
   onChange: (next: SubscriptionDraft) => void;
 }) {
+  const boxId = `notification-event-${eventType}`;
+  const thresholdId = `notification-min-failures-${eventType}`;
+
   return (
-    <Box>
-      <FormControlLabel
-        sx={{ alignItems: 'flex-start' }}
-        control={
-          <Checkbox
-            checked={draft.wanted}
-            onChange={(event) => onChange({ ...draft, wanted: event.target.checked })}
-            slotProps={inputTestId(`Notifications.Dialog.Event.${eventType}`)}
-          />
-        }
-        label={
-          <Box sx={{ pt: 1 }}>
-            <Typography variant="body2">{notificationEventTypeLabels[eventType]}</Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              {notificationEventTypeHelp[eventType]}
-            </Typography>
-          </Box>
-        }
-      />
-      {draft.wanted && (
-        <TextField
-          label="Only when this many results failed"
-          type="number"
-          size="small"
-          sx={{ ml: 4, mt: 1, maxWidth: 300 }}
-          value={draft.minFailures}
-          onChange={(event) =>
-            /*
-              `Number('')` is 0, which is the contract's own default and means "every occurrence" —
-              so clearing the field lands on the value the field would have had anyway rather than
-              on a NaN the server refuses.
-            */
-            onChange({ ...draft, minFailures: Math.max(0, Math.trunc(Number(event.target.value) || 0)) })
-          }
-          helperText="0 is every occurrence."
-          slotProps={{
-            htmlInput: {
-              min: 0,
-              'data-testid': `Notifications.Dialog.MinFailures.${eventType}`,
-            },
-          }}
+    <div>
+      <div className="flex items-start gap-2.5">
+        {/*
+          A native checkbox rather than the kit's, because this is a control the suite clicks on
+          the render it arrives at: `@radix-ui/react-checkbox`'s root is a button whose behaviour
+          leans on pointer APIs jsdom does not implement, and the platform control needs no
+          adapter to be clickable, checkable and labelled.
+        */}
+        <input
+          id={boxId}
+          type="checkbox"
+          className="mt-0.5 size-4 shrink-0 accent-[color:var(--color-steel)]"
+          checked={draft.wanted}
+          onChange={(event) => onChange({ ...draft, wanted: event.target.checked })}
+          data-testid={`Notifications.Dialog.Event.${eventType}`}
         />
+        <label htmlFor={boxId} className="min-w-0">
+          <span className="block text-[13px] text-ink-2">{notificationEventTypeLabels[eventType]}</span>
+          <span className="block text-[12px] leading-[1.5] text-ink-4">
+            {notificationEventTypeHelp[eventType]}
+          </span>
+        </label>
+      </div>
+      {draft.wanted && (
+        <div className="mt-2 ml-6 max-w-[300px]">
+          <Field
+            label="Only when this many results failed"
+            htmlFor={thresholdId}
+            help="0 is every occurrence."
+          >
+            <Input
+              id={thresholdId}
+              type="number"
+              min={0}
+              className="w-[92px] text-right font-mono tabular-nums"
+              value={draft.minFailures}
+              onChange={(event) =>
+                /*
+                  `Number('')` is 0, which is the contract's own default and means "every
+                  occurrence" — so clearing the field lands on the value the field would have had
+                  anyway rather than on a NaN the server refuses.
+                */
+                onChange({ ...draft, minFailures: Math.max(0, Math.trunc(Number(event.target.value) || 0)) })
+              }
+              data-testid={`Notifications.Dialog.MinFailures.${eventType}`}
+            />
+          </Field>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }
 

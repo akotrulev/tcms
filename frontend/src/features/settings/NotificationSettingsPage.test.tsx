@@ -90,11 +90,18 @@ async function enabled(testId: string) {
   await waitFor(() => expect(screen.getByTestId(testId)).toBeEnabled())
 }
 
-/** MUI renders a select's options into a portal, so the listbox is found on the document. */
+/**
+ * Picks an option by its visible name.
+ *
+ * ~~MUI renders a select's options into a portal, so the listbox is found on the document.~~ →
+ * **superseded (007 T15).** The transport picker is a native `<select>` now — one of four fixed
+ * words, so the platform control — and its options are children of the box rather than a portal.
+ * This helper is the only line of this file the port touched; every assertion below is unchanged.
+ */
 async function chooseFrom(testId: string, optionName: string | RegExp) {
-  const select = screen.getByTestId(testId).closest('.MuiInputBase-root')!
-  await userEvent.click(within(select as HTMLElement).getByRole('combobox'))
-  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+  const select = screen.getByTestId(testId)
+  const option = within(select).getByRole('option', { name: optionName }) as HTMLOptionElement
+  await userEvent.selectOptions(select, option)
 }
 
 /** Opens the edit dialog on the first row and waits for its Save to be usable. */
