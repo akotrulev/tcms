@@ -196,11 +196,25 @@ public class NotificationChannelService {
             if (!errors.isEmpty()) {
                 return new Outcome.Invalid(errors);
             }
+            // Checked here rather than left to uq_notification_channel_name, which is
+            // (company_id, project_id, name) over a plain `text` column and therefore
+            // case-sensitive — so this comparison is equals(), not equalsIgnoreCase(). Without
+            // it the insert reaches the index and the violation surfaces as a
+            // DataIntegrityViolationException at flush: a 500 for what is a field the caller
+            // can fix, and the failure that made seed-demo-data abort on its second run.
+            // Not Outcome.Conflict: that record's header reserves it for the If-Match path.
+            String name = input.name().trim();
+            boolean taken = channels.findInProject(project.getId()).stream()
+                    .anyMatch(existing -> existing.getName().equals(name));
+            if (taken) {
+                return new Outcome.Invalid(Map.of("name",
+                        List.of("This project already has a channel called \"" + name + "\".")));
+            }
             Instant now = clock.instant();
             NotificationChannel channel = channels.saveAndFlush(NotificationChannel.create(
                     project.getId(),
                     input.kind(),
-                    input.name().trim(),
+                    name,
                     input.enabled(),
                     configDocument(input.recipients()),
                     encrypt(input.secret()),

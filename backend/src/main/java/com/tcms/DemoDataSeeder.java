@@ -138,12 +138,19 @@ public class DemoDataSeeder {
             Map<String, UUID> peopleIds = seedPeople(spec, adminId, projectIds, report, label);
             seedTeams(spec, adminId, peopleIds, report, label);
 
-            DemoCast cast = new DemoCast(companyId, adminId, peopleIds);
             for (DemoSeedPlan.ProjectSpec project : spec.projects()) {
                 UUID projectId = projectIds.get(project.key());
                 if (projectId == null) {
                     continue;
                 }
+                // Scoped to this project, not one cast for the company: a PROJECT-scope grant
+                // names one project, and DemoCast's fallback to the admin is only correct if a
+                // person who cannot reach this project is absent from the map rather than in it.
+                // Authoring as somebody without the grant is refused NotFound — the project is
+                // not visible to them — which is how the plan's tester, granted WEB alone, was
+                // silently dropping every third case in MOB.
+                DemoCast cast = new DemoCast(
+                        companyId, adminId, authorsFor(spec, peopleIds, project.key()));
                 projectSeeder.seed(cast, project, projectId, force, report, label);
             }
 
@@ -180,6 +187,30 @@ public class DemoDataSeeder {
     }
 
     /**
+     * The people who may author content in one project: those the plan grants it, plus everyone
+     * whose grant is company-wide.
+     *
+     * <p>A person the plan does not place here is left out of the map entirely, so
+     * {@link DemoCast}'s lookups fall through to the Company Admin, who holds the company-wide
+     * grant and can therefore always write.
+     */
+    private static Map<String, UUID> authorsFor(
+            DemoSeedPlan.CompanySpec spec, Map<String, UUID> peopleIds, String projectKey) {
+
+        Map<String, UUID> scoped = new LinkedHashMap<>();
+        for (DemoSeedPlan.Person person : spec.people()) {
+            UUID id = peopleIds.get(person.email());
+            if (id == null) {
+                continue;
+            }
+            if (person.projectKeys().isEmpty() || person.projectKeys().contains(projectKey)) {
+                scoped.put(person.email(), id);
+            }
+        }
+        return scoped;
+    }
+
+    /**
      * Invites each person, redeems the invitation with the shared demo password, and makes their
      * grant.
      *
@@ -212,10 +243,7 @@ public class DemoDataSeeder {
             }
             ids.put(person.email(), userId);
 
-            invitations.issueIfPending(CompanyContext.require(), userId, adminId)
-                    .acceptUrl()
-                    .flatMap(DemoDataSeeder::secretIn)
-                    .ifPresent(secret -> redeem(secret, person.email(), report));
+            activate(userId, adminId, person.email(), report);
 
             grant(person, userId, adminId, projectIds, report, label);
             report.credential(person.email(), person.roleName(), spec.displayName());
@@ -338,6 +366,39 @@ public class DemoDataSeeder {
                 report.line(label, "project " + view.key() + " archived");
             }
         }
+    }
+
+    /**
+     * Turns an invited person into an active member, which is what every later write depends on.
+     *
+     * <p><strong>{@code reissue}, not {@code issueIfPending}.</strong> The line above has just
+     * called {@code invite}, which mints an outstanding invitation; {@code issueIfPending} then
+     * finds that very invitation redeemable and deliberately answers with <em>no</em> accept URL,
+     * because its contract is to leave a live link in somebody's inbox alone. Only a digest of the
+     * token is stored, so a URL not returned here cannot be recovered afterwards — the redemption
+     * was therefore skipped for every person in every run, and every one of them stayed
+     * {@code INVITED}. An invited user is not an active member, so the permission evaluator
+     * returns nothing for them, the project is invisible, and every write they author is refused
+     * {@code NotFound}: the whole fixture came up empty except the one company with no people in
+     * its plan, which falls back to authoring as the admin.
+     *
+     * <p>Idempotent across runs for the reason {@code reissue} states: it answers
+     * {@code IssueOutcome.none()} for a membership that is already active, so a second run
+     * activates nobody and replaces no token.
+     */
+    private void activate(UUID userId, UUID adminId, String email, DemoSeedReport report) {
+        Optional<String> acceptUrl =
+                invitations.reissue(CompanyContext.require(), userId, adminId).acceptUrl();
+        if (acceptUrl.isEmpty()) {
+            // Already active — the re-run path, and the only one that is silent.
+            return;
+        }
+        Optional<String> secret = acceptUrl.flatMap(DemoDataSeeder::secretIn);
+        if (secret.isEmpty()) {
+            report.note("could not activate " + email + ": the accept URL carried no token");
+            return;
+        }
+        redeem(secret.get(), email, report);
     }
 
     /** Redeems one invitation with the shared demo password. */

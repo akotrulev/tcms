@@ -25,6 +25,9 @@ import com.tcms.work.BoardService;
 import com.tcms.work.Priority;
 import com.tcms.work.WorkItemStatus;
 import com.tcms.work.WorkItemWriteRequest;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -54,6 +57,7 @@ public class DemoWorkspaceSeeder {
     private final NotificationChannelService channels;
     private final ApiTokenService apiTokens;
     private final RoleRepository roles;
+    private final Clock clock;
 
     public DemoWorkspaceSeeder(
             DocPageWriteService docPages,
@@ -63,7 +67,8 @@ public class DemoWorkspaceSeeder {
             BoardService board,
             NotificationChannelService channels,
             ApiTokenService apiTokens,
-            RoleRepository roles) {
+            RoleRepository roles,
+            Clock clock) {
 
         this.docPages = docPages;
         this.artifacts = artifacts;
@@ -73,6 +78,7 @@ public class DemoWorkspaceSeeder {
         this.channels = channels;
         this.apiTokens = apiTokens;
         this.roles = roles;
+        this.clock = clock;
     }
 
     void seed(
@@ -120,7 +126,7 @@ public class DemoWorkspaceSeeder {
                                 + "Anything whose failure is silent\n"
                                 + "Nothing that needs a human to judge whether it looks right",
                         null, null),
-                new DocBlockInput(null, DocBlockType.TABLE, null, null, List.of(
+                new DocBlockInput(null, DocBlockType.TABLE, null, "", List.of(
                         List.of("Area", "Owner", "Cadence"),
                         List.of("Checkout", "Storefront Squad", "Every build"),
                         List.of("Search", "Storefront Squad", "Nightly"),
@@ -158,7 +164,11 @@ public class DemoWorkspaceSeeder {
         if (outcome instanceof DocPageWriteService.Outcome.Created created) {
             return created.view().id();
         }
-        log.warn("Doc page '{}' was refused: {}", title, outcome.getClass().getSimpleName());
+        if (outcome instanceof DocPageWriteService.Outcome.Invalid invalid) {
+            log.warn("Doc page '{}' was refused: Invalid {}", title, invalid.errors());
+        } else {
+            log.warn("Doc page '{}' was refused: {}", title, outcome.getClass().getSimpleName());
+        }
         return null;
     }
 
@@ -249,7 +259,7 @@ public class DemoWorkspaceSeeder {
         for (Card card : cards) {
             var gate = board.create(cast.lead(),
                     new WorkItemWriteRequest(projectId, card.title(), card.description(),
-                            card.priority(), LocalDate.now().plusDays(card.dueInDays()),
+                            card.priority(), LocalDate.now(clock).plusDays(card.dueInDays()),
                             card.assignee()),
                     DemoProjectSeeder.idempotencyKey(projectId, "card", card.title()));
 
@@ -291,7 +301,8 @@ public class DemoWorkspaceSeeder {
     private void seedChannels(
             DemoCast cast, UUID projectId, DemoSeedReport report, String label) {
 
-        channels.create(cast.adminId(), projectId, new NotificationChannelInput(
+        int created = 0;
+        created += channel(cast, projectId, "#quality-alerts", new NotificationChannelInput(
                 NotificationChannelKind.SLACK,
                 "#quality-alerts",
                 true,
@@ -302,7 +313,7 @@ public class DemoWorkspaceSeeder {
                         new NotificationChannelInput.SubscriptionInput(
                                 OutboxEvents.REVIEW_REQUESTED, 0))));
 
-        channels.create(cast.adminId(), projectId, new NotificationChannelInput(
+        created += channel(cast, projectId, "Release leads", new NotificationChannelInput(
                 NotificationChannelKind.EMAIL,
                 "Release leads",
                 true,
@@ -311,7 +322,32 @@ public class DemoWorkspaceSeeder {
                 List.of(new NotificationChannelInput.SubscriptionInput(
                         OutboxEvents.REVIEW_APPROVED, 0))));
 
-        report.line(label, "two notification channels and their subscriptions");
+        if (created > 0) {
+            report.line(label, created + " notification channel"
+                    + (created == 1 ? "" : "s") + " and their subscriptions");
+        }
+    }
+
+    /**
+     * Creates one channel, and answers whether it landed.
+     *
+     * <p>The outcome used to be discarded, so the report said "two notification channels" whatever
+     * happened. A channel whose name is already taken now answers {@code Invalid} rather than
+     * reaching the unique index, which is what makes a second run of this command survive; that is
+     * the expected answer on a re-run and so is not worth a line, but anything else is.
+     */
+    private int channel(
+            DemoCast cast, UUID projectId, String name, NotificationChannelInput input) {
+
+        NotificationChannelService.Outcome outcome =
+                channels.create(cast.adminId(), projectId, input);
+        if (outcome instanceof NotificationChannelService.Outcome.Saved) {
+            return 1;
+        }
+        if (!(outcome instanceof NotificationChannelService.Outcome.Invalid)) {
+            log.warn("Channel '{}' was refused: {}", name, outcome.getClass().getSimpleName());
+        }
+        return 0;
     }
 
     /**
@@ -321,19 +357,26 @@ public class DemoWorkspaceSeeder {
     private void seedApiTokens(
             DemoCast cast, UUID projectId, DemoSeedReport report, String label) {
 
-        issue(cast, projectId, "Automation Service", "Nightly CI");
-        issue(cast, projectId, "Agent", "Case-drafting agent");
+        issue(cast, projectId, "Automation Service", "Nightly CI", null);
+        // An agent token is refused without an expiry — ApiTokenService states why: it lives on
+        // somebody's machine rather than in a pipeline. Ninety days is far enough out that the
+        // fixture is not born expired and near enough to be a date somebody would accept.
+        issue(cast, projectId, "Agent", "Case-drafting agent",
+                clock.instant().plus(Duration.ofDays(90)));
         report.line(label, "two API tokens (Automation Service, Agent)");
     }
 
-    private void issue(DemoCast cast, UUID projectId, String roleName, String tokenName) {
+    private void issue(
+            DemoCast cast, UUID projectId, String roleName, String tokenName, Instant expiresAt) {
         Optional<Role> role = roles.findByName(roleName);
         if (role.isEmpty()) {
             return;
         }
         ApiTokenService.Outcome outcome = apiTokens.issue(cast.adminId(),
-                new ApiTokenIssueRequest(tokenName, role.get().getId(), projectId, null));
-        if (!(outcome instanceof ApiTokenService.Outcome.Issued)) {
+                new ApiTokenIssueRequest(tokenName, role.get().getId(), projectId, expiresAt));
+        if (outcome instanceof ApiTokenService.Outcome.Invalid invalid) {
+            log.warn("Token '{}' was refused: Invalid {}", tokenName, invalid.errors());
+        } else if (!(outcome instanceof ApiTokenService.Outcome.Issued)) {
             log.warn("Token '{}' was refused: {}", tokenName, outcome.getClass().getSimpleName());
         }
     }

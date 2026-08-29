@@ -35,6 +35,7 @@ import com.tcms.repository.CaseHealthRecomputeService;
 import com.tcms.repository.TestCaseDetailView;
 import com.tcms.storage.BlobUpload;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -90,6 +91,7 @@ public class DemoExecutionSeeder {
     private final RollupRefreshService rollups;
     private final ExecutionFactRefreshService facts;
     private final CaseHealthRecomputeService caseHealth;
+    private final Clock clock;
 
     public DemoExecutionSeeder(
             PlanCreateService planCreate,
@@ -106,7 +108,8 @@ public class DemoExecutionSeeder {
             CaseStatusRepository caseStatuses,
             RollupRefreshService rollups,
             ExecutionFactRefreshService facts,
-            CaseHealthRecomputeService caseHealth) {
+            CaseHealthRecomputeService caseHealth,
+            Clock clock) {
 
         this.planCreate = planCreate;
         this.planStatus = planStatus;
@@ -123,6 +126,7 @@ public class DemoExecutionSeeder {
         this.rollups = rollups;
         this.facts = facts;
         this.caseHealth = caseHealth;
+        this.clock = clock;
     }
 
     void seed(
@@ -226,7 +230,7 @@ public class DemoExecutionSeeder {
                         "What we will test before " + releaseOf(spec) + " ships, and what we "
                                 + "will not.",
                         releaseOf(spec),
-                        LocalDate.now().plusDays(21),
+                        LocalDate.now(clock).plusDays(21),
                         List.copyOf(suiteIds.values()),
                         List.<UUID>of(),
                         List.<String>of(),
@@ -235,18 +239,26 @@ public class DemoExecutionSeeder {
                                 + "that carry 94% of our traffic.",
                         "Back-office tooling, and the partner API — both covered by their own "
                                 + "plans, both out of scope here.",
-                        List.of(new CriterionInput("cases_approved", "gte", 90.0,
+                        List.of(new CriterionInput("cases_approved", ">=", 90.0,
                                 "At least 90% of the cases in scope are approved.")),
-                        List.of(new CriterionInput("pass_rate", "gte", 95.0,
+                        List.of(new CriterionInput("pass_rate", ">=", 95.0,
                                         "Pass rate at or above 95%."),
-                                new CriterionInput("open_critical_defects", "eq", 0.0,
+                                new CriterionInput("open_critical", "=", 0.0,
                                         "No open critical defects."))),
                 DemoProjectSeeder.idempotencyKey(projectId, "plan", releaseOf(spec)));
 
         UUID planId = switch (outcome) {
             case PlanCreateService.Outcome.Created created -> created.view().id();
             case PlanCreateService.Outcome.Replayed replayed -> replayed.view().id();
-            default -> null;
+            case PlanCreateService.Outcome.Invalid invalid -> {
+                log.warn("Plan for {} was refused: Invalid {}", releaseOf(spec), invalid.errors());
+                yield null;
+            }
+            default -> {
+                log.warn("Plan for {} was refused: {}", releaseOf(spec),
+                        outcome.getClass().getSimpleName());
+                yield null;
+            }
         };
         if (planId != null && full) {
             planStatus.setStatus(cast.lead(), projectId, planId, new PlanStatusRequest("IN_REVIEW"));

@@ -202,6 +202,9 @@ public class DemoProjectSeeder {
                             spec.body()));
             if (outcome instanceof ConditionService.Outcome.Created created) {
                 byTitle.put(spec.title(), created.view().id());
+            } else {
+                log.warn("Condition '{}' was refused: {}", spec.title(),
+                        outcome.getClass().getSimpleName());
             }
         }
         return byTitle;
@@ -234,6 +237,9 @@ public class DemoProjectSeeder {
                 byName.put(suite.name(), created.view().id());
             } else if (outcome instanceof SuiteWriteService.Outcome.Replayed replayed) {
                 byName.put(suite.name(), replayed.view().id());
+            } else {
+                log.warn("Suite '{}' was refused: {}", suite.name(),
+                        outcome.getClass().getSimpleName());
             }
         }
         return byName;
@@ -261,9 +267,13 @@ public class DemoProjectSeeder {
                     ? List.of()
                     : List.of(featureIds.get(index % featureIds.size()));
 
+            // A library reference, never an inline body: CaseConditionInput's header refuses the
+            // inline arm outright, because nothing in the product can render one — so the inline
+            // form this used to send was rejected on every run and cost the case it was attached
+            // to. The id is the library entry seeded just above.
             List<CaseConditionInput> preconditions = full && index == 1 && !conditionIds.isEmpty()
-                    ? List.of(new CaseConditionInput(null,
-                            List.of("Start from a basket that already has two items in it.")))
+                    ? List.of(new CaseConditionInput(
+                            conditionIds.values().iterator().next(), null))
                     : List.of();
 
             CaseCreateService.Outcome outcome = caseCreate.create(author, projectId,
@@ -273,6 +283,9 @@ public class DemoProjectSeeder {
             switch (outcome) {
                 case CaseCreateService.Outcome.Created c -> created.add(c.view());
                 case CaseCreateService.Outcome.Replayed r -> created.add(r.view());
+                case CaseCreateService.Outcome.Invalid invalid ->
+                        log.warn("Case '{}' was refused: Invalid {}", caseSpec.title(),
+                                invalid.errors());
                 default -> log.warn("Case '{}' was refused: {}", caseSpec.title(),
                         outcome.getClass().getSimpleName());
             }
