@@ -73,12 +73,6 @@ describe('theme.ts mirrors index.css', () => {
   });
 
   /**
-   * The tier split is the point of the 002 audit's B1: one saturated palette had been answering
-   * five unrelated questions, and a `COMPLETED` run reusing the outcome green is what put a green
-   * chip on a run with a 0% pass rate. The progress and viz tiers must stay disjoint from the
-   * outcome tier **by value**, not only by name — sharing a hex is how the overload comes back.
-   */
-  /**
    * The render kit adds four names the app had none for (design language §1): two surfaces, a
    * fourth ink weight, and the three Gherkin keyword hues. They are asserted here rather than
    * left to a screen to discover, because a missing token renders as `transparent` — a surface
@@ -114,6 +108,12 @@ describe('theme.ts mirrors index.css', () => {
     expect(dark.get(keyword)).toBe(dark.get(result));
   });
 
+  /**
+   * The tier split is the point of the 002 audit's B1: one saturated palette had been answering
+   * five unrelated questions, and a `COMPLETED` run reusing the outcome green is what put a green
+   * chip on a run with a 0% pass rate. The progress and viz tiers must stay disjoint from the
+   * outcome tier **by value**, not only by name — sharing a hex is how the overload comes back.
+   */
   it.each(['--color-progress-done', '--color-viz-1', '--color-viz-2'])(
     '%s is not a recoloured outcome token',
     (token) => {
@@ -125,4 +125,38 @@ describe('theme.ts mirrors index.css', () => {
       }
     },
   );
+});
+
+/**
+ * Tailwind's breakpoint scale must be the app's, not Tailwind's own.
+ *
+ * The port added a second responsive system by omission: Tailwind ships `md: 768px` and this
+ * app's contract has been `md: 900` since it adopted MUI's set wholesale. A `md:` in a class and
+ * an `md` in `breakpoints.ts` meaning two different widths is invisible until a layout breaks in
+ * the 132px between them — and `breakpoints.ts`'s own header forbids exactly this ("never
+ * introduce a second system"). So the agreement is computed rather than remembered.
+ */
+describe('the breakpoint contract is single', () => {
+  const themeStart = css.indexOf('@theme inline');
+  const themeBlock = css.slice(themeStart, css.indexOf('\n}', themeStart));
+  const declared = new Map(
+    [...themeBlock.matchAll(/--breakpoint-([a-z]+):\s*(\d+)px\s*;/g)].map((m) => [m[1]!, Number(m[2])]),
+  );
+
+  /* Read, not restated: a copy of the contract in the test is a third system to keep in step. */
+  const contract = new Map(
+    [
+      ...readFileSync(resolve(HERE, 'breakpoints.ts'), 'utf8').matchAll(/^\s*(sm|md|lg|xl):\s*(\d+),/gm),
+    ].map((m) => [m[1]!, Number(m[2])]),
+  );
+
+  it('parsed the contract at all', () => {
+    expect([...contract.keys()].sort()).toEqual(['lg', 'md', 'sm', 'xl']);
+  });
+
+  it.each(['sm', 'md', 'lg', 'xl'])('--breakpoint-%s matches breakpoints.ts', (name) => {
+    expect(declared.get(name), `--breakpoint-${name} not declared in @theme inline`).toBe(
+      contract.get(name),
+    );
+  });
 });

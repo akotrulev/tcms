@@ -1,50 +1,36 @@
+import { useColorScheme } from '@mui/material';
 import {
-  Box,
-  Button,
-  Divider,
-  Drawer,
-  IconButton,
-  Link,
-  ListItemIcon,
-  ListItemText,
-  Menu,
-  MenuItem,
-  Select,
-  Stack,
-  Tooltip,
-  Typography,
-  useColorScheme,
-} from '@mui/material';
-import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
-import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
-import AssignmentIndOutlinedIcon from '@mui/icons-material/AssignmentIndOutlined';
-import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
-import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
-import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
-import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
-import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
-import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
-import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
-import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
-import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
-import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
-import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
-import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
-import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
-import InventoryOutlinedIcon from '@mui/icons-material/Inventory2Outlined';
-import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined';
-import LoginOutlinedIcon from '@mui/icons-material/LoginOutlined';
-import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
-import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
-import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
-import LogoutIcon from '@mui/icons-material/Logout';
-import MenuIcon from '@mui/icons-material/Menu';
-import PlaylistAddCheckOutlinedIcon from '@mui/icons-material/PlaylistAddCheckOutlined';
-import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined';
+  Bell,
+  Bug,
+  ChartColumn,
+  ChevronLeft,
+  ChevronRight,
+  CloudUpload,
+  ClipboardList,
+  FileText,
+  Folder,
+  HelpCircle,
+  History,
+  Kanban,
+  Key,
+  LayoutDashboard,
+  LayoutGrid,
+  ListChecks,
+  LogIn,
+  LogOut,
+  Menu as MenuIcon,
+  MessageSquareText,
+  Moon,
+  Network,
+  Package,
+  Search,
+  Shield,
+  Sparkles,
+  Sun,
+  Tag,
+  UserCheck,
+  Users,
+} from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import {
   Link as RouterLink,
@@ -62,6 +48,25 @@ import { RouteErrorBoundary } from '../components/ErrorBoundaries';
 import { SkipToContentLink } from '../components/SkipToContentLink';
 import { useAuth } from '../auth/useAuth';
 import { safeStorage } from '../lib/safeStorage';
+import { cn } from '../lib/cn';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '../components/ui';
 import type { Project } from '../api/types';
 
 /**
@@ -147,7 +152,7 @@ interface NavItem {
 const MY_WORK: NavItem = {
   label: 'My work',
   to: '/my-work',
-  icon: <AssignmentIndOutlinedIcon fontSize="small" />,
+  icon: <UserCheck className="size-4" />,
   end: true,
 };
 
@@ -166,7 +171,7 @@ const MY_WORK: NavItem = {
 const CASE_SEARCH: NavItem = {
   label: 'Search cases',
   to: '/search',
-  icon: <SearchOutlinedIcon fontSize="small" />,
+  icon: <Search className="size-4" />,
   end: true,
 };
 
@@ -196,7 +201,7 @@ const CASE_SEARCH: NavItem = {
 const ALL_PROJECTS: NavItem = {
   label: 'All projects',
   to: '/',
-  icon: <GridViewOutlinedIcon fontSize="small" />,
+  icon: <LayoutGrid className="size-4" />,
   end: true,
 };
 
@@ -266,17 +271,17 @@ function projectNav(
     {
       heading: 'Repository',
       items: [
-        { label: 'Overview', to: p, icon: <DashboardOutlinedIcon fontSize="small" />, end: true },
-        { label: 'Test cases', to: `${p}/cases`, icon: <FolderOutlinedIcon fontSize="small" /> },
-        { label: 'Documentation', to: `${p}/docs`, icon: <ArticleOutlinedIcon fontSize="small" /> },
+        { label: 'Overview', to: p, icon: <LayoutDashboard className="size-4" />, end: true },
+        { label: 'Test cases', to: `${p}/cases`, icon: <Folder className="size-4" /> },
+        { label: 'Documentation', to: `${p}/docs`, icon: <FileText className="size-4" /> },
       ],
     },
     {
       heading: 'Execution',
       items: [
-        { label: 'Test plans', to: `${p}/plans`, icon: <AssignmentOutlinedIcon fontSize="small" /> },
-        { label: 'Test runs', to: `${p}/runs`, icon: <PlaylistAddCheckOutlinedIcon fontSize="small" /> },
-        { label: 'Board', to: `${p}/board`, icon: <ViewKanbanOutlinedIcon fontSize="small" /> },
+        { label: 'Test plans', to: `${p}/plans`, icon: <ClipboardList className="size-4" /> },
+        { label: 'Test runs', to: `${p}/runs`, icon: <ListChecks className="size-4" /> },
+        { label: 'Board', to: `${p}/board`, icon: <Kanban className="size-4" /> },
         /*
           §6e's reports (§89). Execution rather than Project, because what a report is *of* is
           execution results — the only one that exists today summarises a run, and every one §6e
@@ -290,7 +295,7 @@ function projectNav(
           would hide the entry from nobody who can reach it, while teaching that rail items come
           and go by permission, which is the opposite of §31's disable-don't-hide.
         */
-        { label: 'Reports', to: `${p}/reports`, icon: <AssessmentOutlinedIcon fontSize="small" /> },
+        { label: 'Reports', to: `${p}/reports`, icon: <ChartColumn className="size-4" /> },
         /*
           §119. Execution, beside Test runs, because an ingested report *is* a run's results
           arriving by another door — and because the person who goes looking for "why did my CI
@@ -304,7 +309,7 @@ function projectNav(
         {
           label: 'CI ingestion',
           to: `${p}/ingestions`,
-          icon: <CloudUploadOutlinedIcon fontSize="small" />,
+          icon: <CloudUpload className="size-4" />,
         },
       ],
     },
@@ -324,14 +329,14 @@ function projectNav(
         {
           label: 'Generated cases',
           to: `${p}/generated-cases`,
-          icon: <AutoAwesomeOutlinedIcon fontSize="small" />,
+          icon: <Sparkles className="size-4" />,
         },
       ],
     },
     {
       heading: 'Project',
       items: [
-        { label: 'Artifacts', to: `${p}/artifacts`, icon: <InventoryOutlinedIcon fontSize="small" /> },
+        { label: 'Artifacts', to: `${p}/artifacts`, icon: <Package className="size-4" /> },
         /*
           `${p}/…`, and it earns the Project heading on exactly the test the note below sets: it is
           about the project in the picker and switching projects changes what it shows. It is the
@@ -339,7 +344,7 @@ function projectNav(
           from the company — while `Teams & roles` below stays the company-wide one. Two headings,
           two scopes, one implementation underneath.
         */
-        { label: 'Access & roles', to: `${p}/access`, icon: <GroupsOutlinedIcon fontSize="small" /> },
+        { label: 'Access & roles', to: `${p}/access`, icon: <Users className="size-4" /> },
         /*
           The project's classification vocabulary. Project-headed on the same test: Feature belongs
           to this project and switching projects changes the tree — even though three of the four
@@ -348,7 +353,7 @@ function projectNav(
         {
           label: 'Classification',
           to: `${p}/settings/classification`,
-          icon: <LocalOfferOutlinedIcon fontSize="small" />,
+          icon: <Tag className="size-4" />,
         },
         /*
           §6g's review policy. Shown to everybody who can see the project, not only to holders of
@@ -359,7 +364,7 @@ function projectNav(
         {
           label: 'Review',
           to: `${p}/settings/review`,
-          icon: <RateReviewOutlinedIcon fontSize="small" />,
+          icon: <MessageSquareText className="size-4" />,
         },
         /*
           §218's channels. ~~Ungated like every item in this rail — a rail with no Notifications
@@ -376,7 +381,7 @@ function projectNav(
               {
                 label: 'Notifications',
                 to: `${p}/settings/notifications`,
-                icon: <NotificationsNoneOutlinedIcon fontSize="small" />,
+                icon: <Bell className="size-4" />,
               },
               /*
                 004 Phase 1's bindings, beside Notifications because they are the same module, the
@@ -389,7 +394,7 @@ function projectNav(
               {
                 label: 'Issue tracker',
                 to: `${p}/settings/trackers`,
-                icon: <BugReportOutlinedIcon fontSize="small" />,
+                icon: <Bug className="size-4" />,
               },
             ]
           : []),
@@ -400,7 +405,7 @@ function projectNav(
               {
                 label: 'Audit trail',
                 to: `${p}/audit`,
-                icon: <HistoryOutlinedIcon fontSize="small" />,
+                icon: <History className="size-4" />,
               },
             ]
           : []),
@@ -434,8 +439,8 @@ function projectNav(
           disable-don't-hide grounds. This one leads to a screen with no gate at all: there is
           nothing to refuse, so the entry is not a promise the page has to walk back.
         */
-        { label: 'Org chart', to: '/org-chart', icon: <AccountTreeOutlinedIcon fontSize="small" /> },
-        { label: 'Teams & roles', to: '/admin/teams', icon: <GroupsOutlinedIcon fontSize="small" /> },
+        { label: 'Org chart', to: '/org-chart', icon: <Network className="size-4" /> },
+        { label: 'Teams & roles', to: '/admin/teams', icon: <Users className="size-4" /> },
         /*
           Company, beside Teams & roles, for the same reason that one is here: a token belongs to
           the company, and switching projects does not change the list.
@@ -447,7 +452,7 @@ function projectNav(
           that refusal is the same claim one click earlier.
         */
         ...(credentials.tokens
-          ? [{ label: 'API tokens', to: '/admin/tokens', icon: <KeyOutlinedIcon fontSize="small" /> }]
+          ? [{ label: 'API tokens', to: '/admin/tokens', icon: <Key className="size-4" /> }]
           : []),
         /*
           ~~Ungated for the same reason the two above are.~~ → **superseded 2026-08-28 (005 C2):
@@ -457,7 +462,7 @@ function projectNav(
           module's strictest credentials and why no read-only view was ever going to exist here.
         */
         ...(credentials.sso
-          ? [{ label: 'Single sign-on', to: '/admin/sso', icon: <LoginOutlinedIcon fontSize="small" /> }]
+          ? [{ label: 'Single sign-on', to: '/admin/sso', icon: <LogIn className="size-4" /> }]
           : []),
         // The company trail (§242). Gated on `audit:view` and HIDDEN without it — the pair to the
         // project entry above, and the same deliberate exception.
@@ -466,7 +471,7 @@ function projectNav(
               {
                 label: 'Audit trail',
                 to: '/admin/audit',
-                icon: <HistoryOutlinedIcon fontSize="small" />,
+                icon: <History className="size-4" />,
               },
             ]
           : []),
@@ -513,7 +518,7 @@ export function AppShell() {
   const mainRef = useRouteFocus<HTMLElement>();
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100%', bgcolor: 'background.default' }}>
+    <div className="flex min-h-full bg-ground">
       {/*
         First focusable element in the DOM, so a keyboard user's very first Tab offers a way past
         the rail. Without it, reaching the content on a page like the case list means tabbing
@@ -521,8 +526,7 @@ export function AppShell() {
       */}
       <SkipToContentLink />
       {/* Desktop rail — shown wherever there is room for it. */}
-      <Box
-        component="nav"
+      <nav
         id="nav-rail"
         aria-label="Main"
         data-testid="Nav.Rail"
@@ -532,44 +536,36 @@ export function AppShell() {
           testid says which variant is showing; this says how wide it currently is.
         */
         data-collapsed={collapsed ? 'true' : 'false'}
-        sx={{
-          display: { xs: 'none', md: 'flex' },
-          flexDirection: 'column',
-          width: collapsed ? RAIL_WIDTH_COLLAPSED : RAIL_WIDTH,
-          flexShrink: 0,
-          borderRight: '1px solid',
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
-          position: 'sticky',
-          top: 0,
-          height: '100vh',
+        className={cn(
+          'hidden md:flex flex-col shrink-0 border-r border-white/8 bg-[#0c1119]',
+          'sticky top-0 h-screen',
           // A width the user asked to change should be seen to change. Motion is opt-out at the
           // theme level (`prefers-reduced-motion` is a hard floor), so this respects it.
-          transition: 'width 160ms ease',
-          '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
-        }}
+          'transition-[width] duration-150 ease-out motion-reduce:transition-none',
+        )}
+        style={{ width: collapsed ? RAIL_WIDTH_COLLAPSED : RAIL_WIDTH }}
       >
         <RailContent collapsed={collapsed} onToggleCollapse={documentRoute ? undefined : toggleRail} />
-      </Box>
+      </nav>
 
       {/* Small-screen drawer — the same content, mounted only while open. */}
-      <Drawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        data-testid="Nav.Drawer"
-        slotProps={{ paper: { sx: { width: RAIL_WIDTH } } }}
-        sx={{ display: { xs: 'block', md: 'none' } }}
-      >
-        <Box component="nav" aria-label="Main" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-          <RailContent onNavigate={() => setDrawerOpen(false)} />
-        </Box>
-      </Drawer>
+      <Dialog open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <DialogContent
+          data-testid="Nav.Drawer"
+          className="left-0 top-0 h-full max-w-none translate-x-0 translate-y-0 rounded-none border-l-0 p-0 flex md:hidden"
+          style={{ width: RAIL_WIDTH }}
+        >
+          <DialogTitle className="sr-only">Navigation</DialogTitle>
+          <nav aria-label="Main" className="flex h-full w-full flex-col">
+            <RailContent onNavigate={() => setDrawerOpen(false)} />
+          </nav>
+        </DialogContent>
+      </Dialog>
 
-      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <div className="flex flex-1 min-w-0 flex-col">
         <TopBar onOpenNav={() => setDrawerOpen(true)} />
 
-        <Box
-          component="main"
+        <main
           id="main-content"
           /*
             Focusable so the route-change hook can move focus here. `-1` keeps it out of the tab
@@ -577,16 +573,13 @@ export function AppShell() {
           */
           tabIndex={-1}
           ref={mainRef}
-          sx={{
-            flex: 1,
-            px: { xs: 2, md: 4 },
-            py: { xs: 2, md: 3 },
-            minWidth: 0,
+          className={cn(
+            'flex-1 min-w-0 px-2 py-2 md:px-4 md:py-3',
             // Focusing a large container draws a full-width ring that reads as a rendering bug
             // rather than as a focus cue. The heading the user lands on is the signal; the skip
             // link and every real control keep their own visible indicators.
-            outline: 'none',
-          }}
+            'outline-none',
+          )}
         >
           {/*
             The per-route boundary sits here, inside the shell, so a page that throws degrades to
@@ -596,11 +589,11 @@ export function AppShell() {
           <RouteErrorBoundary>
             <Outlet />
           </RouteErrorBoundary>
-        </Box>
+        </main>
 
         <AppFooter />
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
 
@@ -678,22 +671,18 @@ function RailContent({
         that is the *only* way home is a guess the user has to make; a logo that agrees with a
         visible nav item is a shortcut.
       */}
-      <Box
-        sx={{
-          px: collapsed ? 0 : 2,
-          py: 1.75,
-          display: 'flex',
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-        }}
+      <div
+        className={cn(
+          'flex items-center border-b border-white/8 py-[14px]',
+          collapsed ? 'justify-center px-0' : 'justify-start px-4',
+        )}
       >
         <RouterLink
           to="/"
           onClick={onNavigate}
           aria-label="TCMS — all projects"
           data-testid="Nav.Wordmark"
-          style={{ textDecoration: 'none' }}
+          className="no-underline"
         >
           <Identifier
             variant="strong"
@@ -702,13 +691,13 @@ function RailContent({
             TCMS
           </Identifier>
         </RouterLink>
-      </Box>
+      </div>
 
       {/*
         Outside the project frame below it, both of them. `MY_WORK` is personal; `ALL_PROJECTS` is
         what the switcher chooses between — see each one's own note.
       */}
-      <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, py: 1 }}>
+      <ul className="m-0 list-none p-0 py-2">
         <li>
           <RailLink item={MY_WORK} onNavigate={onNavigate} collapsed={collapsed} />
           <RailLink item={CASE_SEARCH} onNavigate={onNavigate} collapsed={collapsed} />
@@ -716,9 +705,9 @@ function RailContent({
         <li>
           <RailLink item={ALL_PROJECTS} onNavigate={onNavigate} collapsed={collapsed} />
         </li>
-      </Box>
+      </ul>
 
-      <Divider />
+      <hr className="m-0 border-t border-white/8" />
 
       {/* Project switcher: which project you're in is the frame for every key on screen. */}
       <ProjectSwitcher
@@ -728,11 +717,11 @@ function RailContent({
         onNavigate={onNavigate}
       />
 
-      <Divider />
+      <hr className="m-0 border-t border-white/8" />
 
-      <Box sx={{ flex: 1, overflowY: 'auto', py: 1 }}>
+      <div className="flex-1 overflow-y-auto py-2">
         {groups.map((group, index) => (
-          <Box key={group.heading} sx={{ mb: 1.5 }}>
+          <div key={group.heading} className="mb-3">
             {/*
               Collapsed, the heading is replaced by a rule rather than dropped. The grouping is the
               only thing telling a reader that Reports is about execution and Classification is
@@ -740,34 +729,22 @@ function RailContent({
               The first group needs no rule — there is already a divider above it.
             */}
             {collapsed ? (
-              index > 0 && <Divider sx={{ mx: 1.5, mb: 1 }} />
+              index > 0 && <hr className="mx-3 mb-2 border-t border-white/8" />
             ) : (
-              <Typography
-                variant="caption"
-                sx={{
-                  display: 'block',
-                  px: 2,
-                  py: 0.5,
-                  color: 'text.secondary',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  fontSize: '0.6875rem',
-                  fontWeight: 600,
-                }}
-              >
+              <p className="m-0 px-4 py-1 font-mono text-[10px] uppercase tracking-[.1em] text-ink-4">
                 {group.heading}
-              </Typography>
+              </p>
             )}
-            <Stack component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+            <ul className="m-0 list-none p-0">
               {group.items.map((item) => (
                 <li key={item.to}>
                   <RailLink item={item} onNavigate={onNavigate} collapsed={collapsed} />
                 </li>
               ))}
-            </Stack>
-          </Box>
+            </ul>
+          </div>
         ))}
-      </Box>
+      </div>
 
       {/*
         Bottom of the rail, below the scrolling nav list rather than inside it: it is a control on
@@ -776,26 +753,32 @@ function RailContent({
       */}
       {onToggleCollapse && (
         <>
-          <Divider />
-          <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end', px: 1, py: 0.75 }}>
-            <Tooltip title={collapsed ? 'Expand navigation' : 'Collapse navigation'} placement="right">
-              <IconButton
-                onClick={onToggleCollapse}
-                size="small"
-                /*
-                  The accessible name states the *action*, and `aria-expanded` states the current
-                  state of the thing it controls. Naming it "Navigation" and leaving the state to
-                  the attribute alone would read as a second way to open the drawer.
-                */
-                aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-                aria-expanded={!collapsed}
-                aria-controls="nav-rail"
-                data-testid="Nav.CollapseToggle"
-              >
-                {collapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
-              </IconButton>
+          <hr className="m-0 border-t border-white/8" />
+          <div className={cn('flex px-2 py-1.5', collapsed ? 'justify-center' : 'justify-end')}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="quiet"
+                  size="icon"
+                  onClick={onToggleCollapse}
+                  /*
+                    The accessible name states the *action*, and `aria-expanded` states the current
+                    state of the thing it controls. Naming it "Navigation" and leaving the state to
+                    the attribute alone would read as a second way to open the drawer.
+                  */
+                  aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+                  aria-expanded={!collapsed}
+                  aria-controls="nav-rail"
+                  data-testid="Nav.CollapseToggle"
+                >
+                  {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                {collapsed ? 'Expand navigation' : 'Collapse navigation'}
+              </TooltipContent>
             </Tooltip>
-          </Box>
+          </div>
         </>
       )}
     </>
@@ -810,7 +793,7 @@ function RailContent({
  * question a 64px rail is most likely to drop. The key is what the rest of the product identifies a
  * project by, so it needs no legend.
  *
- * It renders even with no project to switch to, matching the expanded `Select`, which renders empty
+ * It renders even with no project to switch to, matching the expanded picker, which renders empty
  * rather than disappearing: a member holding no project grants should see that the control exists
  * and is empty, not conclude the app has no projects in it.
  */
@@ -826,7 +809,6 @@ function ProjectSwitcher({
   onNavigate?: () => void;
 }) {
   const navigate = useNavigate();
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
 
   const active = projects.find((project) => project.id === activeProjectId);
 
@@ -837,73 +819,64 @@ function ProjectSwitcher({
 
   if (collapsed) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 1.5 }}>
-        <Tooltip title={active ? `Project: ${active.name}` : 'Project'} placement="right">
-          <IconButton
-            onClick={(event) => setAnchor(event.currentTarget)}
-            size="small"
-            aria-label={active ? `Switch project — current project ${active.name}` : 'Switch project'}
-            aria-haspopup="menu"
-            aria-expanded={anchor ? 'true' : undefined}
-            data-testid="Nav.ProjectSwitcher"
-            sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 1 }}
-          >
-            {active ? (
-              <Identifier variant="strong" sx={{ fontSize: '0.75rem' }}>
-                {active.key}
-              </Identifier>
-            ) : (
-              <FolderOutlinedIcon fontSize="small" />
-            )}
-          </IconButton>
-        </Tooltip>
-        <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
-          {projects.map((project) => (
-            <MenuItem
-              key={project.id}
-              selected={project.id === activeProjectId}
-              onClick={() => {
-                setAnchor(null);
-                go(project.id);
-              }}
-            >
-              <ListItemIcon>
+      <div className="flex justify-center py-3">
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={active ? `Switch project — current project ${active.name}` : 'Switch project'}
+                  data-testid="Nav.ProjectSwitcher"
+                >
+                  {active ? (
+                    <Identifier variant="strong" sx={{ fontSize: '0.75rem' }}>
+                      {active.key}
+                    </Identifier>
+                  ) : (
+                    <Folder className="size-4" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="right">{active ? `Project: ${active.name}` : 'Project'}</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent align="start" side="right">
+            {projects.map((project) => (
+              <DropdownMenuItem
+                key={project.id}
+                onClick={() => go(project.id)}
+                className={cn(project.id === activeProjectId && 'bg-white/5 text-ink')}
+              >
                 <Identifier variant="muted">{project.key}</Identifier>
-              </ListItemIcon>
-              <ListItemText slotProps={{ primary: { variant: 'body2' } }}>{project.name}</ListItemText>
-            </MenuItem>
-          ))}
-        </Menu>
-      </Box>
+                <span>{project.name}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     );
   }
 
   return (
-    <Box sx={{ px: 1.5, py: 1.5 }}>
-      <Typography
-        variant="caption"
-        component="label"
-        htmlFor="project-switcher"
-        sx={{ display: 'block', color: 'text.secondary', mb: 0.5 }}
-      >
+    <div className="px-3 py-3">
+      <label htmlFor="project-switcher" className="mb-1 block text-xs text-ink-3">
         Project
-      </Typography>
-      <Select
-        native
-        id="project-switcher"
-        size="small"
-        fullWidth
-        value={activeProjectId ?? ''}
-        onChange={(event) => go(event.target.value)}
-        data-testid="Nav.ProjectSwitcher"
-      >
-        {projects.map((project) => (
-          <option key={project.id} value={project.id}>
-            {project.name}
-          </option>
-        ))}
+      </label>
+      <Select value={activeProjectId ?? ''} onValueChange={go}>
+        <SelectTrigger id="project-switcher" data-testid="Nav.ProjectSwitcher">
+          <SelectValue placeholder="Select a project" />
+        </SelectTrigger>
+        <SelectContent>
+          {projects.map((project) => (
+            <SelectItem key={project.id} value={project.id}>
+              {project.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
       </Select>
-    </Box>
+    </div>
   );
 }
 
@@ -932,41 +905,26 @@ function RailLink({
       */
       aria-label={collapsed ? item.label : undefined}
       data-testid={`Nav.Link.${item.label.replace(/[^A-Za-z]/g, '')}`}
-      style={{ textDecoration: 'none' }}
+      className="block no-underline"
     >
       {({ isActive }) => (
-        <Box
+        <div
           aria-current={isActive ? 'page' : undefined}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: collapsed ? 'center' : 'flex-start',
-            gap: collapsed ? 0 : 1.25,
-            px: collapsed ? 0 : 2,
-            py: 0.875,
-            position: 'relative',
-            color: isActive ? 'primary.main' : 'text.primary',
-            fontWeight: isActive ? 600 : 400,
-            fontSize: '0.875rem',
-            bgcolor: isActive ? 'action.selected' : 'transparent',
-            '&:hover': { bgcolor: 'action.hover' },
-            '&::before': isActive
-              ? {
-                  content: '""',
-                  position: 'absolute',
-                  left: 0,
-                  top: 6,
-                  bottom: 6,
-                  width: 3,
-                  borderRadius: '0 2px 2px 0',
-                  bgcolor: 'primary.main',
-                }
-              : undefined,
-          }}
+          className={cn(
+            'relative flex items-center py-[7px] text-[13px]',
+            collapsed ? 'justify-center gap-0 px-0' : 'justify-start gap-2.5 px-4',
+            isActive ? 'bg-steel/12 font-medium text-ink' : 'text-ink-2 hover:bg-white/4',
+          )}
         >
-          <Box sx={{ display: 'flex', color: isActive ? 'primary.main' : 'text.secondary' }}>{item.icon}</Box>
+          {isActive && (
+            <span
+              aria-hidden
+              className="absolute left-0 top-[6px] bottom-[6px] w-[3px] rounded-r-sm bg-steel"
+            />
+          )}
+          <span className={cn('flex', isActive ? 'text-steel' : 'text-ink-3')}>{item.icon}</span>
           {!collapsed && item.label}
-        </Box>
+        </div>
       )}
     </NavLink>
   );
@@ -977,8 +935,9 @@ function RailLink({
     across the whole rail.
   */
   return collapsed ? (
-    <Tooltip title={item.label} placement="right">
-      {link}
+    <Tooltip>
+      <TooltipTrigger asChild>{link}</TooltipTrigger>
+      <TooltipContent side="right">{item.label}</TooltipContent>
     </Tooltip>
   ) : (
     link
@@ -990,7 +949,6 @@ function RailLink({
 function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
   const { user, logout } = useAuth();
   const { mode, systemMode, setMode } = useColorScheme();
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
 
   /**
    * The toggle must reflect the scheme the user is *looking at*, not the stored setting.
@@ -1002,126 +960,89 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
   const isDark = mode === 'dark' || (mode === 'system' && systemMode === 'dark');
 
   return (
-    <Box
-      component="header"
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        px: { xs: 1, md: 2 },
-        height: 52,
-        flexShrink: 0,
-        borderBottom: '1px solid',
-        borderColor: 'divider',
-        bgcolor: 'background.paper',
-        position: 'sticky',
-        top: 0,
-        zIndex: 10,
-      }}
-    >
-      <IconButton
+    <header className="sticky top-0 z-10 flex h-[52px] shrink-0 items-center gap-1 border-b border-white/8 bg-paper px-2 md:px-4">
+      <Button
+        variant="quiet"
+        size="icon"
         onClick={onOpenNav}
         aria-label="Open navigation"
         data-testid="Nav.HamburgerButton"
-        sx={{ display: { xs: 'inline-flex', md: 'none' } }}
+        className="inline-flex md:hidden"
       >
-        <MenuIcon />
-      </IconButton>
-
-      <Box sx={{ flex: 1 }} />
-
-      <Tooltip title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}>
-        <IconButton
-          onClick={() => setMode(isDark ? 'light' : 'dark')}
-          aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
-          data-testid="TopBar.ThemeToggle"
-          size="small"
-        >
-          {isDark ? <LightModeOutlinedIcon fontSize="small" /> : <DarkModeOutlinedIcon fontSize="small" />}
-        </IconButton>
-      </Tooltip>
-
-      <Button
-        onClick={(event) => setAnchor(event.currentTarget)}
-        data-testid="TopBar.UserMenuButton"
-        size="small"
-        sx={{ color: 'text.primary' }}
-        aria-haspopup="menu"
-        aria-expanded={anchor ? 'true' : undefined}
-      >
-        {user?.displayName ?? 'Account'}
+        <MenuIcon className="size-4" />
       </Button>
 
-      <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
-        <Box sx={{ px: 2, py: 1, minWidth: 200 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {user?.displayName}
-          </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {user?.email}
-          </Typography>
-        </Box>
-        <Divider />
-        {/* The account's own sign-in identities (V58) — self-service, so no gate. */}
-        <MenuItem
-          component={RouterLink}
-          to="/account/security"
-          onClick={() => setAnchor(null)}
-          data-testid="TopBar.SecurityLink"
-        >
-          <ListItemIcon>
-            <ShieldOutlinedIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText slotProps={{ primary: { variant: 'body2' } }}>Security</ListItemText>
-        </MenuItem>
-        {/*
-          The account's own tracker credentials (004 D2) — beside Security, self-service, no gate.
+      <div className="flex-1" />
 
-          **Not in the rail**, and that is the D2 inversion made visible: everything in the rail is
-          scoped by the project switcher, and a tracker connection is not — one credential serves
-          every project bound to that host. Putting it under `Project` would teach exactly the
-          per-project reading the plan inverted the model to avoid.
-        */}
-        <MenuItem
-          component={RouterLink}
-          to="/account/trackers"
-          onClick={() => setAnchor(null)}
-          data-testid="TopBar.TrackersLink"
-        >
-          <ListItemIcon>
-            <BugReportOutlinedIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText slotProps={{ primary: { variant: 'body2' } }}>
-            Tracker connections
-          </ListItemText>
-        </MenuItem>
-        {/*
-          The user guide (§252). Beside Security rather than in the rail: the rail's every item is
-          a place in the *product* — a project's cases, a company's teams — and its grouping tells
-          the reader whether the project switcher changes what they are looking at. Help is about
-          the product rather than a place in it, so it belongs with the two other entries whose
-          subject is the session itself. The footer link below is the second, more discoverable
-          door.
-        */}
-        <MenuItem
-          component={RouterLink}
-          to="/help"
-          onClick={() => setAnchor(null)}
-          data-testid="TopBar.HelpLink"
-        >
-          <ListItemIcon>
-            <HelpOutlineOutlinedIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText slotProps={{ primary: { variant: 'body2' } }}>Help &amp; documentation</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={logout} data-testid="TopBar.SignOutButton">
-          <ListItemIcon>
-            <LogoutIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText slotProps={{ primary: { variant: 'body2' } }}>Sign out</ListItemText>
-        </MenuItem>
-      </Menu>
-    </Box>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="quiet"
+            size="icon"
+            onClick={() => setMode(isDark ? 'light' : 'dark')}
+            aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+            data-testid="TopBar.ThemeToggle"
+          >
+            {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{isDark ? 'Switch to light theme' : 'Switch to dark theme'}</TooltipContent>
+      </Tooltip>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="quiet" size="sm" data-testid="TopBar.UserMenuButton" className="text-ink">
+            {user?.displayName ?? 'Account'}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <div className="px-2 py-1.5">
+            <p className="m-0 text-[13px] font-semibold text-ink">{user?.displayName}</p>
+            <p className="m-0 text-xs text-ink-3">{user?.email}</p>
+          </div>
+          <div className="my-1 h-px bg-white/8" />
+          {/* The account's own sign-in identities (V58) — self-service, so no gate. */}
+          <DropdownMenuItem asChild>
+            <RouterLink to="/account/security" data-testid="TopBar.SecurityLink">
+              <Shield className="size-4" />
+              <span>Security</span>
+            </RouterLink>
+          </DropdownMenuItem>
+          {/*
+            The account's own tracker credentials (004 D2) — beside Security, self-service, no gate.
+
+            **Not in the rail**, and that is the D2 inversion made visible: everything in the rail is
+            scoped by the project switcher, and a tracker connection is not — one credential serves
+            every project bound to that host. Putting it under `Project` would teach exactly the
+            per-project reading the plan inverted the model to avoid.
+          */}
+          <DropdownMenuItem asChild>
+            <RouterLink to="/account/trackers" data-testid="TopBar.TrackersLink">
+              <Bug className="size-4" />
+              <span>Tracker connections</span>
+            </RouterLink>
+          </DropdownMenuItem>
+          {/*
+            The user guide (§252). Beside Security rather than in the rail: the rail's every item is
+            a place in the *product* — a project's cases, a company's teams — and its grouping tells
+            the reader whether the project switcher changes what they are looking at. Help is about
+            the product rather than a place in it, so it belongs with the two other entries whose
+            subject is the session itself. The footer link below is the second, more discoverable
+            door.
+          */}
+          <DropdownMenuItem asChild>
+            <RouterLink to="/help" data-testid="TopBar.HelpLink">
+              <HelpCircle className="size-4" />
+              <span>Help &amp; documentation</span>
+            </RouterLink>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={logout} data-testid="TopBar.SignOutButton">
+            <LogOut className="size-4" />
+            <span>Sign out</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </header>
   );
 }
 
@@ -1142,30 +1063,22 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
  */
 function AppFooter() {
   return (
-    <Box
-      component="footer"
+    <footer
       data-testid="AppFooter"
-      sx={{
-        px: { xs: 2, md: 4 },
-        py: 2,
-        borderTop: '1px solid',
-        borderColor: 'divider',
-        color: 'text.secondary',
-      }}
+      className="border-t border-white/8 px-2 py-2 text-ink-3 md:px-4"
     >
-      <Stack direction="row" sx={{ gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Typography variant="caption">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs">
           TCMS <Identifier variant="muted">{__APP_VERSION__}</Identifier>
-        </Typography>
-        <Link
-          component={RouterLink}
+        </span>
+        <RouterLink
           to="/help"
-          variant="caption"
           data-testid="AppFooter.HelpLink"
+          className="text-xs text-steel underline-offset-4 hover:underline"
         >
           Documentation
-        </Link>
-      </Stack>
-    </Box>
+        </RouterLink>
+      </div>
+    </footer>
   );
 }
