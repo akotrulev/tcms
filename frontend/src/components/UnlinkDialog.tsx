@@ -1,14 +1,13 @@
+import { useEffect } from 'react';
+import { Banner } from './kit';
 import {
-  Alert,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  Stack,
-} from '@mui/material';
-import { useEffect } from 'react';
+} from './ui';
 import { describeError } from '../lib/describeError';
 
 /**
@@ -81,38 +80,45 @@ export function UnlinkDialog({
   }, [open, target, reset]);
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs" data-testid={testId}>
-      <DialogTitle>Remove this link?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2}>
-          <DialogContentText data-testid={`${testId}.Target`}>{target}</DialogContentText>
-          <DialogContentText variant="body2">{consequence}</DialogContentText>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-sm" data-testid={testId}>
+        <DialogHeader>
+          <DialogTitle>Remove this link?</DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-4 flex flex-col gap-4">
+          <p className="m-0 text-ink" data-testid={`${testId}.Target`}>
+            {target}
+          </p>
+          <p className="m-0 text-sm text-ink-2">{consequence}</p>
           {/*
             The failure stays on the dialog rather than going to the corner: the refusal this can
             produce is a 403 or a 404 about the row the reader just clicked, and a toast detaches
             the sentence from the thing it is about — `CaseDeleteDialog` records the same call.
           */}
           {error != null && (
-            <Alert severity="error" role="alert" data-testid={`${testId}.Error`}>
-              {describeError(error).body}
-            </Alert>
+            <div data-testid={`${testId}.Error`}>
+              <Banner tone="bad">
+                <span role="alert">{describeError(error).body}</span>
+              </Banner>
+            </div>
           )}
-        </Stack>
+        </div>
+
+        <DialogFooter>
+          <Button variant="quiet" onClick={onClose} data-testid={`${testId}.Cancel`}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            disabled={pending}
+            onClick={onConfirm}
+            data-testid={`${testId}.Confirm`}
+          >
+            {pending ? 'Removing…' : 'Remove link'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid={`${testId}.Cancel`}>
-          Cancel
-        </Button>
-        <Button
-          color="error"
-          variant="contained"
-          disabled={pending}
-          onClick={onConfirm}
-          data-testid={`${testId}.Confirm`}
-        >
-          {pending ? 'Removing…' : 'Remove link'}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

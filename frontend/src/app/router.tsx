@@ -1,4 +1,4 @@
-import { Box, Skeleton, Stack } from '@mui/material';
+import { Skeleton } from '../components/ui';
 import { Suspense, lazy } from 'react';
 import { Navigate, Outlet, Route, Routes, useMatch } from 'react-router-dom';
 import { AppShell } from './AppShell';
@@ -176,11 +176,11 @@ const AuditLogPage = lazy(() =>
 /** Route-level fallback, shaped like a page so the shell doesn't jump while a chunk loads. */
 function RouteFallback() {
   return (
-    <Stack sx={{ gap: 2 }} data-testid="Route.Loading" aria-busy="true">
-      <Skeleton variant="text" width={240} height={40} />
-      <Skeleton variant="rounded" height={120} />
-      <Skeleton variant="rounded" height={320} />
-    </Stack>
+    <div className="flex flex-col gap-4" data-testid="Route.Loading" aria-busy="true">
+      <Skeleton className="h-10 w-60 rounded" />
+      <Skeleton className="h-[120px] rounded" />
+      <Skeleton className="h-[320px] rounded" />
+    </div>
   );
 }
 
@@ -835,9 +835,9 @@ function AppRoutes() {
       <Route
         path="*"
         element={
-          <Box sx={{ p: 4 }}>
+          <div className="p-8">
             <NotFoundPage />
-          </Box>
+          </div>
         }
       />
     </Routes>

@@ -1,13 +1,12 @@
+import { Banner } from '../../components/kit';
 import {
-  Alert,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  Stack,
-} from '@mui/material';
+} from '../../components/ui';
 import { useEffect } from 'react';
 import { useDeletePlan } from '../../api/queries';
 import { describeError } from '../../lib/describeError';
@@ -51,34 +50,36 @@ export function PlanDeleteDialog({
   }, [open, planId, reset]);
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs" data-testid="PlanStats.DeleteDialog">
-      <DialogTitle>Delete this test plan?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2}>
-          <DialogContentText>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-sm" data-testid="PlanStats.DeleteDialog">
+      <DialogHeader>
+          <DialogTitle>Delete this test plan?</DialogTitle>
+        </DialogHeader>
+      <div className="mt-4 flex flex-col gap-4">
+          <p className="m-0 text-ink">
             The plan and its scope will be removed. The suites and cases it covers are not touched.
-          </DialogContentText>
+          </p>
           {/*
             Not "this cannot be undone" — the delete is soft and the row survives — but nothing in
             the product brings the plan back, which is the part the reader has to act on.
           */}
-          <DialogContentText variant="body2">
+          <p className="m-0 text-sm text-ink-2">
             A plan that runs were executed against cannot be deleted; close it instead.
-          </DialogContentText>
+          </p>
           {remove.isError && (
-            <Alert severity="error" role="alert" data-testid="PlanStats.DeleteDialog.Error">
+            <div data-testid="PlanStats.DeleteDialog.Error">
+            <Banner tone="bad"><span role="alert">
               {describeError(remove.error).body}
-            </Alert>
+            </span></Banner>
+          </div>
           )}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
+        </div>
+      <DialogFooter>
         <Button onClick={onClose} data-testid="PlanStats.DeleteDialog.Cancel">
           Cancel
         </Button>
         <Button
-          color="error"
-          variant="contained"
+          variant="danger"
           disabled={remove.isPending}
           data-testid="PlanStats.DeleteDialog.Confirm"
           onClick={() => {
@@ -92,7 +93,8 @@ export function PlanDeleteDialog({
         >
           {remove.isPending ? 'Deleting…' : 'Delete plan'}
         </Button>
-      </DialogActions>
+      </DialogFooter>
+    </DialogContent>
     </Dialog>
   );
 }

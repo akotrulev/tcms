@@ -1,4 +1,3 @@
-import { Box } from '@mui/material';
 import type { ReactNode } from 'react';
 
 /**
@@ -16,10 +15,11 @@ import type { ReactNode } from 'react';
  * the eight tables in this app are the things that need to scroll. Wrapping at the table also
  * keeps the panel's title row still while the columns move under it.
  *
- * `overflowX: 'auto'` forces the computed `overflow-y` to `auto` as well — that is CSS, not a
+ * `overflow-x: auto` forces the computed `overflow-y` to `auto` as well — that is CSS, not a
  * choice — so this is deliberately used around content that grows sideways, never around a
- * region with its own vertical scrolling (the DataGrid manages its own, and must not be wrapped).
+ * region with its own vertical scrolling (~~the DataGrid manages its own~~ → superseded: the
+ * grid is TanStack Table since T9, and it too must not be wrapped).
  */
 export function ScrollX({ children }: { children: ReactNode }) {
-  return <Box sx={{ overflowX: 'auto', maxWidth: '100%' }}>{children}</Box>;
+  return <div className="max-w-full overflow-x-auto">{children}</div>;
 }

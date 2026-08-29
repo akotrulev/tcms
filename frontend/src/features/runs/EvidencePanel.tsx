@@ -1,16 +1,12 @@
+import { Trash2, Upload } from 'lucide-react';
 /** Evidence on an execution — the strip of attachments, and the control that adds one. */
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
+import { Banner } from '../../components/kit';
 import {
-  Alert,
-  Box,
   Button,
-  IconButton,
-  Link,
-  Stack,
   Tooltip,
-  Typography,
-} from '@mui/material';
+  TooltipContent,
+  TooltipTrigger,
+} from '../../components/ui';
 import { useRef, useState } from 'react';
 import { MAX_EVIDENCE_BYTES, useAttachEvidence, useDeleteEvidence } from '../../api/queries';
 import type { Evidence } from '../../api/types';
@@ -78,19 +74,22 @@ export function EvidencePanel({
       actions={
         <PermissionGate projectId={projectId} permission="evidence:attach">
           {({ allowed, reason }) => (
-            <Tooltip title={frozen ? FROZEN_REASON : allowed ? '' : reason}>
+            <Tooltip>
+<TooltipTrigger asChild>
               <span>
                 <Button
-                  size="small"
-                  startIcon={<UploadFileIcon />}
+                  size="sm"
                   disabled={!allowed || attach.isPending || frozen}
                   onClick={() => input.current?.click()}
                   data-testid="Execution.Evidence.Attach"
                 >
+                  <Upload aria-hidden className="size-3.5" />
                   {attach.isPending ? 'Uploading…' : 'Attach'}
                 </Button>
               </span>
-            </Tooltip>
+            </TooltipTrigger>
+<TooltipContent>{frozen ? FROZEN_REASON : allowed ? '' : reason}</TooltipContent>
+</Tooltip>
           )}
         </PermissionGate>
       }
@@ -110,22 +109,26 @@ export function EvidencePanel({
       />
 
       {tooLarge && (
-        <Alert severity="warning" sx={{ mb: 2 }} data-testid="Execution.Evidence.TooLarge">
+        <div data-testid="Execution.Evidence.TooLarge">
+<Banner tone="warn">
           {tooLarge}
-        </Alert>
+        </Banner>
+</div>
       )}
       {attach.isError && (
-        <Alert severity="error" sx={{ mb: 2 }} data-testid="Execution.Evidence.Error">
+        <div data-testid="Execution.Evidence.Error">
+<Banner tone="bad">
           {describeError(attach.error).body}
-        </Alert>
+        </Banner>
+</div>
       )}
 
       {evidence.length === 0 ? (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        <p className="m-0 text-sm text-ink-2">
           No screenshots or logs attached yet.
-        </Typography>
+        </p>
       ) : (
-        <Stack sx={{ gap: 1 }} data-testid="Execution.Evidence.List">
+        <div className="flex flex-col gap-2" data-testid="Execution.Evidence.List">
           {evidence.map((item) => (
             <EvidenceRow
               key={item.id}
@@ -136,7 +139,7 @@ export function EvidencePanel({
               frozen={frozen}
             />
           ))}
-        </Stack>
+        </div>
       )}
     </Panel>
   );
@@ -159,49 +162,31 @@ function EvidenceRow({
   const isImage = item.contentType.startsWith('image/');
 
   return (
-    <Stack
-      direction="row"
-      sx={{ alignItems: 'center', gap: 1.5 }}
-      data-testid="Execution.Evidence.Row"
-    >
+    <div className="flex items-center gap-3" data-testid="Execution.Evidence.Row">
       {isImage && (
-        <Box
-          component="img"
-          src={item.url}
-          alt=""
-          sx={{
-            width: 48,
-            height: 48,
-            objectFit: 'cover',
-            borderRadius: 1,
-            border: '1px solid',
-            borderColor: 'divider',
-            flexShrink: 0,
-          }}
-        />
+        <img className="object-cover rounded-lg border border-white/8 shrink-0" style={{ width: 48, height: 48 }} src={item.url} alt="" />
       )}
-      <Stack sx={{ minWidth: 0, flex: 1 }}>
-        <Link
+      <div className="flex flex-col min-w-0 flex-1">
+        <a
           href={item.url}
           target="_blank"
           rel="noreferrer"
-          variant="body2"
-          sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+          className="overflow-hidden text-ellipsis whitespace-nowrap text-sm text-steel underline-offset-4 hover:underline"
           data-testid="Execution.Evidence.Link"
         >
           {item.filename}
-        </Link>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+        </a>
+        <span className="m-0 text-xs text-ink-2">
           {formatBytes(item.sizeBytes)}
           {item.createdBy ? ` · ${item.createdBy.displayName}` : ''}
           {` · ${formatDateTime(item.createdAt)}`}
-        </Typography>
+        </span>
         {item.caption && (
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          <span className="m-0 text-xs text-ink-2">
             {item.caption}
-          </Typography>
+          </span>
         )}
-      </Stack>
+      </div>
 
       {/*
         ~~`authorId` is what makes this an OWN-qualified gate: `evidence:delete` is held outright by
@@ -221,21 +206,23 @@ function EvidenceRow({
         authorId={item.createdBy?.id ?? null}
       >
         {({ allowed, reason }) => (
-          <Tooltip title={frozen ? FROZEN_REASON : allowed ? 'Remove' : reason}>
+          <Tooltip>
+<TooltipTrigger asChild>
             <span>
-              <IconButton
-                size="small"
+              <Button variant="quiet" size="icon"
                 disabled={!allowed || deleting || frozen}
                 onClick={onDelete}
                 aria-label={`Remove ${item.filename}`}
                 data-testid="Execution.Evidence.Delete"
               >
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
+                <Trash2 aria-hidden className="size-4" />
+              </Button>
             </span>
-          </Tooltip>
+          </TooltipTrigger>
+<TooltipContent>{frozen ? FROZEN_REASON : allowed ? 'Remove' : reason}</TooltipContent>
+</Tooltip>
         )}
       </PermissionGate>
-    </Stack>
+    </div>
   );
 }

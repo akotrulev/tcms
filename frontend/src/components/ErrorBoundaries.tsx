@@ -1,4 +1,5 @@
-import { Alert, AlertTitle, Box, Button, Stack, Typography } from '@mui/material';
+import { Banner } from './kit';
+import { Button } from './ui';
 import { ErrorBoundary, type FallbackProps } from 'react-error-boundary';
 import { useEffect, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -61,24 +62,23 @@ function useSkewRecovery(error: unknown): 'recovering' | 'manual' | 'not-skew' {
 /** The stale-build fallback, shared by every tier. */
 function SkewFallback({ mode, testId }: { mode: 'recovering' | 'manual'; testId: string }) {
   return (
-    <Alert severity="info" data-testid={`${testId}.Skew`} sx={{ my: 2 }}>
-      <AlertTitle sx={{ fontSize: '0.875rem', fontWeight: 600 }}>A newer version is available</AlertTitle>
-      <Typography variant="body2" sx={{ mb: 1.5 }}>
-        {mode === 'recovering'
-          ? 'Reloading to pick up the latest version…'
-          : 'This tab has been open since an earlier release. Reload to continue.'}
-      </Typography>
-      {mode === 'manual' && (
-        <Button
-          size="small"
-          variant="outlined"
-          onClick={reloadOntoCurrentBuild}
-          data-testid={`${testId}.Skew.Reload`}
-        >
-          Reload
-        </Button>
-      )}
-    </Alert>
+    <div className="my-4" data-testid={`${testId}.Skew`}>
+      <Banner tone="steel">
+        <div className="min-w-0">
+          <p className="m-0 text-sm font-semibold text-ink">A newer version is available</p>
+          <p className={mode === 'manual' ? 'mt-1 mb-3' : 'mt-1 mb-0'}>
+            {mode === 'recovering'
+              ? 'Reloading to pick up the latest version…'
+              : 'This tab has been open since an earlier release. Reload to continue.'}
+          </p>
+          {mode === 'manual' && (
+            <Button size="sm" onClick={reloadOntoCurrentBuild} data-testid={`${testId}.Skew.Reload`}>
+              Reload
+            </Button>
+          )}
+        </div>
+      </Banner>
+    </div>
   );
 }
 
@@ -92,40 +92,40 @@ function RootFallback({ error, resetErrorBoundary }: FallbackProps) {
   const skew = useSkewRecovery(error);
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'grid',
-        placeItems: 'center',
-        p: 3,
-        // Deliberately not themed: this boundary catches failures in the providers themselves,
-        // so the theme may be exactly what is broken. Plain system styling always renders.
-      }}
-    >
-      <Box sx={{ maxWidth: '52ch' }} data-testid="Root.Error">
+    <div className="grid min-h-screen place-items-center bg-ground p-6">
+      {/*
+        ~~Deliberately not themed: this boundary catches failures in the providers themselves, so
+        the theme may be exactly what is broken. Plain system styling always renders.~~
+        → superseded in T16. The caution was about MUI's `ThemeProvider`, a React provider that
+        this boundary sits *above* — if it threw, anything styled through it rendered unstyled.
+        Tailwind's utilities are a static stylesheet the document has already loaded by the time
+        any of this runs, so they cannot be broken by a provider throwing. The property the
+        original comment wanted is now structural rather than a restraint to remember.
+      */}
+      <div className="max-w-[52ch]" data-testid="Root.Error">
         {skew !== 'not-skew' ? (
           <SkewFallback mode={skew} testId="Root" />
         ) : (
           <>
-            <Typography variant="h4" component="h1" sx={{ mb: 1 }}>
+            <h1 className="m-0 mb-2 text-[19px] font-semibold tracking-[-.018em] text-ink">
               TCMS ran into a problem
-            </Typography>
-            <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            </h1>
+            <p className="mt-0 mb-4 text-sm text-ink-2">
               Something went wrong loading the application. The problem has been reported. Trying
               again is usually enough; if it keeps happening, reload the page.
-            </Typography>
-            <Stack direction="row" sx={{ gap: 1 }}>
-              <Button variant="contained" onClick={resetErrorBoundary} data-testid="Root.Error.Retry">
+            </p>
+            <div className="flex gap-2">
+              <Button variant="primary" onClick={resetErrorBoundary} data-testid="Root.Error.Retry">
                 Try again
               </Button>
-              <Button variant="outlined" onClick={() => window.location.reload()} data-testid="Root.Error.Reload">
+              <Button onClick={() => window.location.reload()} data-testid="Root.Error.Reload">
                 Reload
               </Button>
-            </Stack>
+            </div>
           </>
         )}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
 
@@ -149,16 +149,26 @@ function RouteFallback({ error, resetErrorBoundary }: FallbackProps) {
   if (skew !== 'not-skew') return <SkewFallback mode={skew} testId="Route" />;
 
   return (
-    <Alert severity="error" data-testid="Route.Error" sx={{ my: 2 }}>
-      <AlertTitle sx={{ fontSize: '0.875rem', fontWeight: 600 }}>This page didn't load</AlertTitle>
-      <Typography variant="body2" sx={{ mb: 1.5 }}>
-        Something went wrong rendering this page, and the problem has been reported. The rest of
-        the application still works — you can try again, or use the navigation to go elsewhere.
-      </Typography>
-      <Button size="small" variant="outlined" color="error" onClick={resetErrorBoundary} data-testid="Route.Error.Retry">
-        Try again
-      </Button>
-    </Alert>
+    <div className="my-4" data-testid="Route.Error">
+      <Banner tone="bad">
+        <div className="min-w-0">
+          <p className="m-0 text-sm font-semibold text-ink">This page didn't load</p>
+          <p className="mt-1 mb-3">
+            Something went wrong rendering this page, and the problem has been reported. The rest
+            of the application still works — you can try again, or use the navigation to go
+            elsewhere.
+          </p>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={resetErrorBoundary}
+            data-testid="Route.Error.Retry"
+          >
+            Try again
+          </Button>
+        </div>
+      </Banner>
+    </div>
   );
 }
 
@@ -205,18 +215,22 @@ export function RegionErrorBoundary({
     <ErrorBoundary
       onError={report('region-boundary', { region: testId })}
       fallbackRender={({ resetErrorBoundary }) => (
-        <Alert severity="error" data-testid={`${testId}.RenderError`} sx={{ my: 1 }}>
-          <Typography variant="body2">We couldn't display {label}.</Typography>
-          <Button
-            size="small"
-            color="error"
-            onClick={resetErrorBoundary}
-            data-testid={`${testId}.RenderError.Retry`}
-            sx={{ mt: 0.5 }}
-          >
-            Try again
-          </Button>
-        </Alert>
+        <div className="my-2" data-testid={`${testId}.RenderError`}>
+          <Banner tone="bad">
+            <div className="min-w-0">
+              <p className="m-0">We couldn't display {label}.</p>
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={resetErrorBoundary}
+                data-testid={`${testId}.RenderError.Retry`}
+                className="mt-1"
+              >
+                Try again
+              </Button>
+            </div>
+          </Banner>
+        </div>
       )}
     >
       {children}

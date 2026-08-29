@@ -1,4 +1,5 @@
-import { Box, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
+import { Table, TableBody, TableCell, TableHead, TableRow } from '../../components/kit';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ApiError } from '../../api/client';
@@ -92,21 +93,21 @@ export function ExecutionGrid({
   const suffix = modeParam ? `?mode=${modeParam}` : '';
 
   return (
-    <Box sx={{ flex: 1, minWidth: 0, p: { xs: 2, md: 3 } }}>
-      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1.5 }}>
+    <div>
+      <span className="m-0 text-xs text-ink-2 block mb-3">
         For a pass whose answers you already know. Blocked still asks which precondition failed, so
         it opens the checklist rather than recording in one click.
-      </Typography>
+      </span>
 
-      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper' }}>
+      <div className="border border-white/8 rounded-lg bg-panel">
         <ScrollX>
-          <Table size="small" data-testid="Execution.Grid">
+          <Table data-testid="Execution.Grid">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ color: 'text.secondary', width: 104 }}>Key</TableCell>
-                <TableCell sx={{ color: 'text.secondary' }}>Case</TableCell>
-                <TableCell sx={{ color: 'text.secondary', width: 120 }}>Result</TableCell>
-                <TableCell sx={{ color: 'text.secondary', width: 190 }}>Record</TableCell>
+                <TableCell className="text-ink-2" style={{ width: 104 }}>Key</TableCell>
+                <TableCell className="text-ink-2">Case</TableCell>
+                <TableCell className="text-ink-2" style={{ width: 120 }}>Result</TableCell>
+                <TableCell className="text-ink-2" style={{ width: 190 }}>Record</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -126,8 +127,8 @@ export function ExecutionGrid({
             </TableBody>
           </Table>
         </ScrollX>
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
 
@@ -197,7 +198,7 @@ function GridRow({
     <TableRow
       data-testid={RowTestId}
       hover
-      sx={{ bgcolor: current ? 'action.selected' : 'transparent' }}
+      className={current ? 'bg-white/8' : 'bg-transparent'}
     >
       <TableCell>
         {/* The key goes to the CASE and the title to the EXECUTION — both decided in
@@ -205,7 +206,7 @@ function GridRow({
         <CaseKeyLink execution={execution} projectId={projectId} testId={RowTestId} />
       </TableCell>
       <TableCell>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <div className="flex items-center gap-2">
           <ExecuteCaseLink
             execution={execution}
             projectId={projectId}
@@ -217,32 +218,27 @@ function GridRow({
           {/* Beside the title rather than in the Result column: this is a warning about the
               CASE, and putting it where the verdict goes would read as a verdict. */}
           {execution.quarantined && <QuarantineChip testId={`${RowTestId}.Quarantined`} />}
-        </Box>
+        </div>
         {error && (
-          <Typography
-            variant="caption"
-            sx={{ color: 'var(--color-failed)', display: 'block' }}
-            data-testid={`${RowTestId}.Error`}
-            role="alert"
-          >
+          <span className="m-0 text-xs block" style={{ color: 'var(--color-failed)' }} data-testid={`${RowTestId}.Error`} role="alert">
             {error}
-          </Typography>
+          </span>
         )}
       </TableCell>
       <TableCell>
         {execution.status?.kind ? (
           <StatusChip kind={execution.status.kind} testId={`${RowTestId}.Status`} />
         ) : (
-          <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid={`${RowTestId}.Status`}>
+          <span className="m-0 text-xs text-ink-2" data-testid={`${RowTestId}.Status`}>
             {statusLabels.UNTESTED}
-          </Typography>
+          </span>
         )}
       </TableCell>
       <TableCell>
         {/* Rule 2: the permission the ROW's state implies, resolved per row. */}
         <PermissionGate projectId={projectId} permission={recorded ? 'result:amend' : 'result:submit'}>
           {({ allowed }) => (
-            <Stack direction="row" sx={{ gap: 0.5 }}>
+            <div className="flex gap-1">
               {VERDICTS.map((kind) => {
                 const status = statuses.find((s) => s.kind === kind);
                 if (!status) return null;
@@ -259,47 +255,23 @@ function GridRow({
                       : statusLabels[kind];
 
                 return (
-                  <Tooltip key={kind} title={reason}>
+                  <Tooltip key={kind}>
+<TooltipTrigger asChild>
                     {/* A disabled button fires no events, so the tooltip needs the wrapper. */}
-                    <Box component="span" sx={{ display: 'inline-flex' }}>
-                      <Box
-                        component="button"
-                        type="button"
-                        disabled={disabled}
-                        aria-pressed={selected}
-                        aria-label={`Record ${execution.caseKey} as ${statusLabels[kind]}`}
-                        data-testid={`${RowTestId}.Mark.${kind}`}
-                        onClick={() =>
+                    <span className="inline-flex">
+                      <button type="button" disabled={disabled} aria-pressed={selected} aria-label={`Record ${execution.caseKey} as ${statusLabels[kind]}`} data-testid={`${RowTestId}.Mark.${kind}`} onClick={() =>
                           // Rule 1: Blocked goes to the dialog, never straight to the wire.
                           kind === 'BLOCKED' ? onBlockedRequested(execution) : void mark(status.id)
-                        }
-                        sx={{
-                          font: 'inherit',
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '0.6875rem',
-                          fontWeight: 600,
-                          width: 30,
-                          height: 24,
-                          display: 'grid',
-                          placeItems: 'center',
-                          borderRadius: 0.5,
-                          border: '1px solid',
-                          cursor: disabled ? 'not-allowed' : 'pointer',
-                          opacity: disabled ? 0.5 : 1,
-                          borderColor: selected ? `var(--color-${kind.toLowerCase()})` : 'divider',
-                          color: selected ? `var(--color-${kind.toLowerCase()})` : 'text.secondary',
-                          bgcolor: selected
-                            ? `color-mix(in srgb, var(--color-${kind.toLowerCase()}) 12%, transparent)`
-                            : 'transparent',
-                        }}
-                      >
+                        }>
                         {statusLabels[kind].charAt(0)}
-                      </Box>
-                    </Box>
-                  </Tooltip>
+                      </button>
+                    </span>
+                  </TooltipTrigger>
+<TooltipContent>{reason}</TooltipContent>
+</Tooltip>
                 );
               })}
-            </Stack>
+            </div>
           )}
         </PermissionGate>
       </TableCell>

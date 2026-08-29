@@ -1,5 +1,6 @@
-import { Alert, Box, Button, Stack } from '@mui/material';
-import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import { FileText } from 'lucide-react';
+import { Banner } from '../../components/kit';
+import { Button } from '../../components/ui';
 import { useState } from 'react';
 import { fetchArtifact } from '../../api/client';
 import type { IngestionJob } from '../../api/types';
@@ -63,24 +64,25 @@ export function DownloadRawReportButton({
   };
 
   return (
-    <Stack sx={{ gap: 1, alignItems: 'flex-start' }}>
+    <div className="flex flex-col items-start gap-2">
       {error && (
-        <Alert severity="error" role="alert" data-testid={`${testId}.Error`}>
-          {error}
-        </Alert>
+        <div data-testid={`${testId}.Error`}>
+          <Banner tone="bad">
+            <span role="alert">{error}</span>
+          </Banner>
+        </div>
       )}
-      <Box>
+      <div>
         <Button
-          size="small"
-          variant="outlined"
-          startIcon={<DescriptionOutlinedIcon />}
+          size="sm"
           disabled={downloading}
           onClick={() => void download()}
           data-testid={testId}
         >
+          <FileText aria-hidden className="size-3.5" />
           {downloading ? 'Downloading…' : 'Download the posted report'}
         </Button>
-      </Box>
-    </Stack>
+      </div>
+    </div>
   );
 }

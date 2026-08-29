@@ -1,5 +1,5 @@
-import { Box, Stack, Tooltip, Typography } from '@mui/material';
 import type { Criterion } from '../api/types';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui';
 import { criterionColor, criterionState, criterionStateLabel } from '../lib/results';
 
 /**
@@ -74,9 +74,9 @@ export function CriteriaStrip({
 
   if (criteria.length === 0) {
     return (
-      <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid={`${composedTestId}.Empty`}>
+      <span className="text-xs text-ink-2" data-testid={`${composedTestId}.Empty`}>
         {emptyLabel}
-      </Typography>
+      </span>
     );
   }
 
@@ -107,8 +107,8 @@ export function CriteriaStrip({
         : `${met} of ${evaluated} met · ${criteria.length - evaluated} not evaluated`;
 
   return (
-    <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }} data-testid={composedTestId}>
-      <Stack direction="row" aria-hidden="true" sx={{ gap: 0.5, flexShrink: 0 }}>
+    <div className="flex min-w-0 items-center gap-2" data-testid={composedTestId}>
+      <div aria-hidden="true" className="flex shrink-0 gap-1">
         {criteria.map((criterion, index) => {
           const state = states[index];
           return (
@@ -117,33 +117,31 @@ export function CriteriaStrip({
               // the index is part of the key rather than the whole of it being the metric.
               // (`PlanStatisticsPage.ExitCriteria` keys the same list the same way.)
               key={`${criterion.metric}-${index}`}
-              title={`${criterion.label} — ${criterionStateLabel(state)}`}
             >
-              <Box
-                data-testid={`${composedTestId}.Mark`}
-                sx={{
-                  width: 14,
-                  height: 4,
-                  borderRadius: 0.5,
-                  flexShrink: 0,
-                  bgcolor: criterionColor(state),
-                  // A grey mark on a grey row is invisible at 4px, and "invisible" would read as
-                  // "this plan has no criteria" — the one thing the strip exists to deny.
-                  outline: state === 'NOT_EVALUATED' ? '1px solid var(--color-border)' : 'none',
-                  outlineOffset: -1,
-                }}
-              />
+              <TooltipTrigger asChild>
+                <span
+                  data-testid={`${composedTestId}.Mark`}
+                  className="h-1 w-3.5 shrink-0 rounded-[2px]"
+                  style={{
+                    backgroundColor: criterionColor(state),
+                    // A grey mark on a grey row is invisible at 4px, and "invisible" would read
+                    // as "this plan has no criteria" — the one thing the strip exists to deny.
+                    outline: state === 'NOT_EVALUATED' ? '1px solid var(--color-border)' : 'none',
+                    outlineOffset: -1,
+                  }}
+                />
+              </TooltipTrigger>
+              <TooltipContent>{`${criterion.label} — ${criterionStateLabel(state)}`}</TooltipContent>
             </Tooltip>
           );
         })}
-      </Stack>
-      <Typography
-        variant="caption"
-        sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}
+      </div>
+      <span
+        className="text-xs whitespace-nowrap text-ink-2"
         data-testid={`${composedTestId}.Summary`}
       >
         {summary}
-      </Typography>
-    </Stack>
+      </span>
+    </div>
   );
 }

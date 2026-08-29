@@ -1,5 +1,3 @@
-import { Box } from '@mui/material';
-
 /**
  * Skip-to-content link.
  *
@@ -9,39 +7,19 @@ import { Box } from '@mui/material';
  *
  * Hidden until focused — the standard treatment. It is positioned off-screen rather than
  * `display: none`, because a hidden-by-display element cannot be focused and so could never
- * reveal itself.
+ * reveal itself. `translate-y` rather than `top` so no layout is affected.
+ *
+ * Both `focus` and `focus-visible` are honoured: some browsers give a fragment link `:focus`
+ * without `:focus-visible`, and a link that is focused but invisible is worse than no link.
  */
 export function SkipToContentLink() {
   return (
-    <Box
-      component="a"
+    <a
       href="#main-content"
       data-testid="SkipToContent"
-      sx={{
-        position: 'absolute',
-        zIndex: 1400,
-        top: 8,
-        left: 8,
-        px: 2,
-        py: 1,
-        borderRadius: 1,
-        bgcolor: 'primary.main',
-        color: 'primary.contrastText',
-        fontSize: '0.875rem',
-        fontWeight: 600,
-        textDecoration: 'none',
-        // Off-screen until focused. `transform` rather than `top` so no layout is affected.
-        transform: 'translateY(-200%)',
-        '&:focus-visible': { transform: 'translateY(0)' },
-        // Some browsers give a fragment link :focus without :focus-visible; honour both so the
-        // link cannot end up focused-but-invisible, which is worse than not having it.
-        '&:focus': { transform: 'translateY(0)' },
-        '@media (prefers-reduced-motion: no-preference)': {
-          transition: 'transform 120ms ease-out',
-        },
-      }}
+      className="absolute top-2 left-2 z-1400 -translate-y-[200%] rounded bg-steel px-4 py-2 text-sm font-semibold text-white no-underline focus:translate-y-0 focus-visible:translate-y-0 motion-safe:transition-transform motion-safe:duration-120 motion-safe:ease-out"
     >
       Skip to content
-    </Box>
+    </a>
   );
 }

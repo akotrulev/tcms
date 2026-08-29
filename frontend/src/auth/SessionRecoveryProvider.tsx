@@ -1,15 +1,13 @@
+import { Banner } from '../components/kit';
 import {
-  Alert,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+  Input,
+} from '../components/ui';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../api/client';
@@ -183,58 +181,68 @@ export function SessionRecoveryProvider({ children }: { children: ReactNode }) {
         session is restored, so dismissing it would leave the user clicking a dead page with no
         explanation. The way out is the explicit "Sign out" button.
       */}
-      <Dialog
-        open={open}
-        maxWidth="xs"
-        fullWidth
-        aria-labelledby="session-expired-title"
-        data-testid="SessionExpired.Dialog"
-      >
-        <form onSubmit={submit}>
-          <DialogTitle id="session-expired-title" sx={{ fontSize: '1.125rem' }}>
-            Your session has expired
-          </DialogTitle>
-          <DialogContent>
-            <DialogContentText sx={{ mb: 2, fontSize: '0.875rem' }}>
+      {/*
+        No `onOpenChange`. This dialog is not dismissible — the session is gone, and every escape
+        hatch it could offer is already on it as a labelled control ("Sign out instead"). Radix
+        would otherwise close it on Escape or an outside click and leave the reader on a page whose
+        every request 401s, with nothing on screen saying why.
+      */}
+      <Dialog open={open}>
+        <DialogContent
+          className="max-w-sm"
+          aria-labelledby="session-expired-title"
+          data-testid="SessionExpired.Dialog"
+          onEscapeKeyDown={(event: KeyboardEvent) => event.preventDefault()}
+          onInteractOutside={(event: Event) => event.preventDefault()}
+        >
+          <form onSubmit={submit}>
+            <DialogHeader>
+              <DialogTitle id="session-expired-title" className="text-lg">
+                Your session has expired
+              </DialogTitle>
+            </DialogHeader>
+
+            <p className="mt-4 mb-4 text-sm text-ink-2">
               Sign in again to continue. <strong>Nothing you have typed has been lost</strong> —
               this page is still exactly where you left it.
-            </DialogContentText>
+            </p>
 
-            {user && (
-              <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-                Signed in as {user.email}
-              </Typography>
-            )}
+            {user && <p className="mt-0 mb-4 text-sm text-ink-2">Signed in as {user.email}</p>}
 
             {formError && (
-              <Alert severity="error" sx={{ mb: 2 }} data-testid="SessionExpired.Error">
-                {formError}
-              </Alert>
+              <div className="mb-4" data-testid="SessionExpired.Error">
+                <Banner tone="bad">
+                  <span role="alert">{formError}</span>
+                </Banner>
+              </div>
             )}
 
-            <TextField
+            <Input
               autoFocus
-              fullWidth
               type="password"
-              label="Password"
-              size="small"
+              aria-label="Password"
+              placeholder="Password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               disabled={submitting}
               data-testid="SessionExpired.Password"
-              slotProps={{ htmlInput: { 'aria-label': 'Password' } }}
+              className="w-full"
             />
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Stack direction="row" sx={{ gap: 1, width: '100%' }}>
-              <Button size="small" onClick={signOut} data-testid="SessionExpired.SignOut">
+
+            <DialogFooter className="mt-5 justify-between">
+              <Button
+                type="button"
+                variant="quiet"
+                size="sm"
+                onClick={signOut}
+                data-testid="SessionExpired.SignOut"
+              >
                 Sign out instead
               </Button>
-              <Stack sx={{ flex: 1 }} />
               <Button
                 type="submit"
-                variant="contained"
-                size="small"
+                variant="primary"
+                size="sm"
                 // The pending state IS the double-submit guard. Two sign-in attempts racing
                 // would write two tokens and leave whichever lost the race in storage.
                 disabled={submitting || password.length === 0}
@@ -242,9 +250,9 @@ export function SessionRecoveryProvider({ children }: { children: ReactNode }) {
               >
                 {submitting ? 'Signing in…' : 'Continue working'}
               </Button>
-            </Stack>
-          </DialogActions>
-        </form>
+            </DialogFooter>
+          </form>
+        </DialogContent>
       </Dialog>
     </SessionRecoveryContext>
   );

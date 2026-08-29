@@ -1,17 +1,14 @@
+import { Badge, Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
-  AlertTitle,
-  Box,
   Button,
-  Chip,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+  Textarea,
+} from '../../components/ui';
 import { useState } from 'react';
 import { ApiError } from '../../api/client';
 import { useCreateCondition, useParseGherkin } from '../../api/queries';
@@ -122,110 +119,100 @@ export function PasteGherkinDialog({
     parse.error instanceof ApiError ? parse.error.fieldErrors?.text?.join(' ') : undefined;
 
   return (
-    <Dialog open={open} onClose={close} maxWidth="md" fullWidth>
-      <DialogTitle data-testid="PasteGherkin.Title">Paste a Gherkin scenario</DialogTitle>
-      <DialogContent>
-        <Stack sx={{ gap: 2, pt: 1 }}>
-          <TextField
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && close()}>
+      <DialogContent className="max-w-2xl">
+      <DialogHeader>
+          <DialogTitle data-testid="PasteGherkin.Title">Paste a Gherkin scenario</DialogTitle>
+        </DialogHeader>
+      <div className="mt-4 flex flex-col gap-4">
+        <div className="flex flex-col gap-4 pt-2">
+          <Field
             label="Scenario"
-            fullWidth
-            multiline
-            minRows={10}
+            htmlFor="scenario"
+            error={refusal}
+            help="A bare step list, a Scenario: block, or a Feature: with a Background and one Scenario."
+          >
+          <Textarea
+            id="scenario"
             value={text}
             onChange={(event) => setText(event.target.value)}
-            error={!!refusal}
-            helperText={
-              refusal
-              ?? 'A bare step list, a Scenario: block, or a Feature: with a Background and one Scenario.'
-            }
-            slotProps={{
-              htmlInput: {
-                'data-testid': 'PasteGherkin.Text',
-                style: { fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', lineHeight: 1.7 },
-              },
-              formHelperText: { role: refusal ? 'alert' : undefined },
-            }}
+            rows={10}
+            aria-invalid={!!refusal}
+            data-testid="PasteGherkin.Text"
           />
+          </Field>
 
           {/* A failure that is NOT one of the four refusals — a timeout, a 404, a 413. The four
               carry their sentence on the field above, so showing both would state one fault twice. */}
           {parse.error && !refusal && (
-            <Alert severity="error" role="alert" data-testid="PasteGherkin.Error">
+            <div data-testid="PasteGherkin.Error">
+            <Banner tone="bad"><span role="alert">
               {describeError(parse.error).body}
-            </Alert>
+            </span></Banner>
+          </div>
           )}
 
           {result && (
-            <Stack sx={{ gap: 2 }} data-testid="PasteGherkin.Result">
-              <Alert severity="success" icon={false}>
-                <AlertTitle>
+            <div className="flex flex-col gap-4" data-testid="PasteGherkin.Result">
+              <div>
+            <Banner tone="steel">
+                <p className="m-0 mb-1 text-sm font-semibold text-ink">
                   {plural(result.steps.length, 'step')} read
                   {result.title ? ` from “${result.title}”` : ''}
-                </AlertTitle>
+                </p>
                 {/* The tags and the objective are shown because the editor merges them, and an
                     author who cannot see what a paste is about to change to their tag list finds
                     out on the version timeline. */}
                 {result.tags.length > 0 && (
-                  <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap', mt: 1 }}>
+                  <div className="flex gap-1 flex-wrap mt-2">
                     {result.tags.map((tag) => (
-                      <Chip key={tag} size="small" label={tag} data-testid="PasteGherkin.Tag" />
+                      <Badge tone="plain" key={tag} data-testid="PasteGherkin.Tag">
+                        {tag}
+                      </Badge>
                     ))}
-                  </Stack>
+                  </div>
                 )}
-              </Alert>
+              </Banner>
+          </div>
 
-              <Box>
+              <div>
                 {result.steps.map((step, index) => (
-                  <Stack
-                    key={index}
-                    direction="row"
-                    sx={{ gap: 1, alignItems: 'baseline' }}
-                    data-testid="PasteGherkin.Step"
-                  >
-                    <Typography
-                      variant="caption"
-                      sx={{ color: 'primary.main', fontWeight: 600, minWidth: 44 }}
-                    >
+                  <div className="flex gap-2 items-baseline" key={index} data-testid="PasteGherkin.Step">
+                    <span className="m-0 text-xs text-steel font-semibold" style={{ minWidth: 44 }}>
                       {/* `*` is Gherkin's own spelling for a step with no keyword, which is what a
                           bare step list parses to — not a blank, which reads as a missing value. */}
                       {step.keyword ? stepKeywordLabels[step.keyword] : '*'}
-                    </Typography>
-                    <Typography variant="body2">{step.action}</Typography>
-                  </Stack>
+                    </span>
+                    <p className="m-0 text-sm">{step.action}</p>
+                  </div>
                 ))}
-              </Box>
+              </div>
 
               {result.background.length > 0 && (
-                <Alert severity="info" icon={false} data-testid="PasteGherkin.Background">
-                  <AlertTitle>
+                <div data-testid="PasteGherkin.Background">
+            <Banner tone="steel">
+                  <p className="m-0 mb-1 text-sm font-semibold text-ink">
                     {plural(result.background.length, 'Background step')} — one precondition each
-                  </AlertTitle>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
+                  </p>
+                  <p className="m-0 text-sm mb-2">
                     A Background is setup every scenario in the file shares, which is what a
                     precondition is here. Each becomes a library entry other cases can attach.
-                  </Typography>
-                  <Stack sx={{ gap: 1 }}>
+                  </p>
+                  <div className="flex flex-col gap-2">
                     {result.background.map((entry, index) => (
-                      <Stack
-                        key={index}
-                        direction="row"
-                        sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap' }}
-                        data-testid="PasteGherkin.Background.Row"
-                      >
+                      <div className="flex gap-2 items-center flex-wrap" key={index} data-testid="PasteGherkin.Background.Row">
                         <Identifier variant="muted">{entry.title}</Identifier>
-                        <Box sx={{ flex: 1 }} />
+                        <div className="flex-1" />
                         {created.includes(index) ? (
-                          <Chip
-                            size="small"
-                            color="success"
-                            label="Attached"
+                          <Badge tone="plain"
                             data-testid="PasteGherkin.Background.Attached"
-                          />
+                          >
+"Attached"</Badge>
                         ) : (
                           <PermissionGate projectId={projectId} permission="library:manage">
                             {({ allowed }) => (
                               <Button
-                                size="small"
+                                size="sm"
                                 disabled={!allowed || createCondition.isPending}
                                 onClick={async () => {
                                   try {
@@ -250,26 +237,22 @@ export function PasteGherkinDialog({
                             )}
                           </PermissionGate>
                         )}
-                      </Stack>
+                      </div>
                     ))}
-                  </Stack>
+                  </div>
                   {createCondition.error && (
-                    <Typography
-                      variant="body2"
-                      role="alert"
-                      sx={{ color: 'error.main', mt: 1 }}
-                      data-testid="PasteGherkin.Background.Error"
-                    >
+                    <p className="m-0 text-sm text-[color:var(--color-failed)] mt-2" role="alert" data-testid="PasteGherkin.Background.Error">
                       {describeError(createCondition.error).body}
-                    </Typography>
+                    </p>
                   )}
-                </Alert>
+                </Banner>
+          </div>
               )}
-            </Stack>
+            </div>
           )}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
+        </div>
+      </div>
+      <DialogFooter>
         <Button onClick={close} data-testid="PasteGherkin.Cancel">
           Cancel
         </Button>
@@ -310,7 +293,8 @@ export function PasteGherkinDialog({
         >
           Replace the steps
         </Button>
-      </DialogActions>
+      </DialogFooter>
+    </DialogContent>
     </Dialog>
   );
 }

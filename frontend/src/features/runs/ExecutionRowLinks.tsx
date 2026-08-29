@@ -1,4 +1,4 @@
-import { Box, Tooltip } from '@mui/material';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui';
 import { Link as RouterLink } from 'react-router-dom';
 import type { TestExecutionSummary } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
@@ -78,15 +78,18 @@ export function CaseKeyLink({
   const label = `Open test case ${execution.caseKey}`;
 
   return (
-    <Tooltip title={label}>
-      <Box
-        component={RouterLink}
-        to={caseHref(projectId, execution.caseId)}
-        aria-label={label}
-        data-testid={`${testId}.CaseLink`}
-      >
-        <Identifier>{execution.caseKey}</Identifier>
-      </Box>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <RouterLink
+          to={caseHref(projectId, execution.caseId)}
+          aria-label={label}
+          data-testid={`${testId}.CaseLink`}
+          className="text-steel underline-offset-4 hover:underline"
+        >
+          <Identifier>{execution.caseKey}</Identifier>
+        </RouterLink>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   );
 }
@@ -116,17 +119,23 @@ export function ExecuteCaseLink({
   testId: string;
 }) {
   return (
-    <Tooltip title={execution.caseTitle}>
-      <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth }}>
-        <Box
-          component={RouterLink}
-          to={executionHref(projectId, runId, execution.id, linkSuffix)}
-          aria-label={`${execution.caseTitle} — record a result for ${execution.caseKey} in this run`}
-          data-testid={`${testId}.Link`}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className="overflow-hidden text-ellipsis whitespace-nowrap"
+          style={maxWidth === undefined ? undefined : { maxWidth }}
         >
-          {execution.caseTitle}
-        </Box>
-      </Box>
+          <RouterLink
+            to={executionHref(projectId, runId, execution.id, linkSuffix)}
+            aria-label={`${execution.caseTitle} — record a result for ${execution.caseKey} in this run`}
+            data-testid={`${testId}.Link`}
+            className="text-steel underline-offset-4 hover:underline"
+          >
+            {execution.caseTitle}
+          </RouterLink>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>{execution.caseTitle}</TooltipContent>
     </Tooltip>
   );
 }

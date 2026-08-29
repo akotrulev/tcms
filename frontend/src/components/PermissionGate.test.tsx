@@ -1,4 +1,3 @@
-import { Button, MenuItem, MenuList } from '@mui/material'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
@@ -16,12 +15,22 @@ import { drivingAFailedRead } from '../test/renderFailures'
  * Both defects §31's browser pass found are locked here, because both were invisible to the
  * build and the linter:
  *
- *   1. **A `Tooltip` wrapped directly around a disabled MUI control never fires** — MUI sets
- *      `pointer-events: none`, so no hover event reaches it and the control greys out and
+ *   1. **A `Tooltip` wrapped directly around a disabled control never fires** — a disabled control
+ *      has `pointer-events: none`, so no hover event reaches it and the control greys out and
  *      explains nothing, which is the *worse* half of the original defect.
- *   2. **`wrapper="block"` inside a `Menu`.** `MenuList` is a plain `<ul>`; an `inline-flex`
+ *   2. **`wrapper="block"` inside a menu.** A menu list is a plain `<ul>`; an `inline-flex`
  *      anchor in it makes the items flow along one line. The suite tree's kebab menu rendered
  *      its three items side by side, and both gates were green while it was unreadable.
+ *
+ * ## What T16 changed about how defect 2 is asserted
+ *
+ * It used to read `getComputedStyle(anchor).display`, which worked because Emotion injected the
+ * `sx` prop into jsdom as a real stylesheet. Tailwind's utilities are compiled into `index.css`
+ * and **jsdom loads no stylesheet**, so that expression now returns `''` for every class this
+ * component could carry — it would pass, or fail, without reference to the code. The assertion is
+ * on the class the wrapper carries instead. That is genuinely weaker: it proves the component
+ * chose `block`, not that `block` laid out as a block. What still holds the layout honest is
+ * `index.css`'s own utility, which is Tailwind's and not this app's to get wrong.
  */
 
 const PROJECT = '11111111-1111-1111-1111-111111111111'
@@ -54,9 +63,9 @@ describe('PermissionGate', () => {
     renderGated(
       <PermissionGate projectId={PROJECT} permission="case:create">
         {({ allowed }) => (
-          <Button disabled={!allowed} data-testid="NewCase">
+          <button type="button" disabled={!allowed} data-testid="NewCase">
             New case
-          </Button>
+          </button>
         )}
       </PermissionGate>,
     )
@@ -70,9 +79,9 @@ describe('PermissionGate', () => {
     renderGated(
       <PermissionGate projectId={PROJECT} permission="case:create">
         {({ allowed }) => (
-          <Button disabled={!allowed} data-testid="NewCase">
+          <button type="button" disabled={!allowed} data-testid="NewCase">
             New case
-          </Button>
+          </button>
         )}
       </PermissionGate>,
     )
@@ -95,9 +104,9 @@ describe('PermissionGate', () => {
     renderGated(
       <PermissionGate projectId={PROJECT} permission="case:delete">
         {({ allowed }) => (
-          <Button disabled={!allowed} data-testid="Delete">
+          <button type="button" disabled={!allowed} data-testid="Delete">
             Delete
-          </Button>
+          </button>
         )}
       </PermissionGate>,
     )
@@ -119,9 +128,9 @@ describe('PermissionGate', () => {
     renderGated(
       <PermissionGate projectId={PROJECT} permission="case:delete">
         {({ allowed }) => (
-          <Button disabled={!allowed} data-testid="Delete">
+          <button type="button" disabled={!allowed} data-testid="Delete">
             Delete
-          </Button>
+          </button>
         )}
       </PermissionGate>,
     )
@@ -136,21 +145,21 @@ describe('PermissionGate', () => {
   })
 
   /**
-   * Defect 2. Asserted as CSS `display` on the anchor rather than as a screenshot: the readable
-   * symptom was three menu items on one line, and the mechanical cause is an inline anchor
-   * inside a `<ul>`.
+   * Defect 2. Asserted on the anchor rather than as a screenshot: the readable symptom was three
+   * menu items on one line, and the mechanical cause is an inline anchor inside a `<ul>`. See the
+   * module header for why this reads the class rather than the computed `display`.
    */
   describe('the wrapper the denied branch needs', () => {
     const denied = (wrapper: 'inline' | 'block') => (
-      <MenuList>
+      <ul role="menu">
         <PermissionGate projectId={PROJECT} permission="suite:delete" wrapper={wrapper}>
           {({ allowed }) => (
-            <MenuItem disabled={!allowed} data-testid="Delete">
+            <li role="menuitem" aria-disabled={!allowed} data-testid="Delete">
               Delete
-            </MenuItem>
+            </li>
           )}
         </PermissionGate>
-      </MenuList>
+      </ul>
     )
 
     it('lays out as a block inside a menu, so the items stack instead of flowing inline', async () => {
@@ -161,7 +170,7 @@ describe('PermissionGate', () => {
       const anchor = item.parentElement as HTMLElement
       await waitFor(() => expect(item).toHaveAttribute('aria-disabled', 'true'))
 
-      expect(getComputedStyle(anchor).display).toBe('block')
+      expect(anchor).toHaveClass('block')
     })
 
     it('lays out inline by default, for a flex row of buttons', async () => {
@@ -169,7 +178,7 @@ describe('PermissionGate', () => {
       renderGated(denied('inline'))
 
       const anchor = (await screen.findByTestId('Delete')).parentElement as HTMLElement
-      expect(getComputedStyle(anchor).display).toBe('inline-flex')
+      expect(anchor).toHaveClass('inline-flex')
     })
 
     it('marks the wrapper presentational, so it does not break menu/menuitem for a screen reader', async () => {
@@ -189,9 +198,9 @@ describe('PermissionGate', () => {
       renderGated(
         <PermissionGate projectId={PROJECT} permission="case:create">
           {({ allowed }) => (
-            <Button disabled={!allowed} data-testid="NewCase">
+            <button type="button" disabled={!allowed} data-testid="NewCase">
               New case
-            </Button>
+            </button>
           )}
         </PermissionGate>,
       )
@@ -207,9 +216,9 @@ describe('PermissionGate', () => {
       renderGated(
         <PermissionGate projectId={PROJECT} permission="case:create">
           {({ allowed }) => (
-            <Button disabled={!allowed} data-testid="NewCase">
+            <button type="button" disabled={!allowed} data-testid="NewCase">
               New case
-            </Button>
+            </button>
           )}
         </PermissionGate>,
       )
@@ -262,9 +271,9 @@ describe('PermissionGate', () => {
         <TestProviders client={createTestQueryClient()} userId={CALLER}>
           <PermissionGate projectId={PROJECT} permission="case:delete" authorId={authorId}>
             {({ allowed }) => (
-              <Button disabled={!allowed} data-testid="Delete">
+              <button type="button" disabled={!allowed} data-testid="Delete">
                 Delete
-              </Button>
+              </button>
             )}
           </PermissionGate>
         </TestProviders>,
@@ -324,9 +333,9 @@ describe('PermissionGate', () => {
       return renderGated(
         <PermissionGate projectId={PROJECT} permission={['case:create', 'case:edit']}>
           {({ allowed }) => (
-            <Button disabled={!allowed} data-testid="Import">
+            <button type="button" disabled={!allowed} data-testid="Import">
               Import feature files
-            </Button>
+            </button>
           )}
         </PermissionGate>,
       )

@@ -1,17 +1,15 @@
+import { Banner, MultiPicker } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
-  Autocomplete,
-  Box,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+  Input,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -336,13 +334,17 @@ export function RunCreateDialog({
   const available = plans.data ?? [];
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
       <form onSubmit={submit} noValidate aria-busy={create.isPending}>
-        <DialogTitle>New test run</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+        <DialogHeader>
+          <DialogTitle>New test run</DialogTitle>
+        </DialogHeader>
+        <div className="mt-4 flex flex-col gap-4">
+          <div className="flex flex-col mt-2 gap-4">
             {errors.root && (
-              <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
+              <div data-testid={`${TestId}.Error`}>
+            <Banner tone="bad"><span role="alert">
                 {errors.root.message}
                 {/*
                   §6g's lead override, offered only where the gate actually refused. Disabled rather
@@ -355,9 +357,9 @@ export function RunCreateDialog({
                   <PermissionGate projectId={projectId} permission="case:approve">
                     {({ allowed }) => (
                       <Button
-                        size="small"
+                        size="sm"
                         color="warning"
-                        sx={{ mt: 1, display: 'block' }}
+                        className="mt-2 block"
                         disabled={!allowed || create.isPending}
                         data-testid={`${TestId}.OverrideGate`}
                         onClick={() => void submitWithOverride()}
@@ -367,60 +369,72 @@ export function RunCreateDialog({
                     )}
                   </PermissionGate>
                 )}
-              </Alert>
+              </span></Banner>
+          </div>
             )}
             {plans.isSuccess && available.length === 0 && (
-              <Alert severity="info" data-testid={`${TestId}.NoPlans`}>
+              <div data-testid={`${TestId}.NoPlans`}>
+            <Banner tone="steel">
                 This project has no test plans yet — choose the suites, tags or cases this run
                 covers instead.
-              </Alert>
+              </Banner>
+          </div>
             )}
-            <TextField
+            <Field
               label="Name"
-              required
+              htmlFor="name"
+              error={errors.name?.message}
+              help="What this pass is — “Regression 4.3.0”."
+            >
+            <Input
+              id="name"
               autoComplete="off"
-              error={!!errors.name}
-              helperText={errors.name?.message ?? 'What this pass is — “Regression 4.3.0”.'}
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Name`, maxLength: MAX_NAME } }}
+              required
+              aria-invalid={!!errors.name}
+              maxLength={MAX_NAME}
+              data-testid={`${TestId}.Name`}
               {...register('name')}
             />
-            <TextField
+            </Field>
+            <Field
               label="Plan"
-              select
-              defaultValue=""
-              error={!!errors.planId}
-              helperText={
-                errors.planId?.message ??
-                (armed
-                  ? 'Recorded as this run’s plan. Its scope is not used — the choices below are.'
-                  : 'Every case in the plan’s scope becomes a row to record against.')
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Plan` } }}
+              htmlFor="plan"
+              error={errors.planId?.message}
+              help={(armed
+                              ? 'Recorded as this run’s plan. Its scope is not used — the choices below are.'
+                              : 'Every case in the plan’s scope becomes a row to record against.')}
+            >
+            <NativeSelect
+              id="plan"
+              aria-invalid={!!errors.planId}
+              data-testid={`${TestId}.Plan`}
               {...register('planId')}
             >
-              {/*
-                An explicit "no plan" row rather than a blank one, for `CaseEditorPage`'s reason:
-                since §99 a run against no plan is a supported thing to want, and a blank first
-                option reads as a field somebody forgot to fill in.
-              */}
-              <MenuItem value="" data-testid={`${TestId}.Plan.None`}>
-                <Box component="span" sx={{ color: 'text.secondary' }}>
-                  No plan — scope it below
-                </Box>
-              </MenuItem>
-              {available.map((plan) => (
-                <MenuItem key={plan.id} value={plan.id} data-testid={`${TestId}.Plan.${plan.key}`}>
-                  <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1 }}>
-                    <Typography variant="body2">
-                      {plan.key} · {plan.name}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      {plural(plan.caseCount, 'case')}
-                    </Typography>
-                  </Stack>
-                </MenuItem>
-              ))}
-            </TextField>
+
+                          {/*
+                            An explicit "no plan" row rather than a blank one, for `CaseEditorPage`'s reason:
+                            since §99 a run against no plan is a supported thing to want, and a blank first
+                            option reads as a field somebody forgot to fill in.
+                          */}
+                          <option value="" data-testid={`${TestId}.Plan.None`}>
+                            <span className="text-ink-2">
+                              No plan — scope it below
+                            </span>
+                          </option>
+                          {available.map((plan) => (
+                            <option key={plan.id} value={plan.id} data-testid={`${TestId}.Plan.${plan.key}`}>
+                              <div className="flex items-baseline gap-2">
+                                <p className="m-0 text-sm">
+                                  {plan.key} · {plan.name}
+                                </p>
+                                <span className="m-0 text-xs text-ink-2">
+                                  {plural(plan.caseCount, 'case')}
+                                </span>
+                              </div>
+                            </option>
+                          ))}
+            </NativeSelect>
+            </Field>
 
             {/*
               §99's three arms. Unioned by the server and deduped, so a case reached by two of them
@@ -432,133 +446,104 @@ export function RunCreateDialog({
               control={control}
               name="suiteIds"
               render={({ field, fieldState }) => (
-                <Autocomplete
-                  multiple
-                  options={[...(suites.data ?? [])].sort(
-                    (a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key),
-                  )}
-                  getOptionLabel={(suite) => suite.name}
-                  isOptionEqualToValue={(option, value) => option.id === value.id}
-                  value={(suites.data ?? []).filter((suite) => field.value.includes(suite.id))}
-                  onChange={(_event, value) => field.onChange(value.map((suite) => suite.id))}
-                  onBlur={field.onBlur}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Suites"
-                      error={!!fieldState.error}
-                      helperText={
-                        fieldState.error?.message ??
-                        'A suite’s whole membership — filed, added, and claimed by its tags.'
-                      }
-                      slotProps={{
-                        // `...params.slotProps` FIRST — §96's defect, which cost a whole slice:
-                        // replacing the object drops `input.startAdornment`, so every chip is
-                        // held, sent and invisible, with both gates green.
-                        ...params.slotProps,
-                        htmlInput: {
-                          ...params.slotProps?.htmlInput,
-                          'data-testid': `${TestId}.Suites`,
-                        },
-                        formHelperText: { role: fieldState.error ? 'alert' : undefined },
-                      }}
-                    />
-                  )}
-                />
+                <Field
+                  label="Suites"
+                  htmlFor="suites"
+                  error={fieldState.error?.message}
+                  help="A suite’s whole membership — filed, added, and claimed by its tags."
+                >
+                  <MultiPicker
+                    id="suites"
+                    options={[...(suites.data ?? [])].sort(
+                      (a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key),
+                    )}
+                    optionKey={(suite) => suite.id}
+                    optionLabel={(suite) => suite.name}
+                    optionText={(suite) => suite.name}
+                    selected={(suites.data ?? []).filter((suite) => field.value.includes(suite.id))}
+                    onChange={(value) => field.onChange(value.map((suite) => suite.id))}
+                    onBlur={field.onBlur}
+                    aria-invalid={!!fieldState.error}
+                    data-testid={`${TestId}.Suites`}
+                  />
+                </Field>
               )}
             />
             <Controller
               control={control}
               name="tags"
               render={({ field, fieldState }) => (
-                <Autocomplete
-                  multiple
-                  freeSolo
-                  /*
+                <Field
+                  label="Tags"
+                  htmlFor="tags"
+                  error={fieldState.error?.message}
+                  // The one place the union/intersection split is visible to a user, and it points
+                  // the opposite way from the case grid's filter on purpose.
+                  help="Any of these — a case carrying one of them is in the run."
+                >
+                  {/*
                     Suggested from the project's own vocabulary and still free text — the tag may
                     be one nobody has used yet, and `GET /tags` lists only tags with a live case.
                     The count beside each is what makes this picker answer the question the person
                     is actually asking, which is how long the run will be.
-                  */
-                  options={(tags.data ?? []).map((usage) => usage.tag)}
-                  value={field.value}
-                  onChange={(_event, value) =>
-                    field.onChange([
-                      ...new Set(value.map((tag) => tag.trim()).filter((tag) => tag !== '')),
-                    ])
-                  }
-                  onBlur={field.onBlur}
-                  renderOption={(props, option) => {
-                    const { key, ...rest } = props;
-                    const usage = (tags.data ?? []).find((row) => row.tag === option);
-                    return (
-                      <li key={key} {...rest}>
-                        <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1 }}>
-                          <Typography variant="body2">{option}</Typography>
+                  */}
+                  <MultiPicker
+                    id="tags"
+                    options={(tags.data ?? []).map((usage) => usage.tag)}
+                    optionKey={(tag) => tag}
+                    optionLabel={(tag) => {
+                      const usage = (tags.data ?? []).find((row) => row.tag === tag);
+                      return (
+                        <span className="flex items-baseline gap-2">
+                          <span className="text-sm text-ink">{tag}</span>
                           {usage && (
-                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            <span className="text-xs text-ink-2">
                               {plural(usage.caseCount, 'case')}
-                            </Typography>
+                            </span>
                           )}
-                        </Stack>
-                      </li>
-                    );
-                  }}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Tags"
-                      error={!!fieldState.error}
-                      helperText={
-                        fieldState.error?.message ??
-                        // The one place the union/intersection split is visible to a user, and it
-                        // points the opposite way from the case grid's filter on purpose.
-                        'Any of these — a case carrying one of them is in the run.'
-                      }
-                      slotProps={{
-                        ...params.slotProps,
-                        htmlInput: {
-                          ...params.slotProps?.htmlInput,
-                          'data-testid': `${TestId}.Tags`,
-                        },
-                        formHelperText: { role: fieldState.error ? 'alert' : undefined },
-                      }}
-                    />
-                  )}
-                />
+                        </span>
+                      );
+                    }}
+                    optionText={(tag) => tag}
+                    selected={field.value}
+                    onChange={(value) =>
+                      field.onChange([
+                        ...new Set(value.map((tag) => tag.trim()).filter((tag) => tag !== '')),
+                      ])
+                    }
+                    onCreate={(typed) => field.onChange([...new Set([...field.value, typed])])}
+                    onBlur={field.onBlur}
+                    aria-invalid={!!fieldState.error}
+                    data-testid={`${TestId}.Tags`}
+                  />
+                </Field>
               )}
             />
             <Controller
               control={control}
               name="caseIds"
               render={({ field, fieldState }) => (
-                <Autocomplete
-                  multiple
-                  options={catalogue.data?.items ?? []}
-                  getOptionLabel={(row) => `${row.key} · ${row.title}`}
-                  isOptionEqualToValue={(option, value) => option.id === value.id}
-                  value={(catalogue.data?.items ?? []).filter((row) =>
-                    field.value.includes(row.id),
-                  )}
-                  onChange={(_event, value) => field.onChange(value.map((row) => row.id))}
-                  onBlur={field.onBlur}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Cases"
-                      error={!!fieldState.error}
-                      helperText={fieldState.error?.message ?? 'Named individually. Optional.'}
-                      slotProps={{
-                        ...params.slotProps,
-                        htmlInput: {
-                          ...params.slotProps?.htmlInput,
-                          'data-testid': `${TestId}.Cases`,
-                        },
-                        formHelperText: { role: fieldState.error ? 'alert' : undefined },
-                      }}
-                    />
-                  )}
-                />
+                <Field
+                  label="Cases"
+                  htmlFor="cases"
+                  error={fieldState.error?.message}
+                  help="Named individually. Optional."
+                >
+                  <MultiPicker
+                    id="cases"
+                    options={catalogue.data?.items ?? []}
+                    optionKey={(row) => row.id}
+                    optionLabel={(row) => `${row.key} · ${row.title}`}
+                    optionText={(row) => `${row.key} · ${row.title}`}
+                    selected={(catalogue.data?.items ?? []).filter((row) =>
+                      field.value.includes(row.id),
+                    )}
+                    onChange={(value) => field.onChange(value.map((row) => row.id))}
+                    onBlur={field.onBlur}
+                    aria-invalid={!!fieldState.error}
+                    data-testid={`${TestId}.Cases`}
+                  />
+                </Field>
               )}
             />
             {/*
@@ -566,97 +551,104 @@ export function RunCreateDialog({
               new is not the payload but the ability to mean something else by it. Neither is
               required and neither has a client-side rule — see the schema.
             */}
-            <Stack direction="row" spacing={2}>
-              <TextField
+            <div className="flex gap-4">
+              <Field
                 label="Configuration"
-                select
-                fullWidth
-                defaultValue=""
-                error={!!errors.configurationId}
-                helperText={
-                  errors.configurationId?.message ?? 'The environment this pass runs in.'
-                }
-                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Configuration` } }}
+                htmlFor="configuration"
+                error={errors.configurationId?.message}
+                help="The environment this pass runs in."
+              >
+              <NativeSelect
+                id="configuration"
+                aria-invalid={!!errors.configurationId}
+                data-testid={`${TestId}.Configuration`}
                 {...register('configurationId')}
               >
-                {/*
-                  Named rather than blank, for the plan select's reason: "the project's default" is
-                  a decision the server makes, and a blank first row reads as a field somebody
-                  forgot to fill in. Every project has exactly one Default seeded, so this is the
-                  honest label for what an untouched form sends.
-                */}
-                <MenuItem value="" data-testid={`${TestId}.Configuration.Default`}>
-                  <Box component="span" sx={{ color: 'text.secondary' }}>
-                    The project’s default
-                  </Box>
-                </MenuItem>
-                {(configurations.data ?? []).map((configuration) => (
-                  <MenuItem
-                    key={configuration.id}
-                    value={configuration.id}
-                    data-testid={`${TestId}.Configuration.${configuration.id}`}
-                  >
-                    {configuration.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField
+
+                              {/*
+                                Named rather than blank, for the plan select's reason: "the project's default" is
+                                a decision the server makes, and a blank first row reads as a field somebody
+                                forgot to fill in. Every project has exactly one Default seeded, so this is the
+                                honest label for what an untouched form sends.
+                              */}
+                              <option value="" data-testid={`${TestId}.Configuration.Default`}>
+                                <span className="text-ink-2">
+                                  The project’s default
+                                </span>
+                              </option>
+                              {(configurations.data ?? []).map((configuration) => (
+                                <option key={configuration.id}
+                                  value={configuration.id}
+                                  data-testid={`${TestId}.Configuration.${configuration.id}`}
+                                >
+                                  {configuration.name}
+                                </option>
+                              ))}
+              </NativeSelect>
+              </Field>
+              <Field
                 label="Assign to"
-                select
-                fullWidth
-                defaultValue=""
-                error={!!errors.assigneeId}
-                helperText={
-                  errors.assigneeId?.message ??
-                  // States the blast radius, because it is the one thing about this control that
-                  // surprises: it is not "who runs this pass", it is every row of the checklist.
-                  'Optional — gives every case in the run to one person.'
-                }
-                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Assignee` } }}
+                htmlFor="assign-to"
+                error={errors.assigneeId?.message}
+                help={// States the blast radius, because it is the one thing about this control that
+                                // surprises: it is not "who runs this pass", it is every row of the checklist.
+                                'Optional — gives every case in the run to one person.'}
+              >
+              <NativeSelect
+                id="assign-to"
+                aria-invalid={!!errors.assigneeId}
+                data-testid={`${TestId}.Assignee`}
                 {...register('assigneeId')}
               >
-                <MenuItem value="" data-testid={`${TestId}.Assignee.None`}>
-                  <Box component="span" sx={{ color: 'text.secondary' }}>
-                    Nobody — the team picks it up
-                  </Box>
-                </MenuItem>
-                {(members.data ?? []).map((member) => (
-                  <MenuItem
-                    key={member.id}
-                    value={member.id}
-                    data-testid={`${TestId}.Assignee.${member.id}`}
-                  >
-                    {member.displayName}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Stack>
-            <Stack direction="row" spacing={2}>
-              <TextField
+
+                              <option value="" data-testid={`${TestId}.Assignee.None`}>
+                                <span className="text-ink-2">
+                                  Nobody — the team picks it up
+                                </span>
+                              </option>
+                              {(members.data ?? []).map((member) => (
+                                <option key={member.id}
+                                  value={member.id}
+                                  data-testid={`${TestId}.Assignee.${member.id}`}
+                                >
+                                  {member.displayName}
+                                </option>
+                              ))}
+              </NativeSelect>
+              </Field>
+            </div>
+            <div className="flex gap-4">
+              <Field
                 label="Release"
+                htmlFor="release"
+                error={errors.releaseVersion?.message}
+                help="Optional — 4.3.0."
+              >
+              <Input
+                id="release"
                 autoComplete="off"
-                fullWidth
-                error={!!errors.releaseVersion}
-                helperText={errors.releaseVersion?.message ?? 'Optional — 4.3.0.'}
-                slotProps={{
-                  htmlInput: { 'data-testid': `${TestId}.Release`, maxLength: MAX_RELEASE },
-                }}
+                aria-invalid={!!errors.releaseVersion}
+                maxLength={MAX_RELEASE}
+                data-testid={`${TestId}.Release`}
                 {...register('releaseVersion')}
               />
-              <TextField
+              </Field>
+              <Field
                 label="Build"
+                htmlFor="build"
+                error={errors.buildNumber?.message}
+                help="Optional — 4471."
+              >
+              <Input
+                id="build"
                 autoComplete="off"
-                fullWidth
-                error={!!errors.buildNumber}
-                // Distinct from the release on purpose: conflating them costs the ability to ask
-                // whether 4.3.0 improved between build 4470 and 4471 (V1's own column comment).
-                helperText={errors.buildNumber?.message ?? 'Optional — 4471.'}
-                slotProps={{
-                  htmlInput: { 'data-testid': `${TestId}.Build`, maxLength: MAX_RELEASE },
-                }}
+                aria-invalid={!!errors.buildNumber}
+                maxLength={MAX_RELEASE}
+                data-testid={`${TestId}.Build`}
                 {...register('buildNumber')}
               />
-            </Stack>
+              </Field>
+            </div>
             {/*
               §177's Git traceability. Optional on a manual run and usually empty — a person running
               a regression pass by hand often knows the branch and rarely the sha, which is why both
@@ -664,41 +656,47 @@ export function RunCreateDialog({
               than beside it because it answers the narrower question: release, then build, then the
               exact code.
             */}
-            <Stack direction="row" spacing={2}>
-              <TextField
+            <div className="flex gap-4">
+              <Field
                 label="Branch"
+                htmlFor="branch"
+                error={errors.branch?.message}
+                help="Optional — release/4.3."
+              >
+              <Input
+                id="branch"
                 autoComplete="off"
-                fullWidth
-                error={!!errors.branch}
-                helperText={errors.branch?.message ?? 'Optional — release/4.3.'}
-                slotProps={{
-                  htmlInput: { 'data-testid': `${TestId}.Branch`, maxLength: MAX_BRANCH },
-                }}
+                aria-invalid={!!errors.branch}
+                maxLength={MAX_BRANCH}
+                data-testid={`${TestId}.Branch`}
                 {...register('branch')}
               />
-              <TextField
+              </Field>
+              <Field
                 label="Commit"
+                htmlFor="commit"
+                error={errors.commitSha?.message}
+                help="Optional — 7 to 40 hex characters."
+              >
+              <Input
+                id="commit"
                 autoComplete="off"
-                fullWidth
-                error={!!errors.commitSha}
-                // The server's rule, stated rather than enforced here — see the schema. Naming the
-                // bound is what makes its refusal predictable instead of a surprise on submit.
-                helperText={errors.commitSha?.message ?? 'Optional — 7 to 40 hex characters.'}
-                slotProps={{
-                  htmlInput: { 'data-testid': `${TestId}.Commit`, maxLength: 40 },
-                }}
+                aria-invalid={!!errors.commitSha}
+                maxLength={40}
+                data-testid={`${TestId}.Commit`}
                 {...register('commitSha')}
               />
-            </Stack>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
+              </Field>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
           <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
             Cancel
           </Button>
           <Button
             type="submit"
-            variant="contained"
+            variant="primary"
             /*
               §99 dropped `|| available.length === 0`. It was right while a plan was the only
               scope: a submit that can only ever be refused should not be offered. It is now the
@@ -712,8 +710,9 @@ export function RunCreateDialog({
           >
             {create.isPending ? 'Starting…' : 'Start run'}
           </Button>
-        </DialogActions>
+        </DialogFooter>
       </form>
+    </DialogContent>
     </Dialog>
   );
 }

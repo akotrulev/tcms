@@ -1,4 +1,3 @@
-import { Box } from '@mui/material';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { AnnouncerContext, type AnnouncerValue } from './announcerContextValue';
 
@@ -45,8 +44,7 @@ export function AnnouncerProvider({ children }: { children: ReactNode }) {
         The lesson is the shared-layer rule in CLAUDE.md, not the units: a second implementation of
         something the shared layer already owns is where the drift lives.
       */}
-      <Box
-        component="div"
+      <div
         className="sr-only"
         data-testid="Announcer"
         role="status"
@@ -54,7 +52,7 @@ export function AnnouncerProvider({ children }: { children: ReactNode }) {
         aria-atomic="true"
       >
         {message}
-      </Box>
+      </div>
     </AnnouncerContext>
   );
 }

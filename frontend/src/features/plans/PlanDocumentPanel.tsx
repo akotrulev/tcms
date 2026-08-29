@@ -1,13 +1,7 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Badge, Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import { Button } from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import type { DocBlock, DocPage } from '../../api/types';
@@ -107,77 +101,81 @@ function LinkPagePanel({ projectId, planId }: { projectId: string; planId: strin
 
   return (
     <Panel testId="PlanDocument.Empty">
-      <Stack sx={{ gap: 1.5, alignItems: 'flex-start' }}>
-        <Typography variant="h6">No page is linked to this plan</Typography>
-        <Typography variant="body2" sx={{ color: 'text.secondary', maxWidth: 640 }}>
+      <div className="flex flex-col gap-3 items-start">
+        <h6 className="m-0 text-[13px] font-semibold">No page is linked to this plan</h6>
+        <p className="m-0 text-sm text-ink-2" style={{ maxWidth: 640 }}>
           A plan&rsquo;s requirements are an ordinary documentation page that this plan adopts —
           written where specifications are written, keeping its own history, its links and its place
           in search. Link one that exists, or write it in the documentation section first.
-        </Typography>
+        </p>
 
         {failure && (
-          <Alert severity="error" data-testid="PlanDocument.LinkError">
+          <div data-testid="PlanDocument.LinkError">
+<Banner tone="bad">
             {failure}
-          </Alert>
+          </Banner>
+</div>
         )}
 
-        <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1, alignSelf: 'stretch' }}>
-          <TextField
-            select
+        <div className="flex flex-col gap-2 self-stretch sm:flex-row">
+          <Field
             label="Page"
-            size="small"
-            value={pageId}
-            onChange={(event) => setPageId(event.target.value)}
-            sx={{ minWidth: 320 }}
-            data-testid="PlanDocument.PagePicker"
-            helperText="Any page in this project's documentation."
+            htmlFor="page"
+            help="Any page in this project's documentation."
+            className="min-w-[320px]"
           >
-            {(pages.data ?? []).map((page) => {
-              const spokenFor = page.subjectType === 'TEST_PLAN' && page.subjectId !== planId;
-              return (
-                <MenuItem key={page.id} value={page.id} disabled={spokenFor}>
-                  <Stack direction="row" sx={{ gap: 1, alignItems: 'baseline' }}>
-                    <Identifier variant="muted">{page.key}</Identifier>
-                    <span>{page.title}</span>
-                    {spokenFor && (
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        — already another plan&rsquo;s document
-                      </Typography>
-                    )}
-                  </Stack>
-                </MenuItem>
-              );
-            })}
-            {pages.data?.length === 0 && (
-              <MenuItem value="" disabled>
-                This project has no documentation pages yet.
-              </MenuItem>
-            )}
-          </TextField>
+            {/*
+              A native `<option>` can hold only text, so the key, the title and the
+              already-spoken-for note are one string per row rather than the three elements MUI's
+              `MenuItem` allowed. That is the trade `native-select` was chosen for (T15): the
+              platform control is keyboard- and screen-reader-operable with no code of ours and is
+              the one thing Radix's Select cannot be under jsdom.
+            */}
+            <NativeSelect
+              id="page"
+              value={pageId}
+              onChange={(event) => setPageId(event.target.value)}
+              data-testid="PlanDocument.PagePicker"
+            >
+              {(pages.data ?? []).map((page) => {
+                const spokenFor = page.subjectType === 'TEST_PLAN' && page.subjectId !== planId;
+                return (
+                  <option key={page.id} value={page.id} disabled={spokenFor}>
+                    {page.key} — {page.title}
+                    {spokenFor && ' — already another plan’s document'}
+                  </option>
+                );
+              })}
+              {pages.data?.length === 0 && (
+                <option value="" disabled>
+                  This project has no documentation pages yet.
+                </option>
+              )}
+          </NativeSelect>
+          </Field>
           <PermissionGate projectId={projectId} permission="doc:edit">
             {({ allowed }) => (
-              <Box>
+              <div>
                 <Button
-                  variant="contained"
+                  variant="primary"
                   disabled={!allowed || !pageId || link.isPending}
                   onClick={adopt}
                   data-testid="PlanDocument.Link"
                 >
                   {link.isPending ? 'Linking…' : 'Link this page'}
                 </Button>
-              </Box>
+              </div>
             )}
           </PermissionGate>
-          <Button
-            component={RouterLink}
+          <RouterLink
             to={`/projects/${projectId}/docs`}
-            variant="outlined"
             data-testid="PlanDocument.OpenDocumentation"
+            className={buttonVariants({ variant: 'primary' })}
           >
             Open documentation
-          </Button>
-        </Stack>
-      </Stack>
+          </RouterLink>
+        </div>
+      </div>
     </Panel>
   );
 }
@@ -196,32 +194,31 @@ function DocumentBody({
   const [failure, setFailure] = useState<string | null>(null);
 
   return (
-    <Stack sx={{ gap: 2 }}>
+    <div className="flex flex-col gap-4">
       {failure && (
-        <Alert severity="error" data-testid="PlanDocument.UnlinkError">
+        <div data-testid="PlanDocument.UnlinkError">
+<Banner tone="bad">
           {failure}
-        </Alert>
+        </Banner>
+</div>
       )}
 
       <Panel
         title={page.title}
         testId="PlanDocument.Body"
         actions={
-          <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
-            <Chip
-              size="small"
-              variant="outlined"
-              label={docPageStatusLabel[page.status]}
+          <div className="flex gap-2 items-center">
+            <Badge tone="plain"
               data-testid="PlanDocument.Status"
-            />
-            <Button
-              size="small"
-              component={RouterLink}
+            >
+{docPageStatusLabel[page.status]}</Badge>
+            <RouterLink
               to={`/projects/${projectId}/docs/${page.id}`}
               data-testid="PlanDocument.OpenPage"
+              className={buttonVariants({ size: 'sm' })}
             >
               Open in documentation
-            </Button>
+            </RouterLink>
             {/*
               Says what it does in its own label, because the two acts are one click apart and only
               one of them is reversible. Unlink clears the link; the page keeps its blocks, its
@@ -229,10 +226,10 @@ function DocumentBody({
             */}
             <PermissionGate projectId={projectId} permission="doc:edit">
               {({ allowed }) => (
-                <Box>
+                <div>
                   <Button
-                    size="small"
-                    color="warning"
+                    size="sm"
+                    variant="danger"
                     disabled={!allowed || unlink.isPending}
                     data-testid="PlanDocument.Unlink"
                     onClick={() => {
@@ -244,17 +241,17 @@ function DocumentBody({
                   >
                     Unlink (keeps the page)
                   </Button>
-                </Box>
+                </div>
               )}
             </PermissionGate>
-          </Stack>
+          </div>
         }
       >
-        <Stack sx={{ gap: 0.5 }}>
+        <div className="flex flex-col gap-1">
           {page.blocks.length === 0 ? (
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            <p className="m-0 text-sm text-ink-2">
               This page has no content yet. Open it in documentation to write it.
-            </Typography>
+            </p>
           ) : (
             page.blocks.map((block) => (
               <BlockView
@@ -265,9 +262,9 @@ function DocumentBody({
               />
             ))
           )}
-        </Stack>
+        </div>
       </Panel>
-    </Stack>
+    </div>
   );
 }
 
@@ -292,16 +289,11 @@ function BlockView({
   const isHeading = block.blockType === 'heading';
 
   return (
-    <Box
+    <div
       data-testid="PlanDocument.Block"
-      sx={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: 1,
-        mt: isHeading ? 2 : 0,
-      }}
+      className={cn('flex items-start gap-2', isHeading && 'mt-4')}
     >
-      <Stack sx={{ flex: 1, gap: 0.5, minWidth: 0 }}>
+      <div className="flex flex-col flex-1 gap-1 min-w-0">
         {/*
           The bullet, its indent and the monospace face used to be spelled out here and nowhere
           else — so this panel rendered an outline while the documentation page rendered the same
@@ -309,32 +301,32 @@ function BlockView({
           chrome this screen owns, which is the link chips below.
         */}
         <DocBlockBody block={block} attachments={attachments} testId="PlanDocument.Block" />
+        {/*
+          A navigating chip, so it is an anchor rather than the kit's `Chip` (a button) or `Badge`
+          (a span) — ~~MUI's `component={RouterLink}` + `clickable`~~. The pill styling is written
+          out here rather than borrowed from `buttonVariants`, because this is a chip and not a
+          button, and the two scales differ.
+        */}
         {block.links && block.links.length > 0 && (
-          <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap' }}>
+          <div className="flex gap-1 flex-wrap">
             {block.links.map((link) => (
-              <Chip
+              <RouterLink
                 key={link.id}
-                size="small"
-                variant="outlined"
                 data-testid="PlanDocument.Link.Chip"
-                component={RouterLink}
                 to={
                   link.sourceType === 'TEST_CASE'
                     ? `/projects/${projectId}/cases/${link.sourceId}`
                     : `/projects/${projectId}/suites/${link.sourceId}`
                 }
-                clickable
-                label={
-                  <Stack direction="row" sx={{ gap: 0.75, alignItems: 'center' }}>
-                    <Identifier>{link.sourceKey}</Identifier>
-                    <span>{link.sourceTitle}</span>
-                  </Stack>
-                }
-              />
+                className="inline-flex items-center gap-1.5 rounded-[5px] border border-white/8 px-2.5 py-[3px] text-xs text-ink-2 no-underline hover:border-white/14 hover:bg-white/4 hover:text-ink"
+              >
+                <Identifier>{link.sourceKey}</Identifier>
+                <span>{link.sourceTitle}</span>
+              </RouterLink>
             ))}
-          </Stack>
+          </div>
         )}
-      </Stack>
-    </Box>
+      </div>
+    </div>
   );
 }

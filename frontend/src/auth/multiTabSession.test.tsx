@@ -1,10 +1,8 @@
-import { ThemeProvider } from '@mui/material/styles'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../api/client'
 import type { CurrentUser } from '../api/types'
-import { theme } from '../app/theme'
 import { anAuthResult } from '../test/fixtures'
 import { createTestQueryClient } from '../test/queryClient'
 import { AuthProvider } from './AuthContext'
@@ -109,7 +107,6 @@ function Probe() {
 function renderTab() {
   const client = createTestQueryClient()
   const view = render(
-    <ThemeProvider theme={theme}>
       <AuthProvider>
         <SessionRecoveryProvider>
           <QueryClientProvider client={client}>
@@ -117,8 +114,7 @@ function renderTab() {
             <Probe />
           </QueryClientProvider>
         </SessionRecoveryProvider>
-      </AuthProvider>
-    </ThemeProvider>,
+      </AuthProvider>,
   )
   return { client, view }
 }

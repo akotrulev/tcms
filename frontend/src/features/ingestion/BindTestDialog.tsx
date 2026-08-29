@@ -1,15 +1,14 @@
+import { Banner, Combobox } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
-  Autocomplete,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  Stack,
-  TextField,
-} from '@mui/material';
+  Input,
+} from '../../components/ui';
 import { useState } from 'react';
 import { useCases, useConfirmAutomationMapping } from '../../api/queries';
 import type { TestCaseSummary, UnmatchedTest } from '../../api/types';
@@ -89,75 +88,67 @@ export function BindTestDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Bind this test to a case</DialogTitle>
-      <DialogContent>
-        <DialogContentText component="div" sx={{ mb: 2 }}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg">
+      <DialogHeader>
+          <DialogTitle>Bind this test to a case</DialogTitle>
+        </DialogHeader>
+      <div className="mt-4 flex flex-col gap-4">
+        <p className="m-0 text-ink">
           Results for this test will be recorded against the case you choose, in this build and
           every later one — through renames of the case, its suite and the project. Only renaming
           the test itself breaks the binding.
-        </DialogContentText>
+        </p>
 
-        <Stack sx={{ gap: 2 }}>
-          <TextField
-            label="Test"
-            value={test.name}
-            fullWidth
-            size="small"
-            // Read-only rather than absent: the reader has to be able to check they are binding
-            // the row they clicked. Not editable, because the name is a fact about the report.
-            slotProps={{ input: { readOnly: true }, htmlInput: { 'data-testid': 'BindTest.Name' } }}
-            helperText="As the report named it. The server normalizes; this screen does not."
-          />
+        <Field
+          label="Test"
+          htmlFor="bind-test-name"
+          help="As the report named it. The server normalizes; this screen does not."
+        >
+          {/*
+            Read-only rather than absent: the reader has to be able to check they are binding the
+            row they clicked. Not editable, because the name is a fact about the report.
+          */}
+          <Input id="bind-test-name" value={test.name} readOnly data-testid="BindTest.Name" />
+        </Field>
 
-          <Autocomplete
-            size="small"
+        <Field label="Case" htmlFor="bind-test-case" help="By key or title.">
+          <Combobox
+            id="bind-test-case"
+            query={query}
+            onQueryChange={setQuery}
             options={search.data?.items ?? []}
-            // The server has already filtered. Filtering again client-side would hide rows that
-            // matched on a field the option label does not show.
-            filterOptions={(all) => all}
-            getOptionLabel={(option) => `${option.key} — ${option.title}`}
-            inputValue={query}
-            onInputChange={(_event, next) => setQuery(next)}
-            value={picked}
-            onChange={(_event, next) => setPicked(next)}
-            noOptionsText={search.isPending ? 'Searching…' : 'No case matches.'}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Case"
-                helperText="By key or title."
-                slotProps={{
-                  ...params.slotProps,
-                  htmlInput: {
-                    ...params.slotProps.htmlInput,
-                    'data-testid': 'BindTest.Case',
-                  },
-                }}
-              />
-            )}
+            optionKey={(option) => option.id}
+            optionLabel={(option) => `${option.key} — ${option.title}`}
+            selected={picked}
+            onSelect={setPicked}
+            emptyLabel={search.isPending ? 'Searching…' : 'No case matches.'}
+            data-testid="BindTest.Case"
           />
+        </Field>
 
           {failure && (
-            <Alert severity="error" role="alert" data-testid="BindTest.Error">
+            <div data-testid="BindTest.Error">
+            <Banner tone="bad"><span role="alert">
               {failure}
-            </Alert>
+            </span></Banner>
+          </div>
           )}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
+        </div>
+      <DialogFooter>
         <Button onClick={onClose} data-testid="BindTest.Cancel">
           Cancel
         </Button>
         <Button
-          variant="contained"
+          variant="primary"
           disabled={!picked || confirm.isPending}
           onClick={() => void submit()}
           data-testid="BindTest.Confirm"
         >
           {picked ? <>Bind to <Identifier>{picked.key}</Identifier></> : 'Bind'}
         </Button>
-      </DialogActions>
+      </DialogFooter>
+    </DialogContent>
     </Dialog>
   );
 }

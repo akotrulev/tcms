@@ -35,13 +35,25 @@ import { afterEach, beforeEach, vi } from 'vitest'
 configure({ asyncUtilTimeout: 5000 })
 
 /**
- * jsdom implements neither `matchMedia` nor `ResizeObserver`, and MUI reaches for both — the
- * theme's `useMediaQuery` calls, and MUI X's tree/grid virtualization. Without these, rendering
- * anything from `@mui/material` throws before a single assertion runs.
+ * jsdom implements neither `matchMedia` nor `ResizeObserver`, and the app reaches for both.
+ *
+ * ~~MUI reaches for both — the theme's `useMediaQuery` calls, and MUI X's tree/grid
+ * virtualization. Without these, rendering anything from `@mui/material` throws before a single
+ * assertion runs.~~ → the *callers* changed in T16 and the polyfills did not: `matchMedia` is now
+ * `app/colorScheme.tsx` resolving `system` to light or dark, and `ResizeObserver` is Radix's
+ * popper measuring its trigger. `colorScheme.tsx` also guards `matchMedia`'s absence itself — that
+ * is a property of the provider rather than a reason to drop this, because a component that only
+ * *reads* the scheme should not have to.
+ *
+ * This is deliberately a polyfill for a missing browser API and **not** a stub for something the
+ * application does under test — `ReviewPanel`, `LinkBlockDialog` and `kit/Combobox` all record the
+ * same rule from the other side: `@radix-ui/react-select` is not used, because bending the harness
+ * to suit it would be stubbing `hasPointerCapture`, which is a behaviour and not an environment.
  *
  * `matches: false` on every query is the honest default for a headless environment: it makes
  * `prefers-reduced-motion: reduce` read as *not* set, so a component that guards animation
- * behind it takes the same branch it takes for most users.
+ * behind it takes the same branch it takes for most users. It also makes the colour scheme resolve
+ * to light under test, which is why no suite has to mount a provider to get a stable palette.
  */
 beforeEach(() => {
   if (!window.matchMedia) {

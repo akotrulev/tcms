@@ -1,3 +1,4 @@
+import { ArrowDown, ArrowUp, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 /**
  * The case editor's Preconditions / Postconditions panel (§95).
  *
@@ -51,6 +52,15 @@
  * endpoint's resolution the paragraph above refuses for a smaller list, and it would be built out
  * of a bound (the suite list omits retired entries) that is not the one retention uses.
  */
+import { Badge, Banner, MultiPicker } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import {
+  Button,
+  Switch,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '../../components/ui';
 import { useMemo, useState, type ReactNode } from 'react';
 import {
   DndContext,
@@ -69,25 +79,6 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import AddIcon from '@mui/icons-material/Add';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import DeleteIcon from '@mui/icons-material/Delete';
-import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
-import EditIcon from '@mui/icons-material/Edit';
-import {
-  Alert,
-  Autocomplete,
-  Box,
-  Chip,
-  FormControlLabel,
-  IconButton,
-  Stack,
-  Switch,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
 import { useConditions } from '../../api/queries';
 import type { CaseConditionRef, Condition } from '../../api/types';
 import { impactSummary } from '../../lib/conditions';
@@ -116,23 +107,18 @@ function SortableCondition({
   });
 
   return (
-    <Box
+    // Lifted rather than hidden while dragging, for `SortableStep`'s reason: this list is the
+    // content the author is reading, and a gap makes the drop target ambiguous.
+    <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      sx={{
-        p: 1,
-        border: '1px solid',
-        borderColor: isDragging ? 'primary.main' : 'divider',
-        borderRadius: 1,
-        // Lifted rather than hidden, for `SortableStep`'s reason: this list is the content the
-        // author is reading, and a gap makes the drop target ambiguous.
-        bgcolor: 'background.paper',
-        opacity: isDragging ? 0.85 : 1,
-        position: 'relative',
-      }}
+      className={cn(
+        'relative rounded border bg-panel p-2',
+        isDragging ? 'border-steel opacity-85' : 'border-white/8 opacity-100',
+      )}
     >
       {children({ attributes, listeners })}
-    </Box>
+    </div>
   );
 }
 
@@ -263,38 +249,34 @@ export function ConditionsPanel({
   const options = entries.filter((entry) => !value.includes(entry.id));
 
   return (
-    <Stack spacing={1} data-testid={testId}>
-      <Typography variant="subtitle2">{LABELS[kind].title}</Typography>
+    <div className="flex flex-col gap-2" data-testid={testId}>
+      <p className="m-0 text-sm font-medium">{LABELS[kind].title}</p>
 
       {inherited.length > 0 && (
-        <Stack spacing={0.5} data-testid={`${testId}.Inherited`}>
+        <div className="flex flex-col gap-1" data-testid={`${testId}.Inherited`}>
           {inherited.map((ref) => {
             const isDeclined = declined.includes(ref.id);
             return (
-              <Box
+              <div
                 key={ref.id}
                 data-testid={`${testId}.Inherited.Item`}
                 data-declined={isDeclined ? 'true' : 'false'}
-                sx={{ p: 1, border: '1px dashed', borderColor: 'divider', borderRadius: 1 }}
+                className="rounded border border-dashed border-white/8 p-2"
               >
-                <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
-                  <Typography
-                    variant="body2"
-                    sx={
-                      isDeclined
-                        ? { textDecoration: 'line-through', color: 'text.disabled' }
-                        : undefined
-                    }
+                <div className="flex gap-2 items-center">
+                  <p
+                    className={cn(
+                      'm-0 text-sm',
+                      isDeclined ? 'text-ink-4 line-through' : 'text-ink',
+                    )}
                   >
                     {ref.title}
-                  </Typography>
+                  </p>
                   {/* Named, not just marked: "inherited" alone leaves the author hunting for which
                       folder to change. */}
-                  <Chip
-                    size="small"
-                    variant="outlined"
-                    label={ref.inheritedFrom ? `From ${ref.inheritedFrom}` : 'Inherited'}
-                  />
+                  <Badge tone="plain"
+                  >
+{ref.inheritedFrom ? `From ${ref.inheritedFrom}` : 'Inherited'}</Badge>
 
                   {/*
                     §6f's opt-out, and it is a switch rather than a Remove button on purpose: this
@@ -302,8 +284,29 @@ export function ConditionsPanel({
                     "From Billing" chip is one an author reasonably reads as deleting the folder's
                     rule for all two hundred siblings.
                   */}
-                  <Tooltip
-                    title={
+                  <Tooltip>
+<TooltipTrigger asChild>
+                    <label
+                      className="mr-0 ml-auto flex cursor-pointer items-center gap-2"
+                      data-testid={`${testId}.DeclineToggle`}
+                    >
+                      <Switch
+                        checked={!isDeclined}
+                        disabled={disabled || leavingFolder}
+                        // The accessible name IS the handle a test uses — `getByRole('switch',
+                        // { name })`. ~~because MUI v7's Switch input slot types reject an
+                        // arbitrary data attribute~~ → that constraint went with MUI; what
+                        // survives is the second reason, which was always the better one: a label
+                        // the screen reader reads is the better selector.
+                        aria-label={`Applies to this case: ${ref.title}`}
+                        onCheckedChange={(next: boolean) => onToggleDecline?.(ref.id, !next)}
+                      />
+                      <span className="m-0 text-xs text-ink-2">
+                        {isDeclined ? 'Not applicable' : 'Applies'}
+                      </span>
+                    </label>
+                  </TooltipTrigger>
+<TooltipContent>{
                       leavingFolder
                         ? `This case is moving out of ${ref.inheritedFrom ?? 'this folder'}, so `
                           + 'the rule stops reaching it either way. Put it back where it was to '
@@ -313,38 +316,13 @@ export function ConditionsPanel({
                             + 'Switch it back on to apply it again.'
                           : `Turn this off for THIS CASE only. The ${ref.inheritedFrom ?? 'folder'} `
                             + 'rule keeps applying to every other case beneath it.'
-                    }
-                  >
-                    <FormControlLabel
-                      sx={{ ml: 'auto', mr: 0 }}
-                      data-testid={`${testId}.DeclineToggle`}
-                      control={
-                        <Switch
-                          size="small"
-                          checked={!isDeclined}
-                          disabled={disabled || leavingFolder}
-                          // The accessible name IS the handle a test uses — `getByRole('switch',
-                          // { name })` — because MUI v7's Switch input slot types reject an
-                          // arbitrary data attribute, and a label the screen reader reads is the
-                          // better selector anyway.
-                          slotProps={{
-                            input: { 'aria-label': `Applies to this case: ${ref.title}` },
-                          }}
-                          onChange={(event) => onToggleDecline?.(ref.id, !event.target.checked)}
-                        />
-                      }
-                      label={
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                          {isDeclined ? 'Not applicable' : 'Applies'}
-                        </Typography>
-                      }
-                    />
-                  </Tooltip>
-                </Stack>
-              </Box>
+                    }</TooltipContent>
+</Tooltip>
+                </div>
+              </div>
             );
           })}
-        </Stack>
+        </div>
       )}
 
       <DndContext
@@ -354,151 +332,143 @@ export function ConditionsPanel({
         onDragEnd={onDragEnd}
       >
         <SortableContext items={value} strategy={verticalListSortingStrategy}>
-          <Stack spacing={0.5}>
+          <div className="flex flex-col gap-1">
             {value.map((conditionId, index) => {
               const entry = byId.get(conditionId);
               return (
                 <SortableCondition key={conditionId} id={conditionId}>
                   {({ attributes, listeners }) => (
-                    <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
-                      <IconButton
-                        size="small"
+                    <div className="flex gap-2 items-center">
+                      <Button variant="quiet" size="icon"
                         aria-label="Reorder"
                         data-testid={`${testId}.Drag`}
                         disabled={disabled}
                         {...attributes}
                         {...listeners}
-                        sx={{ cursor: 'grab' }}
+                        className="cursor-grab"
                       >
-                        <DragIndicatorIcon fontSize="small" />
-                      </IconButton>
+                        <GripVertical aria-hidden className="size-4" />
+                      </Button>
 
-                      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                        <Typography variant="body2" noWrap>
+                      <div className="grow min-w-0">
+                        <p className="m-0 text-sm">
                           {/* A library read in flight is not an empty condition. Falling back to
                               the id would render a UUID at the author; naming the state is the
                               honest rendering of "we have the attachment, not yet the text". */}
                           {entry?.title ?? (resolved.isPending ? 'Loading…' : 'Unknown condition')}
-                        </Typography>
-                      </Box>
+                        </p>
+                      </div>
 
                       {entry && (
-                        <Tooltip title="Edit — this changes every case using it">
+                        <Tooltip>
+<TooltipTrigger asChild>
                           <span>
-                            <IconButton
-                              size="small"
+                            <Button variant="quiet" size="icon"
                               aria-label={`Edit ${entry.title}`}
                               data-testid={`${testId}.Edit`}
                               disabled={disabled}
                               onClick={() => onEdit(entry)}
                             >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
+                              <Pencil aria-hidden className="size-4" />
+                            </Button>
                           </span>
-                        </Tooltip>
+                        </TooltipTrigger>
+<TooltipContent>Edit — this changes every case using it</TooltipContent>
+</Tooltip>
                       )}
 
                       {/* KEPT alongside the drag handle — the keyboard, screen-reader and touch
                           path, and the only way to move a row by exactly one place deliberately.
                           §94's rule, and both ends call the same `move`. */}
-                      <IconButton
-                        size="small"
+                      <Button variant="quiet" size="icon"
                         aria-label="Move up"
                         data-testid={`${testId}.Up`}
                         disabled={disabled || index === 0}
                         onClick={() => move(index, index - 1)}
                       >
-                        <ArrowUpwardIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
+                        <ArrowUp aria-hidden className="size-4" />
+                      </Button>
+                      <Button variant="quiet" size="icon"
                         aria-label="Move down"
                         data-testid={`${testId}.Down`}
                         disabled={disabled || index === value.length - 1}
                         onClick={() => move(index, index + 1)}
                       >
-                        <ArrowDownwardIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
+                        <ArrowDown aria-hidden className="size-4" />
+                      </Button>
+                      <Button variant="quiet" size="icon"
                         aria-label="Detach"
                         data-testid={`${testId}.Remove`}
                         disabled={disabled}
                         onClick={() => onChange(value.filter((id) => id !== conditionId))}
                       >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Stack>
+                        <Trash2 aria-hidden className="size-4" />
+                      </Button>
+                    </div>
                   )}
                 </SortableCondition>
               );
             })}
-          </Stack>
+          </div>
         </SortableContext>
       </DndContext>
 
       {library.isError && (
         // Scoped to this panel: a failed library read must not stop the rest of the case saving.
-        <Alert severity="warning" data-testid={`${testId}.Error`}>
+        <div data-testid={`${testId}.Error`}>
+<Banner tone="warn">
           The condition library did not load, so nothing can be attached right now.
-        </Alert>
+        </Banner>
+</div>
       )}
 
-      <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
-        <Autocomplete
-          sx={{ flexGrow: 1 }}
-          disabled={disabled}
-          options={options}
-          loading={library.isFetching}
-          getOptionLabel={(option) => option.title}
-          // Controlled to null so the box empties after a pick — it is an "attach one more"
-          // control, not a field holding a value.
-          value={null}
-          inputValue={query}
-          onInputChange={(_, next) => setQuery(next)}
-          onChange={(_, picked) => {
-            if (!picked) return;
-            onChange([...value, picked.id]);
-            setQuery('');
-          }}
-          renderOption={(props, option) => (
-            <li {...props} key={option.id}>
-              <Stack>
-                <Typography variant="body2">{option.title}</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {impactSummary(option)}
-                </Typography>
-              </Stack>
-            </li>
-          )}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              size="small"
-              label={LABELS[kind].attach}
-              slotProps={{
-                ...params.slotProps,
-                htmlInput: {
-                  ...params.slotProps?.htmlInput,
-                  'data-testid': `${testId}.Attach`,
-                },
-              }}
-            />
-          )}
-        />
-        <Tooltip title="Create a new library condition">
+      <div className="flex gap-2 items-center">
+        <Field label={LABELS[kind].attach} htmlFor="labels-kind-attach" className="grow">
+          {/*
+            An "attach one more" control, not a field holding a value: `selected` stays empty and
+            the box empties after every pick, which is what MUI's `value={null}` was doing.
+          */}
+          <MultiPicker
+            id="labels-kind-attach"
+            disabled={disabled}
+            options={options}
+            optionKey={(option) => option.id}
+            optionLabel={(option) => (
+              <span className="flex flex-col">
+                <span className="text-sm text-ink">{option.title}</span>
+                <span className="text-xs text-ink-2">{impactSummary(option)}</span>
+              </span>
+            )}
+            optionText={(option) => option.title}
+            query={query}
+            onQueryChange={setQuery}
+            serverFiltered
+            selected={[]}
+            onChange={(picked) => {
+              if (!picked[0]) return;
+              onChange([...value, picked[0].id]);
+              setQuery('');
+            }}
+            emptyLabel={library.isFetching ? 'Searching…' : 'No match.'}
+            data-testid={`${testId}.Attach`}
+          />
+        </Field>
+        <Tooltip>
+<TooltipTrigger asChild>
           <span>
-            <IconButton
+            <Button variant="quiet" size="icon"
               aria-label="Create a condition"
               data-testid={`${testId}.Create`}
               disabled={disabled}
               onClick={onCreate}
             >
-              <AddIcon />
-            </IconButton>
+              <Plus aria-hidden className="size-4" />
+            </Button>
           </span>
-        </Tooltip>
-      </Stack>
-    </Stack>
+        </TooltipTrigger>
+<TooltipContent>Create a new library condition</TooltipContent>
+</Tooltip>
+      </div>
+    </div>
   );
 }

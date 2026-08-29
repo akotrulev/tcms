@@ -1,5 +1,6 @@
-import { Alert, Box, Button, Stack } from '@mui/material';
-import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
+import { Download } from 'lucide-react';
+import { Banner } from '../../components/kit';
+import { Button } from '../../components/ui';
 import { useState } from 'react';
 import { fetchArtifact } from '../../api/client';
 import type { ReportJob } from '../../api/types';
@@ -73,24 +74,26 @@ export function DownloadReportButton({
   };
 
   return (
-    <Stack sx={{ gap: 1, alignItems: 'flex-start' }}>
+    <div className="flex flex-col items-start gap-2">
       {error && (
-        <Alert severity="error" role="alert" data-testid={`${testId}.Error`}>
-          {error}
-        </Alert>
+        <div data-testid={`${testId}.Error`}>
+          <Banner tone="bad">
+            <span role="alert">{error}</span>
+          </Banner>
+        </div>
       )}
-      <Box>
+      <div>
         <Button
           size={size}
           variant={variant}
-          startIcon={<DownloadOutlinedIcon />}
           disabled={downloading}
           onClick={() => void download()}
           data-testid={testId}
         >
+          <Download aria-hidden className="size-3.5" />
           {downloading ? 'Downloading…' : `Download ${formatLabel(job.format)}`}
         </Button>
-      </Box>
-    </Stack>
+      </div>
+    </div>
   );
 }

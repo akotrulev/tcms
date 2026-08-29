@@ -1,4 +1,5 @@
-import { Alert, Box, Skeleton, Stack, Typography } from '@mui/material';
+import { Banner } from '../../components/kit';
+import { Skeleton } from '../../components/ui';
 import { useReferencedCases, type CaseReference } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
@@ -80,8 +81,8 @@ export function ResolvedScope({
   if (references.length === 0) return null;
 
   return (
-    <Stack sx={{ gap: 0.5 }} data-testid={testId}>
-      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+    <div className="flex flex-col gap-1" data-testid={testId}>
+      <span className="text-xs text-ink-2">
         {dirty
           ? /*
               The honest sentence for a reference the author has just added. The rows ARE live
@@ -94,7 +95,7 @@ export function ResolvedScope({
           : 'The cases these references catch right now, recomputed on every read.'}
         {namedCaseCount > 0
           && ` The ${plural(namedCaseCount, 'case')} named directly above are not repeated here.`}
-      </Typography>
+      </span>
 
       <DataRegion
         testId={testId}
@@ -108,50 +109,44 @@ export function ResolvedScope({
           body: 'The suites and tags above resolve to nothing at the moment. They stay on the plan, and this fills in when a matching case appears.',
         }}
         skeleton={
-          <Stack sx={{ gap: 0.5, pl: 2 }}>
+          <div className="flex flex-col gap-1 pl-4">
             {[0, 1, 2].map((row) => (
-              <Skeleton key={row} variant="text" width="60%" />
+              <Skeleton key={row} className="h-4 w-3/5 rounded" />
             ))}
-          </Stack>
+          </div>
         }
       >
         {() => (
-          <Stack sx={{ gap: 0.25, pl: 2 }} data-testid={`${testId}.List`}>
+          <div className="flex flex-col gap-0.5 pl-4" data-testid={`${testId}.List`}>
             {resolved.truncated.map((cut) => (
-              <Alert
-                key={cut.label}
-                severity="info"
-                sx={{ py: 0, my: 0.5 }}
-                data-testid={`${testId}.Truncated`}
-              >
-                {cut.label} resolves to {plural(cut.total, 'case')} — the first{' '}
-                {formatCount(cut.shown)} are listed.
-              </Alert>
+              <div key={cut.label} className="my-1" data-testid={`${testId}.Truncated`}>
+                <Banner tone="steel">
+                  {cut.label} resolves to {plural(cut.total, 'case')} — the first{' '}
+                  {formatCount(cut.shown)} are listed.
+                </Banner>
+              </div>
             ))}
             {resolved.cases.map((row) => (
-              <Stack
+              <div
                 key={row.id}
-                direction="row"
-                sx={{ gap: 1, alignItems: 'baseline', flexWrap: 'wrap' }}
+                className="flex flex-wrap items-baseline gap-2"
                 data-testid={`${testId}.Row`}
               >
-                <Box aria-hidden sx={{ color: 'text.disabled', fontFamily: 'monospace' }}>
+                <span aria-hidden className="font-mono text-ink-4">
                   ├─
-                </Box>
+                </span>
                 <Identifier>{row.key}</Identifier>
-                <Typography variant="body2">{row.title}</Typography>
+                <span className="text-sm text-ink">{row.title}</span>
                 {/*
                   Which reference brought it in. Without it, taking a suite off and watching three
                   rows vanish is a surprise; with it, the row said so before the click.
                 */}
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  ({row.via.join(', ')})
-                </Typography>
-              </Stack>
+                <span className="text-xs text-ink-2">({row.via.join(', ')})</span>
+              </div>
             ))}
-          </Stack>
+          </div>
         )}
       </DataRegion>
-    </Stack>
+    </div>
   );
 }

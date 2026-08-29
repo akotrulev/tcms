@@ -1,8 +1,6 @@
-import { ThemeProvider } from '@mui/material/styles'
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
-import { theme } from '../app/theme'
 import { AuthContext, type AuthValue } from '../auth/authContextValue'
 import type { CurrentUser } from '../api/types'
 
@@ -16,9 +14,14 @@ import type { CurrentUser } from '../api/types'
  * retry policy. A unit test that fails because the notification provider changed is a test of
  * the wrong thing.
  *
- * The REAL theme is used rather than a bare `createTheme()`, because component code reads
- * `theme.palette.*` and `statusColors` — a default theme would make a missing token render
- * fine under test and blank in the app.
+ * ## ~~The REAL theme is used rather than a bare `createTheme()`~~ → no theme provider at all (T16)
+ *
+ * ~~because component code reads `theme.palette.*` and `statusColors` — a default theme would make
+ * a missing token render fine under test and blank in the app.~~ The concern was real and its
+ * answer is now structural: there is no theme *object*. Colour reaches a component as a Tailwind
+ * utility compiled against `index.css`'s custom properties, so a component under test resolves the
+ * same token the app does with nothing mounted around it — and jsdom applies no stylesheet either
+ * way, so a wrapper here would prove nothing it used to prove.
  */
 export function TestProviders({
   client,
@@ -44,9 +47,7 @@ export function TestProviders({
 }) {
   const tree = (
     <MemoryRouter initialEntries={[route]}>
-      <ThemeProvider theme={theme}>
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      </ThemeProvider>
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
     </MemoryRouter>
   )
 

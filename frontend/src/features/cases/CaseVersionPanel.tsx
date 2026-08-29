@@ -1,5 +1,7 @@
-import { Box, Chip, Stack, Tooltip, Typography } from '@mui/material';
-import PushPinIcon from '@mui/icons-material/PushPin';
+import { Badge } from '../../components/kit';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui';
+import { Pin } from 'lucide-react';
+import { cn } from '../../lib/cn';
 import type { CaseVersion } from '../../api/queries';
 import { useCaseVersions } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
@@ -54,9 +56,9 @@ export function CaseVersionPanel({
         }}
       >
         {(rows) => (
-          <Stack sx={{ gap: 1.5 }}>
-            <Stack
-              sx={{ gap: 1.5, maxHeight: 320, overflowY: 'auto' }}
+          <div className="flex flex-col gap-3">
+            <div
+              className="flex max-h-80 flex-col gap-3 overflow-y-auto"
               data-testid="CaseDetail.Versions.List"
             >
               {rows.map((version) => (
@@ -66,9 +68,9 @@ export function CaseVersionPanel({
                   isCurrent={version.versionNo === currentVersionNo}
                 />
               ))}
-            </Stack>
+            </div>
             <EarliestRecorded oldest={rows[rows.length - 1]} />
-          </Stack>
+          </div>
         )}
       </DataRegion>
     </Panel>
@@ -77,18 +79,16 @@ export function CaseVersionPanel({
 
 function VersionRow({ version, isCurrent }: { version: CaseVersion; isCurrent: boolean }) {
   return (
-    <Box
+    <div
       data-testid="CaseDetail.Versions.Item"
-      sx={{
-        pl: 1.5,
-        borderLeft: '2px solid',
-        borderColor: isCurrent ? 'primary.main' : 'divider',
-      }}
+      className={cn('border-l-2 pl-3', isCurrent ? 'border-steel' : 'border-white/8')}
     >
-      <Stack direction="row" sx={{ alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mb: 0.25 }}>
+      <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
         <Identifier variant="strong">v{version.versionNo}</Identifier>
         {isCurrent && (
-          <Chip size="small" label="Current" color="primary" variant="outlined" data-testid="CaseDetail.Versions.Current" />
+          <Badge tone="steel" data-testid="CaseDetail.Versions.Current">
+            Current
+          </Badge>
         )}
         {/*
           A pinned version is referenced by a run, an approval or a generated report, which makes it
@@ -97,28 +97,32 @@ function VersionRow({ version, isCurrent }: { version: CaseVersion; isCurrent: b
           a past report still depends on before, not after.
         */}
         {version.pinned && (
-          <Tooltip title="A run, approval or report still references this version, so it is never pruned.">
-            <Chip
-              size="small"
-              variant="outlined"
-              icon={<PushPinIcon sx={{ fontSize: '0.85rem' }} />}
-              label="Pinned"
-              data-testid="CaseDetail.Versions.Pinned"
-            />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span data-testid="CaseDetail.Versions.Pinned">
+                <Badge tone="plain">
+                  <Pin aria-hidden className="size-3" />
+                  Pinned
+                </Badge>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              A run, approval or report still references this version, so it is never pruned.
+            </TooltipContent>
           </Tooltip>
         )}
-      </Stack>
+      </div>
 
-      <Typography variant="body2" sx={{ color: version.changeComment ? 'text.primary' : 'text.secondary' }}>
+      <p className={cn('m-0 text-sm', version.changeComment ? 'text-ink' : 'text-ink-2')}>
         {/*
           `changeComment` is nullable and most saves have none. "No comment" rather than a blank
           line: an empty row reads as a rendering failure, and the reader cannot tell whether the
           author wrote nothing or the panel lost it.
         */}
         {version.changeComment ?? 'No comment'}
-      </Typography>
+      </p>
 
-      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+      <span className="block text-xs text-ink-2">
         {/*
           `createdBy` is null when the author cannot be named — an imported version, or one whose
           recorded account no longer resolves. The contract says this field is always present and
@@ -127,11 +131,14 @@ function VersionRow({ version, isCurrent }: { version: CaseVersion; isCurrent: b
         */}
         {version.createdBy?.displayName ?? 'Unknown author'}
         {' · '}
-        <Tooltip title={formatDateTime(version.createdAt)}>
-          <Box component="span">{formatAge(version.createdAt)}</Box>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>{formatAge(version.createdAt)}</span>
+          </TooltipTrigger>
+          <TooltipContent>{formatDateTime(version.createdAt)}</TooltipContent>
         </Tooltip>
-      </Typography>
-    </Box>
+      </span>
+    </div>
   );
 }
 
@@ -148,13 +155,12 @@ function EarliestRecorded({ oldest }: { oldest: CaseVersion | undefined }) {
   if (!oldest || oldest.versionNo === 1) return null;
 
   return (
-    <Typography
-      variant="caption"
-      sx={{ color: 'text.secondary', borderTop: '1px solid', borderColor: 'divider', pt: 1.5 }}
+    <p
+      className="m-0 border-t border-white/8 pt-3 text-xs text-ink-2"
       data-testid="CaseDetail.Versions.EarliestRecorded"
     >
       v{oldest.versionNo} is the earliest recorded version. This case is older than its history —
       what it said before then was not kept.
-    </Typography>
+    </p>
   );
 }

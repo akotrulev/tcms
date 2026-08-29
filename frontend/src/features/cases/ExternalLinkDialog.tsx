@@ -1,17 +1,15 @@
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
-  MenuItem,
-  Stack,
-  TextField,
-  ToggleButton,
-  ToggleButtonGroup,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-} from '@mui/material';
+  Input,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { useEffect, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { useLinkCaseExternally } from '../../api/queries';
@@ -113,88 +111,126 @@ export function ExternalLinkDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid="CaseDetail.ExternalLink">
-      <DialogTitle>Link this case to something outside TCMS</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 0.5 }}>
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            value={kind}
-            onChange={(_event, chosen: Kind | null) => chosen && setKind(chosen)}
-            aria-label="What is being linked"
-          >
-            <ToggleButton value="EXTERNAL_GIT" data-testid="CaseDetail.ExternalLink.Git">
-              Code
-            </ToggleButton>
-            <ToggleButton value="EXTERNAL_URL" data-testid="CaseDetail.ExternalLink.Url">
-              A URL
-            </ToggleButton>
-          </ToggleButtonGroup>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid="CaseDetail.ExternalLink">
+      <DialogHeader>
+          <DialogTitle>Link this case to something outside TCMS</DialogTitle>
+        </DialogHeader>
+      <div className="mt-4 flex flex-col gap-4">
+          {/*
+            ~~`ToggleButtonGroup`~~ → two `aria-pressed` buttons, T16. The group was already
+            `exclusive` over two values, which is a two-state choice and not a set — so the port is
+            the markup MUI was rendering underneath, with the pressed state stated on each button
+            rather than inferred from a class.
+          */}
+          <div role="group" aria-label="What is being linked" className="flex gap-1">
+            {(
+              [
+                ['EXTERNAL_GIT', 'Code', 'CaseDetail.ExternalLink.Git'],
+                ['EXTERNAL_URL', 'A URL', 'CaseDetail.ExternalLink.Url'],
+              ] as const
+            ).map(([value, label, testId]) => (
+              <Button
+                key={value}
+                type="button"
+                size="sm"
+                variant={kind === value ? 'primary' : 'ghost'}
+                aria-pressed={kind === value}
+                onClick={() => setKind(value)}
+                data-testid={testId}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
 
           {kind === 'EXTERNAL_GIT' ? (
             <>
-              <TextField
-                label="Repository"
-                value={repo}
-                onChange={(event) => setRepo(event.target.value)}
-                placeholder="acme/checkout-service"
-                error={fieldError('repo') !== undefined}
-                helperText={fieldError('repo')}
-                slotProps={{ htmlInput: { 'data-testid': 'CaseDetail.ExternalLink.Repo' } }}
-              />
-              <TextField
-                label="File"
-                value={path}
-                onChange={(event) => setPath(event.target.value)}
-                placeholder="src/main/java/com/acme/Checkout.java"
-                error={fieldError('path') !== undefined}
-                helperText={fieldError('path')}
-                slotProps={{ htmlInput: { 'data-testid': 'CaseDetail.ExternalLink.Path' } }}
-              />
-              <Stack direction="row" spacing={2}>
-                <TextField
+              <Field label="Repository" htmlFor="link-repo" error={fieldError('repo')}>
+                <Input
+                  id="link-repo"
+                  value={repo}
+                  onChange={(event) => setRepo(event.target.value)}
+                  placeholder="acme/checkout-service"
+                  aria-invalid={fieldError('repo') !== undefined}
+                  data-testid="CaseDetail.ExternalLink.Repo"
+                />
+              </Field>
+              <Field label="File" htmlFor="link-path" error={fieldError('path')}>
+                <Input
+                  id="link-path"
+                  value={path}
+                  onChange={(event) => setPath(event.target.value)}
+                  placeholder="src/main/java/com/acme/Checkout.java"
+                  aria-invalid={fieldError('path') !== undefined}
+                  data-testid="CaseDetail.ExternalLink.Path"
+                />
+              </Field>
+              <div className="flex gap-4">
+                <Field
                   label="First line"
-                  value={lineStart}
-                  onChange={(event) => setLineStart(event.target.value)}
-                  type="number"
-                  error={fieldError('lineStart') !== undefined}
-                  helperText={fieldError('lineStart') ?? 'Optional — leave both empty for the whole file.'}
-                  slotProps={{ htmlInput: { 'data-testid': 'CaseDetail.ExternalLink.LineStart' } }}
-                />
-                <TextField
+                  htmlFor="link-line-start"
+                  error={fieldError('lineStart')}
+                  help="Optional — leave both empty for the whole file."
+                  className="flex-1"
+                >
+                  <Input
+                    id="link-line-start"
+                    type="number"
+                    value={lineStart}
+                    onChange={(event) => setLineStart(event.target.value)}
+                    aria-invalid={fieldError('lineStart') !== undefined}
+                    data-testid="CaseDetail.ExternalLink.LineStart"
+                  />
+                </Field>
+                <Field
                   label="Last line"
-                  value={lineEnd}
-                  onChange={(event) => setLineEnd(event.target.value)}
-                  type="number"
-                  error={fieldError('lineEnd') !== undefined}
-                  helperText={fieldError('lineEnd')}
-                  slotProps={{ htmlInput: { 'data-testid': 'CaseDetail.ExternalLink.LineEnd' } }}
-                />
-              </Stack>
-              <TextField
+                  htmlFor="link-line-end"
+                  error={fieldError('lineEnd')}
+                  className="flex-1"
+                >
+                  <Input
+                    id="link-line-end"
+                    type="number"
+                    value={lineEnd}
+                    onChange={(event) => setLineEnd(event.target.value)}
+                    aria-invalid={fieldError('lineEnd') !== undefined}
+                    data-testid="CaseDetail.ExternalLink.LineEnd"
+                  />
+                </Field>
+              </div>
+              <Field
                 label="Commit"
-                value={commitSha}
-                onChange={(event) => setCommitSha(event.target.value)}
-                placeholder="4f9c2b1"
-                error={fieldError('commitSha') !== undefined}
-                helperText={
-                  fieldError('commitSha') ??
-                  'The lines are pinned to this commit. Without one they point at different code after the next push — a branch name is refused for that reason.'
-                }
-                slotProps={{ htmlInput: { 'data-testid': 'CaseDetail.ExternalLink.Sha' } }}
-              />
+                htmlFor="link-sha"
+                error={fieldError('commitSha')}
+                help="The lines are pinned to this commit. Without one they point at different code after the next push — a branch name is refused for that reason."
+              >
+                <Input
+                  id="link-sha"
+                  value={commitSha}
+                  onChange={(event) => setCommitSha(event.target.value)}
+                  placeholder="4f9c2b1"
+                  aria-invalid={fieldError('commitSha') !== undefined}
+                  data-testid="CaseDetail.ExternalLink.Sha"
+                />
+              </Field>
             </>
           ) : (
-            <TextField
+            <Field
               label="Address"
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-              placeholder="https://specs.example.com/refunds"
-              error={fieldError('url') !== undefined}
-              helperText={fieldError('url') ?? 'Must start with http:// or https://.'}
-              slotProps={{ htmlInput: { 'data-testid': 'CaseDetail.ExternalLink.Address' } }}
-            />
+              htmlFor="link-url"
+              error={fieldError('url')}
+              help="Must start with http:// or https://."
+            >
+              <Input
+                id="link-url"
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                placeholder="https://specs.example.com/refunds"
+                aria-invalid={fieldError('url') !== undefined}
+                data-testid="CaseDetail.ExternalLink.Address"
+              />
+            </Field>
           )}
 
           {/*
@@ -204,21 +240,31 @@ export function ExternalLinkDialog({
             false claim — and a form that always sent the default would make the other two
             unreachable from this product, which is the shape this slice exists to close.
           */}
-          <TextField
-            select
+          <Field
             label="What this case does with it"
-            value={relationship}
-            onChange={(event) => setRelationship(event.target.value as LinkRelationship)}
-            error={fieldError('relationship') !== undefined}
-            helperText={fieldError('relationship') ?? linkRelationshipHelp[relationship]}
-            slotProps={{ htmlInput: { 'data-testid': 'CaseDetail.ExternalLink.Relationship' } }}
+            htmlFor="link-relationship"
+            error={fieldError('relationship')}
+            help={linkRelationshipHelp[relationship]}
           >
-            {(Object.keys(linkRelationshipLabels) as LinkRelationship[]).map((value) => (
-              <MenuItem key={value} value={value}>
-                {linkRelationshipLabels[value]}
-              </MenuItem>
-            ))}
-          </TextField>
+            {/*
+              `NativeSelect` and not the Radix one, for T15's recorded reason: three words from a
+              closed set is exactly what the platform control is for, and `@radix-ui/react-select`
+              cannot run under jsdom, whose `hasPointerCapture` it calls.
+            */}
+            <NativeSelect
+              id="link-relationship"
+              value={relationship}
+              onChange={(event) => setRelationship(event.target.value as LinkRelationship)}
+              aria-invalid={fieldError('relationship') !== undefined}
+              data-testid="CaseDetail.ExternalLink.Relationship"
+            >
+              {(Object.keys(linkRelationshipLabels) as LinkRelationship[]).map((value) => (
+                <option key={value} value={value}>
+                  {linkRelationshipLabels[value]}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
 
           {/*
             Stated because it is visible and would otherwise read as a failure: the panel is served
@@ -227,30 +273,32 @@ export function ExternalLinkDialog({
             the other direction — a link somebody else made, or one made from the documentation
             page, which arrives on the next refresh rather than now.
           */}
-          <DialogContentText variant="body2">
+          <p className="m-0 text-sm text-ink-2">
             Links made elsewhere can take a minute to appear on this panel.
-          </DialogContentText>
+          </p>
 
           {unnamedFailure && (
-            <Alert severity="error" role="alert" data-testid="CaseDetail.ExternalLink.Error">
+            <div data-testid="CaseDetail.ExternalLink.Error">
+            <Banner tone="bad"><span role="alert">
               {describeError(write.error).body}
-            </Alert>
+            </span></Banner>
+          </div>
           )}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
+        </div>
+      <DialogFooter>
         <Button onClick={onClose} data-testid="CaseDetail.ExternalLink.Cancel">
           Cancel
         </Button>
         <Button
-          variant="contained"
+          variant="primary"
           disabled={write.isPending}
           onClick={submit}
           data-testid="CaseDetail.ExternalLink.Confirm"
         >
           {write.isPending ? 'Linking…' : 'Link'}
         </Button>
-      </DialogActions>
+      </DialogFooter>
+    </DialogContent>
     </Dialog>
   );
 }

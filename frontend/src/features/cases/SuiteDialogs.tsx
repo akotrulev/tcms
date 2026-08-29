@@ -1,15 +1,15 @@
+import { Banner, MultiPicker } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
-  Autocomplete,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  Stack,
-  TextField,
-} from '@mui/material';
+  Input,
+  Textarea,
+} from '../../components/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -241,79 +241,85 @@ function SuiteFormDialog({
   return (
     // `md`, not `sm`: the two condition panels each carry a list, a picker and a create button,
     // and at `sm` the reorder controls wrap under the title they belong to.
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md" data-testid={testId}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-2xl" data-testid={testId}>
       <form onSubmit={submit} noValidate aria-busy={isPending}>
-        <DialogTitle>{title}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="mt-4 flex flex-col gap-4">
+          <div className="flex flex-col mt-2 gap-4">
             {errors.root && (
-              <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.Error`}>
+              <div data-testid={`${TestIdPrefix}.Error`}>
+            <Banner tone="bad"><span role="alert">
                 {errors.root.message}
-              </Alert>
+              </span></Banner>
+          </div>
             )}
-            <TextField
+            <Field
               label="Name"
-              required
+              htmlFor="name"
+              error={errors.name?.message}
+              help=" "
+            >
+            <Input
+              id="name"
               autoComplete="off"
-              error={!!errors.name}
-              helperText={errors.name?.message ?? ' '}
-              slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Name`, maxLength: MAX_NAME } }}
+              required
+              aria-invalid={!!errors.name}
+              maxLength={MAX_NAME}
+              data-testid={`${TestIdPrefix}.Name`}
               {...register('name')}
             />
-            <TextField
+            </Field>
+            <Field
               label="Description"
-              multiline
-              minRows={2}
-              error={!!errors.description}
-              helperText={errors.description?.message ?? 'Optional.'}
-              slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Description` } }}
+              htmlFor="description"
+              error={errors.description?.message}
+              help="Optional."
+            >
+            <Textarea
+              id="description"
+              rows={2}
+              aria-invalid={!!errors.description}
+              data-testid={`${TestIdPrefix}.Description`}
               {...register('description')}
             />
+            </Field>
             <Controller
               control={control}
               name="tagRules"
               render={({ field, fieldState }) => (
-                <Autocomplete
-                  multiple
-                  freeSolo
-                  // The tags in use, most-used first, for the case editor's reason and with its
-                  // caveat: derived rather than curated, and `freeSolo` so a rule may still name a
-                  // tag no case carries yet — which is how a suite gets written before its cases.
-                  options={(projectTags.data ?? []).map((usage) => usage.tag)}
-                  filterSelectedOptions
-                  value={field.value}
-                  onChange={(_event, value) =>
-                    field.onChange([
-                      ...new Set(value.map((tag) => tag.trim()).filter((tag) => tag !== '')),
-                    ])
-                  }
-                  onBlur={field.onBlur}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Tag rules"
-                      error={!!fieldState.error}
-                      helperText={
-                        fieldState.error?.message ??
-                        'Any case carrying ANY of these belongs to this suite, wherever it is filed.'
-                      }
-                      slotProps={{
-                        // `...params.slotProps` FIRST, and this is not tidiness. MUI puts the
-                        // selected chips in `slotProps.input.startAdornment` and the field's ref
-                        // and ARIA wiring in `slotProps.htmlInput`; an object that merely adds a
-                        // testid REPLACES the lot, so every tag is held by the form, sent on save,
-                        // and invisible on screen — the author types it, sees nothing, and types
-                        // it again. Both gates were green when this was wrong.
-                        ...params.slotProps,
-                        htmlInput: {
-                          ...params.slotProps?.htmlInput,
-                          'data-testid': `${TestIdPrefix}.TagRules`,
-                        },
-                        formHelperText: { role: fieldState.error ? 'alert' : undefined },
-                      }}
-                    />
-                  )}
-                />
+                <Field
+                  label="Tag rules"
+                  htmlFor="tag-rules"
+                  error={fieldState.error?.message}
+                  help="Any case carrying ANY of these belongs to this suite, wherever it is filed."
+                >
+                  {/*
+                    The tags in use, most-used first, for the case editor's reason and with its
+                    caveat: derived rather than curated, and `onCreate` (~~`freeSolo`~~) so a rule
+                    may still name a tag no case carries yet — which is how a suite gets written
+                    before its cases.
+                  */}
+                  <MultiPicker
+                    id="tag-rules"
+                    options={(projectTags.data ?? []).map((usage) => usage.tag)}
+                    optionKey={(tag) => tag}
+                    optionLabel={(tag) => tag}
+                    optionText={(tag) => tag}
+                    selected={field.value}
+                    onChange={(value) =>
+                      field.onChange([
+                        ...new Set(value.map((tag) => tag.trim()).filter((tag) => tag !== '')),
+                      ])
+                    }
+                    onCreate={(typed) => field.onChange([...new Set([...field.value, typed])])}
+                    onBlur={field.onBlur}
+                    aria-invalid={!!fieldState.error}
+                    data-testid={`${TestIdPrefix}.TagRules`}
+                  />
+                </Field>
               )}
             />
 
@@ -327,17 +333,17 @@ function SuiteFormDialog({
               §98 removed the tree — so the panel's inherited section is empty here by construction
               rather than by omission.
             */}
-            <Stack sx={{ gap: 1 }}>
-              <DialogContentText variant="body2">
+            <div className="flex flex-col gap-2">
+              <p className="m-0 text-sm text-ink-2">
                 Conditions are inherited by the cases <strong>filed</strong> in this suite. A case
                 added individually, or matched by a tag rule, does not pick them up.
-              </DialogContentText>
-              <Stack sx={{ gap: 3 }}>
+              </p>
+              <div className="flex flex-col gap-6">
                 <Controller
                   control={control}
                   name="preconditionIds"
                   render={({ field, fieldState }) => (
-                    <Stack sx={{ gap: 0.5 }}>
+                    <div className="flex flex-col gap-1">
                       <ConditionsPanel
                         kind="PRE"
                         projectId={projectId}
@@ -350,18 +356,20 @@ function SuiteFormDialog({
                         onEdit={(condition) => setConditionDialog({ kind: 'PRE', condition })}
                       />
                       {fieldState.error && (
-                        <Alert severity="error" role="alert">
+                        <div>
+            <Banner tone="bad"><span role="alert">
                           {fieldState.error.message}
-                        </Alert>
+                        </span></Banner>
+          </div>
                       )}
-                    </Stack>
+                    </div>
                   )}
                 />
                 <Controller
                   control={control}
                   name="postconditionIds"
                   render={({ field, fieldState }) => (
-                    <Stack sx={{ gap: 0.5 }}>
+                    <div className="flex flex-col gap-1">
                       <ConditionsPanel
                         kind="POST"
                         projectId={projectId}
@@ -374,15 +382,17 @@ function SuiteFormDialog({
                         onEdit={(condition) => setConditionDialog({ kind: 'POST', condition })}
                       />
                       {fieldState.error && (
-                        <Alert severity="error" role="alert">
+                        <div>
+            <Banner tone="bad"><span role="alert">
                           {fieldState.error.message}
-                        </Alert>
+                        </span></Banner>
+          </div>
                       )}
-                    </Stack>
+                    </div>
                   )}
                 />
-              </Stack>
-            </Stack>
+              </div>
+            </div>
             {/*
               B10 — what detaching a condition costs, said before Save rather than discovered after.
 
@@ -396,27 +406,29 @@ function SuiteFormDialog({
               from the stored rows rather than predicted from a rule.
             */}
             {abandonedDeclines > 0 && (
-              <Alert severity="warning" data-testid={`${TestIdPrefix}.DeclineWarning`}>
+              <div data-testid={`${TestIdPrefix}.DeclineWarning`}>
+            <Banner tone="warn">
                 {abandonedDeclines === 1
                   ? 'One case has opted out of a condition you are removing. That opt-out is deleted with it, and re-attaching the condition does not bring it back.'
                   : `${plural(abandonedDeclines, 'case')} have opted out of conditions you are removing. Those opt-outs are deleted with them, and re-attaching the conditions does not bring them back.`}
-              </Alert>
+              </Banner>
+          </div>
             )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
+          </div>
+        </div>
+        <DialogFooter>
           <Button onClick={onClose} data-testid={`${TestIdPrefix}.Cancel`}>
             Cancel
           </Button>
           <Button
             type="submit"
-            variant="contained"
+            variant="primary"
             disabled={isPending}
             data-testid={`${TestIdPrefix}.Submit`}
           >
             {isPending ? 'Saving…' : submitLabel}
           </Button>
-        </DialogActions>
+        </DialogFooter>
       </form>
       {conditionDialog && (
         <ConditionEditDialog
@@ -437,6 +449,7 @@ function SuiteFormDialog({
           }}
         />
       )}
+    </DialogContent>
     </Dialog>
   );
 }
@@ -590,21 +603,17 @@ export function DeleteSuiteDialog({
   }, [open, suite.id, reset]);
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      fullWidth
-      maxWidth="xs"
-      data-testid={`${TestIdPrefix}.Delete`}
-    >
-      <DialogTitle>Delete this suite?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2}>
-          <DialogContentText>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-sm" data-testid={`${TestIdPrefix}.Delete`}>
+      <DialogHeader>
+          <DialogTitle>Delete this suite?</DialogTitle>
+        </DialogHeader>
+      <div className="mt-4 flex flex-col gap-4">
+          <p className="m-0 text-ink">
             {/* ~~"removed from the tree"~~ — there has been no tree since §98, and a suite is a
                 named collection resolved from three arms. */}
             <Identifier>{suite.key}</Identifier> {suite.name} will be removed from this project.
-          </DialogContentText>
+          </p>
           {/*
             B10 — what this costs, before it is pressed rather than after.
 
@@ -621,7 +630,8 @@ export function DeleteSuiteDialog({
             confirmation is worse than a number that is absent.
           */}
           {suite.caseCount > 0 && (
-            <Alert severity="warning" data-testid={`${TestIdPrefix}.Delete.Membership`}>
+            <div data-testid={`${TestIdPrefix}.Delete.Membership`}>
+            <Banner tone="warn">
               This suite currently resolves to {formatCount(suite.caseCount)}{' '}
               {suite.caseCount === 1 ? 'case' : 'cases'}
               {suite.caseIds.length > 0 &&
@@ -630,22 +640,23 @@ export function DeleteSuiteDialog({
                 `, and it claims everything tagged ${suite.tagRules.join(', ')}`}
               . The cases are not deleted — they stop belonging to this collection. A case{' '}
               <strong>filed</strong> here blocks the delete instead.
-            </Alert>
+            </Banner>
+          </div>
           )}
           {remove.isError && (
-            <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.Delete.Error`}>
+            <div data-testid={`${TestIdPrefix}.Delete.Error`}>
+            <Banner tone="bad"><span role="alert">
               {describeError(remove.error).body}
-            </Alert>
+            </span></Banner>
+          </div>
           )}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
+        </div>
+      <DialogFooter>
         <Button onClick={onClose} data-testid={`${TestIdPrefix}.Delete.Cancel`}>
           Cancel
         </Button>
         <Button
-          color="error"
-          variant="contained"
+          variant="danger"
           disabled={remove.isPending}
           data-testid={`${TestIdPrefix}.Delete.Confirm`}
           onClick={() => {
@@ -661,7 +672,8 @@ export function DeleteSuiteDialog({
         >
           {remove.isPending ? 'Deleting…' : 'Delete suite'}
         </Button>
-      </DialogActions>
+      </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }

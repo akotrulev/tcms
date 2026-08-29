@@ -1,4 +1,4 @@
-import { Box, Stack, Tooltip, Typography } from '@mui/material';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui';
 import { Link as RouterLink } from 'react-router-dom';
 import type { TestExecutionSummary } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
@@ -48,101 +48,46 @@ export function ExecutionQueue({
   const suffix = modeParam ? `?mode=${modeParam}` : '';
 
   return (
-    <Box
-      component="nav"
-      aria-label="Cases in this run"
-      data-testid="Execution.Queue"
-      sx={{
-        width: 300,
-        flexShrink: 0,
-        borderRight: '1px solid',
-        borderColor: 'divider',
-        bgcolor: 'background.paper',
-        // The rail scrolls independently of the case detail, and sticks: on a 400-case run the
-        // tester is deep in one case's steps and still wants the next one reachable.
-        position: 'sticky',
-        top: 68,
-        maxHeight: 'calc(100vh - 84px)',
-        overflowY: 'auto',
-        // Below lg there is no room for two columns, so the rail is dropped and the detail takes
-        // the width — Split degrades to Focus rather than to a squeezed version of itself. A CSS
-        // swap rather than `useMediaQuery`, so nothing depends on a hook that measures the window.
-        display: { xs: 'none', lg: 'block' },
-      }}
-    >
-      <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid="Execution.Queue.Position">
+    <nav aria-label="Cases in this run" data-testid="Execution.Queue">
+      <div className="px-4 py-3 border-b border-white/8">
+        <span className="m-0 text-xs text-ink-2" data-testid="Execution.Queue.Position">
           {position >= 0
             ? `Case ${position + 1} of ${ordered.length}`
             : `${plural(ordered.length, 'case')} in this run`}
-        </Typography>
-      </Box>
+        </span>
+      </div>
 
-      <Stack component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+      <div className="flex flex-col list-none m-0 p-0">
         {ordered.map((execution) => {
           const current = execution.id === currentExecutionId;
           const kind = execution.status?.kind;
           return (
-            <Box component="li" key={execution.id}>
-              <Box
-                component={RouterLink}
-                to={`/projects/${projectId}/runs/${runId}/executions/${execution.id}${suffix}`}
-                data-testid={RowTestId}
-                // The current row is the app's standard "you are here": an inset accent bar plus
-                // weight, never colour alone (ui-rules' navigation rule), and `aria-current` so a
-                // screen reader is told the same thing the bar says.
-                aria-current={current ? 'page' : undefined}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.25,
-                  px: 2,
-                  py: 1,
-                  textDecoration: 'none',
-                  color: 'text.primary',
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                  bgcolor: current ? 'action.selected' : 'transparent',
-                  boxShadow: current ? 'inset 3px 0 0 0 var(--color-action-primary)' : 'none',
-                  '&:hover': { bgcolor: 'action.hover', textDecoration: 'none' },
-                }}
-              >
+            <li key={execution.id}>
+              <RouterLink to={`/projects/${projectId}/runs/${runId}/executions/${execution.id}${suffix}`} data-testid={RowTestId} aria-current={current ? 'page' : undefined}>
                 {/*
                   The dot carries the result and the row carries no other status text — the rail
                   is 300px and a chip per row would leave no room for the title. Colour is not
                   alone: the tooltip names the status, and `Untested` is the readable default
                   rather than an absent mark, so "not run yet" is a state rather than a blank.
                 */}
-                <Tooltip title={kind ? statusLabels[kind] : statusLabels.UNTESTED}>
-                  <Box
-                    component="span"
-                    data-testid={`${RowTestId}.Status`}
-                    aria-label={kind ? statusLabels[kind] : statusLabels.UNTESTED}
-                    sx={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      flexShrink: 0,
-                      bgcolor: kind ? `var(--color-${kind.toLowerCase()})` : 'var(--color-untested)',
-                    }}
-                  />
-                </Tooltip>
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Typography
-                    variant="body2"
+                <Tooltip>
+<TooltipTrigger asChild>
+                  <span data-testid={`${RowTestId}.Status`} aria-label={kind ? statusLabels[kind] : statusLabels.UNTESTED} />
+                </TooltipTrigger>
+<TooltipContent>{kind ? statusLabels[kind] : statusLabels.UNTESTED}</TooltipContent>
+</Tooltip>
+                <div className="min-w-0 flex-1">
+                  <p
                     data-testid={`${RowTestId}.Title`}
-                    sx={{
-                      fontWeight: current ? 600 : 400,
-                      color: current ? 'text.primary' : 'text.secondary',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
+                    className={cn(
+                      'm-0 overflow-hidden text-sm text-ellipsis whitespace-nowrap',
+                      current ? 'font-semibold text-ink' : 'font-normal text-ink-2',
+                    )}
                   >
                     {execution.caseTitle}
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                    <Identifier variant="muted" sx={{ fontSize: '0.6875rem' }}>
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <Identifier variant="muted" className="text-[0.6875rem]">
                       {execution.caseKey}
                     </Identifier>
                     {/* The rail is 260px, so this is the one surface where the chip has to earn
@@ -151,13 +96,13 @@ export function ExecutionQueue({
                     {execution.quarantined && (
                       <QuarantineChip testId={`${RowTestId}.Quarantined`} />
                     )}
-                  </Box>
-                </Box>
-              </Box>
-            </Box>
+                  </div>
+                </div>
+              </RouterLink>
+            </li>
           );
         })}
-      </Stack>
-    </Box>
+      </div>
+    </nav>
   );
 }

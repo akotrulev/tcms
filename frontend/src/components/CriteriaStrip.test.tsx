@@ -1,8 +1,6 @@
-import { ThemeProvider } from '@mui/material/styles'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { Criterion } from '../api/types'
-import { theme } from '../app/theme'
 import { CriteriaStrip } from './CriteriaStrip'
 
 /**
@@ -25,9 +23,7 @@ const criterion = (met: boolean | null | undefined, label = 'Pass rate'): Criter
 
 const renderStrip = (criteria: Criterion[]) =>
   render(
-    <ThemeProvider theme={theme}>
-      <CriteriaStrip criteria={criteria} testId="Test.Criteria" />
-    </ThemeProvider>,
+      <CriteriaStrip criteria={criteria} testId="Test.Criteria" />,
   )
 
 describe('CriteriaStrip', () => {

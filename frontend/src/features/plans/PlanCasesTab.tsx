@@ -1,24 +1,28 @@
+import { Badge, Banner, MultiPicker } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
-  Autocomplete,
-  Box,
   Button,
-  Chip,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  IconButton,
-  MenuItem,
-  Stack,
-  TextField,
+  Input,
   Tooltip,
-  Typography,
-} from '@mui/material';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownwardOutlined';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpwardOutlined';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
+  TooltipContent,
+  TooltipTrigger,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
+import { ArrowDown, ArrowUp, Trash2 } from 'lucide-react';
+import { Banner, MultiPicker } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import {
+  Button,
+  Input,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '../../components/ui';
 import { useMemo, useState } from 'react';
 import { useCases, useProjectTags, useSuites, type CaseReference } from '../../api/queries';
 import type { TestCaseSummary, TestPlan } from '../../api/types';
@@ -148,24 +152,29 @@ export function PlanCasesTab({
       title="Test cases"
       testId="PlanCases"
       actions={
-        <Tooltip title="A case can be named directly in one section and arrive through a suite or a tag in another, so the sections' counts add up to more than the plan's total.">
-          <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid="PlanCases.Total">
+        <Tooltip>
+<TooltipTrigger asChild>
+          <span className="m-0 text-xs text-ink-2" data-testid="PlanCases.Total">
             {plural(plan.caseCount, 'case')} in scope
-          </Typography>
-        </Tooltip>
+          </span>
+        </TooltipTrigger>
+<TooltipContent>A case can be named directly in one section and arrive through a suite or a tag in another, so the sections' counts add up to more than the plan's total.</TooltipContent>
+</Tooltip>
       }
     >
-      <Stack sx={{ gap: 2 }}>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+      <div className="flex flex-col gap-4">
+        <span className="m-0 text-xs text-ink-2">
           Every reference below is resolved on each read: this plan grows when a referenced suite
           grows and when somebody tags a case. Nothing typed here is created until you press Save.
-        </Typography>
+        </span>
 
         {dirty && (
-          <Alert severity="info" data-testid="PlanCases.CountsStale">
+          <div data-testid="PlanCases.CountsStale">
+<Banner tone="steel">
             The counts are the server&rsquo;s, over the plan as it was loaded. They are recomputed
             when this plan is saved.
-          </Alert>
+          </Banner>
+</div>
         )}
 
         {groupIds(draft).map((group, position) => (
@@ -188,31 +197,34 @@ export function PlanCasesTab({
           />
         ))}
 
-        <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1, alignItems: 'flex-start' }}>
-          <TextField
-            size="small"
+        <div className="flex flex-col items-start gap-2 sm:flex-row">
+          <Field
             label="New section"
-            value={newSection}
-            onChange={(event) => setNewSection(event.target.value)}
-            helperText="A sub-feature of this release — “Create an object”, “Navigation”."
-            slotProps={{ htmlInput: { 'data-testid': 'PlanCases.NewSection' } }}
-            sx={{ minWidth: 280 }}
-          />
+            htmlFor="new-section"
+            help="A sub-feature of this release — “Create an object”, “Navigation”."
+            className="min-w-[280px]"
+          >
+            <Input
+              id="new-section"
+              value={newSection}
+              onChange={(event) => setNewSection(event.target.value)}
+              data-testid="PlanCases.NewSection"
+            />
+          </Field>
           <Button
-            size="small"
-            variant="outlined"
+            size="sm"
             data-testid="PlanCases.AddSection"
             disabled={newSection.trim() === ''}
             onClick={() => {
               onChange(addSection(draft, newSection.trim()));
               setNewSection('');
             }}
-            sx={{ mt: 0.5 }}
+            className="mt-6"
           >
             Add section
           </Button>
-        </Stack>
-      </Stack>
+        </div>
+      </div>
 
       {deleting !== null && (
         <DeleteSectionDialog
@@ -246,15 +258,18 @@ function DeleteSectionDialog({
   onConfirm: (disposition: SectionDeletion) => void;
 }) {
   return (
-    <Dialog open onClose={onClose} data-testid="PlanCases.DeleteSection">
-      <DialogTitle>Delete “{name}”?</DialogTitle>
-      <DialogContent>
-        <DialogContentText>
+    <Dialog open onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid="PlanCases.DeleteSection">
+      <DialogHeader>
+          <DialogTitle>Delete “{name}”?</DialogTitle>
+        </DialogHeader>
+      <div className="mt-4 flex flex-col gap-4">
+        <p className="m-0 text-ink">
           This section holds references — suites, tags and cases. Deleting the heading does not have
           to mean dropping them from the plan.
-        </DialogContentText>
-      </DialogContent>
-      <DialogActions>
+        </p>
+      </div>
+      <DialogFooter>
         <Button onClick={onClose} data-testid="PlanCases.DeleteSection.Cancel">
           Cancel
         </Button>
@@ -271,7 +286,8 @@ function DeleteSectionDialog({
         >
           Remove them from the plan
         </Button>
-      </DialogActions>
+      </DialogFooter>
+    </DialogContent>
     </Dialog>
   );
 }
@@ -333,128 +349,112 @@ function GroupCard({
   const remove = (reference: Reference) => onChange(removeReference(draft, group, reference));
 
   return (
-    <Box
-      data-testid={section ? 'PlanCases.Section' : 'PlanCases.Unsectioned'}
-      sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}
-    >
-      <Stack sx={{ gap: 1.5 }}>
-        <Stack direction="row" sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+    <div className="border border-white/8 rounded-lg p-3" data-testid={section ? 'PlanCases.Section' : 'PlanCases.Unsectioned'}>
+      <div className="flex flex-col gap-3">
+        <div className="flex gap-2 items-center flex-wrap">
           {section ? (
-            <TextField
-              size="small"
-              variant="standard"
+            /*
+              The section's name edited in place — ~~a `standard` `TextField` with a bold input
+              slot~~. Borderless on purpose: this is a heading the reader can type over, and a
+              boxed field here would read as a form on a card that is not one.
+            */
+            <Input
               value={section.name}
               onChange={(event) => onChange(renameSection(draft, index, event.target.value))}
-              error={section.name.trim() === ''}
-              slotProps={{
-                htmlInput: {
-                  'data-testid': `PlanCases.SectionName.${index}`,
-                  'aria-label': `Name of section ${index + 1}`,
-                },
-              }}
-              sx={{ '& .MuiInputBase-input': { fontWeight: 600 } }}
+              aria-invalid={section.name.trim() === ''}
+              data-testid={`PlanCases.SectionName.${index}`}
+              aria-label={`Name of section ${index + 1}`}
+              className="border-0 bg-transparent px-0 font-semibold"
             />
           ) : (
-            <Typography variant="subtitle2">Not in a section</Typography>
+            <p className="m-0 text-sm font-medium">Not in a section</p>
           )}
 
           {count !== null && (
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            <span className="m-0 text-xs text-ink-2">
               {plural(count, 'case')}
-            </Typography>
+            </span>
           )}
 
-          <Box sx={{ flex: 1 }} />
+          <div className="flex-1" />
 
           {section && (
             <>
-              <IconButton
-                size="small"
+              <Button variant="quiet" size="icon"
                 aria-label={`Move ${section.name} up`}
                 data-testid={`PlanCases.MoveUp.${index}`}
                 disabled={index === 0}
                 onClick={() => onChange(moveSection(draft, index, -1))}
               >
-                <ArrowUpwardIcon fontSize="small" />
-              </IconButton>
-              <IconButton
-                size="small"
+                <ArrowUp aria-hidden className="size-4" />
+              </Button>
+              <Button variant="quiet" size="icon"
                 aria-label={`Move ${section.name} down`}
                 data-testid={`PlanCases.MoveDown.${index}`}
                 disabled={index === draft.sections.length - 1}
                 onClick={() => onChange(moveSection(draft, index, 1))}
               >
-                <ArrowDownwardIcon fontSize="small" />
-              </IconButton>
-              <IconButton
-                size="small"
+                <ArrowDown aria-hidden className="size-4" />
+              </Button>
+              <Button variant="quiet" size="icon"
                 aria-label={`Delete section ${section.name}`}
                 data-testid={`PlanCases.DeleteSection.${index}`}
                 onClick={onDelete}
               >
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
+                <Trash2 aria-hidden className="size-4" />
+              </Button>
             </>
           )}
-        </Stack>
+        </div>
 
         {/* What defines this group — the references, never the cases they resolve to. */}
-        <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap' }}>
+        <div className="flex gap-1 flex-wrap">
           {references.suiteIds.map((id) => (
-            <Chip
+            <Badge tone="plain"
               key={`suite-${id}`}
-              size="small"
-              variant="outlined"
               data-testid="PlanCases.SuiteChip"
               // The suite tree is served whole, so an unresolved id here means the list has not
               // arrived yet — never that the suite is missing. `…` says loading; a sentence about
               // a suite not being found would be a claim this component cannot make.
-              label={`Suite ${suitesById.get(id)?.name ?? '…'}`}
-              onDelete={() => remove({ kind: 'suite', id })}
-            />
+            >
+`Suite ${suitesById.get(id)?.name ?? '…'}`</Badge>
           ))}
           {references.tags.map((tag) => (
-            <Chip
+            <Badge tone="plain"
               key={`tag-${tag}`}
-              size="small"
-              variant="outlined"
               data-testid="PlanCases.TagChip"
-              label={`Tag ${tag}`}
-              onDelete={() => remove({ kind: 'tag', value: tag })}
-            />
+            >
+`Tag ${tag}`</Badge>
           ))}
           {references.caseIds.map((id) => {
             const known = casesById.get(id);
             return (
-              <Chip
+              <Badge tone="plain"
                 key={`case-${id}`}
-                size="small"
-                variant="outlined"
                 data-testid="PlanCases.CaseChip"
-                label={
+              >
+
                   known ? (
-                    <Stack direction="row" sx={{ gap: 0.75, alignItems: 'center' }}>
+                    <div className="flex gap-1.5 items-center">
                       <Identifier>{known.key}</Identifier>
                       <span>{known.title}</span>
-                    </Stack>
+                    </div>
                   ) : (
                     // Since B8 this is a case the by-ids read did not answer for: deleted since
                     // the plan named it, or past the 200-id cap. It can still be removed, which
                     // is what the chip is for. Named honestly rather than shown as a UUID.
                     'A case this project no longer lists'
                   )
-                }
-                onDelete={() => remove({ kind: 'case', id })}
-              />
+                </Badge>
             );
           })}
           {references.suiteIds.length + references.tags.length + references.caseIds.length === 0
             && rows.length <= 1 && (
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              <span className="m-0 text-xs text-ink-2">
                 Nothing referenced yet.
-              </Typography>
+              </span>
             )}
-        </Stack>
+        </div>
 
         {/*
           …and what those references currently CATCH (§103). Read-only, resolved by the server on
@@ -475,7 +475,7 @@ function GroupCard({
           dirty={dirty}
         />
 
-        <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 1 }}>
+        <div className="flex flex-col gap-2">
           <SuitePicker
             group={group}
             options={suiteOptions}
@@ -488,7 +488,7 @@ function GroupCard({
             group={group}
             onPick={(testCase) => add({ kind: 'case', id: testCase.id })}
           />
-        </Stack>
+        </div>
 
         <NewCaseRows
           projectId={projectId}
@@ -497,8 +497,8 @@ function GroupCard({
           draft={draft}
           onChange={onChange}
         />
-      </Stack>
-    </Box>
+      </div>
+    </div>
   );
 }
 
@@ -515,29 +515,37 @@ function SuitePicker({
   onPick: (id: string) => void;
 }) {
   return (
-    <TextField
-      select
-      size="small"
+    <Field
       label="Add a suite"
-      value=""
-      onChange={(event) => onPick(event.target.value)}
-      sx={{ minWidth: 200 }}
-      data-testid={`PlanCases.AddSuite.${group ?? 'unsectioned'}`}
-      helperText="Everything the suite resolves to, now and later."
+      htmlFor={`add-a-suite-${group ?? 'unsectioned'}`}
+      help="Everything the suite resolves to, now and later."
+      className="min-w-[200px]"
     >
-      {options.map((suite) => (
-        <MenuItem key={suite.id} value={suite.id} disabled={chosen.includes(suite.id)}>
-          {suite.name}
-        </MenuItem>
-      ))}
-      {options.length === 0 && (
-        <MenuItem value="" disabled>
-          This project has no suites yet.
-        </MenuItem>
-      )}
-    </TextField>
+      <NativeSelect
+        id={`add-a-suite-${group ?? 'unsectioned'}`}
+        value=""
+        onChange={(event) => onPick(event.target.value)}
+        data-testid={`PlanCases.AddSuite.${group ?? 'unsectioned'}`}
+      >
+        {/* The empty value is the resting state, not a choice — picking one fires `onPick` and
+            the select returns to it, because a suite is added to the plan rather than held here. */}
+        <option value="" disabled>
+          {options.length === 0 ? 'This project has no suites yet.' : 'Choose a suite…'}
+        </option>
+        {options.map((suite) => (
+          <option key={suite.id} value={suite.id} disabled={chosen.includes(suite.id)}>
+            {suite.name}
+          </option>
+        ))}
+      </NativeSelect>
+    </Field>
   );
 }
+
+/**
+ * A tag, from the project's own vocabulary **or a new one**.
+ *
+ * `freeSolo` because tags are free text everywhere else in the product (§96) — the list is a
 
 /**
  * A tag, from the project's own vocabulary **or a new one**.
@@ -558,37 +566,37 @@ function TagPicker({
   const [value, setValue] = useState('');
 
   return (
-    <Autocomplete
-      freeSolo
-      size="small"
-      options={options}
-      inputValue={value}
-      onInputChange={(_event, next) => setValue(next)}
-      value={null}
-      onChange={(_event, picked) => {
-        const tag = (picked ?? '').trim();
-        if (tag === '') return;
-        onPick(tag);
-        setValue('');
-      }}
-      sx={{ minWidth: 200 }}
-      renderInput={(params) => (
-        <TextField
-          {...params}
-          label="Add a tag"
-          helperText="Every case carrying it, now and later."
-          slotProps={{
-            // `...params.slotProps` FIRST — §96's defect, whose fix is this line: an object that
-            // merely adds a testid REPLACES the input wiring MUI put there.
-            ...params.slotProps,
-            htmlInput: {
-              ...params.slotProps.htmlInput,
-              'data-testid': `PlanCases.AddTag.${group ?? 'unsectioned'}`,
-            },
-          }}
-        />
-      )}
-    />
+    <Field
+      label="Add a tag"
+      htmlFor="add-a-tag"
+      help="Every case carrying it, now and later."
+      className="min-w-[200px]"
+    >
+      {/*
+        A picker that commits and empties rather than holding a selection: the tag is added to the
+        plan the moment it is chosen, so `selected` is always empty and `onChange`/`onCreate` both
+        forward to `onPick`. `MultiPicker` rather than `Combobox` because the free-text arm — a tag
+        the project has never used — is `onCreate`, and only the multi picker has one.
+      */}
+      <MultiPicker
+        id="add-a-tag"
+        options={options}
+        optionKey={(tag) => tag}
+        optionLabel={(tag) => tag}
+        optionText={(tag) => tag}
+        query={value}
+        onQueryChange={setValue}
+        selected={[]}
+        onChange={(picked) => {
+          const tag = (picked[0] ?? '').trim();
+          if (tag === '') return;
+          onPick(tag);
+          setValue('');
+        }}
+        onCreate={(typed) => onPick(typed)}
+        data-testid={`PlanCases.AddTag.${group ?? 'unsectioned'}`}
+      />
+    </Field>
   );
 }
 
@@ -614,36 +622,32 @@ function CasePicker({
   const options = search.data?.items ?? [];
 
   return (
-    <Autocomplete
-      size="small"
-      options={options}
-      filterOptions={(all) => all}
-      getOptionLabel={(option) => `${option.key} ${option.title}`}
-      inputValue={query}
-      onInputChange={(_event, next) => setQuery(next)}
-      value={null}
-      onChange={(_event, picked) => {
-        if (!picked) return;
-        onPick(picked);
-        setQuery('');
-      }}
-      noOptionsText={search.isPending ? 'Searching…' : 'No case matches.'}
-      sx={{ minWidth: 260, flex: 1 }}
-      renderInput={(params) => (
-        <TextField
-          {...params}
-          label="Add an existing case"
-          helperText="By key or title. One case, named directly."
-          slotProps={{
-            ...params.slotProps,
-            htmlInput: {
-              ...params.slotProps.htmlInput,
-              'data-testid': `PlanCases.AddCase.${group ?? 'unsectioned'}`,
-            },
-          }}
-        />
-      )}
-    />
+    <Field
+      label="Add an existing case"
+      htmlFor="add-an-existing-case"
+      help="By key or title. One case, named directly."
+      className="min-w-[260px] flex-1"
+    >
+      {/* Commits and empties, as the tag picker above does — see its note. */}
+      <MultiPicker
+        id="add-an-existing-case"
+        options={options}
+        optionKey={(option) => option.id}
+        optionLabel={(option) => `${option.key} ${option.title}`}
+        optionText={(option) => `${option.key} ${option.title}`}
+        query={query}
+        onQueryChange={setQuery}
+        serverFiltered
+        selected={[]}
+        onChange={(picked) => {
+          if (!picked[0]) return;
+          onPick(picked[0]);
+          setQuery('');
+        }}
+        emptyLabel={search.isPending ? 'Searching…' : 'No case matches.'}
+        data-testid={`PlanCases.AddCase.${group ?? 'unsectioned'}`}
+      />
+    </Field>
   );
 }
 
@@ -678,38 +682,31 @@ function NewCaseRows({
   return (
     <PermissionGate projectId={projectId} permission="case:create">
       {({ allowed, reason }) => (
-        <Stack sx={{ gap: 0.5 }}>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+        <div className="flex flex-col gap-1">
+          <span className="m-0 text-xs text-ink-2">
             New cases {allowed ? '— created when you save this plan, filed in no suite.' : `— ${reason}`}
-          </Typography>
+          </span>
           {rows.map((row, index) => (
-            <Stack key={row.rowId} direction="row" sx={{ gap: 1, alignItems: 'center' }}>
-              <TextField
-                size="small"
-                fullWidth
+            <div className="flex gap-2 items-center" key={row.rowId}>
+              <Input
                 placeholder={index === rows.length - 1 ? 'Write a case title…' : ''}
                 value={row.title}
                 disabled={!allowed}
                 onChange={(event) => onChange(typeInCaseRow(draft, row.rowId, event.target.value))}
-                slotProps={{
-                  htmlInput: {
-                    'data-testid': `PlanCases.NewCase.${group ?? 'unsectioned'}.${index}`,
-                    'aria-label': `New case ${index + 1}`,
-                  },
-                }}
+                data-testid={`PlanCases.NewCase.${group ?? 'unsectioned'}.${index}`}
+                aria-label={`New case ${index + 1}`}
               />
-              <IconButton
-                size="small"
+              <Button variant="quiet" size="icon"
                 aria-label={`Remove new case ${index + 1}`}
                 data-testid={`PlanCases.RemoveNewCase.${group ?? 'unsectioned'}.${index}`}
                 disabled={!allowed || rows.length === 1}
                 onClick={() => onChange(removeCaseRow(draft, row.rowId))}
               >
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
-            </Stack>
+                <Trash2 aria-hidden className="size-4" />
+              </Button>
+            </div>
           ))}
-        </Stack>
+        </div>
       )}
     </PermissionGate>
   );

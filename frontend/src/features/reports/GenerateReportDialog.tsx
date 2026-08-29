@@ -1,15 +1,15 @@
+import { Banner, MultiPicker } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+  Input,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -544,17 +544,22 @@ export function GenerateReportDialog({
   const features = (dimensions.data ?? []).find((dimension) => dimension.key === 'feature');
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
       <form onSubmit={submit} noValidate aria-busy={generate.isPending || save.isPending}>
-        <DialogTitle>
+        <DialogHeader>
+          <DialogTitle>
           {definition ? `Generate “${definition.name}”` : 'Generate a report'}
         </DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+        </DialogHeader>
+        <div className="mt-4 flex flex-col gap-4">
+          <div className="flex flex-col mt-2 gap-4">
             {errors.root && (
-              <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
+              <div data-testid={`${TestId}.Error`}>
+            <Banner tone="bad"><span role="alert">
                 {errors.root.message}
-              </Alert>
+              </span></Banner>
+          </div>
             )}
             {definition && (
               /*
@@ -563,10 +568,12 @@ export function GenerateReportDialog({
                 here — which is the one thing the request cannot express without overwriting the
                 saved parameters it merges over.
               */
-              <Alert severity="info" data-testid={`${TestId}.FromDefinition`}>
+              <div data-testid={`${TestId}.FromDefinition`}>
+            <Banner tone="steel">
                 This uses the settings saved with <strong>{definition.name}</strong> —{' '}
                 {humanize(definition.type)}. Choose the format to produce it in.
-              </Alert>
+              </Banner>
+          </div>
             )}
             {/*
               A run is the RUN SUMMARY's whole scope, so a project with none cannot produce one —
@@ -575,106 +582,115 @@ export function GenerateReportDialog({
               none is exactly where somebody would be reaching for it first.
             */}
             {needsRun && runs.isSuccess && available.length === 0 && (
-              <Alert severity="info" data-testid={`${TestId}.NoRuns`}>
+              <div data-testid={`${TestId}.NoRuns`}>
+            <Banner tone="steel">
                 This project has no test runs yet. A run summary reports on one run, so there is
                 nothing to report on until a run has been started.
-              </Alert>
+              </Banner>
+          </div>
             )}
             {!regenerating && (
-            <TextField
+            <Field
               label="Report"
+              htmlFor="report"
+              error={errors.type?.message}
+              help={(TYPES.find((entry) => entry.value === type) ?? TYPES[0]).hint}
+            >
+            <NativeSelect
+              id="report"
               required
-              select
               defaultValue={TYPES[0].value}
-              error={!!errors.type}
-              helperText={
-                errors.type?.message ??
-                (TYPES.find((entry) => entry.value === type) ?? TYPES[0]).hint
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Type` } }}
+              aria-invalid={!!errors.type}
+              data-testid={`${TestId}.Type`}
               {...register('type')}
             >
               {TYPES.map((entry) => (
-                <MenuItem
+                <option
                   key={entry.value}
                   value={entry.value}
                   data-testid={`${TestId}.Type.${entry.value}`}
                 >
                   {entry.label}
-                </MenuItem>
+                </option>
               ))}
-            </TextField>
+            </NativeSelect>
+            </Field>
             )}
             {isCoverage && pages.isSuccess && documents.length === 0 && (
-              <Alert severity="info" data-testid={`${TestId}.NoDocuments`}>
+              <div data-testid={`${TestId}.NoDocuments`}>
+            <Banner tone="steel">
                 This project has no documentation pages yet. A coverage matrix reports on the
                 statements a document makes, so there is nothing to report on until one is written.
-              </Alert>
+              </Banner>
+          </div>
             )}
             {needsRun && (
-              <TextField
+              <Field
                 label="Run"
+                htmlFor="run"
+                error={errors.runId?.message}
+                help="Which run the numbers come from. Frozen onto the report so it can be reproduced."
+              >
+              <NativeSelect
+                id="run"
                 required
-                select
-                defaultValue=""
-                error={!!errors.runId}
-                helperText={
-                  errors.runId?.message ??
-                  'Which run the numbers come from. Frozen onto the report so it can be reproduced.'
-                }
-                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Run` } }}
+                aria-invalid={!!errors.runId}
+                data-testid={`${TestId}.Run`}
                 {...register('runId')}
               >
-                {available.map((run) => (
-                  <MenuItem key={run.id} value={run.id} data-testid={`${TestId}.Run.${run.key}`}>
-                    <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1 }}>
-                      <Typography variant="body2">
-                        {run.key} · {run.name}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        {runStatusLabels[run.status]}
-                      </Typography>
-                    </Stack>
-                  </MenuItem>
-                ))}
-              </TextField>
+
+                              {available.map((run) => (
+                                <option key={run.id} value={run.id} data-testid={`${TestId}.Run.${run.key}`}>
+                                  <div className="flex items-baseline gap-2">
+                                    <p className="m-0 text-sm">
+                                      {run.key} · {run.name}
+                                    </p>
+                                    <span className="m-0 text-xs text-ink-2">
+                                      {runStatusLabels[run.status]}
+                                    </span>
+                                  </div>
+                                </option>
+                              ))}
+              </NativeSelect>
+              </Field>
             )}
             {isCoverage && (
-              <TextField
+              <Field
                 label="Document"
+                htmlFor="document"
+                error={errors.docPageId?.message}
+                help="The page whose structure the report follows. Its statements are the rows."
+              >
+              <NativeSelect
+                id="document"
                 required
-                select
-                defaultValue=""
-                error={!!errors.docPageId}
-                helperText={
-                  errors.docPageId?.message ??
-                  'The page whose structure the report follows. Its statements are the rows.'
-                }
-                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Document` } }}
+                aria-invalid={!!errors.docPageId}
+                data-testid={`${TestId}.Document`}
                 {...register('docPageId')}
               >
-                {documents.map((page) => (
-                  <MenuItem
-                    key={page.id}
-                    value={page.id}
-                    data-testid={`${TestId}.Document.${page.key}`}
-                  >
-                    <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1 }}>
-                      <Typography variant="body2">
-                        {page.key} · {page.title}
-                      </Typography>
-                      {/*
-                        The status, because a coverage report over a DRAFT specification is a
-                        different claim from one over a PUBLISHED one — the report prints it in its
-                        own metadata, and the picker says it before the choice rather than after.
-                      */}
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        {docPageStatusLabel[page.status]}
-                      </Typography>
-                    </Stack>
-                  </MenuItem>
-                ))}
-              </TextField>
+
+                              {documents.map((page) => (
+                                <option key={page.id}
+                                  value={page.id}
+                                  data-testid={`${TestId}.Document.${page.key}`}
+                                >
+                                  <div className="flex items-baseline gap-2">
+                                    <p className="m-0 text-sm">
+                                      {page.key} · {page.title}
+                                    </p>
+                                    {/*
+                                      The status, because a coverage report over a DRAFT specification is a
+                                      different claim from one over a PUBLISHED one — the report prints it in its
+                                      own metadata, and the picker says it before the choice rather than after.
+                                    */}
+                                    <span className="m-0 text-xs text-ink-2">
+                                      {docPageStatusLabel[page.status]}
+                                    </span>
+                                  </div>
+                                </option>
+                              ))}
+              </NativeSelect>
+              </Field>
             )}
             {isAggregate && (
               <>
@@ -686,156 +702,153 @@ export function GenerateReportDialog({
                   (plan §3, detail 9). The help text under it is the same sentence the plan page
                   shows for the same value — one map, two screens.
                 */}
-                <TextField
+                <Field
                   label="Aggregation policy"
+                  htmlFor="aggregation-policy"
+                  error={errors.policy?.message}
+                  help={aggregationHelp[policy]}
+                >
+                <NativeSelect
+                  id="aggregation-policy"
                   required
-                  select
-                  defaultValue="LATEST"
-                  error={!!errors.policy}
-                  helperText={errors.policy?.message ?? aggregationHelp[policy]}
-                  slotProps={{ htmlInput: { 'data-testid': `${TestId}.Policy` } }}
+                  aria-invalid={!!errors.policy}
+                  data-testid={`${TestId}.Policy`}
                   {...register('policy')}
                 >
-                  {POLICIES.map((value) => (
-                    <MenuItem
-                      key={value}
-                      value={value}
-                      data-testid={`${TestId}.Policy.${value}`}
-                    >
-                      {aggregationLabels[value]}
-                    </MenuItem>
-                  ))}
-                </TextField>
+
+                                  {POLICIES.map((value) => (
+                                    <option key={value}
+                                      value={value}
+                                      data-testid={`${TestId}.Policy.${value}`}
+                                    >
+                                      {aggregationLabels[value]}
+                                    </option>
+                                  ))}
+                </NativeSelect>
+                </Field>
                 <Controller
                   control={control}
                   name="planIds"
                   render={({ field }) => (
-                    <TextField
+                    <Field
                       label="Plans"
-                      select
-                      /*
-                        The testid is on the ROOT and not on the input: a `multiple` select writes
-                        through a hidden input MUI owns, and MUI's own props type refuses a
-                        `data-*` on the display element. Tests reach the control by its role and
-                        label, which is what a person does too.
-                      */
-                      data-testid={`${TestId}.Plans`}
-                      value={field.value}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                      inputRef={field.ref}
-                      helperText="Every plan when none is chosen. Results recorded outside any plan are excluded once one is."
-                      slotProps={{
-                        select: {
-                          multiple: true,
-                          renderValue: (selected) =>
-                            `${(selected as string[]).length} selected`,
-                        },
-                      }}
+                      htmlFor="report-plans"
+                      help="Every plan when none is chosen. Results recorded outside any plan are excluded once one is."
                     >
-                      {(plans.data ?? []).map((plan) => (
-                        <MenuItem
-                          key={plan.id}
-                          value={plan.id}
-                          data-testid={`${TestId}.Plans.${plan.key}`}
-                        >
-                          {plan.key} · {plan.name}
-                        </MenuItem>
-                      ))}
-                    </TextField>
+                      {/*
+                        ~~The testid is on the ROOT and not on the input: a `multiple` select
+                        writes through a hidden input MUI owns, and MUI's own props type refuses a
+                        `data-*` on the display element. Tests reach the control by its role and
+                        label, which is what a person does too.~~ → superseded in T16. There is no
+                        hidden input and no root wrapper: `MultiPicker` is a `role="combobox"` over
+                        a `role="listbox"`, the testid is on the input, and the chosen plans are
+                        chips the reader can see and remove rather than an "N selected" summary
+                        that named none of them.
+                      */}
+                      <MultiPicker
+                        id="report-plans"
+                        options={plans.data ?? []}
+                        optionKey={(plan) => plan.id}
+                        optionLabel={(plan) => `${plan.key} · ${plan.name}`}
+                        optionText={(plan) => `${plan.key} · ${plan.name}`}
+                        selected={(plans.data ?? []).filter((plan) =>
+                          field.value.includes(plan.id),
+                        )}
+                        onChange={(next) => field.onChange(next.map((plan) => plan.id))}
+                        onBlur={field.onBlur}
+                        data-testid={`${TestId}.Plans`}
+                      />
+                    </Field>
                   )}
                 />
                 <Controller
                   control={control}
                   name="featureIds"
                   render={({ field }) => (
-                    <TextField
+                    <Field
                       label="Features"
-                      select
-                      data-testid={`${TestId}.Features`}
-                      disabled={!features || features.values.length === 0}
-                      value={field.value}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                      inputRef={field.ref}
+                      htmlFor="report-features"
                       // Union, not intersection — the contract's reading, said here because the
                       // opposite one is what a person assumes when they tick two boxes.
-                      helperText={
+                      help={
                         features && features.values.length > 0
                           ? 'Cases classified under any of these. Every feature when none is chosen.'
                           : 'This project has no features in its vocabulary yet.'
                       }
-                      slotProps={{
-                        select: {
-                          multiple: true,
-                          renderValue: (selected) =>
-                            `${(selected as string[]).length} selected`,
-                        },
-                      }}
                     >
-                      {(features?.values ?? []).map((value) => (
-                        <MenuItem
-                          key={value.id}
-                          value={value.id}
-                          data-testid={`${TestId}.Features.${value.id}`}
-                        >
-                          {/* The path, so two features of the same name under different parents
-                              are distinguishable — the picker is a filter and picking the wrong
-                              one produces a plausible report of the wrong thing. */}
-                          {value.path.split('.').join(' / ')}
-                        </MenuItem>
-                      ))}
-                    </TextField>
+                      <MultiPicker
+                        id="report-features"
+                        disabled={!features || features.values.length === 0}
+                        options={features?.values ?? []}
+                        optionKey={(value) => value.id}
+                        /* The path, so two features of the same name under different parents are
+                           distinguishable — the picker is a filter and picking the wrong one
+                           produces a plausible report of the wrong thing. */
+                        optionLabel={(value) => value.path.split('.').join(' / ')}
+                        optionText={(value) => value.path.split('.').join(' / ')}
+                        selected={(features?.values ?? []).filter((value) =>
+                          field.value.includes(value.id),
+                        )}
+                        onChange={(next) => field.onChange(next.map((value) => value.id))}
+                        onBlur={field.onBlur}
+                        data-testid={`${TestId}.Features`}
+                      />
+                    </Field>
                   )}
                 />
-                <Stack direction="row" sx={{ gap: 2 }}>
-                  <TextField
+                <div className="flex gap-4">
+                  <Field
                     label="From"
+                    htmlFor="from"
+                    error={errors.from?.message}
+                    help="Inclusive. The beginning when empty."
+                  >
+                  <Input
+                    id="from"
                     type="date"
-                    fullWidth
-                    error={!!errors.from}
-                    helperText={errors.from?.message ?? 'Inclusive. The beginning when empty.'}
-                    slotProps={{
-                      inputLabel: { shrink: true },
-                      htmlInput: { 'data-testid': `${TestId}.From` },
-                    }}
+                    aria-invalid={!!errors.from}
+                    data-testid={`${TestId}.From`}
                     {...register('from')}
                   />
-                  <TextField
+                  </Field>
+                  <Field
                     label="To"
+                    htmlFor="to"
+                    error={errors.to?.message}
+                    help="Inclusive — the whole of that day. Now when empty."
+                  >
+                  <Input
+                    id="to"
                     type="date"
-                    fullWidth
-                    error={!!errors.to}
-                    // "Inclusive" is a claim this form has to make good on: the API's `to` is
-                    // exclusive, so `dayAfter` is what keeps the last day in the report.
-                    helperText={errors.to?.message ?? 'Inclusive — the whole of that day. Now when empty.'}
-                    slotProps={{
-                      inputLabel: { shrink: true },
-                      htmlInput: { 'data-testid': `${TestId}.To` },
-                    }}
+                    aria-invalid={!!errors.to}
+                    data-testid={`${TestId}.To`}
                     {...register('to')}
                   />
-                </Stack>
+                  </Field>
+                </div>
               </>
             )}
-            <TextField
+            <Field
               label="Format"
+              htmlFor="format"
+              error={errors.format?.message}
+              help={reportFormatHints[format]}
+            >
+            <NativeSelect
+              id="format"
               required
-              select
-              defaultValue="HTML"
-              error={!!errors.format}
-              // The hint is the selected format's own, so the picker teaches what each one is for
-              // rather than leaving three acronyms to be guessed at.
-              helperText={errors.format?.message ?? reportFormatHints[format]}
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Format` } }}
+              aria-invalid={!!errors.format}
+              data-testid={`${TestId}.Format`}
               {...register('format')}
             >
-              {formats.map((value) => (
-                <MenuItem key={value} value={value} data-testid={`${TestId}.Format.${value}`}>
-                  {reportFormatLabels[value]}
-                </MenuItem>
-              ))}
-            </TextField>
+
+                          {formats.map((value) => (
+                            <option key={value} value={value} data-testid={`${TestId}.Format.${value}`}>
+                              {reportFormatLabels[value]}
+                            </option>
+                          ))}
+            </NativeSelect>
+            </Field>
             {/*
               Optional, and the helper text says what "saved" does and does not cover: the format is
               chosen per download and is NOT part of a definition, which is a surprise worth
@@ -846,26 +859,29 @@ export function GenerateReportDialog({
               mode are the empty ones it did not render.
             */}
             {!regenerating && (
-              <TextField
+              <Field
                 label="Save these settings as"
-                error={!!errors.saveAs}
-                helperText={
-                  errors.saveAs?.message ??
-                  'Optional. A saved report keeps its selection so the same one can be produced next release — the format is chosen each time.'
-                }
-                slotProps={{ htmlInput: { 'data-testid': `${TestId}.SaveAs` } }}
+                htmlFor="save-these-settings-as"
+                error={errors.saveAs?.message}
+                help="Optional. A saved report keeps its selection so the same one can be produced next release — the format is chosen each time."
+              >
+              <Input
+                id="save-these-settings-as"
+                aria-invalid={!!errors.saveAs}
+                data-testid={`${TestId}.SaveAs`}
                 {...register('saveAs')}
               />
+              </Field>
             )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
+          </div>
+        </div>
+        <DialogFooter>
           <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
             Cancel
           </Button>
           <Button
             type="submit"
-            variant="contained"
+            variant="primary"
             // `!isAggregate &&` is the whole of R6's frontend gate change, and it is the line the
             // test for it had to be written to fail without: a project with no runs may still ask
             // for an aggregate report, whose honest answer is a report saying nothing has been
@@ -886,8 +902,9 @@ export function GenerateReportDialog({
                   ? 'Save and generate'
                   : 'Generate'}
           </Button>
-        </DialogActions>
+        </DialogFooter>
       </form>
+    </DialogContent>
     </Dialog>
   );
 }

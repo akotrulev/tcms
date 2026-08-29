@@ -1,19 +1,16 @@
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
-  Box,
   Button,
   Checkbox,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  FormControlLabel,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+  Input,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -255,25 +252,29 @@ export function RunCloneDialog({
   const submitWithOverride = handleSubmit((values) => cloneRun(values, true));
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
       <form onSubmit={submit} noValidate aria-busy={clone.isPending}>
-        <DialogTitle>Clone this test run</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <DialogContentText variant="body2">
+        <DialogHeader>
+          <DialogTitle>Clone this test run</DialogTitle>
+        </DialogHeader>
+        <div className="mt-4 flex flex-col gap-4">
+          <div className="flex flex-col mt-2 gap-4">
+            <p className="m-0 text-sm text-ink-2">
               <Identifier>{run.key}</Identifier> {run.name}
-            </DialogContentText>
+            </p>
 
             {errors.root && (
-              <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
+              <div data-testid={`${TestId}.Error`}>
+            <Banner tone="bad"><span role="alert">
                 {errors.root.message}
                 {gateRefused && (
                   <PermissionGate projectId={projectId} permission="case:approve">
                     {({ allowed }) => (
                       <Button
-                        size="small"
+                        size="sm"
                         color="warning"
-                        sx={{ mt: 1, display: 'block' }}
+                        className="mt-2 block"
                         disabled={!allowed || clone.isPending}
                         data-testid={`${TestId}.OverrideGate`}
                         onClick={() => void submitWithOverride()}
@@ -283,53 +284,63 @@ export function RunCloneDialog({
                     )}
                   </PermissionGate>
                 )}
-              </Alert>
+              </span></Banner>
+          </div>
             )}
 
-            <TextField
+            <Field
               label="Name"
-              required
+              htmlFor="name"
+              error={errors.name?.message}
+              help="Suggested from the source — usually the new build."
+            >
+            <Input
+              id="name"
               autoComplete="off"
-              error={!!errors.name}
-              helperText={errors.name?.message ?? 'Suggested from the source — usually the new build.'}
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Name`, maxLength: MAX_NAME } }}
+              required
+              aria-invalid={!!errors.name}
+              maxLength={MAX_NAME}
+              data-testid={`${TestId}.Name`}
               {...register('name')}
             />
+            </Field>
 
-            <Stack direction="row" spacing={2}>
-              <TextField
+            <div className="flex gap-4">
+              <Field
                 label="Release"
+                htmlFor="release"
+                error={errors.releaseVersion?.message}
+                help={(run.releaseVersion
+                                  ? `Leave empty to keep ${run.releaseVersion}.`
+                                  : 'The source names none.')}
+              >
+              <Input
+                id="release"
                 autoComplete="off"
-                fullWidth
-                error={!!errors.releaseVersion}
-                helperText={
-                  errors.releaseVersion?.message ??
-                  (run.releaseVersion
-                    ? `Leave empty to keep ${run.releaseVersion}.`
-                    : 'The source names none.')
-                }
-                slotProps={{
-                  htmlInput: { 'data-testid': `${TestId}.Release`, maxLength: MAX_RELEASE },
-                }}
+                aria-invalid={!!errors.releaseVersion}
+                maxLength={MAX_RELEASE}
+                data-testid={`${TestId}.Release`}
                 {...register('releaseVersion')}
               />
-              <TextField
+              </Field>
+              <Field
                 label="Build"
+                htmlFor="build"
+                error={errors.buildNumber?.message}
+                help={(run.buildNumber
+                                  ? `Leave empty to keep ${run.buildNumber}.`
+                                  : 'The source names none.')}
+              >
+              <Input
+                id="build"
                 autoComplete="off"
-                fullWidth
-                error={!!errors.buildNumber}
-                helperText={
-                  errors.buildNumber?.message ??
-                  (run.buildNumber
-                    ? `Leave empty to keep ${run.buildNumber}.`
-                    : 'The source names none.')
-                }
-                slotProps={{
-                  htmlInput: { 'data-testid': `${TestId}.Build`, maxLength: MAX_RELEASE },
-                }}
+                aria-invalid={!!errors.buildNumber}
+                maxLength={MAX_RELEASE}
+                data-testid={`${TestId}.Build`}
                 {...register('buildNumber')}
               />
-            </Stack>
+              </Field>
+            </div>
 
             {/*
               A4's two, and their defaults point in OPPOSITE directions — which is why each says
@@ -337,68 +348,69 @@ export function RunCloneDialog({
               source's; leaving the assignee alone gives the copy to nobody, because a run has no
               assignee for the clone to inherit (the column is per execution).
             */}
-            <Stack direction="row" spacing={2}>
-              <TextField
+            <div className="flex gap-4">
+              <Field
                 label="Configuration"
-                select
-                fullWidth
-                defaultValue=""
-                error={!!errors.configurationId}
-                helperText={
-                  errors.configurationId?.message ?? `Leave as-is to keep ${run.configuration.name}.`
-                }
-                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Configuration` } }}
+                htmlFor="configuration"
+                error={errors.configurationId?.message}
+                help={`Leave as-is to keep ${run.configuration.name}.`}
+              >
+              <NativeSelect
+                id="configuration"
+                aria-invalid={!!errors.configurationId}
+                data-testid={`${TestId}.Configuration`}
                 {...register('configurationId')}
               >
-                <MenuItem value="" data-testid={`${TestId}.Configuration.Keep`}>
-                  <Box component="span" sx={{ color: 'text.secondary' }}>
-                    Keep {run.configuration.name}
-                  </Box>
-                </MenuItem>
-                {(configurations.data ?? [])
-                  // The source's own row is already the first option, under the label that says
-                  // what leaving it does — offering it twice would be two controls' worth of
-                  // choice for one outcome.
-                  .filter((configuration) => configuration.id !== run.configuration.id)
-                  .map((configuration) => (
-                    <MenuItem
-                      key={configuration.id}
-                      value={configuration.id}
-                      data-testid={`${TestId}.Configuration.${configuration.id}`}
-                    >
-                      {configuration.name}
-                    </MenuItem>
-                  ))}
-              </TextField>
-              <TextField
+
+                              <option value="" data-testid={`${TestId}.Configuration.Keep`}>
+                                <span className="text-ink-2">
+                                  Keep {run.configuration.name}
+                                </span>
+                              </option>
+                              {(configurations.data ?? [])
+                                // The source's own row is already the first option, under the label that says
+                                // what leaving it does — offering it twice would be two controls' worth of
+                                // choice for one outcome.
+                                .filter((configuration) => configuration.id !== run.configuration.id)
+                                .map((configuration) => (
+                                  <option key={configuration.id}
+                                    value={configuration.id}
+                                    data-testid={`${TestId}.Configuration.${configuration.id}`}
+                                  >
+                                    {configuration.name}
+                                  </option>
+                                ))}
+              </NativeSelect>
+              </Field>
+              <Field
                 label="Assign to"
-                select
-                fullWidth
-                defaultValue=""
-                error={!!errors.assigneeId}
-                helperText={
-                  errors.assigneeId?.message ??
-                  'Optional — gives every case in the copy to one person.'
-                }
-                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Assignee` } }}
+                htmlFor="assign-to"
+                error={errors.assigneeId?.message}
+                help="Optional — gives every case in the copy to one person."
+              >
+              <NativeSelect
+                id="assign-to"
+                aria-invalid={!!errors.assigneeId}
+                data-testid={`${TestId}.Assignee`}
                 {...register('assigneeId')}
               >
-                <MenuItem value="" data-testid={`${TestId}.Assignee.None`}>
-                  <Box component="span" sx={{ color: 'text.secondary' }}>
-                    Nobody — the team picks it up
-                  </Box>
-                </MenuItem>
-                {(members.data ?? []).map((member) => (
-                  <MenuItem
-                    key={member.id}
-                    value={member.id}
-                    data-testid={`${TestId}.Assignee.${member.id}`}
-                  >
-                    {member.displayName}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Stack>
+
+                              <option value="" data-testid={`${TestId}.Assignee.None`}>
+                                <span className="text-ink-2">
+                                  Nobody — the team picks it up
+                                </span>
+                              </option>
+                              {(members.data ?? []).map((member) => (
+                                <option key={member.id}
+                                  value={member.id}
+                                  data-testid={`${TestId}.Assignee.${member.id}`}
+                                >
+                                  {member.displayName}
+                                </option>
+                              ))}
+              </NativeSelect>
+              </Field>
+            </div>
 
             {/*
               The frozen-scope sentence. A reader expects "the same suites" and gets "the same
@@ -409,12 +421,12 @@ export function RunCloneDialog({
               clone-versus-template distinction, and it is the one thing on this screen somebody
               would otherwise learn from a short checklist.
             */}
-            <DialogContentText variant="caption">
+            <p className="m-0 text-xs text-ink-2">
               The copy covers the same {plural(caseCount, 'case')} as this run, every one
               untested. Results, evidence, defect links and the run’s own timings stay with{' '}
               <Identifier variant="muted">{run.key}</Identifier>. Cases added to those folders since
               this run started are not picked up — a run records the checklist it was given.
-            </DialogContentText>
+            </p>
 
             {/*
               B7 — the other intention, offered where the sentence above states its absence.
@@ -434,46 +446,44 @@ export function RunCloneDialog({
                 control={control}
                 name="rescope"
                 render={({ field }) => (
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={field.value}
-                        onChange={(event) => field.onChange(event.target.checked)}
-                        data-testid={`${TestId}.Rescope`}
-                      />
-                    }
-                    label={
-                      <Stack sx={{ gap: 0.25 }}>
-                        <Typography variant="body2">
-                          Re-resolve the original scope instead
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                          Runs {describeScopeRequest(run.scopeRequest)} again as they stand now, so
-                          cases added since are included. The copy may be longer or shorter than
-                          this run.
-                        </Typography>
-                      </Stack>
-                    }
-                  />
+                  <label className="flex cursor-pointer items-start gap-2">
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={(next: boolean) => field.onChange(next)}
+                      data-testid={`${TestId}.Rescope`}
+                      className="mt-0.5"
+                    />
+                    <span className="flex flex-col gap-0.5">
+                      <span className="text-sm text-ink">
+                        Re-resolve the original scope instead
+                      </span>
+                      <span className="text-xs text-ink-2">
+                        Runs {describeScopeRequest(run.scopeRequest)} again as they stand now, so
+                        cases added since are included. The copy may be longer or shorter than this
+                        run.
+                      </span>
+                    </span>
+                  </label>
                 )}
               />
             )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
+          </div>
+        </div>
+        <DialogFooter>
           <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
             Cancel
           </Button>
           <Button
             type="submit"
-            variant="contained"
+            variant="primary"
             disabled={clone.isPending}
             data-testid={`${TestId}.Submit`}
           >
             {clone.isPending ? 'Cloning…' : 'Clone run'}
           </Button>
-        </DialogActions>
+        </DialogFooter>
       </form>
+    </DialogContent>
     </Dialog>
   );
 }

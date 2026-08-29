@@ -1,18 +1,15 @@
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
-  AlertTitle,
-  Box,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+  Input,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -210,59 +207,73 @@ export function CaseCloneDialog({
     : [];
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
       <form onSubmit={submit} noValidate aria-busy={clone.isPending}>
-        <DialogTitle>Clone this test case</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <DialogContentText variant="body2">
+        <DialogHeader>
+          <DialogTitle>Clone this test case</DialogTitle>
+        </DialogHeader>
+        <div className="mt-4 flex flex-col gap-4">
+          <div className="flex flex-col mt-2 gap-4">
+            <p className="m-0 text-sm text-ink-2">
               <Identifier>{testCase.key}</Identifier> {testCase.title}
-            </DialogContentText>
+            </p>
 
             {errors.root && (
-              <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
+              <div data-testid={`${TestId}.Error`}>
+            <Banner tone="bad"><span role="alert">
                 {errors.root.message}
-              </Alert>
+              </span></Banner>
+          </div>
             )}
 
-            <TextField
+            <Field
               label="Title"
-              required
+              htmlFor="title"
+              error={errors.title?.message}
+              help="Suggested from the source. Two cases a reader cannot tell apart are worse than one."
+            >
+            <Input
+              id="title"
               autoComplete="off"
-              error={!!errors.title}
-              helperText={
-                errors.title?.message ??
-                'Suggested from the source. Two cases a reader cannot tell apart are worse than one.'
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Title`, maxLength: MAX_TITLE } }}
+              required
+              aria-invalid={!!errors.title}
+              maxLength={MAX_TITLE}
+              data-testid={`${TestId}.Title`}
               {...register('title')}
             />
+            </Field>
 
-            <TextField
+            <Field
               label="Folder"
-              select
-              defaultValue=""
-              error={!!errors.suiteId}
-              helperText={errors.suiteId?.message ?? 'Where the copy is filed.'}
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Suite` } }}
+              htmlFor="folder"
+              error={errors.suiteId?.message}
+              help="Where the copy is filed."
+            >
+            <NativeSelect
+              id="folder"
+              aria-invalid={!!errors.suiteId}
+              data-testid={`${TestId}.Suite`}
               {...register('suiteId')}
             >
-              {/*
-                An explicit row rather than a blank first option, naming the folder the copy lands
-                in — `RunCreateDialog`'s reason: a blank option reads as a field somebody forgot to
-                fill in, and here it would hide the whole default.
-              */}
-              <MenuItem value="" data-testid={`${TestId}.Suite.Source`}>
-                <Box component="span" sx={{ color: 'text.secondary' }}>
-                  Same as the source — {sourceFolder}
-                </Box>
-              </MenuItem>
-              {(suites.data ?? []).map((suite) => (
-                <MenuItem key={suite.id} value={suite.id} data-testid={`${TestId}.Suite.${suite.key}`}>
-                  {suite.key} · {suite.name}
-                </MenuItem>
-              ))}
-            </TextField>
+
+                          {/*
+                            An explicit row rather than a blank first option, naming the folder the copy lands
+                            in — `RunCreateDialog`'s reason: a blank option reads as a field somebody forgot to
+                            fill in, and here it would hide the whole default.
+                          */}
+                          <option value="" data-testid={`${TestId}.Suite.Source`}>
+                            <span className="text-ink-2">
+                              Same as the source — {sourceFolder}
+                            </span>
+                          </option>
+                          {(suites.data ?? []).map((suite) => (
+                            <option key={suite.id} value={suite.id} data-testid={`${TestId}.Suite.${suite.key}`}>
+                              {suite.key} · {suite.name}
+                            </option>
+                          ))}
+            </NativeSelect>
+            </Field>
 
             {/*
               Directly under the control that decides it, not down beside the closing caption: the
@@ -275,33 +286,37 @@ export function CaseCloneDialog({
               answer to "which of my four rules is this".
             */}
             {notCarried.length > 0 && (
-              <Alert severity="warning" data-testid={`${TestId}.NotCarriedDeclines`}>
-                <AlertTitle>
+              <div data-testid={`${TestId}.NotCarriedDeclines`}>
+            <Banner tone="warn">
+                <p className="m-0 mb-1 text-sm font-semibold text-ink">
                   The copy will not carry {plural(notCarried.length, 'condition exception')}
-                </AlertTitle>
-                <Typography variant="body2">
+                </p>
+                <p className="m-0 text-sm">
                   A folder&rsquo;s rule can only be declined by a case filed in that folder, so the
                   copy follows {notCarried.length === 1 ? 'its' : 'their'} new folder&rsquo;s rules
                   in full. <Identifier>{testCase.key}</Identifier> keeps{' '}
                   {notCarried.length === 1 ? 'its exception' : 'its exceptions'}.
-                </Typography>
-                <Box component="ul" sx={{ pl: 3, my: 1 }}>
+                </p>
+                <ul className="pl-6 my-2">
                   {notCarried.map((ref) => (
-                    <Typography component="li" variant="body2" key={ref.id}>
+                    <li className="m-0 text-sm" key={ref.id}>
                       {ref.title}
                       {ref.inheritedFrom ? ` — from ${ref.inheritedFrom}` : null}
-                    </Typography>
+                    </li>
                   ))}
-                </Box>
-              </Alert>
+                </ul>
+              </Banner>
+          </div>
             )}
 
             {testCase.automationStatus === 'AUTOMATED' && (
-              <Alert severity="info" data-testid={`${TestId}.AutomationNote`}>
+              <div data-testid={`${TestId}.AutomationNote`}>
+            <Banner tone="steel">
                 The automation key is not copied — it identifies one case to CI, and two cases
                 claiming it would make an ingested result match both. The copy is created as{' '}
                 <strong>To be automated</strong>; give it its own key once the test exists.
-              </Alert>
+              </Banner>
+          </div>
             )}
 
             {/*
@@ -310,27 +325,28 @@ export function CaseCloneDialog({
               whatever folder the copy lands in, while the standing rules it inherits are always the
               destination's — and its exceptions to them are the alert above.
             */}
-            <DialogContentText variant="caption">
+            <p className="m-0 text-xs text-ink-2">
               The steps, classification, tags, attached files and the conditions the case attaches
               itself come across; the standing rules it inherits are its new folder&rsquo;s. The
               review state starts at draft, and the source keeps its version and execution history.
-            </DialogContentText>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
           <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
             Cancel
           </Button>
           <Button
             type="submit"
-            variant="contained"
+            variant="primary"
             disabled={clone.isPending}
             data-testid={`${TestId}.Submit`}
           >
             {clone.isPending ? 'Cloning…' : 'Clone case'}
           </Button>
-        </DialogActions>
+        </DialogFooter>
       </form>
+    </DialogContent>
     </Dialog>
   );
 }

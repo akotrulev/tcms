@@ -1,17 +1,16 @@
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
   Button,
   Checkbox,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  FormControlLabel,
-  FormGroup,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+  Input,
+  Textarea,
+} from '../../components/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -157,121 +156,141 @@ export function PlanCreateDialog({
   });
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
       <form onSubmit={submit} noValidate aria-busy={create.isPending}>
-        <DialogTitle>New test plan</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+        <DialogHeader>
+          <DialogTitle>New test plan</DialogTitle>
+        </DialogHeader>
+        <div className="mt-4 flex flex-col gap-4">
+          <div className="flex flex-col mt-2 gap-4">
             {errors.root && (
-              <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
+              <div data-testid={`${TestId}.Error`}>
+            <Banner tone="bad"><span role="alert">
                 {errors.root.message}
-              </Alert>
+              </span></Banner>
+          </div>
             )}
-            <TextField
+            <Field
               label="Name"
-              required
+              htmlFor="name"
+              error={errors.name?.message}
+              help="The release or milestone this plan covers."
+            >
+            <Input
+              id="name"
               autoComplete="off"
-              error={!!errors.name}
-              helperText={errors.name?.message ?? 'The release or milestone this plan covers.'}
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Name`, maxLength: MAX_NAME } }}
+              required
+              aria-invalid={!!errors.name}
+              maxLength={MAX_NAME}
+              data-testid={`${TestId}.Name`}
               {...register('name')}
             />
-            <Stack direction="row" spacing={2}>
-              <TextField
+            </Field>
+            <div className="flex gap-4">
+              <Field
                 label="Milestone"
+                htmlFor="milestone"
+                error={errors.milestoneName?.message}
+                help="Optional — GA, Sprint 42."
+              >
+              <Input
+                id="milestone"
                 autoComplete="off"
-                fullWidth
-                error={!!errors.milestoneName}
-                helperText={errors.milestoneName?.message ?? 'Optional — GA, Sprint 42.'}
-                slotProps={{
-                  htmlInput: { 'data-testid': `${TestId}.Milestone`, maxLength: MAX_MILESTONE_NAME },
-                }}
+                aria-invalid={!!errors.milestoneName}
+                maxLength={MAX_MILESTONE_NAME}
+                data-testid={`${TestId}.Milestone`}
                 {...register('milestoneName')}
               />
-              <TextField
+              </Field>
+              {/*
+                ~~A date input renders its placeholder over the label unless the label is shrunk,
+                which is MUI's documented case rather than a workaround.~~ → the label sits above
+                the control now, always, so there is nothing to shrink and no overlap to avoid.
+              */}
+              <Field
                 label="Milestone date"
+                htmlFor="milestone-date"
+                error={errors.milestoneDate?.message}
+                help="Optional."
+              >
+              <Input
+                id="milestone-date"
                 type="date"
-                fullWidth
-                error={!!errors.milestoneDate}
-                helperText={errors.milestoneDate?.message ?? 'Optional.'}
-                // A date input renders its placeholder over the label unless the label is shrunk,
-                // which is MUI's documented case rather than a workaround.
-                slotProps={{
-                  inputLabel: { shrink: true },
-                  htmlInput: { 'data-testid': `${TestId}.MilestoneDate` },
-                }}
+                aria-invalid={!!errors.milestoneDate}
+                data-testid={`${TestId}.MilestoneDate`}
                 {...register('milestoneDate')}
               />
-            </Stack>
-            <TextField
+              </Field>
+            </div>
+            <Field
               label="Description"
-              multiline
-              minRows={2}
-              error={!!errors.description}
-              helperText={errors.description?.message ?? 'Optional.'}
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Description` } }}
+              htmlFor="description"
+              error={errors.description?.message}
+              help="Optional."
+            >
+            <Textarea
+              id="description"
+              rows={2}
+              aria-invalid={!!errors.description}
+              data-testid={`${TestId}.Description`}
               {...register('description')}
             />
+            </Field>
 
-            <Stack spacing={0.5}>
-              <Typography variant="subtitle2">Scope</Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            <div className="flex flex-col gap-1">
+              <p className="m-0 text-sm font-medium">Scope</p>
+              <span className="m-0 text-xs text-ink-2">
                 A folder covers everything beneath it, now and as cases are added. You can leave
                 this empty and add folders later.
-              </Typography>
-              <FormGroup data-testid={`${TestId}.Scope`} sx={{ maxHeight: 200, overflowY: 'auto' }}>
+              </span>
+              <div
+                data-testid={`${TestId}.Scope`}
+                className="flex max-h-[200px] flex-col gap-1 overflow-y-auto"
+              >
                 {(suites.data ?? []).map((suite) => (
-                  <FormControlLabel
-                    key={suite.id}
-                    control={
-                      <Checkbox
-                        size="small"
-                        checked={scope.includes(suite.id)}
-                        onChange={(event) =>
-                          setScope((current) =>
-                            event.target.checked
-                              ? [...current, suite.id]
-                              : current.filter((id) => id !== suite.id),
-                          )
-                        }
-                        slotProps={{ input: { 'aria-label': suite.name } }}
-                        data-testid={`${TestId}.Scope.${suite.key}`}
-                      />
-                    }
-                    label={
-                      <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1 }}>
-                        <Identifier variant="muted">{suite.key}</Identifier>
-                        <Typography variant="body2">{suite.name}</Typography>
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                          {plural(suite.caseCount, 'case')}
-                        </Typography>
-                      </Stack>
-                    }
-                  />
+                  <label key={suite.id} className="flex cursor-pointer items-center gap-2">
+                    <Checkbox
+                      checked={scope.includes(suite.id)}
+                      onCheckedChange={(next: boolean) =>
+                        setScope((current) =>
+                          next ? [...current, suite.id] : current.filter((id) => id !== suite.id),
+                        )
+                      }
+                      aria-label={suite.name}
+                      data-testid={`${TestId}.Scope.${suite.key}`}
+                    />
+                    <span className="flex items-baseline gap-2">
+                      <Identifier variant="muted">{suite.key}</Identifier>
+                      <span className="text-sm text-ink">{suite.name}</span>
+                      <span className="text-xs text-ink-2">{plural(suite.caseCount, 'case')}</span>
+                    </span>
+                  </label>
                 ))}
                 {suites.data?.length === 0 && (
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  <p className="m-0 text-sm text-ink-2">
                     This project has no suites yet.
-                  </Typography>
+                  </p>
                 )}
-              </FormGroup>
-            </Stack>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
+              </div>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
           <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
             Cancel
           </Button>
           <Button
             type="submit"
-            variant="contained"
+            variant="primary"
             disabled={create.isPending}
             data-testid={`${TestId}.Submit`}
           >
             {create.isPending ? 'Creating…' : 'Create plan'}
           </Button>
-        </DialogActions>
+        </DialogFooter>
       </form>
+    </DialogContent>
     </Dialog>
   );
 }

@@ -3,9 +3,12 @@
 
   Extracted from `../case-authoring-redesign.html` — the case-authoring render that established the
   direction — and generalised so every other surface can be drawn in it. This file is the render
-  kit, NOT the product's stylesheet: the app's real tokens live in `frontend/src/index.css` and
-  `frontend/src/app/theme.ts`. The two agree on palette and family on purpose (see
-  `../../2026-08-28-design-language.md` §2), so a token added here has a named counterpart there.
+  kit, NOT the product's stylesheet: the app's real tokens live in `frontend/src/index.css`, and
+  that is now the whole of it. ~~and `frontend/src/app/theme.ts`~~ → deleted in plan 007 T16 with
+  the rest of MUI; there is no second declaration of a colour on the app side any more, and
+  `frontend/src/app/tokenSystem.test.ts` is what holds that. The two files agree on palette and
+  family on purpose (see `../../2026-08-28-design-language.md` §2), so a token added here has a
+  named counterpart there.
 
   Every render in this directory links this file and adds nothing but page-specific one-offs.
 */

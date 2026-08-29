@@ -28,8 +28,10 @@
  * already has. That indirection is deliberate — see `AttachmentImage` below for what a naive
  * `<img src>` does here, which is fail silently.
  */
-import { Alert, Box, Skeleton, Stack, Typography } from '@mui/material';
 import { useEffect, useState } from 'react';
+import { Banner } from './kit';
+import { Skeleton } from './ui';
+import { cn } from '../lib/cn';
 import { useAttachmentBlob } from '../api/queries';
 import { describeError } from '../lib/describeError';
 import { FileDownloadLink } from './FileDownloadLink';
@@ -87,14 +89,14 @@ function HeadingBody({ block }: { block: DocBlock }) {
   const depth = block.level ?? 1;
   const element = depth === 1 ? 'h2' : depth === 2 ? 'h3' : 'h4';
 
+  const Heading = element;
   return (
-    <Typography
-      variant={element}
-      component={element}
-      sx={{ fontSize: `${Math.max(1.05, 1.5 - (depth - 1) * 0.14)}rem`, fontWeight: 600 }}
+    <Heading
+      className="m-0 font-semibold text-ink"
+      style={{ fontSize: `${Math.max(1.05, 1.5 - (depth - 1) * 0.14)}rem` }}
     >
       {block.text}
-    </Typography>
+    </Heading>
   );
 }
 
@@ -110,46 +112,34 @@ function ListBody({ block, testId }: { block: DocBlock; testId: string }) {
   const depth = block.level ?? 1;
 
   return (
-    <Stack
-      direction="row"
-      sx={{ gap: 1, alignItems: 'flex-start', pl: (depth - 1) * 3 }}
+    <div
+      className="flex items-start gap-2"
+      style={{ paddingLeft: `${(depth - 1) * 24}px` }}
       data-testid={`${testId}.Bullet`}
     >
       {/* aria-hidden: the bullet is a visual marker, and a screen reader announcing "bullet" per
           line adds nothing the indentation does not already imply. */}
-      <Typography sx={{ color: 'text.secondary', lineHeight: 1.6 }} aria-hidden>
+      <span className="leading-[1.6] text-ink-2" aria-hidden>
         •
-      </Typography>
+      </span>
       <ProseBody text={block.text} />
-    </Stack>
+    </div>
   );
 }
 
 function CodeBody({ block, testId }: { block: DocBlock; testId: string }) {
   return (
-    <Box
-      component="pre"
+    // `whitespace-pre-wrap` and not `pre`: a long line wraps instead of pushing a horizontal
+    // scrollbar onto the whole page. `overflow-x-auto` catches what cannot wrap — a URL, a base64
+    // blob — and keeps that scrollbar inside this block, which is the rule the table below follows.
+    <pre
       data-testid={`${testId}.Code`}
-      sx={{
-        m: 0,
-        p: 1.5,
-        borderRadius: 1,
-        border: '1px solid',
-        borderColor: 'divider',
-        bgcolor: 'action.hover',
-        fontFamily: 'var(--font-mono)',
-        fontSize: '0.85rem',
-        // `pre-wrap` and not `pre`: a long line wraps instead of pushing a horizontal scrollbar
-        // onto the whole page. `overflowX` catches what cannot wrap — a URL, a base64 blob — and
-        // keeps that scrollbar inside this block, which is the rule the table below follows too.
-        whiteSpace: 'pre-wrap',
-        overflowX: 'auto',
-      }}
+      className="m-0 overflow-x-auto rounded border border-white/8 bg-field p-3 font-mono text-[0.85rem] whitespace-pre-wrap text-ink"
     >
       {/* A real <code> inside a real <pre>: the two elements together are what tells a screen
           reader this is preformatted source rather than a paragraph that happens to be monospace. */}
-      <Box component="code">{block.text}</Box>
-    </Box>
+      <code>{block.text}</code>
+    </pre>
   );
 }
 
@@ -161,64 +151,46 @@ function TableBody({ block, testId }: { block: DocBlock; testId: string }) {
     // build, a direct write. Stating it beats rendering a caption above nothing, which reads as a
     // table whose rows are still loading.
     return (
-      <Stack sx={{ gap: 0.5 }}>
+      <div className="flex flex-col gap-1">
         <ProseBody text={block.text} />
-        <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid={`${testId}.Table.Empty`}>
+        <p className="m-0 text-sm text-ink-2" data-testid={`${testId}.Table.Empty`}>
           This table has no rows.
-        </Typography>
-      </Stack>
+        </p>
+      </div>
     );
   }
 
   const [header, ...body] = rows;
 
+  const CELL = 'border border-white/8 px-2 py-1.5 text-left align-top text-[0.9rem]';
+
   return (
-    <Stack sx={{ gap: 0.75, minWidth: 0 }}>
+    <div className="flex min-w-0 flex-col gap-1.5">
       {/*
         The caption is `text`, and it is a real <caption> rather than a paragraph above the table.
         A screen reader announces a caption as the table's name when the user lands on it; a
         paragraph sitting above one is a separate thing that happens to be nearby.
       */}
-      <Box sx={{ overflowX: 'auto', maxWidth: '100%' }}>
-        <Box
-          component="table"
-          data-testid={`${testId}.Table`}
-          sx={{
-            borderCollapse: 'collapse',
-            width: '100%',
-            'th, td': {
-              border: '1px solid',
-              borderColor: 'divider',
-              px: 1,
-              py: 0.75,
-              textAlign: 'left',
-              verticalAlign: 'top',
-              fontSize: '0.9rem',
-            },
-            th: { bgcolor: 'action.hover', fontWeight: 600 },
-          }}
-        >
+      <div className="max-w-full overflow-x-auto">
+        <table data-testid={`${testId}.Table`} className="w-full border-collapse text-ink">
           {block.text ? (
-            <Box
-              component="caption"
-              sx={{ captionSide: 'top', textAlign: 'left', pb: 0.5, color: 'text.secondary', fontSize: '0.9rem' }}
-            >
+            <caption className="caption-top pb-1 text-left text-[0.9rem] text-ink-2">
               {block.text}
-            </Box>
+            </caption>
           ) : null}
-          <Box component="thead">
-            <Box component="tr">
+          <thead>
+            <tr>
               {header.map((cell, index) => (
                 // `scope="col"` is what makes the header cell announce with every cell beneath it.
                 // Without it a <th> is only bold text, and a table read column-by-column becomes a
                 // list of values with nothing saying what they are.
-                <Box component="th" scope="col" key={index}>
+                <th scope="col" key={index} className={cn(CELL, 'bg-field font-semibold')}>
                   {cell}
-                </Box>
+                </th>
               ))}
-            </Box>
-          </Box>
-          <Box component="tbody">
+            </tr>
+          </thead>
+          <tbody>
             {body.map((row, rowIndex) => (
               /*
                 Index keys, deliberately, and this is the case where they are correct: a cell is a
@@ -226,18 +198,18 @@ function TableBody({ block, testId }: { block: DocBlock; testId: string }) {
                 replaced wholesale on every save. There is no state inside a cell for a reordered
                 key to attach to the wrong row.
               */
-              <Box component="tr" key={rowIndex}>
+              <tr key={rowIndex}>
                 {row.map((cell, cellIndex) => (
-                    <Box component="td" key={cellIndex}>
+                  <td key={cellIndex} className={CELL}>
                     {cell}
-                  </Box>
+                  </td>
                 ))}
-              </Box>
+              </tr>
             ))}
-          </Box>
-        </Box>
-      </Box>
-    </Stack>
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -263,10 +235,12 @@ function ImageBody({
       picture that survives the picture.
     */
     return (
-      <Alert severity="warning" data-testid={`${testId}.Image.Missing`}>
-        This image&rsquo;s file is no longer attached to the page. It was described as:{' '}
-        {block.text}
-      </Alert>
+      <div data-testid={`${testId}.Image.Missing`}>
+        <Banner tone="warn">
+          This image&rsquo;s file is no longer attached to the page. It was described as:{' '}
+          {block.text}
+        </Banner>
+      </div>
     );
   }
 
@@ -315,73 +289,62 @@ function AttachmentImage({
       better answer than an apology. `FileDownloadLink` is the same credential-carrying read.
     */
     return (
-      <Alert severity="warning" data-testid={`${testId}.Image.Error`}>
-        <Stack sx={{ gap: 0.5, alignItems: 'flex-start' }}>
-          <span>
-            {alt} — {describeError(blob.error).body}
-          </span>
-          <FileDownloadLink
-            url={file.url}
-            filename={file.filename}
-            testId={`${testId}.Image.Download`}
-          />
-        </Stack>
-      </Alert>
+      <div data-testid={`${testId}.Image.Error`}>
+        <Banner tone="warn">
+          <div className="flex flex-col items-start gap-1">
+            <span>
+              {alt} — {describeError(blob.error).body}
+            </span>
+            <FileDownloadLink
+              url={file.url}
+              filename={file.filename}
+              testId={`${testId}.Image.Download`}
+            />
+          </div>
+        </Banner>
+      </div>
     );
   }
 
   if (!objectUrl) {
     return (
       <Skeleton
-        variant="rectangular"
-        height={180}
         // `aria-busy` and a label, so the wait is announced rather than being a silent grey box —
         // and the label is the alt text, which is the only description that exists yet.
         aria-busy="true"
         aria-label={alt}
         data-testid={`${testId}.Image.Loading`}
-        sx={{ borderRadius: 1, maxWidth: 640 }}
+        className="h-[180px] max-w-[640px] rounded"
       />
     );
   }
 
   return (
-    <Stack sx={{ gap: 0.5, alignItems: 'flex-start' }}>
-      <Box
-        component="img"
+    <div className="flex flex-col items-start gap-1">
+      <img
         src={objectUrl}
         // Required and never empty: the server refuses a blank alt on an image block, because an
         // image in a specification is never decorative.
         alt={alt}
         data-testid={`${testId}.Image`}
-        sx={{ maxWidth: '100%', height: 'auto', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
+        className="h-auto max-w-full rounded border border-white/8"
       />
       {/* The alt text again, visibly. In a specification the sentence describing a diagram is part
           of the specification — a reader quoting the document needs it, and hiding it in an
           attribute means only screen-reader users ever get it. */}
-      <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid={`${testId}.Image.Caption`}>
+      <p className="m-0 text-sm text-ink-2" data-testid={`${testId}.Image.Caption`}>
         {alt}
-      </Typography>
-    </Stack>
+      </p>
+    </div>
   );
 }
 
 /** A run of authored words, with the newlines the author typed. */
 function ProseBody({ text }: { text: string }) {
   return (
-    <Typography
-      component="p"
-      sx={{
-        // `pre-wrap`, so a paragraph somebody wrote across several lines reads as they wrote it.
-        // The editor stores the newlines; a renderer that collapsed them would show a different
-        // document from the one being edited two clicks away.
-        whiteSpace: 'pre-wrap',
-        fontSize: '0.95rem',
-        flex: 1,
-        minWidth: 0,
-      }}
-    >
-      {text}
-    </Typography>
+    // `whitespace-pre-wrap`, so a paragraph somebody wrote across several lines reads as they
+    // wrote it. The editor stores the newlines; a renderer that collapsed them would show a
+    // different document from the one being edited two clicks away.
+    <p className="m-0 min-w-0 flex-1 text-[0.95rem] whitespace-pre-wrap text-ink">{text}</p>
   );
 }

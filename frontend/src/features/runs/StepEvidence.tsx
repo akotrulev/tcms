@@ -1,7 +1,12 @@
+import { Trash2, Upload } from 'lucide-react';
 /** Evidence on ONE step of a run — the strip under a step row, and the control that adds to it. */
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import { Alert, Box, Button, IconButton, Link, Stack, Tooltip, Typography } from '@mui/material';
+import { Banner } from '../../components/kit';
+import {
+  Button,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '../../components/ui';
 import { useRef, useState } from 'react';
 import { MAX_EVIDENCE_BYTES, useAttachEvidence, useDeleteEvidence } from '../../api/queries';
 import type { Evidence } from '../../api/types';
@@ -74,63 +79,63 @@ export function StepEvidence({
   }
 
   return (
-    <Box sx={{ mt: 1, pl: 3 }} data-testid="Execution.Steps.Row.Evidence">
-      <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+    <div className="mt-2 pl-6" data-testid="Execution.Steps.Row.Evidence">
+      <div className="flex items-center gap-2 flex-wrap">
         <PermissionGate projectId={projectId} permission="evidence:attach">
           {({ allowed, reason }) => (
-            <Tooltip title={blockedReason(allowed, reason)}>
+            <Tooltip>
+<TooltipTrigger asChild>
               <span>
                 <Button
-                  size="small"
-                  startIcon={<UploadFileIcon />}
+                  size="sm"
                   disabled={!allowed || frozen || !recorded || attach.isPending}
                   onClick={() => input.current?.click()}
                   data-testid="Execution.Steps.Row.Evidence.Attach"
                 >
+                  <Upload aria-hidden className="size-3.5" />
                   {attach.isPending ? 'Uploading…' : 'Attach to this step'}
                 </Button>
               </span>
-            </Tooltip>
+            </TooltipTrigger>
+<TooltipContent>{blockedReason(allowed, reason)}</TooltipContent>
+</Tooltip>
           )}
         </PermissionGate>
 
         {evidence.map((item) => (
-          <Stack
-            key={item.id}
-            direction="row"
-            sx={{ alignItems: 'center', gap: 0.5 }}
-            data-testid="Execution.Steps.Row.Evidence.Row"
-          >
-            <Link
+          <div className="flex items-center gap-1" key={item.id} data-testid="Execution.Steps.Row.Evidence.Row">
+            <a
               href={item.url}
               target="_blank"
               rel="noreferrer"
               variant="caption"
-              sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              className="overflow-hidden text-ellipsis whitespace-nowrap text-sm text-steel underline-offset-4 hover:underline" style={{ maxWidth: 200 }}
               data-testid="Execution.Steps.Row.Evidence.Link"
             >
               {item.filename}
-            </Link>
+            </a>
             <PermissionGate projectId={projectId} permission="evidence:delete">
               {({ allowed, reason }) => (
-                <Tooltip title={frozen ? FROZEN_REASON : allowed ? 'Remove' : reason}>
+                <Tooltip>
+<TooltipTrigger asChild>
                   <span>
-                    <IconButton
-                      size="small"
+                    <Button variant="quiet" size="icon"
                       aria-label={`Remove ${item.filename}`}
                       disabled={!allowed || frozen || remove.isPending}
                       onClick={() => remove.mutate(item.id)}
                       data-testid="Execution.Steps.Row.Evidence.Remove"
                     >
-                      <DeleteOutlineIcon fontSize="inherit" />
-                    </IconButton>
+                      <Trash2 aria-hidden className="size-4" />
+                    </Button>
                   </span>
-                </Tooltip>
+                </TooltipTrigger>
+<TooltipContent>{frozen ? FROZEN_REASON : allowed ? 'Remove' : reason}</TooltipContent>
+</Tooltip>
               )}
             </PermissionGate>
-          </Stack>
+          </div>
         ))}
-      </Stack>
+      </div>
 
       <input
         ref={input}
@@ -147,20 +152,24 @@ export function StepEvidence({
       />
 
       {tooLarge && (
-        <Alert severity="warning" sx={{ mt: 1 }} data-testid="Execution.Steps.Row.Evidence.TooLarge">
+        <div data-testid="Execution.Steps.Row.Evidence.TooLarge">
+<Banner tone="warn">
           {tooLarge}
-        </Alert>
+        </Banner>
+</div>
       )}
       {attach.isError && (
-        <Alert severity="error" sx={{ mt: 1 }} data-testid="Execution.Steps.Row.Evidence.Error">
+        <div data-testid="Execution.Steps.Row.Evidence.Error">
+<Banner tone="bad">
           {describeError(attach.error).body}
-        </Alert>
+        </Banner>
+</div>
       )}
       {!recorded && evidence.length === 0 && (
-        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
+        <span className="m-0 text-xs text-ink-2 block mt-1">
           {UNMARKED_REASON}
-        </Typography>
+        </span>
       )}
-    </Box>
+    </div>
   );
 }

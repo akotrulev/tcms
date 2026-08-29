@@ -28,10 +28,10 @@
  * press. It is a fragment rather than a wrapper so the caller decides the layout — a table cell and
  * a stacked list want different things, and a component that picked one would be wrong in the other.
  */
-import { Alert, Link } from '@mui/material';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import type { SxProps, Theme } from '@mui/material/styles';
+import { Banner } from './kit';
+import { cn } from '../lib/cn';
 import { fetchArtifact } from '../api/client';
 import { describeError } from '../lib/describeError';
 import { saveBlob } from '../lib/download';
@@ -41,7 +41,7 @@ export function FileDownloadLink({
   filename,
   children,
   testId,
-  sx,
+  className,
 }: {
   /** The **server's** path. Never composed here — a client that rebuilds it holds a second copy of
    *  the routing, and a route change then breaks the download with a 404 that reads as a missing
@@ -58,7 +58,8 @@ export function FileDownloadLink({
   children?: ReactNode;
   /** Locator root; the control is `<testId>` and its failure `<testId>.Error`. */
   testId: string;
-  sx?: SxProps<Theme>;
+  /** ~~`sx`~~ → `className` in T16; the callers that styled this link pass utilities now. */
+  className?: string;
 }) {
   const [downloading, setDownloading] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -78,10 +79,8 @@ export function FileDownloadLink({
 
   return (
     <>
-      <Link
-        component="button"
+      <button
         type="button"
-        variant="body2"
         disabled={downloading}
         onClick={() => void download()}
         /*
@@ -91,21 +90,21 @@ export function FileDownloadLink({
         */
         aria-label={`Download ${filename}`}
         data-testid={testId}
-        sx={{
-          border: 0,
-          background: 'none',
-          padding: 0,
-          textAlign: 'left',
-          cursor: downloading ? 'default' : 'pointer',
-          ...sx,
-        }}
+        className={cn(
+          'cursor-pointer border-0 bg-transparent p-0 text-left text-sm text-steel underline-offset-4 hover:underline',
+          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
+          downloading && 'cursor-default opacity-60',
+          className,
+        )}
       >
         {children ?? filename}
-      </Link>
+      </button>
       {failure && (
-        <Alert severity="error" role="alert" sx={{ mt: 0.5 }} data-testid={`${testId}.Error`}>
-          {failure}
-        </Alert>
+        <div className="mt-1" data-testid={`${testId}.Error`}>
+          <Banner tone="bad">
+            <span role="alert">{failure}</span>
+          </Banner>
+        </div>
       )}
     </>
   );

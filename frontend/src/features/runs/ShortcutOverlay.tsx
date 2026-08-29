@@ -1,4 +1,9 @@
-import { Box, Dialog, DialogContent, DialogTitle, Stack, Typography } from '@mui/material';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui';
 import { EXECUTION_SHORTCUTS, type ShortcutScope } from './executionKeys';
 
 /**
@@ -23,58 +28,40 @@ const SCOPES = Object.keys(SCOPE_HEADINGS) as ShortcutScope[];
 
 export function ShortcutOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth data-testid="Execution.Shortcuts.Overlay">
-      <DialogTitle>Keyboard shortcuts</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-sm" data-testid="Execution.Shortcuts.Overlay">
+        <DialogHeader>
+          <DialogTitle>Keyboard shortcuts</DialogTitle>
+        </DialogHeader>
+
+        <p className="mt-4 mb-4 text-sm text-ink-2">
           Every one of these has a button on the screen too — they are a faster route, never the
           only one. Nothing here fires while you are typing in a box.
-        </Typography>
+        </p>
 
         {SCOPES.map((scope) => {
           const rows = EXECUTION_SHORTCUTS.filter((shortcut) => shortcut.scope === scope);
           if (rows.length === 0) return null;
           return (
-            <Box key={scope} sx={{ mb: 2 }}>
-              <Typography
-                variant="caption"
-                sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}
-              >
+            <div key={scope} className="mb-4">
+              <span className="text-xs tracking-[0.05em] text-ink-2 uppercase">
                 {SCOPE_HEADINGS[scope]}
-              </Typography>
-              <Stack component="dl" sx={{ m: 0, mt: 1, gap: 1 }}>
+              </span>
+              <dl className="m-0 mt-2 flex flex-col gap-2">
                 {rows.map((shortcut) => (
-                  <Stack
+                  <div
                     key={`${shortcut.scope}-${shortcut.key}`}
-                    direction="row"
-                    sx={{ alignItems: 'baseline', gap: 1.5 }}
+                    className="flex items-baseline gap-3"
                     data-testid="Execution.Shortcuts.Row"
                   >
-                    <Box
-                      component="dt"
-                      sx={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        minWidth: 40,
-                        textAlign: 'center',
-                        px: 0.75,
-                        py: 0.25,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        borderRadius: 0.5,
-                        flexShrink: 0,
-                      }}
-                    >
+                    <dt className="min-w-10 shrink-0 rounded-[2px] border border-white/8 px-1.5 py-0.5 text-center font-mono text-xs font-semibold text-ink">
                       {shortcut.display}
-                    </Box>
-                    <Typography component="dd" variant="body2" sx={{ m: 0 }}>
-                      {shortcut.description}
-                    </Typography>
-                  </Stack>
+                    </dt>
+                    <dd className="m-0 text-sm text-ink">{shortcut.description}</dd>
+                  </div>
                 ))}
-              </Stack>
-            </Box>
+              </dl>
+            </div>
           );
         })}
       </DialogContent>

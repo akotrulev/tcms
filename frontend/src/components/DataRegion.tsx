@@ -1,4 +1,3 @@
-import { Alert, AlertTitle, Box, Button, Link, Skeleton, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { isAbort } from '../api/client';
@@ -6,6 +5,8 @@ import { describeError } from '../lib/describeError';
 import { RegionErrorBoundary } from './ErrorBoundaries';
 import { formatTimeOfDay } from '../lib/format';
 import { Identifier } from './Identifier';
+import { Banner } from './kit';
+import { Button, Skeleton } from './ui';
 
 /**
  * The three-state region — the single binding that gives every list, panel, and tile in the
@@ -71,116 +72,108 @@ export function DataRegion<T>({
     // same way on the next click, and a button that never works is worse than no button.
     const showRetry = !!refetch && retryable;
     return (
-      <Alert
-        severity={isRefused ? 'warning' : 'error'}
-        data-testid={`${testId}.Error`}
-        sx={{ my: 1 }}
-      >
-        <AlertTitle sx={{ fontSize: '0.875rem', fontWeight: 600 }}>{title}</AlertTitle>
-        <Typography variant="body2" sx={{ mb: showRetry || isRefused ? 1.5 : 0 }}>
-          {body}
-        </Typography>
-        {/*
-          The Refused state's way out (005 C1b). `describeError` has already named the permission
-          and said to ask a Company Admin; this is the link that lets them find one.
+      <div className="my-2" data-testid={`${testId}.Error`}>
+        <Banner tone={isRefused ? 'warn' : 'bad'}>
+          <div className="min-w-0">
+            <p className="m-0 text-sm font-semibold text-ink">{title}</p>
+            <p className={showRetry || isRefused ? 'mt-1 mb-3' : 'mt-1 mb-0'}>{body}</p>
+            {/*
+              The Refused state's way out (005 C1b). `describeError` has already named the
+              permission and said to ask a Company Admin; this is the link that lets them find one.
 
-          **The org chart and nothing more specific.** C1b dropped the endpoint that would have
-          answered "who can grant this here", so there is no named individual to offer — and the
-          chart is a screen every member may open, which already discloses a company's
-          administrators on `OrgChartPerson.companyRoles`. It is rendered as its own affordance
-          rather than woven into the sentence so the notification stack, which shows the same copy
-          with no link, is not showing a sentence with a hole in it.
+              **The org chart and nothing more specific.** C1b dropped the endpoint that would have
+              answered "who can grant this here", so there is no named individual to offer — and
+              the chart is a screen every member may open, which already discloses a company's
+              administrators on `OrgChartPerson.companyRoles`. It is rendered as its own affordance
+              rather than woven into the sentence so the notification stack, which shows the same
+              copy with no link, is not showing a sentence with a hole in it.
 
-          A `.Refused` testid of its own: the difference between this and any other failed region
-          is the whole of 005 C1, and asserting on the alert alone cannot see it.
-        */}
-        {isRefused && (
-          <Typography variant="body2" data-testid={`${testId}.Refused`}>
-            <Link component={RouterLink} to="/org-chart">
-              Find a Company Admin on the org chart
-            </Link>
-          </Typography>
-        )}
-        {showRetry && (
-          <Button size="small" variant="outlined" color="error" onClick={refetch} data-testid={`${testId}.Retry`}>
-            Try again
-          </Button>
-        )}
-        {correlationId && (
-          <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
-            Reference <Identifier variant="muted">{correlationId}</Identifier>
-          </Typography>
-        )}
-      </Alert>
+              A `.Refused` testid of its own: the difference between this and any other failed
+              region is the whole of 005 C1, and asserting on the alert alone cannot see it.
+            */}
+            {isRefused && (
+              <p className="m-0 mb-3" data-testid={`${testId}.Refused`}>
+                <RouterLink
+                  to="/org-chart"
+                  className="text-steel underline-offset-4 hover:underline"
+                >
+                  Find a Company Admin on the org chart
+                </RouterLink>
+              </p>
+            )}
+            {showRetry && (
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={refetch}
+                data-testid={`${testId}.Retry`}
+              >
+                Try again
+              </Button>
+            )}
+            {correlationId && (
+              <p className="mt-2 mb-0 text-xs text-ink-3">
+                Reference <Identifier variant="muted">{correlationId}</Identifier>
+              </p>
+            )}
+          </div>
+        </Banner>
+      </div>
     );
   }
 
   if (isPending || data === undefined) {
     return (
-      <Box data-testid={`${testId}.Loading`} aria-busy="true" aria-live="polite">
+      <div data-testid={`${testId}.Loading`} aria-busy="true" aria-live="polite">
         {skeleton ?? <DefaultSkeleton />}
-      </Box>
+      </div>
     );
   }
 
   return (
-    <Box sx={{ position: 'relative' }}>
+    <div className="relative">
       {/*
         A refetch that failed: the data is still on screen, so say so rather than pretending
         the numbers are current. This is the state that most often goes unbuilt, and it's the
         one where a user makes a decision on stale figures without knowing it.
       */}
       {genuinelyFailed && (
-        <Alert severity="warning" data-testid={`${testId}.Stale`} sx={{ mb: 1 }}>
-          <Typography variant="body2">
-            {/*
-              Naming the time is the difference between an honest stale marker and a vague one.
-              "Older data" gives the user nothing to judge; "as of 14:02 UTC" lets them decide
-              whether it still supports the decision they were about to make.
-            */}
-            Showing data from {formatTimeOfDay(dataUpdatedAt)} — the latest refresh failed.
-          </Typography>
-          {refetch && (
-            <Button size="small" color="warning" onClick={refetch} data-testid={`${testId}.Retry`} sx={{ mt: 0.5 }}>
-              Try again
-            </Button>
-          )}
-        </Alert>
+        <div className="mb-2" data-testid={`${testId}.Stale`}>
+          <Banner tone="warn">
+            <div className="min-w-0">
+              {/*
+                Naming the time is the difference between an honest stale marker and a vague one.
+                "Older data" gives the user nothing to judge; "as of 14:02 UTC" lets them decide
+                whether it still supports the decision they were about to make.
+              */}
+              <p className="m-0">
+                Showing data from {formatTimeOfDay(dataUpdatedAt)} — the latest refresh failed.
+              </p>
+              {refetch && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={refetch}
+                  data-testid={`${testId}.Retry`}
+                  className="mt-1"
+                >
+                  Try again
+                </Button>
+              )}
+            </div>
+          </Banner>
+        </div>
       )}
 
       {/* A background refresh is a hairline progress hint, not a spinner that hides content. */}
       {isFetching && !genuinelyFailed && (
-        <Box
+        <div
           data-testid={`${testId}.Refreshing`}
           aria-hidden="true"
-          sx={{
-            position: 'absolute',
-            insetInline: 0,
-            top: 0,
-            height: 2,
-            overflow: 'hidden',
-            bgcolor: 'transparent',
-            zIndex: 2,
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              inset: 0,
-              bgcolor: 'primary.main',
-              opacity: 0.5,
-            },
-            '@media (prefers-reduced-motion: no-preference)': {
-              '&::after': {
-                animation: 'tcmsIndeterminate 1.1s ease-in-out infinite',
-                transformOrigin: 'left',
-              },
-            },
-            '@keyframes tcmsIndeterminate': {
-              '0%': { transform: 'scaleX(0)' },
-              '50%': { transform: 'scaleX(0.7)' },
-              '100%': { transform: 'scaleX(1)', opacity: 0 },
-            },
-          }}
-        />
+          className="absolute inset-x-0 top-0 z-2 h-0.5 overflow-hidden bg-transparent"
+        >
+          <span className="absolute inset-0 origin-left bg-steel opacity-50 motion-safe:animate-[tcmsIndeterminate_1.1s_ease-in-out_infinite]" />
+        </div>
       )}
 
       {/*
@@ -205,7 +198,7 @@ export function DataRegion<T>({
           {children}
         </RegionContent>
       </RegionErrorBoundary>
-    </Box>
+    </div>
   );
 }
 
@@ -240,23 +233,23 @@ function RegionContent<T>({
 
 function DefaultSkeleton() {
   return (
-    <Stack spacing={1} sx={{ py: 1 }}>
+    <div className="flex flex-col gap-2 py-2">
       {[0, 1, 2, 3, 4].map((i) => (
-        <Skeleton key={i} variant="rounded" height={36} />
+        <Skeleton key={i} className="h-9 rounded" />
       ))}
-    </Stack>
+    </div>
   );
 }
 
 /** Skeleton shaped like a grid, so rows don't jump when the real ones arrive. */
 export function GridSkeleton({ rows = 8 }: { rows?: number }) {
   return (
-    <Stack spacing={0.5} sx={{ p: 1 }}>
-      <Skeleton variant="rounded" height={40} />
+    <div className="flex flex-col gap-1 p-2">
+      <Skeleton className="h-10 rounded" />
       {Array.from({ length: rows }, (_, i) => (
-        <Skeleton key={i} variant="rounded" height={44} />
+        <Skeleton key={i} className="h-11 rounded" />
       ))}
-    </Stack>
+    </div>
   );
 }
 
@@ -296,33 +289,19 @@ export function EmptyState({
         : { title: title ?? 'Nothing yet', body: body ?? '' };
 
   return (
-    <Box
-      data-testid={testId}
-      sx={{
-        py: 6,
-        px: 3,
-        textAlign: 'center',
-        color: 'text.secondary',
-      }}
-    >
-      <Typography variant="h4" sx={{ mb: 0.5, color: 'text.primary' }}>
-        {copy.title}
-      </Typography>
-      {copy.body && (
-        <Typography variant="body2" sx={{ maxWidth: '46ch', mx: 'auto' }}>
-          {copy.body}
-        </Typography>
-      )}
+    <div data-testid={testId} className="px-6 py-12 text-center text-ink-2">
+      <h3 className="m-0 mb-1 text-[15px] font-semibold text-ink">{copy.title}</h3>
+      {copy.body && <p className="mx-auto mt-0 mb-0 max-w-[46ch] text-sm">{copy.body}</p>}
       {(action || onClearFilters) && (
-        <Stack direction="row" spacing={1} sx={{ justifyContent: 'center', mt: 2 }}>
+        <div className="mt-4 flex justify-center gap-2">
           {action}
           {onClearFilters && (
-            <Button size="small" variant="outlined" onClick={onClearFilters} data-testid={`${testId}.ClearFilters`}>
+            <Button size="sm" onClick={onClearFilters} data-testid={`${testId}.ClearFilters`}>
               Clear filters
             </Button>
           )}
-        </Stack>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }

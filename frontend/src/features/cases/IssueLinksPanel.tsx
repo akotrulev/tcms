@@ -1,19 +1,14 @@
+import { Link2 } from 'lucide-react';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
-  Box,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogFooter,
   DialogTitle,
-  List,
-  ListItemButton,
-  ListItemText,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
-import AddLinkIcon from '@mui/icons-material/AddLink';
+  Input,
+} from '../../components/ui';
 import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useCreateIssueLink, useDeleteIssueLink, useIssueLinks, useTrackerIssueSearch } from '../../api/queries';
@@ -67,12 +62,12 @@ export function IssueLinksPanel({
         <PermissionGate projectId={projectId} permission="case:edit">
           {({ allowed }) => (
             <Button
-              size="small"
-              startIcon={<AddLinkIcon />}
+              size="sm"
               disabled={!allowed}
               onClick={() => setLinking(true)}
               data-testid="CaseDetail.IssueLinks.AddButton"
             >
+              <Link2 aria-hidden className="size-3.5" />
               Link an issue
             </Button>
           )}
@@ -90,19 +85,13 @@ export function IssueLinksPanel({
         }}
       >
         {(rows) => (
-          <Stack sx={{ gap: 1, p: 1.5 }} data-testid="CaseDetail.IssueLinks.List">
+          <div className="flex flex-col gap-2 p-3" data-testid="CaseDetail.IssueLinks.List">
             {rows.map((link) => (
-              <Stack
-                key={link.id}
-                direction="row"
-                sx={{ alignItems: 'center', gap: 1, justifyContent: 'space-between' }}
-                data-testid="CaseDetail.IssueLinks.Row"
-              >
+              <div className="flex items-center gap-2 justify-between" key={link.id} data-testid="CaseDetail.IssueLinks.Row">
                 <IssueChip projectId={projectId} link={link} />
                 <PermissionGate projectId={projectId} permission="case:edit">
                   {({ allowed }) => (
                     <Button
-                      size="small"
                       disabled={!allowed}
                       onClick={() => setUnlinking(link)}
                       data-testid="CaseDetail.IssueLinks.Remove"
@@ -111,9 +100,9 @@ export function IssueLinksPanel({
                     </Button>
                   )}
                 </PermissionGate>
-              </Stack>
+              </div>
             ))}
-          </Stack>
+          </div>
         )}
       </DataRegion>
 
@@ -186,71 +175,89 @@ function LinkIssueDialog({
     search.data?.state === 'NOT_CONNECTED' || search.data?.state === 'UNAVAILABLE';
 
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="sm" data-testid="CaseDetail.IssueLinks.Dialog">
-      <DialogTitle>Link an issue</DialogTitle>
-      <DialogContent>
-        <Stack sx={{ gap: 2, mt: 1 }}>
-          <TextField
+    <Dialog open onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid="CaseDetail.IssueLinks.Dialog">
+      <DialogHeader>
+        <DialogTitle>Link an issue</DialogTitle>
+      </DialogHeader>
+      <div>
+        <div className="flex flex-col gap-4 mt-2">
+          <Field
             label="Search your tracker"
+            htmlFor="search-your-tracker"
+            help="Searched as you, with your own credential — you will only find issues you can already see."
+          >
+          <Input
+            id="search-your-tracker"
             value={term}
             onChange={(e) => setTerm(e.target.value)}
-            helperText="Searched as you, with your own credential — you will only find issues you can already see."
-            slotProps={{ htmlInput: { 'data-testid': 'CaseDetail.IssueLinks.Search' } }}
+            data-testid="CaseDetail.IssueLinks.Search"
           />
+          </Field>
           {unavailable && (
-            <Alert severity="info" data-testid="CaseDetail.IssueLinks.Unavailable">
-              <Stack sx={{ gap: 1, alignItems: 'flex-start' }}>
-                <Typography variant="body2">
+            <div data-testid="CaseDetail.IssueLinks.Unavailable">
+<Banner tone="steel">
+              <div className="flex flex-col gap-2 items-start">
+                <p className="m-0 text-sm">
                   {search.data?.state === 'NOT_CONNECTED'
                     ? trackerUnavailableReasons.NOT_CONNECTED
                     : trackerUnavailableReasons.UNAVAILABLE}
-                </Typography>
+                </p>
                 {search.data?.state === 'NOT_CONNECTED' && (
-                  <Button
-                    size="small"
-                    component={RouterLink}
+                  <RouterLink
                     to="/account/trackers"
                     data-testid="CaseDetail.IssueLinks.Connect"
+                    className={buttonVariants({ size: 'sm' })}
                   >
                     Connect your tracker
-                  </Button>
+                  </RouterLink>
                 )}
-              </Stack>
-            </Alert>
+              </div>
+            </Banner>
+</div>
           )}
           {search.data?.state === 'AVAILABLE' && (
-            <List dense data-testid="CaseDetail.IssueLinks.Results">
+            <ul className="m-0 list-none p-0" data-testid="CaseDetail.IssueLinks.Results">
               {search.data.issues.map((issue) => (
-                <ListItemButton
-                  key={`${issue.bindingId}:${issue.id}`}
-                  onClick={() => link(issue)}
-                  disabled={create.isPending}
-                  data-testid="CaseDetail.IssueLinks.Result"
-                >
-                  <ListItemText primary={`${issue.key} · ${issue.title}`} secondary={issue.statusName} />
-                </ListItemButton>
+                <li key={`${issue.bindingId}:${issue.id}`}>
+                  <button
+                    type="button"
+                    onClick={() => link(issue)}
+                    disabled={create.isPending}
+                    data-testid="CaseDetail.IssueLinks.Result"
+                    className="block w-full cursor-pointer px-4 py-1.5 text-left hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <span className="block text-[13px] text-ink">
+                      {issue.key} · {issue.title}
+                    </span>
+                    <span className="block text-xs text-ink-2">{issue.statusName}</span>
+                  </button>
+                </li>
               ))}
               {search.data.issues.length === 0 && (
-                <Box sx={{ px: 2, py: 1 }}>
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                <div className="px-4 py-2">
+                  <p className="m-0 text-sm text-ink-2">
                     Nothing matched.
-                  </Typography>
-                </Box>
+                  </p>
+                </div>
               )}
-            </List>
+            </ul>
           )}
           {create.error != null && (
-            <Alert severity="error" role="alert" data-testid="CaseDetail.IssueLinks.Error">
+            <div data-testid="CaseDetail.IssueLinks.Error">
+<Banner tone="bad"><span role="alert">
               {describeError(create.error).body}
-            </Alert>
+            </span></Banner>
+</div>
           )}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
+        </div>
+      </div>
+      <DialogFooter>
         <Button onClick={onClose} data-testid="CaseDetail.IssueLinks.Cancel">
           Close
         </Button>
-      </DialogActions>
+      </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }

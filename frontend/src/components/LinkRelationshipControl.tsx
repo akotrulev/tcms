@@ -1,8 +1,16 @@
-import { Button, ListItemText, Menu, MenuItem, Tooltip } from '@mui/material';
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
-import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import type { LinkRelationship } from '../api/types';
 import { linkRelationshipHelp, linkRelationshipLabels } from '../lib/labels';
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from './ui';
 
 const CHOICES = Object.keys(linkRelationshipLabels) as LinkRelationship[];
 
@@ -44,68 +52,66 @@ export function LinkRelationshipControl({
   pending: boolean;
   testId: string;
 }) {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-
   return (
-    <>
-      <Tooltip title={linkRelationshipHelp[value]}>
-        {/* A span, because a disabled button fires no events and MUI's tooltip needs something to
-            listen to — so the meaning of the value would be unreachable to the reader least able
-            to act on it. `TableRowsEditor` records the same trap. */}
+    <Tooltip>
+      {/* A span, because a disabled button fires no events and a tooltip needs something to
+          listen to — so the meaning of the value would be unreachable to the reader least able to
+          act on it. `TableRowsEditor` records the same trap. It survived the port: Radix's
+          tooltip has the same requirement MUI's did. */}
+      <TooltipTrigger asChild>
         <span>
-          <Button
-            /*
-              A Button and not a Chip, and the Chip is what this was written as first.
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              {/*
+                A Button and not a Chip, and the Chip is what this was written as first.
 
-              MUI's Chip renders a `div`; `disabled` on it becomes a class plus
-              `pointer-events: none`, which LOOKS disabled, exposes no disabled state to a screen
-              reader, and is indistinguishable from an enabled control to anything that asks the
-              DOM — so the permission gate on it would have been decorative. `component="button"`
-              fixes the semantics and keeps the chip's pointer-events quirk, which is how this was
-              found: a test could not click the ENABLED control either.
+                ~~MUI's Chip renders a `div`; `disabled` on it becomes a class plus
+                `pointer-events: none`, which LOOKS disabled, exposes no disabled state to a
+                screen reader, and is indistinguishable from an enabled control to anything that
+                asks the DOM~~ → superseded in T16: there is no MUI Chip here any more. The
+                finding it records is why this is still a `<button>` and not the kit's `Chip`,
+                which is also a display element — a real button carries the disabled state the
+                permission gate depends on.
 
-              A button is also what it is. This opens a menu; a chip is a display element that was
-              being asked to act like one.
-            */
-            size="small"
-            variant="outlined"
-            color="inherit"
-            endIcon={<ArrowDropDownIcon />}
-            disabled={disabled || pending}
-            onClick={(event) => setAnchor(event.currentTarget)}
-            sx={{
-              py: 0,
-              minWidth: 0,
-              textTransform: 'none',
-              fontWeight: 400,
-              fontSize: '0.75rem',
-              color: 'text.secondary',
-              borderColor: 'divider',
-            }}
-            data-testid={testId}
-          >
-            {linkRelationshipLabels[value]}
-          </Button>
+                A button is also what it is. This opens a menu; a chip is a display element that
+                was being asked to act like one.
+              */}
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={disabled || pending}
+                className="min-w-0 py-0 text-xs font-normal text-ink-2"
+                data-testid={testId}
+              >
+                {linkRelationshipLabels[value]}
+                <ChevronDown aria-hidden className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {CHOICES.map((choice) => (
+                <DropdownMenuItem
+                  key={choice}
+                  onSelect={() => {
+                    // The no-op is sent nowhere. The server answers 200 and writes nothing for it,
+                    // which is correct of the server and pointless from here — a request that
+                    // cannot change anything still spends a round trip and still invalidates a
+                    // page.
+                    if (choice !== value) onChange(choice);
+                  }}
+                  data-testid={`${testId}.${choice}`}
+                  className="flex-col items-start gap-0.5"
+                >
+                  <span className={choice === value ? 'font-semibold text-ink' : 'text-ink'}>
+                    {linkRelationshipLabels[choice]}
+                  </span>
+                  <span className="text-xs text-ink-2">{linkRelationshipHelp[choice]}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </span>
-      </Tooltip>
-      <Menu anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
-        {CHOICES.map((choice) => (
-          <MenuItem
-            key={choice}
-            selected={choice === value}
-            onClick={() => {
-              setAnchor(null);
-              // The no-op is sent nowhere. The server answers 200 and writes nothing for it, which
-              // is correct of the server and pointless from here — a request that cannot change
-              // anything still spends a round trip and still invalidates a page.
-              if (choice !== value) onChange(choice);
-            }}
-            data-testid={`${testId}.${choice}`}
-          >
-            <ListItemText primary={linkRelationshipLabels[choice]} secondary={linkRelationshipHelp[choice]} />
-          </MenuItem>
-        ))}
-      </Menu>
-    </>
+      </TooltipTrigger>
+      <TooltipContent>{linkRelationshipHelp[value]}</TooltipContent>
+    </Tooltip>
   );
 }

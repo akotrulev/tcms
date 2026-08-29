@@ -1,19 +1,15 @@
+import { Banner, MultiPicker } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
-  AlertTitle,
-  Autocomplete,
-  Box,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  MenuItem,
-  Select,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+  Input,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { useEffect, useMemo, useState } from 'react';
 import type {
   AutomationStatus,
@@ -312,43 +308,42 @@ export function BulkActionDialog({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth data-testid={TestIdPrefix}>
-      <DialogTitle>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && handleClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestIdPrefix}>
+      <DialogHeader>
+          <DialogTitle>
         Edit {formatCount(selectedIds.length)} selected {selectedIds.length === 1 ? 'case' : 'cases'}
       </DialogTitle>
+        </DialogHeader>
 
-      <DialogContent dividers>
-        <Stack sx={{ gap: 2 }}>
+      <div className="mt-4 flex flex-col gap-4">
+        <div className="flex flex-col gap-4">
           <Field label="Operation" htmlFor="bulk-operation">
-            <Select
+            <NativeSelect
               id="bulk-operation"
-              size="small"
-              fullWidth
               value={action}
               onChange={(event) => setAction(event.target.value as Action)}
               data-testid={`${TestIdPrefix}.Operation`}
             >
               {ACTIONS.map((op) => (
-                <MenuItem key={op.value} value={op.value}>
+                <option key={op.value} value={op.value}>
                   {op.label}
-                </MenuItem>
+                </option>
               ))}
-            </Select>
+            </NativeSelect>
           </Field>
 
           {action === 'SET_STATUS' && (
             <Field label="New status" htmlFor="bulk-status" error={fieldErrors.lifecycleStatus}>
-              <Select
+              <NativeSelect
                 id="bulk-status"
-                size="small"
-                fullWidth
                 value={lifecycleValue}
                 onChange={(event) => setLifecycleValue(event.target.value as LifecycleStatus)}
                 data-testid={`${TestIdPrefix}.Field.LifecycleStatus`}
               >
                 {(Object.entries(lifecycleLabels) as [LifecycleStatus, string][]).map(
                   ([key, label]) => (
-                    <MenuItem
+                    <option
                       key={key}
                       value={key}
                       // Only APPROVED is gated: the server refuses that one value and accepts the
@@ -358,14 +353,14 @@ export function BulkActionDialog({
                     >
                       {label}
                       {key === 'APPROVED' && !mayApprove && (
-                        <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
+                        <span className="m-0 text-xs ml-2 text-ink-2">
                           — {approveReason ?? 'not yours to grant'}
-                        </Typography>
+                        </span>
                       )}
-                    </MenuItem>
+                    </option>
                   ),
                 )}
-              </Select>
+              </NativeSelect>
             </Field>
           )}
 
@@ -376,20 +371,18 @@ export function BulkActionDialog({
                 htmlFor="bulk-automation"
                 error={fieldErrors.automationStatus}
               >
-                <Select
+                <NativeSelect
                   id="bulk-automation"
-                  size="small"
-                  fullWidth
                   value={automationValue}
                   onChange={(event) => setAutomationValue(event.target.value as AutomationStatus)}
                   data-testid={`${TestIdPrefix}.Field.AutomationStatus`}
                 >
                   {Object.entries(automationLabels).map(([key, label]) => (
-                    <MenuItem key={key} value={key}>
+                    <option key={key} value={key}>
                       {label}
-                    </MenuItem>
+                    </option>
                   ))}
-                </Select>
+                </NativeSelect>
               </Field>
 
               {/* Required by V1's check constraint, so the field appears exactly when it applies
@@ -400,10 +393,8 @@ export function BulkActionDialog({
                   htmlFor="bulk-not-automatable"
                   error={fieldErrors.notAutomatableReason}
                 >
-                  <TextField
+                  <Input
                     id="bulk-not-automatable"
-                    size="small"
-                    fullWidth
                     value={notAutomatableReason}
                     onChange={(event) => setNotAutomatableReason(event.target.value)}
                     data-testid={`${TestIdPrefix}.Field.NotAutomatableReason`}
@@ -415,11 +406,8 @@ export function BulkActionDialog({
 
           {action === 'SET_OWNER' && (
             <Field label="Owner" htmlFor="bulk-owner" error={fieldErrors.ownerId}>
-              <Select
+              <NativeSelect
                 id="bulk-owner"
-                size="small"
-                fullWidth
-                displayEmpty
                 value={ownerId}
                 onChange={(event) => setOwnerId(event.target.value)}
                 data-testid={`${TestIdPrefix}.Field.Owner`}
@@ -427,128 +415,113 @@ export function BulkActionDialog({
                 {/* The unassign option is offered explicitly rather than left as "pick nobody":
                     clearing an owner across 40 cases is a real intent, and a blank that means two
                     things is how it gets performed by accident. */}
-                <MenuItem value="">No owner</MenuItem>
+                <option value="">No owner</option>
                 {(members.data ?? []).map((member) => (
-                  <MenuItem key={member.id} value={member.id}>
+                  <option key={member.id} value={member.id}>
                     {member.displayName}
-                  </MenuItem>
+                  </option>
                 ))}
-              </Select>
+              </NativeSelect>
             </Field>
           )}
 
           {action === 'MOVE_TO_SUITE' && (
             <Field label="Destination suite" htmlFor="bulk-suite" error={fieldErrors.suiteId}>
-              <Select
+              <NativeSelect
                 id="bulk-suite"
-                size="small"
-                fullWidth
-                displayEmpty
                 value={suiteId}
                 onChange={(event) => setSuiteId(event.target.value)}
                 data-testid={`${TestIdPrefix}.Field.Suite`}
               >
-                <MenuItem value="">Choose a suite…</MenuItem>
+                <option value="">Choose a suite…</option>
                 {(suites.data ?? []).map((suite) => (
-                  <MenuItem key={suite.id} value={suite.id}>
+                  <option key={suite.id} value={suite.id}>
                     {suite.name}
-                  </MenuItem>
+                  </option>
                 ))}
-              </Select>
+              </NativeSelect>
             </Field>
           )}
 
           {action === 'ADD_TAGS' && (
             <Field label="Tags" htmlFor="bulk-tags" error={fieldErrors.tags}>
-              <Autocomplete
-                multiple
-                freeSolo
-                // The project's tags in use, most-used first — the third of the three controls
-                // §96 shipped with an empty list. A bulk tag is the one most worth suggesting:
-                // it is applied to every selected case at once, so a typo here is a typo on all
-                // of them, and the fix is a second bulk action nobody knows they need.
-                options={(projectTags.data ?? []).map((usage) => usage.tag)}
-                filterSelectedOptions
-                value={tags}
-                onChange={(_event, value) => setTags(value as string[])}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    id="bulk-tags"
-                    size="small"
-                    placeholder="Type a tag and press Enter"
-                    slotProps={{
-                      /*
-                        §96's slot trap, in the form that hides longer: an inline `data-testid` on
-                        a `TextField` lands on the ROOT div, not the input, so the locator resolved
-                        to an element `userEvent.type` cannot type into. Nothing failed — the two
-                        tests here never typed a tag, they only read the payload — and it surfaced
-                        only when a suggestion list gave the field something to filter.
+              {/*
+                The project's tags in use, most-used first — the third of the three controls §96
+                shipped with an empty list. A bulk tag is the one most worth suggesting: it is
+                applied to every selected case at once, so a typo here is a typo on all of them,
+                and the fix is a second bulk action nobody knows they need.
 
-                        `...params.slotProps` FIRST, for this control's siblings' reason: MUI keeps
-                        the selected chips in `slotProps.input.startAdornment`, and an object that
-                        merely adds a testid replaces the lot.
-                      */
-                      ...params.slotProps,
-                      htmlInput: {
-                        ...params.slotProps?.htmlInput,
-                        'data-testid': `${TestIdPrefix}.Field.Tags`,
-                      },
-                    }}
-                  />
-                )}
+                ~~§96's slot trap: an inline `data-testid` on a `TextField` lands on the ROOT div,
+                not the input, so the locator resolved to an element `userEvent.type` cannot type
+                into — and `...params.slotProps` had to come FIRST because MUI kept the selected
+                chips in `slotProps.input.startAdornment`.~~ → superseded in T16. `MultiPicker`
+                puts `data-testid` on the input itself and renders the chips as its own siblings,
+                so there is no slot to get wrong and nothing to spread back in.
+              */}
+              <MultiPicker
+                id="bulk-tags"
+                options={(projectTags.data ?? []).map((usage) => usage.tag)}
+                optionKey={(tag) => tag}
+                optionLabel={(tag) => tag}
+                optionText={(tag) => tag}
+                selected={tags}
+                onChange={setTags}
+                onCreate={(typed) => setTags([...new Set([...tags, typed])])}
+                placeholder="Type a tag and press Enter"
+                data-testid={`${TestIdPrefix}.Field.Tags`}
               />
             </Field>
           )}
 
           {(action === 'ATTACH_CONDITIONS' || action === 'DETACH_CONDITIONS') && (
             <Field label="Precondition" htmlFor="bulk-condition" error={fieldErrors.conditionId}>
-              <Select
+              <NativeSelect
                 id="bulk-condition"
-                size="small"
-                fullWidth
-                displayEmpty
                 value={conditionId}
                 onChange={(event) => setConditionId(event.target.value)}
                 data-testid={`${TestIdPrefix}.Field.Condition`}
               >
-                <MenuItem value="">Choose a condition…</MenuItem>
+                <option value="">Choose a condition…</option>
                 {(conditions.data ?? []).map((condition: Condition) => (
-                  <MenuItem key={condition.id} value={condition.id}>
+                  <option key={condition.id} value={condition.id}>
                     {condition.title}
                     {/* Omitted at zero rather than rendered as "used by 0". Nothing maintains
                         usage_count yet, so on a real instance every row would carry it — a label
                         stating a fact the data never made, and one that invites reading the
                         order as a ranking when it is currently just the title. */}
                     {condition.usageCount > 0 && (
-                      <Box component="span" sx={{ ml: 1, color: 'text.secondary', fontSize: '0.75rem' }}>
+                      <span className="ml-2 text-ink-2" style={{ fontSize: '0.75rem' }}>
                         used by {formatCount(condition.usageCount)}
-                      </Box>
+                      </span>
                     )}
-                  </MenuItem>
+                  </option>
                 ))}
-              </Select>
+              </NativeSelect>
             </Field>
           )}
 
           {action === 'SUBMIT_FOR_REVIEW' && (
-            <Alert severity="info" icon={false} data-testid={`${TestIdPrefix}.SubmitNote`}>
+            <div data-testid={`${TestIdPrefix}.SubmitNote`}>
+            <Banner tone="steel">
               Moves the selected cases to <strong>In review</strong>. Approving them is a separate
               step, and a test lead's.
-            </Alert>
+            </Banner>
+          </div>
           )}
 
           {preview && <BulkPreview result={preview} />}
 
           {(rootError || fieldErrors.caseIds) && (
-            <Alert severity="error" role="alert" data-testid={`${TestIdPrefix}.Error`}>
+            <div data-testid={`${TestIdPrefix}.Error`}>
+            <Banner tone="bad"><span role="alert">
               {rootError ?? fieldErrors.caseIds}
-            </Alert>
+            </span></Banner>
+          </div>
           )}
-        </Stack>
-      </DialogContent>
+        </div>
 
-      <DialogActions>
+      </div>
+      <DialogFooter>
         <Button onClick={handleClose} data-testid={`${TestIdPrefix}.Cancel`}>
           Cancel
         </Button>
@@ -560,7 +533,7 @@ export function BulkActionDialog({
           {bulk.isPending && !preview ? 'Checking…' : 'Preview changes'}
         </Button>
         <Button
-          variant="contained"
+          variant="primary"
           onClick={() => void run(false)}
           // Commit is gated on having seen a preview — the point of preview-then-commit is
           // lost if the user can skip straight past it.
@@ -570,7 +543,8 @@ export function BulkActionDialog({
         >
           {preview ? `Apply to ${plural(preview.changed.length, 'case')}` : 'Apply'}
         </Button>
-      </DialogActions>
+      </DialogFooter>
+    </DialogContent>
     </Dialog>
   );
 }
@@ -594,60 +568,54 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <Box>
-      <Typography
-        variant="caption"
-        component="label"
-        htmlFor={htmlFor}
-        sx={{ display: 'block', mb: 0.5 }}
-      >
+    <div>
+      <label className="m-0 text-xs block mb-1" htmlFor={htmlFor}>
         {label}
-      </Typography>
+      </label>
       {children}
       {error && (
-        <Typography variant="caption" role="alert" sx={{ color: 'error.main', mt: 0.5, display: 'block' }}>
+        <span className="m-0 text-xs text-[color:var(--color-failed)] mt-1 block" role="alert">
           {error}
-        </Typography>
+        </span>
       )}
-    </Box>
+    </div>
   );
 }
 
 function BulkPreview({ result }: { result: BulkResult }) {
   return (
-    <Box data-testid={`${TestIdPrefix}.Preview.Result`}>
-      <Alert
+    <div data-testid={`${TestIdPrefix}.Preview.Result`}>
+      <Banner
         // A lost decline warns as loudly as a skip, and it is the opposite kind of event: a skip
         // is something the operation will NOT do, this is something it will do that nobody asked
         // for (§193).
-        severity={result.skipped.length > 0 || result.declinesEnded.length > 0 ? 'warning' : 'info'}
-        icon={false}
-        sx={{ '& .MuiAlert-message': { width: '100%' } }}
+        tone={result.skipped.length > 0 || result.declinesEnded.length > 0 ? 'warn' : 'steel'}
+        className="[&>div]:w-full"
       >
-        <AlertTitle sx={{ fontSize: '0.875rem' }}>Preview</AlertTitle>
-        <Stack sx={{ gap: 1 }}>
-          <Typography variant="body2">
+        <p className="m-0 mb-1 text-sm font-semibold text-ink">Preview</p>
+        <div className="flex flex-col gap-2">
+          <p className="m-0 text-sm">
             <strong>{formatCount(result.changed.length)}</strong> will change ·{' '}
             <strong>{formatCount(result.unchanged.length)}</strong> already match ·{' '}
             <strong>{formatCount(result.skipped.length)}</strong> will be skipped
-          </Typography>
+          </p>
 
           {result.changed.length > 0 && (
-            <Box>
-              <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            <div>
+              <span className="m-0 text-xs font-semibold">
                 Changing
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
+              </span>
+              <div className="flex flex-wrap gap-1.5 mt-1">
                 {result.changed.slice(0, 12).map((key) => (
                   <Identifier key={key} variant="muted">
                     {key}
                   </Identifier>
                 ))}
                 {result.changed.length > 12 && (
-                  <Typography variant="caption">+{result.changed.length - 12} more</Typography>
+                  <span className="m-0 text-xs">+{result.changed.length - 12} more</span>
                 )}
-              </Box>
-            </Box>
+              </div>
+            </div>
           )}
 
           {/* The one consequence on this screen that the user did not ask for (§193). A move
@@ -656,49 +624,49 @@ function BulkPreview({ result }: { result: BulkResult }) {
               counted, for the same reason `skipped` is: "3 will lose an exception" leaves them
               no way to find out which three. */}
           {result.declinesEnded.length > 0 && (
-            <Box>
-              <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            <div>
+              <span className="m-0 text-xs font-semibold">
                 Losing a condition exception
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
+              </span>
+              <div className="flex flex-wrap gap-1.5 mt-1">
                 {result.declinesEnded.slice(0, 12).map((key) => (
                   <Identifier key={key} variant="muted">
                     {key}
                   </Identifier>
                 ))}
                 {result.declinesEnded.length > 12 && (
-                  <Typography variant="caption">
+                  <span className="m-0 text-xs">
                     +{result.declinesEnded.length - 12} more
-                  </Typography>
+                  </span>
                 )}
-              </Box>
-              <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+              </div>
+              <span className="m-0 text-xs block mt-1">
                 These cases turn an inherited condition off. The folder they are moving to does not
                 impose it, so the exception ends — and moving them back will not bring it back.
-              </Typography>
-            </Box>
+              </span>
+            </div>
           )}
 
           {/* Skipped items are named with their reason — "2 skipped" alone leaves the user
               with no way to find out which two, or what to do about them. */}
           {result.skipped.length > 0 && (
-            <Box>
-              <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            <div>
+              <span className="m-0 text-xs font-semibold">
                 Skipped
-              </Typography>
-              <Stack component="ul" sx={{ m: 0, mt: 0.5, pl: 2, gap: 0.25 }}>
+              </span>
+              <div className="flex flex-col m-0 mt-1 pl-4 gap-0.5">
                 {result.skipped.map((item) => (
-                  <Box component="li" key={item.key}>
-                    <Typography variant="caption">
+                  <li key={item.key}>
+                    <span className="m-0 text-xs">
                       <Identifier variant="muted">{item.key}</Identifier> — {item.reason}
-                    </Typography>
-                  </Box>
+                    </span>
+                  </li>
                 ))}
-              </Stack>
-            </Box>
+              </div>
+            </div>
           )}
-        </Stack>
-      </Alert>
-    </Box>
+        </div>
+      </Banner>
+    </div>
   );
 }

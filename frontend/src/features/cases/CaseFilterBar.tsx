@@ -1,16 +1,8 @@
-import {
-  Box,
-  Button,
-  Chip,
-  InputAdornment,
-  MenuItem,
-  Select,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
-import ClearIcon from '@mui/icons-material/Close';
-import SearchIcon from '@mui/icons-material/Search';
+import { Search, X } from 'lucide-react';
+import { Chip } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import { Button, Input } from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { useEffect, useState } from 'react';
 import type { ClassificationDimension, Facet } from '../../api/types';
 import {
@@ -104,37 +96,39 @@ export function CaseFilterBar({
   };
 
   return (
-    <Stack sx={{ gap: 1.5, mb: 2 }} data-testid={TestIdPrefix}>
-      <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 1.5, alignItems: { md: 'center' } }}>
-        <TextField
-          placeholder="Search titles, or paste a key like TC-42"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          sx={{ flex: 1, minWidth: 240 }}
-          slotProps={{
-            htmlInput: { 'data-testid': `${TestIdPrefix}.Search`, 'aria-label': 'Search test cases' },
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-              endAdornment: search ? (
-                <InputAdornment position="end">
-                  <Button
-                    size="small"
-                    onClick={() => setSearch('')}
-                    data-testid={`${TestIdPrefix}.ClearSearch`}
-                    aria-label="Clear search"
-                    sx={{ minWidth: 0, p: 0.5 }}
-                  >
-                    <ClearIcon fontSize="small" />
-                  </Button>
-                </InputAdornment>
-              ) : null,
-            },
-          }}
-        />
+    <div className="flex flex-col gap-3 mb-4" data-testid={TestIdPrefix}>
+      <div className="flex flex-col">
+        {/*
+          ~~`InputAdornment` slots~~ → the icons are positioned siblings, T16. MUI's adornment API
+          reserved room inside its own input wrapper; here the wrapper is a `relative` div and the
+          input carries the padding that keeps text clear of both icons.
+        */}
+        <div className="relative min-w-[240px] flex-1">
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-ink-4"
+          />
+          <Input
+            placeholder="Search titles, or paste a key like TC-42"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            data-testid={`${TestIdPrefix}.Search`}
+            aria-label="Search test cases"
+            className="pr-9 pl-8"
+          />
+          {search && (
+            <Button
+              variant="quiet"
+              size="icon"
+              onClick={() => setSearch('')}
+              data-testid={`${TestIdPrefix}.ClearSearch`}
+              aria-label="Clear search"
+              className="absolute top-1/2 right-1 size-7 -translate-y-1/2"
+            >
+              <X aria-hidden className="size-3.5" />
+            </Button>
+          )}
+        </div>
 
         <SelectFilter
           label="Feature"
@@ -157,44 +151,39 @@ export function CaseFilterBar({
           onChange={(value) => setFilter('testLevelId', value)}
           testId={`${TestIdPrefix}.TestLevel`}
         />
-      </Stack>
+      </div>
 
       {/* Toggle chips rather than dropdowns: these are the filters people combine, and a
           chip row shows what's active without opening anything. */}
-      <Stack direction="row" sx={{ gap: 2, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      <div className="flex gap-4 flex-wrap items-start">
         {MULTI_FILTERS.map((filter) => {
           const selected = (filters[filter.key] as string[] | undefined) ?? [];
           return (
-            <Box key={filter.key}>
-              <Typography
-                variant="caption"
-                sx={{ display: 'block', color: 'text.secondary', mb: 0.5, fontWeight: 600 }}
-              >
+            <div key={filter.key}>
+              <span className="m-0 text-xs block text-ink-2 mb-1 font-semibold">
                 {filter.label}
-              </Typography>
-              <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap' }}>
+              </span>
+              <div className="flex gap-1 flex-wrap">
                 {Object.entries(filter.labels).map(([value, label]) => {
                   const isSelected = selected.includes(value);
                   const count = facetCount(filter.key, value);
                   return (
                     <Chip
                       key={value}
-                      size="small"
-                      label={count === undefined ? label : `${label} ${formatCount(count)}`}
                       onClick={() => toggleMulti(filter.key, value)}
-                      variant={isSelected ? 'filled' : 'outlined'}
-                      color={isSelected ? 'primary' : 'default'}
+                      selected={isSelected}
                       aria-pressed={isSelected}
                       data-testid={`${TestIdPrefix}.${filter.label}.${value}`}
-                      sx={{ cursor: 'pointer' }}
-                    />
+                    >
+                      {count === undefined ? label : `${label} ${formatCount(count)}`}
+                    </Chip>
                   );
                 })}
-              </Stack>
-            </Box>
+              </div>
+            </div>
           );
         })}
-      </Stack>
+      </div>
 
       {/*
         Tags and the unfiled toggle (§96). Both are narrowing filters over things the grid shows,
@@ -206,64 +195,54 @@ export function CaseFilterBar({
         because there is no vocabulary — see the editor's own tags control for why offering a
         curated set is the thing that left `shared_step` empty.
       */}
-      <Stack direction="row" sx={{ gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
-        <TextField
-          size="small"
+      <div className="flex gap-3 items-center flex-wrap">
+        <Field
           label="Tag"
-          placeholder="Add a tag and press Enter"
+          htmlFor="tag"
+          help="All of these — a case must carry every one."
+        >
+        <Input
+          id="tag"
           value={tagDraft}
           onChange={(event) => setTagDraft(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key !== 'Enter') return;
-            event.preventDefault();
-            const tag = tagDraft.trim();
-            if (!tag) return;
-            const current = filters.tag ?? [];
-            // Adding one already applied is a no-op rather than a duplicate parameter: the
-            // server ANDs, so `?tag=smoke&tag=smoke` narrows to the same rows twice.
-            if (!current.includes(tag)) setFilter('tag', [...current, tag]);
-            setTagDraft('');
-          }}
-          sx={{ minWidth: 220 }}
-          /*
-            B3 — which semantics this filter has, said on the control that has them.
-
-            Three surfaces in the product take a set of tags and two of them mean the opposite of
-            this one: a suite's tag rules and a run's `tags` arm are unions ("any case carrying one
-            of these"), and this is an intersection. Both of those already said so on their own
-            helper text; this one said nothing, so the only way to learn that a second tag NARROWS
-            the grid was to add one and watch the list get shorter — which reads as a filter that
-            is broken rather than one that ANDs.
-
-            The sentence is unconditional rather than shown once a second tag is applied: a person
-            deciding whether to type another tag is exactly the person who needs it, and by then
-            they have already committed to the experiment.
-          */
-          helperText="All of these — a case must carry every one."
-          slotProps={{
-            htmlInput: { 'data-testid': `${TestIdPrefix}.TagInput`, 'aria-label': 'Filter by tag' },
-          }}
+                    if (event.key !== 'Enter') return;
+                    event.preventDefault();
+                    const tag = tagDraft.trim();
+                    if (!tag) return;
+                    const current = filters.tag ?? [];
+                    // Adding one already applied is a no-op rather than a duplicate parameter: the
+                    // server ANDs, so `?tag=smoke&tag=smoke` narrows to the same rows twice.
+                    if (!current.includes(tag)) setFilter('tag', [...current, tag]);
+                    setTagDraft('');
+                  }}
+          placeholder="Add a tag and press Enter"
+          aria-label="Filter by tag"
+          data-testid={`${TestIdPrefix}.TagInput`}
         />
+        </Field>
         {(filters.tag ?? []).map((tag) => (
           <Chip
             key={tag}
-            size="small"
-            label={tag}
-            onDelete={() =>
+            // The chip's own body navigates nowhere — the filter is already applied, and the only
+            // act it offers is taking it off. `onRemove` is the affordance; `onClick` is required
+            // by the type and is deliberately a no-op rather than a second way to do the same
+            // thing.
+            onClick={() => {}}
+            onRemove={() =>
               setFilter(
                 'tag',
                 (filters.tag ?? []).filter((value) => value !== tag),
               )
             }
             data-testid={`${TestIdPrefix}.Tag.${tag}`}
-          />
+          >
+            {tag}
+          </Chip>
         ))}
         <Chip
-          size="small"
-          label="Not filed"
           onClick={() => setFilter('unfiled', filters.unfiled ? undefined : true)}
-          variant={filters.unfiled ? 'filled' : 'outlined'}
-          color={filters.unfiled ? 'primary' : 'default'}
+          selected={!!filters.unfiled}
           aria-pressed={!!filters.unfiled}
           // Disabled beside a suite filter rather than hidden (§31): the server ignores the pair,
           // so a chip that looked active and changed nothing would be the worse half of
@@ -275,9 +254,11 @@ export function CaseFilterBar({
               : 'Only cases filed in no suite'
           }
           data-testid={`${TestIdPrefix}.Unfiled`}
-          sx={{ cursor: filters.suiteId ? 'not-allowed' : 'pointer' }}
-        />
-      </Stack>
+          className={filters.suiteId ? 'cursor-not-allowed' : 'cursor-pointer'}
+        >
+          Not filed
+        </Chip>
+      </div>
 
       {/*
         The owner filter has no control of its own — it arrives only from a dashboard by-owner
@@ -287,18 +268,20 @@ export function CaseFilterBar({
         both render a plausible page that answers a different question than the heading claims.
       */}
       {filters.ownerId && (
-        <Box>
+        <div>
           <Chip
-            size="small"
-            label={`Owner: ${ownerName ?? 'one owner'}`}
-            onDelete={() => setFilter('ownerId', undefined)}
+            // As with the tag chips above: the body is a statement, `onRemove` is the act.
+            onClick={() => {}}
+            onRemove={() => setFilter('ownerId', undefined)}
             data-testid={`${TestIdPrefix}.Owner`}
-          />
-        </Box>
+          >
+            {`Owner: ${ownerName ?? 'one owner'}`}
+          </Chip>
+        </div>
       )}
 
-      <Stack direction="row" sx={{ gap: 1.5, alignItems: 'center' }}>
-        <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid={`${TestIdPrefix}.ResultCount`}>
+      <div className="flex gap-3 items-center">
+        <p className="m-0 text-sm text-ink-2" data-testid={`${TestIdPrefix}.ResultCount`}>
           {/*
             An unknown count is rendered as absent, not as "Loading…". The `DataRegion` beside this
             bar already owns loading and failed, and a bare text node claiming the page was still
@@ -306,14 +289,14 @@ export function CaseFilterBar({
             and that it had failed, at the same moment, in the same column.
           */}
           {total === undefined ? EM_DASH : plural(total, 'case')}
-        </Typography>
+        </p>
         {hasActiveFilters && (
-          <Button size="small" onClick={clearFilters} data-testid={`${TestIdPrefix}.ClearAll`}>
+          <Button size="sm" onClick={clearFilters} data-testid={`${TestIdPrefix}.ClearAll`}>
             Clear filters
           </Button>
         )}
-      </Stack>
-    </Stack>
+      </div>
+    </div>
   );
 }
 
@@ -331,32 +314,24 @@ function SelectFilter({
   testId: string;
 }) {
   return (
-    <Box sx={{ minWidth: 160 }}>
-      <Select
-        size="small"
-        fullWidth
-        displayEmpty
+    <div style={{ minWidth: 160 }}>
+      <NativeSelect
         value={value ?? ''}
         onChange={(event) => onChange(event.target.value || undefined)}
         data-testid={testId}
-        renderValue={(selected) => {
-          if (!selected) return <Box sx={{ color: 'text.secondary' }}>{label}: any</Box>;
-          const match = dimension?.values.find((v) => v.id === selected);
-          return `${label}: ${match?.name ?? selected}`;
-        }}
         inputProps={{ 'aria-label': `Filter by ${label.toLowerCase()}` }}
       >
-        <MenuItem value="">{label}: any</MenuItem>
+        <option value="">{label}: any</option>
         {(dimension?.values ?? []).map((option) => (
-          <MenuItem key={option.id} value={option.id}>
+          <option key={option.id} value={option.id}>
             {/* Hierarchical dimensions are indented by depth so "Refunds" reads as a child
                 of "Payments" rather than as a peer. */}
-            <Box component="span" sx={{ pl: (option.path.split('.').length - 1) * 1.5 }}>
+            <span style={{ paddingLeft: (option.path.split('.').length - 1) * 12 }}>
               {option.name}
-            </Box>
-          </MenuItem>
+            </span>
+          </option>
         ))}
-      </Select>
-    </Box>
+      </NativeSelect>
+    </div>
   );
 }

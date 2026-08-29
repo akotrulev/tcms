@@ -1,4 +1,3 @@
-import { ThemeProvider } from '@mui/material/styles'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -6,7 +5,6 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
 import type { SocialIdentityList, SocialProvider } from '../../api/types'
-import { theme } from '../../app/theme'
 import { AuthContext, type AuthValue } from '../../auth/authContextValue'
 import {
   anAuthResult,
@@ -71,7 +69,6 @@ function renderSecurity({
     logout: () => {},
   }
   return render(
-    <ThemeProvider theme={theme}>
       <AuthContext value={session}>
       <QueryClientProvider client={createTestQueryClient()}>
         <MemoryRouter initialEntries={[{ pathname: path.split('?')[0], search: path.split('?')[1] ? `?${path.split('?')[1]}` : '', state }]}>
@@ -81,8 +78,7 @@ function renderSecurity({
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>
-      </AuthContext>
-    </ThemeProvider>,
+      </AuthContext>,
   )
 }
 

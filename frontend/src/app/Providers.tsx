@@ -1,4 +1,3 @@
-import { CssBaseline, ThemeProvider } from '@mui/material';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { AnnouncerProvider } from '../a11y/AnnouncerProvider';
@@ -9,7 +8,7 @@ import { Toaster } from '../components/ui';
 import { NotificationsProvider } from '../notifications/NotificationsProvider';
 import { useNotify } from '../notifications/useNotify';
 import { createAppQueryClient } from './queryClient';
-import { theme } from './theme';
+import { ColorSchemeProvider } from './colorScheme';
 import { VersionSkewWatcher } from './VersionSkewWatcher';
 
 /**
@@ -18,7 +17,13 @@ import { VersionSkewWatcher } from './VersionSkewWatcher';
  *
  * The nesting order is load-bearing:
  *
- *   Theme → Announcer → Notifications → Auth → SessionRecovery → QueryClient
+ *   ColorScheme → Announcer → Notifications → Auth → SessionRecovery → QueryClient
+ *
+ * ~~`ThemeProvider theme={theme} defaultMode="system"` + `CssBaseline`~~ → superseded in T16.
+ * `ColorSchemeProvider` stands in exactly their position and keeps the one behaviour they carried
+ * that nothing else could: it writes the resolved scheme onto `<html>`, which is what `index.css`'s
+ * dark palette selects on and what a Radix dialog portalled into `document.body` needs in order to
+ * be painted at all. Preflight replaced the rest of `CssBaseline`.
  *
  * The query client is created **innermost** because its global error handlers have to raise
  * notifications and trigger session recovery, so both of those must already be above it.
@@ -27,8 +32,7 @@ import { VersionSkewWatcher } from './VersionSkewWatcher';
  */
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <ThemeProvider theme={theme} defaultMode="system">
-      <CssBaseline />
+    <ColorSchemeProvider>
       {/*
         Success and informational toasts are `sonner`, anchored bottom-right, where auto-dismiss
         is correct behaviour — ~~notistack's `SnackbarProvider`~~ sat in exactly this position for
@@ -39,8 +43,8 @@ export function Providers({ children }: { children: ReactNode }) {
 
         `<Toaster />` is a sibling rather than a wrapper because sonner's queue is a module
         singleton (`notifications/toast.ts` calls into it directly); the component only renders
-        it. Nothing below needs to be inside it, and it stays under the theme because it draws
-        app chrome.
+        it. Nothing below needs to be inside it, and it stays under the colour-scheme provider
+        because it draws app chrome.
       */}
       <Toaster position="bottom-right" visibleToasts={3} theme="system" />
       <AnnouncerProvider>
@@ -52,7 +56,7 @@ export function Providers({ children }: { children: ReactNode }) {
           </AuthProvider>
         </NotificationsProvider>
       </AnnouncerProvider>
-    </ThemeProvider>
+    </ColorSchemeProvider>
   );
 }
 

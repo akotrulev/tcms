@@ -1,4 +1,4 @@
-import { Box, Typography } from '@mui/material';
+import { cn } from '../../lib/cn';
 import { useWatch, type Control, type UseFormGetValues } from 'react-hook-form';
 import { formatTimeOfDay } from '../../lib/format';
 import { toCasePayload, type CaseInput } from './caseSchema';
@@ -76,27 +76,25 @@ export function CaseDraftStatus({
   });
 
   return (
-    <Box
+    <div
       role="status"
       aria-live="polite"
-      sx={{ mb: inline ? 0 : 2, minHeight: 20 }}
+      className={cn('min-h-5', inline ? 'mb-0' : 'mb-4')}
       data-testid={testId}
     >
       {autosave.status === 'failed' ? (
-        <Typography variant="caption" color="error">
+        <span className="text-xs text-[color:var(--color-failed)]">
           Could not save a backup of your changes. Your work is still here — use {commitLabel} to
           keep it.
-        </Typography>
+        </span>
       ) : autosave.status === 'saving' ? (
-        <Typography variant="caption" color="text.secondary">
-          Saving a backup…
-        </Typography>
+        <span className="text-xs text-ink-2">Saving a backup…</span>
       ) : autosave.status === 'saved' ? (
-        <Typography variant="caption" color="text.secondary">
+        <span className="text-xs text-ink-2">
           Backup saved {formatTimeOfDay(autosave.savedAt)}. This is not the case itself — use{' '}
           {commitLabel} to publish your work.
-        </Typography>
+        </span>
       ) : null}
-    </Box>
+    </div>
   );
 }

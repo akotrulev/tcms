@@ -1,5 +1,15 @@
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import { Box, Chip, IconButton, Menu, MenuItem, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
+import { MoreVertical } from 'lucide-react';
+import { Badge, Table, TableBody, TableCell, TableHead, TableRow } from '../../components/kit';
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '../../components/ui';
 import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useSetArtifactStatus } from '../../api/queries';
@@ -43,27 +53,28 @@ export function ArtifactTable({
 
   return (
     <ScrollX>
-      <Table size="small" data-testid="Artifacts.Grid">
+      <Table data-testid="Artifacts.Grid">
         <TableHead>
           <TableRow>
-            <TableCell sx={{ color: 'text.secondary', width: 130 }}>Category</TableCell>
-            <TableCell sx={{ color: 'text.secondary' }}>Artifact</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 120 }}>Kind</TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 100 }} align="right">
+            <TableCell className="text-ink-2" style={{ width: 130 }}>Category</TableCell>
+            <TableCell className="text-ink-2">Artifact</TableCell>
+            <TableCell className="text-ink-2" style={{ width: 120 }}>Kind</TableCell>
+            <TableCell className="text-ink-2" style={{ width: 100 }}>
               Size
             </TableCell>
-            <TableCell sx={{ color: 'text.secondary', width: 170 }}>Updated</TableCell>
-            <TableCell sx={{ width: 48 }} />
+            <TableCell className="text-ink-2" style={{ width: 170 }}>Updated</TableCell>
+            <TableCell style={{ width: 48 }}   />
           </TableRow>
         </TableHead>
         <TableBody>
           {sorted.map((artifact) => (
             <TableRow key={artifact.id} data-testid="Artifacts.Row" hover>
               <TableCell>
-                <Chip size="small" variant="outlined" label={humanize(artifact.category)} />
+                <Badge tone="plain" >
+{humanize(artifact.category)}</Badge>
               </TableCell>
               <TableCell>
-                <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <div className="flex items-center gap-2 flex-wrap">
                   {/*
                     A documentation reference links to the page. Without this the kind plan §6n
                     steers people toward is the one kind the reader cannot open, while the external
@@ -71,31 +82,19 @@ export function ArtifactTable({
                     URLs, which is the failure the register exists to prevent.
                   */}
                   {artifact.kind === 'DOC_PAGE_REF' && artifact.docPageId ? (
-                    <Box
-                      component={RouterLink}
-                      to={`/projects/${projectId}/docs/${artifact.docPageId}`}
-                      data-testid="Artifacts.Row.PageLink"
-                      sx={{ fontWeight: 500, fontSize: '0.8125rem' }}
-                    >
+                    <RouterLink className="font-medium" style={{ fontSize: '0.8125rem' }} to={`/projects/${projectId}/docs/${artifact.docPageId}`} data-testid="Artifacts.Row.PageLink">
                       {artifact.title}
-                    </Box>
+                    </RouterLink>
                   ) : artifact.kind === 'EXTERNAL_URL' && artifact.url ? (
-                    <Box
-                      component="a"
-                      href={artifact.url}
-                      target="_blank"
-                      rel="noopener"
-                      data-testid="Artifacts.Row.Link"
-                      sx={{ fontWeight: 500, fontSize: '0.8125rem' }}
-                    >
+                    <a className="font-medium" style={{ fontSize: '0.8125rem' }} href={artifact.url} target="_blank" rel="noopener" data-testid="Artifacts.Row.Link">
                       {artifact.title}
-                      <Box component="span" aria-hidden="true" sx={{ ml: 0.5 }}>
+                      <span className="ml-1" aria-hidden="true">
                         ↗
-                      </Box>
-                      <Box component="span" className="sr-only">
+                      </span>
+                      <span className="sr-only">
                         (opens in a new tab)
-                      </Box>
-                    </Box>
+                      </span>
+                    </a>
                   ) : artifact.kind === 'FILE' && artifact.url ? (
                     /*
                       An uploaded document downloads, and it is a BUTTON rather than an anchor.
@@ -117,14 +116,14 @@ export function ArtifactTable({
                       // invented from the media type would not be.
                       filename={artifact.filename ?? artifact.title}
                       testId="Artifacts.Row.Download"
-                      sx={{ fontWeight: 500, fontSize: '0.8125rem' }}
+                      className="font-medium" style={{ fontSize: '0.8125rem' }}
                     >
                       {artifact.title}
                     </FileDownloadLink>
                   ) : (
-                    <Typography variant="body2" sx={{ fontWeight: 500 }} data-testid="Artifacts.Row.Title">
+                    <p className="m-0 text-sm font-medium" data-testid="Artifacts.Row.Title">
                       {artifact.title}
-                    </Typography>
+                    </p>
                   )}
   
                   {/*
@@ -133,18 +132,28 @@ export function ArtifactTable({
                     project's — and so they duplicate them.
                   */}
                   {showInheritance && artifact.inherited && (
-                    <Tooltip title="Inherited from the project. Editing it affects every plan that inherits it.">
-                      <Chip
-                        size="small"
-                        label="from project"
+                    <Tooltip>
+<TooltipTrigger asChild>
+                      {/*
+                        `style` rather than a `BadgeTone`: `--color-info` is not one of the kit's
+                        eight tones, and mapping it onto the nearest would be this file quietly
+                        choosing a different colour. `Badge` spreads the caller's props after its
+                        own, so this wins.
+                      */}
+                      <Badge
+                        tone="plain"
                         data-testid="Artifacts.Row.InheritedMarker"
-                        sx={{
-                          bgcolor: 'transparent',
+                        style={{
+                          backgroundColor: 'transparent',
                           color: 'var(--color-info)',
-                          border: '1px solid color-mix(in srgb, var(--color-info) 45%, transparent)',
+                          borderColor: 'color-mix(in srgb, var(--color-info) 45%, transparent)',
                         }}
-                      />
-                    </Tooltip>
+                      >
+                        from project
+                      </Badge>
+                    </TooltipTrigger>
+<TooltipContent>Inherited from the project. Editing it affects every plan that inherits it.</TooltipContent>
+</Tooltip>
                   )}
                   {/*
                     The status, and — for a superseded row — WHAT replaced it. A status the reader
@@ -154,43 +163,47 @@ export function ArtifactTable({
                     covers the one case it is not, a plan register showing an inherited row.
                   */}
                   {artifact.status !== 'ACTIVE' && (
-                    <Tooltip title={statusReason(artifact, replacements)}>
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        label={artifactStatusLabel[artifact.status]}
+                    <Tooltip>
+<TooltipTrigger asChild>
+                      <Badge tone="plain"
                         data-testid="Artifacts.Row.Status"
-                      />
-                    </Tooltip>
+                      >
+{artifactStatusLabel[artifact.status]}</Badge>
+                    </TooltipTrigger>
+<TooltipContent>{statusReason(artifact, replacements)}</TooltipContent>
+</Tooltip>
                   )}
-                </Stack>
+                </div>
   
                 {artifact.description && (
-                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                  <span className="m-0 text-xs text-ink-2 block">
                     {artifact.description}
-                  </Typography>
+                  </span>
                 )}
                 {artifact.filename && (
                   <Identifier variant="muted">{artifact.filename}</Identifier>
                 )}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+              <TableCell className="text-ink-2" style={{ fontSize: '0.75rem' }}>
                 {artifact.kind === 'DOC_PAGE_REF'
                   ? 'Documentation page'
                   : artifact.kind === 'EXTERNAL_URL'
                     ? 'External link'
                     : 'File'}
               </TableCell>
-              <TableCell align="right">
+              <TableCell>
                 <Identifier variant="muted">{formatBytes(artifact.sizeBytes)}</Identifier>
               </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                <Tooltip title={formatDateTime(artifact.updatedAt)}>
-                  <Box component="span">{formatAge(artifact.updatedAt)}</Box>
-                </Tooltip>
-                <Box>by {artifact.updatedBy.displayName}</Box>
+              <TableCell className="text-ink-2" style={{ fontSize: '0.75rem' }}>
+                <Tooltip>
+<TooltipTrigger asChild>
+                  <span>{formatAge(artifact.updatedAt)}</span>
+                </TooltipTrigger>
+<TooltipContent>{formatDateTime(artifact.updatedAt)}</TooltipContent>
+</Tooltip>
+                <div>by {artifact.updatedBy.displayName}</div>
               </TableCell>
-              <TableCell align="right">
+              <TableCell>
                 <ArtifactRowActions artifact={artifact} projectId={projectId} />
               </TableCell>
             </TableRow>
@@ -252,7 +265,6 @@ function statusReason(artifact: Artifact, titles: Map<string, string>): string {
  * at Archive for the case somebody actually meant.
  */
 function ArtifactRowActions({ artifact, projectId }: { artifact: Artifact; projectId: string }) {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [editing, setEditing] = useState(false);
   const [removing, setRemoving] = useState(false);
   const gate = useCan(projectId);
@@ -281,78 +293,86 @@ function ArtifactRowActions({ artifact, projectId }: { artifact: Artifact; proje
     ? 'This is a sign-off record, so the register keeps it as it was signed. Register a replacement to correct it.'
     : undefined;
 
+  // `setAnchor(null)` used to close the menu by hand in both of these; Radix closes on select, so
+  // what is left is the act itself.
   const move = (status: 'ACTIVE' | 'ARCHIVED') => {
-    setAnchor(null);
     setStatus.mutate({ artifactId: artifact.id, status });
   };
 
   const open = (act: (value: boolean) => void) => {
-    setAnchor(null);
     act(true);
   };
 
   return (
     <>
-      <Tooltip title={reason ?? 'Artifact actions'}>
-        <Box component="span">
-          <IconButton
-            size="small"
-            // No longer `|| superseded` — see the header. A caller who holds neither key still
-            // gets a disabled button with the gate's reason on it.
-            disabled={(!allowed && !mayRemove) || setStatus.isPending}
-            onClick={(event) => setAnchor(event.currentTarget)}
-            data-testid="Artifacts.Row.Actions"
-            aria-label={`Actions for ${artifact.title}`}
-          >
-            <MoreVertIcon fontSize="small" />
-          </IconButton>
-        </Box>
-      </Tooltip>
-      <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
-        <MenuItem
+      {/*
+        ~~`anchorEl` + `open` + `onClose`~~ → `DropdownMenu`, T16. Radix anchors the panel to its
+        own trigger, so the `anchor` state MUI needed is gone and the button IS the trigger rather
+        than a thing that records a coordinate.
+      */}
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="quiet"
+                  size="icon"
+                  // No longer `|| superseded` — see the header. A caller who holds neither key
+                  // still gets a disabled button with the gate's reason on it.
+                  disabled={(!allowed && !mayRemove) || setStatus.isPending}
+                  data-testid="Artifacts.Row.Actions"
+                  aria-label={`Actions for ${artifact.title}`}
+                >
+                  <MoreVertical aria-hidden className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{reason ?? 'Artifact actions'}</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="end">
+        <DropdownMenuItem
           disabled={!allowed || frozen}
           onClick={() => open(setEditing)}
           data-testid="Artifacts.Row.Edit"
         >
           Correct…
-        </MenuItem>
-        <MenuItem
+        </DropdownMenuItem>
+        <DropdownMenuItem
           disabled={!allowed || artifact.status !== 'ACTIVE'}
           onClick={() => move('ARCHIVED')}
           data-testid="Artifacts.Row.Archive"
         >
           Archive
-        </MenuItem>
-        <MenuItem
+        </DropdownMenuItem>
+        <DropdownMenuItem
           disabled={!allowed || artifact.status !== 'ARCHIVED'}
           onClick={() => move('ACTIVE')}
           data-testid="Artifacts.Row.Restore"
         >
           Restore
-        </MenuItem>
-        <MenuItem
+        </DropdownMenuItem>
+        <DropdownMenuItem
           disabled={!mayRemove || frozen}
           onClick={() => open(setRemoving)}
           data-testid="Artifacts.Row.Delete"
         >
           Remove…
-        </MenuItem>
+        </DropdownMenuItem>
         {/*
-          Why the row's promise is stated here and not as a tooltip on the two disabled items: MUI
-          raises no hover events on a disabled `MenuItem`, so a tooltip there is a reason nobody
+          Why the row's promise is stated here and not as a tooltip on the two disabled items: a
+          disabled menu item raises no hover events, so a tooltip there is a reason nobody
           can read — the finding this file already records for the superseded case. A line inside
           the menu is read by the person who just found both acts greyed.
         */}
         {frozen && (
-          <Typography
-            variant="caption"
-            sx={{ display: 'block', px: 2, py: 1, maxWidth: 280, color: 'text.secondary' }}
-            data-testid="Artifacts.Row.WriteOnce"
-          >
+          <span className="m-0 text-xs block px-4 py-2 text-ink-2" style={{ maxWidth: 280 }} data-testid="Artifacts.Row.WriteOnce">
             {frozenReason}
-          </Typography>
+          </span>
         )}
-      </Menu>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <EditArtifactDialog
         open={editing}
         onClose={() => setEditing(false)}

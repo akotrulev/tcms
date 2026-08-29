@@ -1,13 +1,4 @@
-import {
-  Box,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material';
+import { Table, TableBody, TableCell, TableHead, TableRow } from '../../components/kit';
 import { Panel } from '../../components/PageHeader';
 import { ScrollX } from '../../components/ScrollX';
 import {
@@ -59,17 +50,15 @@ export function ReportView({ document }: { document: ReportDocument }) {
   const { report } = document;
 
   return (
-    <Stack sx={{ gap: 2 }} data-testid={TestId}>
+    <div className="flex flex-col gap-4" data-testid={TestId}>
       <Panel testId={`${TestId}.Header`} title="What this report covers" dense>
         <ScrollX>
-          <Table size="small" data-testid={`${TestId}.Header.Grid`}>
+          <Table data-testid={`${TestId}.Header.Grid`}>
             <TableBody>
               {headerBlock(document).map((entry) => (
                 <TableRow key={entry.label} data-testid={`${TestId}.Header.Row`}>
                   <TableCell
-                    component="th"
-                    scope="row"
-                    sx={{ color: 'text.secondary', width: 260, verticalAlign: 'top' }}
+                    className="w-[260px] align-top text-ink-2"
                   >
                     {entry.label}
                   </TableCell>
@@ -89,10 +78,10 @@ export function ReportView({ document }: { document: ReportDocument }) {
       */}
       {report.sections.length === 0 ? (
         <Panel testId={`${TestId}.NoSections`} dense>
-          <Typography variant="body2" sx={{ color: 'text.secondary', p: 2 }}>
+          <p className="m-0 text-sm text-ink-2 p-4">
             This report has no sections. Nothing matched what it was asked to compute over — the
             header above says what that was.
-          </Typography>
+          </p>
         </Panel>
       ) : (
         report.sections.map((section, index) => (
@@ -103,7 +92,7 @@ export function ReportView({ document }: { document: ReportDocument }) {
           <SectionPanel key={`${index}-${section.heading}`} section={section} />
         ))
       )}
-    </Stack>
+    </div>
   );
 }
 
@@ -114,7 +103,7 @@ function SectionPanel({ section }: { section: ReportSection }) {
 
   return (
     <Panel testId={`${TestId}.Section`} title={section.heading} dense>
-      <Stack sx={{ gap: 2, p: table ? 0 : 2 }}>
+      <div className={cn('flex flex-col gap-4', table ? 'p-0' : 'p-4')}>
         {/*
           The narrative is not decoration — it is where a section says what its denominator is
           ("of the executions recorded", not "of the cases in the run"). A section whose numbers can
@@ -122,22 +111,21 @@ function SectionPanel({ section }: { section: ReportSection }) {
           so it renders above the table rather than as a caption under it.
         */}
         {section.narrative && (
-          <Typography
-            variant="body2"
-            sx={{ color: 'text.secondary', px: table ? 2 : 0, pt: table ? 2 : 0 }}
+          <p
+            className={cn('m-0 text-sm text-ink-2', table && 'px-4 pt-4')}
             data-testid={`${TestId}.Section.Narrative`}
           >
             {section.narrative}
-          </Typography>
+          </p>
         )}
 
         {table && (
           <ScrollX>
-            <Table size="small" data-testid={`${TestId}.Section.Grid`}>
+            <Table data-testid={`${TestId}.Section.Grid`}>
               <TableHead>
                 <TableRow>
                   {table.columns.map((column) => (
-                    <TableCell key={column} sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
+                    <TableCell key={column} className="text-ink-2 whitespace-nowrap">
                       {column}
                     </TableCell>
                   ))}
@@ -166,11 +154,11 @@ function SectionPanel({ section }: { section: ReportSection }) {
         )}
 
         {section.series.map((series) => (
-          <Box key={series.name} sx={{ px: table ? 2 : 0, pb: table ? 2 : 0 }}>
+          <div key={series.name} className={cn(table && 'px-4 pb-4')}>
             <SeriesChart series={series} />
-          </Box>
+          </div>
         ))}
-      </Stack>
+      </div>
     </Panel>
   );
 }
@@ -188,36 +176,23 @@ function SeriesChart({ series }: { series: ReportSeries }) {
   const percents = barPercents(series.points);
 
   return (
-    <Stack sx={{ gap: 0.75 }} data-testid={`${TestId}.Series`}>
-      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+    <div className="flex flex-col gap-1.5" data-testid={`${TestId}.Series`}>
+      <span className="m-0 text-xs text-ink-2 font-semibold">
         {series.name}
-      </Typography>
+      </span>
       {series.points.map((point, index) => (
-        <Stack
-          key={`${index}-${point.label}`}
-          direction="row"
-          sx={{ alignItems: 'center', gap: 1 }}
-          data-testid={`${TestId}.Series.Point`}
-        >
-          <Typography variant="caption" sx={{ width: 140, flexShrink: 0 }}>
+        <div className="flex items-center gap-2" key={`${index}-${point.label}`} data-testid={`${TestId}.Series.Point`}>
+          <span className="m-0 text-xs shrink-0" style={{ width: 140 }}>
             {point.label}
-          </Typography>
-          <Box sx={{ flex: 1, height: 10, bgcolor: 'action.hover', borderRadius: 0.5 }}>
-            <Box
-              sx={{
-                width: `${percents[index] ?? 0}%`,
-                height: '100%',
-                bgcolor: 'primary.main',
-                borderRadius: 0.5,
-              }}
-              data-testid={`${TestId}.Series.Bar`}
-            />
-          </Box>
-          <Typography variant="caption" sx={{ width: 64, textAlign: 'right', flexShrink: 0 }}>
+          </span>
+          <div className="flex-1 bg-field rounded" style={{ height: 10 }}>
+            <div data-testid={`${TestId}.Series.Bar`} />
+          </div>
+          <span className="m-0 text-xs text-right shrink-0" style={{ width: 64 }}>
             {point.value}
-          </Typography>
-        </Stack>
+          </span>
+        </div>
       ))}
-    </Stack>
+    </div>
   );
 }

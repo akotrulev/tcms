@@ -41,10 +41,10 @@
  * the endpoint's own description both say so; this comment is the third copy on purpose, because it
  * is the change a reviewer would otherwise "fix".
  */
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import { Alert, Button, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import { Trash2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { Banner } from './kit';
+import { Button, Tooltip, TooltipContent, TooltipTrigger } from './ui';
 import type { Attachment, PermissionKey } from '../api/types';
 import { describeError } from '../lib/describeError';
 import { formatBytes, formatDateTime } from '../lib/format';
@@ -105,24 +105,27 @@ export function AttachmentsPanel({
       actions={
         <PermissionGate projectId={projectId} permission={permission}>
           {({ allowed, reason }) => (
-            <Tooltip title={allowed ? '' : reason}>
-              {/*
-                The span is not decoration: MUI puts `pointer-events: none` on a disabled control,
-                so a Tooltip wrapped directly around one greys out and explains nothing.
-                `PermissionGate`'s own header records this; it is re-made here because this is a
-                render-prop call site and the wrapper is the caller's job.
-              */}
-              <span>
-                <Button
-                  size="small"
-                  startIcon={<UploadFileIcon />}
-                  disabled={!allowed || attaching}
-                  onClick={() => input.current?.click()}
-                  data-testid={`${testId}.Attach`}
-                >
-                  {attaching ? 'Uploading…' : 'Attach a file'}
-                </Button>
-              </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {/*
+                  The span is not decoration: a disabled control has `pointer-events: none`, so a
+                  Tooltip wrapped directly around one greys out and explains nothing.
+                  `PermissionGate`'s own header records this; it is re-made here because this is a
+                  render-prop call site and the wrapper is the caller's job.
+                */}
+                <span>
+                  <Button
+                    size="sm"
+                    disabled={!allowed || attaching}
+                    onClick={() => input.current?.click()}
+                    data-testid={`${testId}.Attach`}
+                  >
+                    <Upload aria-hidden className="size-3.5" />
+                    {attaching ? 'Uploading…' : 'Attach a file'}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {!allowed && reason && <TooltipContent>{reason}</TooltipContent>}
             </Tooltip>
           )}
         </PermissionGate>
@@ -143,22 +146,22 @@ export function AttachmentsPanel({
       />
 
       {refused && (
-        <Alert severity="warning" sx={{ mb: 2 }} data-testid={`${testId}.Refused`}>
-          {refused}
-        </Alert>
+        <div className="mb-4" data-testid={`${testId}.Refused`}>
+          <Banner tone="warn">{refused}</Banner>
+        </div>
       )}
       {attachError != null && (
-        <Alert severity="error" sx={{ mb: 2 }} data-testid={`${testId}.Error`}>
-          {describeError(attachError).body}
-        </Alert>
+        <div className="mb-4" data-testid={`${testId}.Error`}>
+          <Banner tone="bad">{describeError(attachError).body}</Banner>
+        </div>
       )}
 
       {attachments.length === 0 ? (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid={`${testId}.Empty`}>
+        <p className="m-0 text-sm text-ink-2" data-testid={`${testId}.Empty`}>
           {emptyBody}
-        </Typography>
+        </p>
       ) : (
-        <Stack sx={{ gap: 1 }} data-testid={`${testId}.List`}>
+        <div className="flex flex-col gap-2" data-testid={`${testId}.List`}>
           {/*
             Sorted newest first, and sorted at all because the server's order is not part of the
             contract — an unsorted list re-orders itself on a refetch and the row somebody was
@@ -178,7 +181,7 @@ export function AttachmentsPanel({
                 testId={testId}
               />
             ))}
-        </Stack>
+        </div>
       )}
     </Panel>
   );
@@ -200,21 +203,21 @@ function AttachmentRow({
   testId: string;
 }) {
   return (
-    <Stack sx={{ gap: 0.5 }} data-testid={`${testId}.Row`}>
-      <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5 }}>
-        <Stack sx={{ minWidth: 0, flex: 1 }}>
+    <div className="flex flex-col gap-1" data-testid={`${testId}.Row`}>
+      <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 flex-col">
           <FileDownloadLink
             url={item.url}
             filename={item.filename}
             testId={`${testId}.Download`}
-            sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            className="overflow-hidden text-ellipsis whitespace-nowrap"
           />
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          <span className="text-xs text-ink-2">
             {formatBytes(item.sizeBytes)}
             {item.uploadedBy ? ` · ${item.uploadedBy.displayName}` : ''}
             {` · ${formatDateTime(item.uploadedAt)}`}
-          </Typography>
-        </Stack>
+          </span>
+        </div>
 
         {/*
           No `authorId`. See the module header: this gate asks whether the caller may edit the
@@ -222,22 +225,26 @@ function AttachmentRow({
         */}
         <PermissionGate projectId={projectId} permission={permission}>
           {({ allowed, reason }) => (
-            <Tooltip title={allowed ? 'Remove' : reason}>
-              <span>
-                <IconButton
-                  size="small"
-                  disabled={!allowed || deleting}
-                  onClick={onDelete}
-                  aria-label={`Remove ${item.filename}`}
-                  data-testid={`${testId}.Delete`}
-                >
-                  <DeleteOutlineIcon fontSize="small" />
-                </IconButton>
-              </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    size="icon"
+                    variant="quiet"
+                    disabled={!allowed || deleting}
+                    onClick={onDelete}
+                    aria-label={`Remove ${item.filename}`}
+                    data-testid={`${testId}.Delete`}
+                  >
+                    <Trash2 aria-hidden className="size-4" />
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{allowed ? 'Remove' : reason}</TooltipContent>
             </Tooltip>
           )}
         </PermissionGate>
-      </Stack>
-    </Stack>
+      </div>
+    </div>
   );
 }

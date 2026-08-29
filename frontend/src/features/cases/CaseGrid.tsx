@@ -119,7 +119,7 @@ function caseColumns(projectId: string) {
           data-testid={`${TestIdPrefix}.Row.KeyLink`}
           style={{ textDecoration: 'none' }}
         >
-          <Identifier sx={{ color: 'primary.main' }}>{row.original.key}</Identifier>
+          <Identifier className="text-steel">{row.original.key}</Identifier>
         </RouterLink>
       ),
     }),

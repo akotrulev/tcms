@@ -1,4 +1,6 @@
-import { Alert, Box, MenuItem, TextField, Typography } from '@mui/material';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import { NativeSelect } from '../../components/ui/native-select';
 import { useAssignExecution, useProjectMembers } from '../../api/queries';
 import type { TestExecution } from '../../api/types';
 import { PermissionGate } from '../../components/PermissionGate';
@@ -60,43 +62,46 @@ export function ExecutionAssignee({
     current && !listed.some((member) => member.id === current.id) ? [current, ...listed] : listed;
 
   return (
-    <Box data-testid="Execution.Assignee">
+    <div data-testid="Execution.Assignee">
       <PermissionGate projectId={projectId} permission="run:execute">
         {({ allowed }) => (
-          <TextField
+          <Field
             label="Assigned to"
-            select
-            fullWidth
-            size="small"
-            // Controlled: the value is the server's answer, so a refused write leaves the control
-            // showing who the row actually belongs to rather than who somebody tried to give it to.
-            value={current?.id ?? ''}
-            // §31 — disabled with a reason rather than hidden, so a tester learns the affordance
-            // exists and is somebody else's to take. `PermissionGate` supplies the tooltip.
-            disabled={!allowed || frozen || assign.isPending}
-            onChange={(event) => void assign.mutateAsync(event.target.value || null).catch(() => {})}
-            helperText={
+            htmlFor="execution-assignee"
+            help={
               frozen
                 ? 'This run has ended, so its checklist can no longer be reorganised.'
                 : 'Whoever this run expects to work the case.'
             }
-            slotProps={{ htmlInput: { 'data-testid': 'Execution.Assignee.Select' } }}
           >
-            <MenuItem value="" data-testid="Execution.Assignee.None">
-              <Box component="span" sx={{ color: 'text.secondary' }}>
+            <NativeSelect
+              id="execution-assignee"
+              // Controlled: the value is the server's answer, so a refused write leaves the
+              // control showing who the row actually belongs to rather than who somebody tried
+              // to give it to.
+              value={current?.id ?? ''}
+              // §31 — disabled with a reason rather than hidden, so a tester learns the affordance
+              // exists and is somebody else's to take. `PermissionGate` supplies the tooltip.
+              disabled={!allowed || frozen || assign.isPending}
+              onChange={(event) =>
+                void assign.mutateAsync(event.target.value || null).catch(() => {})
+              }
+              data-testid="Execution.Assignee.Select"
+            >
+              <option value="" data-testid="Execution.Assignee.None">
                 Nobody
-              </Box>
-            </MenuItem>
-            {options.map((member) => (
-              <MenuItem
-                key={member.id}
-                value={member.id}
-                data-testid={`Execution.Assignee.${member.id}`}
-              >
-                {member.displayName}
-              </MenuItem>
-            ))}
-          </TextField>
+              </option>
+              {options.map((member) => (
+                <option
+                  key={member.id}
+                  value={member.id}
+                  data-testid={`Execution.Assignee.${member.id}`}
+                >
+                  {member.displayName}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
         )}
       </PermissionGate>
       {/*
@@ -105,10 +110,12 @@ export function ExecutionAssignee({
         while this page was open, and the sentence names reopening as the way forward.
       */}
       {assign.isError && (
-        <Alert severity="error" role="alert" sx={{ mt: 1 }} data-testid="Execution.Assignee.Error">
-          <Typography variant="body2">{describeError(assign.error).body}</Typography>
-        </Alert>
+        <div className="mt-2" data-testid="Execution.Assignee.Error">
+          <Banner tone="bad">
+            <span role="alert">{describeError(assign.error).body}</span>
+          </Banner>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }

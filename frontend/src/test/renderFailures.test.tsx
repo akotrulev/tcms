@@ -24,10 +24,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, waitFor } from '@testing-library/react'
 import { useEffect, type ReactNode } from 'react'
-import { ThemeProvider } from '@mui/material/styles'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClientProvider, useMutation, useQuery } from '@tanstack/react-query'
-import { theme } from '../app/theme'
 import { RegionErrorBoundary, RouteErrorBoundary } from '../components/ErrorBoundaries'
 import type { ClientErrorReport } from '../lib/reportClientError'
 import {
@@ -62,9 +60,7 @@ function Throws(): ReactNode {
 function renderThrowing(tree: ReactNode) {
   const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
   render(
-    <ThemeProvider theme={theme}>
-      <MemoryRouter>{tree}</MemoryRouter>
-    </ThemeProvider>,
+      <MemoryRouter>{tree}</MemoryRouter>,
   )
   consoleError.mockRestore()
 }

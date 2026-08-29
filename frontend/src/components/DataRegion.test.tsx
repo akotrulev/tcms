@@ -1,11 +1,9 @@
-import { ThemeProvider } from '@mui/material/styles'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, TimeoutError } from '../api/client'
-import { theme } from '../app/theme'
 import { renderingIntoAnErrorBoundary } from '../test/renderFailures'
 import { DataRegion, type DataRegionState } from './DataRegion'
 
@@ -34,7 +32,6 @@ function renderRegion(regionState: DataRegionState<Rows>, extra?: Partial<Parame
     // The router is here for the Refused state's way out (005 C1b), which is a `RouterLink` to the
     // org chart — the only thing in this component that needs one.
     <MemoryRouter>
-    <ThemeProvider theme={theme}>
       <DataRegion<Rows>
         testId="Cases"
         state={regionState}
@@ -49,7 +46,6 @@ function renderRegion(regionState: DataRegionState<Rows>, extra?: Partial<Parame
           </ul>
         )}
       </DataRegion>
-    </ThemeProvider>
     </MemoryRouter>,
   )
 }
@@ -249,11 +245,9 @@ describe('DataRegion', () => {
       expect(screen.getByTestId('Cases.Stale')).toBeInTheDocument()
 
       rerender(
-        <ThemeProvider theme={theme}>
           <DataRegion<Rows> testId="Cases" state={state({ data: rows('TC-1', 'TC-2', 'TC-3', 'TC-4') })}>
             {(data) => <ul data-testid="Cases.Rows">{data.items.map((i) => <li key={i}>{i}</li>)}</ul>}
-          </DataRegion>
-        </ThemeProvider>,
+          </DataRegion>,
       )
 
       expect(screen.queryByTestId('Cases.Stale')).not.toBeInTheDocument()
@@ -281,15 +275,13 @@ describe('DataRegion', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       render(
-        <ThemeProvider theme={theme}>
           <Sibling>
             <DataRegion<Rows> testId="Cases" state={state({ data: rows('TC-1') })}>
               {() => {
                 throw new TypeError("Cannot read properties of undefined (reading 'key')")
               }}
             </DataRegion>
-          </Sibling>
-        </ThemeProvider>,
+          </Sibling>,
       )
 
       // The page's own chrome — the search box and the filters the user needs in order to
@@ -306,7 +298,6 @@ describe('DataRegion', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       render(
-        <ThemeProvider theme={theme}>
           <Sibling>
             <DataRegion<Rows>
               testId="Cases"
@@ -315,8 +306,7 @@ describe('DataRegion', () => {
             >
               {() => <ul data-testid="Cases.Rows" />}
             </DataRegion>
-          </Sibling>
-        </ThemeProvider>,
+          </Sibling>,
       )
 
       expect(screen.getByTestId('PageChrome')).toBeInTheDocument()

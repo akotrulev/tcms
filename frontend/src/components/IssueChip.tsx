@@ -1,6 +1,7 @@
-import { Chip, Link, Skeleton, Stack, Tooltip } from '@mui/material';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { ExternalLink } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
+import { Badge } from './kit';
+import { Skeleton, Tooltip, TooltipContent, TooltipTrigger } from './ui';
 import { useTrackerIssue } from '../api/queries';
 import type { IssueLink } from '../api/types';
 import {
@@ -72,42 +73,46 @@ export function IssueChip({
     ?? link.provider;
 
   if (preview.isPending && link.bindingId !== null) {
-    return <Skeleton variant="rounded" width={220} height={24} data-testid={`${testId}.Loading`} />;
+    return <Skeleton className="h-6 w-[220px] rounded" data-testid={`${testId}.Loading`} />;
   }
 
   const issue = preview.data?.state === 'AVAILABLE' ? preview.data.issue : null;
 
   if (issue) {
     return (
-      <Tooltip
-        // The bounded fact behind the unbounded word: "Pending triage" is this project's spelling
-        // of "To do", and the tooltip is where the reader can find that out without the chip
-        // pretending the free-text name is one of three.
-        title={`${trackerStatusCategoryLabels[issue.statusCategory]} in ${providerLabel}`}
-      >
-      <Chip
-        size="small"
-        color={trackerStatusCategoryColors[issue.statusCategory]}
-        variant="outlined"
-        data-testid={`${testId}.Live`}
-        label={
-          <Link
-            href={issue.url}
-            target="_blank"
-            rel="noreferrer noopener"
-            underline="hover"
-            color="inherit"
-          >
-            {/*
-              `statusName` is the WORD and `statusCategory` is the colour — two different questions,
-              and conflating them is what makes an unbounded enum look bounded. A project's status
-              names are free text and per-project; the category is the bounded thing.
-            */}
-            {issue.key} · {issue.title} · {issue.statusName}
-            <OpenInNewIcon fontSize="inherit" sx={{ ml: 0.5, verticalAlign: 'text-bottom' }} />
-          </Link>
-        }
-      />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {/* A span around the badge, not the badge itself: `asChild` clones a ref onto its
+              child and `Badge` is a plain function component rendering a span, not a
+              ref-forwarding element. `BoardPage`'s derived marker is the same shape. */}
+          <span data-testid={`${testId}.Live`}>
+          <Badge tone={trackerStatusCategoryColors[issue.statusCategory]}>
+            <a
+              href={issue.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="text-inherit no-underline hover:underline"
+            >
+              {/*
+                `statusName` is the WORD and `statusCategory` is the colour — two different
+                questions, and conflating them is what makes an unbounded enum look bounded. A
+                project's status names are free text and per-project; the category is the bounded
+                thing.
+              */}
+              {issue.key} · {issue.title} · {issue.statusName}
+              <ExternalLink aria-hidden className="ml-1 inline size-3 align-text-bottom" />
+            </a>
+          </Badge>
+          </span>
+        </TooltipTrigger>
+        {/*
+          The bounded fact behind the unbounded word: "Pending triage" is this project's spelling
+          of "To do", and the tooltip is where the reader can find that out without the chip
+          pretending the free-text name is one of three.
+        */}
+        <TooltipContent>
+          {`${trackerStatusCategoryLabels[issue.statusCategory]} in ${providerLabel}`}
+        </TooltipContent>
       </Tooltip>
     );
   }
@@ -127,25 +132,24 @@ export function IssueChip({
       : trackerUnavailableReasons.UNAVAILABLE;
 
   return (
-    <Stack direction="row" sx={{ gap: 0.75, alignItems: 'center' }}>
-      <Tooltip title={reason}>
-        <Chip
-          size="small"
-          variant="outlined"
-          data-testid={`${testId}.Degraded`}
-          label={
-            <Link
+    <div className="flex items-center gap-1.5">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span data-testid={`${testId}.Degraded`}>
+          <Badge tone="plain">
+            <a
               href={link.url}
               target="_blank"
               rel="noreferrer noopener"
-              underline="hover"
-              color="inherit"
+              className="text-inherit no-underline hover:underline"
             >
               {providerLabel} issue {link.issueId}
-              <OpenInNewIcon fontSize="inherit" sx={{ ml: 0.5, verticalAlign: 'text-bottom' }} />
-            </Link>
-          }
-        />
+              <ExternalLink aria-hidden className="ml-1 inline size-3 align-text-bottom" />
+            </a>
+          </Badge>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{reason}</TooltipContent>
       </Tooltip>
       {/*
         The call to action, offered **only for the one state the reader can do something about**.
@@ -154,15 +158,14 @@ export function IssueChip({
         would send them to a page where everything already reads as connected.
       */}
       {preview.data?.state === 'NOT_CONNECTED' && (
-        <Link
-          component={RouterLink}
+        <RouterLink
           to="/account/trackers"
-          variant="caption"
+          className="text-xs text-steel underline-offset-4 hover:underline"
           data-testid={`${testId}.Connect`}
         >
           Connect
-        </Link>
+        </RouterLink>
       )}
-    </Stack>
+    </div>
   );
 }

@@ -1,4 +1,6 @@
-import { Box, Chip, Tooltip } from '@mui/material';
+import type { ReactNode } from 'react';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui';
+import { cn } from '../lib/cn';
 import type {
   AutomationStatus,
   HealthSignal,
@@ -30,27 +32,65 @@ import {
  * palettes themselves moved to `lib/statusColors.ts` in §180, when the dashboard's stacked bars
  * needed the lifecycle one — they had been private to this file while the *server* sent a second
  * copy of the same mapping down the wire.
+ *
+ * ## `Pill`, and why the kit's `Badge` is not what these use
+ *
+ * `kit/Badge` takes a `BadgeTone` — a closed set of eight names the render's palette knows. These
+ * chips are keyed on `lib/statusColors.ts` instead, which hands back a **CSS custom property name**
+ * per status, lifecycle and severity, and that table is the one the server's own colour column is
+ * checked against. Feeding it through an eight-name enum would mean a second mapping in the middle
+ * that could disagree with it — the exact drift §180 collapsed when it moved these palettes out of
+ * this file. So the tint arithmetic that was in each `sx` prop is one local component instead.
  */
+
+/**
+ * The tinted-chip treatment, once: a `color-mix` ground, a saturated border and saturated text.
+ * Readable in both schemes without the chip becoming a solid block that fights the row it sits in.
+ */
+function Pill({
+  colorVar,
+  tinted = true,
+  size = 'small',
+  children,
+  testId,
+}: {
+  /** A `var(--color-…)` reference from `lib/statusColors.ts`. */
+  colorVar: string;
+  /** `false` for the quieter outline used by the two warning chips. */
+  tinted?: boolean;
+  size?: 'small' | 'medium';
+  children: ReactNode;
+  testId?: string;
+}) {
+  return (
+    <span
+      data-testid={testId}
+      className={cn(
+        'inline-flex items-center rounded-full border whitespace-nowrap',
+        size === 'medium' ? 'px-3 py-1 text-[13px]' : 'px-2 py-0.5 text-[11.5px]',
+      )}
+      style={{
+        color: colorVar,
+        borderColor: `color-mix(in srgb, ${colorVar} ${tinted ? 40 : 45}%, transparent)`,
+        backgroundColor: tinted ? `color-mix(in srgb, ${colorVar} 12%, transparent)` : 'transparent',
+      }}
+    >
+      {children}
+    </span>
+  );
+}
 
 /** A filled dot plus text — the pattern used wherever space is tight enough that a chip crowds. */
 export function StatusDot({ kind, testId }: { kind: StatusKind; testId?: string }) {
   return (
-    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }} data-testid={testId}>
-      <Box
-        component="span"
+    <span className="inline-flex items-center gap-1.5" data-testid={testId}>
+      <span
         aria-hidden="true"
-        sx={{
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          flexShrink: 0,
-          bgcolor: statusVar[kind],
-        }}
+        className="block size-2 shrink-0 rounded-full"
+        style={{ backgroundColor: statusVar[kind] }}
       />
-      <Box component="span" sx={{ fontSize: '0.8125rem' }}>
-        {statusLabels[kind]}
-      </Box>
-    </Box>
+      <span className="text-[13px]">{statusLabels[kind]}</span>
+    </span>
   );
 }
 
@@ -64,18 +104,9 @@ export function StatusChip({
   testId?: string;
 }) {
   return (
-    <Chip
-      size={size}
-      label={statusLabels[kind]}
-      data-testid={testId}
-      sx={{
-        // Tinted background with a saturated border and text: readable in both schemes
-        // without the chip becoming a solid colour block that fights the row it sits in.
-        bgcolor: `color-mix(in srgb, ${statusVar[kind]} 12%, transparent)`,
-        color: statusVar[kind],
-        border: `1px solid color-mix(in srgb, ${statusVar[kind]} 40%, transparent)`,
-      }}
-    />
+    <Pill colorVar={statusVar[kind]} size={size} testId={testId}>
+      {statusLabels[kind]}
+    </Pill>
   );
 }
 
@@ -89,16 +120,9 @@ export function LifecycleChip({
   testId?: string;
 }) {
   return (
-    <Chip
-      size={size}
-      label={lifecycleLabels[status]}
-      data-testid={testId}
-      sx={{
-        bgcolor: `color-mix(in srgb, ${lifecycleVar[status]} 12%, transparent)`,
-        color: lifecycleVar[status],
-        border: `1px solid color-mix(in srgb, ${lifecycleVar[status]} 40%, transparent)`,
-      }}
-    />
+    <Pill colorVar={lifecycleVar[status]} size={size} testId={testId}>
+      {lifecycleLabels[status]}
+    </Pill>
   );
 }
 
@@ -110,24 +134,19 @@ export function LifecycleChip({
 export function PriorityLabel({ priority, testId }: { priority: Priority; testId?: string }) {
   const emphasis = priority === 'CRITICAL' || priority === 'HIGH';
   return (
-    <Box
+    <span
       data-testid={testId}
-      sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 0.75,
-        fontWeight: emphasis ? 600 : 400,
-        color: priority === 'CRITICAL' ? 'var(--color-failed)' : 'text.primary',
-      }}
+      className={cn(
+        'inline-flex items-center gap-1.5',
+        emphasis ? 'font-semibold' : 'font-normal',
+        priority === 'CRITICAL' ? 'text-[color:var(--color-failed)]' : 'text-ink',
+      )}
     >
-      <Box
-        component="span"
+      <span
         aria-hidden="true"
-        sx={{
-          width: 2,
-          height: 14,
-          borderRadius: 1,
-          bgcolor:
+        className="block h-3.5 w-0.5 shrink-0 rounded-full"
+        style={{
+          backgroundColor:
             priority === 'CRITICAL'
               ? 'var(--color-failed)'
               : priority === 'HIGH'
@@ -136,7 +155,7 @@ export function PriorityLabel({ priority, testId }: { priority: Priority; testId
         }}
       />
       {priorityLabels[priority]}
-    </Box>
+    </span>
   );
 }
 
@@ -148,9 +167,9 @@ export function AutomationLabel({
   testId?: string;
 }) {
   return (
-    <Box component="span" data-testid={testId} sx={{ color: 'text.secondary' }}>
+    <span data-testid={testId} className="text-ink-2">
       {automationLabels[status]}
-    </Box>
+    </span>
   );
 }
 
@@ -269,17 +288,18 @@ const healthHelp: Record<HealthSignal, string> = {
 export function QuarantineChip({ testId }: { testId?: string }) {
   const color = severityVar.WARNING;
   return (
-    <Tooltip title="Somebody has quarantined this case — its results are not trusted, and the reports print a pass rate that leaves it out. Run it and record a verdict as normal.">
-      <Chip
-        size="small"
-        label="Quarantined"
-        data-testid={testId}
-        sx={{
-          bgcolor: 'transparent',
-          color,
-          border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`,
-        }}
-      />
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span data-testid={testId}>
+          <Pill colorVar={color} tinted={false}>
+            Quarantined
+          </Pill>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        Somebody has quarantined this case — its results are not trusted, and the reports print a
+        pass rate that leaves it out. Run it and record a verdict as normal.
+      </TooltipContent>
     </Tooltip>
   );
 }
@@ -309,17 +329,15 @@ export function HealthChip({
 }) {
   const color = severityVar[severity];
   return (
-    <Tooltip title={healthHelp[signal]}>
-      <Chip
-        size="small"
-        label={healthLabels[signal]}
-        data-testid={testId}
-        sx={{
-          bgcolor: 'transparent',
-          color,
-          border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`,
-        }}
-      />
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span data-testid={testId}>
+          <Pill colorVar={color} tinted={false}>
+            {healthLabels[signal]}
+          </Pill>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{healthHelp[signal]}</TooltipContent>
     </Tooltip>
   );
 }

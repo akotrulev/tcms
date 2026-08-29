@@ -1,13 +1,12 @@
+import { Banner } from '../../components/kit';
 import {
-  Alert,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  Stack,
-} from '@mui/material';
+} from '../../components/ui';
 import { useEffect } from 'react';
 import type { TestCase } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
@@ -65,36 +64,38 @@ export function CaseDeleteDialog({
   }, [open, testCase.id, reset]);
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs" data-testid="CaseDetail.Delete">
-      <DialogTitle>Delete this test case?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2}>
-          <DialogContentText>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-sm" data-testid="CaseDetail.Delete">
+      <DialogHeader>
+          <DialogTitle>Delete this test case?</DialogTitle>
+        </DialogHeader>
+      <div className="mt-4 flex flex-col gap-4">
+          <p className="m-0 text-ink">
             <Identifier>{testCase.key}</Identifier> {testCase.title} will be removed from the
             repository.
-          </DialogContentText>
+          </p>
           {/*
             Not "this cannot be undone", because it is not true: the delete is soft, and past runs
             keep resolving the version they executed. What is true — and what the reader needs —
             is that nothing in the product brings it back.
           */}
-          <DialogContentText variant="body2">
+          <p className="m-0 text-sm text-ink-2">
             Past runs keep the version they executed. Nothing here restores a deleted case.
-          </DialogContentText>
+          </p>
           {remove.isError && (
-            <Alert severity="error" role="alert" data-testid="CaseDetail.Delete.Error">
+            <div data-testid="CaseDetail.Delete.Error">
+            <Banner tone="bad"><span role="alert">
               {describeError(remove.error).body}
-            </Alert>
+            </span></Banner>
+          </div>
           )}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
+        </div>
+      <DialogFooter>
         <Button onClick={onClose} data-testid="CaseDetail.Delete.Cancel">
           Cancel
         </Button>
         <Button
-          color="error"
-          variant="contained"
+          variant="danger"
           disabled={remove.isPending}
           data-testid="CaseDetail.Delete.Confirm"
           onClick={() => {
@@ -108,7 +109,8 @@ export function CaseDeleteDialog({
         >
           {remove.isPending ? 'Deleting…' : 'Delete case'}
         </Button>
-      </DialogActions>
+      </DialogFooter>
+    </DialogContent>
     </Dialog>
   );
 }

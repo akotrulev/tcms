@@ -207,7 +207,12 @@ recorded reason.
 
 ### Frontend
 
-Vite 8 + React 19 + TypeScript strict + MUI v9 (X DataGrid / TreeView / date-pickers).
+Vite 8 + React 19 + TypeScript strict + **Tailwind v4 + shadcn/ui** (Radix primitives skinned to
+the render kit, in `src/components/ui/`; the nine-component kit above them in `src/components/kit/`).
+~~MUI v9 (X DataGrid / TreeView / date-pickers)~~ — **removed in plan 007 T16**; `@mui/*`,
+`@emotion/*` and `notistack` are in no import and no `package.json`. TanStack Table replaced the
+DataGrid, `sonner` the snackbar, and each MUI X package is named here only so a reader who finds one
+in the git history knows where it went.
 **No Next.js, no RSC** — no `'use client'` boundary exists, so the skills' RSC lane does not apply.
 React Router 7; project-scoped routes under `/projects/:projectId/*`.
 
@@ -216,8 +221,15 @@ React Router 7; project-scoped routes under `/projects/:projectId/*`.
   read/write hook, **one** `keys` factory in `keys.ts` (never add a second), `enabled` gates, and a
   per-endpoint-class timeout budget threaded through every call.
 - **Client state:** session in Context; **filter state lives in the URL** (`useSearchParams`).
-- **Styling:** MUI `theme` + `sx` as the single authority. No Tailwind. Tokens are CSS custom
-  properties in `index.css` bridged into `createTheme`.
+- **Styling:** Tailwind utilities as the single authority — ~~MUI `theme` + `sx`. No Tailwind.~~
+  reversed by 007, which ported all 42 screens onto the render kit. Tokens are CSS custom properties
+  in `index.css`, bridged into utility names by `@theme inline` (*inline* is load-bearing: it emits
+  `var(--…)` rather than copying the value, so the palette swap on `[data-color-scheme]` moves every
+  utility with it). Preflight is on and is the only baseline, so a component sets its own type scale
+  rather than inheriting one. `app/colorScheme.tsx` owns the light/dark/system choice and is the one
+  thing that writes that attribute; `app/tokenSystem.test.ts` checks the token system against
+  itself. **No `sx`, no CSS-in-JS, and no second stylesheet** — component styles live in the class
+  list, and `index.css` holds tokens plus four global rules and nothing else.
 - **`src/app/Providers.tsx` nesting order is load-bearing** and documented in the file: the query
   client is constructed *innermost* because its global error handlers consume the notification and
   session-recovery providers.

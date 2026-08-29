@@ -1,6 +1,11 @@
-import { Alert, Box, Button, Chip, Stack, Tooltip, Typography } from '@mui/material';
-import ScienceOutlinedIcon from '@mui/icons-material/ScienceOutlined';
-import { useState } from 'react';
+import { Badge, Banner } from '../../components/kit';
+import {
+  Button,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '../../components/ui';
+import { useState, type CSSProperties } from 'react';
 import type { TestCase } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
 import { Panel } from '../../components/PageHeader';
@@ -45,17 +50,13 @@ export function FlakePanel({ projectId, testCase }: { projectId: string; testCas
 
   return (
     <Panel title="Reliability" testId="CaseDetail.Flake">
-      <Stack sx={{ gap: 1.5 }}>
+      <div className="flex flex-col gap-3">
         {quarantined && flake && (
-          <Alert
-            severity="warning"
-            icon={<ScienceOutlinedIcon fontSize="small" />}
-            data-testid="CaseDetail.Flake.Quarantined"
-            sx={{ py: 0.5 }}
-          >
-            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.25 }}>
+          <div data-testid="CaseDetail.Flake.Quarantined">
+<Banner tone="warn">
+            <p className="m-0 text-sm font-semibold mb-0.5">
               Quarantined
-            </Typography>
+            </p>
             {/*
               The reason is a sentence somebody typed, rendered verbatim — never split, never
               looked up. §121 phase 3 made `QUARANTINE` its own work-item kind for exactly this:
@@ -63,10 +64,10 @@ export function FlakePanel({ projectId, testCase }: { projectId: string; testCas
               each fragment as a health code, so "Flaky on Firefox, races the login redirect"
               renders as two fragments joined by a middot with nothing failing anywhere.
             */}
-            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+            <p className="m-0 text-sm whitespace-pre-wrap">
               {flake.quarantineReason}
-            </Typography>
-            <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
+            </p>
+            <span className="m-0 text-xs block mt-1 text-ink-2">
               {/*
                 `quarantinedBy` is a UserRef since this slice — it was the only bare-uuid actor
                 field on the API. It can still be null when the id resolves to no account (an
@@ -75,49 +76,50 @@ export function FlakePanel({ projectId, testCase }: { projectId: string; testCas
               */}
               by {flake.quarantinedBy?.displayName ?? 'somebody no longer in this company'} ·{' '}
               {formatDateTime(flake.quarantinedAt)}
-            </Typography>
-          </Alert>
+            </span>
+          </Banner>
+</div>
         )}
 
-        <Stack direction="row" sx={{ gap: 1, alignItems: 'baseline', flexWrap: 'wrap' }}>
+        <div className="flex gap-2 items-baseline flex-wrap">
           {verdict.kind === 'SCORED' ? (
             <>
-              <Chip
-                size="small"
-                label={flakeBandLabels[verdict.band]}
+              <Badge
+                tone="plain"
                 data-testid="CaseDetail.Flake.Band"
-                sx={bandStyle(verdict.band)}
-              />
-              <Tooltip title="Alternations divided by repeat runs under identical conditions — not by the number of results.">
-                <Box component="span">
+                style={bandStyle(verdict.band)}
+              >
+                {flakeBandLabels[verdict.band]}
+              </Badge>
+              <Tooltip>
+<TooltipTrigger asChild>
+                <span>
                   <Identifier variant="muted">{formatRatio(verdict.score)}</Identifier>
-                </Box>
-              </Tooltip>
+                </span>
+              </TooltipTrigger>
+<TooltipContent>Alternations divided by repeat runs under identical conditions — not by the number of results.</TooltipContent>
+</Tooltip>
             </>
           ) : (
-            <Typography
-              variant="body2"
-              sx={{ color: 'text.secondary' }}
-              data-testid="CaseDetail.Flake.NoScore"
-            >
+            <p className="m-0 text-sm text-ink-2" data-testid="CaseDetail.Flake.NoScore">
               {verdict.kind === 'UNMEASURED'
                 ? 'Not assessed yet.'
                 : 'Not enough evidence to score.'}
-            </Typography>
+            </p>
           )}
-        </Stack>
+        </div>
 
         {evidence && (
-          <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid="CaseDetail.Flake.Evidence">
+          <p className="m-0 text-sm text-ink-2" data-testid="CaseDetail.Flake.Evidence">
             {evidence}
-          </Typography>
+          </p>
         )}
 
         {verdict.kind === 'UNMEASURED' && (
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          <p className="m-0 text-sm text-ink-2">
             Flakiness is measured from results recorded against one version on one configuration.
             Nothing has been computed for this case.
-          </Typography>
+          </p>
         )}
 
         {/*
@@ -126,24 +128,19 @@ export function FlakePanel({ projectId, testCase }: { projectId: string; testCas
           be current or stale about, and the line would claim a measurement that was never made.
         */}
         {flake && (
-          <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid="CaseDetail.Flake.ComputedAt">
+          <span className="m-0 text-xs text-ink-2" data-testid="CaseDetail.Flake.ComputedAt">
             {formatComputedAt(flake.computedAt)}
-          </Typography>
+          </span>
         )}
 
         <PermissionGate projectId={projectId} permission="case:edit">
           {({ allowed }) => (
-            <Tooltip
-              title={
-                allowed
-                  ? ''
-                  : 'You need permission to edit test cases in this project to change a quarantine.'
-              }
-            >
-              <Box component="span" sx={{ alignSelf: 'flex-start' }}>
+            <Tooltip>
+<TooltipTrigger asChild>
+              <span className="self-start">
                 <Button
-                  size="small"
-                  variant="outlined"
+                  size="sm"
+                  variant="ghost"
                   color={quarantined ? 'primary' : 'warning'}
                   disabled={!allowed}
                   onClick={() => setConfirming(quarantined ? 'RELEASE' : 'QUARANTINE')}
@@ -151,11 +148,17 @@ export function FlakePanel({ projectId, testCase }: { projectId: string; testCas
                 >
                   {quarantined ? 'Return to the gate' : 'Quarantine test'}
                 </Button>
-              </Box>
-            </Tooltip>
+              </span>
+            </TooltipTrigger>
+<TooltipContent>{
+                allowed
+                  ? ''
+                  : 'You need permission to edit test cases in this project to change a quarantine.'
+              }</TooltipContent>
+</Tooltip>
           )}
         </PermissionGate>
-      </Stack>
+      </div>
 
       {/*
         Mounted only while confirming, so the dialog's reset-on-open effect starts from a clean
@@ -183,13 +186,16 @@ export function FlakePanel({ projectId, testCase }: { projectId: string; testCas
  * that never flakes and fails every time would wear it. Neutral for stable, warning for the two
  * middle bands, failure for the top one.
  */
-function bandStyle(band: FlakeBand) {
+/** Real CSS properties since T16 — ~~an `sx` object~~; there is no engine to interpret one. */
+function bandStyle(band: FlakeBand): CSSProperties {
   const token =
     band === 'STABLE' ? null : band === 'HIGH' ? 'var(--color-failed)' : 'var(--color-blocked)';
-  if (token === null) return { bgcolor: 'transparent', border: '1px solid', borderColor: 'divider' };
+  if (token === null) {
+    return { backgroundColor: 'transparent', borderColor: 'rgb(255 255 255 / 8%)' };
+  }
   return {
-    bgcolor: 'transparent',
+    backgroundColor: 'transparent',
     color: token,
-    border: `1px solid color-mix(in srgb, ${token} 45%, transparent)`,
+    borderColor: `color-mix(in srgb, ${token} 45%, transparent)`,
   };
 }

@@ -1,14 +1,14 @@
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  Stack,
-  TextField,
-} from '@mui/material';
+  Textarea,
+} from '../../components/ui';
 import { useEffect, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { useQuarantineCase } from '../../api/queries';
@@ -106,21 +106,17 @@ export function QuarantineDialog({
   };
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      fullWidth
-      maxWidth="sm"
-      data-testid="CaseDetail.Quarantine"
-    >
-      <DialogTitle>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid="CaseDetail.Quarantine">
+      <DialogHeader>
+          <DialogTitle>
         {quarantining ? 'Quarantine this test?' : 'Put this test back into the gate?'}
       </DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 0.5 }}>
-          <DialogContentText>
+        </DialogHeader>
+      <div className="mt-4 flex flex-col gap-4">
+          <p className="m-0 text-ink">
             <Identifier>{testCase.key}</Identifier> {testCase.title}
-          </DialogContentText>
+          </p>
 
           {quarantining ? (
             <>
@@ -131,34 +127,37 @@ export function QuarantineDialog({
                 argument in one sentence: a denominator that moved without saying so is worse than
                 no figure at all.
               */}
-              <DialogContentText variant="body2">
+              <p className="m-0 text-sm text-ink-2">
                 The test stays in every run and every report, and its results still count. Quarantine
                 records the decision to stop treating its failures as a signal — it is a note for
                 the people reading them, not an exclusion.
-              </DialogContentText>
-              <TextField
+              </p>
+              <Field
                 label="Why"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                onBlur={() => setTouched(true)}
-                required
-                multiline
-                minRows={2}
-                autoFocus
-                error={reasonError !== undefined}
-                helperText={
-                  reasonError ??
-                  'Recorded against the case and named on the board card. Somebody who did not make this decision has to be able to evaluate it.'
-                }
-                slotProps={{ htmlInput: { maxLength: REASON_MAX, 'data-testid': 'CaseDetail.Quarantine.Reason' } }}
-              />
+                htmlFor="quarantine-reason"
+                error={reasonError}
+                help="Recorded against the case and named on the board card. Somebody who did not make this decision has to be able to evaluate it."
+              >
+                <Textarea
+                  id="quarantine-reason"
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  onBlur={() => setTouched(true)}
+                  required
+                  rows={2}
+                  autoFocus
+                  aria-invalid={reasonError !== undefined}
+                  maxLength={REASON_MAX}
+                  data-testid="CaseDetail.Quarantine.Reason"
+                />
+              </Field>
             </>
           ) : (
-            <DialogContentText variant="body2">
+            <p className="m-0 text-sm text-ink-2">
               The reason recorded with the quarantine is cleared. It stays in the audit log — the
               row keeps only the current decision, which is why the log is where the history of an
               exclusion lives.
-            </DialogContentText>
+            </p>
           )}
 
           {/*
@@ -167,18 +166,19 @@ export function QuarantineDialog({
             refusal on a screen that offered the action.
           */}
           {write.isError && serverError === undefined && (
-            <Alert severity="error" role="alert" data-testid="CaseDetail.Quarantine.Error">
+            <div data-testid="CaseDetail.Quarantine.Error">
+            <Banner tone="bad"><span role="alert">
               {describeError(write.error).body}
-            </Alert>
+            </span></Banner>
+          </div>
           )}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
+        </div>
+      <DialogFooter>
         <Button onClick={onClose} data-testid="CaseDetail.Quarantine.Cancel">
           Cancel
         </Button>
         <Button
-          variant="contained"
+          variant="primary"
           // Danger-styled in one direction only: `ui-rules` §4 wants the button and the title to
           // agree, and releasing a test back into the gate is the safe direction — colouring it red
           // would make the two acts look equally grave and teach the colour to mean nothing.
@@ -193,7 +193,8 @@ export function QuarantineDialog({
               ? 'Quarantine test'
               : 'Return to the gate'}
         </Button>
-      </DialogActions>
+      </DialogFooter>
+    </DialogContent>
     </Dialog>
   );
 }

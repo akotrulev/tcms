@@ -17,9 +17,17 @@ describe('the kit primitives', () => {
   });
 
   /**
-   * The whole reason `lib/muiTestIds.ts` exists is that MUI types slot props too narrowly to
-   * accept `data-*`. A plain element does not, and this is the check that says so — it is what
-   * lets T16 delete that helper rather than port it.
+   * ~~The whole reason the slot-prop test-id helper in `lib/` exists~~ → **it does not: T16
+   * deleted it, and this is the assertion that let it.** MUI typed a slot's props as that
+   * element's known DOM props, which excludes `data-*`, so thirteen call sites went through a
+   * helper to put a test id on an input. A plain element takes one directly, which is what this
+   * checks.
+   *
+   * The file's *name* is deliberately not written here. `packages/client/src/test/citedFiles.test.ts`
+   * scans this tree for paths named in comments and fails on one that is not on disk — and it
+   * reddens the **packages** job, not the frontend one, which is the wrong place to go looking.
+   * A superseded decision is normally struck through rather than deleted (CLAUDE.md); here the
+   * strike-through carries the reasoning and the path itself has to go.
    */
   it('takes a data-testid through to an input, with no slot-prop workaround', () => {
     render(<Input data-testid="Somewhere.Name" defaultValue="Reflex" />);

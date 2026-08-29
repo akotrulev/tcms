@@ -1,14 +1,14 @@
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogContentText,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  Stack,
-  TextField,
-} from '@mui/material';
+  Input,
+} from '../../components/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -109,55 +109,64 @@ export function PlanCloneDialog({
   });
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
       <form onSubmit={submit} noValidate aria-busy={clone.isPending}>
-        <DialogTitle>Clone this test plan</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <DialogContentText variant="body2">
+        <DialogHeader>
+          <DialogTitle>Clone this test plan</DialogTitle>
+        </DialogHeader>
+        <div className="mt-4 flex flex-col gap-4">
+            <p className="m-0 text-sm text-ink-2">
               <Identifier>{plan.key}</Identifier> {plan.name}
-            </DialogContentText>
+            </p>
 
             {errors.root && (
-              <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
+              <div data-testid={`${TestId}.Error`}>
+            <Banner tone="bad"><span role="alert">
                 {errors.root.message}
-              </Alert>
+              </span></Banner>
+          </div>
             )}
 
-            <TextField
+            <Field
               label="Name"
-              required
-              autoComplete="off"
-              error={!!errors.name}
-              helperText={
-                errors.name?.message ?? 'Suggested from the source — usually the next release.'
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Name`, maxLength: MAX_NAME } }}
-              {...register('name')}
-            />
+              htmlFor="plan-clone-name"
+              error={errors.name?.message}
+              help="Suggested from the source — usually the next release."
+            >
+              <Input
+                id="plan-clone-name"
+                required
+                autoComplete="off"
+                aria-invalid={!!errors.name}
+                maxLength={MAX_NAME}
+                data-testid={`${TestId}.Name`}
+                {...register('name')}
+              />
+            </Field>
 
-            <DialogContentText variant="caption">
+            <p className="m-0 text-xs text-ink-2">
               The whole scope comes across — the suites, cases and tags, every section, the scope
               prose and both criteria lists. The runs and their results stay with{' '}
               <Identifier variant="muted">{plan.key}</Identifier>, and the copy starts as a draft
               even if this plan is approved.
-            </DialogContentText>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
+            </p>
+          </div>
+        <DialogFooter>
           <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
             Cancel
           </Button>
           <Button
             type="submit"
-            variant="contained"
+            variant="primary"
             disabled={clone.isPending}
             data-testid={`${TestId}.Submit`}
           >
             {clone.isPending ? 'Cloning…' : 'Clone plan'}
           </Button>
-        </DialogActions>
+        </DialogFooter>
       </form>
+    </DialogContent>
     </Dialog>
   );
 }

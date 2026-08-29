@@ -1,20 +1,19 @@
+import { Link2, Trash2 } from 'lucide-react';
 /** Defect links on an execution — the list, and the controls that add and remove one. */
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
-import LinkIcon from '@mui/icons-material/Link';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
-  Box,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogFooter,
   DialogTitle,
-  IconButton,
-  Stack,
-  TextField,
+  Input,
+  Textarea,
   Tooltip,
-  Typography,
-} from '@mui/material';
+  TooltipContent,
+  TooltipTrigger,
+} from '../../components/ui';
 import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
@@ -124,7 +123,7 @@ export function DefectPanel({
       actions={
         <PermissionGate projectId={projectId} permission="defect:create">
           {({ allowed, reason }) => (
-            <Stack direction="row" sx={{ gap: 0.5, alignItems: 'center' }}>
+            <div className="flex gap-1 items-center">
               {filing && (
                 <FileDefectButton
                   projectId={projectId}
@@ -134,20 +133,23 @@ export function DefectPanel({
                   onOpen={() => setFilingOpen(true)}
                 />
               )}
-              <Tooltip title={frozen ? FROZEN_REASON : allowed ? '' : reason}>
+              <Tooltip>
+<TooltipTrigger asChild>
                 <span>
                   <Button
-                    size="small"
-                    startIcon={<LinkIcon />}
+                    size="sm"
                     disabled={!allowed || frozen}
                     onClick={() => setAdding((open) => !open)}
                     data-testid="Execution.Defects.Add"
                   >
+                    <Link2 aria-hidden className="size-3.5" />
                     Link a defect
                   </Button>
                 </span>
-              </Tooltip>
-            </Stack>
+              </TooltipTrigger>
+<TooltipContent>{frozen ? FROZEN_REASON : allowed ? '' : reason}</TooltipContent>
+</Tooltip>
+            </div>
           )}
         </PermissionGate>
       }
@@ -162,27 +164,33 @@ export function DefectPanel({
         />
       )}
       {adding && (
-        <Stack sx={{ gap: 1.5, mb: 2 }} data-testid="Execution.Defects.Form">
-          <TextField
+        <div className="flex flex-col gap-3 mb-4" data-testid="Execution.Defects.Form">
+          <Field
             label="Defect id"
-            size="small"
+            htmlFor="defect-id"
+            help="Whatever your tracker calls it — PAY-991, #4172."
+          >
+          <Input
+            id="defect-id"
             value={externalKey}
             onChange={(event) => setExternalKey(event.target.value)}
-            helperText="Whatever your tracker calls it — PAY-991, #4172."
-            slotProps={{ htmlInput: { 'data-testid': 'Execution.Defects.Key' } }}
+            data-testid="Execution.Defects.Key"
           />
-          <TextField
+          </Field>
+          <Field
             label="Link"
-            size="small"
+            htmlFor="link"
+            help="The address of the defect, starting with http:// or https://."
+          >
+          <Input
+            id="link"
             value={url}
             onChange={(event) => setUrl(event.target.value)}
-            helperText="The address of the defect, starting with http:// or https://."
-            slotProps={{ htmlInput: { 'data-testid': 'Execution.Defects.Url' } }}
+            data-testid="Execution.Defects.Url"
           />
-          <Stack direction="row" sx={{ gap: 1 }}>
+          </Field>
+          <div className="flex gap-2">
             <Button
-              size="small"
-              variant="contained"
               disabled={incomplete || link.isPending}
               onClick={submit}
               data-testid="Execution.Defects.Save"
@@ -190,28 +198,29 @@ export function DefectPanel({
               {link.isPending ? 'Linking…' : 'Link'}
             </Button>
             <Button
-              size="small"
               onClick={() => setAdding(false)}
               data-testid="Execution.Defects.Cancel"
             >
               Cancel
             </Button>
-          </Stack>
-        </Stack>
+          </div>
+        </div>
       )}
 
       {link.isError && (
-        <Alert severity="error" sx={{ mb: 2 }} data-testid="Execution.Defects.Error">
+        <div data-testid="Execution.Defects.Error">
+<Banner tone="bad">
           {describeError(link.error).body}
-        </Alert>
+        </Banner>
+</div>
       )}
 
       {defects.length === 0 ? (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        <p className="m-0 text-sm text-ink-2">
           No defect linked to this result.
-        </Typography>
+        </p>
       ) : (
-        <Stack sx={{ gap: 1 }} data-testid="Execution.Defects.List">
+        <div className="flex flex-col gap-2" data-testid="Execution.Defects.List">
           {defects.map((defect) => (
             <DefectRow
               key={defect.id}
@@ -222,7 +231,7 @@ export function DefectPanel({
               frozen={frozen}
             />
           ))}
-        </Stack>
+        </div>
       )}
     </Panel>
   );
@@ -243,50 +252,43 @@ function DefectRow({
   frozen: boolean;
 }) {
   return (
-    <Stack
-      direction="row"
-      sx={{ alignItems: 'center', gap: 1 }}
-      data-testid="Execution.Defects.Row"
-    >
-      <Box
-        component="a"
-        href={defect.url}
-        target="_blank"
-        rel="noopener"
-        sx={{ flex: 1, minWidth: 0 }}
-        data-testid="Execution.Defects.Link"
-      >
+    <div className="flex items-center gap-2" data-testid="Execution.Defects.Row">
+      <a className="flex-1 min-w-0" href={defect.url} target="_blank" rel="noopener" data-testid="Execution.Defects.Link">
         <Identifier>{defect.externalKey}</Identifier>
-        <Box component="span" aria-hidden="true" sx={{ ml: 0.5, color: 'text.secondary' }}>
+        <span className="ml-1 text-ink-2" aria-hidden="true">
           ↗
-        </Box>
-        <Box component="span" className="sr-only">
+        </span>
+        <span className="sr-only">
           (opens in a new tab)
-        </Box>
-      </Box>
+        </span>
+      </a>
       {defect.statusCache && (
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+        <span className="m-0 text-xs text-ink-2">
           {defect.statusCache}
-        </Typography>
+        </span>
       )}
       <PermissionGate projectId={projectId} permission="defect:create">
         {({ allowed, reason }) => (
-          <Tooltip title={frozen ? FROZEN_REASON : allowed ? 'Unlink' : reason}>
+          <Tooltip>
+<TooltipTrigger asChild>
             <span>
-              <IconButton
-                size="small"
+              <Button
+                variant="quiet"
+                size="icon"
                 aria-label={`Unlink ${defect.externalKey}`}
                 disabled={!allowed || unlinking || frozen}
                 onClick={onUnlink}
                 data-testid="Execution.Defects.Unlink"
               >
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
+                <Trash2 aria-hidden className="size-4" />
+              </Button>
             </span>
-          </Tooltip>
+          </TooltipTrigger>
+<TooltipContent>{frozen ? FROZEN_REASON : allowed ? 'Unlink' : reason}</TooltipContent>
+</Tooltip>
         )}
       </PermissionGate>
-    </Stack>
+    </div>
   );
 }
 
@@ -335,12 +337,11 @@ function FileDefectButton({
         : '';
 
   return (
-    <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
-      <Tooltip title={reason ?? ''}>
+    <div className="flex items-center gap-1">
+      <Tooltip>
+<TooltipTrigger asChild>
         <span>
           <Button
-            size="small"
-            variant="outlined"
             disabled={!allowed || frozen || !connected}
             onClick={onOpen}
             data-testid="Execution.Defects.File"
@@ -348,19 +349,20 @@ function FileDefectButton({
             File a defect
           </Button>
         </span>
-      </Tooltip>
+      </TooltipTrigger>
+<TooltipContent>{reason ?? ''}</TooltipContent>
+</Tooltip>
       {/* The way out, beside the reason rather than only inside a tooltip nobody can click. */}
       {!connected && !frozen && allowed && (
-        <Button
-          size="small"
-          component={RouterLink}
+        <RouterLink
           to="/account/trackers"
           data-testid="Execution.Defects.Connect"
+          className={buttonVariants({ variant: 'primary', size: 'sm' })}
         >
           Connect
-        </Button>
+        </RouterLink>
       )}
-    </Stack>
+    </div>
   );
 }
 
@@ -430,54 +432,71 @@ function FileDefectDialog({
     );
 
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="sm" data-testid="Execution.Defects.FileDialog">
-      <DialogTitle>File a defect</DialogTitle>
-      <DialogContent>
-        <Stack sx={{ gap: 2, mt: 1 }}>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+    <Dialog open onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid="Execution.Defects.FileDialog">
+      <DialogHeader>
+        <DialogTitle>File a defect</DialogTitle>
+      </DialogHeader>
+      <div>
+        <div className="flex flex-col gap-4 mt-2">
+          <p className="m-0 text-sm text-ink-2">
             Filed in your name, with your own tracker account.
-          </Typography>
-          <TextField
+          </p>
+          <Field
             label="Summary"
+            htmlFor="summary"
+          >
+          <Input
+            id="summary"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            slotProps={{ htmlInput: { 'data-testid': 'Execution.Defects.FileTitle' } }}
+            data-testid="Execution.Defects.FileTitle"
           />
-          <TextField
+          </Field>
+          <Field
             label="Description"
+            htmlFor="description"
+            help="Pre-filled from this execution. Edit it — it is what the tracker will show."
+          >
+          <Textarea
+            id="description"
             value={description}
-            multiline
-            minRows={6}
             onChange={(e) => setDescription(e.target.value)}
-            helperText="Pre-filled from this execution. Edit it — it is what the tracker will show."
-            slotProps={{ htmlInput: { 'data-testid': 'Execution.Defects.FileDescription' } }}
+            rows={6}
+            data-testid="Execution.Defects.FileDescription"
           />
+          </Field>
           {create.error != null && (
-            <Alert severity="error" role="alert" data-testid="Execution.Defects.FileError">
+            <div data-testid="Execution.Defects.FileError">
+<Banner tone="bad"><span role="alert">
               {describeError(create.error).body}
-            </Alert>
+            </span></Banner>
+</div>
           )}
           {link.error != null && (
-            <Alert severity="warning" data-testid="Execution.Defects.FileLinkError">
+            <div data-testid="Execution.Defects.FileLinkError">
+<Banner tone="warn">
               The defect was filed, but linking it to this result did not go through. It will be
               linked shortly on its own.
-            </Alert>
+            </Banner>
+</div>
           )}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
+        </div>
+      </div>
+      <DialogFooter>
         <Button onClick={onClose} data-testid="Execution.Defects.FileCancel">
           Cancel
         </Button>
         <Button
-          variant="contained"
+          variant="primary"
           disabled={create.isPending || link.isPending || title.trim() === ''}
           onClick={submit}
           data-testid="Execution.Defects.FileConfirm"
         >
           File it
         </Button>
-      </DialogActions>
+      </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }

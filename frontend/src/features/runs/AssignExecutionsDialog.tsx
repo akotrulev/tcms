@@ -1,22 +1,14 @@
+import { Badge, Banner, MultiPicker } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
-  AlertTitle,
-  Autocomplete,
-  Box,
   Button,
-  Chip,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  MenuItem,
-  Select,
-  Stack,
-  TextField,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography,
-} from '@mui/material'
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { useEffect, useMemo, useState } from 'react'
 import { ApiError } from '../../api/client'
 import type {
@@ -165,28 +157,48 @@ export function AssignExecutionsDialog({
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth data-testid={TestIdPrefix}>
-      <DialogTitle>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && handleClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestIdPrefix}>
+      <DialogHeader>
+          <DialogTitle>
         Assign {formatCount(selectedIds.length)} selected{' '}
         {selectedIds.length === 1 ? 'row' : 'rows'}
       </DialogTitle>
+        </DialogHeader>
 
-      <DialogContent dividers>
-        <Stack sx={{ gap: 2 }}>
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            value={mode}
-            onChange={(_, next: Mode | null) => next && setMode(next)}
+      <div className="mt-4 flex flex-col gap-4">
+        <div className="flex flex-col gap-4">
+          {/*
+            ~~`ToggleButtonGroup exclusive`~~ → two `aria-pressed` buttons, T16. An exclusive group
+            over two values is a two-state choice, not a set, so the port is the markup MUI was
+            rendering underneath with the pressed state stated on each button rather than inferred
+            from a class.
+          */}
+          <div
+            role="group"
+            aria-label="How to spread the work"
+            className="flex gap-1"
             data-testid={`${TestIdPrefix}.Mode`}
           >
-            <ToggleButton value="ONE" data-testid={`${TestIdPrefix}.Mode.ONE`}>
-              Give them all to one person
-            </ToggleButton>
-            <ToggleButton value="SPREAD" data-testid={`${TestIdPrefix}.Mode.SPREAD`}>
-              Spread them across several
-            </ToggleButton>
-          </ToggleButtonGroup>
+            {(
+              [
+                ['ONE', 'Give them all to one person'],
+                ['SPREAD', 'Spread them across several'],
+              ] as const
+            ).map(([value, label]) => (
+              <Button
+                key={value}
+                type="button"
+                size="sm"
+                variant={mode === value ? 'primary' : 'ghost'}
+                aria-pressed={mode === value}
+                onClick={() => setMode(value)}
+                data-testid={`${TestIdPrefix}.Mode.${value}`}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
 
           {mode === 'ONE' ? (
             <Field
@@ -194,22 +206,19 @@ export function AssignExecutionsDialog({
               htmlFor="assign-person"
               error={fieldErrors['payload.assigneeId']}
             >
-              <Select
+              <NativeSelect
                 id="assign-person"
-                size="small"
-                fullWidth
-                displayEmpty
                 value={assigneeId}
                 onChange={(event) => setAssigneeId(event.target.value)}
                 data-testid={`${TestIdPrefix}.Person`}
               >
-                <MenuItem value="">Nobody (unassign)</MenuItem>
+                <option value="">Nobody (unassign)</option>
                 {(members.data ?? []).map((person) => (
-                  <MenuItem key={person.id} value={person.id}>
+                  <option key={person.id} value={person.id}>
                     {person.displayName}
-                  </MenuItem>
+                  </option>
                 ))}
-              </Select>
+              </NativeSelect>
             </Field>
           ) : (
             <Field
@@ -217,74 +226,61 @@ export function AssignExecutionsDialog({
               htmlFor="assign-people"
               error={fieldErrors['payload.assigneeIds']}
             >
-              <Autocomplete
-                multiple
-                size="small"
+              {/*
+                ~~`params.slotProps.htmlInput`, not `params.inputProps` — MUI v7's spelling, and
+                `params.slotProps` spread back in so overriding one slot does not drop the ref and
+                adornments Autocomplete puts on the others.~~ → superseded in T16: there are no
+                slots. The testid goes on the input because the input is what this renders.
+              */}
+              <MultiPicker
+                id="assign-people"
                 options={members.data ?? []}
-                value={assignees}
-                onChange={(_, next) => setAssignees(next)}
-                getOptionLabel={(person) => person.displayName}
-                isOptionEqualToValue={(a, b) => a.id === b.id}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    id="assign-people"
-                    placeholder="Choose people"
-                    // `params.slotProps.htmlInput`, not `params.inputProps` — MUI v7's spelling,
-                    // and `params.slotProps` is spread back in so overriding one slot does not
-                    // drop the ref and adornments Autocomplete puts on the others.
-                    slotProps={{
-                      ...params.slotProps,
-                      htmlInput: {
-                        ...params.slotProps.htmlInput,
-                        'data-testid': `${TestIdPrefix}.People`,
-                      },
-                    }}
-                  />
-                )}
+                optionKey={(person) => person.id}
+                optionLabel={(person) => person.displayName}
+                optionText={(person) => person.displayName}
+                selected={assignees}
+                onChange={setAssignees}
+                placeholder="Choose people"
+                data-testid={`${TestIdPrefix}.People`}
               />
               {assignees.length > 0 && (
-                <Stack
-                  direction="row"
-                  sx={{ flexWrap: 'wrap', gap: 0.75, mt: 1 }}
-                  data-testid={`${TestIdPrefix}.Order`}
-                >
+                <div className="flex flex-wrap gap-1.5 mt-2" data-testid={`${TestIdPrefix}.Order`}>
                   {assignees.map((person, index) => (
-                    <Chip
+                    <Badge tone="plain"
                       key={person.id}
-                      size="small"
-                      label={`${index + 1}. ${person.displayName}`}
-                      variant="outlined"
-                    />
+                    >
+{`${index + 1}. ${person.displayName}`}</Badge>
                   ))}
-                </Stack>
+                </div>
               )}
-              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
+              <span className="m-0 text-xs text-ink-2 block mt-1">
                 Rows are handed out in this order, wrapping round — so the people at the top take
                 the remainder.
-              </Typography>
+              </span>
             </Field>
           )}
 
           {fieldErrors.executionIds && (
-            <Typography variant="caption" role="alert" sx={{ color: 'error.main' }}>
+            <span className="m-0 text-xs text-[color:var(--color-failed)]" role="alert">
               {fieldErrors.executionIds}
-            </Typography>
+            </span>
           )}
 
           {rootError && (
-            <Alert severity="error" data-testid={`${TestIdPrefix}.Error`}>
+            <div data-testid={`${TestIdPrefix}.Error`}>
+            <Banner tone="bad">
               {rootError}
-            </Alert>
+            </Banner>
+          </div>
           )}
 
           {preview && (
             <AssignPreview result={preview} order={assignees} />
           )}
-        </Stack>
-      </DialogContent>
+        </div>
 
-      <DialogActions>
+      </div>
+      <DialogFooter>
         <Button onClick={handleClose} data-testid={`${TestIdPrefix}.Cancel`}>
           Cancel
         </Button>
@@ -296,7 +292,7 @@ export function AssignExecutionsDialog({
           {bulk.isPending && !preview ? 'Checking…' : 'Preview changes'}
         </Button>
         <Button
-          variant="contained"
+          variant="primary"
           onClick={() => void run(false)}
           // Commit is gated on having seen a preview — the point of preview-then-commit is lost if
           // the person can skip straight past it.
@@ -306,7 +302,8 @@ export function AssignExecutionsDialog({
         >
           {preview ? `Assign ${formatCount(preview.changed.length)} rows` : 'Assign'}
         </Button>
-      </DialogActions>
+      </DialogFooter>
+    </DialogContent>
     </Dialog>
   )
 }
@@ -324,17 +321,17 @@ function Field({
   children: React.ReactNode
 }) {
   return (
-    <Box>
-      <Typography variant="caption" component="label" htmlFor={htmlFor} sx={{ display: 'block', mb: 0.5 }}>
+    <div>
+      <label className="m-0 text-xs block mb-1" htmlFor={htmlFor}>
         {label}
-      </Typography>
+      </label>
       {children}
       {error && (
-        <Typography variant="caption" role="alert" sx={{ color: 'error.main', mt: 0.5, display: 'block' }}>
+        <span className="m-0 text-xs text-[color:var(--color-failed)] mt-1 block" role="alert">
           {error}
-        </Typography>
+        </span>
       )}
-    </Box>
+    </div>
   )
 }
 
@@ -348,78 +345,77 @@ function AssignPreview({ result, order }: { result: ExecutionBulkResult; order: 
   const tally = tallyByAssignee(result.changed, order)
 
   return (
-    <Box data-testid={`${TestIdPrefix}.Preview.Result`}>
-      <Alert
-        severity={result.skipped.length > 0 ? 'warning' : 'info'}
-        icon={false}
-        sx={{ '& .MuiAlert-message': { width: '100%' } }}
+    <div data-testid={`${TestIdPrefix}.Preview.Result`}>
+      <Banner
+        tone={result.skipped.length > 0 ? 'warn' : 'steel'}
+        className="[&>div]:w-full"
       >
-        <AlertTitle sx={{ fontSize: '0.875rem' }}>Preview</AlertTitle>
-        <Stack sx={{ gap: 1 }}>
-          <Typography variant="body2">
+        <p className="m-0 mb-1 text-sm font-semibold text-ink">Preview</p>
+        <div className="flex flex-col gap-2">
+          <p className="m-0 text-sm">
             <strong>{formatCount(result.changed.length)}</strong> will move ·{' '}
             <strong>{formatCount(result.unchanged.length)}</strong> already assigned to that person ·{' '}
             <strong>{formatCount(result.skipped.length)}</strong> will be skipped
-          </Typography>
+          </p>
 
           {tally.length > 0 && (
-            <Box data-testid={`${TestIdPrefix}.Preview.Tally`}>
-              <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            <div data-testid={`${TestIdPrefix}.Preview.Tally`}>
+              <span className="m-0 text-xs font-semibold">
                 The split
-              </Typography>
-              <Stack component="ul" sx={{ m: 0, mt: 0.5, pl: 2, gap: 0.25 }}>
+              </span>
+              <div className="flex flex-col m-0 mt-1 pl-4 gap-0.5">
                 {tally.map((share) => (
-                  <Box component="li" key={share.assigneeId} data-testid={`${TestIdPrefix}.Preview.Share`}>
-                    <Typography variant="caption">
+                  <li key={share.assigneeId} data-testid={`${TestIdPrefix}.Preview.Share`}>
+                    <span className="m-0 text-xs">
                       {share.assigneeName ?? 'Unknown'} — {formatCount(share.count)}
-                    </Typography>
-                  </Box>
+                    </span>
+                  </li>
                 ))}
-              </Stack>
-            </Box>
+              </div>
+            </div>
           )}
 
           {result.changed.length > 0 && (
-            <Box data-testid={`${TestIdPrefix}.Preview.Rows`}>
-              <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            <div data-testid={`${TestIdPrefix}.Preview.Rows`}>
+              <span className="m-0 text-xs font-semibold">
                 Moving
-              </Typography>
-              <Stack component="ul" sx={{ m: 0, mt: 0.5, pl: 2, gap: 0.25 }}>
+              </span>
+              <div className="flex flex-col m-0 mt-1 pl-4 gap-0.5">
                 {result.changed.slice(0, 20).map((change) => (
-                  <Box component="li" key={change.executionId}>
-                    <Typography variant="caption">
+                  <li key={change.executionId}>
+                    <span className="m-0 text-xs">
                       <Identifier variant="muted">{change.caseKey}</Identifier> →{' '}
                       {change.assigneeName ?? 'nobody'}
-                    </Typography>
-                  </Box>
+                    </span>
+                  </li>
                 ))}
                 {result.changed.length > 20 && (
-                  <Typography variant="caption">+{result.changed.length - 20} more</Typography>
+                  <span className="m-0 text-xs">+{result.changed.length - 20} more</span>
                 )}
-              </Stack>
-            </Box>
+              </div>
+            </div>
           )}
 
           {/* Named with their reason — "2 skipped" alone leaves the reader with no way to find
               out which two, or what to do about them. */}
           {result.skipped.length > 0 && (
-            <Box>
-              <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            <div>
+              <span className="m-0 text-xs font-semibold">
                 Skipped
-              </Typography>
-              <Stack component="ul" sx={{ m: 0, mt: 0.5, pl: 2, gap: 0.25 }}>
+              </span>
+              <div className="flex flex-col m-0 mt-1 pl-4 gap-0.5">
                 {result.skipped.map((item) => (
-                  <Box component="li" key={item.executionId}>
-                    <Typography variant="caption">
+                  <li key={item.executionId}>
+                    <span className="m-0 text-xs">
                       <Identifier variant="muted">{item.executionId}</Identifier> — {item.reason}
-                    </Typography>
-                  </Box>
+                    </span>
+                  </li>
                 ))}
-              </Stack>
-            </Box>
+              </div>
+            </div>
           )}
-        </Stack>
-      </Alert>
-    </Box>
+        </div>
+      </Banner>
+    </div>
   )
 }

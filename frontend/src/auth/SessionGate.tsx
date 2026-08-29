@@ -1,4 +1,3 @@
-import { Box, CircularProgress, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { Identifier } from '../components/Identifier';
 import { useAuth } from './useAuth';
@@ -21,23 +20,30 @@ export function SessionGate({ children }: { children: ReactNode }) {
   if (status === 'ready') return children;
 
   return (
-    <Box
-      component="main"
+    <main
       role="status"
       aria-busy="true"
       data-testid="Session.Restoring"
-      sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', bgcolor: 'background.default' }}
+      className="grid min-h-screen place-items-center bg-ground"
     >
-      <Stack sx={{ alignItems: 'center', gap: 2 }}>
+      <div className="flex flex-col items-center gap-4">
         {/* The wordmark, so the wait reads as the app starting rather than as a blank page. */}
-        <Identifier variant="strong" sx={{ fontSize: '1.5rem', letterSpacing: '0.06em' }}>
+        <Identifier variant="strong" className="text-2xl tracking-[0.06em]">
           TCMS
         </Identifier>
-        <CircularProgress size={20} aria-hidden />
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          Restoring your session…
-        </Typography>
-      </Stack>
-    </Box>
+        {/*
+          ~~MUI's `CircularProgress`~~ → a bordered ring with `animate-spin`, T16. It is the one
+          spinner left in the app: everything else waits behind a skeleton, and this is the case
+          where there is no layout yet to approximate the shape of. `motion-safe:` so it obeys the
+          reduced-motion block in `index.css`; without it the ring simply sits still, which is
+          correct — the `role="status"` and `aria-busy` above are what actually announce the wait.
+        */}
+        <span
+          aria-hidden
+          className="size-5 rounded-full border-2 border-white/12 border-t-steel motion-safe:animate-spin"
+        />
+        <p className="m-0 text-sm text-ink-2">Restoring your session…</p>
+      </div>
+    </main>
   );
 }

@@ -1,13 +1,15 @@
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  Stack,
-  TextField,
-} from '@mui/material';
+  Input,
+  Textarea,
+} from '../../components/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, type ChangeEvent } from 'react';
 import { useForm } from 'react-hook-form';
@@ -136,66 +138,87 @@ export function ProjectCreateDialog({
   });
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
       <form onSubmit={submit} noValidate aria-busy={create.isPending}>
-        <DialogTitle>New project</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+        <DialogHeader>
+          <DialogTitle>New project</DialogTitle>
+        </DialogHeader>
+        <div className="mt-4 flex flex-col gap-4">
             {errors.root && (
-              <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
+              <div data-testid={`${TestId}.Error`}>
+            <Banner tone="bad"><span role="alert">
                 {errors.root.message}
-              </Alert>
+              </span></Banner>
+          </div>
             )}
-            <TextField
+            <Field
               label="Key"
-              required
-              autoComplete="off"
-              error={!!errors.key}
-              helperText={errors.key?.message ?? 'Short, upper-case, and permanent — OLB, MOB.'}
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Key`, maxLength: 10 } }}
-              {...register('key', {
-                // Upper-cased where the user can see it, rather than silently on the server. The
-                // cursor stays put because the value is the same length either way.
-                onChange: (event: ChangeEvent<HTMLInputElement>) =>
-                  setValue('key', event.target.value.toUpperCase()),
-              })}
-            />
-            <TextField
+              htmlFor="project-key"
+              error={errors.key?.message}
+              help="Short, upper-case, and permanent — OLB, MOB."
+            >
+              <Input
+                id="project-key"
+                required
+                autoComplete="off"
+                aria-invalid={!!errors.key}
+                maxLength={10}
+                data-testid={`${TestId}.Key`}
+                {...register('key', {
+                  // Upper-cased where the user can see it, rather than silently on the server. The
+                  // cursor stays put because the value is the same length either way.
+                  onChange: (event: ChangeEvent<HTMLInputElement>) =>
+                    setValue('key', event.target.value.toUpperCase()),
+                })}
+              />
+            </Field>
+            <Field
               label="Name"
-              required
-              autoComplete="off"
-              error={!!errors.name}
-              helperText={
-                errors.name?.message ?? 'The whole product or engagement — not a feature area.'
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Name`, maxLength: MAX_NAME } }}
-              {...register('name')}
-            />
-            <TextField
+              htmlFor="project-name"
+              error={errors.name?.message}
+              help="The whole product or engagement — not a feature area."
+            >
+              <Input
+                id="project-name"
+                required
+                autoComplete="off"
+                aria-invalid={!!errors.name}
+                maxLength={MAX_NAME}
+                data-testid={`${TestId}.Name`}
+                {...register('name')}
+              />
+            </Field>
+            <Field
               label="Description"
-              multiline
-              minRows={2}
-              error={!!errors.description}
-              helperText={errors.description?.message ?? 'Optional.'}
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Description` } }}
-              {...register('description')}
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
+              htmlFor="project-description"
+              error={errors.description?.message}
+              help="Optional."
+            >
+              <Textarea
+                id="project-description"
+                rows={2}
+                aria-invalid={!!errors.description}
+                data-testid={`${TestId}.Description`}
+                {...register('description')}
+              />
+            </Field>
+          </div>
+        <DialogFooter>
           <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
             Cancel
           </Button>
           <Button
             type="submit"
-            variant="contained"
+            variant="primary"
             disabled={create.isPending}
             data-testid={`${TestId}.Submit`}
           >
             {create.isPending ? 'Creating…' : 'Create project'}
           </Button>
-        </DialogActions>
+        </DialogFooter>
       </form>
+    </DialogContent>
     </Dialog>
   );
 }

@@ -1,5 +1,6 @@
-import { Alert, Box, Button, Chip, CircularProgress, Stack, Typography } from '@mui/material';
-import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import { Eye } from 'lucide-react';
+import { Badge, Banner } from '../../components/kit';
+import { Button } from '../../components/ui';
 import { Link as RouterLink } from 'react-router-dom';
 import { isJobFinished } from '../../api/queries';
 import type { ReportJob } from '../../api/types';
@@ -56,17 +57,9 @@ const formatLabel = (format: string): string =>
 
 export function ReportJobCard({ projectId, job }: { projectId: string; job: ReportJob }) {
   return (
-    <Box
-      data-testid={TestId}
-      sx={{
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 1,
-        p: 2,
-      }}
-    >
+    <div className="border border-white/8 rounded-lg p-4" data-testid={TestId}>
       <JobBody job={job} projectId={projectId} />
-    </Box>
+    </div>
   );
 }
 
@@ -74,32 +67,26 @@ function JobBody({ job, projectId }: { job: ReportJob; projectId: string }) {
   const running = !isJobFinished(job.status);
 
   return (
-    <Stack sx={{ gap: 1 }}>
-      <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         {/*
           Humanized, not the wire value: the report type is an open string, so there is no map to
           derive a label from — `humanize` turns `run_summary` into "Run summary" for whatever a
           later release adds, where a lookup table would fall through to the raw token (ui-rules §1).
         */}
-        <Typography variant="body2" sx={{ fontWeight: 600 }} data-testid={`${TestId}.Type`}>
+        <p className="m-0 text-sm font-semibold" data-testid={`${TestId}.Type`}>
           {humanize(job.type)}
-        </Typography>
-        <Chip
-          size="small"
-          variant="outlined"
-          label={formatLabel(job.format)}
+        </p>
+        <Badge tone="plain"
           data-testid={`${TestId}.Format`}
-        />
+        >
+{formatLabel(job.format)}</Badge>
         {/*
           When it was asked for. On the card rather than only in a tooltip because the list is
           ordered by it: an order a reader cannot see is one they have to take on trust, and two
           run summaries of the same project are told apart by nothing else.
         */}
-        <Typography
-          variant="caption"
-          sx={{ color: 'text.secondary' }}
-          data-testid={`${TestId}.RequestedAt`}
-        >
+        <span className="m-0 text-xs text-ink-2" data-testid={`${TestId}.RequestedAt`}>
           {formatDateTime(job.requestedAt)}
           {/*
             The rendered artifact's size (005 S1) — `Artifact.sizeBytes`, joined onto the job so a
@@ -112,25 +99,35 @@ function JobBody({ job, projectId }: { job: ReportJob; projectId: string }) {
             zero that would claim an empty file.
           */}
           {job.sizeBytes !== null && (
-            <Box component="span" data-testid={`${TestId}.Size`}>
+            <span data-testid={`${TestId}.Size`}>
               {' · '}
               {formatBytes(job.sizeBytes)}
-            </Box>
+            </span>
           )}
-        </Typography>
-        <Box sx={{ flex: 1 }} />
-        {running && <CircularProgress size={14} data-testid={`${TestId}.Spinner`} />}
-        <Chip
-          size="small"
-          label={reportJobStatusLabels[job.status]}
+        </span>
+        <div className="flex-1" />
+        {running && (
+          // ~~`CircularProgress`~~ → a bordered ring, T16. `motion-safe:` so it obeys the
+          // reduced-motion block in `index.css`; the surrounding row already says the job is
+          // running in words, so a still ring costs nothing.
+          <span
+            aria-hidden
+            data-testid={`${TestId}.Spinner`}
+            className="size-3.5 shrink-0 rounded-full border-2 border-white/12 border-t-steel motion-safe:animate-spin"
+          />
+        )}
+        <Badge
+          tone="plain"
           data-testid={`${TestId}.Status`}
-          sx={{
-            bgcolor: 'transparent',
+          style={{
+            backgroundColor: 'transparent',
             color: reportJobStatusColors[job.status],
-            border: `1px solid color-mix(in srgb, ${reportJobStatusColors[job.status]} 45%, transparent)`,
+            borderColor: `color-mix(in srgb, ${reportJobStatusColors[job.status]} 45%, transparent)`,
           }}
-        />
-      </Stack>
+        >
+          {reportJobStatusLabels[job.status]}
+        </Badge>
+      </div>
 
       {/*
         The server's sentence, not a rephrasing of it. A report's parameters are validated inside
@@ -139,9 +136,11 @@ function JobBody({ job, projectId }: { job: ReportJob; projectId: string }) {
         on a server sentence applies to *branching*, not to showing it.
       */}
       {job.status === 'FAILED' && (
-        <Alert severity="error" role="alert" data-testid={`${TestId}.Failed`}>
+        <div data-testid={`${TestId}.Failed`}>
+<Banner tone="bad"><span role="alert">
           {job.error ?? 'The report could not be generated, and the server did not say why.'}
-        </Alert>
+        </span></Banner>
+</div>
       )}
 
       {/*
@@ -161,25 +160,28 @@ function JobBody({ job, projectId }: { job: ReportJob; projectId: string }) {
         the wrong rule — the refusal, if it somehow comes, is rendered where it is raised.
       */}
       {(job.modelUrl || job.downloadUrl) && (
-        <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div className="flex gap-2 flex-wrap items-start">
+          {/*
+            A `<Link>` wearing the button's classes, not a `<Button component={…}>`: this
+            navigates, so the element has to be an anchor for middle-click, copy-link and the
+            browser's own focus order. `buttonVariants` exists for exactly this.
+          */}
           {job.modelUrl && (
-            <Button
-              component={RouterLink}
+            <RouterLink
               to={`/projects/${projectId}/reports/jobs/${job.jobId}`}
-              size="small"
-              variant="contained"
-              startIcon={<VisibilityOutlinedIcon />}
+              className={buttonVariants({ size: 'sm', variant: 'primary' })}
               data-testid={`${TestId}.View`}
             >
+              <Eye aria-hidden className="size-3.5" />
               View report
-            </Button>
+            </RouterLink>
           )}
           <DownloadReportButton job={job} testId={`${TestId}.Download`} />
-        </Stack>
+        </div>
       )}
 
       {running && (
-        <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid={`${TestId}.Waiting`}>
+        <span className="m-0 text-xs text-ink-2" data-testid={`${TestId}.Waiting`}>
           {/*
             ~~"Leaving this page loses the link: the report is still made, but nothing in this
             version can list it again."~~ — true until §227 gave the server a job list, and the
@@ -188,8 +190,8 @@ function JobBody({ job, projectId }: { job: ReportJob; projectId: string }) {
           */}
           Generated in the background — this updates itself, and it stays in this list when you
           come back.
-        </Typography>
+        </span>
       )}
-    </Stack>
+    </div>
   );
 }

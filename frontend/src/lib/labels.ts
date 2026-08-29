@@ -8,6 +8,7 @@
  *
  * Every render path uses these. There is no second place a status becomes a word.
  */
+import type { BadgeTone } from '../components/kit/Badge';
 import type {
   AggregationPolicy,
   AssignmentVia,
@@ -1063,12 +1064,19 @@ export const trackerStatusCategoryLabels = {
   DONE: 'Done',
 } as const satisfies Record<TrackerIssueStatusCategory, string>;
 
-/** MUI chip colours for the three categories. Not a status palette: three buckets, three weights. */
+/**
+ * Badge tones for the three categories. Not a status palette: three buckets, three weights.
+ *
+ * ~~MUI chip colours (`default` / `info` / `success`)~~ → superseded in T16, which took the MUI
+ * palette away. `plain` / `steel` / `passed` are the kit's nearest three weights and keep the
+ * same reading — an unstarted issue is unpainted, one in flight carries the action hue, and a
+ * finished one carries the passed hue.
+ */
 export const trackerStatusCategoryColors = {
-  TODO: 'default',
-  IN_PROGRESS: 'info',
-  DONE: 'success',
-} as const satisfies Record<TrackerIssueStatusCategory, 'default' | 'info' | 'success'>;
+  TODO: 'plain',
+  IN_PROGRESS: 'steel',
+  DONE: 'passed',
+} as const satisfies Record<TrackerIssueStatusCategory, BadgeTone>;
 
 /**
  * Whether a person on this project can use the integration, per bound host (004 D19).
@@ -1085,12 +1093,13 @@ export const trackerConnectionStateLabels = {
   NOT_CONNECTED: 'Not connected',
 } as const satisfies Record<TrackerConnectionState, string>;
 
-/** The same three, as chip colours. */
-export const trackerConnectionStateColors = {
-  CONNECTED: 'success',
-  NEEDS_ATTENTION: 'warning',
-  NOT_CONNECTED: 'default',
-} as const satisfies Record<TrackerConnectionState, 'success' | 'warning' | 'default'>;
+/*
+ * ~~`trackerConnectionStateColors` — the same three, as chip colours.~~ → superseded, deleted in
+ * T16. It spelled `success` / `warning` / `default`, which were MUI's palette keys and nothing
+ * else's, and its only consumer (`settings/TrackerSettingsPage`) grew its own local
+ * `satisfies Record<TrackerConnectionState, BadgeTone>` when T15 ported that screen. Keeping a
+ * second, unused vocabulary for one concept is the drift `ui-rules` §6 forbids.
+ */
 
 /**
  * Why a chip is showing the id instead of the issue (004 D16/D17) — one sentence per reason.

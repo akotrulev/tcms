@@ -1,7 +1,5 @@
-import { ThemeProvider } from '@mui/material/styles'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { theme } from '../../app/theme'
 import { anOrgChart, anOrgChartPerson, anOrgChartProject } from '../../test/fixtures'
 import { OrgChartGaps } from './OrgChartGaps'
 
@@ -18,9 +16,7 @@ import { OrgChartGaps } from './OrgChartGaps'
 
 function renderGaps(chart = anOrgChart()) {
   return render(
-    <ThemeProvider theme={theme}>
-      <OrgChartGaps chart={chart} />
-    </ThemeProvider>,
+      <OrgChartGaps chart={chart} />,
   )
 }
 

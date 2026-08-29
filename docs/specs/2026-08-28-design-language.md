@@ -105,7 +105,8 @@ from drifting away from the thing it describes.
 ## 4. Where the rail collapses
 
 The expanded 232px rail — headings and order exactly as `AppShell.tsx:projectNav` has them — is the
-default everywhere. It collapses to the 60px icon rail on **exactly two routes**:
+default everywhere. It collapses to the ~~60px~~ **64px** icon rail (see §9.2 for why the
+build's number wins) on **exactly two routes**:
 
 - the case document editor (the case redesign's decision — the document wants the width), and
 - **the execution runner** (this document's addition, for the same reason: the tester is reading a
@@ -203,9 +204,17 @@ file per page would have drawn that skeleton ten times and let the ten drift.
    drawn dark misrepresents the file being downloaded — but it is a second palette to maintain, and
    nothing here says what happens when the app grows a light theme and the two collide.
 
-2. **Two rail widths is a layout the shell does not have.** Collapsing on two routes means the shell
-   reads the route, which `AppShell` does not do today. The case redesign named this and did not
-   cost it; adding a second route does not make it cheaper.
+2. ~~**Two rail widths is a layout the shell does not have.** Collapsing on two routes means the
+   shell reads the route, which `AppShell` does not do today. The case redesign named this and did
+   not cost it; adding a second route does not make it cheaper.~~ **→ superseded — closed by plan
+   007 T5.** `AppShell` reads the route now and collapses on **three** patterns, not two: §4's two
+   screens, one of which is reachable at two URLs. The cost the paragraph was worried about was
+   real and was paid once, in the shell, rather than per screen.
+
+   **The collapsed rail is 64px, not the 60px the renders draw.** That is a deliberate amendment to
+   the spec rather than a defect in the build, per 007 §4's rule that where the build disagrees with
+   a render the *spec* is amended: 64 is a multiple of the 4px grid the rest of the shell sits on,
+   and it leaves a 40px icon target 12px of side padding, which 60 does not.
 
 3. **Nine families is nine files to keep in agreement.** The shared kit helps and does not solve it:
    a component changed in `tcms.css` silently changes nine renders, which is the point, but a

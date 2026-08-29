@@ -1,5 +1,5 @@
-import { Chip, Stack, Tooltip, Typography } from '@mui/material';
 import type { ProposalVerdict, VerdictSource } from '../../api/types';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui';
 import {
   proposalVerdictColors,
   proposalVerdictLabels,
@@ -39,31 +39,37 @@ export function VerdictChip({
   source: VerdictSource;
 }) {
   return (
-    <Stack direction="row" sx={{ alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-      <Tooltip title={verdictSourceLabels[source]}>
-        <Chip
-          size="small"
-          variant="outlined"
-          label={proposalVerdictLabels[verdict]}
-          data-testid="Proposals.Verdict"
-          sx={{
-            borderColor: proposalVerdictColors[verdict],
-            color: proposalVerdictColors[verdict],
-          }}
-        />
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {/*
+            An outline and no tint, and the colour comes straight from `proposalVerdictColors` —
+            a CSS custom property per verdict. `kit/Badge`'s eight tones are deliberately not used
+            here: `--color-draft` and `--color-info` are not among them, and mapping onto the
+            nearest one would be this file quietly choosing a colour the labels module already
+            chose. See the header on why none of them is green.
+          */}
+          <span
+            data-testid="Proposals.Verdict"
+            className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11.5px] whitespace-nowrap"
+            style={{
+              borderColor: proposalVerdictColors[verdict],
+              color: proposalVerdictColors[verdict],
+            }}
+          >
+            {proposalVerdictLabels[verdict]}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{verdictSourceLabels[source]}</TooltipContent>
       </Tooltip>
       {/*
         The source is rendered as TEXT beside the chip, not only as the tooltip above it. A tooltip
         is not available to somebody skimming, and "who checked" is the half a skimmer most needs:
         the failure mode this component exists for is reading `Grounded` and stopping there.
       */}
-      <Typography
-        variant="caption"
-        sx={{ color: 'text.secondary' }}
-        data-testid="Proposals.VerdictSource"
-      >
+      <span className="text-xs text-ink-2" data-testid="Proposals.VerdictSource">
         {verdictSourceLabels[source]}
-      </Typography>
-    </Stack>
+      </span>
+    </span>
   );
 }

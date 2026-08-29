@@ -1,4 +1,3 @@
-import { Box, Stack, Typography } from '@mui/material';
 import { STEP_DETAIL_LIMIT, useExecutionSteps, useStatuses } from '../../api/queries';
 import type { CaseStatus, StepResult, TestExecutionSummary, TestRunDetail } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
@@ -71,12 +70,12 @@ export function FailureSummary({
 
   return (
     <Panel title="What failed" testId="RunDetail.Failures">
-      <Stack sx={{ gap: 3 }}>
+      <div className="flex flex-col gap-6">
         {/*
           The headline, in counts and in words. `formatCount` rather than a bare number so the
           thousands separator matches every other figure in the product.
         */}
-        <Typography variant="body2" data-testid="RunDetail.Failures.Headline">
+        <p className="m-0 text-sm" data-testid="RunDetail.Failures.Headline">
           {failed.length === 0 && blocked.length === 0
             ? 'Nothing failed and nothing was blocked in this run.'
             : [
@@ -86,20 +85,20 @@ export function FailureSummary({
               ]
                 .filter(Boolean)
                 .join(' · ')}
-        </Typography>
+        </p>
 
         {failed.length === 0 && blocked.length === 0 ? (
           // Good news, worded as good news. An empty table here reads as a panel that failed to
           // load, which is the one thing this state must not be mistaken for.
-          <Typography variant="body2" sx={{ color: 'text.secondary' }} data-testid="RunDetail.Failures.None">
+          <p className="m-0 text-sm text-ink-2" data-testid="RunDetail.Failures.None">
             {(data.counts.notRun ?? 0) > 0
               ? 'Nothing has failed so far — but the run is not finished, so this is not the final answer.'
               : 'Every case in this run produced a result and none of them failed.'}
-          </Typography>
+          </p>
         ) : (
           <>
             {failed.length > 0 && (
-              <Stack sx={{ gap: 1 }}>
+              <div className="flex flex-col gap-2">
                 {/*
                   **The region wraps the step layer only, and the case rows are OUTSIDE it.**
                   That is `DataRegion`'s own first rule — wrap the response-dependent subtree and
@@ -114,15 +113,15 @@ export function FailureSummary({
                   testId="RunDetail.Failures.Steps"
                   state={steps}
                   skeleton={
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    <span className="m-0 text-xs text-ink-2">
                       Reading where each case failed…
-                    </Typography>
+                    </span>
                   }
                 >
                   {() => null}
                 </DataRegion>
 
-                <Stack sx={{ gap: 1.5 }}>
+                <div className="flex flex-col gap-3">
                   {failed.map((execution) => (
                     <FailedCaseRow
                       key={execution.id}
@@ -137,29 +136,25 @@ export function FailureSummary({
                       steps={steps.data?.find((entry) => entry.executionId === execution.id)?.steps}
                     />
                   ))}
-                </Stack>
+                </div>
 
                 {truncated > 0 && (
-                  <Typography
-                    variant="caption"
-                    sx={{ color: 'text.secondary' }}
-                    data-testid="RunDetail.Failures.Truncated"
-                  >
+                  <span className="m-0 text-xs text-ink-2" data-testid="RunDetail.Failures.Truncated">
                     Every failed case is listed. Step detail was read for the first{' '}
                     {formatCount(STEP_DETAIL_LIMIT)} — open the other {formatCount(truncated)} to see
                     where they failed.
-                  </Typography>
+                  </span>
                 )}
-              </Stack>
+              </div>
             )}
 
             {blocked.length > 0 && (
-              <Stack sx={{ gap: 1 }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              <div className="flex flex-col gap-2">
+                <span className="m-0 text-xs text-ink-2">
                   Blocked — nobody could get far enough to find out whether these pass. Not counted
                   as failures.
-                </Typography>
-                <Stack sx={{ gap: 1 }} data-testid="RunDetail.Failures.Blocked">
+                </span>
+                <div className="flex flex-col gap-2" data-testid="RunDetail.Failures.Blocked">
                   {blocked.map((execution) => (
                     <CaseLine
                       key={execution.id}
@@ -168,12 +163,12 @@ export function FailureSummary({
                       runId={runId}
                     />
                   ))}
-                </Stack>
-              </Stack>
+                </div>
+              </div>
             )}
           </>
         )}
-      </Stack>
+      </div>
     </Panel>
   );
 }
@@ -189,7 +184,7 @@ function CaseLine({
   runId: string;
 }) {
   return (
-    <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }} data-testid={CaseRowTestId}>
+    <div className="flex items-center gap-2 min-w-0" data-testid={CaseRowTestId}>
       <CaseKeyLink execution={execution} projectId={projectId} testId={CaseRowTestId} />
       <ExecuteCaseLink
         execution={execution}
@@ -198,7 +193,7 @@ function CaseLine({
         maxWidth={520}
         testId={CaseRowTestId}
       />
-    </Stack>
+    </div>
   );
 }
 
@@ -229,54 +224,45 @@ function FailedCaseRow({
   const outcome = steps ? stepOutcome(steps, statuses) : null;
 
   return (
-    <Box>
+    <div>
       <CaseLine execution={execution} projectId={projectId} runId={runId} />
-      <Box sx={{ pl: 2, mt: 0.5, borderLeft: '2px solid', borderColor: 'divider' }}>
+      <div className="pl-4 mt-1 border-l-2 border-white/8">
         {pending ? null : outcome === null ? (
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          <span className="m-0 text-xs text-ink-2">
             Open the case to see where it failed.
-          </Typography>
+          </span>
         ) : outcome.totalCount === 0 ? (
           // Exploratory cases carry no structured steps at all. Saying "0 of 0 steps failed" would
           // read as a case whose steps all passed while the case itself failed.
-          <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid={`${StepRowTestId}.None`}>
+          <span className="m-0 text-xs text-ink-2" data-testid={`${StepRowTestId}.None`}>
             No structured steps — the verdict is on the case as a whole.
-          </Typography>
+          </span>
         ) : (
-          <Stack sx={{ gap: 0.5 }}>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }} data-testid={`${StepRowTestId}.Counts`}>
+          <div className="flex flex-col gap-1">
+            <span className="m-0 text-xs text-ink-2" data-testid={`${StepRowTestId}.Counts`}>
               {formatCount(outcome.failed.length)} of {plural(outcome.totalCount, 'step')} failed
               {outcome.unmarkedCount > 0 && ` · ${formatCount(outcome.unmarkedCount)} not marked`}
-            </Typography>
+            </span>
             {outcome.failed.map((step) => (
-              <Stack
-                key={step.stepId}
-                direction="row"
-                sx={{ gap: 1, alignItems: 'baseline', minWidth: 0 }}
-                data-testid={StepRowTestId}
-              >
+              <div className="flex gap-2 items-baseline min-w-0" key={step.stepId} data-testid={StepRowTestId}>
                 {/* The position as the tester saw it: `position` is 0-based on the wire. */}
                 <Identifier variant="muted">{(step.position ?? 0) + 1}</Identifier>
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography variant="body2" sx={{ color: 'var(--color-failed)' }}>
+                <div className="min-w-0">
+                  <p className="m-0 text-sm" style={{ color: 'var(--color-failed)' }}>
                     {step.keyword ? `${step.keyword} ` : ''}
                     {step.action}
-                  </Typography>
+                  </p>
                   {step.comment && (
-                    <Typography
-                      variant="caption"
-                      sx={{ color: 'text.secondary', display: 'block' }}
-                      data-testid={`${StepRowTestId}.Comment`}
-                    >
+                    <span className="m-0 text-xs text-ink-2 block" data-testid={`${StepRowTestId}.Comment`}>
                       {step.comment}
-                    </Typography>
+                    </span>
                   )}
-                </Box>
-              </Stack>
+                </div>
+              </div>
             ))}
-          </Stack>
+          </div>
         )}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

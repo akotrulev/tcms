@@ -1,4 +1,4 @@
-import { Box, Stack, Table, TableBody, TableCell, TableRow } from '@mui/material';
+import { Table, TableBody, TableCell, TableRow } from '../../components/kit';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -51,41 +51,25 @@ export function StepDataView({
   if (!docString && !hasTable) return null;
 
   return (
-    <Stack sx={{ gap: 1, mt: 0.5 }}>
+    <div className="mt-1 flex flex-col gap-2">
       {docString && (
-        <Box
-          component="pre"
+        // Whitespace is content in a `"""` block, so `whitespace-pre` preserves it and the box
+        // scrolls rather than wrapping — a re-wrapped doc string is a different payload.
+        <pre
           data-testid={`${testId}.DocString`}
-          sx={{
-            m: 0,
-            p: 1.5,
-            // Whitespace is content in a `"""` block, so it is preserved and the box scrolls
-            // rather than wrapping — a re-wrapped doc string is a different payload.
-            whiteSpace: 'pre',
-            overflowX: 'auto',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '0.8125rem',
-            lineHeight: 1.7,
-            bgcolor: 'background.default',
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: 1,
-          }}
+          className="m-0 overflow-x-auto rounded border border-white/8 bg-ground p-3 font-mono text-[13px] leading-[1.7] whitespace-pre text-ink"
         >
           {docString}
-        </Box>
+        </pre>
       )}
       {hasTable && dataTable && (
         <ScrollX>
-          <Table size="small" data-testid={`${testId}.Table`}>
+          <Table data-testid={`${testId}.Table`}>
             <TableBody>
               {dataTable.map((row, rowIndex) => (
                 <TableRow key={rowIndex} data-testid={`${testId}.Table.Row`}>
                   {row.map((cell, columnIndex) => (
-                    <TableCell
-                      key={columnIndex}
-                      sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}
-                    >
+                    <TableCell key={columnIndex} className="font-mono text-[13px]">
                       {cell}
                     </TableCell>
                   ))}
@@ -95,6 +79,6 @@ export function StepDataView({
           </Table>
         </ScrollX>
       )}
-    </Stack>
+    </div>
   );
 }

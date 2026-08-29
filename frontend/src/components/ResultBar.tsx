@@ -1,12 +1,11 @@
-import { Box, Stack, Tooltip, Typography } from '@mui/material';
-import type { ResultCounts, StatusKind } from '../api/types';
+import type { ResultCounts } from '../api/types';
 import { formatCount, formatPercent, percentOf } from '../lib/format';
 import { executedCount, passRate, type Denominator } from '../lib/results';
-import { statusLabels } from '../lib/labels';
 import { Identifier } from './Identifier';
+import { cn } from '../lib/cn';
 
 /**
- * Result counts, rendered as a stacked bar.
+ * The three figure-shaped readings of a set of result counts.
  *
  * **Counts are the unit of truth; percentages are derived for reading.** That is why the API
  * returns counts and never percentages: the pass rate a reader wants depends on the
@@ -18,68 +17,16 @@ import { Identifier } from './Identifier';
  * A single stored percentage can only express one of them, and it is never obvious which. So
  * both are offered, always labeled, and never averaged: a rollup sums the leaf counts,
  * because averaging children's percentages over unequal case counts is wrong arithmetic.
+ *
+ * ## ~~`ResultBar`~~ → superseded by `components/kit/ResultBar` (T3), deleted in T16
+ *
+ * This file used to export a stacked bar of the same name, plus the `SEGMENTS` table that drew
+ * it. The kit's `ResultBar` is the render's version of the same figure and has been the one on
+ * screen since T10 ported the index family onto it — the copy here had no importer left, and
+ * two stacked bars for one concept is the drift `ui-rules` §6 forbids. The three components
+ * below survived because the kit has no equivalent of them; `PlanStatisticsPage` is their one
+ * caller and T15 recorded them as the second copy that "collapses when MUI goes". It has.
  */
-
-const SEGMENTS: { kind: StatusKind; key: keyof ResultCounts; color: string }[] = [
-  { kind: 'PASSED', key: 'passed', color: 'var(--color-passed)' },
-  { kind: 'FAILED', key: 'failed', color: 'var(--color-failed)' },
-  { kind: 'BLOCKED', key: 'blocked', color: 'var(--color-blocked)' },
-  { kind: 'SKIPPED', key: 'skipped', color: 'var(--color-skipped)' },
-  { kind: 'UNTESTED', key: 'notRun', color: 'var(--color-untested)' },
-];
-
-export function ResultBar({
-  counts,
-  height = 10,
-  showLegend = false,
-  testId,
-}: {
-  counts: ResultCounts;
-  height?: number;
-  showLegend?: boolean;
-  testId?: string;
-}) {
-  const total = Math.max(counts.total, 1);
-
-  return (
-    <Box data-testid={testId}>
-      <Stack direction="row" sx={{ height, borderRadius: 0.5, overflow: 'hidden', bgcolor: 'action.hover' }}>
-        {SEGMENTS.map((segment) => {
-          const value = counts[segment.key];
-          if (value === 0) return null;
-          return (
-            <Tooltip
-              key={segment.kind}
-              title={`${statusLabels[segment.kind]}: ${formatCount(value)} of ${formatCount(counts.total)}`}
-            >
-              <Box
-                sx={{ width: `${(value / total) * 100}%`, bgcolor: segment.color, minWidth: 2 }}
-                aria-label={`${statusLabels[segment.kind]}: ${value}`}
-              />
-            </Tooltip>
-          );
-        })}
-      </Stack>
-
-      {showLegend && (
-        <Stack direction="row" sx={{ gap: 2, flexWrap: 'wrap', mt: 1 }}>
-          {SEGMENTS.map((segment) => (
-            <Stack key={segment.kind} direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
-              <Box
-                aria-hidden="true"
-                sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: segment.color, flexShrink: 0 }}
-              />
-              <Typography variant="caption">
-                {statusLabels[segment.kind]}{' '}
-                <Identifier variant="muted">{formatCount(counts[segment.key])}</Identifier>
-              </Typography>
-            </Stack>
-          ))}
-        </Stack>
-      )}
-    </Box>
-  );
-}
 
 /**
  * The headline figure. Both denominators are shown side by side rather than behind a toggle
@@ -103,24 +50,22 @@ export function PassRateSummary({
   const coverage = coveragePercent ?? percentOf(executed, counts.total);
 
   return (
-    <Stack direction="row" sx={{ gap: 4, flexWrap: 'wrap' }} data-testid={testId}>
-      <Box>
-        <Typography className="identifier" sx={{ fontSize: '2rem', fontWeight: 600, lineHeight: 1 }}>
+    <div className="flex flex-wrap gap-8" data-testid={testId}>
+      <div>
+        <p className="identifier m-0 text-[2rem] leading-none font-semibold text-ink">
           {formatPercent(ofExecuted)}
-        </Typography>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          passed, of {formatCount(executed)} executed
-        </Typography>
-      </Box>
-      <Box>
-        <Typography className="identifier" sx={{ fontSize: '2rem', fontWeight: 600, lineHeight: 1 }}>
+        </p>
+        <span className="text-xs text-ink-2">passed, of {formatCount(executed)} executed</span>
+      </div>
+      <div>
+        <p className="identifier m-0 text-[2rem] leading-none font-semibold text-ink">
           {formatPercent(coverage)}
-        </Typography>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+        </p>
+        <span className="text-xs text-ink-2">
           executed, of {formatCount(counts.total)} in scope
-        </Typography>
-      </Box>
-    </Stack>
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -142,12 +87,12 @@ export function ResultCountsCell({
   const whole = denominator === 'EXECUTED' ? executedCount(counts) : counts.total;
 
   return (
-    <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }} data-testid={testId}>
-      <Identifier sx={{ minWidth: 52, textAlign: 'right' }}>{formatPercent(rate, 0)}</Identifier>
-      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+    <div className="flex items-center gap-2" data-testid={testId}>
+      <Identifier className="min-w-[52px] text-right">{formatPercent(rate, 0)}</Identifier>
+      <span className="text-xs text-ink-2">
         {formatCount(counts.passed)}/{formatCount(whole)}
-      </Typography>
-    </Stack>
+      </span>
+    </div>
   );
 }
 
@@ -162,35 +107,26 @@ export function DenominatorToggle({
   testId: string;
 }) {
   return (
-    <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
-      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-        Pass rate as a share of
-      </Typography>
+    <div className="flex items-center gap-1">
+      <span className="text-xs text-ink-2">Pass rate as a share of</span>
       {(['EXECUTED', 'TOTAL'] as const).map((option) => (
-        <Box
+        <button
           key={option}
-          component="button"
           type="button"
           onClick={() => onChange(option)}
           aria-pressed={value === option}
           data-testid={`${testId}.${option}`}
-          sx={{
-            font: 'inherit',
-            fontSize: '0.75rem',
-            fontWeight: value === option ? 600 : 400,
-            px: 1,
-            py: 0.25,
-            border: '1px solid',
-            borderColor: value === option ? 'primary.main' : 'divider',
-            borderRadius: 0.5,
-            bgcolor: value === option ? 'action.selected' : 'transparent',
-            color: 'text.primary',
-            cursor: 'pointer',
-          }}
+          className={cn(
+            'cursor-pointer rounded-[2px] border px-2 py-0.5 font-sans text-xs text-ink',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
+            value === option
+              ? 'border-steel bg-white/8 font-semibold'
+              : 'border-white/8 bg-transparent',
+          )}
         >
           {option === 'EXECUTED' ? 'executed' : 'all in scope'}
-        </Box>
+        </button>
       ))}
-    </Stack>
+    </div>
   );
 }

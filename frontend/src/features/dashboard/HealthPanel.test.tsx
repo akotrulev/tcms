@@ -1,9 +1,7 @@
-import { ThemeProvider } from '@mui/material/styles'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import type { RepositoryDashboard } from '../../api/types'
-import { theme } from '../../app/theme'
 import { severityVar } from '../../lib/statusColors'
 import { HealthPanel } from './DashboardPage'
 
@@ -46,11 +44,9 @@ const dashboard = (partial: Partial<RepositoryDashboard>): RepositoryDashboard =
 
 function renderPanel(data: RepositoryDashboard) {
   return render(
-    <ThemeProvider theme={theme}>
       <MemoryRouter>
         <HealthPanel data={data} casesPath="/projects/p/cases" />
-      </MemoryRouter>
-    </ThemeProvider>,
+      </MemoryRouter>,
   )
 }
 

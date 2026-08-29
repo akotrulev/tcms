@@ -1,5 +1,7 @@
 export { ResultBar, type ResultBarProps } from './ResultBar';
 export { RailRow, type RailRowProps } from './RailRow';
+export { Combobox, COMBOBOX_FIELD, type ComboboxProps } from './Combobox';
+export { MultiPicker, type MultiPickerProps } from './MultiPicker';
 export { Badge, type BadgeProps, type BadgeTone } from './Badge';
 export { Chip, type ChipProps } from './Chip';
 export { Banner, type BannerProps, type BannerTone } from './Banner';

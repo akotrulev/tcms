@@ -1,5 +1,6 @@
-import BookmarkAddOutlinedIcon from '@mui/icons-material/BookmarkAddOutlined';
-import { Alert, Box, Button, Stack, Tooltip } from '@mui/material';
+import { BookmarkPlus } from 'lucide-react';
+import { Banner } from '../../components/kit';
+import { Button, Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui';
 import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { usePlans } from '../../api/queries';
@@ -73,20 +74,22 @@ export function PinReportButton({
   const reason = gate.reason('artifact:edit');
 
   return (
-    <Stack sx={{ gap: 1, alignItems: 'flex-end' }}>
-      <Tooltip title={reason ?? 'Keep this report in the project register'}>
-        <Box component="span">
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<BookmarkAddOutlinedIcon />}
-            disabled={!allowed}
-            onClick={() => setOpen(true)}
-            data-testid={testId}
-          >
-            Save to register
-          </Button>
-        </Box>
+    <div className="flex flex-col items-end gap-2">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>
+            <Button
+              size="sm"
+              disabled={!allowed}
+              onClick={() => setOpen(true)}
+              data-testid={testId}
+            >
+              <BookmarkPlus aria-hidden className="size-3.5" />
+              Save to register
+            </Button>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{reason ?? 'Keep this report in the project register'}</TooltipContent>
       </Tooltip>
 
       {/*
@@ -99,10 +102,19 @@ export function PinReportButton({
         vanishes leaves the reader with a fact and no way to act on it.
       */}
       {saved && (
-        <Alert severity="success" data-testid={`${testId}.Saved`} sx={{ width: '100%' }}>
-          “{saved}” is in the project register.{' '}
-          <RouterLink to={`/projects/${projectId}/artifacts`}>Open the register</RouterLink>
-        </Alert>
+        <div className="w-full" data-testid={`${testId}.Saved`}>
+          <Banner tone="steel">
+            <span>
+              “{saved}” is in the project register.{' '}
+              <RouterLink
+                to={`/projects/${projectId}/artifacts`}
+                className="text-steel underline-offset-4 hover:underline"
+              >
+                Open the register
+              </RouterLink>
+            </span>
+          </Banner>
+        </div>
       )}
 
       {/*
@@ -121,6 +133,6 @@ export function PinReportButton({
           onRegistered={(artifact) => setSaved(artifact.title)}
         />
       )}
-    </Stack>
+    </div>
   );
 }

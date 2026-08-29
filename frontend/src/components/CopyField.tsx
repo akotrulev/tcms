@@ -1,5 +1,6 @@
-import { Box, Button, Stack, Typography } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
+import { Button } from './ui';
+import { cn } from '../lib/cn';
 
 /**
  * A value shown to be copied — the app's one clipboard affordance (§118).
@@ -63,46 +64,36 @@ export function CopyField({
   };
 
   return (
-    <Box>
-      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
-        {label}
-      </Typography>
-      <Stack direction="row" sx={{ gap: 1, alignItems: 'flex-start' }}>
-        <Box
-          className="identifier"
+    <div>
+      <span className="mb-1 block text-xs text-ink-2">{label}</span>
+      <div className="flex items-start gap-2">
+        {/* `break-all` and `select-all`: a 64-character secret must wrap rather than scroll out
+            of view, because the whole point of rendering it is that every character can be read
+            and selected. */}
+        <div
+          className="identifier flex-1 rounded border border-white/8 bg-field p-2.5 text-[13px] break-all select-all"
           data-testid={`${testId}.Value`}
-          sx={{
-            flex: 1,
-            p: 1.25,
-            borderRadius: 1,
-            border: '1px solid',
-            borderColor: 'divider',
-            bgcolor: 'action.hover',
-            fontSize: '0.8125rem',
-            // A 64-character secret must wrap rather than scroll out of view: the whole point of
-            // rendering it is that every character can be read and selected.
-            wordBreak: 'break-all',
-            userSelect: 'all',
-          }}
         >
           {value}
-        </Box>
-        <Button size="small" onClick={() => void copy()} data-testid={`${testId}.Copy`}>
+        </div>
+        <Button size="sm" onClick={() => void copy()} data-testid={`${testId}.Copy`}>
           Copy
         </Button>
-      </Stack>
-      <Typography
-        variant="caption"
+      </div>
+      <span
         role="status"
         data-testid={`${testId}.Status`}
-        sx={{ display: 'block', mt: 0.5, color: outcome === 'failed' ? 'warning.main' : 'text.secondary' }}
+        className={cn(
+          'mt-1 block text-xs',
+          outcome === 'failed' ? 'text-[color:var(--color-warning)]' : 'text-ink-2',
+        )}
       >
         {outcome === 'copied'
           ? 'Copied.'
           : outcome === 'failed'
             ? 'Your browser blocked the clipboard — select the text above and copy it.'
             : ''}
-      </Typography>
-    </Box>
+      </span>
+    </div>
   );
 }

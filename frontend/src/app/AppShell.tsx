@@ -1,4 +1,4 @@
-import { useColorScheme } from '@mui/material';
+import { useColorScheme } from './colorScheme';
 import {
   Bell,
   Bug,
@@ -689,7 +689,7 @@ function RailContent({
         >
           <Identifier
             variant="strong"
-            sx={{ fontSize: collapsed ? '0.8125rem' : '1rem', letterSpacing: collapsed ? 0 : '0.08em' }}
+            style={{ fontSize: collapsed ? '0.8125rem' : '1rem', letterSpacing: collapsed ? 0 : '0.08em' }}
           >
             TCMS
           </Identifier>
@@ -834,7 +834,7 @@ function ProjectSwitcher({
                   data-testid="Nav.ProjectSwitcher"
                 >
                   {active ? (
-                    <Identifier variant="strong" sx={{ fontSize: '0.75rem' }}>
+                    <Identifier variant="strong" style={{ fontSize: '0.75rem' }}>
                       {active.key}
                     </Identifier>
                   ) : (
@@ -951,7 +951,7 @@ function RailLink({
 
 function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
   const { user, logout } = useAuth();
-  const { mode, systemMode, setMode } = useColorScheme();
+  const { resolved, setMode } = useColorScheme();
 
   /**
    * The toggle must reflect the scheme the user is *looking at*, not the stored setting.
@@ -959,8 +959,12 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
    * while the page is plainly dark — reading the setting alone shows a "switch to dark"
    * control on an already-dark page, and the first click then appears to do nothing because
    * it only moves `system` to the equivalent explicit value.
+   *
+   * `resolved` is `app/colorScheme.tsx`'s name for exactly that computation, which is why this
+   * reads one value where it used to combine two: the provider owns the resolution now, so the
+   * rule cannot be re-derived differently by a second caller.
    */
-  const isDark = mode === 'dark' || (mode === 'system' && systemMode === 'dark');
+  const isDark = resolved === 'dark';
 
   return (
     <header className="sticky top-0 z-10 flex h-[52px] shrink-0 items-center gap-1 border-b border-white/8 bg-paper px-2 md:px-4">

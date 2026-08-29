@@ -1,4 +1,7 @@
-import { Alert, Box, Button, IconButton, MenuItem, Select, Stack, TextField, Typography } from '@mui/material';
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
+import { Button, Input, Textarea } from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { Panel } from '../../components/PageHeader';
 import {
   criterionMetricEvaluated,
@@ -57,64 +60,81 @@ export function PlanFieldsTab({
   const nameEmpty = draft.name.trim() === '';
 
   return (
-    <Stack sx={{ gap: 3 }}>
+    <div className="flex flex-col gap-6">
       <Panel title="Plan" testId="PlanStats.PlanFields">
-        <Stack sx={{ gap: 2 }}>
-          <TextField
+        <div className="flex flex-col gap-4">
+          {/*
+            The empty-name hint is said here as well as on the disabled Save, because the reason
+            belongs beside the box that is empty and the button is on a banner that may be
+            scrolled away.
+          */}
+          <Field
             label="Name"
-            required
-            autoComplete="off"
+            htmlFor="name"
+            error={errorOf('name')}
+            help={nameEmpty ? 'Enter a plan name.' : 'The release or milestone this plan covers.'}
+          >
+          <Input
+            id="name"
             value={draft.name}
             onChange={(event) => onChange({ name: event.target.value })}
-            error={nameEmpty || !!errorOf('name')}
-            helperText={
-              errorOf('name')
-              // Said here as well as on the disabled Save, because the reason belongs beside the
-              // box that is empty and the button is on a banner that may be scrolled away.
-              ?? (nameEmpty ? 'Enter a plan name.' : 'The release or milestone this plan covers.')
-            }
-            slotProps={{ htmlInput: { 'data-testid': `${TestId}.Name`, maxLength: MAX_NAME } }}
+            autoComplete="off"
+            required
+            aria-invalid={nameEmpty || !!errorOf('name')}
+            maxLength={MAX_NAME}
+            data-testid={`${TestId}.Name`}
           />
-          <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 2 }}>
-            <TextField
+          </Field>
+          <div className="flex flex-col gap-4">
+            <Field
               label="Milestone"
-              autoComplete="off"
-              fullWidth
+              htmlFor="milestone"
+              error={errorOf('milestoneName')}
+              help="Optional — GA, Sprint 42."
+            >
+            <Input
+              id="milestone"
               value={draft.milestoneName}
               onChange={(event) => onChange({ milestoneName: event.target.value })}
-              error={!!errorOf('milestoneName')}
-              helperText={errorOf('milestoneName') ?? 'Optional — GA, Sprint 42.'}
-              slotProps={{
-                htmlInput: { 'data-testid': `${TestId}.Milestone`, maxLength: MAX_MILESTONE_NAME },
-              }}
+              autoComplete="off"
+              aria-invalid={!!errorOf('milestoneName')}
+              maxLength={MAX_MILESTONE_NAME}
+              data-testid={`${TestId}.Milestone`}
             />
-            <TextField
+            </Field>
+            <Field
               label="Milestone date"
-              type="date"
-              fullWidth
+              htmlFor="milestone-date"
+              error={errorOf('milestoneDate')}
+              help="Optional."
+            >
+            <Input
+              id="milestone-date"
               value={draft.milestoneDate}
               onChange={(event) => onChange({ milestoneDate: event.target.value })}
-              error={!!errorOf('milestoneDate')}
-              helperText={errorOf('milestoneDate') ?? 'Optional.'}
-              slotProps={{
-                inputLabel: { shrink: true },
-                htmlInput: { 'data-testid': `${TestId}.MilestoneDate` },
-              }}
+              type="date"
+              aria-invalid={!!errorOf('milestoneDate')}
+              data-testid={`${TestId}.MilestoneDate`}
             />
-          </Stack>
-          <TextField
+            </Field>
+          </div>
+          <Field
             label="Description"
-            multiline
-            minRows={2}
+            htmlFor="description"
+            error={errorOf('description')}
+            help="Optional."
+          >
+          <Textarea
+            id="description"
             value={draft.description}
             onChange={(event) => onChange({ description: event.target.value })}
-            error={!!errorOf('description')}
-            helperText={errorOf('description') ?? 'Optional.'}
-            slotProps={{
-              htmlInput: { 'data-testid': `${TestId}.Description`, maxLength: MAX_DESCRIPTION },
-            }}
+            rows={2}
+            aria-invalid={!!errorOf('description')}
+            maxLength={MAX_DESCRIPTION}
+            data-testid={`${TestId}.Description`}
           />
-        </Stack>
+          </Field>
+        </div>
       </Panel>
 
       <CriteriaEditor
@@ -133,7 +153,7 @@ export function PlanFieldsTab({
         error={errorOf('exitCriteria')}
         onChange={(exitCriteria) => onChange({ exitCriteria })}
       />
-    </Stack>
+    </div>
   );
 }
 
@@ -171,31 +191,28 @@ function CriteriaEditor({
 
   return (
     <Panel title={title} testId={testId}>
-      <Stack sx={{ gap: 1 }}>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+      <div className="flex flex-col gap-2">
+        <span className="m-0 text-xs text-ink-2">
           {hint}
-        </Typography>
+        </span>
         {error && (
-          <Alert severity="error" data-testid={`${testId}.Error`}>
+          <div data-testid={`${testId}.Error`}>
+<Banner tone="bad">
             {error}
-          </Alert>
+          </Banner>
+</div>
         )}
         {rows.map((row, index) => (
-          <Stack
-            key={index}
-            direction={{ xs: 'column', md: 'row' }}
-            sx={{ gap: 1, alignItems: { md: 'center' } }}
-          >
-            <Select
-              size="small"
+          <div className="flex flex-col" key={index}>
+            <NativeSelect
               value={row.metric}
               onChange={(event) => update(index, { metric: event.target.value })}
               data-testid={`${testId}.Metric.${index}`}
               inputProps={{ 'aria-label': `Metric for criterion ${index + 1}` }}
-              sx={{ minWidth: 170 }}
+              style={{ minWidth: 170 }}
             >
               {Object.entries(criterionMetricLabels).map(([value, label]) => (
-                <MenuItem key={value} value={value}>
+                <option key={value} value={value}>
                   {/*
                     B11 — the three metrics this product cannot decide yet say so HERE, where the
                     choice is made. All five stay on offer: a gate somebody has agreed to is worth
@@ -205,76 +222,59 @@ function CriteriaEditor({
                   */}
                   {label}
                   {!criterionMetricEvaluated[value as keyof typeof criterionMetricEvaluated] && (
-                    <Typography
-                      component="span"
-                      variant="caption"
-                      sx={{ color: 'text.secondary', ml: 1 }}
-                    >
+                    <span className="m-0 text-xs text-ink-2 ml-2">
                       — not evaluated yet
-                    </Typography>
+                    </span>
                   )}
-                </MenuItem>
+                </option>
               ))}
-            </Select>
-            <Select
-              size="small"
+            </NativeSelect>
+            <NativeSelect
               value={row.op}
               onChange={(event) => update(index, { op: event.target.value })}
               data-testid={`${testId}.Op.${index}`}
               inputProps={{ 'aria-label': `Comparison for criterion ${index + 1}` }}
-              sx={{ minWidth: 80 }}
+              style={{ minWidth: 80 }}
             >
               {criterionOperators.map((op) => (
-                <MenuItem key={op} value={op}>
+                <option key={op} value={op}>
                   {op}
-                </MenuItem>
+                </option>
               ))}
-            </Select>
-            <TextField
-              size="small"
+            </NativeSelect>
+            <Input
               type="number"
               value={row.value}
               onChange={(event) => update(index, { value: event.target.value })}
-              slotProps={{
-                htmlInput: {
-                  'data-testid': `${testId}.Value.${index}`,
-                  'aria-label': `Threshold for criterion ${index + 1}`,
-                },
-              }}
-              sx={{ width: 110 }}
+              data-testid={`${testId}.Value.${index}`}
+              aria-label={`Threshold for criterion ${index + 1}`}
+              className="w-[110px]"
             />
-            <TextField
-              size="small"
-              fullWidth
+            <Input
               placeholder="Optional label"
               value={row.label}
               onChange={(event) => update(index, { label: event.target.value })}
-              slotProps={{
-                htmlInput: {
-                  'data-testid': `${testId}.Label.${index}`,
-                  'aria-label': `Label for criterion ${index + 1}`,
-                },
-              }}
+              data-testid={`${testId}.Label.${index}`}
+              aria-label={`Label for criterion ${index + 1}`}
             />
-            <IconButton
-              size="small"
+            <Button variant="quiet" size="icon"
               aria-label={`Remove criterion ${index + 1}`}
               data-testid={`${testId}.Remove.${index}`}
               onClick={() => onChange(rows.filter((_, i) => i !== index))}
             >
               ✕
-            </IconButton>
-          </Stack>
+            </Button>
+          </div>
         ))}
         {rows.length === 0 && (
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          <p className="m-0 text-sm text-ink-2">
             None set.
-          </Typography>
+          </p>
         )}
         {/* Wrapped so the button sizes to its label rather than stretching to the row width. */}
-        <Box>
+        <div>
           <Button
-            size="small"
+            size="sm"
             disabled={rows.length >= MAX_CRITERIA}
             data-testid={`${testId}.Add`}
             onClick={() =>
@@ -283,8 +283,8 @@ function CriteriaEditor({
           >
             Add criterion
           </Button>
-        </Box>
-      </Stack>
+        </div>
+      </div>
     </Panel>
   );
 }

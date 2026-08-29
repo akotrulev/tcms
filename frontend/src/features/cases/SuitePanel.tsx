@@ -1,5 +1,5 @@
-import { Box, Button, Stack, Tooltip, Typography } from '@mui/material';
-import HistoryIcon from '@mui/icons-material/History';
+import { History } from 'lucide-react';
+import { buttonVariants, Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui';
 import { Link as RouterLink } from 'react-router-dom';
 import type { Suite } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
@@ -44,16 +44,13 @@ import { ReviewPanel } from '../review/ReviewPanel';
  */
 export function SuitePanel({ projectId, suite }: { projectId: string; suite: Suite }) {
   return (
-    <Box data-testid="Cases.SuitePanel">
+    <div data-testid="Cases.SuitePanel">
       <Panel testId="Cases.SuitePanel.Header" dense>
-        <Stack
-          direction="row"
-          sx={{ alignItems: 'center', gap: 1.5, flexWrap: 'wrap', px: 1.5, py: 1 }}
-        >
+        <div className="flex flex-wrap items-center gap-3 px-3 py-2">
           <Identifier variant="strong">{suite.key}</Identifier>
-          <Typography variant="body2" sx={{ fontWeight: 600 }} data-testid="Cases.SuitePanel.Name">
+          <span className="text-sm font-semibold text-ink" data-testid="Cases.SuitePanel.Name">
             {suite.name}
-          </Typography>
+          </span>
           <LifecycleChip status={suite.lifecycleStatus} testId="Cases.SuitePanel.Lifecycle" />
           {/*
             The membership figure, worded rather than left as a bare number: the three arms overlap
@@ -67,28 +64,33 @@ export function SuitePanel({ projectId, suite }: { projectId: string; suite: Sui
             mechanisms while showing one number for all of them. A reader deciding whether a suite
             is a filing structure or a saved query cannot tell from the union alone.
           */}
-          <Tooltip
-            title={`${formatCount(suite.filedCount)} filed · ${formatCount(suite.addedCount)} added · ${formatCount(suite.taggedCount)} matched by tag. They overlap, so they do not add up to ${formatCount(suite.caseCount)}.`}
-          >
-            <Typography
-              variant="caption"
-              sx={{ color: 'text.secondary' }}
-              data-testid="Cases.SuitePanel.CaseCount"
-            >
-              {suite.caseCount} {suite.caseCount === 1 ? 'case' : 'cases'} filed, added or tagged here
-            </Typography>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-xs text-ink-2" data-testid="Cases.SuitePanel.CaseCount">
+                {suite.caseCount} {suite.caseCount === 1 ? 'case' : 'cases'} filed, added or tagged
+                here
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              {`${formatCount(suite.filedCount)} filed · ${formatCount(suite.addedCount)} added · ${formatCount(suite.taggedCount)} matched by tag. They overlap, so they do not add up to ${formatCount(suite.caseCount)}.`}
+            </TooltipContent>
           </Tooltip>
-          <Box sx={{ flex: 1 }} />
-          <Button
-            component={RouterLink}
+          <div className="flex-1" />
+          {/*
+            A `<Link>` wearing the button's classes rather than a `<Button>` with `component=`:
+            this navigates, so it must be an anchor — middle-click, copy-link and the browser's own
+            focus order all come from the element, not from what it looks like. `buttonVariants`
+            exists for exactly this.
+          */}
+          <RouterLink
             to={`/projects/${projectId}/suites/${suite.id}/history`}
-            size="small"
-            startIcon={<HistoryIcon />}
+            className={buttonVariants({ size: 'sm' })}
             data-testid="Cases.SuitePanel.HistoryLink"
           >
+            <History aria-hidden className="size-3.5" />
             Execution history
-          </Button>
-        </Stack>
+          </RouterLink>
+        </div>
       </Panel>
 
       {/*
@@ -99,6 +101,6 @@ export function SuitePanel({ projectId, suite }: { projectId: string; suite: Sui
         offered rather than offered wrongly; `ReviewPanel`'s own prop is optional for this reason.
       */}
       <ReviewPanel projectId={projectId} subjectType="SUITE" subjectId={suite.id} />
-    </Box>
+    </div>
   );
 }

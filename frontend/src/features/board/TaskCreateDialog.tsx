@@ -1,14 +1,16 @@
+import { Banner } from '../../components/kit';
+import { Field } from '../../components/kit/Field';
 import {
-  Alert,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-} from '@mui/material';
+  Input,
+  Textarea,
+} from '../../components/ui';
+import { NativeSelect } from '../../components/ui/native-select';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -194,77 +196,91 @@ export function TaskCreateDialog({
   });
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid={TestId}>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
+      <DialogContent className="max-w-lg" data-testid={TestId}>
       <form onSubmit={submit} noValidate aria-busy={create.isPending}>
-        <DialogTitle>New task</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+        <DialogHeader>
+          <DialogTitle>New task</DialogTitle>
+        </DialogHeader>
+        <div className="mt-4 flex flex-col gap-4">
+          <div className="flex flex-col mt-2 gap-4">
             {errors.root && (
-              <Alert severity="error" role="alert" data-testid={`${TestId}.Error`}>
+              <div data-testid={`${TestId}.Error`}>
+            <Banner tone="bad"><span role="alert">
                 {errors.root.message}
-              </Alert>
+              </span></Banner>
+          </div>
             )}
-            <TextField
+            <Field
               label="Title"
-              required
+              htmlFor="title"
+              error={errors.title?.message}
+              help="What needs doing — “Update the refund cases”."
+            >
+            <Input
+              id="title"
               autoComplete="off"
-              error={!!errors.title}
-              helperText={errors.title?.message ?? 'What needs doing — “Update the refund cases”.'}
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Title`, maxLength: MAX_TITLE } }}
+              required
+              aria-invalid={!!errors.title}
+              maxLength={MAX_TITLE}
+              data-testid={`${TestId}.Title`}
               {...register('title')}
             />
-            <TextField
+            </Field>
+            <Field
               label="Description"
-              multiline
-              minRows={2}
+              htmlFor="description"
+              error={errors.description?.message}
+              help="Optional."
+            >
+            <Textarea
+              id="description"
               autoComplete="off"
-              error={!!errors.description}
-              helperText={errors.description?.message ?? 'Optional.'}
-              slotProps={{
-                htmlInput: { 'data-testid': `${TestId}.Description`, maxLength: MAX_DESCRIPTION },
-              }}
+              rows={2}
+              aria-invalid={!!errors.description}
+              maxLength={MAX_DESCRIPTION}
+              data-testid={`${TestId}.Description`}
               {...register('description')}
             />
-            <Stack direction="row" spacing={2}>
-              <TextField
+            </Field>
+            <div className="flex gap-4">
+              <Field
                 label="Priority"
-                select
-                fullWidth
-                defaultValue="MEDIUM"
-                error={!!errors.priority}
-                // Named rather than left to a bare enum: this is board priority, which §6l is
-                // explicit is NOT the case's priority — a P1 case may be a low-priority thing to
-                // update.
-                helperText={errors.priority?.message ?? 'How urgent the work is.'}
-                slotProps={{ htmlInput: { 'data-testid': `${TestId}.Priority` } }}
+                htmlFor="priority"
+                error={errors.priority?.message}
+                help="How urgent the work is."
+              >
+              <NativeSelect
+                id="priority"
+                aria-invalid={!!errors.priority}
+                data-testid={`${TestId}.Priority`}
                 {...register('priority')}
               >
-                {(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const).map((priority) => (
-                  <MenuItem
-                    key={priority}
-                    value={priority}
-                    data-testid={`${TestId}.Priority.${priority}`}
-                  >
-                    {priorityLabels[priority]}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField
+
+                              {(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const).map((priority) => (
+                                <option key={priority}
+                                  value={priority}
+                                  data-testid={`${TestId}.Priority.${priority}`}
+                                >
+                                  {priorityLabels[priority]}
+                                </option>
+                              ))}
+              </NativeSelect>
+              </Field>
+              <Field
                 label="Due"
-                type="date"
-                fullWidth
-                error={!!errors.dueDate}
-                // A date in the past is accepted, by the server too: recording something already
-                // late is the most common reason to type a task at all, and the board has an
-                // `overdue` flag whose entire job is showing it.
-                helperText={errors.dueDate?.message ?? 'Optional.'}
-                slotProps={{
-                  inputLabel: { shrink: true },
-                  htmlInput: { 'data-testid': `${TestId}.DueDate` },
-                }}
+                htmlFor="due"
+                error={errors.dueDate?.message}
+                help="Optional."
+              >
+              <Input
+                id="due"
+                aria-invalid={!!errors.dueDate}
+                data-testid={`${TestId}.DueDate`}
                 {...register('dueDate')}
               />
-            </Stack>
+              </Field>
+            </div>
 
             {/*
               The assignee. Disabled while the list is loading rather than rendered empty — an
@@ -275,56 +291,57 @@ export function TaskCreateDialog({
               members request that 500s costs the assignment and not the task. The alternative —
               failing the whole dialog — would make an optional field able to stop a create.
             */}
-            <TextField
+            <Field
               label="Assignee"
-              select
-              fullWidth
+              htmlFor="assignee"
+              error={errors.assigneeId?.message}
+              help={(members.isError
+                              ? "Couldn't load the project's members. The task can still be added unassigned."
+                              : members.isPending
+                                ? 'Loading the people on this project…'
+                                : 'Leave unassigned so anyone on the project can pick it up.')}
+            >
+            <NativeSelect
+              id="assignee"
               disabled={members.isPending}
-              defaultValue=""
-              error={!!errors.assigneeId}
-              helperText={
-                errors.assigneeId?.message ??
-                (members.isError
-                  ? "Couldn't load the project's members. The task can still be added unassigned."
-                  : members.isPending
-                    ? 'Loading the people on this project…'
-                    : 'Leave unassigned so anyone on the project can pick it up.')
-              }
-              slotProps={{ htmlInput: { 'data-testid': `${TestId}.Assignee` } }}
+              aria-invalid={!!errors.assigneeId}
+              data-testid={`${TestId}.Assignee`}
               {...register('assigneeId')}
             >
-              <MenuItem value="" data-testid={`${TestId}.Assignee.None`}>
-                Unassigned
-              </MenuItem>
-              {(members.data ?? []).map((person) => (
-                <MenuItem
-                  key={person.id}
-                  value={person.id}
-                  // Keyed by the person's id, not a shared `.Option` — the test-id audit
-                  // requires distinct locators, and selecting a MUI option is a click on the
-                  // menu item rather than a value assignment.
-                  data-testid={`${TestId}.Assignee.${person.id}`}
-                >
-                  {person.displayName}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
+
+                          <option value="" data-testid={`${TestId}.Assignee.None`}>
+                            Unassigned
+                          </option>
+                          {(members.data ?? []).map((person) => (
+                            <option key={person.id}
+                              value={person.id}
+                              // Keyed by the person's id, not a shared `.Option` — the test-id audit
+                              // requires distinct locators, and selecting a MUI option is a click on the
+                              // menu item rather than a value assignment.
+                              data-testid={`${TestId}.Assignee.${person.id}`}
+                            >
+                              {person.displayName}
+                            </option>
+                          ))}
+            </NativeSelect>
+            </Field>
+          </div>
+        </div>
+        <DialogFooter>
           <Button onClick={onClose} data-testid={`${TestId}.Cancel`}>
             Cancel
           </Button>
           <Button
             type="submit"
-            variant="contained"
+            variant="primary"
             disabled={create.isPending}
             data-testid={`${TestId}.Submit`}
           >
             {create.isPending ? 'Adding…' : 'Add task'}
           </Button>
-        </DialogActions>
+        </DialogFooter>
       </form>
+    </DialogContent>
     </Dialog>
   );
 }
