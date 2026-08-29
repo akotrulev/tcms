@@ -206,7 +206,7 @@ pointing at the drawing would produce a second, drifting design source — which
 | 12 | T12 — Family 3, Execution | open | `ExecutionPage` renders with the collapsed rail and number-key verdicts | T5, T11 |
 | 13 | T13 — Family 4, Board & people | **done** | Board · MyWork · TeamBoard · OrgChart; the MUI tree-view package unimported | T3, T8 |
 | 14 | T14 — Family 5, Authoring | open | Docs · DocPageEditor · FeatureImport at the 70ch prose measure | T11 |
-| 15 | T15 — Family 6 & 7, Analytics and Settings | open | Dashboard · PlanStatistics per §6; the **11** settings/account screens (§8's nine plus the two it does not list) | T10 |
+| 15 | T15 — Family 6 & 7, Analytics and Settings | **done** | Dashboard · PlanStatistics per §6; the **11** settings/account screens (§8's nine plus the two it does not list) | T10 |
 | 16 | T16 — MUI removed, preflight on | open | No `@mui`/`@emotion`/`notistack` in `package.json` or any import; Preflight imported; `muiTestIds.ts` deleted with **both** citations | T6–T15 |
 | 17 | T17 — Gates and bundle measurement | open | The four gates green on `shanks` (the **only** gate pass for T6–T16 — see the directive in the header); before/after bundle numbers recorded; preflight layout damage fixed | T16 |
 
@@ -1329,9 +1329,45 @@ order. Six `lib/muiTestIds` importers are this task's (`ReviewSettingsPage`, `Tr
 `NotificationChannelDialog`, `TeamDialog`, `TeamMembersDialog`, `ProviderFormDialog`) — each port
 drops its own; the full ownership map is under D3.
 
-- [ ] **Steps 1–2:** Dashboard, PlanStatistics. **Steps 3–8:** Review, Classification,
+- [x] **Steps 1–2:** Dashboard, PlanStatistics. **Steps 3–8:** Review, Classification,
 Notifications, Trackers, ProjectAccess, AuditLog. **Steps 9–13:** Teams, ApiTokens, SsoProviders,
 AccountSecurity, TrackerConnections. **Step 14:** Commit — no gate here; T17 runs it.
+
+**DONE** (`e330de34` steps 1–2 · `8390db78` steps 3–8 · `bc7d0e7a` steps 9–13). Where it differs
+from the steps above:
+
+- **Thirteen screens became twenty-eight files.** The task's own list names the pages; the
+  `grep` in its "done when" is over `features/{dashboard,settings,admin,audit,account}/**`, which
+  also holds ten dialogs nobody had assigned — Grant/Invite/Remove/IssueToken/RevokeToken/
+  DeleteTeam/ClassificationValue, plus `RoleAssignmentTable` and `RoleReference`. They are ported
+  here, and they had to be: `ProjectAccessPage` renders two of them.
+- **Three new kit files**, none of them in §5's nine and all three earned by repetition across
+  this task's screens: `kit/FigurePanel` (the render's `.fig` frame — `Figure.tsx` beside it is
+  the *drawings*), `kit/SettingRow` + `SettingGroup` (family 7's two-column rule, with the
+  blast-radius slot), `kit/Field` (label above, one column, refusal under the control —
+  `ConditionEditDialog` has a private copy from T7 that should collapse onto it).
+- **`ui/native-select.tsx` is new, and it is a decision, not a convenience.** Every picker on
+  these screens chooses one word from a closed set of three or four. The platform control is
+  keyboard- and screen-reader-operable with no code of ours, opens as the system picker on a
+  phone, and — the finding T13 recorded — is the one `@radix-ui/react-select` cannot be under
+  jsdom, whose `hasPointerCapture` it calls and `src/test/setup.ts` does not polyfill.
+- **Five test files were touched and no expectation in any of them moved.** Four MUI-internal
+  select helpers (`.closest('.MuiInputBase-root')` → a portalled listbox) in
+  `NotificationSettingsPage.test`, `GrantRoleDialog.test` and `IssueTokenDialog.test`, and one
+  `.closest('.MuiFormControl-root')`. They addressed markup this task deleted; leaving them would
+  have handed T17 four red files with nothing to fix but the helpers.
+- **`ReviewSettingsPage`'s blast-radius panel became the rows' own consequences**, keeping every
+  `ReviewSettings.Impact.*` testid. Family 7's rule is that the consequence belongs *to the
+  setting*, counted before the control moves.
+- **`AuditLogPage` is the kit's `Timeline`**, per §5's three owners for it, and its
+  `TablePagination` is a stated window (`25–50 of 1 942`) with Newer/Older.
+- **Two test files still import `@mui/material/styles`** — `HealthPanel.test` and
+  `AccountSecurityPage.test` wrap in `ThemeProvider theme={theme}`, as `src/test/TestProviders.tsx`
+  and three other suites do. That is `app/theme.ts`'s deletion, which is **T16's**.
+- Two second copies are left named rather than silently made: `PlanStatisticsPage`'s `PLAN_TONE`
+  (T10 put a private one in `PlanListPage`, which this lane may not edit) and the two
+  `*StateColors` maps in `lib/{apiTokens,labels}.ts`, whose one consumer each is now a local
+  `satisfies Record<…, BadgeTone>`. Both collapse when MUI goes.
 
 ---
 
