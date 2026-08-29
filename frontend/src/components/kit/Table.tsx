@@ -61,12 +61,36 @@ export function TableRow({ selected, children, className, style, ...rest }: Tabl
 
 export interface TableHeaderCellProps extends ThHTMLAttributes<HTMLTableCellElement> {
   align?: 'left' | 'right';
-  sortable?: boolean;
+  /**
+   * The column's current sort, or `false` for a column that sorts but is not the one sorted by.
+   * Omit entirely for a column that cannot be sorted — its presence is what puts `aria-sort` on
+   * the header and makes the label a button.
+   */
+  sortDirection?: 'asc' | 'desc' | false;
+  onSort?: () => void;
 }
 
-export function TableHeaderCell({ align = 'left', sortable, children, className, ...rest }: TableHeaderCellProps) {
+/**
+ * A sortable head is a `<button>` inside the `<th>`, never a click handler on the `<th>` itself —
+ * the latter is unreachable from the keyboard, and `aria-sort` on a cell nothing can operate
+ * announces an order the reader cannot change. The arrow appears only on the column actually
+ * sorted, as in the render: an arrow on every sortable head is ten arrows competing with the data.
+ */
+export function TableHeaderCell({
+  align = 'left',
+  sortDirection,
+  onSort,
+  children,
+  className,
+  ...rest
+}: TableHeaderCellProps) {
+  const sortable = sortDirection !== undefined;
+
   return (
     <th
+      aria-sort={
+        sortable ? (sortDirection === 'asc' ? 'ascending' : sortDirection === 'desc' ? 'descending' : 'none') : undefined
+      }
       className={cn(
         'sticky top-0 whitespace-nowrap border-b border-white/14 bg-paper px-3.5 py-2.5',
         'font-mono text-[11px] font-medium uppercase tracking-[.07em] text-ink-3',
@@ -75,11 +99,24 @@ export function TableHeaderCell({ align = 'left', sortable, children, className,
       )}
       {...rest}
     >
-      {children}
-      {sortable && (
-        <span aria-hidden className="ml-[5px] text-[10px] text-steel">
-          ↓
-        </span>
+      {onSort ? (
+        <button
+          type="button"
+          onClick={onSort}
+          className={cn(
+            'inline-flex items-center gap-[5px] text-inherit uppercase tracking-[inherit] hover:text-ink-2',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-given',
+          )}
+        >
+          {children}
+          {sortDirection && (
+            <span aria-hidden className="text-[10px] text-steel">
+              {sortDirection === 'desc' ? '\u2193' : '\u2191'}
+            </span>
+          )}
+        </button>
+      ) : (
+        children
       )}
     </th>
   );
