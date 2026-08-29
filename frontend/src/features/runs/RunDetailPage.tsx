@@ -16,7 +16,6 @@ import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import type { RunStatus, TestRunDetail } from '../../api/types';
 import { useProject, useRun, useSetRunStatus } from '../../api/queries';
-import { useSnackbar } from 'notistack';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
@@ -29,6 +28,7 @@ import { isRunClosed, runStatusColors, runStatusLabels, statusLabels } from '../
 import { describeRunCode } from '../../lib/links';
 import { inputTestId } from '../../lib/muiTestIds';
 import { ScrollX } from '../../components/ScrollX';
+import { toast } from '../../notifications/toast';
 import { CaseKeyLink, ExecuteCaseLink } from './ExecutionRowLinks';
 import { FailureSummary } from './FailureSummary';
 import { RunCloneDialog } from './RunCloneDialog';
@@ -322,7 +322,6 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
   const [filter, setFilter] = useState<Filter>('ALL');
   const [selection, setSelection] = useState<string[]>([]);
   const [assignOpen, setAssignOpen] = useState(false);
-  const { enqueueSnackbar } = useSnackbar();
   const executions = data.executions ?? [];
   const frozen = isRunClosed(data.status);
 
@@ -667,7 +666,7 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
             parts.push(`${formatCount(result.unchanged.length)} already assigned`);
           }
           if (result.skipped.length) parts.push(`${formatCount(result.skipped.length)} skipped`);
-          enqueueSnackbar(parts.join(' · '), {
+          toast(parts.join(' · '), {
             variant: result.skipped.length ? 'warning' : 'success',
           });
           setSelection([]);

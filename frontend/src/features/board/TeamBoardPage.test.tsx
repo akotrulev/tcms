@@ -1,5 +1,4 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
-import { SnackbarProvider } from 'notistack'
 import { Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
@@ -96,11 +95,9 @@ function renderPage() {
     /* Through a `<Route>`, never bare — §69's trap: rendered bare, `useParams` gives `teamId: ''`
        and the query asks for a board nobody named, which several assertions here would survive. */
     <TestProviders client={createTestQueryClient()} route={`/teams/${TEAM}/board`}>
-      <SnackbarProvider>
-        <Routes>
-          <Route path="/teams/:teamId/board" element={<TeamBoardPage />} />
-        </Routes>
-      </SnackbarProvider>
+      <Routes>
+        <Route path="/teams/:teamId/board" element={<TeamBoardPage />} />
+      </Routes>
     </TestProviders>,
   )
 }

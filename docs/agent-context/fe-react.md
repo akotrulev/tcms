@@ -1,6 +1,6 @@
 # fe-react — orientation cache
 
-**Baseline commit:** `5933ca27` · **Written:** 2026-08-29 · **Verdict on creation:** FULL (no cache existed)
+**Baseline commit:** `6de8c9a9` · **Written:** 2026-08-29 · **Verdict on creation:** FULL (no cache existed)
 
 Per `ep-agent-orientation-cache`: validate this against a git delta before trusting it. A changed
 `frontend/package.json`, `package-lock.json`, `tsconfig*.json` or `vite.config.ts` invalidates the
@@ -96,6 +96,49 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 
 ## Session log
 
+- **2026-08-29** — T8 (family 9, the states). **`notistack` is imported by no file.** The split
+  survives the swap and is now *two surfaces, one of them sonner*: `<Toaster />` replaces
+  `SnackbarProvider` in exactly its position in `app/Providers.tsx` (bottom-right, `visibleToasts`
+  3) and takes success/info/warning; `NotificationsProvider` keeps its own portal, its dedupe,
+  its ten-second roll-up and its cap, because sonner owns its list and has none of those. The plan's
+  "route failures through `toast.error`" was refused for that reason — see T8's landing note.
+  The transient surface is a **module function**, `notifications/toast.ts` →
+  `toast(message, { variant })`, not a hook: `useNotify()` throws outside `NotificationsProvider`
+  and `test/TestProviders.tsx` mounts none, so a hook would have meant *adding* a provider to six
+  tests instead of dropping one. sonner's queue is a module singleton, so only `<Toaster />` is
+  mounted. **`variant: 'error'` now has no timer** — under notistack the provider owned the
+  duration and three page call sites were raising failures onto a 4 s auto-hide, §7 broken past
+  every gate. Two facts about sonner 2.0.8 worth keeping: it emits **no `role`** on a toast (the
+  aria-live region is `polite`), so the plan's `getByRole('alert')` assertion only holds on
+  `NotificationsProvider`; and a toast renders **a tick after** it is raised, so a test needs
+  `vi.useFakeTimers({ shouldAdvanceTime: true })` and `findBy*`, never a frozen clock. The
+  `testId` option puts a real `data-testid` on the toast. `features/help` is now MUI-free except
+  through `DataRegion` and `ScrollX`; **`sections.tsx` (898 lines) needed no edit** — it imports
+  only `./prose` and `./RoleMatrix`. Help renders on `DocumentSurface measure="prose"` with no
+  `PageHeader`, so the section title is the `<h2>` the tests already expected.
+
+- **2026-08-29** — T9 (the grid engine). `CaseGrid` runs on **TanStack Table v9.2.4** — `useTable`
+  + `tableFeatures({ rowPaginationFeature, rowSelectionFeature, rowSortingFeature })`, NOT v8's
+  `useReactTable`/`getCoreRowModel()`, and not `stockFeatures`. `@mui/x-data-grid` is now imported
+  by no file (its dependency line dies in T16). The grid keeps its whole server-side contract —
+  page/size/sort in the URL via `useCaseFilters`, `rowCount` from the server, selection keyed by
+  domain id — and renders its own pager (`Cases.Pager.*`), which `DataGrid` used to supply.
+  `kit/Table`'s `TableHeaderCell` gained `sortDirection` + `onSort` (a `<button>` in the `<th>`,
+  `aria-sort` on it) and lost the decorative `sortable` prop nothing consumed. Two notes for the
+  next lane: a heterogeneous column array needs `helper.columns([...])` or `tsc` reports two
+  unrelated `ColumnDefBase_Core` types; and `manualFiltering` does not typecheck without
+  `columnFilteringFeature`, which is fine — an unregistered feature is a stronger guarantee than a
+  flag. Column widths and the kit's second line travel in the `columnMeta` type slot.
+- **2026-08-29** — T6 (family 8, the threshold). `features/auth` is the **first MUI-free feature
+  directory**: `LoginPage`, `AcceptInvitationPage` and `SsoCallbackPage` render from
+  `components/ui` + `components/kit`, plus a local `features/auth/ThresholdLayout.tsx` (the `.thr`
+  two-column shell and six one-liners — deliberately not in `kit`, which is §5's nine). `Identifier`
+  was **not** used: it is MUI, so the wordmark and the invited address are `.mk`/`.id` inlined; T16
+  decides whether `Identifier` is ported or dissolved. RHF + Radix: the remember-me switch needs a
+  `Controller` (Radix `Switch` is a button, not a native input) — `register()` alone does not bind
+  it. **The full local suite is red and it is not this change** — a nondeterministic 4/16/8 failures
+  across a moving set of files, all `Failed to parse URL from /api/v1/…`, present with the change
+  stashed; the tree also carried an uncommitted T9 lane. See 007's T6 Step 3.
 - **2026-08-29** — FULL orientation, no code written. Compared `CaseEditorPage`'s New-case state
   against `assets/case-authoring-redesign.html` frame B; found the IA implemented and the design
   not, in seven places. Measured the MUI footprint (156 files, but only 8 coupled to internals; X

@@ -1,8 +1,7 @@
-import { Alert, AlertTitle, Box, Button, IconButton, Stack, Typography } from '@mui/material';
-import CloseIcon from '@mui/icons-material/Close';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import { Copy, X } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Identifier } from '../components/Identifier';
+import { Button } from '../components/ui';
+import { cn } from '../lib/cn';
 import {
   NotificationsContext,
   type NotifyErrorInput,
@@ -20,8 +19,8 @@ import {
  *
  *   1. **Errors never auto-dismiss.** A timed-out error the user was scrolling past is an
  *      unreported bug. Dismissal is the close button, and nothing else. (Success toasts *may*
- *      auto-dismiss — those stay with notistack, which is why this surface handles only
- *      failures and prompts.)
+ *      auto-dismiss — those go through ~~notistack~~ `notifications/toast.ts`, which is why this
+ *      surface handles only failures and prompts.)
  *   2. **Deduped by cause, with a count.** A call that fails three times is one entry saying
  *      "3 times", not three stacked copies whose own close buttons scroll off-screen.
  *   3. **Rolled up by cause, not by call.** One backend 503 failing six regions is *one*
@@ -171,37 +170,31 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         The region exists in the DOM unconditionally, empty or not. A live region mounted at
         announce time does not announce — the screen reader has to be observing the node
         before its content changes.
+
+        `z-1250` is above the app bar (1100) and the drawer (1200) and below modals (1300): a
+        dialog the user is working in must not be covered by a notification about something else.
       */}
-      <Box
+      <div
         data-testid="Notifications.Region"
         aria-live="polite"
         aria-label="Notifications"
-        sx={{
-          position: 'fixed',
-          top: 12,
-          right: 12,
-          // Above the app bar (1100) and the drawer (1200), below modals (1300): a dialog the
-          // user is working in must not be covered by a notification about something else.
-          zIndex: 1250,
-          width: { xs: 'calc(100vw - 24px)', sm: 400 },
-          maxWidth: 'calc(100vw - 24px)',
-          maxHeight: 'calc(100vh - 24px)',
-          overflowY: 'auto',
-          pointerEvents: 'none',
-        }}
+        className={
+          'pointer-events-none fixed top-3 right-3 z-[1250] max-h-[calc(100vh-24px)] ' +
+          'w-[calc(100vw-24px)] overflow-y-auto sm:w-100'
+        }
       >
-        <Stack sx={{ gap: 1 }}>
+        <div className="flex flex-col gap-2">
           {visible.map((group) => (
             <NotificationCard key={group.key} group={group} onDismiss={dismiss} />
           ))}
 
           {hiddenCount > 0 && (
             <Button
-              size="small"
-              variant="outlined"
+              size="sm"
+              variant="ghost"
               onClick={() => setExpanded(true)}
               data-testid="Notifications.ShowMore"
-              sx={{ pointerEvents: 'auto', bgcolor: 'background.paper' }}
+              className="pointer-events-auto bg-panel"
             >
               {hiddenCount} more {hiddenCount === 1 ? 'issue' : 'issues'}
             </Button>
@@ -209,16 +202,17 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
           {groups.length > 1 && (
             <Button
-              size="small"
+              size="sm"
+              variant="quiet"
               onClick={dismissAll}
               data-testid="Notifications.DismissAll"
-              sx={{ pointerEvents: 'auto', alignSelf: 'flex-end' }}
+              className="pointer-events-auto self-end"
             >
               Dismiss all
             </Button>
           )}
-        </Stack>
-      </Box>
+        </div>
+      </div>
     </NotificationsContext>
   );
 }
@@ -297,81 +291,86 @@ function NotificationCard({ group, onDismiss }: { group: Group; onDismiss: (id: 
   const dismissGroup = () => group.entries.forEach((entry) => onDismiss(entry.id));
 
   return (
-    <Alert
-      severity={isPrompt ? 'info' : 'error'}
+    <div
       // `role="alert"` for a failure so it interrupts; a prompt is informational and rides the
       // container's polite region instead of talking over whatever the user is doing.
       role={isPrompt ? 'status' : 'alert'}
       data-testid={isPrompt ? 'Notifications.Prompt' : 'Notifications.Error'}
-      variant="filled"
-      sx={{ pointerEvents: 'auto', alignItems: 'flex-start', boxShadow: 3 }}
-      action={
-        <IconButton
-          size="small"
-          color="inherit"
-          aria-label="Close"
-          onClick={dismissGroup}
-          data-testid={isPrompt ? 'Notifications.Prompt.Close' : 'Notifications.Error.Close'}
-        >
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      }
-    >
-      <AlertTitle sx={{ fontSize: '0.8125rem', fontWeight: 600, mb: 0.25 }}>
-        {isPrompt ? 'Update available' : (group.title ?? "Couldn't load this")}
-      </AlertTitle>
-
-      <Typography variant="body2">{group.message}</Typography>
-
-      {/* Volume, so a repeated failure reads as repeated rather than as one blip. */}
-      {group.count > 1 && (
-        <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.9 }}>
-          Occurred {group.count} times
-          {regions.length > 1 ? ` across ${regions.length} areas` : ''}
-        </Typography>
+      style={{
+        borderLeftColor: isPrompt ? 'var(--color-steel)' : 'var(--color-failed)',
+      }}
+      className={cn(
+        'pointer-events-auto flex items-start gap-[11px] rounded-lg border border-white/8',
+        'border-l-[3px] bg-ground px-3.5 py-3 text-[13px] leading-[1.5] text-ink-2',
+        'shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]',
       )}
+    >
+      <div className="min-w-0 flex-1">
+        <b className="mb-0.5 block font-[550] text-ink">
+          {isPrompt ? 'Update available' : (group.title ?? "Couldn't load this")}
+        </b>
 
-      {correlationId && (
-        <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5, mt: 0.75 }}>
-          <Typography variant="caption">Reference</Typography>
-          <Identifier data-testid="Notifications.Error.CorrelationId">{correlationId}</Identifier>
-          <IconButton
-            size="small"
-            color="inherit"
-            aria-label="Copy reference"
-            data-testid="Notifications.Error.CopyCorrelationId"
+        <p className="m-0">{group.message}</p>
+
+        {/* Volume, so a repeated failure reads as repeated rather than as one blip. */}
+        {group.count > 1 && (
+          <p className="m-0 mt-1 text-[11.5px] text-ink-4">
+            Occurred {group.count} times
+            {regions.length > 1 ? ` across ${regions.length} areas` : ''}
+          </p>
+        )}
+
+        {correlationId && (
+          <div className="mt-1.5 flex items-center gap-1.5 font-mono text-[10.5px] text-ink-4">
+            <span>ref</span>
+            <span data-testid="Notifications.Error.CorrelationId">{correlationId}</span>
+            <button
+              type="button"
+              aria-label="Copy reference"
+              data-testid="Notifications.Error.CopyCorrelationId"
+              className="cursor-pointer text-ink-4 hover:text-ink-2"
+              onClick={() => {
+                // Clipboard access is unavailable on an insecure origin and can reject when the
+                // document isn't focused. A failed copy must not take the notification down.
+                void navigator.clipboard?.writeText(correlationId).catch(() => {});
+              }}
+            >
+              <Copy aria-hidden className="size-3.5" />
+            </button>
+          </div>
+        )}
+
+        {(isPrompt || primary.onRetry) && (
+          <Button
+            size="sm"
+            variant={isPrompt ? 'primary' : 'ghost'}
+            data-testid={isPrompt ? 'Notifications.Prompt.Action' : 'Notifications.Error.Retry'}
+            className="mt-2.5"
             onClick={() => {
-              // Clipboard access is unavailable on an insecure origin and can reject when the
-              // document isn't focused. A failed copy must not take the notification down.
-              void navigator.clipboard?.writeText(correlationId).catch(() => {});
+              if (isPrompt) {
+                primary.onAction?.();
+                return;
+              }
+              // Retrying every entry in the group: one 503 that took out six regions should
+              // recover all six from one click, not make the user dismiss and retry each.
+              group.entries.forEach((entry) => entry.onRetry?.());
+              dismissGroup();
             }}
           >
-            <ContentCopyIcon sx={{ fontSize: 14 }} />
-          </IconButton>
-        </Stack>
-      )}
+            {isPrompt ? primary.actionLabel : 'Try again'}
+          </Button>
+        )}
+      </div>
 
-      {(isPrompt || primary.onRetry) && (
-        <Button
-          size="small"
-          color="inherit"
-          variant="outlined"
-          data-testid={isPrompt ? 'Notifications.Prompt.Action' : 'Notifications.Error.Retry'}
-          sx={{ mt: 1 }}
-          onClick={() => {
-            if (isPrompt) {
-              primary.onAction?.();
-              return;
-            }
-            // Retrying every entry in the group: one 503 that took out six regions should
-            // recover all six from one click, not make the user dismiss and retry each.
-            group.entries.forEach((entry) => entry.onRetry?.());
-            dismissGroup();
-          }}
-        >
-          {isPrompt ? primary.actionLabel : 'Try again'}
-        </Button>
-      )}
-    </Alert>
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={dismissGroup}
+        data-testid={isPrompt ? 'Notifications.Prompt.Close' : 'Notifications.Error.Close'}
+        className="mt-px cursor-pointer text-ink-4 hover:text-ink-2"
+      >
+        <X aria-hidden className="size-3.5" />
+      </button>
+    </div>
   );
 }

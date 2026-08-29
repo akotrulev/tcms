@@ -1,7 +1,6 @@
 import { Box, Button, Stack, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import { useSnackbar } from 'notistack';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCases, useClassification, useProject, useSuites } from '../../api/queries';
@@ -10,6 +9,7 @@ import { DataRegion, GridSkeleton } from '../../components/DataRegion';
 import { PermissionGate } from '../../components/PermissionGate';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { formatCount } from '../../lib/format';
+import { toast } from '../../notifications/toast';
 import { BulkActionDialog } from './BulkActionDialog';
 import { CaseFilterBar } from './CaseFilterBar';
 import { CaseGrid } from './CaseGrid';
@@ -32,7 +32,6 @@ import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
 export function CaseListPage() {
   const { projectId = '' } = useParams();
   const navigate = useNavigate();
-  const { enqueueSnackbar } = useSnackbar();
 
   const filterState = useCaseFilters();
   const { filters, sort, hasActiveFilters, setFilter, setPage, setSize, setSort, clearFilters } = filterState;
@@ -308,7 +307,7 @@ export function CaseListPage() {
           if (result.declinesEnded.length) {
             parts.push(`${formatCount(result.declinesEnded.length)} lost a condition exception`);
           }
-          enqueueSnackbar(parts.join(' · '), {
+          toast(parts.join(' · '), {
             variant: result.skipped.length || result.declinesEnded.length ? 'warning' : 'success',
           });
           setSelection([]);

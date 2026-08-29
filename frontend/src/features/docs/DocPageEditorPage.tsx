@@ -15,7 +15,6 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownwardOutlined';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpwardOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useSnackbar } from 'notistack';
 import { Controller, useFieldArray, useForm } from 'react-hook-form';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
@@ -28,6 +27,7 @@ import { PageHeader, Panel } from '../../components/PageHeader';
 import { describeError } from '../../lib/describeError';
 import { docBlockTypeLabel } from '../../lib/labels';
 import type { DocPage } from '../../api/types';
+import { toast } from '../../notifications/toast';
 
 /**
  * Editing a documentation page — the title and the blocks.
@@ -155,7 +155,6 @@ export function DocPageEditorPage() {
  */
 export function DocPageEditor({ projectId, page }: { projectId: string; page: DocPage }) {
   const navigate = useNavigate();
-  const { enqueueSnackbar } = useSnackbar();
   const update = useUpdateDocPage(projectId, page.id);
 
   const {
@@ -224,7 +223,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
             block.blockType === 'image' ? block.attachmentId || null : null,
         })),
       });
-      enqueueSnackbar(`Saved ${saved.key} as v${saved.currentVersionNo}`, { variant: 'success' });
+      toast(`Saved ${saved.key} as v${saved.currentVersionNo}`, { variant: 'success' });
       navigate(`/projects/${projectId}/docs/${saved.id}`);
     } catch (error) {
       /*

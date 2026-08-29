@@ -1,6 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { SnackbarProvider } from 'notistack'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionRecoveryContext } from '../../auth/sessionRecoveryContextValue'
@@ -168,11 +167,9 @@ function renderNew(search = '') {
   return render(
     <TestProviders client={createTestQueryClient()} route={`/projects/${PROJECT}/cases/new${search}`}>
       <SessionRecoveryContext.Provider value={sessionRecovery}>
-        <SnackbarProvider>
-          <Routes>
-            <Route path="/projects/:projectId/cases/new" element={<CaseEditorPage mode="create" />} />
-          </Routes>
-        </SnackbarProvider>
+        <Routes>
+          <Route path="/projects/:projectId/cases/new" element={<CaseEditorPage mode="create" />} />
+        </Routes>
       </SessionRecoveryContext.Provider>
     </TestProviders>,
   )
@@ -182,11 +179,9 @@ function renderEdit(caseId: string) {
   return render(
     <TestProviders client={createTestQueryClient()} route={`/projects/${PROJECT}/cases/${caseId}/edit`}>
       <SessionRecoveryContext.Provider value={sessionRecovery}>
-        <SnackbarProvider>
-          <Routes>
-            <Route path="/projects/:projectId/cases/:caseId/edit" element={<CaseEditorPage mode="edit" />} />
-          </Routes>
-        </SnackbarProvider>
+        <Routes>
+          <Route path="/projects/:projectId/cases/:caseId/edit" element={<CaseEditorPage mode="edit" />} />
+        </Routes>
       </SessionRecoveryContext.Provider>
     </TestProviders>,
   )

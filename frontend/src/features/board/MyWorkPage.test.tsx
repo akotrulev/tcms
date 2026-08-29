@@ -1,5 +1,4 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
-import { SnackbarProvider } from 'notistack'
 import { describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type { WorkItem } from '../../api/types'
@@ -71,9 +70,7 @@ function mockBoard(items: WorkItem[], paths: string[] = []) {
 function renderPage() {
   return render(
     <TestProviders client={createTestQueryClient()}>
-      <SnackbarProvider>
-        <MyWorkPage />
-      </SnackbarProvider>
+      <MyWorkPage />
     </TestProviders>,
   )
 }
@@ -152,9 +149,7 @@ describe('A card on a board that spans projects', () => {
     // is always the same value teaches that it never varies, which is exactly wrong here.
     render(
       <TestProviders client={createTestQueryClient()}>
-        <SnackbarProvider>
-          <Board items={[card({ id: '1', title: 'One project' })]} />
-        </SnackbarProvider>
+        <Board items={[card({ id: '1', title: 'One project' })]} />
       </TestProviders>,
     )
 

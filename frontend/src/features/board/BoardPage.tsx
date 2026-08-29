@@ -12,10 +12,10 @@ import {
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import { useSnackbar } from 'notistack';
 import { useState, type ReactNode } from 'react';
 import { useAnnounce } from '../../a11y/useAnnounce';
 import { PermissionGate } from '../../components/PermissionGate';
+import { toast } from '../../notifications/toast';
 import { TaskCreateDialog } from './TaskCreateDialog';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
@@ -91,7 +91,6 @@ export function BoardPage() {
   const project = useProject(projectId);
   const items = useWorkItems(projectId, mine);
   const [creating, setCreating] = useState(false);
-  const { enqueueSnackbar } = useSnackbar();
 
   return (
     <Box>
@@ -161,7 +160,7 @@ export function BoardPage() {
           projectId={projectId}
           open
           onClose={() => setCreating(false)}
-          onCreated={(task) => enqueueSnackbar(`Added “${task.title}”`, { variant: 'success' })}
+          onCreated={(task) => toast(`Added “${task.title}”`, { variant: 'success' })}
         />
       )}
 
@@ -281,7 +280,6 @@ function linkFor(item: WorkItem): string {
  * card with that project is noise the reader has to filter out on every glance.
  */
 export function Board({ items, crossProject = false }: { items: WorkItem[]; crossProject?: boolean }) {
-  const { enqueueSnackbar } = useSnackbar();
   const announce = useAnnounce();
   const move = useMoveWorkItem();
   const [dragging, setDragging] = useState<WorkItem | null>(null);
@@ -333,7 +331,7 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
         error instanceof ApiError ? error.detail : "Couldn't move that card. Check your connection and try again.";
       setRejected(reason);
       announce(`${item_.title} did not move. ${reason}`);
-      enqueueSnackbar("Couldn't move that card", { variant: 'error' });
+      toast("Couldn't move that card", { variant: 'error' });
     }
   };
 

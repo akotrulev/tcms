@@ -1,5 +1,5 @@
-import { Alert, Box, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
+import { Banner } from '../../components/kit';
 import { ScrollX } from '../../components/ScrollX';
 
 /**
@@ -16,24 +16,23 @@ import { ScrollX } from '../../components/ScrollX';
  *
  * These are deliberately thin. Anything a section needs that is more than a paragraph, a list or
  * a command block belongs in a real component beside `RoleMatrix` — not in another primitive here.
+ *
+ * **None of them carries a measure any more.** ~~`maxWidth: '78ch'` on every primitive~~ →
+ * superseded by design language §3: help is the fourth document surface, and the measure is the
+ * surface's — 70ch, set once by `kit/DocumentSurface`, so that a reader who has learnt a case, a
+ * doc page or a proposal has already learnt this page. A per-primitive width would silently
+ * out-vote it and give the same page two different columns depending on which primitive drew the
+ * paragraph.
  */
 
-/** A paragraph. `maxWidth` is a measure, not a layout: prose past ~78ch stops being readable. */
+/** A paragraph. */
 export function P({ children }: { children: ReactNode }) {
-  return (
-    <Typography variant="body2" sx={{ maxWidth: '78ch', mb: 1.5, lineHeight: 1.7 }}>
-      {children}
-    </Typography>
-  );
+  return <p className="mb-3 text-[14.5px] leading-[1.7] text-ink-2">{children}</p>;
 }
 
 /** A sub-heading inside a section. `h3`, because the section itself renders the `h2`. */
 export function H({ children }: { children: ReactNode }) {
-  return (
-    <Typography variant="h5" component="h3" sx={{ mt: 3, mb: 1 }}>
-      {children}
-    </Typography>
-  );
+  return <h3 className="mt-7 mb-2 text-[17px] font-[620] tracking-[-.015em] text-ink">{children}</h3>;
 }
 
 /**
@@ -43,39 +42,26 @@ export function H({ children }: { children: ReactNode }) {
  * inside a list item and get two different vertical rhythms on the same page.
  */
 export function List({ items, ordered }: { items: ReactNode[]; ordered?: boolean }) {
-  return (
-    <Box
-      component={ordered ? 'ol' : 'ul'}
-      sx={{ maxWidth: '78ch', pl: 3, mt: 0, mb: 2, '& li': { mb: 0.75 } }}
-    >
-      {items.map((item, index) => (
-        <li key={index}>
-          <Typography variant="body2" component="span" sx={{ lineHeight: 1.7 }}>
-            {item}
-          </Typography>
-        </li>
-      ))}
-    </Box>
+  const className = 'mt-0 mb-4 pl-6 text-[14.5px] leading-[1.7] text-ink-2';
+  const body = items.map((item, index) => (
+    <li key={index} className="mb-1.5">
+      {item}
+    </li>
+  ));
+
+  return ordered ? (
+    <ol className={`list-decimal ${className}`}>{body}</ol>
+  ) : (
+    <ul className={`list-disc ${className}`}>{body}</ul>
   );
 }
 
 /** Inline monospace, for a command, a path, an environment variable or a permission key. */
 export function Code({ children }: { children: ReactNode }) {
   return (
-    <Box
-      component="code"
-      className="identifier"
-      sx={{
-        fontSize: '0.8125rem',
-        px: 0.5,
-        py: 0.125,
-        borderRadius: 0.5,
-        bgcolor: 'action.hover',
-        whiteSpace: 'nowrap',
-      }}
-    >
+    <code className="rounded-[3px] bg-white/6 px-1 py-px font-mono text-[12.5px] whitespace-nowrap text-ink">
       {children}
-    </Box>
+    </code>
   );
 }
 
@@ -87,26 +73,11 @@ export function Code({ children }: { children: ReactNode }) {
  */
 export function Terminal({ children }: { children: string }) {
   return (
-    <Box
-      sx={{
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 1,
-        bgcolor: 'action.hover',
-        mb: 2,
-        maxWidth: '78ch',
-      }}
-    >
+    <div className="mb-4 rounded-lg border border-white/8 bg-field">
       <ScrollX>
-        <Box
-          component="pre"
-          className="identifier"
-          sx={{ m: 0, px: 2, py: 1.5, fontSize: '0.8125rem', lineHeight: 1.6 }}
-        >
-          {children}
-        </Box>
+        <pre className="m-0 px-4 py-3 font-mono text-[12.5px] leading-[1.6] text-ink-2">{children}</pre>
       </ScrollX>
-    </Box>
+    </div>
   );
 }
 
@@ -119,11 +90,9 @@ export function Note({
   children: ReactNode;
 }) {
   return (
-    <Alert severity={severity} variant="outlined" sx={{ maxWidth: '78ch', mb: 2 }}>
-      <Typography variant="body2" sx={{ lineHeight: 1.7 }}>
-        {children}
-      </Typography>
-    </Alert>
+    <Banner tone={severity === 'warning' ? 'warn' : 'steel'} className="mb-4">
+      <span className="leading-[1.6]">{children}</span>
+    </Banner>
   );
 }
 
@@ -136,21 +105,13 @@ export function Note({
  */
 export function Definitions({ items }: { items: { term: ReactNode; detail: ReactNode }[] }) {
   return (
-    <Stack component="dl" sx={{ maxWidth: '78ch', m: 0, mb: 2, gap: 1.25 }}>
+    <dl className="m-0 mb-4 flex flex-col gap-2.5">
       {items.map((item, index) => (
-        <Box key={index}>
-          <Typography component="dt" variant="body2" sx={{ fontWeight: 600 }}>
-            {item.term}
-          </Typography>
-          <Typography
-            component="dd"
-            variant="body2"
-            sx={{ m: 0, color: 'text.secondary', lineHeight: 1.7 }}
-          >
-            {item.detail}
-          </Typography>
-        </Box>
+        <div key={index}>
+          <dt className="text-[14.5px] font-semibold text-ink">{item.term}</dt>
+          <dd className="m-0 text-[14.5px] leading-[1.7] text-ink-3">{item.detail}</dd>
+        </div>
       ))}
-    </Stack>
+    </dl>
   );
 }

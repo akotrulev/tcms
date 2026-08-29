@@ -1,6 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { SnackbarProvider } from 'notistack'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
 import type { DocPage } from '../../api/types'
@@ -89,9 +88,7 @@ function renderEditor(subject: DocPage = page) {
         stack changed is a test of the wrong thing.
       */}
       <SessionRecoveryContext.Provider value={sessionRecovery}>
-        <SnackbarProvider>
-          <DocPageEditor projectId="p1" page={subject} />
-        </SnackbarProvider>
+        <DocPageEditor projectId="p1" page={subject} />
       </SessionRecoveryContext.Provider>
     </TestProviders>,
   )

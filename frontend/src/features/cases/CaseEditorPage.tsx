@@ -14,10 +14,10 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { useSnackbar } from 'notistack';
 import { useEffect, useRef, useState } from 'react';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import { useCan } from '../../auth/useCan';
+import { toast } from '../../notifications/toast';
 import { Controller, useForm, type FieldErrors, type FieldPath, type UseFormSetFocus } from 'react-hook-form';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
@@ -387,7 +387,6 @@ function CaseEditorForm({
   existing: TestCase | undefined;
 }) {
   const navigate = useNavigate();
-  const { enqueueSnackbar } = useSnackbar();
   const [searchParams] = useSearchParams();
   const suites = useSuites(projectId);
   const dimensions = useClassification(projectId);
@@ -859,7 +858,7 @@ function CaseEditorForm({
             : [];
 
         clearCaseText(textKey);
-        enqueueSnackbar(
+        toast(
           ended.length
             ? `Saved ${saved.key} as v${saved.currentVersionNo}`
               + ` · the move ended ${plural(ended.length, 'condition exception')}`
@@ -871,7 +870,7 @@ function CaseEditorForm({
         const created = await createCase.mutateAsync(payload);
         newCaseDraft.discard();
         clearCaseText(textKey);
-        enqueueSnackbar(`Created ${created.key}`, { variant: 'success' });
+        toast(`Created ${created.key}`, { variant: 'success' });
         navigate(`/projects/${projectId}/cases/${created.id}`);
       }
     } catch (error) {

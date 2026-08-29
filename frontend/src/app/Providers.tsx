@@ -1,11 +1,11 @@
 import { CssBaseline, ThemeProvider } from '@mui/material';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { SnackbarProvider } from 'notistack';
 import { useState, type ReactNode } from 'react';
 import { AnnouncerProvider } from '../a11y/AnnouncerProvider';
 import { AuthProvider } from '../auth/AuthContext';
 import { SessionRecoveryProvider, SessionReplayBridge } from '../auth/SessionRecoveryProvider';
 import { useSessionRecovery } from '../auth/useSessionRecovery';
+import { Toaster } from '../components/ui';
 import { NotificationsProvider } from '../notifications/NotificationsProvider';
 import { useNotify } from '../notifications/useNotify';
 import { createAppQueryClient } from './queryClient';
@@ -30,27 +30,28 @@ export function Providers({ children }: { children: ReactNode }) {
     <ThemeProvider theme={theme} defaultMode="system">
       <CssBaseline />
       {/*
-        Success and informational toasts keep notistack, anchored bottom-right, where
-        auto-dismiss is correct behaviour. Failures do NOT come through here — they go to
+        Success and informational toasts are `sonner`, anchored bottom-right, where auto-dismiss
+        is correct behaviour — ~~notistack's `SnackbarProvider`~~ sat in exactly this position for
+        exactly this reason. Failures do NOT come through here: they go to
         `NotificationsProvider`, top-right, which never auto-dismisses. That split is the point:
         one provider cannot be both auto-hiding and persistent, and an error notification that
         vanishes after four seconds is an unreported bug.
+
+        `<Toaster />` is a sibling rather than a wrapper because sonner's queue is a module
+        singleton (`notifications/toast.ts` calls into it directly); the component only renders
+        it. Nothing below needs to be inside it, and it stays under the theme because it draws
+        app chrome.
       */}
-      <SnackbarProvider
-        maxSnack={3}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        autoHideDuration={4000}
-      >
-        <AnnouncerProvider>
-          <NotificationsProvider>
-            <AuthProvider>
-              <SessionRecoveryProvider>
-                <QueryProvider>{children}</QueryProvider>
-              </SessionRecoveryProvider>
-            </AuthProvider>
-          </NotificationsProvider>
-        </AnnouncerProvider>
-      </SnackbarProvider>
+      <Toaster position="bottom-right" visibleToasts={3} theme="system" />
+      <AnnouncerProvider>
+        <NotificationsProvider>
+          <AuthProvider>
+            <SessionRecoveryProvider>
+              <QueryProvider>{children}</QueryProvider>
+            </SessionRecoveryProvider>
+          </AuthProvider>
+        </NotificationsProvider>
+      </AnnouncerProvider>
     </ThemeProvider>
   );
 }

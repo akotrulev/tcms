@@ -1,6 +1,5 @@
 import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { SnackbarProvider } from 'notistack'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
@@ -73,9 +72,7 @@ const card = (partial: Partial<WorkItem> & Pick<WorkItem, 'id' | 'title'>): Work
 function renderBoard(items: WorkItem[], crossProject = false) {
   return render(
     <TestProviders client={createTestQueryClient()}>
-      <SnackbarProvider>
-        <Board items={items} crossProject={crossProject} />
-      </SnackbarProvider>
+      <Board items={items} crossProject={crossProject} />
     </TestProviders>,
   )
 }
@@ -412,11 +409,9 @@ describe('Moving a card writes optimistically and rolls back (§106)', () => {
   function renderPage() {
     return render(
       <TestProviders client={createTestQueryClient()} route="/projects/p1/board">
-        <SnackbarProvider>
-          <Routes>
-            <Route path="/projects/:projectId/board" element={<BoardPage />} />
-          </Routes>
-        </SnackbarProvider>
+        <Routes>
+          <Route path="/projects/:projectId/board" element={<BoardPage />} />
+        </Routes>
       </TestProviders>,
     )
   }

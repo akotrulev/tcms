@@ -13,7 +13,6 @@ import {
 import CenterFocusStrongOutlinedIcon from '@mui/icons-material/CenterFocusStrongOutlined';
 import TableRowsOutlinedIcon from '@mui/icons-material/TableRowsOutlined';
 import VerticalSplitOutlinedIcon from '@mui/icons-material/VerticalSplitOutlined';
-import { useSnackbar } from 'notistack';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
@@ -23,6 +22,7 @@ import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import type { CaseStatus, StepResult, TestExecution, TestExecutionSummary } from '../../api/types';
 import { useExecution, useProject, useRun, useStatuses, useSubmitResult } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
+import { toast } from '../../notifications/toast';
 import { DefectPanel } from './DefectPanel';
 import { StepEvidence } from './StepEvidence';
 import { StepDataView } from '../cases/StepDataCell';
@@ -274,7 +274,6 @@ function GridBlockedDialog({
 }) {
   const detail = useExecution(projectId, runId, execution.id);
   const submit = useSubmitResult(projectId, runId, execution.id);
-  const { enqueueSnackbar } = useSnackbar();
 
   const record = async (reason: string) => {
     const blocked = statuses.find((s) => s.kind === 'BLOCKED');
@@ -291,10 +290,10 @@ function GridBlockedDialog({
         durationMs: detail.data.durationMs ?? null,
         lockVersion: detail.data.lockVersion,
       });
-      enqueueSnackbar(`Recorded Blocked for ${execution.caseKey}`, { variant: 'warning' });
+      toast(`Recorded Blocked for ${execution.caseKey}`, { variant: 'warning' });
       onClose();
     } catch (failure) {
-      enqueueSnackbar(
+      toast(
         failure instanceof ApiError ? failure.detail : "Couldn't record the result. Check your connection and try again.",
         { variant: 'error' },
       );
@@ -398,7 +397,6 @@ function ExecutionForm({
   modeParam: string | null;
 }) {
   const navigate = useNavigate();
-  const { enqueueSnackbar } = useSnackbar();
   const submit = useSubmitResult(projectId, runId, executionId);
 
   /*
@@ -497,7 +495,7 @@ function ExecutionForm({
           })),
         ...overrides,
       });
-      enqueueSnackbar(`Recorded ${updated.status?.name ?? 'result'} for ${updated.caseKey}`, {
+      toast(`Recorded ${updated.status?.name ?? 'result'} for ${updated.caseKey}`, {
         variant: updated.status?.countsAsPass ? 'success' : 'warning',
       });
       navigate(`/projects/${projectId}/runs/${runId}`);
@@ -506,7 +504,7 @@ function ExecutionForm({
         setConflict(error.detail);
         return;
       }
-      enqueueSnackbar(
+      toast(
         error instanceof ApiError ? error.detail : "Couldn't record the result. Check your connection and try again.",
         { variant: 'error' },
       );

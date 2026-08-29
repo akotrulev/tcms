@@ -1,7 +1,8 @@
-import { Box, Divider, Link, Stack, Typography } from '@mui/material';
 import { useEffect, useRef } from 'react';
 import { Link as RouterLink, Navigate, useParams } from 'react-router-dom';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { useAnnounce } from '../../a11y/useAnnounce';
+import { DocumentSurface } from '../../components/kit';
+import { cn } from '../../lib/cn';
 import { helpSections, findHelpSection, type HelpSection } from './sections';
 
 /**
@@ -27,6 +28,16 @@ import { helpSections, findHelpSection, type HelpSection } from './sections';
  * which is a refusal no administrator could grant their way out of. It also inverts the product's
  * own rule: this is the screen that exists to tell somebody what they are missing and what to ask
  * for, so it is the last screen that should hide it from them.
+ *
+ * ## It is the fourth document surface
+ *
+ * Design language §3: help renders on `DocumentSurface` at the prose measure, the same 70ch, the
+ * same gutter and the same hairline rule as a case, a doc page and a proposal — *"written in the
+ * product, on the product's own document surface, using the product's own chart components"*. That
+ * is what keeps it from drifting away from the thing it describes, and it is why ~~`PageHeader` +
+ * `Panel`~~ are gone from this file: a page header's `<h1>` above a document's own title is two
+ * titles for one thing, and a panel around the only thing on screen is rule 1's exact prohibition.
+ * The section title is the `<h2>` the document draws; the rail and the top strip carry the rest.
  */
 export function HelpPage() {
   const { sectionId } = useParams<{ sectionId: string }>();
@@ -37,23 +48,11 @@ export function HelpPage() {
   if (!section) return <Navigate to={`/help/${helpSections[0]!.id}`} replace />;
 
   return (
-    <Stack sx={{ gap: 3 }} data-testid="HelpPage">
-      <PageHeader
-        testId="Help.Header"
-        title={section.title}
-        documentTitle={`Help — ${section.title}`}
-        subtitle={section.summary}
-        crumbs={[{ label: 'Help', to: `/help/${helpSections[0]!.id}` }, { label: section.title }]}
-      />
-
-      <Stack
-        direction={{ xs: 'column', md: 'row' }}
-        sx={{ gap: 3, alignItems: 'flex-start' }}
-      >
-        <Contents current={section.id} />
-        <SectionBody section={section} />
-      </Stack>
-    </Stack>
+    <div className="flex flex-col items-start gap-6 md:flex-row" data-testid="HelpPage">
+      <title>{`Help — ${section.title} · TCMS`}</title>
+      <Contents current={section.id} />
+      <SectionBody section={section} />
+    </div>
   );
 }
 
@@ -67,49 +66,35 @@ export function HelpPage() {
  */
 function Contents({ current }: { current: string }) {
   return (
-    <Box
-      component="nav"
+    <nav
       aria-label="Help contents"
       data-testid="Help.Contents"
-      sx={{
-        width: { xs: '100%', md: 260 },
-        flexShrink: 0,
-        position: { md: 'sticky' },
-        top: { md: 16 },
-      }}
+      className="w-full shrink-0 md:sticky md:top-4 md:w-[232px]"
     >
-      <Panel testId="Help.Contents.Panel" dense title="Contents">
-        <Stack component="ul" sx={{ listStyle: 'none', m: 0, p: 1, gap: 0.25 }}>
-          {helpSections.map((section) => {
-            const active = section.id === current;
-            return (
-              <li key={section.id}>
-                <Link
-                  component={RouterLink}
-                  to={`/help/${section.id}`}
-                  aria-current={active ? 'page' : undefined}
-                  data-testid={`Help.Contents.Link.${section.id}`}
-                  underline="none"
-                  sx={{
-                    display: 'block',
-                    px: 1.5,
-                    py: 0.75,
-                    borderRadius: 1,
-                    fontSize: '0.875rem',
-                    fontWeight: active ? 600 : 400,
-                    color: active ? 'primary.main' : 'text.primary',
-                    bgcolor: active ? 'action.selected' : 'transparent',
-                    '&:hover': { bgcolor: 'action.hover' },
-                  }}
-                >
-                  {section.title}
-                </Link>
-              </li>
-            );
-          })}
-        </Stack>
-      </Panel>
-    </Box>
+      <h2 className="mb-2 px-3 font-mono text-[11px] font-medium uppercase tracking-[.07em] text-ink-4">
+        Contents
+      </h2>
+      <ul className="m-0 flex list-none flex-col gap-px p-0">
+        {helpSections.map((section) => {
+          const active = section.id === current;
+          return (
+            <li key={section.id}>
+              <RouterLink
+                to={`/help/${section.id}`}
+                aria-current={active ? 'page' : undefined}
+                data-testid={`Help.Contents.Link.${section.id}`}
+                className={cn(
+                  'block rounded-md px-3 py-1.5 text-[13px] no-underline',
+                  active ? 'bg-white/6 font-medium text-ink' : 'text-ink-3 hover:bg-white/4 hover:text-ink-2',
+                )}
+              >
+                {section.title}
+              </RouterLink>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }
 
@@ -121,10 +106,19 @@ function Contents({ current }: { current: string }) {
  * screen-reader user hears nothing and a keyboard user's next Tab continues down the contents
  * instead of into what they just asked for. `tabIndex={-1}` makes the heading focusable
  * programmatically without adding it to the tab order.
+ *
+ * The arrival announcement is raised here rather than by a shared header, because this is the
+ * component that knows which section actually rendered — the route alone does not, since an
+ * unknown id redirects.
  */
 function SectionBody({ section }: { section: HelpSection }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const first = useRef(true);
+  const announce = useAnnounce();
+
+  useEffect(() => {
+    announce(`Help — ${section.title} page loaded`);
+  }, [announce, section.title]);
 
   useEffect(() => {
     if (first.current) {
@@ -135,25 +129,22 @@ function SectionBody({ section }: { section: HelpSection }) {
   }, [section.id]);
 
   return (
-    <Box sx={{ flex: 1, minWidth: 0 }} data-testid={`Help.Section.${section.id}`}>
-      <Panel testId="Help.Section.Panel">
-        <Box sx={{ p: { xs: 2, md: 3 } }}>
-          <Typography
-            ref={heading}
-            variant="h3"
-            component="h2"
-            tabIndex={-1}
-            sx={{ mb: 2, outline: 'none' }}
-          >
-            {section.title}
-          </Typography>
-          {section.body}
-        </Box>
-      </Panel>
+    <DocumentSurface measure="prose" className="min-w-0 flex-1" data-testid={`Help.Section.${section.id}`}>
+      <h2
+        ref={heading}
+        tabIndex={-1}
+        className="m-0 mb-1.5 max-w-[36ch] text-[25px] leading-[1.25] font-[620] tracking-[-.02em] text-ink outline-none"
+      >
+        {section.title}
+      </h2>
+      <p className="m-0 max-w-[62ch] text-[14.5px] leading-[1.6] text-ink-3">{section.summary}</p>
+      <div className="my-[18px] h-px bg-white/8" />
 
-      <Divider sx={{ my: 3 }} />
+      {section.body}
+
+      <div className="mt-8 h-px bg-white/8" />
       <Pager current={section.id} />
-    </Box>
+    </DocumentSurface>
   );
 }
 
@@ -164,23 +155,19 @@ function Pager({ current }: { current: string }) {
   const next = index < helpSections.length - 1 ? helpSections[index + 1] : undefined;
 
   return (
-    <Stack
-      direction="row"
-      sx={{ justifyContent: 'space-between', gap: 2 }}
-      data-testid="Help.Pager"
-    >
+    <div className="flex justify-between gap-4 pt-4 text-[13px]" data-testid="Help.Pager">
       {previous ? (
-        <Link component={RouterLink} to={`/help/${previous.id}`} variant="body2" data-testid="Help.Pager.Previous">
+        <RouterLink to={`/help/${previous.id}`} className="text-steel no-underline hover:underline" data-testid="Help.Pager.Previous">
           ← {previous.title}
-        </Link>
+        </RouterLink>
       ) : (
         <span />
       )}
       {next && (
-        <Link component={RouterLink} to={`/help/${next.id}`} variant="body2" data-testid="Help.Pager.Next">
+        <RouterLink to={`/help/${next.id}`} className="text-steel no-underline hover:underline" data-testid="Help.Pager.Next">
           {next.title} →
-        </Link>
+        </RouterLink>
       )}
-    </Stack>
+    </div>
   );
 }

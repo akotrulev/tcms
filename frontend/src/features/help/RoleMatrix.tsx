@@ -1,18 +1,16 @@
+import { Check } from 'lucide-react';
+import { useRoles } from '../../api/queries';
+import type { PermissionKey, Role } from '../../api/types';
+import { DataRegion } from '../../components/DataRegion';
 import {
-  Chip,
-  Stack,
+  Badge,
   Table,
   TableBody,
   TableCell,
   TableHead,
+  TableHeaderCell,
   TableRow,
-  Typography,
-} from '@mui/material';
-import CheckIcon from '@mui/icons-material/Check';
-import { useRoles } from '../../api/queries';
-import type { PermissionKey, Role } from '../../api/types';
-import { DataRegion } from '../../components/DataRegion';
-import { ScrollX } from '../../components/ScrollX';
+} from '../../components/kit';
 import { Code, Definitions } from './prose';
 import {
   allPermissions,
@@ -77,46 +75,44 @@ function Matrix({ roles }: { roles: Role[] }) {
   );
 
   return (
-    <Stack sx={{ gap: 1.5 }}>
+    <div className="flex flex-col gap-3">
       <Definitions
         items={columns.map((role) => ({
           term: (
-            <Stack direction="row" component="span" sx={{ gap: 1, alignItems: 'center' }}>
+            <span className="flex items-center gap-2">
               <span data-testid={`Help.RoleMatrix.Role.${role.name}`}>{role.name}</span>
               {!role.assignable && (
-                <Chip size="small" variant="outlined" label="Credentials only — never granted to a person" />
+                <Badge tone="plain">Credentials only — never granted to a person</Badge>
               )}
-            </Stack>
+            </span>
           ),
           detail: role.description,
         }))}
       />
 
-      <ScrollX>
-        <Table size="small" sx={{ minWidth: 720 }} data-testid="Help.RoleMatrix.Table">
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ fontWeight: 600 }}>What it lets you do</TableCell>
-              {columns.map((role) => (
-                <TableCell key={role.id} align="center" sx={{ fontWeight: 600 }}>
-                  {role.name}
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((permission, index) => (
-              <PermissionRow
-                key={permission}
-                permission={permission}
-                columns={columns}
-                showArea={index === 0 || permissionAreas[rows[index - 1]!] !== permissionAreas[permission]}
-              />
+      <Table data-testid="Help.RoleMatrix.Table">
+        <TableHead>
+          <TableRow>
+            <TableHeaderCell>What it lets you do</TableHeaderCell>
+            {columns.map((role) => (
+              <TableHeaderCell key={role.id} className="text-center">
+                {role.name}
+              </TableHeaderCell>
             ))}
-          </TableBody>
-        </Table>
-      </ScrollX>
-    </Stack>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((permission, index) => (
+            <PermissionRow
+              key={permission}
+              permission={permission}
+              columns={columns}
+              showArea={index === 0 || permissionAreas[rows[index - 1]!] !== permissionAreas[permission]}
+            />
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
@@ -137,34 +133,21 @@ function PermissionRow({
   showArea: boolean;
 }) {
   return (
-    <TableRow hover data-testid={`Help.RoleMatrix.Row.${permission}`}>
-      <TableCell>
+    <TableRow data-testid={`Help.RoleMatrix.Row.${permission}`}>
+      <TableCell variant="title">
         {showArea && (
-          <Typography
-            variant="caption"
-            sx={{
-              display: 'block',
-              color: 'text.secondary',
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              fontWeight: 600,
-              mt: 0.5,
-            }}
-          >
+          <span className="mt-1 mb-0.5 block font-mono text-[10.5px] font-medium uppercase tracking-[.07em] text-ink-4">
             {areaLabels[permissionAreas[permission]]}
-          </Typography>
+          </span>
         )}
-        <Typography variant="body2" component="span">
-          {permissionLabels[permission]}
-        </Typography>{' '}
-        <Code>{permission}</Code>
+        {permissionLabels[permission]} <Code>{permission}</Code>
       </TableCell>
       {columns.map((role) => {
         const held = role.permissions.includes(permission);
         return (
           <TableCell
             key={role.id}
-            align="center"
+            className="text-center"
             /*
               The whole sentence on the cell, because a tick and a dash carry it only for a reader
               who can see which column they are under. Out of that context — a screen reader moving
@@ -175,11 +158,15 @@ function PermissionRow({
             aria-label={`${role.name} ${held ? 'can' : 'cannot'} ${permissionLabels[permission]}`}
           >
             {held ? (
-              <CheckIcon fontSize="small" color="success" aria-hidden />
+              <Check
+                aria-hidden
+                style={{ color: 'var(--color-passed)' }}
+                className="mx-auto size-4"
+              />
             ) : (
-              <Typography component="span" variant="body2" sx={{ color: 'text.disabled' }} aria-hidden>
+              <span aria-hidden className="text-ink-4">
                 —
-              </Typography>
+              </span>
             )}
           </TableCell>
         );

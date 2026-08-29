@@ -1,10 +1,27 @@
 # 007 — Implementing the renders: Tailwind + shadcn/ui, all 42 screens
 
-**Date:** 2026-08-29 · **Written by:** `ep-writing-plans` · **Status:** proposed, nothing implemented
+**Date:** 2026-08-29 · **Written by:** `ep-writing-plans` · **Status:** ~~proposed, nothing
+implemented~~ → **T1–T6, T8 and T9 landed**
+(`5e14f336`, `8c21107a`, `2dceb911`, `8b78a4f9`, `8127551a` + `5a4d7226`, T6, T9 `6de8c9a9`, T8),
+the rest open. Next up: **T7**.
+
+> **Grounded 2026-08-29** against the working tree after T4. Where a task below was written from an
+> assumption the code disproved, the original text is struck through and the correction follows it
+> (D4). The counts in §1 were re-measured; the ones that moved are marked.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
 > task-by-task, or `ep-delegate-to-subagents` to run its tasks through subagents. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
+
+> **Gates run once, at the end — not per task (user directive, 2026-08-29).** ~~Every task ends with
+> `npm run build && npm run lint && npm run test:run`.~~ → superseded. T6–T16 **do not run the build,
+> the lint or the test suite**; each one writes its code and commits. The single gate pass is **T17**,
+> after all of T6–T16 are on `master`, and it runs on `shanks` per CLAUDE.md. Two consequences the
+> next reader should not rediscover the hard way: (a) a task's own "done when" `grep` checks stay —
+> they cost nothing and are not a gate; (b) the layout damage Tailwind's preflight causes in T16 now
+> surfaces in **T17** rather than in T16, so T17 is a gate pass *and* the fix-up for it. Anyone who
+> wants a fast local check mid-task may run a single test file, but the full three-command gate is
+> T17's alone.
 
 **Goal:** Make the product look like `docs/specs/assets/renders/`, by replacing MUI with Tailwind v4
 + shadcn/ui and porting all 42 screens onto the nine-component kit the design-language spec defines.
@@ -50,18 +67,19 @@ Taken on `master` at `5933ca27`, before any change:
 | | |
 |---|---|
 | Non-test components | 148 `.tsx`, ~86k LOC of `.ts`/`.tsx` |
-| Files importing `@mui` | 156 (`@mui/material` 156 · `@mui/icons-material` 115) |
-| Test files | 100 |
-| Files coupled to MUI **internals** | **8** — `lib/muiTestIds.ts` and 7 consumers |
+| Files importing `@mui` | 156 (`@mui/material` 156 · `@mui/icons-material` ~~115~~ **41** — re-measured; the 115 was a grep over `@mui` lines, not files) |
+| Test files | ~~100~~ **143** `*.test.ts(x)` (the 100 counted `.test.tsx` only) |
+| Files coupled to MUI **internals** | ~~**8** — `lib/muiTestIds.ts` and 7 consumers~~ → **14**: the lib, **13 importers** of `inputTestId`/`selectTestId`, and **two path citations** in comments (`features/runs/BlockedDialog.tsx:105`, `components/ui/ui.test.tsx:20`) |
 | `@mui/x-data-grid` | **1 file** — `features/cases/CaseGrid.tsx` |
-| `@mui/x-tree-view` | **2 files** — `CaseGrid.tsx`, `features/cases/ClassificationPicker.tsx` |
-| `@mui/x-date-pickers` | **0 files** — a declared dependency nothing imports |
-| Routes | 9 `<Route>` elements; 44 `*Page.tsx` |
+| `@mui/x-tree-view` | ~~**2 files** — `CaseGrid.tsx`, `features/cases/ClassificationPicker.tsx`~~ → **1 file**, `ClassificationPicker.tsx`; `CaseGrid.tsx` does not import it |
+| `@mui/x-date-pickers` | **0 files** — a declared dependency nothing imports (re-confirmed) |
+| `notistack` | **14 files** — `app/Providers.tsx`, **6 pages** calling `useSnackbar` (`BoardPage`, `CaseListPage`, `CaseEditorPage`, `DocPageEditorPage`, `RunDetailPage`, `ExecutionPage`), **6 tests** that wrap `SnackbarProvider`, and one comment — *not* one provider line; see T8 |
+| Routes | 9 `<Route>` elements; 44 `*Page.tsx` — **two of which the design language's family map (§8) does not list**: `settings/TrackerSettingsPage` and `account/TrackerConnectionsPage`. T15 takes both. |
 | The design language itself | `tcms.css`, 367 lines; the spec, 9 sections |
 
 Two of those numbers decide the shape of the plan. **Tests query by `data-testid` and role, not by
-MUI class** — only 8 files reach into MUI internals — so a faithful primitive swap keeps the
-existing suite meaningful instead of rewriting 100 test files. And **the MUI X packages are three
+MUI class** — only 14 files reach into MUI internals — so a faithful primitive swap keeps the
+existing suite meaningful instead of rewriting 143 test files. And **the MUI X packages are two
 files**, so the expensive-looking DataGrid/TreeView replacements are two contained tasks, not a
 theme running through the whole tree.
 
@@ -89,6 +107,13 @@ Rule 5 (*"one palette serves keywords and results"*) is what moves `retest` off 
 the token work is **two additions, one split, three hue changes** — everything else already exists
 under a different name.
 
+*As landed in T1:* the two additions are named **`--color-surface-ground`** and
+**`--color-surface-field`** (following the `--color-surface-*` family already in `index.css`), not
+the bare `--color-ground` / `--color-field` the steps below wrote; `@theme inline` maps them to the
+kit's `ground` / `field`, so the utility names are unchanged. `theme.ts`'s `statusColors` moved
+with them, including a light-mode `RETEST` hue (`#3f5aa6`) so light stays blue too — D1's
+"derived" in practice.
+
 ## 3. Decisions this plan takes
 
 **D1 — Dark stays the authored theme; light is kept and derived.** The renders are dark-only and
@@ -115,9 +140,23 @@ T16 lands — a half-migrated tree is the failure this bounding exists to preven
 
 **D3 — `lib/muiTestIds.ts` is deleted, not ported.** Its entire reason is that *"MUI types a slot's
 props as that element's known DOM props, which excludes custom attributes"*. A Tailwind `<input>`
-takes `data-testid` directly, so the workaround's premise disappears. One comment cites it —
-`features/runs/BlockedDialog.tsx:105` — and that citation must die with the file or
-`packages/client/src/test/citedFiles.test.ts` reddens the **packages** job. (Checked: `corpus.ts`
+takes `data-testid` directly, so the workaround's premise disappears. ~~One comment cites it —
+`features/runs/BlockedDialog.tsx:105`~~ **Two comments cite it by path** —
+`features/runs/BlockedDialog.tsx:105` and, since T2, `components/ui/ui.test.tsx:20` (the test that
+proves the premise is gone cites the file whose premise it is) — and both citations must die with
+the file or `packages/client/src/test/citedFiles.test.ts` reddens the **packages** job. The 13
+importers do not need a T16 step: each screen task removes its own `inputTestId`/`selectTestId`
+import when it ports the control, and T16's grep is what proves none survived. Who owns which:
+
+| Importer | Removed by |
+|---|---|
+| `cases/CaseEditorPage.tsx:67`, `cases/ConditionEditDialog.tsx:40` | T7 |
+| `runs/RunSchedulePage.tsx:39` | T10 |
+| `runs/RunDetailPage.tsx:30`, `review/ReviewPanel.tsx:43` | T11 |
+| `runs/BlockedDialog.tsx:16` (+ the `:105` citation) | T12 |
+| `cases/ClassificationPicker.tsx:19` | T13 |
+| `settings/ReviewSettingsPage.tsx:32`, `settings/TrackerSettingsPage.tsx:46`, `settings/NotificationChannelDialog.tsx:40`, `admin/TeamDialog.tsx:20`, `admin/TeamMembersDialog.tsx:24`, `admin/ProviderFormDialog.tsx:21` | T15 |
+| `components/ui/ui.test.tsx:20` (citation only) | T16 | (Checked: `corpus.ts`
 scans `frontend/src` for `.ts`/`.tsx` only, so the `.css` citation at `index.css:9` and the ones in
 `tcms.css` are out of scope. `lib/statusColors.ts` is cited three times and **survives** — it is
 token names, not MUI.)
@@ -151,38 +190,49 @@ pointing at the drawing would produce a second, drifting design source — which
 
 **Tasks** — in the order they are done:
 
-| # | Task | Deliverable | Depends on |
-|---|---|---|---|
-| 1 | T1 — Tailwind v4, preflight off, kit tokens | `npm run build` clean with Tailwind compiled; `index.css` carries the kit's token names; MUI untouched and still rendering | none |
-| 2 | T2 — shadcn primitives, skinned | `components/ui/` holds the Radix primitives, restyled to the kit; each renders in a test at kit colours | T1 |
-| 3 | T3 — The nine-component kit | `components/kit/` exports the nine components of design-language §5; each has a test asserting the rule it carries | T2 |
-| 4 | T4 — `DataRegion`'s sixth state | `DataRegion` renders loading/loaded/empty/failed/stale/**refused**; refused is neutral, names the permission and a grantee, and offers no retry | T3 |
-| 5 | T5 — AppShell | Rail at 232px, collapsing to the 60px icon rail on exactly the two routes of §4; top strip; footer strip | T3 |
-| 6 | T6 — Family 8, Threshold | Login · AcceptInvitation · SsoCallback render from the kit with no MUI import | T5 |
-| 7 | T7 — Case editor, both frames | `CaseEditorPage` matches `case-authoring-redesign.html` frames A and B, incl. the seven items of §0 | T5 |
-| 8 | T8 — Family 9, States | NotFound · Help, and the refusal/notification matrix all 42 inherit | T4, T6 |
-| 9 | T9 — TanStack Table | `CaseGrid` renders on TanStack Table with server-side paging/sort/filter; `@mui/x-data-grid` unimported | T3 |
-| 10 | T10 — Family 1, Index & table | The 10 index screens render on the kit's Table | T9 |
-| 11 | T11 — Family 2, Record as document | The 7 document screens render at the 74ch measure | T7 |
-| 12 | T12 — Family 3, Execution | `ExecutionPage` renders with the collapsed rail and number-key verdicts | T5, T11 |
-| 13 | T13 — Family 4, Board & people | Board · MyWork · TeamBoard · OrgChart; `@mui/x-tree-view` unimported | T3 |
-| 14 | T14 — Family 5, Authoring | Docs · DocPageEditor · FeatureImport at the 70ch prose measure | T11 |
-| 15 | T15 — Family 6 & 7, Analytics and Settings | Dashboard · PlanStatistics per §6; the 9 settings screens | T10 |
-| 16 | T16 — MUI removed, preflight on | No `@mui`/`@emotion`/`notistack` in `package.json` or any import; Preflight imported; `muiTestIds.ts` deleted with its citation | T6–T15 |
-| 17 | T17 — Gates and bundle measurement | The four gates green on `shanks`; before/after bundle numbers recorded | T16 |
+| # | Task | Status | Deliverable | Depends on |
+|---|---|---|---|---|
+| 1 | T1 — Tailwind v4, preflight off, kit tokens | **done** `5e14f336` | `npm run build` clean with Tailwind compiled; `index.css` carries the kit's token names; MUI untouched and still rendering | none |
+| 2 | T2 — shadcn primitives, skinned | **done** `8c21107a` | `components/ui/` holds the Radix primitives, restyled to the kit; each renders in a test at kit colours | T1 |
+| 3 | T3 — The nine-component kit | **done** `2dceb911` | `components/kit/` exports the nine components of design-language §5; each has a test asserting the rule it carries | T2 |
+| 4 | T4 — ~~`DataRegion`'s sixth state~~ `StateBlock`'s refusal without a grantee | **done** `8b78a4f9` | ~~`DataRegion` renders … **refused**~~ `DataRegion` already did; `StateBlock`'s refused state now degrades to *Ask a Company Admin* when no grantee can be named | T3 |
+| 5 | T5 — AppShell | **done** `8127551a` + `5a4d7226` | Rail at 232px, collapsing to the icon rail on the **three** route patterns below (§4's two screens, one of them at two URLs); top strip; footer strip. ~~Slot for a page's commit bar~~ → not built; T7 adds it | T3 |
+| 6 | T6 — Family 8, Threshold | **done** | Login · AcceptInvitation · SsoCallback render from the kit with no MUI import | T5 |
+| 8 | T8 — Family 9, States **(runs before T7)** | **done** | NotFound · Help; notistack → `sonner` across all 14 files; the refusal/notification matrix all 42 inherit | T4, T6 |
+| 7 | T7 — Case editor, both frames | open | `CaseEditorPage` matches `case-authoring-redesign.html` frames A and B, incl. the seven items of §0 | T5, T8 |
+| 9 | T9 — TanStack Table | **done** `6de8c9a9` | `CaseGrid` renders on TanStack Table with server-side paging/sort/filter; `@mui/x-data-grid` unimported | T3 |
+| 10 | T10 — Family 1, Index & table | open | The 10 index screens render on the kit's Table | T9 |
+| 11 | T11 — Family 2, Record as document | open | The 7 document screens render at the 74ch measure | T7 |
+| 12 | T12 — Family 3, Execution | open | `ExecutionPage` renders with the collapsed rail and number-key verdicts | T5, T11 |
+| 13 | T13 — Family 4, Board & people | open | Board · MyWork · TeamBoard · OrgChart; `@mui/x-tree-view` unimported | T3, T8 |
+| 14 | T14 — Family 5, Authoring | open | Docs · DocPageEditor · FeatureImport at the 70ch prose measure | T11 |
+| 15 | T15 — Family 6 & 7, Analytics and Settings | open | Dashboard · PlanStatistics per §6; the **11** settings/account screens (§8's nine plus the two it does not list) | T10 |
+| 16 | T16 — MUI removed, preflight on | open | No `@mui`/`@emotion`/`notistack` in `package.json` or any import; Preflight imported; `muiTestIds.ts` deleted with **both** citations | T6–T15 |
+| 17 | T17 — Gates and bundle measurement | open | The four gates green on `shanks` (the **only** gate pass for T6–T16 — see the directive in the header); before/after bundle numbers recorded; preflight layout damage fixed | T16 |
 
 Seventeen tasks. T6–T15 are the ten screen tasks and are ordered so the cheapest proof of the kit
 (T6, three screens, no rail) lands before the hardest document surface (T7), and so every family
 that consumes a replacement engine comes after the task that builds it.
 
+**One ordering change from the original:** **T8 now runs before T7.** The notistack → `sonner`
+swap was written as a one-line provider change in T5; it is not (§1: six pages call `useSnackbar`
+and six tests mount `SnackbarProvider`). It belongs with the notification matrix in T8, and
+`CaseEditorPage` is one of the six callers — so porting T7 first would touch that file twice.
+Numbers are kept as they were so commit messages and this table keep agreeing.
+
 ---
 
-### T1 — Tailwind v4, preflight off, kit tokens
+### T1 — Tailwind v4, preflight off, kit tokens — **DONE** (`5e14f336`)
 
 **Deliverable:** `npm run build` is clean with Tailwind compiling, `src/index.css` carries the render
 kit's token names alongside the existing ones, and every current screen still renders through MUI
 exactly as before.
 **Depends on:** none
+
+**What landed, where it differs from the steps below:** the two new tokens are
+`--color-surface-ground` / `--color-surface-field` (§2 note); `theme.ts` was also touched, because
+`themeTokenParity.test.ts` pins its `statusColors` to `index.css` and the three hue changes would
+otherwise have failed that test; the rule-5 identity test exists as written. Steps 1–8 are ticked.
 
 **Files:**
 - Modify: `frontend/package.json` — add `tailwindcss`, `@tailwindcss/vite`
@@ -190,13 +240,13 @@ exactly as before.
 - Modify: `frontend/src/index.css` — the layer imports and the kit tokens
 - Test: `frontend/src/app/themeTokenParity.test.ts:1-92` — extend, do not replace
 
-- [ ] **Step 1: Install**
+- [x] **Step 1: Install**
 
 ```bash
 cd frontend && npm install tailwindcss @tailwindcss/vite
 ```
 
-- [ ] **Step 2: Register the Vite plugin**
+- [x] **Step 2: Register the Vite plugin**
 
 In `frontend/vite.config.ts`, add the import and the plugin entry:
 
@@ -208,7 +258,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 3: Import Tailwind's layers individually — WITHOUT preflight**
+- [x] **Step 3: Import Tailwind's layers individually — WITHOUT preflight**
 
 At the very top of `frontend/src/index.css`, above the existing `:root` block:
 
@@ -221,7 +271,7 @@ At the very top of `frontend/src/index.css`, above the existing `:root` block:
 `tailwindcss/preflight.css` is deliberately absent. Adding it here resets MUI's Emotion baseline and
 every screen loses its typography at once. T16 adds it, after the last MUI import is gone.
 
-- [ ] **Step 4: Add the six token changes of §2 to the dark block**
+- [x] **Step 4: Add the six token changes of §2 to the dark block**
 
 In `frontend/src/index.css`, inside `[data-mui-color-scheme='dark']`:
 
@@ -244,7 +294,7 @@ value. The three changed status hues and the three keyword hues are the same thr
 5 — declared twice because the two names mean different things to a reader, not because they may
 diverge.
 
-- [ ] **Step 5: Expose the tokens to Tailwind**
+- [x] **Step 5: Expose the tokens to Tailwind**
 
 Below the imports in `frontend/src/index.css`:
 
@@ -268,7 +318,7 @@ This is what makes `bg-panel`, `text-ink-3` and `font-mono` resolve to the token
 Tailwind's defaults. The CSS custom properties stay the single source: `@theme inline` points at
 them, it does not copy their values.
 
-- [ ] **Step 6: Extend the parity test rather than replacing it**
+- [x] **Step 6: Extend the parity test rather than replacing it**
 
 `themeTokenParity.test.ts` pins `index.css` against `app/theme.ts`. It must keep doing that while
 MUI lives, and additionally assert the new names exist. Add to that file:
@@ -294,7 +344,7 @@ it('keeps the keyword hue and its result hue identical (design language rule 5)'
 The second test is the one worth having: rule 5 is a claim two people editing two tokens can break
 silently, and it is exactly the *"schema-wide invariant needs a computed check"* rule in CLAUDE.md.
 
-- [ ] **Step 7: Run the gate**
+- [x] **Step 7: Run the gate**
 
 ```bash
 cd frontend && npm run build && npm run lint && npm run test:run
@@ -303,7 +353,7 @@ cd frontend && npm run build && npm run lint && npm run test:run
 Expected: build clean, lint 0 warnings, suite green. Every screen still looks as it did — Tailwind
 is compiled but nothing uses a utility class yet.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add frontend/package.json frontend/package-lock.json frontend/vite.config.ts \
@@ -313,19 +363,28 @@ git commit -m "feat(frontend): T1 — Tailwind v4 with preflight off, render-kit
 
 ---
 
-### T2 — shadcn primitives, skinned to the kit
+### T2 — shadcn primitives, skinned to the kit — **DONE** (`8c21107a`)
 
 **Deliverable:** `frontend/src/components/ui/` holds the Radix-based primitives the 42 screens need,
 restyled to the kit tokens, each rendering at kit colours in a test. Nothing outside that folder
 imports them yet.
 **Depends on:** T1 (tokens and utilities must resolve)
 
+**What landed, where it differs from the steps below:** ~~Step 2's `npx shadcn init` / `add`~~ was
+**not run** — the 17 primitives were written by hand, because the CLI imposes a `@/` alias this
+codebase does not use (it imports relatively throughout) and would have rewritten T1's `index.css`.
+So there is **no `components.json`**; `button.tsx` and `buttonVariants.ts` are two files (a module
+exporting a component and a value loses Fast Refresh, which the lint gate reports); `lucide-react`
+was added as the icon replacement for the 41 `@mui/icons-material` files; `sonner` is installed
+and `ui/sonner.tsx` exports `Toaster`, **but nothing mounts it yet** — that is T8. The barrel is
+`components/ui/index.ts`.
+
 **Files:**
 - Create: `frontend/src/components/ui/*.tsx` — the primitive set
 - Create: `frontend/src/lib/cn.ts`
 - Test: `frontend/src/components/ui/ui.test.tsx`
 
-- [ ] **Step 1: The class-merge helper**
+- [x] **Step 1: The class-merge helper**
 
 ```bash
 cd frontend && npm install clsx tailwind-merge
@@ -339,7 +398,7 @@ import { twMerge } from 'tailwind-merge';
 export const cn = (...inputs: ClassValue[]) => twMerge(clsx(inputs));
 ```
 
-- [ ] **Step 2: Add the primitives**
+- [x] **Step 2: Add the primitives**
 
 ```bash
 cd frontend && npx shadcn@latest init
@@ -351,7 +410,7 @@ npx shadcn@latest add button dialog select popover command switch checkbox \
 block are deliberate and `init` writes the preflight-on form. Point `components.json` at
 `src/components/ui` and at the existing `@/` alias.
 
-- [ ] **Step 3: Skin the button to the kit**
+- [x] **Step 3: Skin the button to the kit**
 
 The generated `button.tsx` ships shadcn's default palette. Replace its variants with the kit's,
 which `tcms.css:.btn` defines — a ghost button is a hairline border and muted ink; the primary is
@@ -381,7 +440,7 @@ const buttonVariants = cva(
 The focus ring is `--color-given`, not steel: the rail spec's rule 3 wants a *visible* focus ring,
 and a steel ring on a steel-adjacent surface is the one that disappears.
 
-- [ ] **Step 4: Write the primitive test**
+- [x] **Step 4: Write the primitive test**
 
 ```tsx
 // frontend/src/components/ui/ui.test.tsx
@@ -409,7 +468,7 @@ The second test is the kit's rule 3 (*"a quiet control is still a control"*) mad
 the rule the current rail breaks in the other direction — loud, but at least operable — and it is
 the one a hand-rolled div silently fails.
 
-- [ ] **Step 5: Run and commit**
+- [x] **Step 5: Run and commit**
 
 ```bash
 cd frontend && npm run build && npm run lint && npm run test:run
@@ -420,12 +479,21 @@ git commit -m "feat(frontend): T2 — shadcn primitives skinned to the render ki
 
 ---
 
-### T3 — The nine-component kit
+### T3 — The nine-component kit — **DONE** (`2dceb911`)
 
 **Deliverable:** `frontend/src/components/kit/` exports the nine components of design-language §5 —
 `Table`, `ResultBar`, `Badge`, `Chip`, `RailRow`, `DocumentSurface`, `Timeline`, `Banner`,
 `StateBlock`, `Figure` — each with a test asserting the rule it carries.
 **Depends on:** T2
+
+**What landed, where it differs from the steps below:** the tests live in two files, not one per
+component — `kit/kitRules.test.tsx` (badge/chip, rail row, result bar) and `kit/StateBlock.test.tsx`.
+The exported names the screen tasks will import (from `components/kit/index.ts`): `Table` with
+`TableHead/TableBody/TableRow/TableCell/TableHeaderCell`; `DocumentSurface` with `DocumentTitle`
+and `ProcedureLine` (+ `ProcedureKeyword`); `Timeline` with `TimelineEvent`; **`Figure` is three
+components** — `Tile`, `HBar`, `Sparkline` — there is no `<Figure>`. `StateBlock`'s empty state
+takes `hidden` / `filters` / `onClearFilters`. `Chip`'s removable form is two sibling buttons, not
+a nested one.
 
 **Files:**
 - Create: `frontend/src/components/kit/{Table,ResultBar,Badge,Chip,RailRow,DocumentSurface,Timeline,Banner,StateBlock,Figure}.tsx`
@@ -435,7 +503,7 @@ git commit -m "feat(frontend): T2 — shadcn primitives skinned to the render ki
 The source for every one is `docs/specs/assets/renders/tcms.css` plus the render that uses it. Port
 the CSS rule; do not re-derive the look.
 
-- [ ] **Step 1: `Badge` vs `Chip` — the distinction the spec makes load-bearing**
+- [x] **Step 1: `Badge` vs `Chip` — the distinction the spec makes load-bearing**
 
 §5: *a **badge** is state the system owns and is static; a **chip** is a value the reader owns and
 is a button.* Encode that in the types so the wrong one is a compile error, not a review comment:
@@ -471,7 +539,7 @@ it('a chip is a real button with a name (UX#117)', () => {
 });
 ```
 
-- [ ] **Step 2: `RailRow` — rule 3, the row the current editor gets wrong**
+- [x] **Step 2: `RailRow` — rule 3, the row the current editor gets wrong**
 
 Quiet at rest, bordered on hover, focus-ringed, native role, value right-aligned. This is item 4 of
 §0 and the single most-repeated component in the product.
@@ -506,7 +574,7 @@ it('is quiet at rest and operable — no filled background, real button, focus r
 });
 ```
 
-- [ ] **Step 3: `StateBlock` — six states, and failed must not read as empty**
+- [x] **Step 3: `StateBlock` — six states, and failed must not read as empty**
 
 §7. The load-bearing assertion is that **failed and empty are unmistakable** — different icon,
 colour, verb and offer — because a 200 with the wrong shape rendering as *no results* is the
@@ -533,7 +601,7 @@ it('refused is neutral, names the permission, and offers no retry', () => {
 });
 ```
 
-- [ ] **Step 4: The remaining six**
+- [x] **Step 4: The remaining six**
 
 `Table` (sticky mono heads; a quiet second line in the cell, never a twelfth column) · `ResultBar`
 (proportion before number; 2px gaps, 3px ends; **untested is the empty track, not a fill** — §6) ·
@@ -550,7 +618,7 @@ it('untested renders as the empty track, never as a fill (design language §6)',
 });
 ```
 
-- [ ] **Step 5: Run and commit**
+- [x] **Step 5: Run and commit**
 
 ```bash
 cd frontend && npm run build && npm run lint && npm run test:run
@@ -560,103 +628,140 @@ git commit -m "feat(frontend): T3 — the nine-component kit of design-language 
 
 ---
 
-### T4 — `DataRegion`'s sixth state
+### T4 — ~~`DataRegion`'s sixth state~~ `StateBlock`'s refusal without a grantee — **DONE** (`8b78a4f9`)
 
-**Deliverable:** `DataRegion` renders loading / loaded / empty / failed / stale / **refused**, with
-refused neutral, naming the permission and a person who holds it, and offering no retry.
-**Depends on:** T3 (`StateBlock`)
+~~**Deliverable:** `DataRegion` renders loading / loaded / empty / failed / stale / **refused**, with
+refused neutral, naming the permission and a person who holds it, and offering no retry.~~
 
-**Files:**
-- Modify: `frontend/src/components/DataRegion.tsx`
-- Modify: `frontend/src/components/DataRegion.test.tsx`
+**→ superseded. The premise was wrong.** Step 1 (*read the existing five states*) found six:
+`describeError` already returns `isRefused`, and `DataRegion.tsx:69-98` already renders a refusal
+as a `warning` (not an error), with no retry, the permission named, and its own `.Refused` testid.
+The deliverable was met before the task started; `DataRegion.tsx` was **not modified** and the
+failing test in the original Step 2 was never written, because it would have passed.
 
-- [ ] **Step 1: Read the existing five states before changing any**
+What was actually wrong was T3's `StateBlock`, which *required* a grantee name. Design language §7
+asks a refusal to name *"somebody in this company who holds it"*, but 005 C1b deliberately dropped
+the endpoint that would answer that, so on this codebase no name exists to give. `grantee` is now
+optional with an `action` slot, and the copy degrades to *Ask a Company Admin* — the wording
+`describeError` already uses, so the product does not carry two. The permission id is still named
+in every branch; it is the clause a reader can repeat to someone, and the part that must not
+degrade.
 
-`DataRegion` is inherited by all 42 screens and its current contract is relied on everywhere. Add
-the sixth; do not restructure the five.
+**Consequence for T15:** *"every refusal names a person who can grant it"* is not achievable as
+written; the settings screens name the permission and the role, via `DataRegion`'s existing
+refused rendering, and that is the bar.
 
-- [ ] **Step 2: Write the failing test first**
-
-```tsx
-it('renders refused as its own state — not an error', () => {
-  render(
-    <DataRegion state="refused" permission="case:edit" grantee="M. Kalcheva">
-      <div>never</div>
-    </DataRegion>,
-  );
-  expect(screen.queryByText('never')).toBeNull();
-  expect(screen.getByText(/case:edit/)).toBeInTheDocument();
-  expect(screen.queryByRole('alert')).toBeNull();
-});
-```
-
-Run `npm run test:run -- DataRegion`. Expected: FAIL, `refused` is not assignable.
-
-- [ ] **Step 3: Add the state, delegating to `StateBlock`. Step 4: re-run to green. Step 5: commit.**
-
-```bash
-git add frontend/src/components/DataRegion.tsx frontend/src/components/DataRegion.test.tsx
-git commit -m "feat(frontend): T4 — DataRegion's refused state"
-```
+**Files touched:** `kit/StateBlock.tsx`, `kit/StateBlock.test.tsx` only.
 
 ---
 
-### T5 — AppShell
+### T5 — AppShell — **DONE** (`8127551a` "T5a" Steps 1–2 · `5a4d7226` "T5b" Step 3)
+
+**What landed, where it differs from the steps below:** `AppShell.tsx` went from ~40 `@mui`
+imports to **one** — `useColorScheme`, kept because it writes `data-mui-color-scheme` and
+`index.css` keys the dark palette off that attribute; **T16 replaces it** (already in T16's file
+list). The collapsed rail is **64px**, not the render's 60 — `RAIL_WIDTH_COLLAPSED` was left as
+it was; take the render's figure in T16's layout pass or leave it, but say which. Two defects the
+port surfaced and fixed on the way: Radix `Tooltip` throws without a provider ancestor, so
+`ui/tooltip.tsx` is now self-providing (a root-only provider would have been fatal in ~100
+isolated-render tests); and Tailwind's default `md: 768px` silently contradicted this app's
+`md: 900` contract in `breakpoints.ts`, so the scale is now declared in `@theme` from the
+contract and `themeTokenParity.test.ts` reads `breakpoints.ts` rather than restating it. **Step 4
+(the top-strip slot) was not built** and moves to T7, the task that needs it. 1988 tests, local.
 
 **Deliverable:** The shell renders the 232px rail with the headings and order `AppShell.tsx`'s
-`projectNav` already has, collapsing to the 60px icon rail on **exactly two routes** — the case
-document editor and the execution runner — plus the top strip and the footer strip of rule 2.
+`projectNav` already has, collapsing to the icon rail on the case document editor and the execution
+runner (§4's two screens — **three route patterns**, below) plus the top strip and the footer strip
+of rule 2, the top strip carrying a slot a page can put its commit bar in.
 **Depends on:** T3
 
 **Files:**
-- Modify: `frontend/src/app/AppShell.tsx`, `frontend/src/app/AppShell.test.tsx`
-- Modify: `frontend/src/app/Providers.tsx` — `sonner`'s `<Toaster />` replaces notistack's provider
+- Modify: `frontend/src/app/AppShell.tsx` (1171 lines, all MUI), `frontend/src/app/AppShell.test.tsx`
+- ~~Modify: `frontend/src/app/Providers.tsx` — `sonner`'s `<Toaster />` replaces notistack's provider~~
+  **→ moved to T8.** The swap is 14 files, not one (§1), and it has nothing to do with the shell.
 
-**`Providers.tsx` nesting order is load-bearing and documented in the file** (CLAUDE.md): the query
-client is constructed innermost because its global error handlers consume the notification and
-session-recovery providers. Swapping notistack for `sonner` must preserve that order — the toaster
-mounts where the `SnackbarProvider` was, not at the root.
+- [x] **Step 1: Write the failing test for the collapse rule** — *landed, with three corrections to
+the text above the line:*
 
-- [ ] **Step 1: Write the failing test for the collapse rule**
+  - The execution runner's route is **`/projects/:projectId/runs/:runId/executions/:executionId`**
+    (`router.tsx:513`), not `/execute`.
+  - The case editor is reachable at **two** URLs — `/cases/new` (frame B, the blank state) and
+    `/cases/:caseId/edit` — and collapsing on one but not the other would put the rail at two widths
+    either side of the first save. So the constant has **three patterns** for §4's two screens.
+  - The rail already carries `data-testid="Nav.Rail"` and `data-collapsed="true|false"`
+    (`AppShell.tsx:528`); the test reads those, not the invented `AppShell.Rail` / `data-width`.
 
-```tsx
-it.each([
-  ['/projects/p1/cases/c1/edit', 'collapsed'],
-  ['/projects/p1/runs/r1/execute', 'collapsed'],
-  ['/projects/p1/cases', 'expanded'],
-  ['/projects/p1/dashboard', 'expanded'],
-])('the rail is %s on %s (design language §4)', (path, expected) => {
-  renderShellAt(path);
-  expect(screen.getByTestId('AppShell.Rail')).toHaveAttribute('data-width', expected);
-});
-```
+  The test also pins the other half — four routes that must **stay expanded** — because a collapse
+  rule that quietly widened to every project route would take 168px off forty screens; and it
+  asserts `Nav.CollapseToggle` is absent on a forced route, since a toggle that cannot expand is a
+  control that appears to do nothing.
 
-Expected: FAIL — the shell does not read the route today, which §9.2 names as an open problem.
+- [x] **Step 2: Implement the route read** — *landed.* `COLLAPSED_RAIL_ROUTES` is a module constant
+in `AppShell.tsx`; `useMatch` is called once per entry at the top level (hooks cannot loop), and
+`collapsed = railCollapsed || documentRoute`. The route forces the collapse without overwriting the
+stored `tcms.nav.railCollapsed` preference.
 
-- [ ] **Step 2: Implement the route read.** Derive from `useMatch` against the two patterns, held in
-one exported constant so a third route is a deliberate edit:
+- [x] **Step 3: Port the rail, top strip and footer strip** from `renders/tcms.css` (`.rail`, `.top`,
+`.foot`) and `renders/01-index-tables.html`. The pieces that exist today, all MUI: the rail `Box`
+at `AppShell.tsx:528`, the 52px `<header>` at `:1006`, the `AppFooter` at `:1146`. Widths: the
+render says 232 / 60; the code says `RAIL_WIDTH` / `RAIL_WIDTH_COLLAPSED = 64` — take the render's.
+Every `Nav.*` testid stays byte-identical; the existing `AppShell.test.tsx` (216 lines before this
+task) is the regression net.
 
-```ts
-export const COLLAPSED_RAIL_ROUTES = [
-  '/projects/:projectId/cases/:caseId/edit',
-  '/projects/:projectId/runs/:runId/execute',
-] as const;
-```
+- [ ] ~~**Step 4: A slot in the top strip for a page's commit bar.**~~ **→ moved to T7 Step 0**, not
+built in T5b. Kept here so the reasoning is not lost: §0 item 7 puts the case
+editor's commit bar *in the top strip beside the breadcrumb*, and T7 cannot do that unless the shell
+offers a place — a `TopStripSlot` (context + portal target, or an `Outlet` context value). This is
+the one thing T7 needs from T5 that the original text did not name. Add it here, with a test that a
+child rendering into it appears inside the `<header>`.
 
-- [ ] **Step 3: Port the rail, top strip and footer strip** from `renders/tcms.css` (`.rail`, `.top`,
-`.foot`) and `renders/01-index-tables.html`.
-
-- [ ] **Step 4: Run and commit**
-
-```bash
-cd frontend && npm run build && npm run lint && npm run test:run
-git add frontend/src/app
-git commit -m "feat(frontend): T5 — AppShell on the kit, with the two-width rail"
-```
+- [x] **Step 5: Run and commit** — landed as two commits, `8127551a` and `5a4d7226`, the second
+also touching `ui/tooltip.tsx`, `index.css` and `themeTokenParity.test.ts` for the reasons above.
 
 ---
 
-### T6 — Family 8, Threshold
+### T6 — Family 8, Threshold — **DONE**
+
+**What landed, and the three things the code disproved.**
+
+**1. The render's headline rule is only two-thirds portable.** *"The email decides the sign-in
+method before a password is asked for"* cannot be built on this screen without deleting behaviour
+the suite pins. `LoginPage.test.tsx`'s *"asks after a rejected local sign-in"* types into
+`Login.PasswordField` with **no blur ever firing** — that is a password manager filling both
+fields and submitting, and it is the everyday case at a company whose accounts exist only through
+its issuer. A password field that appears only after discovery answers would have nothing for that
+manager to fill. So the password path stays unconditional, `Keep me signed in` stays with it (the
+render's fourth note puts the switch on the password path only — satisfied vacuously, since the
+password path is always on), and the discovery *banner* of frame A — *"acme.test signs in through
+Acme Okta. You will not need a password."* — was **not** ported: its second sentence is false here,
+and its first duplicates the button beneath it while costing a `watch()` on the email field.
+Making this screen match frame A properly is a behaviour change with its own tests, not a port.
+
+**2. Frame C's story column asks for four fields the contract does not return.**
+`GET /auth/invitations/{token}` answers `email`, `displayName`, `passwordRequired`. The render's
+left panel says *"Mira Kalcheva invited you to Acme. You will join as a **Test Engineer**, with
+access to **Reflex Payments** and **Halo Onboarding**…"* — inviter, company, role, projects, and
+the role's own can/cannot sentence, which the render's first note calls the one moment a person
+will read a permission description. None of it is on the wire. The story column carries the
+invitee's own name and nothing invented; **the rest is a contract change**, and it is the
+strongest single argument in these three screens for one. Same for the expiry in the footnote —
+*"This link expires in 6 days"* became *"This link can be used once"*, which is a fact this page
+actually holds.
+
+**3. Frame C's strength meter and second requirement tick are claims the product cannot make.**
+The drawing shows a four-segment meter and two ticks, the second being *"Not a password seen in a
+known breach"*. There is no breach check in this tree or in the contract, and no strength
+estimator — adding `zxcvbn` for a drawing is a dependency for a decoration. One tick landed, wired
+to the Zod rule that actually exists (12 bytes), turning `--color-passed` when met. The meter did
+not.
+
+Also landed, smaller: `Identifier` is **not** used on these screens — it is MUI, and the wordmark
+and the invited address are the render's `.mk` and `.id` classes inlined instead; T16 owns whether
+`Identifier` itself is ported or dissolved. The failed-callback frame (D, lower) is **not** built:
+`SsoCallbackPage` redirects a failure to `/login` and that is pinned by four tests, and the
+drawing's four facts — the returned address, the reason, *SSO never creates accounts*, a reference
+to quote — are exactly what §6r's opaque marker withholds. The render and the refusal design
+disagree; the refusal design wins, and §9 of the design language gains an entry.
 
 **Deliverable:** `LoginPage`, `AcceptInvitationPage` and `SsoCallbackPage` render entirely from the
 kit with no `@mui` import, matching `renders/08-threshold.html`.
@@ -666,14 +771,34 @@ Three screens, no rail, no project, no session — the cheapest complete proof t
 a screen. The render's rule: *more identity than anywhere inside, fewer controls than anywhere
 inside, and the email decides the sign-in method before a password is asked for.*
 
-**Files:** `frontend/src/features/auth/*.tsx` and their tests.
+**Files:** `frontend/src/features/auth/*.tsx` and their tests. **One file was added** —
+`features/auth/ThresholdLayout.tsx`, the `.thr` two-column shell plus the six one-liners the three
+screens share (`label.f`, `.err`, `.help`, `.or`, `.quiet`, the form column's title and lead). It is
+not in `components/kit`: §5's nine components are the ones that carry all forty-two screens, and
+these carry three.
 
-- [ ] **Step 1:** Port each screen against `renders/08-threshold.html`, replacing MUI imports with
+- [x] **Step 1:** Port each screen against `renders/08-threshold.html`, replacing MUI imports with
 `components/ui` and `components/kit`. Keep every `data-testid` byte-identical — the existing tests
-are the regression net and must not be edited to accommodate the port.
-- [ ] **Step 2:** `grep -rn "@mui" frontend/src/features/auth` → expected: no matches.
-- [ ] **Step 3:** `npm run build && npm run lint && npm run test:run`
-- [ ] **Step 4:** Commit.
+are the regression net and must not be edited to accommodate the port. *Every testid is byte-
+identical (verified by the suite, which queries by them). The three `*.test.tsx` files were touched
+in exactly one way: the now-dead `<ThemeProvider theme={theme}>` wrapper and its two imports were
+removed, because Step 2's grep covers the whole directory. No assertion, mock, fixture or query was
+changed.*
+- [x] **Step 2:** `grep -rn "@mui" frontend/src/features/auth` → expected: no matches. *No matches.*
+- [x] **Step 3:** `npm run build && npm run lint && npm run test:run` — *build clean, lint 0
+warnings, `src/features/auth` **36/36**. The **full** suite is red on this tree and it is not T6:
+run with the T6 change it failed 16 tests in 7 files; run again with `features/auth` stashed and
+nothing else altered it failed **8 tests in 6 files — a different set** (`IssueChip`,
+`PlanLifecycle`, `ClassificationSettingsPage`, `TrackerSettingsPage`, only three files overlapping),
+and an earlier run of the same tree failed 4 in 2. Zero auth failures in any of the three. Every
+failure is the same shape — `TypeError: Failed to parse URL from /api/v1/…`, i.e. a write that
+escaped its double — and the set moves between runs, which is a parallel-worker pollution or load
+cliff, not a defect in any one file. The tree also carries an **uncommitted T9 lane** at the time
+of this run (`@tanstack/react-table` in `package.json`, a rewritten `CaseGrid.tsx`, a modified
+`kit/Table.tsx` and a new `CaseGrid.test.tsx`, +12 tests → 2000), which is the load that changed.
+**T17's shanks pass is what settles it**; if it reproduces there, capping vitest's worker count is
+the lead the runner's own comment in `vitest.config.ts` already names.*
+- [x] **Step 4:** Commit.
 
 ```bash
 git add frontend/src/features/auth
@@ -686,7 +811,15 @@ git commit -m "feat(frontend): T6 — family 8, the threshold, ported to the kit
 
 **Deliverable:** `CaseEditorPage` matches `assets/case-authoring-redesign.html` frames A and B, with
 all seven differences of §0 closed except item 6, which §4 defers.
-**Depends on:** T5
+**Depends on:** T5, **T8** (so `useSnackbar` at
+`CaseEditorPage.tsx:17` and the `SnackbarProvider` wrap in its test are already gone when this
+file is opened — see the ordering note under the task table).
+
+*Line references re-checked 2026-08-29:* `Panel title="Start"` `:345`, `"The case"` `:1032`,
+`"Notes"` `:1083` with the two fields at `:1086` / `:1095`, `"This case"` (the rail) `:1152`;
+`CaseDocument.tsx` `MONO` `:70`, `SHARED` `:86`, the placeholder `:280`; the file is 1662 lines and
+its test 524. `CaseEditorPage.tsx:67` imports `selectTestId` from `lib/muiTestIds` — Step 4 removes
+it with the `Select`s it served.
 
 This is the screen the plan was opened for. Its two specs
 ([`2026-08-28-case-authoring-redesign.md`](../specs/2026-08-28-case-authoring-redesign.md),
@@ -695,6 +828,11 @@ where they and the render disagree — the rail spec's *"Does the render need re
 lists four places the render is already known to be wrong.
 
 **Files:** `frontend/src/features/cases/CaseEditorPage.tsx`, `CaseDocument.tsx`, and their tests.
+
+- [ ] **Step 0: The top-strip slot** (moved from T5). `AppShell.tsx`'s `<header>` gets a
+`TopStripSlot` — a context + portal target — so a page can render its commit bar beside the
+breadcrumb (§0 item 7). Test: a child rendered into it appears inside the `<header>`, and nothing
+appears on a route that renders none. This is the only `AppShell.tsx` change in T7.
 
 - [ ] **Step 1: Remove the panel chrome** (§0 item 1). The document column is a bare `paper` surface;
 `Start`, `The case` and `Notes` lose their `Panel` wrappers. The rail keeps its section headings —
@@ -751,7 +889,7 @@ it('renders the rail rows quiet — no filled input surface at rest', () => {
 });
 ```
 
-- [ ] **Step 9:** `npm run build && npm run lint && npm run test:run`, then commit.
+- [ ] **Step 9:** Commit. No gate here — the build, lint and suite run once in T17.
 
 ```bash
 git add frontend/src/features/cases/CaseEditorPage.tsx frontend/src/features/cases/CaseDocument.tsx \
@@ -765,18 +903,85 @@ git commit -m "feat(frontend): T7 — the case editor as the render draws it"
 
 **Deliverable:** `NotFoundPage` and `HelpPage` render from the kit, and the refusal + notification
 matrix all 42 screens inherit is in place: a failure never auto-dismisses, an error names the field
-and links to it, every failure carries a six-character reference and a timestamp.
-**Depends on:** T4 (`StateBlock`), T6
+and links to it, every failure carries a six-character reference and a timestamp. **`notistack` is
+imported by no file** when this task ends.
+**Depends on:** T4 (`StateBlock`), T6. **Runs before T7** (see the task table).
 
-**Files:** `frontend/src/features/NotFoundPage.tsx`, `frontend/src/features/help/*`,
-`frontend/src/notifications/*`, `frontend/src/app/queryClient.ts`
+**Files:** `frontend/src/features/NotFoundPage.tsx`; `frontend/src/features/help/{HelpPage,RoleMatrix,prose}.tsx`
+(**`sections.tsx` needed no edit** — 898 lines of copy that imports only `./prose` and
+`./RoleMatrix`, never MUI, so porting the primitives ported all eleven sections);
+`frontend/src/notifications/{NotificationsProvider.tsx,notificationsContextValue.ts,useNotify.ts}`;
+`frontend/src/app/Providers.tsx`; `frontend/src/app/queryClient.ts`; and the 13 other notistack
+files of §1.
 
 Help is deliberately the fourth document surface (§3) — *written in the product, on the product's own
 document surface, using the product's own chart components*.
 
-- [ ] **Step 1:** Port both screens. **Step 2:** Move the notification surface onto `sonner`,
-preserving `app/queryClient.ts` as the one place a failure raises a notification (CLAUDE.md).
-**Step 3:** Assert the never-auto-dismiss rule:
+**The two notification surfaces today, and what each becomes.** `Providers.tsx` documents the
+split: success/info toasts go through notistack's `SnackbarProvider` (bottom-right, 4s auto-hide,
+`maxSnack={3}`); failures go through `NotificationsProvider` (top-right, never auto-dismisses) and
+are raised only by `app/queryClient.ts`. That split is the point and survives the swap — *"one
+provider cannot be both auto-hiding and persistent"*. `sonner` handles both with one `<Toaster>`
+(`toast.success` with a duration; `toast.error` with `duration: Infinity`), so:
+
+**What landed, where it differs from the steps below.**
+
+**The two surfaces stayed two.** Step 2 below says to *"route `NotificationsProvider`'s failure
+surface through `toast.error` with no auto-dismiss"* — that was **not done, and should not be**.
+`sonner` renders a list it owns; it has no notion of dedupe-by-cause, of the ten-second roll-up
+window, or of the *"+N more"* / *"Dismiss all"* controls, all four of which
+`NotificationsProvider`'s own header calls out as *"a defect class if it's missing"*. Routing it
+through sonner would have deleted three of the four to gain nothing: the property being ported is
+*never auto-dismisses*, and the surface already had it. So the **split** moved to sonner, not the
+surface — `<Toaster />` replaces `SnackbarProvider` in exactly its position and takes the
+success/info/warning half; the persistent half kept its portal and its logic, and lost only its MUI
+chrome (it now draws the render's `.toast`: `ground` ground, a 3px coloured left border, the mono
+`ref` line).
+
+**The pages call a module function, not a hook.** `useNotify()` throws outside
+`NotificationsProvider`, and `test/TestProviders.tsx` deliberately does not mount one — so a
+`useNotify`-shaped hook would have meant *adding* a provider to the six tests rather than dropping
+one from them, which is the opposite of Step 3. `sonner`'s queue is itself a module singleton
+(only `<Toaster />` needs mounting), so the transient surface is `notifications/toast.ts` —
+`toast(message, { variant })`, imported directly. The six call sites changed by exactly one
+identifier each.
+
+**`variant: 'error'` is where the rule was actually being broken.** Under notistack the caller's
+`variant` chose the copy and the *provider* chose the timer, so the three page-level
+`variant: 'error'` calls (`BoardPage` on a rejected drag, `ExecutionPage` twice on a refused
+recording) were failures on a four-second auto-hide — §7 broken by a call site, past every gate.
+`toast.ts` is now the only thing that sets a duration and its `error` arm has none.
+
+**The 404 is still generic, on purpose.** The render draws it *inside a project* — *"There is no
+TC-9999 in Reflex Payments; the highest case key in this project is TC-1284"* — but this component
+is the router's catch-all (`path="*"`, and `ProjectGuard` for an unresolvable project id), so it
+has neither a key nor a project to name. The half of the copy that survives is the *cause*, and it
+was kept: keys are per project. A contextual 404 belongs to the screen that knows the context.
+
+**One acceptance check cannot hold as written.** Step 4's `grep -rn "notistack" frontend/src` → no
+matches contradicts Step 3's *"strike it through there"*, and CLAUDE.md's rule that a superseded
+decision is written down struck through rather than deleted. **No file imports or calls notistack**
+— that is the check that was met. Three doc comments still name it, struck through, in the three
+places a reader needs the history: `app/Providers.tsx` (why `<Toaster />` sits where it sits),
+`notifications/toast.ts` (what it supersedes and which defect that fixed) and
+`notifications/NotificationsProvider.tsx:22` (the one Step 3 named).
+
+- [x] **Step 1:** Port `NotFoundPage` and the four help files.
+- [x] **Step 2:** Mount `ui/sonner`'s `<Toaster />` **where `SnackbarProvider` sits** in
+`Providers.tsx` — the nesting order is load-bearing and documented in the file: the query client is
+constructed innermost because its global error handlers consume the notification and
+session-recovery providers. Route `NotificationsProvider`'s failure surface through `toast.error`
+with no auto-dismiss, keeping `queryClient.ts` as the one place a failure is raised.
+- [x] **Step 3:** Give the six pages a `useNotify`-shaped success/info call instead of
+`useSnackbar` — `BoardPage.tsx:15`, `CaseListPage.tsx:4`, `CaseEditorPage.tsx:17`,
+`DocPageEditorPage.tsx:18`, `RunDetailPage.tsx:19`, `ExecutionPage.tsx:16` — and drop the
+`SnackbarProvider` wrap from the six tests that mount it (`TeamBoardPage`, `BoardPage`, `MyWorkPage`,
+`CaseEditorPage`, `CaseDocument`, `DocPageEditorPage`). The fourteenth file,
+`NotificationsProvider.tsx:23`, names notistack only in a comment — strike it through there. This
+is the only step of the plan that touches pages ahead of their own family task, and it touches
+only the import and the call.
+- [x] **Step 4:** `grep -rn "notistack" frontend/src` → no matches. **Step 5:** Assert the
+never-auto-dismiss rule:
 
 ```tsx
 it('a failure notification does not auto-dismiss', () => {
@@ -786,11 +991,17 @@ it('a failure notification does not auto-dismiss', () => {
 });
 ```
 
-- [ ] **Step 4:** Run the gate and commit.
+- [x] **Step 6:** Commit. No gate here — the build, lint and suite run once in T17.
+
+```bash
+git add frontend/src/features/NotFoundPage.tsx frontend/src/features/help frontend/src/notifications \
+        frontend/src/app/Providers.tsx frontend/src/app/queryClient.ts <the 12 notistack pages and tests>
+git commit -m "feat(frontend): T8 — family 9, the states, and one notification surface on sonner"
+```
 
 ---
 
-### T9 — TanStack Table
+### T9 — TanStack Table — **DONE** (`6de8c9a9`)
 
 **Deliverable:** `CaseGrid` renders on TanStack Table with `manualPagination` / `manualSorting` /
 `manualFiltering` driving the existing query hooks; `@mui/x-data-grid` is imported by no file.
@@ -798,14 +1009,25 @@ it('a failure notification does not auto-dismiss', () => {
 
 **Files:** `frontend/src/features/cases/CaseGrid.tsx` (336 lines), `frontend/src/components/kit/Table.tsx`
 
-- [ ] **Step 1:** `npm install @tanstack/react-table`
-- [ ] **Step 2:** Port the column definitions one-for-one. **Server-side paging/sort/filter is not
+**What landed, where it differs from the steps below:** TanStack Table **v9.2.4** — `useTable` and
+`tableFeatures({ rowPaginationFeature, rowSelectionFeature, rowSortingFeature })`, not v8's
+`useReactTable` + `getCoreRowModel()`. There is **no `manualFiltering: true`**: that option belongs
+to `columnFilteringFeature`, which this grid does not register, so there is no client-side filter
+path to switch off — filtering stays the URL's and the server's, which is the stronger guarantee of
+the two. `kit/Table`'s `TableHeaderCell` grew a real sort affordance (`sortDirection` + `onSort` →
+a `<button>` inside the `<th>` and `aria-sort` on it); its decorative `sortable` prop, which had no
+consumer, is gone. The grid now renders its own pager (`Cases.Pager.*`) — `DataGrid` supplied one
+and nothing else does. Tooltips are the native `title` attribute rather than a tooltip component
+per truncated cell. New file: `CaseGrid.test.tsx`, twelve assertions, none of them a look.
+
+- [x] **Step 1:** `npm install @tanstack/react-table`
+- [x] **Step 2:** Port the column definitions one-for-one. **Server-side paging/sort/filter is not
 optional** — it is how the grid behaves today and a client-side load of the full table is the named
 anti-pattern. Deterministic default sort with a unique tiebreaker is a `ui-rules` requirement and
 the existing behaviour; keep it.
-- [ ] **Step 3:** The kit's Table rule — *a quiet second line in the cell rather than a twelfth
+- [x] **Step 3:** The kit's Table rule — *a quiet second line in the cell rather than a twelfth
 column* (UX#113 / UX#111) — is the one visual change. Everything else is a mechanical port.
-- [ ] **Step 4:** `grep -rn "x-data-grid" frontend/src` → no matches. Gate, commit.
+- [x] **Step 4:** `grep -rn "x-data-grid" frontend/src` → no matches. Gate, commit.
 
 ---
 
@@ -820,8 +1042,8 @@ toolbar; **proportion before number**; an em dash meaning *no value* rather than
 *a count is a link to its rows, and the URL carries the filter*. Filter state lives in the URL
 (`useSearchParams`) and that does not change.
 
-- [ ] **Step 1–10:** One screen per step, each ending with `npm run test:run` on that screen's test.
-- [ ] **Step 11:** Gate and commit.
+- [ ] **Step 1–10:** One screen per step.
+- [ ] **Step 11:** Commit. No gate here — the build, lint and suite run once in T17.
 
 ---
 
@@ -836,7 +1058,7 @@ ReportView render at the 74ch measure on `kit/DocumentSurface` and `kit/Timeline
 file being downloaded. It is the one screen in the product that is deliberately not dark, and the
 port must not "fix" it.
 
-- [ ] **Steps 1–7:** One screen per step. **Step 8:** Gate and commit.
+- [ ] **Steps 1–7:** One screen per step. **Step 8:** Commit — no gate here; T17 runs it.
 
 ---
 
@@ -846,6 +1068,11 @@ port must not "fix" it.
 from T5, number keys for verdicts, the current step at full ink, the failure panel in place of a
 dialog, and *last time* on screen before it is needed.
 **Depends on:** T5, T11
+
+**Files:** `frontend/src/features/runs/ExecutionPage.tsx` and its test; the route is
+`/projects/:projectId/runs/:runId/executions/:executionId` (`router.tsx:513`) and T5 already
+collapses the rail on it. The failure panel replaces `features/runs/BlockedDialog.tsx`'s dialog
+form — the file whose comment cites `muiTestIds` (D3); its `inputTestId` import goes here.
 
 - [ ] **Step 1:** Port. **Step 2:** Assert the keyboard contract:
 
@@ -857,7 +1084,7 @@ it('records a verdict from the number key for that verdict', async () => {
 });
 ```
 
-- [ ] **Step 3:** Gate and commit.
+- [ ] **Step 3:** Commit — no gate here; T17 runs it.
 
 ---
 
@@ -870,12 +1097,18 @@ it('records a verdict from the number key for that verdict', async () => {
 The board is the only drag surface, *so the only one where WCAG 2.2's drag rule bites* — every drag
 needs a single-pointer alternative. `@dnd-kit` stays; it is not MUI.
 
-`ClassificationPicker.tsx` is the second `x-tree-view` consumer and is replaced with a flat
-`components/ui/command` combobox — classification values are a flat vocabulary per dimension, not a
-tree, which is why the TreeView was carrying one node depth.
+`features/cases/ClassificationPicker.tsx` is the ~~second~~ **only** `x-tree-view` consumer
+(`CaseGrid.tsx` does not import it — §1) and is replaced with a flat `components/ui/command`
+combobox — classification values are a flat vocabulary per dimension, not a tree, which is why the
+TreeView was carrying one node depth. It is a case-authoring component, not a board one; it sits in
+this task only because the tree-view removal does, and it drops its `inputTestId` import with the
+port. **Depends on T8** as well, because `BoardPage.tsx:15` calls `useSnackbar` until then.
+
+**Files:** `features/board/{BoardPage,MyWorkPage,TeamBoardPage}.tsx`,
+`features/org-chart/OrgChartPage.tsx`, `features/cases/ClassificationPicker.tsx`, their tests.
 
 - [ ] **Step 1–4:** One screen per step. **Step 5:** `grep -rn "x-tree-view" frontend/src` → no
-matches. Gate, commit.
+matches, then commit — no gate here; T17 runs it.
 
 ---
 
@@ -890,7 +1123,7 @@ the tree, dimmed; and *Write one* sits on the untested clause, opening the case 
 with that paragraph as the objective. The import shows the **diff, not the count**, never deletes,
 and its button counts what it will do.
 
-- [ ] **Steps 1–3:** One screen per step. **Step 4:** Gate and commit.
+- [ ] **Steps 1–3:** One screen per step. **Step 4:** Commit — no gate here; T17 runs it.
 
 ---
 
@@ -906,11 +1139,24 @@ this), and *Activity, last 30 days* is drawn as three small multiples rather tha
 chart, because the product's accents measure 2.5 ΔE apart under deuteranopia. No pie, donut or gauge.
 Y axes start at zero.
 
-Settings' rules: every setting states its blast radius against live data; every refusal names a
-person who can grant it (T4's refused state); revoked and expired rows **stay on screen, dimmed**,
-with the date and reason — rule 7, *disable, don't hide*.
+Settings' rules: every setting states its blast radius against live data; ~~every refusal names a
+person who can grant it (T4's refused state)~~ every refusal names the permission and the role that
+can grant it — a person cannot be named on this codebase, see T4; revoked and expired rows **stay
+on screen, dimmed**, with the date and reason — rule 7, *disable, don't hide*.
 
-- [ ] **Steps 1–11:** One screen per step. **Step 12:** Gate and commit.
+**Thirteen screens, not eleven.** §8 lists nine settings/admin pages; the tree has two more that
+the family map never placed — `features/settings/TrackerSettingsPage.tsx` (project-level tracker
+config, alongside Review/Classification/Notifications) and `features/account/TrackerConnectionsPage.tsx`
+(alongside `AccountSecurityPage`). Both are settings by job and take family 7's render. Together
+with Dashboard and PlanStatistics that is 13 screens; this is the task §6 says to split — split it
+**after step 2** (analytics) and **after step 8** (the project-scoped settings), and keep the
+order. Six `lib/muiTestIds` importers are this task's (`ReviewSettingsPage`, `TrackerSettingsPage`,
+`NotificationChannelDialog`, `TeamDialog`, `TeamMembersDialog`, `ProviderFormDialog`) — each port
+drops its own; the full ownership map is under D3.
+
+- [ ] **Steps 1–2:** Dashboard, PlanStatistics. **Steps 3–8:** Review, Classification,
+Notifications, Trackers, ProjectAccess, AuditLog. **Steps 9–13:** Teams, ApiTokens, SsoProviders,
+AccountSecurity, TrackerConnections. **Step 14:** Commit — no gate here; T17 runs it.
 
 ---
 
@@ -923,9 +1169,14 @@ comment that cites it.
 
 **Files:**
 - Delete: `frontend/src/lib/muiTestIds.ts`, `frontend/src/app/theme.ts`
-- Modify: `frontend/src/features/runs/BlockedDialog.tsx:105` — the citation
+- Modify: `frontend/src/components/ui/ui.test.tsx:20` — the second citation (the first,
+  `BlockedDialog.tsx:105`, went with T12)
 - Modify: `frontend/src/index.css`, `frontend/package.json`
 - Modify: `frontend/src/app/themeTokenParity.test.ts` — its subject no longer exists
+- Modify: `frontend/src/app/Providers.tsx` — `ThemeProvider` + `CssBaseline` go; the
+  `defaultMode="system"` toggle they carried must be re-homed on `data-mui-color-scheme` (or its
+  renamed successor) before they do, or the theme toggle becomes the no-op CLAUDE.md warns about
+- Modify: `docs/specs/assets/renders/tcms.css:6-7` — the header names `theme.ts` (§5)
 
 - [ ] **Step 1: Prove nothing imports MUI**
 
@@ -936,12 +1187,15 @@ cd frontend && grep -rn "@mui\|@emotion\|notistack" src/ ; echo "exit=$?"
 Expected: no matches (`exit=1`). A single hit here means a screen task is unfinished; finish it
 before proceeding — this is the task that makes the D2 intermediate state end.
 
-- [ ] **Step 2: Delete the two files and fix the citation**
+- [ ] **Step 2: Delete the two files and fix the citations**
 
-`BlockedDialog.tsx:105` reads `// reason \`lib/muiTestIds.ts\` exists.` Delete the comment with the
-file. **This is not optional**: `packages/client/src/test/citedFiles.test.ts` scans `frontend/src`
-for `.ts`/`.tsx` and fails on a path that is not on disk, and it reddens the **packages** job, not
-the frontend one — the wrong place to go looking.
+`components/ui/ui.test.tsx:20` reads `The whole reason \`lib/muiTestIds.ts\` exists is …`; it is the
+test that proved the premise gone, and it now describes a file that is not there — strike the
+path through and say the file was deleted here, per D4. (`BlockedDialog.tsx:105` was the other
+citation and T12 owns it; if it survived, T12 is unfinished.) **This is not optional**:
+`packages/client/src/test/citedFiles.test.ts` scans `frontend/src` for `.ts`/`.tsx` and fails on a
+path that is not on disk, and it reddens the **packages** job, not the frontend one — the wrong
+place to go looking. `grep -rn "muiTestIds" frontend/src` → no matches is the proof.
 
 - [ ] **Step 3: Rewrite `themeTokenParity.test.ts`**
 
@@ -969,15 +1223,16 @@ cd frontend && npm uninstall @mui/material @mui/icons-material @mui/x-data-grid 
 
 `@mui/x-date-pickers` is removed here having never been imported by anything — see §1.
 
-- [ ] **Step 6: Run the full gate and expect layout damage**
+- [ ] **Step 6: ~~Run the full gate and expect layout damage~~ → superseded — no gate here**
 
-```bash
-cd frontend && npm run build && npm run lint && npm run test:run
-```
+~~`cd frontend && npm run build && npm run lint && npm run test:run`~~
 
-Preflight resets margins, list styles and heading sizes that MUI's baseline was providing. Expect
+Preflight resets margins, list styles and heading sizes that MUI's baseline was providing. ~~Expect
 findings here and fix them in this task — that is what Step 4 is for, and postponing it to T17 makes
-the gate task a second design task.
+the gate task a second design task.~~ → superseded by the gates-run-once directive at the top of
+this file: the damage now surfaces in **T17**, which is therefore a gate pass *and* the design
+fix-up for whatever preflight moved. Fix it there, against T17's build output, and record it in
+T17's Results section.
 
 - [ ] **Step 7: Commit**
 
@@ -994,6 +1249,13 @@ git commit -m "feat(frontend): T16 — MUI removed, preflight on, one styling au
 **Deliverable:** The four gates run green on `shanks`, and the before/after bundle numbers are
 recorded in this plan's closing section.
 **Depends on:** T16
+
+**This is the FIRST time anything is built or tested since the last gated task (T9)** — the gates-run-once directive at
+the top of this file moved every per-task gate here. So expect this task to be a fix-up task, not a
+formality: T6–T16 have eleven tasks' worth of unrun `tsc`, lint and Vitest between them, plus the
+layout damage Tailwind's preflight causes when T16 turns it on. Budget for that, fix what the gates
+find here, and re-run until all four are green before writing the Results section. If the first run
+buries you, fix in the order build → lint → tests, since a type error hides everything behind it.
 
 **Gates run on `shanks`, not locally** — the standing user directive in CLAUDE.md. Read
 [`shanks-runner-details.md`](../specs/shanks-runner-details.md) first: `BUILD FAILED` with
@@ -1069,9 +1331,14 @@ git commit -m "fix: T17 — gates green on shanks, bundle measured"
 
 ## 6. What this plan does not claim
 
-Nothing here is built. The task sizes are a judgement, not a measurement: T10 and T15 are ten and
-eleven screens and are the two most likely to overrun a single agent's useful context — split them
-at the screen boundary named in their steps and keep the order. The claim that the kit's nine
+~~Nothing here is built.~~ T1–T4 are built and their gates ran **locally** (build clean, lint 0,
+suite green — 1973 tests at T3); none of the four has yet been run on `shanks`, so per CLAUDE.md
+they are *built and unverified* until T17. T4 is also the first task whose premise the code
+disproved (a sixth `DataRegion` state that already existed) — the reason every remaining task has
+a *"read it first"* step, and the reason this grounding pass was made. The task sizes are a
+judgement, not a measurement: T10 and T15 are ten and thirteen screens and are the two most likely
+to overrun a single agent's useful context — split them at the screen boundary named in their steps
+and keep the order. The claim that the kit's nine
 components carry all forty-two screens is the design-language spec's claim, made from drawings, and
 the first task that finds a tenth component is evidence against it, not a reason to improvise one
 quietly. Everything is *built and unverified* until T17 says otherwise.
