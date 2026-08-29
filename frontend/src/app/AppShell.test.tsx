@@ -1,5 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
+import { Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { api } from '../api/client'
 import type { PermissionKey, Project } from '../api/types'
@@ -7,6 +9,7 @@ import { heldPermissions } from '../test/permissions'
 import { createTestQueryClient } from '../test/queryClient'
 import { TestProviders } from '../test/TestProviders'
 import { AppShell } from './AppShell'
+import { TopStripSlot } from './topStripSlot'
 
 /**
  * The shell's navigation affordances — the first test file it has ever had, added with the two
@@ -266,5 +269,53 @@ describe('the rail collapses on the document routes (design language §4)', () =
     renderShell(`/projects/${OLB}/cases`)
     await railReady()
     expect(rail().getByTestId('Nav.CollapseToggle')).toBeInTheDocument()
+  })
+})
+
+/**
+ * The top strip's slot (007 T7 Step 0) — the one thing the case editor needs from the shell.
+ *
+ * A page's commit bar belongs beside the breadcrumb rather than in a footer bar of its own, and a
+ * page cannot reach into `<header>`. The two halves worth pinning are that a child rendered into
+ * the slot ends up *inside the header element* — not merely somewhere on the page, which a portal
+ * pointed at the wrong target would also satisfy — and that a route filling nothing leaves the
+ * strip empty rather than reserving a band of chrome for it.
+ */
+describe('AppShell top-strip slot', () => {
+  function renderWithSlot(children: ReactNode) {
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path === '/projects') return PROJECTS
+      if (path.startsWith('/me/permissions')) return heldPermissions([])
+      return []
+    }) as typeof api.get)
+
+    return render(
+      <TestProviders client={createTestQueryClient()} route={`/projects/${OLB}/cases/new`} userId="user-1">
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/projects/:projectId/cases/new" element={children} />
+          </Route>
+        </Routes>
+      </TestProviders>,
+    )
+  }
+
+  it('renders a page’s commit bar inside the header, not merely on the page', async () => {
+    renderWithSlot(
+      <TopStripSlot>
+        <button type="button" data-testid="Page.Save">Save</button>
+      </TopStripSlot>,
+    )
+
+    const save = await screen.findByTestId('Page.Save')
+    await waitFor(() => expect(save.closest('header')).not.toBeNull())
+    expect(within(screen.getByTestId('Nav.TopStrip')).getByTestId('Page.Save')).toBeInTheDocument()
+  })
+
+  it('leaves the strip empty on a route that fills nothing', async () => {
+    renderWithSlot(<p>Just a page</p>)
+
+    await screen.findByText('Just a page')
+    expect(screen.getByTestId('Nav.TopStrip')).toBeEmptyDOMElement()
   })
 })

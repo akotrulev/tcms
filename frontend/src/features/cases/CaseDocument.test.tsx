@@ -184,14 +184,25 @@ describe('CaseDocument — seeding', () => {
     expect(within(feature).queryByRole('textbox')).not.toBeInTheDocument()
   })
 
-  it('shows Given / When / Then as ghost text on a document with nothing in it', async () => {
+  it('scaffolds a document with nothing in it, one ghost hint per keyword', async () => {
+    /*
+      REPLACES `placeholder="Given …/When …/Then …"` (007 §0 item 3). The placeholder named the
+      three keywords, which the author can already see in any other case; the scaffold says what
+      each one is FOR, on the line it will be typed on. It renders inside the MIRROR rather than
+      above the box, so nothing on screen moves when the first character arrives.
+    */
     mockReads()
     vi.spyOn(api, 'postForText').mockResolvedValue('Feature: Refunds\n' as never)
     renderEditor()
 
     const area = await screen.findByTestId('CaseEditor.Document.Text')
     await waitFor(() => expect(area).toHaveValue(''))
-    expect(area).toHaveAttribute('placeholder', 'Given …\nWhen …\nThen …')
+    expect(area).not.toHaveAttribute('placeholder')
+
+    const scaffold = await screen.findByTestId('CaseEditor.Document.Scaffold')
+    expect(scaffold).toHaveTextContent('the state the test starts from')
+    expect(scaffold).toHaveTextContent('the action under test')
+    expect(scaffold).toHaveTextContent('what must be true afterwards')
   })
 })
 

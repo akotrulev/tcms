@@ -23,21 +23,21 @@
  */
 import { useState } from 'react';
 import {
-  Alert,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-} from '@mui/material';
+  Input,
+  Textarea,
+} from '../../components/ui';
+import { Banner } from '../../components/kit';
 import { useCreateCondition, useUpdateCondition } from '../../api/queries';
 import type { Condition } from '../../api/types';
 import { ApiError } from '../../api/client';
+import { cn } from '../../lib/cn';
 import { describeError } from '../../lib/describeError';
-import { selectTestId } from '../../lib/muiTestIds';
 import { impactSummary } from '../../lib/conditions';
 
 const TYPES = [
@@ -113,83 +113,131 @@ export function ConditionEditDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{editing ? 'Edit condition' : 'New condition'}</DialogTitle>
+    <Dialog open={open} onOpenChange={(next: boolean) => !next && onClose()}>
       <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
+        <DialogHeader>
+          <DialogTitle>{editing ? 'Edit condition' : 'New condition'}</DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-4 flex flex-col gap-4">
           {editing && (
             /*
-              The impact, stated before the save and naming the object — ui-rules §4. `warning`
-              rather than `info` because the consequence is the point: this is not a note about
+              The impact, stated before the save and naming the object — ui-rules §4. `warn` rather
+              than a neutral note because the consequence is the point: this is not a remark about
               where the entry is used, it is what the author is about to change.
             */
-            <Alert severity="warning" data-testid="CaseEditor.Condition.Impact">
-              Saving changes “{condition.title}” everywhere it is used. {impactSummary(condition)}.
-            </Alert>
+            <div data-testid="CaseEditor.Condition.Impact">
+              <Banner tone="warn">
+                Saving changes “{condition.title}” everywhere it is used. {impactSummary(condition)}.
+              </Banner>
+            </div>
           )}
 
           {rootError && (
-            <Alert severity="error" data-testid="CaseEditor.Condition.Error">
-              {rootError}
-            </Alert>
+            <div data-testid="CaseEditor.Condition.Error">
+              <Banner tone="bad">
+                <span role="alert">{rootError}</span>
+              </Banner>
+            </div>
           )}
 
-          <TextField
-            label="Title"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            error={!!errors.title}
-            helperText={errors.title?.[0]}
-            slotProps={{ htmlInput: { 'data-testid': 'CaseEditor.Condition.Title' } }}
-          />
+          <Field label="Title" htmlFor="condition-title" error={errors.title?.[0]}>
+            <Input
+              id="condition-title"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              data-testid="CaseEditor.Condition.Title"
+            />
+          </Field>
 
-          <TextField
-            select
+          <Field
             label="Used as"
-            value={type}
-            onChange={(event) => setType(event.target.value)}
-            error={!!errors.type}
-            helperText={errors.type?.[0] ?? '“Both” appears in the precondition and postcondition pickers.'}
-            slotProps={{ select: { SelectDisplayProps: selectTestId('CaseEditor.Condition.Type') } }}
+            htmlFor="condition-type"
+            error={errors.type?.[0]}
+            help="“Both” appears in the precondition and postcondition pickers."
           >
-            {TYPES.map((option) => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </TextField>
+            <select
+              id="condition-type"
+              value={type}
+              onChange={(event) => setType(event.target.value)}
+              data-testid="CaseEditor.Condition.Type"
+              className="w-full cursor-pointer rounded-[6px] border border-white/8 bg-field px-3 py-1.5 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
+            >
+              {TYPES.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-          <TextField
+          <Field
             label="Actions"
-            multiline
-            minRows={3}
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
-            error={!!errors.body}
-            helperText={errors.body?.[0] ?? 'One action per line — the order is the procedure.'}
-            slotProps={{ htmlInput: { 'data-testid': 'CaseEditor.Condition.Body' } }}
-          />
-        </Stack>
+            htmlFor="condition-body"
+            error={errors.body?.[0]}
+            help="One action per line — the order is the procedure."
+          >
+            <Textarea
+              id="condition-body"
+              rows={3}
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              data-testid="CaseEditor.Condition.Body"
+            />
+          </Field>
+        </div>
+
+        <DialogFooter>
+          <Button variant="quiet" onClick={onClose} data-testid="CaseEditor.Condition.Cancel">
+            Cancel
+          </Button>
+          {/*
+            Verb-labeled, and on an edit it names the consequence rather than saying "Save" —
+            ui-rules §4's rule about a warning title with a neutral confirm button sending a mixed
+            signal. The pending flag is the double-submit guard.
+          */}
+          <Button
+            variant={editing ? 'danger' : 'primary'}
+            disabled={pending}
+            onClick={submit}
+            data-testid="CaseEditor.Condition.Save"
+          >
+            {pending ? 'Saving…' : editing ? 'Change everywhere' : 'Create condition'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} data-testid="CaseEditor.Condition.Cancel">
-          Cancel
-        </Button>
-        {/*
-          Verb-labeled, and on an edit it names the consequence rather than saying "Save" —
-          ui-rules §4's rule about a warning title with a neutral confirm button sending a mixed
-          signal. `loading` is the double-submit guard.
-        */}
-        <Button
-          variant="contained"
-          color={editing ? 'warning' : 'primary'}
-          loading={pending}
-          onClick={submit}
-          data-testid="CaseEditor.Condition.Save"
-        >
-          {editing ? 'Change everywhere' : 'Create condition'}
-        </Button>
-      </DialogActions>
     </Dialog>
+  );
+}
+
+/** A label above its control, its refusal — or its help — beneath it. One column, always. */
+function Field({
+  label,
+  htmlFor,
+  help,
+  error,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  help?: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label htmlFor={htmlFor} className="mb-1 block text-[13px] font-medium text-ink-2">
+        {label}
+      </label>
+      {children}
+      {(error ?? help) && (
+        <p
+          role={error ? 'alert' : undefined}
+          className={cn('m-0 mt-1 text-xs', error ? 'text-[color:var(--color-failed)]' : 'text-ink-4')}
+        >
+          {error ?? help}
+        </p>
+      )}
+    </div>
   );
 }

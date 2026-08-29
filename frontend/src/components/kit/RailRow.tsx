@@ -1,5 +1,5 @@
 import { ChevronDown } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
 
@@ -29,8 +29,15 @@ import { cn } from '../../lib/cn';
  * `readOnly` renders a non-interactive row for a value the author genuinely cannot change here —
  * inherited preconditions, a server-assigned id. It is not a disabled button: there is no action
  * behind it to enable.
+ *
+ * **It takes the rest of a `<button>`'s props** — widened by its first real consumer, the case
+ * editor's rail (007 T7). A row that opens a disclosure has to say so with `aria-expanded`, and a
+ * component whose props stop at `data-testid` cannot: the state would be visible in the chevron
+ * and invisible to a screen reader, which is UX#117's *state* clause failed by the component that
+ * exists to satisfy it.
  */
-export interface RailRowProps {
+export interface RailRowProps
+  extends Omit<ComponentProps<'button'>, 'value' | 'onClick' | 'children' | 'type'> {
   label: string;
   value: ReactNode;
   onOpen?: () => void;
@@ -41,10 +48,10 @@ export interface RailRowProps {
 const ROW =
   'flex w-full items-center justify-between gap-2.5 rounded-[5px] py-1 text-[13px] text-left min-h-7';
 
-export function RailRow({ label, value, onOpen, readOnly, ...rest }: RailRowProps) {
+export function RailRow({ label, value, onOpen, readOnly, className, ...rest }: RailRowProps) {
   if (readOnly || !onOpen) {
     return (
-      <div className={cn(ROW, 'opacity-[.72]')} {...rest}>
+      <div className={cn(ROW, 'opacity-[.72]', className)} data-testid={rest['data-testid']}>
         <span className="shrink-0 text-ink-3">{label}</span>
         <span className="flex items-center gap-1.5 text-right font-normal text-ink">{value}</span>
       </div>
@@ -60,6 +67,7 @@ export function RailRow({ label, value, onOpen, readOnly, ...rest }: RailRowProp
         '-mx-2 w-[calc(100%+1rem)] cursor-pointer border border-transparent px-2',
         'hover:border-white/14 hover:bg-white/3',
         'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]',
+        className,
       )}
       {...rest}
     >

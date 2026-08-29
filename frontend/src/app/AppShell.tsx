@@ -48,6 +48,7 @@ import { RouteErrorBoundary } from '../components/ErrorBoundaries';
 import { SkipToContentLink } from '../components/SkipToContentLink';
 import { useAuth } from '../auth/useAuth';
 import { safeStorage } from '../lib/safeStorage';
+import { TopStripProvider, TopStripTarget } from './topStripSlot';
 import { cn } from '../lib/cn';
 import {
   Button,
@@ -518,82 +519,84 @@ export function AppShell() {
   const mainRef = useRouteFocus<HTMLElement>();
 
   return (
-    <div className="flex min-h-full bg-ground">
-      {/*
-        First focusable element in the DOM, so a keyboard user's very first Tab offers a way past
-        the rail. Without it, reaching the content on a page like the case list means tabbing
-        through the project switcher and eleven nav links on every single navigation.
-      */}
-      <SkipToContentLink />
-      {/* Desktop rail — shown wherever there is room for it. */}
-      <nav
-        id="nav-rail"
-        aria-label="Main"
-        data-testid="Nav.Rail"
-        /*
-          Read by the collapse toggle's own assertion, and by nothing else: `aria-expanded` on the
-          button names a state, and a screen reader needs the element that state is *about*. The
-          testid says which variant is showing; this says how wide it currently is.
-        */
-        data-collapsed={collapsed ? 'true' : 'false'}
-        className={cn(
-          'hidden md:flex flex-col shrink-0 border-r border-white/8 bg-[#0c1119]',
-          'sticky top-0 h-screen',
-          // A width the user asked to change should be seen to change. Motion is opt-out at the
-          // theme level (`prefers-reduced-motion` is a hard floor), so this respects it.
-          'transition-[width] duration-150 ease-out motion-reduce:transition-none',
-        )}
-        style={{ width: collapsed ? RAIL_WIDTH_COLLAPSED : RAIL_WIDTH }}
-      >
-        <RailContent collapsed={collapsed} onToggleCollapse={documentRoute ? undefined : toggleRail} />
-      </nav>
-
-      {/* Small-screen drawer — the same content, mounted only while open. */}
-      <Dialog open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <DialogContent
-          data-testid="Nav.Drawer"
-          className="left-0 top-0 h-full max-w-none translate-x-0 translate-y-0 rounded-none border-l-0 p-0 flex md:hidden"
-          style={{ width: RAIL_WIDTH }}
-        >
-          <DialogTitle className="sr-only">Navigation</DialogTitle>
-          <nav aria-label="Main" className="flex h-full w-full flex-col">
-            <RailContent onNavigate={() => setDrawerOpen(false)} />
-          </nav>
-        </DialogContent>
-      </Dialog>
-
-      <div className="flex flex-1 min-w-0 flex-col">
-        <TopBar onOpenNav={() => setDrawerOpen(true)} />
-
-        <main
-          id="main-content"
+    <TopStripProvider>
+      <div className="flex min-h-full bg-ground">
+        {/*
+          First focusable element in the DOM, so a keyboard user's very first Tab offers a way past
+          the rail. Without it, reaching the content on a page like the case list means tabbing
+          through the project switcher and eleven nav links on every single navigation.
+        */}
+        <SkipToContentLink />
+        {/* Desktop rail — shown wherever there is room for it. */}
+        <nav
+          id="nav-rail"
+          aria-label="Main"
+          data-testid="Nav.Rail"
           /*
-            Focusable so the route-change hook can move focus here. `-1` keeps it out of the tab
-            order — it is a programmatic focus target, not a stop the user tabs through.
+            Read by the collapse toggle's own assertion, and by nothing else: `aria-expanded` on the
+            button names a state, and a screen reader needs the element that state is *about*. The
+            testid says which variant is showing; this says how wide it currently is.
           */
-          tabIndex={-1}
-          ref={mainRef}
+          data-collapsed={collapsed ? 'true' : 'false'}
           className={cn(
-            'flex-1 min-w-0 px-2 py-2 md:px-4 md:py-3',
-            // Focusing a large container draws a full-width ring that reads as a rendering bug
-            // rather than as a focus cue. The heading the user lands on is the signal; the skip
-            // link and every real control keep their own visible indicators.
-            'outline-none',
+            'hidden md:flex flex-col shrink-0 border-r border-white/8 bg-[#0c1119]',
+            'sticky top-0 h-screen',
+            // A width the user asked to change should be seen to change. Motion is opt-out at the
+            // theme level (`prefers-reduced-motion` is a hard floor), so this respects it.
+            'transition-[width] duration-150 ease-out motion-reduce:transition-none',
           )}
+          style={{ width: collapsed ? RAIL_WIDTH_COLLAPSED : RAIL_WIDTH }}
         >
-          {/*
-            The per-route boundary sits here, inside the shell, so a page that throws degrades to
-            an alert in the content area while the rail, the project switcher, and the top bar
-            keep working — the user can navigate away from a broken page instead of reloading.
-          */}
-          <RouteErrorBoundary>
-            <Outlet />
-          </RouteErrorBoundary>
-        </main>
+          <RailContent collapsed={collapsed} onToggleCollapse={documentRoute ? undefined : toggleRail} />
+        </nav>
 
-        <AppFooter />
+        {/* Small-screen drawer — the same content, mounted only while open. */}
+        <Dialog open={drawerOpen} onOpenChange={setDrawerOpen}>
+          <DialogContent
+            data-testid="Nav.Drawer"
+            className="left-0 top-0 h-full max-w-none translate-x-0 translate-y-0 rounded-none border-l-0 p-0 flex md:hidden"
+            style={{ width: RAIL_WIDTH }}
+          >
+            <DialogTitle className="sr-only">Navigation</DialogTitle>
+            <nav aria-label="Main" className="flex h-full w-full flex-col">
+              <RailContent onNavigate={() => setDrawerOpen(false)} />
+            </nav>
+          </DialogContent>
+        </Dialog>
+
+        <div className="flex flex-1 min-w-0 flex-col">
+          <TopBar onOpenNav={() => setDrawerOpen(true)} />
+
+          <main
+            id="main-content"
+            /*
+              Focusable so the route-change hook can move focus here. `-1` keeps it out of the tab
+              order — it is a programmatic focus target, not a stop the user tabs through.
+            */
+            tabIndex={-1}
+            ref={mainRef}
+            className={cn(
+              'flex-1 min-w-0 px-2 py-2 md:px-4 md:py-3',
+              // Focusing a large container draws a full-width ring that reads as a rendering bug
+              // rather than as a focus cue. The heading the user lands on is the signal; the skip
+              // link and every real control keep their own visible indicators.
+              'outline-none',
+            )}
+          >
+            {/*
+              The per-route boundary sits here, inside the shell, so a page that throws degrades to
+              an alert in the content area while the rail, the project switcher, and the top bar
+              keep working — the user can navigate away from a broken page instead of reloading.
+            */}
+            <RouteErrorBoundary>
+              <Outlet />
+            </RouteErrorBoundary>
+          </main>
+
+          <AppFooter />
+        </div>
       </div>
-    </div>
+    </TopStripProvider>
   );
 }
 
@@ -972,7 +975,12 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
         <MenuIcon className="size-4" />
       </Button>
 
-      <div className="flex-1" />
+      {/*
+        Where a page puts its own commit bar — the case editor's Save sits here rather than in a
+        footer bar of its own (design language rule 1, 007 §0 item 7). Empty on every route that
+        fills nothing, so it doubles as the spacer this header already needed.
+      */}
+      <TopStripTarget className="flex flex-1 items-center justify-end gap-2" />
 
       <Tooltip>
         <TooltipTrigger asChild>

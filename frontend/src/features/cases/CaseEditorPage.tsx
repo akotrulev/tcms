@@ -1,24 +1,16 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  Alert,
-  AlertTitle,
-  Box,
-  Button,
-  Collapse,
-  Divider,
-  Link,
-  MenuItem,
-  Stack,
-  Switch,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import { useCan } from '../../auth/useCan';
 import { toast } from '../../notifications/toast';
-import { Controller, useForm, type FieldErrors, type FieldPath, type UseFormSetFocus } from 'react-hook-form';
+import {
+  Controller,
+  useForm,
+  type FieldErrors,
+  type FieldPath,
+  type UseFormRegister,
+  type UseFormSetFocus,
+} from 'react-hook-form';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import {
@@ -57,14 +49,16 @@ import {
   useUpdateCase,
 } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
-import { Identifier } from '../../components/Identifier';
-import { PageHeader, Panel } from '../../components/PageHeader';
+import { Banner, RailRow } from '../../components/kit';
+import { Button, Switch, Textarea } from '../../components/ui';
 import { PermissionGate } from '../../components/PermissionGate';
+import { TopStripSlot } from '../../app/topStripSlot';
+import { useAnnounce } from '../../a11y/useAnnounce';
 import { NEW_CASE_DEFAULTS } from '../../lib/caseDefaults';
+import { cn } from '../../lib/cn';
 import { formatAge, plural } from '../../lib/format';
 import { useDebouncedValue } from '../../lib/useDebouncedValue';
 import { automationLabels, priorityLabels } from '../../lib/labels';
-import { selectTestId } from '../../lib/muiTestIds';
 import type {
   CaseConditionRef,
   Condition,
@@ -220,45 +214,45 @@ function ErrorSummary({
   }, []);
 
   return (
-    <Alert
-      severity="error"
+    <div
       role="alert"
       ref={ref}
       tabIndex={-1}
-      sx={{ mb: 2, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}
       data-testid={testId}
+      className="mb-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-steel)]"
     >
-      <AlertTitle>
-        {rows.length === 1
-          ? 'One thing needs fixing before this can be saved'
-          : `${rows.length} things need fixing before this can be saved`}
-      </AlertTitle>
-      <Box component="ul" sx={{ pl: 2.5, my: 0 }}>
-        {rows.map((row) => (
-          <Typography component="li" variant="body2" key={`${row.label}:${row.message}`}>
-            {row.field ? (
-              <Link
-                component="button"
-                type="button"
-                underline="always"
-                color="inherit"
-                onClick={() => setFocus(row.field as FieldPath<CaseInput>, { shouldSelect: true })}
-                data-testid={`${testId}.Item`}
-                sx={{ font: 'inherit', textAlign: 'left' }}
-              >
-                {row.label}
-              </Link>
-            ) : (
-              <Box component="span" sx={{ fontWeight: 600 }} data-testid={`${testId}.Item`}>
-                {row.label}
-              </Box>
-            )}
-            {' — '}
-            {row.message}
-          </Typography>
-        ))}
-      </Box>
-    </Alert>
+      <Banner tone="bad">
+        <div>
+          <strong className="block font-medium text-ink">
+            {rows.length === 1
+              ? 'One thing needs fixing before this can be saved'
+              : `${rows.length} things need fixing before this can be saved`}
+          </strong>
+          <ul className="my-1 pl-5">
+            {rows.map((row) => (
+              <li key={`${row.label}:${row.message}`}>
+                {row.field ? (
+                  <button
+                    type="button"
+                    onClick={() => setFocus(row.field as FieldPath<CaseInput>, { shouldSelect: true })}
+                    data-testid={`${testId}.Item`}
+                    className="cursor-pointer text-left font-medium text-ink underline underline-offset-2"
+                  >
+                    {row.label}
+                  </button>
+                ) : (
+                  <span className="font-medium text-ink" data-testid={`${testId}.Item`}>
+                    {row.label}
+                  </span>
+                )}
+                {' — '}
+                {row.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Banner>
+    </div>
   );
 }
 
@@ -342,34 +336,99 @@ function CaseStarts({
   }, [text, onText]);
 
   return (
-    <Panel title="Start" testId={`${TestIdPrefix}.Starts`}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1.5 }}>
-        <Button variant="contained" onClick={onWrite} data-testid={`${TestIdPrefix}.Start.Write`}>
-          Write it
-        </Button>
-        <Tooltip
-          title={
-            recentCase
-              ? `Copies the text of ${recentCase.key} — nothing is linked.`
-              : 'This project has no case to copy yet.'
-          }
-        >
-          <Box component="span">
-            <Button
-              variant="outlined"
-              disabled={!recentCase}
-              onClick={() => recentCase && setFromId(recentCase.id)}
-              data-testid={`${TestIdPrefix}.Start.FromCase`}
-            >
-              Start from a case
-            </Button>
-          </Box>
-        </Tooltip>
-        <Button variant="outlined" onClick={onPaste} data-testid={`${TestIdPrefix}.Start.Paste`}>
-          Paste a .feature
-        </Button>
-      </Stack>
-    </Panel>
+    <div
+      data-testid={`${TestIdPrefix}.Starts`}
+      className="mb-8 grid max-w-[860px] gap-3 sm:grid-cols-3"
+    >
+      <StartCard
+        highlighted
+        title="Write it"
+        hint="start typing"
+        testId={`${TestIdPrefix}.Start.Write`}
+        onClick={onWrite}
+      >
+        Type the title, then the steps. Suggestions come from the steps this project already has.
+      </StartCard>
+
+      <StartCard
+        title="Start from a case"
+        hint="⌘O"
+        testId={`${TestIdPrefix}.Start.FromCase`}
+        disabled={!recentCase}
+        onClick={() => recentCase && setFromId(recentCase.id)}
+      >
+        {recentCase ? (
+          <>
+            Copy the shape of one that already works.{' '}
+            <span className="text-ink-2">
+              {recentCase.key} · {recentCase.title}
+            </span>{' '}
+            was edited {formatAge(recentCase.updatedAt)}. Nothing is linked.
+          </>
+        ) : (
+          <>Copy the shape of one that already works — this project has no case to copy yet.</>
+        )}
+      </StartCard>
+
+      <StartCard
+        title="Paste a .feature"
+        hint="⌘V"
+        testId={`${TestIdPrefix}.Start.Paste`}
+        onClick={onPaste}
+      >
+        Drop Gherkin from a repo. It parses into steps, and Background becomes preconditions.
+      </StartCard>
+    </div>
+  );
+}
+
+/**
+ * One of the three, as the render draws it: a described card, not a bare button.
+ *
+ * The card is itself the `<button>` rather than a `<div>` wrapping one — the whole surface is the
+ * target, and a nested button inside a clickable div is UX#117's *"don't use a clickable div"* with
+ * an extra tab stop. Its accessible name is therefore the whole card, which is why the sentence is
+ * worth reading: it is what a screen reader announces.
+ */
+function StartCard({
+  title,
+  hint,
+  testId,
+  onClick,
+  disabled,
+  highlighted,
+  children,
+}: {
+  title: string;
+  /** The keyboard route to the same start, as the render's `.kbd` chip. */
+  hint: string;
+  testId: string;
+  onClick: () => void;
+  disabled?: boolean;
+  highlighted?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      data-testid={testId}
+      className={cn(
+        'flex cursor-pointer flex-col items-start rounded-lg border border-white/8 bg-panel p-3.5 text-left',
+        'hover:border-white/14 focus-visible:outline-2 focus-visible:outline-offset-2',
+        'focus-visible:outline-[color:var(--color-given)]',
+        'disabled:cursor-not-allowed disabled:opacity-45',
+        highlighted &&
+          'border-[color:color-mix(in_oklab,var(--color-steel)_35%,transparent)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-steel)_7%,transparent),transparent)]',
+      )}
+    >
+      <span className="mb-1.5 text-[13.5px] font-semibold text-ink">{title}</span>
+      <span className="text-[12.5px] leading-[1.5] text-ink-3">{children}</span>
+      <span className="mt-2.5 rounded border border-white/14 px-[5px] py-px font-mono text-[10.5px] text-ink-4">
+        {hint}
+      </span>
+    </button>
   );
 }
 
@@ -615,9 +674,10 @@ function CaseEditorForm({
   const suiteId = watch('suiteId');
   const movingFolder = mode === 'edit' && !!existing && (existing.suiteId ?? '') !== suiteId;
 
+  const suiteName = (suites.data ?? []).find((suite) => suite.id === suiteId)?.name;
+
   /** The `Feature:` chrome — the suite's name, live off the picker, or the key of a filed-nowhere case. */
-  const featureName =
-    (suites.data ?? []).find((suite) => suite.id === suiteId)?.name ?? existing?.key ?? null;
+  const featureName = suiteName ?? existing?.key ?? null;
 
   /**
    * The text, read by the server, merged into the form — **five fields, and never a sixth.**
@@ -920,91 +980,207 @@ function CaseEditorForm({
     setDocumentText((current) => (current.trim().length === 0 ? line : `${current.replace(/\n+$/, '')}\n${line}`));
   };
 
+  /*
+    The browser-tab title and the arrival announcement, raised here rather than by `PageHeader` —
+    which this screen no longer has, because rule 1 of the design language forbids a page `<h1>`
+    that repeats the rail's active item. React 19 hoists a bare `<title>`, so both halves of what
+    the header did for accessibility survive its removal; what goes is the heading nobody needed.
+  */
+  const pageTitle = mode === 'edit' ? `Edit ${existing?.key ?? 'case'}` : 'New test case';
+  const announce = useAnnounce();
+  useEffect(() => {
+    announce(`${pageTitle} page loaded`);
+  }, [announce, pageTitle]);
+
+  /*
+    Which rail rows are open. Independent flags rather than one accordion key: closing Automation
+    because somebody opened Duration is how the refusal below would disappear from the screen.
+  */
+  const [opened, setOpened] = useState<Record<string, boolean>>({});
+  const toggleRow = (key: string) => setOpened((current) => ({ ...current, [key]: !current[key] }));
+
+  /**
+   * The automation disclosure **cannot be closed while its own refusal stands** — the rail spec's
+   * open question 2, answered.
+   *
+   * `automationStatus` is sent on every save and `NOT_AUTOMATABLE` requires a reason, so the one
+   * control on this screen that can put the form into a state only a second control resolves is
+   * this one. If the surface holding that second control could close over the error, the sentence
+   * *"Say why this case cannot be automated"* would name a field nobody can see.
+   *
+   * Answered by making it a disclosure in the rail rather than a popover over it: an inline
+   * surface has no dismiss-on-outside-click to defend against, and this derived flag holds it open
+   * for as long as the refusal is real. Recorded in `docs/specs/2026-08-28-case-authoring-rail.md`.
+   */
+  const automationRefused = !!errors.automationKey || !!errors.notAutomatableReason;
+  const rowOpen = (key: string) => opened[key] === true || (key === 'automation' && automationRefused);
+
   return (
-    <Box component="form" onSubmit={onSubmit} noValidate aria-busy={isSubmitting} data-testid={`${TestIdPrefix}.Form`}>
-      <PageHeader
-        testId={`${TestIdPrefix}.Header`}
-        title={mode === 'edit' ? `Edit ${existing?.key}` : 'New test case'}
-        documentTitle={mode === 'edit' ? `Edit ${existing?.key}` : 'New test case'}
-        crumbs={[
-          { label: 'Test cases', to: `/projects/${projectId}/cases` },
-          ...(existing ? [{ label: existing.key, to: `/projects/${projectId}/cases/${existing.id}` }] : []),
-          { label: mode === 'edit' ? 'Edit' : 'New' },
-        ]}
-        meta={
-          existing && (
-            <Tooltip title="Saving writes a new version. Past runs keep the version they executed.">
-              <Box>
-                <Identifier variant="muted">
-                  v{existing.currentVersionNo} → v{(existing.currentVersionNo ?? 1) + 1}
-                </Identifier>
-              </Box>
-            </Tooltip>
-          )
-        }
-      />
+    <form
+      onSubmit={onSubmit}
+      noValidate
+      aria-busy={isSubmitting}
+      data-testid={`${TestIdPrefix}.Form`}
+      className="flex min-h-full flex-col"
+    >
+      <title>{`${pageTitle} · TCMS`}</title>
 
-      {promptOpen && (
-        <Alert
-          severity="info"
-          sx={{ mb: 2 }}
-          data-testid={`${TestIdPrefix}.DraftPrompt`}
-          action={
-            <Stack direction="row" sx={{ gap: 1 }}>
-              <Button size="small" onClick={dismissDraft} data-testid={`${TestIdPrefix}.DraftDiscard`}>
-                Discard
-              </Button>
-              <Button
-                size="small"
-                variant="contained"
-                onClick={restoreDraft}
-                data-testid={`${TestIdPrefix}.DraftRestore`}
-              >
-                Restore
-              </Button>
-            </Stack>
-          }
+      {/*
+        THE COMMIT BAR, IN THE TOP STRIP (007 §0 item 7).
+
+        Beside the breadcrumb, where the render puts it, rather than in a sticky bar of its own at
+        the foot of the document. Two things go with the move: the page `<h1>` (rule 1 — no page
+        heading repeating the rail's active item) and the second horizontal band of chrome the
+        footer bar was. `TopStripSlot` renders in place when there is no shell above it, so the
+        Save button cannot vanish because of where the page was mounted.
+      */}
+      <TopStripSlot>
+        {/*
+          The breadcrumb the removed `PageHeader` used to draw, in the strip the render puts it in.
+          It is the only way back to the list that is not the rail, and dropping it with the H1
+          would have been the item taking a navigation affordance with it.
+        */}
+        <nav
+          aria-label="Breadcrumb"
+          data-testid={`${TestIdPrefix}.Breadcrumbs`}
+          className="mr-auto hidden min-w-0 truncate text-[12.5px] text-ink-3 sm:block"
         >
-          <AlertTitle>
-            Your unsaved changes from {formatAge((offeredDraft ?? bufferedText)?.updatedAt ?? '')}
-          </AlertTitle>
-          You left work on this case without saving it.
-          {bufferedText && !offeredDraft && (
+          <RouterLink to={`/projects/${projectId}/cases`} className="hover:underline">
+            Test cases
+          </RouterLink>
+          {existing && (
             <>
-              {' '}
-              {/* The text-only arm: work that never parsed, so no payload was ever buffered. */}
-              <strong>It had not been read as a scenario yet, so it comes back exactly as typed.</strong>
+              {' / '}
+              <RouterLink to={`/projects/${projectId}/cases/${existing.id}`} className="hover:underline">
+                {existing.key}
+              </RouterLink>
             </>
           )}
-          {offeredDraft?.stale && (
-            <>
-              {' '}
-              <strong>
-                The case has been saved since this draft was written, so restoring it will discard
-                that change.
-              </strong>
-            </>
+          {' / '}
+          <span className="font-medium text-ink-2">{mode === 'edit' ? 'Edit' : 'New'}</span>
+        </nav>
+
+        <div className="flex items-center gap-2" data-testid={`${TestIdPrefix}.CommitBar`}>
+          <div className="hidden min-w-0 max-w-[420px] flex-1 md:block">
+            <CaseDraftStatus
+              control={control}
+              getValues={getValues}
+              enabled={autosaveEnabled}
+              save={saveDraftContent}
+              commitLabel={mode === 'edit' ? 'Save changes' : 'Create case'}
+              testId={`${TestIdPrefix}.DraftStatus`}
+              inline
+            />
+          </div>
+          {existing && (
+            <span
+              className="hidden font-mono text-[11px] text-ink-4 lg:inline"
+              title="Saving writes a new version. Past runs keep the version they executed."
+            >
+              v{existing.currentVersionNo} → v{(existing.currentVersionNo ?? 1) + 1}
+            </span>
           )}
-        </Alert>
-      )}
+          <Button
+            variant="ghost"
+            onClick={() =>
+              navigate(existing ? `/projects/${projectId}/cases/${existing.id}` : `/projects/${projectId}/cases`)
+            }
+            data-testid={`${TestIdPrefix}.Cancel`}
+          >
+            Cancel
+          </Button>
+          <PermissionGate projectId={projectId} permission={mode === 'edit' ? 'case:edit' : 'case:create'}>
+            {({ allowed }) => (
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={!allowed || isSubmitting || migrationBlocked || (mode === 'edit' && !isDirty)}
+                title={
+                  migrationBlocked
+                    ? 'This case has not been migrated yet — see the note above the text.'
+                    : allowed && mode === 'edit' && !isDirty
+                      ? 'Nothing has changed yet'
+                      : undefined
+                }
+                data-testid={`${TestIdPrefix}.Submit`}
+              >
+                {isSubmitting ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Create case'}
+              </Button>
+            )}
+          </PermissionGate>
+        </div>
+      </TopStripSlot>
 
-      {errors.root && (
-        <Alert severity="error" role="alert" sx={{ mb: 2 }} data-testid={`${TestIdPrefix}.Error`}>
-          {errors.root.message}
-        </Alert>
-      )}
+      <div className="flex min-w-0 flex-1 flex-col lg:flex-row">
+        {/*
+          THE DOCUMENT COLUMN — a bare paper surface (007 §0 item 1).
 
-      {showSummary && summaryRows.length > 0 && (
-        <ErrorSummary
-          key={submitCount}
-          rows={summaryRows}
-          setFocus={setFocus}
-          testId={`${TestIdPrefix}.ErrorSummary`}
-        />
-      )}
+          `Start`, `The case` and `Notes` were three bordered panels; rule 1 is *"no card wrapping a
+          table, no panel around the only thing on screen"*, and the only thing on this screen is
+          the document. What is left is the render's `.doc`: one surface, one hairline rule, and the
+          procedure at its measure.
+        */}
+        <div className="min-w-0 flex-1 bg-paper px-4 py-6 md:px-8">
+          {promptOpen && (
+            <div className="mb-5 max-w-[74ch]" data-testid={`${TestIdPrefix}.DraftPrompt`}>
+              <Banner tone="steel">
+                <div className="flex flex-wrap items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <strong className="block font-medium text-ink">
+                      Your unsaved changes from {formatAge((offeredDraft ?? bufferedText)?.updatedAt ?? '')}
+                    </strong>
+                    You left work on this case without saving it.
+                    {bufferedText && !offeredDraft && (
+                      <>
+                        {' '}
+                        {/* The text-only arm: work that never parsed, so no payload was ever buffered. */}
+                        <strong className="text-ink">
+                          It had not been read as a scenario yet, so it comes back exactly as typed.
+                        </strong>
+                      </>
+                    )}
+                    {offeredDraft?.stale && (
+                      <>
+                        {' '}
+                        <strong className="text-ink">
+                          The case has been saved since this draft was written, so restoring it will
+                          discard that change.
+                        </strong>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <Button size="sm" variant="quiet" onClick={dismissDraft} data-testid={`${TestIdPrefix}.DraftDiscard`}>
+                      Discard
+                    </Button>
+                    <Button size="sm" variant="primary" onClick={restoreDraft} data-testid={`${TestIdPrefix}.DraftRestore`}>
+                      Restore
+                    </Button>
+                  </div>
+                </div>
+              </Banner>
+            </div>
+          )}
 
-      <Stack direction={{ xs: 'column', lg: 'row' }} sx={{ gap: 2.5, alignItems: 'flex-start' }}>
-        <Stack sx={{ gap: 2.5, flex: 1, minWidth: 0, width: '100%' }}>
+          {errors.root && (
+            <div className="mb-5 max-w-[74ch]" data-testid={`${TestIdPrefix}.Error`}>
+              <Banner tone="bad">
+                <span role="alert">{errors.root.message}</span>
+              </Banner>
+            </div>
+          )}
+
+          {showSummary && summaryRows.length > 0 && (
+            <div className="max-w-[74ch]">
+              <ErrorSummary
+                key={submitCount}
+                rows={summaryRows}
+                setFocus={setFocus}
+                testId={`${TestIdPrefix}.ErrorSummary`}
+              />
+            </div>
+          )}
+
           {/*
             THE THREE STARTS (003 Phase 1) — on create, and not on edit.
 
@@ -1027,97 +1203,87 @@ function CaseEditorForm({
             />
           )}
 
-          <Panel
-            title="The case"
-            testId={`${TestIdPrefix}.Document.Panel`}
-            actions={
-              <Button
-                size="small"
-                onClick={() => setPasting(true)}
-                data-testid={`${TestIdPrefix}.Steps.Paste`}
-              >
-                Paste Gherkin
-              </Button>
-            }
-          >
-            <Box>
-              {migrationBlocked && (
-                <Alert severity="warning" sx={{ mb: 2 }} data-testid={`${TestIdPrefix}.NotMigrated`}>
-                  <AlertTitle>Not yet migrated</AlertTitle>
+          {migrationBlocked && (
+            <div className="mb-4 max-w-[74ch]" data-testid={`${TestIdPrefix}.NotMigrated`}>
+              <Banner tone="warn">
+                <div>
+                  <strong className="block font-medium text-ink">Not yet migrated</strong>
                   This case&rsquo;s scenario is still stored as text, so it cannot be edited here and
                   cannot be saved. Ask your operator to run{' '}
-                  <Identifier>migrate-gherkin-source</Identifier>. Nothing below has been changed.
-                </Alert>
-              )}
-              {render.isError && (
-                <Alert severity="error" sx={{ mb: 2 }} data-testid={`${TestIdPrefix}.RenderFailed`}>
-                  The case could not be rendered as text. Reload before editing — saving now would
-                  write an empty scenario over it.
-                </Alert>
-              )}
-              <CaseDocument
-                projectId={projectId}
-                text={documentText}
-                onTextChange={setDocumentText}
-                onCommit={() => void commit(documentText)}
-                refusal={refusal}
-                featureName={featureName}
-                inheritedPreconditionCount={inheritedPreCount}
-                readOnly={migrationBlocked}
-                testIdPrefix={TestIdPrefix}
-              />
-            </Box>
-          </Panel>
+                  <span className="font-mono text-[12px] text-ink-2">migrate-gherkin-source</span>.
+                  Nothing below has been changed.
+                </div>
+              </Banner>
+            </div>
+          )}
+
+          {render.isError && (
+            <div className="mb-4 max-w-[74ch]" data-testid={`${TestIdPrefix}.RenderFailed`}>
+              <Banner tone="bad">
+                The case could not be rendered as text. Reload before editing — saving now would
+                write an empty scenario over it.
+              </Banner>
+            </div>
+          )}
+
+          <div className="max-w-[74ch]">
+            <div className="mb-1 flex justify-end">
+              <Button size="sm" variant="quiet" onClick={() => setPasting(true)} data-testid={`${TestIdPrefix}.Steps.Paste`}>
+                Paste Gherkin
+              </Button>
+            </div>
+
+            <CaseDocument
+              projectId={projectId}
+              text={documentText}
+              onTextChange={setDocumentText}
+              onCommit={() => void commit(documentText)}
+              refusal={refusal}
+              featureName={featureName}
+              inheritedPreconditionCount={inheritedPreCount}
+              readOnly={migrationBlocked}
+              testIdPrefix={TestIdPrefix}
+            />
+          </div>
 
           {/*
             THE TWO FIELDS THE TEXT DOES NOT CARRY AND THE RAIL DOES NOT PLACE.
 
             003's *Fields that must find a home* table settles eleven fields; `description` and
             `expectedOutcome` are not among them, and they are not in the five the text represents
-            either. Dropping them would make two persisted fields uneditable in the only case
-            editor there is — a silent narrowing of the product, not a simplification. They are
-            prose, so they sit in the narrative column under the document rather than in a 320px
-            rail that holds only short enumerable values.
+            either. The render kills both — and 007 §4 **defers that deliberately**: they are on the
+            wire, they hold data in existing cases, and removing them is a contract change with a
+            migration behind it. So the *panel* goes and the fields stay, in the document's
+            narrative column under the procedure, where prose belongs.
           */}
-          <Panel title="Notes" testId={`${TestIdPrefix}.Notes`}>
-            <Stack sx={{ gap: 2, maxWidth: 920 }}>
-              <TextField
+          <section className="mt-10 max-w-[74ch] border-t border-white/8 pt-6" data-testid={`${TestIdPrefix}.Notes`}>
+            <div className="grid gap-5 md:grid-cols-2">
+              <NoteField
                 label="Expected outcome"
-                fullWidth
-                multiline
-                minRows={2}
-                helperText="The case-level outcome, alongside the per-step expected results."
-                slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Field.ExpectedOutcome` } }}
-                {...register('expectedOutcome')}
+                help="The case-level outcome, alongside the per-step expected results."
+                testId={`${TestIdPrefix}.Field.ExpectedOutcome`}
+                registration={register('expectedOutcome')}
               />
-              <TextField
+              <NoteField
                 label="Description"
-                fullWidth
-                multiline
-                minRows={2}
-                helperText="Optional background — anything a reader needs that the steps assume."
-                slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Field.Description` } }}
-                {...register('description')}
+                help="Optional background — anything a reader needs that the steps assume."
+                testId={`${TestIdPrefix}.Field.Description`}
+                registration={register('description')}
               />
-            </Stack>
-          </Panel>
+            </div>
 
-          {mode === 'edit' && (
-            <Panel title="Change note" testId={`${TestIdPrefix}.ChangeComment`}>
-              <Box>
-                <TextField
+            {mode === 'edit' && (
+              <div className="mt-5" data-testid={`${TestIdPrefix}.ChangeComment`}>
+                <NoteField
                   label="What changed, and why"
-                  fullWidth
-                  multiline
-                  minRows={2}
-                  helperText="Optional. It appears on the version timeline, so make it worth reading."
-                  slotProps={{ htmlInput: { 'data-testid': `${TestIdPrefix}.Field.ChangeComment` } }}
-                  {...register('changeComment')}
+                  help="Optional. It appears on the version timeline, so make it worth reading."
+                  testId={`${TestIdPrefix}.Field.ChangeComment`}
+                  registration={register('changeComment')}
                 />
-              </Box>
-            </Panel>
-          )}
-        </Stack>
+              </div>
+            )}
+          </section>
+        </div>
 
         {/*
           ===================================== THE RAIL =====================================
@@ -1131,488 +1297,482 @@ function CaseEditorForm({
           summary. `ui-reasoning.csv` row 16 makes keyboard operability a must_have for a
           productivity tool, and a rail nobody can Tab into fails that outright.
 
+          **What 007 T7 changed: the rows went quiet.** They were full outlined `Select`s with a
+          permanent border and a helper paragraph each — the nine-control form the redesign retired,
+          moved into a 320px column. Now each row is `kit/RailRow`: no filled surface at rest, the
+          value right-aligned, a border on hover and focus, and the helper sentence **inside the
+          control it is about**, visible only once the row is open.
+
           Row count is not the constraint; VALUE WIDTH is. Only short enumerable values sit on the
           face — the automation key, the condition lists and the classification chips render as a
           count plus a disclosure.
 
           It is present on the BLANK STATE too, with defaults and the Suite prefilled from context
-          (frame B draws no rail; a new case still needs a suite). And it collapses **on this route
-          only** — `position: sticky` here, not a global chrome change.
+          (frame B draws no rail; a new case still needs a suite).
         */}
-        <Box
-          sx={{
-            width: { xs: '100%', lg: 320 },
-            flexShrink: 0,
-            position: { lg: 'sticky' },
-            top: { lg: 'calc(var(--header-height) + 16px)' },
-          }}
-        >
-          <Stack sx={{ gap: 2.5 }}>
-            <Panel title="This case" testId={`${TestIdPrefix}.Rail`}>
-              <Stack sx={{ gap: 2 }}>
-                <Controller
-                  control={control}
-                  name="suiteId"
-                  render={({ field, fieldState }) => (
-                    <TextField
-                      select
-                      label="Suite"
-                      fullWidth
+        <aside className="w-full shrink-0 border-white/8 bg-panel lg:w-[300px] lg:border-l">
+          <section className="border-b border-white/8 px-4 py-4" data-testid={`${TestIdPrefix}.Rail`}>
+            <h2 className="m-0 mb-2 text-[11px] font-semibold tracking-[.08em] text-ink-3 uppercase">
+              Properties
+            </h2>
+
+            <Controller
+              control={control}
+              name="suiteId"
+              render={({ field, fieldState }) => (
+                <RailDisclosure
+                  label="Suite"
+                  value={suiteName ?? <span className="text-ink-4">Not filed</span>}
+                  testId={`${TestIdPrefix}.Field.Suite`}
+                  open={rowOpen('suite')}
+                  onToggle={() => toggleRow('suite')}
+                >
+                  <RailField
+                    label="Suite"
+                    htmlFor={`${TestIdPrefix}.suite`}
+                    /* An explicit choice rather than an empty first row (§96): "nowhere" is a real
+                       answer, and a blank option reads as a field somebody forgot. */
+                    help={
+                      fieldState.error?.message ??
+                      (field.value
+                        ? 'The case is filed here. Changing it moves the case.'
+                        : 'Unfiled. It still appears in the grid, and any suite whose tags it carries.')
+                    }
+                    invalid={!!fieldState.error}
+                  >
+                    <select
+                      id={`${TestIdPrefix}.suite`}
                       value={field.value}
                       onChange={field.onChange}
                       onBlur={field.onBlur}
-                      error={!!fieldState.error}
-                      helperText={
-                        fieldState.error?.message ??
-                        (field.value
-                          ? undefined
-                          : 'Unfiled. It still appears in the grid, and any suite whose tags it carries.')
-                      }
-                      slotProps={{
-                        select: { native: false, SelectDisplayProps: selectTestId(`${TestIdPrefix}.Field.Suite`) },
-                        formHelperText: { role: fieldState.error ? 'alert' : undefined },
-                      }}
+                      data-testid={`${TestIdPrefix}.Field.Suite.Input`}
+                      className={SELECT_CLASS}
                     >
-                      {/* An explicit choice rather than an empty first row (§96): "nowhere" is a
-                          real answer, and a blank option reads as a field somebody forgot. */}
-                      <MenuItem value="">
-                        <Box component="span" sx={{ color: 'text.secondary' }}>
-                          Not filed
-                        </Box>
-                      </MenuItem>
+                      <option value="">Not filed</option>
                       {[...(suites.data ?? [])]
                         .sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key))
                         .map((suite) => (
-                          <MenuItem key={suite.id} value={suite.id}>
+                          <option key={suite.id} value={suite.id}>
                             {suite.name}
-                          </MenuItem>
+                          </option>
                         ))}
-                    </TextField>
-                  )}
-                />
+                    </select>
+                  </RailField>
+                </RailDisclosure>
+              )}
+            />
 
-                <Controller
-                  control={control}
-                  name="priority"
-                  render={({ field }) => (
-                    <TextField
-                      select
-                      label="Priority"
-                      fullWidth
+            <Controller
+              control={control}
+              name="priority"
+              render={({ field }) => (
+                <RailDisclosure
+                  label="Priority"
+                  value={
+                    <span className="rounded-full border border-white/8 bg-white/6 px-2 py-0.5 text-[11.5px] text-ink-2">
+                      {priorityLabels[field.value]}
+                    </span>
+                  }
+                  testId={`${TestIdPrefix}.Field.Priority`}
+                  open={rowOpen('priority')}
+                  onToggle={() => toggleRow('priority')}
+                >
+                  <RailField
+                    label="Priority"
+                    htmlFor={`${TestIdPrefix}.priority`}
+                    // `severity` keeps its `severity: data.priority` mirror in the payload —
+                    // dropping it would leave the stored value stale, because PATCH is a merge.
+                    help="Also recorded as the case's severity."
+                  >
+                    <select
+                      id={`${TestIdPrefix}.priority`}
                       value={field.value}
                       onChange={field.onChange}
-                      // `severity` keeps its `severity: data.priority` mirror in the payload —
-                      // dropping it would leave the stored value stale, because PATCH is a merge.
-                      helperText="Also recorded as the case's severity."
-                      slotProps={{
-                        select: { SelectDisplayProps: selectTestId(`${TestIdPrefix}.Field.Priority`) },
-                      }}
+                      data-testid={`${TestIdPrefix}.Field.Priority.Input`}
+                      className={SELECT_CLASS}
                     >
                       {Object.entries(priorityLabels).map(([value, label]) => (
-                        <MenuItem key={value} value={value}>
+                        <option key={value} value={value}>
                           {label}
-                        </MenuItem>
+                        </option>
                       ))}
-                    </TextField>
-                  )}
-                />
-
-                {/* AUTOMATION IS A CONTROL, NOT A BADGE: it is required on every save and it gates
-                    two child fields, which is exactly what a badge cannot express. Its two
-                    children sit in its disclosure rather than in rows of their own — an unbounded
-                    identifier cannot render whole on a 280px face. */}
-                <Controller
-                  control={control}
-                  name="automationStatus"
-                  render={({ field }) => (
-                    <TextField
-                      select
-                      label="Automation"
-                      fullWidth
-                      value={field.value}
-                      onChange={field.onChange}
-                      slotProps={{
-                        select: { SelectDisplayProps: selectTestId(`${TestIdPrefix}.Field.AutomationStatus`) },
-                      }}
-                    >
-                      {Object.entries(automationLabels).map(([value, label]) => (
-                        <MenuItem key={value} value={value}>
-                          {label}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  )}
-                />
-                <Collapse in={automationStatus === 'AUTOMATED' || automationStatus === 'NOT_AUTOMATABLE'}>
-                  <Stack sx={{ gap: 2 }}>
-                    {automationStatus === 'AUTOMATED' && (
-                      <TextField
-                        label="Automated test"
-                        fullWidth
-                        error={!!errors.automationKey}
-                        helperText={
-                          errors.automationKey?.message ??
-                          'Fully-qualified test method. Ingested results match on this.'
-                        }
-                        slotProps={{
-                          htmlInput: {
-                            'data-testid': `${TestIdPrefix}.Field.AutomationKey`,
-                            style: { fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' },
-                          },
-                          formHelperText: { role: errors.automationKey ? 'alert' : undefined },
-                        }}
-                        {...register('automationKey')}
-                      />
-                    )}
-                    {automationStatus === 'NOT_AUTOMATABLE' && (
-                      <TextField
-                        label="Why it can't be automated"
-                        fullWidth
-                        multiline
-                        minRows={2}
-                        error={!!errors.notAutomatableReason}
-                        helperText={
-                          errors.notAutomatableReason?.message ??
-                          'Recorded so the automation-coverage figure stays honest.'
-                        }
-                        slotProps={{
-                          htmlInput: { 'data-testid': `${TestIdPrefix}.Field.NotAutomatableReason` },
-                          formHelperText: { role: errors.notAutomatableReason ? 'alert' : undefined },
-                        }}
-                        {...register('notAutomatableReason')}
-                      />
-                    )}
-                  </Stack>
-                </Collapse>
-
-                <TextField
-                  label="Duration (seconds)"
-                  type="number"
-                  fullWidth
-                  error={!!errors.estimatedDurationSec}
-                  helperText={errors.estimatedDurationSec?.message}
-                  slotProps={{
-                    htmlInput: { 'data-testid': `${TestIdPrefix}.Field.EstimatedDuration`, min: 0 },
-                    formHelperText: { role: errors.estimatedDurationSec ? 'alert' : undefined },
-                  }}
-                  {...register('estimatedDurationSec')}
-                />
-
-                <Divider />
-
-                {/*
-                  PRECONDITIONS — a read-only inherited count, because the case's OWN preconditions
-                  are the `Background:` block in the document now (003 D6, decision (a)).
-
-                  What stays here is the half the text cannot say: the folder's conditions, which
-                  reach this case by inheritance and are rendered identically to its own by
-                  `bodies()`, so putting them in the block would make deleting a line ambiguous
-                  between detaching an own condition and DECLINING an inherited one. The count
-                  links to what is missing from the rendered `.feature`.
-
-                  §187's opt-out toggle survives inside the disclosure. 003 retires this row as an
-                  *editor of attachments*; it says nothing about declines, and dropping them would
-                  delete a shipped feature on the way past.
-                */}
-                <Controller
-                  control={control}
-                  name="declinedConditionIds"
-                  render={({ field: declines }) => {
-                    const toggle = (attachmentId: string, next: boolean) =>
-                      declines.onChange(
-                        next
-                          ? [...declines.value, attachmentId]
-                          : declines.value.filter((id: string) => id !== attachmentId),
-                      );
-
-                    /*
-                      The rows the pending move will end (§194) — resolved from what is on screen,
-                      which is why they can be NAMED. Here rather than in either group: one array
-                      carries both kinds, so a per-group alert would state the same event twice and
-                      each copy would name half of it.
-                    */
-                    const ending = movingFolder
-                      ? [...inheritedPre, ...inheritedPost].filter((ref) => declines.value.includes(ref.id))
-                      : [];
-
-                    return (
-                      <Stack sx={{ gap: 2 }}>
-                        {ending.length > 0 && (
-                          <Alert severity="warning" data-testid={`${TestIdPrefix}.Conditions.EndingDeclines`}>
-                            <AlertTitle>
-                              Moving this case ends {plural(ending.length, 'condition exception')}
-                            </AlertTitle>
-                            <Typography variant="body2">
-                              A folder&rsquo;s rule can only be declined by a case filed in that
-                              folder, so {ending.length === 1 ? 'this exception' : 'these exceptions'}
-                              {' '}end with the move. Moving it back will not bring
-                              {ending.length === 1 ? ' it' : ' them'} back.
-                            </Typography>
-                            <Box component="ul" sx={{ pl: 3, my: 1 }}>
-                              {ending.map((ref) => (
-                                <Typography component="li" variant="body2" key={ref.id}>
-                                  {ref.title}
-                                  {ref.inheritedFrom ? ` — from ${ref.inheritedFrom}` : null}
-                                </Typography>
-                              ))}
-                            </Box>
-                          </Alert>
-                        )}
-
-                        <Box data-testid={`${TestIdPrefix}.Preconditions`}>
-                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                            Preconditions
-                          </Typography>
-                          <Typography variant="body2">
-                            {inheritedPreCount === 0
-                              ? 'None inherited. Write this case’s own setup as a Background: block.'
-                              : `${plural(inheritedPreCount, 'inherited precondition')} — not shown in the text above.`}
-                          </Typography>
-                          {inheritedPre.map((ref) => (
-                            <Stack
-                              key={ref.id}
-                              direction="row"
-                              sx={{ alignItems: 'center', gap: 1, mt: 0.5 }}
-                              data-testid={`${TestIdPrefix}.Preconditions.Row`}
-                            >
-                              <Switch
-                                size="small"
-                                checked={!declines.value.includes(ref.id)}
-                                disabled={movingFolder}
-                                onChange={(event) => toggle(ref.id, !event.target.checked)}
-                                // The panel's own wording, verbatim: the two switches mean the
-                                // same thing and a reader meets both on this screen.
-                                //
-                                // `slotProps.input` and not `inputProps`: MUI v9 dropped the
-                                // latter from Switch, and it is the label a screen reader announces
-                                // — so the compile error was standing in for a control that would
-                                // have gone unnamed. `PlanCreateDialog` uses the same form.
-                                slotProps={{ input: { 'aria-label': `Applies to this case: ${ref.title}` } }}
-                              />
-                              <Typography variant="body2" sx={{ minWidth: 0 }}>
-                                {ref.title}
-                                {ref.inheritedFrom ? (
-                                  <Identifier variant="muted"> from {ref.inheritedFrom}</Identifier>
-                                ) : null}
-                              </Typography>
-                            </Stack>
-                          ))}
-                          {existing && (
-                            <Link
-                              component={RouterLink}
-                              to={`/projects/${projectId}/cases/${existing.id}`}
-                              variant="caption"
-                              data-testid={`${TestIdPrefix}.Preconditions.Link`}
-                            >
-                              See the whole procedure, inherited setup included
-                            </Link>
-                          )}
-                        </Box>
-
-                        <Divider />
-
-                        {/* POSTCONDITIONS — new, and the render draws no such row. Gherkin emits
-                            them as comments the parser reads back as nothing by design, so the
-                            text can never author them; this is the only place they can live. */}
-                        <Controller
-                          control={control}
-                          name="postconditionIds"
-                          render={({ field }) => (
-                            <ConditionsPanel
-                              kind="POST"
-                              projectId={projectId}
-                              testId={`${TestIdPrefix}.Postconditions`}
-                              value={field.value}
-                              inherited={inheritedPost}
-                              declined={declines.value}
-                              leavingFolder={movingFolder}
-                              onToggleDecline={toggle}
-                              onChange={field.onChange}
-                              known={createdConditions}
-                              onCreate={() => setConditionDialog({ kind: 'POST', condition: null })}
-                              onEdit={(condition) => setConditionDialog({ kind: 'POST', condition })}
-                            />
-                          )}
-                        />
-                      </Stack>
-                    );
-                  }}
-                />
-
-                {/*
-                  CLASSIFICATION — **absent entirely when every vocabulary is empty** (finding 3).
-
-                  Not a labelled control with nothing in it, and not four of them: a freshly
-                  provisioned project has four dimensions and no values, and the row is worth its
-                  space only when there is something to choose. The one sentence and the one link
-                  are the picker's `emptyNotice`, owned here because this is the side that knows
-                  where Classification lives.
-                */}
-                <Controller
-                  control={control}
-                  name="classificationValueIds"
-                  render={({ field }) => (
-                    <DataRegion state={dimensions} testId={`${TestIdPrefix}.ClassificationRegion`}>
-                      {(loaded) =>
-                        loaded.length === 0 || loaded.every((dimension) => dimension.values.length === 0) ? (
-                          <Box data-testid={`${TestIdPrefix}.Classification.Absent`}>
-                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                              Nothing configured, nothing shown.{' '}
-                              <Link component={RouterLink} to={`/projects/${projectId}/settings/classification`}>
-                                Set up Classification
-                              </Link>{' '}
-                              to classify cases here.
-                            </Typography>
-                          </Box>
-                        ) : (
-                          <>
-                            <Divider sx={{ mb: 2 }} />
-                            <ClassificationPicker
-                              dimensions={loaded}
-                              selected={field.value}
-                              onChange={field.onChange}
-                              testIdPrefix={TestIdPrefix}
-                              emptyNotice={(empty) => (
-                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                  {empty.map((dimension) => dimension.name).join(', ')}{' '}
-                                  {empty.length === 1 ? 'has' : 'have'} no values yet.{' '}
-                                  <Link
-                                    component={RouterLink}
-                                    to={`/projects/${projectId}/settings/classification`}
-                                  >
-                                    Set up Classification
-                                  </Link>
-                                </Typography>
-                              )}
-                            />
-                          </>
-                        )
-                      }
-                    </DataRegion>
-                  )}
-                />
-              </Stack>
-            </Panel>
+                    </select>
+                  </RailField>
+                </RailDisclosure>
+              )}
+            />
 
             {/*
-              THE STANDING CORPUS (003 Phase 1) — *steps this project uses*, ranked by use count,
-              insert on click.
-
-              ONE MOUNT PER PAGE, on its own key and its own hook: `useStepSuggestions`'s
-              `enabled: q.trim().length > 0` gate is untouched, because the read this panel makes
-              is precisely the one that gate refuses and the reason it refuses it — eight mounted
-              rows firing eight reads of a thousand-row list — does not apply to a panel there is
-              one of.
+              AUTOMATION IS A CONTROL, NOT A BADGE: it is required on every save and it gates two
+              child fields, which is exactly what a badge cannot express. Its two children sit in
+              its own disclosure rather than in rows of their own — an unbounded identifier cannot
+              render whole on a 300px face, so the face truncates it and the whole value lives one
+              level in, beside the status that requires it.
             */}
-            <Panel title="Steps this project uses" testId={`${TestIdPrefix}.Corpus`}>
-              <Box sx={{ maxHeight: 320, overflowY: 'auto' }}>
-                <DataRegion
-                  state={corpus}
-                  testId={`${TestIdPrefix}.Corpus.Region`}
-                  isEmpty={(rows) => rows.length === 0}
-                  empty={{
-                    title: 'No steps yet',
-                    body: 'This list fills itself from the steps your cases already contain — nobody has to populate it.',
-                  }}
-                >
-                  {(rows) => (
-                    <Stack sx={{ gap: 0.5 }}>
-                      {rows.map((row) => (
-                        <Button
-                          key={row.action}
-                          size="small"
-                          onClick={() => insertFromCorpus(row)}
-                          data-testid={`${TestIdPrefix}.Corpus.Step`}
-                          sx={{ justifyContent: 'space-between', textAlign: 'left', textTransform: 'none' }}
-                        >
-                          <Box component="span" sx={{ minWidth: 0 }}>
-                            {row.action}
-                          </Box>
-                          {/* The ranking signal, shown rather than only sorted by. */}
-                          <Identifier variant="muted">
-                            {row.useCount} case{row.useCount === 1 ? '' : 's'}
-                          </Identifier>
-                        </Button>
-                      ))}
-                    </Stack>
-                  )}
-                </DataRegion>
-              </Box>
-            </Panel>
-
-            {mode === 'edit' && (
-              <Alert severity="info" data-testid={`${TestIdPrefix}.StatusNotice`}>
-                <Typography variant="body2">
-                  Review status is changed through the review actions, not here — approving a case
-                  records who approved it and when.
-                </Typography>
-              </Alert>
-            )}
-          </Stack>
-        </Box>
-      </Stack>
-
-      {/*
-        THE COMMIT BAR — the form's one Save, pinned to the bottom of the viewport, carrying the
-        buffer's status line beside the button that sentence names.
-      */}
-      <Box
-        data-testid={`${TestIdPrefix}.CommitBar`}
-        sx={{
-          position: 'sticky',
-          bottom: 0,
-          zIndex: 2,
-          mt: 2.5,
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 2,
-          px: 2,
-          py: 1.5,
-          borderTop: '1px solid',
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
-        }}
-      >
-        <Box sx={{ flex: 1, minWidth: 200 }}>
-          <CaseDraftStatus
-            control={control}
-            getValues={getValues}
-            enabled={autosaveEnabled}
-            save={saveDraftContent}
-            commitLabel={mode === 'edit' ? 'Save changes' : 'Create case'}
-            testId={`${TestIdPrefix}.DraftStatus`}
-            inline
-          />
-        </Box>
-        <Button
-          onClick={() =>
-            navigate(existing ? `/projects/${projectId}/cases/${existing.id}` : `/projects/${projectId}/cases`)
-          }
-          data-testid={`${TestIdPrefix}.Cancel`}
-        >
-          Cancel
-        </Button>
-        <PermissionGate projectId={projectId} permission={mode === 'edit' ? 'case:edit' : 'case:create'}>
-          {({ allowed }) => (
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={!allowed || isSubmitting || migrationBlocked || (mode === 'edit' && !isDirty)}
-              title={
-                migrationBlocked
-                  ? 'This case has not been migrated yet — see the note above the text.'
-                  : allowed && mode === 'edit' && !isDirty
-                    ? 'Nothing has changed yet'
-                    : undefined
+            <RailDisclosure
+              label="Automation"
+              value={
+                <span className="min-w-0 truncate">
+                  {automationLabels[automationStatus]}
+                  {automationStatus === 'AUTOMATED' && watch('automationKey')
+                    ? ` · ${watch('automationKey')}`
+                    : ''}
+                </span>
               }
-              data-testid={`${TestIdPrefix}.Submit`}
+              testId={`${TestIdPrefix}.Field.Automation`}
+              open={rowOpen('automation')}
+              onToggle={() => toggleRow('automation')}
             >
-              {isSubmitting ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Create case'}
-            </Button>
+              <Controller
+                control={control}
+                name="automationStatus"
+                render={({ field }) => (
+                  <RailField label="Status" htmlFor={`${TestIdPrefix}.automationStatus`}>
+                    <select
+                      id={`${TestIdPrefix}.automationStatus`}
+                      value={field.value}
+                      onChange={field.onChange}
+                      data-testid={`${TestIdPrefix}.Field.AutomationStatus`}
+                      className={SELECT_CLASS}
+                    >
+                      {Object.entries(automationLabels).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </RailField>
+                )}
+              />
+
+              {automationStatus === 'AUTOMATED' && (
+                <RailField
+                  label="Automated test"
+                  htmlFor={`${TestIdPrefix}.automationKey`}
+                  help={
+                    errors.automationKey?.message ??
+                    'Fully-qualified test method. Ingested results match on this.'
+                  }
+                  invalid={!!errors.automationKey}
+                >
+                  <input
+                    id={`${TestIdPrefix}.automationKey`}
+                    data-testid={`${TestIdPrefix}.Field.AutomationKey`}
+                    className={cn(INPUT_CLASS, 'font-mono text-[12.5px]')}
+                    {...register('automationKey')}
+                  />
+                </RailField>
+              )}
+
+              {automationStatus === 'NOT_AUTOMATABLE' && (
+                <RailField
+                  label="Why it can't be automated"
+                  htmlFor={`${TestIdPrefix}.notAutomatableReason`}
+                  help={
+                    errors.notAutomatableReason?.message ??
+                    'Recorded so the automation-coverage figure stays honest.'
+                  }
+                  invalid={!!errors.notAutomatableReason}
+                >
+                  <Textarea
+                    id={`${TestIdPrefix}.notAutomatableReason`}
+                    rows={2}
+                    data-testid={`${TestIdPrefix}.Field.NotAutomatableReason`}
+                    {...register('notAutomatableReason')}
+                  />
+                </RailField>
+              )}
+            </RailDisclosure>
+
+            <RailDisclosure
+              label="Duration"
+              value={
+                watch('estimatedDurationSec') ? (
+                  <span className="font-mono tabular-nums">{watch('estimatedDurationSec')}s</span>
+                ) : (
+                  <span className="text-ink-4">not set</span>
+                )
+              }
+              testId={`${TestIdPrefix}.Field.Duration`}
+              open={rowOpen('duration')}
+              onToggle={() => toggleRow('duration')}
+            >
+              <RailField
+                label="Duration (seconds)"
+                htmlFor={`${TestIdPrefix}.duration`}
+                help={errors.estimatedDurationSec?.message ?? 'How long one manual run takes.'}
+                invalid={!!errors.estimatedDurationSec}
+              >
+                <input
+                  id={`${TestIdPrefix}.duration`}
+                  type="number"
+                  min={0}
+                  data-testid={`${TestIdPrefix}.Field.EstimatedDuration`}
+                  className={INPUT_CLASS}
+                  {...register('estimatedDurationSec')}
+                />
+              </RailField>
+            </RailDisclosure>
+
+            <div className="my-2 h-px bg-white/8" />
+
+            {/*
+              PRECONDITIONS — a read-only inherited count, because the case's OWN preconditions
+              are the `Background:` block in the document now (003 D6, decision (a)).
+
+              What stays here is the half the text cannot say: the folder's conditions, which
+              reach this case by inheritance and are rendered identically to its own by
+              `bodies()`, so putting them in the block would make deleting a line ambiguous
+              between detaching an own condition and DECLINING an inherited one.
+
+              §187's opt-out toggle survives, and it is **not** behind the disclosure: it is the
+              only control that can put a declined rule back, and a switch that has to be found
+              before it can be un-flipped is the one-way action §187 exists to prevent.
+            */}
+            <Controller
+              control={control}
+              name="declinedConditionIds"
+              render={({ field: declines }) => {
+                const toggle = (attachmentId: string, next: boolean) =>
+                  declines.onChange(
+                    next
+                      ? [...declines.value, attachmentId]
+                      : declines.value.filter((id: string) => id !== attachmentId),
+                  );
+
+                /*
+                  The rows the pending move will end (§194) — resolved from what is on screen,
+                  which is why they can be NAMED. Here rather than in either group: one array
+                  carries both kinds, so a per-group alert would state the same event twice and
+                  each copy would name half of it.
+                */
+                const ending = movingFolder
+                  ? [...inheritedPre, ...inheritedPost].filter((ref) => declines.value.includes(ref.id))
+                  : [];
+
+                return (
+                  <div className="flex flex-col gap-3">
+                    {ending.length > 0 && (
+                      <div data-testid={`${TestIdPrefix}.Conditions.EndingDeclines`}>
+                        <Banner tone="warn">
+                          <div>
+                            <strong className="block font-medium text-ink">
+                              Moving this case ends {plural(ending.length, 'condition exception')}
+                            </strong>
+                            A folder&rsquo;s rule can only be declined by a case filed in that
+                            folder, so {ending.length === 1 ? 'this exception' : 'these exceptions'}
+                            {' '}end with the move. Moving it back will not bring
+                            {ending.length === 1 ? ' it' : ' them'} back.
+                            <ul className="my-1 pl-4">
+                              {ending.map((ref) => (
+                                <li key={ref.id}>
+                                  {ref.title}
+                                  {ref.inheritedFrom ? ` — from ${ref.inheritedFrom}` : null}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </Banner>
+                      </div>
+                    )}
+
+                    <div data-testid={`${TestIdPrefix}.Preconditions`}>
+                      <RailRow
+                        label="Preconditions"
+                        readOnly
+                        value={
+                          inheritedPreCount === 0 ? (
+                            <span className="text-ink-4">none inherited</span>
+                          ) : (
+                            `${inheritedPreCount} inherited`
+                          )
+                        }
+                      />
+                      <p className="m-0 text-xs leading-[1.5] text-ink-4">
+                        {inheritedPreCount === 0
+                          ? 'Write this case’s own setup as a Background: block.'
+                          : 'Inherited from the suite — not shown in the text.'}
+                      </p>
+                      {inheritedPre.map((ref) => (
+                        <div
+                          key={ref.id}
+                          className="mt-1.5 flex items-center gap-2 text-[13px]"
+                          data-testid={`${TestIdPrefix}.Preconditions.Row`}
+                        >
+                          <Switch
+                            checked={!declines.value.includes(ref.id)}
+                            disabled={movingFolder}
+                            onCheckedChange={(next: boolean) => toggle(ref.id, !next)}
+                            // The panel's own wording, verbatim: the two switches mean the same
+                            // thing and a reader meets both on this screen.
+                            aria-label={`Applies to this case: ${ref.title}`}
+                          />
+                          <span className="min-w-0 text-ink-2">
+                            {ref.title}
+                            {ref.inheritedFrom ? (
+                              <span className="font-mono text-[11px] text-ink-4"> from {ref.inheritedFrom}</span>
+                            ) : null}
+                          </span>
+                        </div>
+                      ))}
+                      {existing && (
+                        <RouterLink
+                          to={`/projects/${projectId}/cases/${existing.id}`}
+                          data-testid={`${TestIdPrefix}.Preconditions.Link`}
+                          className="mt-1 inline-block text-xs text-steel underline-offset-4 hover:underline"
+                        >
+                          See the whole procedure, inherited setup included
+                        </RouterLink>
+                      )}
+                    </div>
+
+                    <div className="h-px bg-white/8" />
+
+                    {/* POSTCONDITIONS — new, and the render draws no such row. Gherkin emits
+                        them as comments the parser reads back as nothing by design, so the
+                        text can never author them; this is the only place they can live. */}
+                    <Controller
+                      control={control}
+                      name="postconditionIds"
+                      render={({ field }) => (
+                        <ConditionsPanel
+                          kind="POST"
+                          projectId={projectId}
+                          testId={`${TestIdPrefix}.Postconditions`}
+                          value={field.value}
+                          inherited={inheritedPost}
+                          declined={declines.value}
+                          leavingFolder={movingFolder}
+                          onToggleDecline={toggle}
+                          onChange={field.onChange}
+                          known={createdConditions}
+                          onCreate={() => setConditionDialog({ kind: 'POST', condition: null })}
+                          onEdit={(condition) => setConditionDialog({ kind: 'POST', condition })}
+                        />
+                      )}
+                    />
+                  </div>
+                );
+              }}
+            />
+          </section>
+
+          {/*
+            THE STANDING CORPUS (003 Phase 1) — *steps this project uses*, ranked by use count,
+            insert on click.
+
+            ONE MOUNT PER PAGE, on its own key and its own hook: `useStepSuggestions`'s
+            `enabled: q.trim().length > 0` gate is untouched, because the read this panel makes
+            is precisely the one that gate refuses and the reason it refuses it — eight mounted
+            rows firing eight reads of a thousand-row list — does not apply to a panel there is
+            one of.
+          */}
+          <section className="border-b border-white/8 px-4 py-4" data-testid={`${TestIdPrefix}.Corpus`}>
+            <h2 className="m-0 mb-2 text-[11px] font-semibold tracking-[.08em] text-ink-3 uppercase">
+              Steps this project uses
+            </h2>
+            <div className="max-h-80 overflow-y-auto">
+              <DataRegion
+                state={corpus}
+                testId={`${TestIdPrefix}.Corpus.Region`}
+                isEmpty={(rows) => rows.length === 0}
+                empty={{
+                  title: 'No steps yet',
+                  body: 'This list fills itself from the steps your cases already contain — nobody has to populate it.',
+                }}
+              >
+                {(rows) => (
+                  <div className="flex flex-col gap-0.5">
+                    {rows.map((row) => (
+                      <button
+                        key={row.action}
+                        type="button"
+                        onClick={() => insertFromCorpus(row)}
+                        data-testid={`${TestIdPrefix}.Corpus.Step`}
+                        className="cursor-pointer rounded-md px-2.5 py-2 text-left text-[13px] leading-[1.45] text-ink-2 hover:bg-white/4 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]"
+                      >
+                        <span className="block font-medium text-ink">{row.action}</span>
+                        {/* The ranking signal, shown rather than only sorted by. */}
+                        <span className="mt-0.5 block font-mono text-[10.5px] text-ink-4">
+                          {row.useCount} case{row.useCount === 1 ? '' : 's'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </DataRegion>
+            </div>
+          </section>
+
+          {/*
+            CLASSIFICATION — **absent entirely when every vocabulary is empty** (finding 3).
+
+            Not a labelled control with nothing in it, and not four of them: a freshly
+            provisioned project has four dimensions and no values, and the row is worth its
+            space only when there is something to choose. The one sentence and the one link
+            are the picker's `emptyNotice`, owned here because this is the side that knows
+            where Classification lives.
+          */}
+          <section className="border-b border-white/8 px-4 py-4">
+            <h2 className="m-0 mb-2 text-[11px] font-semibold tracking-[.08em] text-ink-3 uppercase">
+              Classification
+            </h2>
+            <Controller
+              control={control}
+              name="classificationValueIds"
+              render={({ field }) => (
+                <DataRegion state={dimensions} testId={`${TestIdPrefix}.ClassificationRegion`}>
+                  {(loaded) =>
+                    loaded.length === 0 || loaded.every((dimension) => dimension.values.length === 0) ? (
+                      <p
+                        className="m-0 text-xs leading-[1.55] text-ink-4"
+                        data-testid={`${TestIdPrefix}.Classification.Absent`}
+                      >
+                        Nothing configured, nothing shown.{' '}
+                        <RouterLink
+                          to={`/projects/${projectId}/settings/classification`}
+                          className="text-steel underline-offset-4 hover:underline"
+                        >
+                          Set up Classification
+                        </RouterLink>{' '}
+                        to classify cases here.
+                      </p>
+                    ) : (
+                      <ClassificationPicker
+                        dimensions={loaded}
+                        selected={field.value}
+                        onChange={field.onChange}
+                        testIdPrefix={TestIdPrefix}
+                        emptyNotice={(empty) => (
+                          <span className="text-xs leading-[1.55] text-ink-4">
+                            {empty.map((dimension) => dimension.name).join(', ')}{' '}
+                            {empty.length === 1 ? 'has' : 'have'} no values yet.{' '}
+                            <RouterLink
+                              to={`/projects/${projectId}/settings/classification`}
+                              className="text-steel underline-offset-4 hover:underline"
+                            >
+                              Set up Classification
+                            </RouterLink>
+                          </span>
+                        )}
+                      />
+                    )
+                  }
+                </DataRegion>
+              )}
+            />
+          </section>
+
+          {mode === 'edit' && (
+            <div className="px-4 py-4" data-testid={`${TestIdPrefix}.StatusNotice`}>
+              <Banner tone="neutral">
+                Review status is changed through the review actions, not here — approving a case
+                records who approved it and when.
+              </Banner>
+            </div>
           )}
-        </PermissionGate>
-      </Box>
+        </aside>
+      </div>
 
       {conditionDialog && (
         <ConditionEditDialog
@@ -1628,8 +1788,8 @@ function CaseEditorForm({
 
       {/*
         The paste dialog, PROMOTED OUT OF ITS BUTTON (003 Phase 1): it is one of the three starts
-        as well as an action on the panel, so it is mounted by whichever opened it and seeds fresh
-        every time.
+        as well as an action on the document, so it is mounted by whichever opened it and seeds
+        fresh every time.
 
         Under D1 the paste lands as TEXT rather than as rows — the text is the source of truth, so
         putting the parsed rows into the form and leaving the document showing something else
@@ -1656,6 +1816,122 @@ function CaseEditorForm({
           hasSteps={documentText.trim().length > 0}
         />
       )}
-    </Box>
+    </form>
+  );
+}
+
+const SELECT_CLASS =
+  'w-full cursor-pointer rounded-[6px] border border-white/8 bg-field px-2 py-1 text-[13px] text-ink ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]';
+
+const INPUT_CLASS =
+  'w-full rounded-[6px] border border-white/8 bg-field px-2 py-1 text-[13px] text-ink ' +
+  'placeholder:text-ink-4 ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]';
+
+/**
+ * A rail row and the control it opens — the rail spec's *"quiet at rest, obviously operable on
+ * hover and focus"*, with the helper sentence **inside the opened control** rather than standing
+ * under a permanently-bordered select.
+ *
+ * An inline disclosure and not a popover, which is the rail spec's open question 2 answered: a
+ * popover can be dismissed by a click outside it, and the one row here that can put the form into
+ * a state only a second control resolves — Automation — must not be able to close over its own
+ * refusal. An inline surface has nothing to dismiss it.
+ */
+function RailDisclosure({
+  label,
+  value,
+  testId,
+  open,
+  onToggle,
+  children,
+}: {
+  label: string;
+  value: ReactNode;
+  testId: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <RailRow
+        label={label}
+        value={value}
+        onOpen={onToggle}
+        aria-expanded={open}
+        data-testid={testId}
+      />
+      {open && (
+        <div className="mt-1 mb-2 flex flex-col gap-3 rounded-md border border-white/8 bg-field px-2.5 py-2.5">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One labelled control inside an opened rail row, with its help — or its refusal — beneath it. */
+function RailField({
+  label,
+  htmlFor,
+  help,
+  invalid,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  help?: string;
+  invalid?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <label
+        htmlFor={htmlFor}
+        className="mb-1 block text-[11px] font-medium tracking-[.04em] text-ink-3 uppercase"
+      >
+        {label}
+      </label>
+      {children}
+      {help && (
+        <p
+          role={invalid ? 'alert' : undefined}
+          className={cn('m-0 mt-1 text-[11.5px] leading-[1.45]', invalid ? 'text-[color:var(--color-failed)]' : 'text-ink-4')}
+        >
+          {help}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One of the two prose fields the document does not carry, in the narrative column.
+ *
+ * A `<label>` above a full-width control, one column — the forms rule the whole app follows. The
+ * help sits under the field rather than beside it for the same reason.
+ */
+function NoteField({
+  label,
+  help,
+  testId,
+  registration,
+}: {
+  label: string;
+  help: string;
+  testId: string;
+  registration: ReturnType<UseFormRegister<CaseInput>>;
+}) {
+  const id = `${testId}.control`;
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1 block text-[13px] font-medium text-ink-2">
+        {label}
+      </label>
+      <Textarea id={id} rows={2} data-testid={testId} {...registration} />
+      <p className="m-0 mt-1 text-xs text-ink-4">{help}</p>
+    </div>
   );
 }

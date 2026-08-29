@@ -202,6 +202,29 @@ describe('the blank state — the three starts (003 Phase 1)', () => {
     expect(screen.getByTestId('CaseEditor.Start.Paste')).toBeInTheDocument()
   })
 
+  it('offers the three starts as described cards, not bare buttons', async () => {
+    // 007 §0 item 2. The card IS the button — a described surface with a keyboard route printed on
+    // it — because three bare verbs taught nothing about what each one would do to a blank page.
+    mockReads()
+    renderNew()
+
+    expect(await screen.findByTestId('CaseEditor.Start.FromCase')).toHaveTextContent(/Copy the shape/)
+    expect(screen.getByTestId('CaseEditor.Start.Paste')).toHaveTextContent('⌘V')
+    expect(screen.getByTestId('CaseEditor.Start.Write')).toHaveTextContent(/start typing/)
+  })
+
+  it('scaffolds the blank document with a hint per keyword', async () => {
+    // The placeholder said `Given …/When …/Then …`, which names the three keywords and teaches
+    // nothing. The scaffold says what each one is FOR, on the line it will be typed on.
+    mockReads()
+    renderNew()
+
+    await screen.findByTestId('CaseEditor.Document.Scaffold')
+    expect(screen.getByText(/the state the test starts from/)).toBeInTheDocument()
+    expect(screen.getByText(/the action under test/)).toBeInTheDocument()
+    expect(screen.getByText(/what must be true afterwards/)).toBeInTheDocument()
+  })
+
   it('offers none of them on edit — there is already a case on screen to overwrite', async () => {
     mockReads({ theCase: aCase({ id: 'c1', steps: [aStep({ action: 'A step' })] }) })
     vi.spyOn(api, 'postForText').mockResolvedValue('Feature: Refunds\n\n  Scenario: X\n' as never)
@@ -330,12 +353,41 @@ describe('the rail', () => {
     renderNew()
 
     const rail = await screen.findByTestId('CaseEditor.Rail')
-    // Suite, Priority and Automation are comboboxes; Duration is a spinbutton. Postconditions is
-    // the conditions panel, and Classification is a select. Every one of them is Tab-reachable.
-    expect(within(rail).getAllByRole('combobox').length).toBeGreaterThanOrEqual(3)
-    expect(within(rail).getByTestId('CaseEditor.Field.EstimatedDuration')).toHaveAttribute('type', 'number')
+    /*
+      REWRITTEN BY 007 T7, and the reason is the change itself: the four value rows were full
+      outlined `Select`s, which is why this used to count comboboxes. They are quiet `RailRow`
+      buttons now, each opening the real control with its helper text inside — so what has to be
+      proved is that the quiet row is still a native, named, state-announcing control and not the
+      clickable div the render drew.
+    */
+    for (const label of ['Suite', 'Priority', 'Automation', 'Duration']) {
+      const row = within(rail).getByRole('button', { name: new RegExp(label) })
+      expect(row.tagName).toBe('BUTTON')
+      expect(row).toHaveAttribute('aria-expanded', 'false')
+    }
     expect(within(rail).getByTestId('CaseEditor.Postconditions')).toBeInTheDocument()
     expect(within(rail).getByTestId('CaseEditor.Preconditions')).toBeInTheDocument()
+  })
+
+  it('renders the rail rows quiet — no filled input surface at rest', async () => {
+    /*
+      007 §0 item 4, and the half of the rail spec that is easiest to lose: the rows must be real
+      controls AND look like nothing until they are wanted. What shipped before was the opposite
+      failure — an outlined select per row with a permanent border and a helper paragraph under it,
+      which is the nine-control form the redesign retired, moved into a 300px column.
+    */
+    mockReads()
+    renderNew()
+
+    await screen.findByTestId('CaseEditor.Rail')
+    const priority = screen.getByRole('button', { name: /Priority/ })
+    // Unprefixed classes only — `hover:bg-white/3` is the row becoming operable on approach, which
+    // is the half of the rule that must survive; a fill at REST is the half that must not.
+    const atRest = priority.className.split(/\s+/).filter((name) => !name.includes(':'))
+    expect(atRest.filter((name) => name.startsWith('bg-'))).toEqual([])
+    expect(priority.className).toMatch(/focus-visible:outline/)
+    // The helper sentence lives inside the control it is about, so it is not on screen at rest.
+    expect(screen.queryByText(/Also recorded as the case/)).not.toBeInTheDocument()
   })
 
   it('shows the automation disclosure only when the status makes it meaningful', async () => {
@@ -346,9 +398,10 @@ describe('the rail', () => {
     await screen.findByTestId('CaseEditor.Rail')
     expect(screen.queryByTestId('CaseEditor.Field.AutomationKey')).not.toBeInTheDocument()
 
-    const status = screen.getByTestId('CaseEditor.Field.AutomationStatus')
-    await user.click(within(status.closest('.MuiInputBase-root') as HTMLElement).getByRole('combobox'))
-    await user.click(await screen.findByRole('option', { name: /^automated$/i }))
+    // The status control and its two children are ONE control (rail spec), so the key field is
+    // inside this row's own disclosure rather than in a row of its own.
+    await user.click(screen.getByTestId('CaseEditor.Field.Automation'))
+    await user.selectOptions(screen.getByTestId('CaseEditor.Field.AutomationStatus'), 'AUTOMATED')
 
     expect(await screen.findByTestId('CaseEditor.Field.AutomationKey')).toBeInTheDocument()
   })
@@ -502,15 +555,14 @@ describe('declining an inherited condition (§187) and moving the case (§194)',
     await screen.findByTestId('CaseEditor.Preconditions.Row')
     expect(screen.queryByTestId('CaseEditor.Conditions.EndingDeclines')).not.toBeInTheDocument()
 
-    const suite = screen.getByTestId('CaseEditor.Field.Suite')
-    await user.click(within(suite.closest('.MuiInputBase-root') as HTMLElement).getByRole('combobox'))
-    await user.click(await screen.findByRole('option', { name: /not filed/i }))
+    await user.click(screen.getByTestId('CaseEditor.Field.Suite'))
+    const suite = screen.getByTestId('CaseEditor.Field.Suite.Input')
+    await user.selectOptions(suite, '')
 
     const warning = await screen.findByTestId('CaseEditor.Conditions.EndingDeclines')
     expect(warning).toHaveTextContent('Log in as standard user')
 
-    await user.click(within(suite.closest('.MuiInputBase-root') as HTMLElement).getByRole('combobox'))
-    await user.click(await screen.findByRole('option', { name: /refunds/i }))
+    await user.selectOptions(suite, 'suite-1')
     // A preview, not a latch.
     await waitFor(() =>
       expect(screen.queryByTestId('CaseEditor.Conditions.EndingDeclines')).not.toBeInTheDocument(),

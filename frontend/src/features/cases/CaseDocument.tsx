@@ -1,8 +1,8 @@
-import { Alert, AlertTitle, Box, Paper, Popper, Stack, Typography } from '@mui/material';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useStepSuggestions } from '../../api/queries';
-import { Identifier } from '../../components/Identifier';
+import { Banner, ProcedureLine } from '../../components/kit';
+import { cn } from '../../lib/cn';
 import { useDebouncedValue } from '../../lib/useDebouncedValue';
 import type { StepSuggestion } from '../../api/types';
 import {
@@ -43,12 +43,31 @@ import {
  * The caret marker is an empty `<span>` rendered **into the coloured line itself**, split at the
  * caret column. That is what makes it one mirror rather than one mirror and one measurer.
  *
+ * ## 007 T7 Step 5 — the document reads as a document, and what that costs the mirror
+ *
+ * `SHARED` is 15px sans at 1.75 now, per the redesign render. The whole surface was mono at 13px,
+ * which is why it read as a config file rather than as a procedure.
+ *
+ * **The keyword changes colour and nothing else.** The render draws it in mono at 14px inside a
+ * 15px sans line, and that is the one thing this surface may not copy: the mirror and the textarea
+ * must agree on font, size, weight, padding and wrapping to the pixel, and a mono keyword would
+ * shift every character after it on its line — putting the completion popup, which is anchored
+ * inside the mirror, somewhere the caret is not. So the mono half of rule 5 lives wherever nothing
+ * is typed: the **gutter number**, which is absolutely positioned out of the text flow, the
+ * `Feature:` chrome, and the blank state's scaffold. A deliberate deviation from the render,
+ * recorded in 007 T7 rather than left to be rediscovered as a caret bug.
+ *
  * ## The completion is a search and nothing more
  *
  * `useStepSuggestions` unchanged — same endpoint, same 250 ms debounce, same typeahead budget,
  * same `enabled` gate. `gherkinText.stepFragmentAt` decides what to search for and answers null on
  * every line that is not a step being written, so the popup cannot open over a table row or inside
  * a doc string.
+ *
+ * ~~The popup is an MUI `Popper` anchored to the caret marker.~~ → **superseded by 007 T7.** It is
+ * an absolutely-positioned element inside the mirror's own positioned box, placed from the
+ * marker's `offsetTop`/`offsetLeft`. The marker's offset parent *is* that box, so the position is
+ * a read rather than a measurement, and it takes the last portal out of this file.
  */
 
 /** A refusal to render against the text — the server's, or one of the two the client owns. */
@@ -67,14 +86,6 @@ export interface DocumentRefusal {
   permission?: string | null;
 }
 
-const MONO = {
-  fontFamily: 'var(--font-mono)',
-  fontSize: '0.8125rem',
-  lineHeight: 1.7,
-  letterSpacing: 'normal',
-  tabSize: 2,
-} as const;
-
 /**
  * The properties the textarea and the mirror must agree on **exactly**.
  *
@@ -82,26 +93,85 @@ const MONO = {
  * different padding shifts the whole grid, a different `white-space` re-wraps it, and a different
  * `word-break` moves only the long lines — which is the version of this bug that survives a
  * demo and fails on somebody's real step.
+ *
+ * The 40px left padding is the render's 26px gutter plus its 14px gap. The line numbers are drawn
+ * into it from `position: absolute`, so they cost the shared text flow nothing.
  */
 const SHARED = {
-  ...MONO,
-  m: 0,
-  p: 1.5,
+  margin: 0,
+  padding: '12px 12px 12px 40px',
   border: '1px solid transparent',
+  fontFamily: 'var(--font-sans)',
+  fontSize: '15px',
+  lineHeight: 1.75,
+  letterSpacing: 'normal',
+  tabSize: 2,
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
   overflowWrap: 'anywhere',
 } as const;
 
+/** Rule 5: `Given`/`When`/`Then` are the same three hues the runner paints results in. */
+function keywordColour(text: string): string {
+  const word = text.trim().replace(/:$/, '');
+  if (word === 'Given') return 'var(--color-given)';
+  if (word === 'When') return 'var(--color-when)';
+  if (word === 'Then') return 'var(--color-then)';
+  // `Feature:`, `Scenario:`, `Background:` — structure the author writes but the case does not own.
+  if (text.trim().endsWith(':')) return 'var(--color-steel)';
+  return 'var(--color-ink-3)';
+}
+
+/**
+ * Everything that is not a keyword.
+ *
+ * Quiet, and quiet in one direction: the render draws a tag in mauve (`--tagc`), a hue this app
+ * has no token for and which rule 5 forbids substituting a status colour for. Tags and step data
+ * are both subordinate to the sentence, so both stay `ink-2` until that token exists.
+ */
 const COLOURS: Record<Span['kind'], string> = {
-  keyword: 'var(--color-accent, #6750a4)',
+  keyword: 'inherit',
   sentence: 'inherit',
-  docstring: 'var(--color-status-info, #0b6bcb)',
-  table: 'var(--color-status-info, #0b6bcb)',
-  comment: 'text.disabled',
-  tag: 'var(--color-status-warning, #9a6700)',
+  docstring: 'var(--color-ink-2)',
+  table: 'var(--color-ink-2)',
+  comment: 'var(--color-ink-4)',
+  tag: 'var(--color-ink-2)',
   plain: 'inherit',
 };
+
+const spanColour = (span: Span) =>
+  span.kind === 'keyword' ? keywordColour(span.text) : COLOURS[span.kind];
+
+/**
+ * What the author sees before there is anything to see — 007 §0 item 3, render frame B.
+ *
+ * It replaces `placeholder="Given …\nWhen …\nThen …"`, and the difference is the item: a
+ * placeholder names the three keywords, this says what each one is *for*, on the line it will be
+ * typed on. It renders **inside the mirror**, so nothing moves when the first character arrives —
+ * the ghost is overwritten in place rather than unmounted above the caret.
+ */
+const SCAFFOLD = [
+  { keyword: 'given', hint: 'the state the test starts from' },
+  { keyword: 'when', hint: 'the action under test' },
+  { keyword: 'then', hint: 'what must be true afterwards' },
+] as const;
+
+function BlankScaffold({ testId }: { testId: string }) {
+  return (
+    <div data-testid={testId} className="-ml-10 text-ink-4">
+      <span className="block max-w-[34ch] text-[25px] leading-[1.25] font-[620] tracking-[-.02em]">
+        Name the case on the first line…
+      </span>
+      <span className="mt-1 block text-sm">One sentence stating what is verified</span>
+      <span className="my-5 block h-px max-w-[74ch] bg-white/8" />
+      {SCAFFOLD.map((row, index) => (
+        <ProcedureLine key={row.keyword} line={index + 1} keyword={row.keyword} className="opacity-55">
+          {row.hint}
+        </ProcedureLine>
+      ))}
+    </div>
+  );
+}
 
 export function CaseDocument({
   projectId,
@@ -138,9 +208,10 @@ export function CaseDocument({
   const [caret, setCaret] = useState(0);
   const [focused, setFocused] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [popup, setPopup] = useState<{ top: number; left: number } | null>(null);
 
   const lines = useMemo(() => scan(text), [text]);
+  const blank = text.length === 0 && !readOnly;
 
   const fragment = focused && !readOnly ? stepFragmentAt(text, caret) : null;
   /*
@@ -157,35 +228,59 @@ export function CaseDocument({
     failed is the critical-vs-optional rule broken in the direction that costs most.
   */
   const options = fragment && debounced === fragment ? (suggestions.data ?? []) : [];
-  const open = options.length > 0 && !!anchor;
+  const open = options.length > 0 && popup !== null;
 
   useEffect(() => {
     setHighlighted(0);
   }, [debounced]);
 
   /*
-    The anchor is re-read after every render that could have moved it — a keystroke, a caret move,
-    a change of options. `getBoundingClientRect` is measured off the marker inside the MIRROR, so
-    the popup follows wrapped lines without this component knowing anything about wrapping.
+    The position is re-read after every render that could have moved it — a keystroke, a caret move,
+    a change of options. It is read off the marker inside the MIRROR, whose offset parent is the
+    mirror's own box, so the popup follows wrapped lines without this component knowing anything
+    about wrapping.
   */
   useEffect(() => {
-    setAnchor(fragment ? caretRef.current : null);
+    const marker = fragment ? caretRef.current : null;
+    setPopup(
+      marker ? { top: marker.offsetTop + marker.offsetHeight, left: marker.offsetLeft } : null,
+    );
   }, [fragment, text, caret, options.length]);
 
   const { line: caretLine } = caretPositionOf(text, caret);
   const backgroundLine = sectionLine(text, 'Background');
 
+  /*
+    React re-renders the value, and a textarea whose value changed keeps its selection at the old
+    offset — which is mid-sentence in the text that was just replaced. So the DOM caret is moved
+    too, after the paint that carries the new value.
+  */
+  const putCaret = (position: number) => {
+    requestAnimationFrame(() => {
+      areaRef.current?.setSelectionRange(position, position);
+      areaRef.current?.focus();
+    });
+  };
+
   const apply = (suggestion: StepSuggestion) => {
     const next = completeStepAt(text, caret, suggestion.action);
     onTextChange(next.text);
     setCaret(next.caret);
-    // The DOM caret has to be moved too: React re-renders the value, and a textarea whose value
-    // changed keeps its selection at the old offset — which is mid-sentence in the text that was
-    // just replaced.
-    requestAnimationFrame(() => {
-      areaRef.current?.setSelectionRange(next.caret, next.caret);
-      areaRef.current?.focus();
-    });
+    putCaret(next.caret);
+  };
+
+  /**
+   * The render's `+ tag` chip, and the only thing on the blank state that writes into the document
+   * without the author typing.
+   *
+   * It writes an `@` and leaves the caret after it rather than offering a vocabulary: `case_tag` is
+   * free text on this contract, the completion under the caret is the step corpus and not a tag
+   * list, and a picker here would be the namespaced-tag syntax 003's open problem 2 defers.
+   */
+  const addTag = () => {
+    onTextChange(text.length === 0 ? '@' : `@\n${text}`);
+    setCaret(1);
+    putCaret(1);
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -203,14 +298,14 @@ export function CaseDocument({
       apply(options[highlighted]);
     } else if (event.key === 'Escape') {
       event.preventDefault();
-      setAnchor(null);
+      setPopup(null);
     }
   };
 
   const sync = () => setCaret(areaRef.current?.selectionStart ?? 0);
 
   return (
-    <Stack sx={{ gap: 1 }} data-testid={`${testIdPrefix}.Document`}>
+    <div className="flex flex-col gap-2" data-testid={`${testIdPrefix}.Document`}>
       {/*
         THE `Feature:` LINE, as chrome (003 C3).
 
@@ -218,68 +313,83 @@ export function CaseDocument({
         so it is shown and not typed. A line the author could retype here would be a rename that
         moved the case out of its folder, from a surface where every other line is theirs.
       */}
-      <Stack
-        direction="row"
-        sx={{ gap: 1, alignItems: 'baseline', px: 1.5 }}
+      <div
+        className="flex flex-wrap items-baseline gap-2 text-[13px]"
         data-testid={`${testIdPrefix}.Document.Feature`}
       >
-        <Identifier variant="muted">Feature:</Identifier>
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          {featureName ?? 'Unfiled'}
-        </Typography>
-        <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+        <span className="font-mono text-[11px] text-ink-4">Feature:</span>
+        <span className="text-ink-2">{featureName ?? 'Unfiled'}</span>
+        <span className="text-xs text-ink-4">
           — from the suite this case is filed in. Change it in the rail.
-        </Typography>
-      </Stack>
+        </span>
+      </div>
 
-      <Box sx={{ position: 'relative' }}>
+      {blank && (
+        <div>
+          <button
+            type="button"
+            onClick={addTag}
+            data-testid={`${testIdPrefix}.Document.AddTag`}
+            className={cn(
+              'rounded-[5px] border border-dashed border-white/14 px-[7px] py-0.5',
+              'font-mono text-xs text-ink-4 hover:border-white/25 hover:text-ink-2',
+              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
+            )}
+          >
+            + tag
+          </button>
+        </div>
+      )}
+
+      <div className="relative">
         {/*
           THE ONE MIRROR. `aria-hidden` because it is a second copy of text the textarea already
           exposes; a screen reader reading both would read the case twice.
         */}
-        <Box
-          component="pre"
+        <pre
           aria-hidden
           data-testid={`${testIdPrefix}.Document.Mirror`}
-          sx={{
-            ...SHARED,
-            position: 'absolute',
-            inset: 0,
-            overflow: 'hidden',
-            pointerEvents: 'none',
-            borderRadius: 1,
-            bgcolor: 'background.default',
-            color: 'text.primary',
-          }}
+          style={SHARED}
+          className="pointer-events-none absolute inset-0 overflow-hidden rounded-md bg-paper text-ink"
         >
-          {lines.map((row) => (
-            <Box
-              key={row.number}
-              component="span"
-              sx={{
-                display: 'block',
-                minHeight: '1.7em',
+          {blank ? (
+            <BlankScaffold testId={`${testIdPrefix}.Document.Scaffold`} />
+          ) : (
+            lines.map((row) => (
+              <span
+                key={row.number}
                 // The refused line, marked where the author is looking rather than only in a
                 // banner they may have scrolled past.
-                bgcolor: refusal?.line === row.number ? 'var(--color-status-error-bg, #fdecea)' : undefined,
-              }}
-            >
-              {renderRow(row.spans, row.number === caretLine ? caretPositionOf(text, caret).column : null, caretRef)}
-            </Box>
-          ))}
-        </Box>
+                style={{
+                  backgroundColor:
+                    refusal?.line === row.number
+                      ? 'color-mix(in oklab, var(--color-failed) 14%, transparent)'
+                      : undefined,
+                }}
+                className="relative block min-h-[1.75em]"
+              >
+                <span className="absolute -left-10 w-[26px] pt-[3px] text-right font-mono text-[11px] tabular-nums text-ink-4">
+                  {row.number}
+                </span>
+                {renderRow(
+                  row.spans,
+                  row.number === caretLine ? caretPositionOf(text, caret).column : null,
+                  caretRef,
+                )}
+              </span>
+            ))
+          )}
+        </pre>
 
-        <Box
-          component="textarea"
+        <textarea
           ref={areaRef}
           value={text}
           readOnly={readOnly}
           spellCheck={false}
           aria-label="The case as Gherkin"
           data-testid={`${testIdPrefix}.Document.Text`}
-          placeholder={'Given …\nWhen …\nThen …'}
           rows={Math.max(12, lines.length + 2)}
-          onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => {
+          onChange={(event) => {
             onTextChange(event.target.value);
             setCaret(event.target.selectionStart);
           }}
@@ -290,31 +400,28 @@ export function CaseDocument({
           onFocus={() => setFocused(true)}
           onBlur={() => {
             setFocused(false);
-            setAnchor(null);
+            setPopup(null);
             onCommit();
           }}
-          sx={{
+          style={{
             ...SHARED,
-            position: 'relative',
-            display: 'block',
-            width: '100%',
-            resize: 'vertical',
-            borderRadius: 1,
-            borderColor: 'divider',
+            borderColor: 'rgb(255 255 255/8%)',
             background: 'transparent',
             // Transparent text over the mirror, and a real caret colour so the caret stays visible.
             color: 'transparent',
-            caretColor: 'var(--color-text-primary, currentColor)',
-            outline: 'none',
-            '&:focus-visible': { borderColor: 'primary.main' },
-            '&::placeholder': { color: 'text.disabled' },
+            caretColor: 'var(--color-ink)',
           }}
+          className="relative block w-full resize-y rounded-md outline-none focus-visible:border-[color:var(--color-steel)]"
         />
 
-        <Popper open={open} anchorEl={anchor} placement="bottom-start" style={{ zIndex: 1300 }}>
-          <Paper elevation={4} sx={{ maxWidth: 520, py: 0.5 }} data-testid={`${testIdPrefix}.Document.Suggestions`}>
+        {open && popup && (
+          <div
+            data-testid={`${testIdPrefix}.Document.Suggestions`}
+            style={{ top: popup.top, left: popup.left }}
+            className="absolute z-30 w-[min(520px,100%)] overflow-hidden rounded-md border border-white/14 bg-panel py-1 shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]"
+          >
             {options.map((option, index) => (
-              <Box
+              <div
                 key={option.action}
                 role="option"
                 aria-selected={index === highlighted}
@@ -325,29 +432,23 @@ export function CaseDocument({
                   event.preventDefault();
                   apply(option);
                 }}
-                sx={{
-                  px: 1.5,
-                  py: 0.75,
-                  cursor: 'pointer',
-                  bgcolor: index === highlighted ? 'action.hover' : undefined,
-                }}
+                className={cn(
+                  'flex cursor-pointer items-baseline gap-2.5 px-3 py-1.5 text-[13.5px]',
+                  index === highlighted && 'bg-white/5',
+                )}
               >
-                <Stack direction="row" sx={{ gap: 1, alignItems: 'baseline' }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {option.action}
-                  </Typography>
-                  {/* The ranking signal, shown rather than only sorted by — "41 cases" is what
-                      tells an author they are writing the project's twenty-first wording of a
-                      step it already has. */}
-                  <Identifier variant="muted">
-                    {option.useCount} case{option.useCount === 1 ? '' : 's'}
-                  </Identifier>
-                </Stack>
-              </Box>
+                <span className="font-medium text-ink">{option.action}</span>
+                {/* The ranking signal, shown rather than only sorted by — "41 cases" is what
+                    tells an author they are writing the project's twenty-first wording of a
+                    step it already has. */}
+                <span className="ml-auto font-mono text-[11px] text-ink-4">
+                  {option.useCount} case{option.useCount === 1 ? '' : 's'}
+                </span>
+              </div>
             ))}
-          </Paper>
-        </Popper>
-      </Box>
+          </div>
+        )}
+      </div>
 
       {/*
         THE COST OF DECISION (a), ON THE SCREEN AND NOT ONLY IN THE PLAN (003 D6).
@@ -360,32 +461,34 @@ export function CaseDocument({
         document nobody reading this screen has open.
       */}
       {(backgroundLine !== null || inheritedPreconditionCount > 0) && (
-        <Typography
-          variant="caption"
-          sx={{ color: 'text.secondary', px: 1.5 }}
+        <p
+          className="m-0 text-xs leading-[1.55] text-ink-3"
           data-testid={`${testIdPrefix}.Document.BackgroundNotice`}
         >
-          <strong>Background:</strong> is this case&rsquo;s own setup. The rendered{' '}
-          <Identifier variant="muted">.feature</Identifier> omits setup inherited from the suite
+          <strong className="font-medium text-ink-2">Background:</strong> is this case&rsquo;s own
+          setup. The rendered <span className="font-mono text-[11px] text-ink-4">.feature</span>{' '}
+          omits setup inherited from the suite
           {inheritedPreconditionCount > 0
             ? ` — ${inheritedPreconditionCount} inherited ${
                 inheritedPreconditionCount === 1 ? 'precondition is' : 'preconditions are'
               } listed in the rail.`
             : '.'}
-        </Typography>
+        </p>
       )}
 
       {refusal && (
-        <Alert severity="error" role="alert" data-testid={`${testIdPrefix}.Document.Refusal`}>
-          <AlertTitle>
-            {refusal.line !== null ? `Line ${refusal.line}` : 'This cannot be saved yet'}
-          </AlertTitle>
-          {/* The server's sentence, quoted. Composing words around "Line 4, column 3: expected a
-              step" is how the author gets told two different things about one typo (§149). */}
-          {refusal.message}
-        </Alert>
+        <Banner tone="bad" data-testid={`${testIdPrefix}.Document.Refusal`}>
+          <span role="alert">
+            <strong className="block font-medium text-ink">
+              {refusal.line !== null ? `Line ${refusal.line}` : 'This cannot be saved yet'}
+            </strong>
+            {/* The server's sentence, quoted. Composing words around "Line 4, column 3: expected a
+                step" is how the author gets told two different things about one typo (§149). */}
+            {refusal.message}
+          </span>
+        </Banner>
       )}
-    </Stack>
+    </div>
   );
 }
 
@@ -400,9 +503,7 @@ function renderRow(
   caretColumn: number | null,
   caretRef: React.RefObject<HTMLSpanElement | null>,
 ) {
-  const marker = (
-    <Box key="caret" component="span" ref={caretRef} sx={{ display: 'inline-block', width: 0 }} />
-  );
+  const marker = <span key="caret" ref={caretRef} className="inline-block w-0" />;
 
   const out: React.ReactNode[] = [];
   let consumed = 0;
@@ -415,22 +516,22 @@ function renderRow(
     if (!placed && caretColumn !== null && caretColumn <= consumed) {
       const at = caretColumn - start;
       out.push(
-        <Box key={`${index}a`} component="span" sx={{ color: COLOURS[span.kind] }}>
+        <span key={`${index}a`} style={{ color: spanColour(span) }}>
           {span.text.slice(0, at)}
-        </Box>,
+        </span>,
         marker,
-        <Box key={`${index}b`} component="span" sx={{ color: COLOURS[span.kind] }}>
+        <span key={`${index}b`} style={{ color: spanColour(span) }}>
           {span.text.slice(at)}
-        </Box>,
+        </span>,
       );
       placed = true;
       return;
     }
 
     out.push(
-      <Box key={index} component="span" sx={{ color: COLOURS[span.kind] }}>
+      <span key={index} style={{ color: spanColour(span) }}>
         {span.text}
-      </Box>,
+      </span>,
     );
   });
 
