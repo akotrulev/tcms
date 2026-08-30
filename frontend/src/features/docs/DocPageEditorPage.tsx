@@ -12,6 +12,15 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { Banner, DocumentSurface } from '../../components/kit';
 import { Button, Textarea } from '../../components/ui';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
 import { NativeSelect } from '../../components/ui/native-select';
 import { cn } from '../../lib/cn';
 import { describeError } from '../../lib/describeError';
@@ -203,6 +212,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
     register,
     handleSubmit,
     setError,
+    setValue,
     watch,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<PageFormInput>({
@@ -379,12 +389,111 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
                     The render's `.gut` — quiet at 35% and full at hover or focus-within, so the
                     handle and the type are there when the author reaches for them and out of the
                     way of the words when they are not.
+
+                    **And it is the only chrome a block gets.** Render B's caption is the decision:
+                    *"blocks get a gutter, not a toolbar each — the case editor's move, applied to a
+                    block model."* The build had the gutter AND a full toolbar under every block —
+                    a type select, a level select, up, down, delete — so a five-block page carried
+                    five toolbars, which is the thing the render ruled out by name (renders audit
+                    5.1). Every one of those actions is still here; they are one press away rather
+                    than permanently on screen, which is the same trade the case editor's rail made.
                   */}
                   <div className="flex flex-col items-center gap-1 pt-1.5 opacity-35 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                     <GripVertical aria-hidden className="size-3.5 text-ink-4" />
-                    <span className="font-mono text-[9px] tracking-[.04em] text-ink-4 uppercase">
-                      {GUTTER_LABEL[type]}
-                    </span>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label={`Block ${index + 1} actions`}
+                          data-testid={`${TestIdPrefix}.Block.Menu`}
+                          className="rounded-[3px] font-mono text-[9px] tracking-[.04em] text-ink-4 uppercase hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-[color:var(--color-given)]"
+                        >
+                          {GUTTER_LABEL[type]}
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuLabel>Block type</DropdownMenuLabel>
+                        {BLOCK_TYPES.map((value) => (
+                          <DropdownMenuCheckboxItem
+                            key={value}
+                            checked={type === value}
+                            onSelect={() =>
+                              setValue(`blocks.${index}.blockType`, value, { shouldDirty: true })
+                            }
+                            data-testid={`${TestIdPrefix}.Block.Type.${value}`}
+                          >
+                            {docBlockTypeLabel[value]}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+
+                        {/*
+                          Offered for the two types that HAVE a depth — the server refuses a level
+                          on the other four rather than ignoring it, so offering it everywhere
+                          would invite a rejection the client could have prevented.
+
+                          The label differs because the two are different things — H3 is a rank, an
+                          indent is a position.
+                        */}
+                        {(type === 'heading' || type === 'list') && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel>
+                              {type === 'heading' ? 'Depth' : 'Indent'}
+                            </DropdownMenuLabel>
+                            {[1, 2, 3, 4, 5, 6].map((value) => (
+                              <DropdownMenuCheckboxItem
+                                key={value}
+                                checked={Number(watch(`blocks.${index}.level`) || 1) === value}
+                                onSelect={() =>
+                                  // The form holds level as a STRING (the select it replaced bound
+                                  // `value` and `onChange` to an `<option value>`), and the schema
+                                  // coerces on submit. Writing a number here would make one field
+                                  // in the array a different type from the rest of its lifetime.
+                                  setValue(`blocks.${index}.level`, String(value), {
+                                    shouldDirty: true,
+                                  })
+                                }
+                                data-testid={`${TestIdPrefix}.Block.Level.${value}`}
+                              >
+                                {type === 'heading' ? `H${value}` : String(value)}
+                              </DropdownMenuCheckboxItem>
+                            ))}
+                          </>
+                        )}
+
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          disabled={index === 0}
+                          onSelect={() => blocks.move(index, index - 1)}
+                          data-testid={`${TestIdPrefix}.Block.Up`}
+                        >
+                          <ArrowUp aria-hidden className="size-3.5" />
+                          Move up
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={index === blocks.fields.length - 1}
+                          onSelect={() => blocks.move(index, index + 1)}
+                          data-testid={`${TestIdPrefix}.Block.Down`}
+                        >
+                          <ArrowDown aria-hidden className="size-3.5" />
+                          Move down
+                        </DropdownMenuItem>
+                        {/*
+                          Removing a block here is a local edit until Save; the server is what
+                          refuses it when something links to it, and that refusal arrives in the
+                          banner above. Warning here instead would mean the client holding a
+                          second, staler copy of the rule.
+                        */}
+                        <DropdownMenuItem
+                          onSelect={() => blocks.remove(index)}
+                          className="text-[color:var(--color-failed)]"
+                          data-testid={`${TestIdPrefix}.Block.Remove`}
+                        >
+                          <Trash2 aria-hidden className="size-3.5" />
+                          Remove
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
 
                   <div className="min-w-0">
@@ -450,97 +559,6 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
                       />
                     )}
 
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2 opacity-45 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                      <Controller
-                        control={control}
-                        name={`blocks.${index}.blockType`}
-                        render={({ field: select }) => (
-                          <NativeSelect
-                            {...select}
-                            aria-label="Block type"
-                            data-testid={`${TestIdPrefix}.Block.Type`}
-                            className="w-[130px]"
-                          >
-                            {BLOCK_TYPES.map((value) => (
-                              <option key={value} value={value}>
-                                {docBlockTypeLabel[value]}
-                              </option>
-                            ))}
-                          </NativeSelect>
-                        )}
-                      />
-                      {/*
-                        Rendered for the two types that HAVE a depth — the server refuses a level
-                        on the other four rather than ignoring it, so offering the control
-                        everywhere would invite a rejection the client could have prevented.
-
-                        The list arm is §93's other half arriving: a bullet's indent is what makes
-                        a nested scenario outline authorable, the reader has rendered it since, and
-                        this control was heading-only, so the depth could be read and never
-                        written. The label differs because the two are different things — H3 is a
-                        rank, an indent is a position.
-                      */}
-                      {(type === 'heading' || type === 'list') && (
-                        <Controller
-                          control={control}
-                          name={`blocks.${index}.level`}
-                          render={({ field: select }) => (
-                            <NativeSelect
-                              {...select}
-                              value={select.value || '1'}
-                              aria-label={type === 'heading' ? 'Depth' : 'Indent'}
-                              data-testid={`${TestIdPrefix}.Block.Level`}
-                              className="w-[86px]"
-                            >
-                              {[1, 2, 3, 4, 5, 6].map((value) => (
-                                <option key={value} value={String(value)}>
-                                  {type === 'heading' ? `H${value}` : value}
-                                </option>
-                              ))}
-                            </NativeSelect>
-                          )}
-                        />
-                      )}
-
-                      <span className="flex-1" />
-
-                      <Button
-                        size="icon"
-                        variant="quiet"
-                        aria-label="Move block up"
-                        disabled={index === 0}
-                        onClick={() => blocks.move(index, index - 1)}
-                        data-testid={`${TestIdPrefix}.Block.Up`}
-                      >
-                        <ArrowUp aria-hidden className="size-3.5" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="quiet"
-                        aria-label="Move block down"
-                        disabled={index === blocks.fields.length - 1}
-                        onClick={() => blocks.move(index, index + 1)}
-                        data-testid={`${TestIdPrefix}.Block.Down`}
-                      >
-                        <ArrowDown aria-hidden className="size-3.5" />
-                      </Button>
-                      {/*
-                        Removing a block here is a local edit until Save; the server is what
-                        refuses it when something links to it, and that refusal arrives in the
-                        banner above. Warning here instead would mean the client holding a second,
-                        staler copy of the rule.
-                      */}
-                      <Button
-                        size="icon"
-                        variant="quiet"
-                        aria-label="Remove block"
-                        title="Remove this block"
-                        onClick={() => blocks.remove(index)}
-                        data-testid={`${TestIdPrefix}.Block.Remove`}
-                      >
-                        <Trash2 aria-hidden className="size-3.5" />
-                      </Button>
-                    </div>
                   </div>
                 </div>
               );

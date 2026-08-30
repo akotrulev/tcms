@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
@@ -102,13 +102,24 @@ function renderEditor(subject: DocPage = page) {
  * visible control is the sibling `combobox`, and the options render into a portal on the
  * document.~~ → **superseded (007 T14).** Both pickers on this form are native `<select>`s now —
  * one of six fixed words, so the platform control, which is also the one `@radix-ui`'s select
- * cannot be under jsdom. Their options are children of the box rather than a portal. This helper
- * is the only line of this file the port touched; every assertion below is unchanged.
+ * cannot be under jsdom. Their options are children of the box rather than a portal.
+ *
+ * ~~This helper is the only line of this file the port touched.~~ → **the helper is gone.** The
+ * block's type and depth moved into the gutter menu (renders audit 5.1), so there is no `<select>`
+ * left on a block to drive; `openBlockMenu` below is what replaced it.
  */
-async function choose(testId: string, optionName: string | RegExp) {
-  const select = screen.getByTestId(testId)
-  const option = within(select).getByRole('option', { name: optionName }) as HTMLOptionElement
-  await userEvent.selectOptions(select, option)
+
+/**
+ * Open one block's gutter menu, which is where its type, its depth and its three moves now live.
+ *
+ * Render B's caption — *"blocks get a gutter, not a toolbar each"* — and until 2026-08-30 the build
+ * had both, so a five-block page carried five toolbars (renders audit 5.1). Every action is the
+ * same one; only where it sits changed, which is why the assertions below are unchanged apart from
+ * the press that reveals the control.
+ */
+async function openBlockMenu(index = 0) {
+  const menus = await screen.findAllByTestId('DocEditor.Block.Menu')
+  await userEvent.click(menus[index])
 }
 
 /** The body of the one PATCH the editor sent. */
@@ -175,8 +186,8 @@ describe('DocPageEditorPage', () => {
     const patch = vi.spyOn(api, 'patch').mockResolvedValue(page as never)
     renderEditor()
 
-    const removes = await screen.findAllByTestId('DocEditor.Block.Remove')
-    await userEvent.click(removes[0])
+    await openBlockMenu(0)
+    await userEvent.click(await screen.findByTestId('DocEditor.Block.Remove'))
     await userEvent.click(screen.getByTestId('DocEditor.Save'))
     await waitFor(() => expect(patch).toHaveBeenCalled())
 
@@ -193,8 +204,16 @@ describe('DocPageEditorPage', () => {
 
     await waitFor(() => expect(screen.getAllByTestId('DocEditor.Block')).toHaveLength(2))
 
-    // The heading starts at H2; the paragraph beside it has no depth control at all.
-    expect(screen.getAllByTestId('DocEditor.Block.Level')).toHaveLength(1)
+    // The heading starts at H2; the paragraph beside it has no depth control at all. Read from
+    // the heading's own menu, and then from the paragraph's, because the two menus are what carry
+    // the difference now.
+    await openBlockMenu(0)
+    expect(await screen.findByTestId('DocEditor.Block.Level.2')).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+
+    await openBlockMenu(1)
+    expect(screen.queryByTestId('DocEditor.Block.Level.2')).toBeNull()
+    await userEvent.keyboard('{Escape}')
 
     await userEvent.click(screen.getByTestId('DocEditor.Save'))
     await waitFor(() => expect(patch).toHaveBeenCalled())
@@ -241,8 +260,8 @@ describe('DocPageEditorPage', () => {
     )
     renderEditor()
 
-    const removes = await screen.findAllByTestId('DocEditor.Block.Remove')
-    await userEvent.click(removes[1])
+    await openBlockMenu(1)
+    await userEvent.click(await screen.findByTestId('DocEditor.Block.Remove'))
     await userEvent.click(screen.getByTestId('DocEditor.Save'))
 
     // The server's own sentence: it is the only one that names the action that does work, and
@@ -394,8 +413,9 @@ describe('DocPageEditorPage — the payload-carrying block types', () => {
 
     // The control exists for a list at all, which it did not before: the reader has indented
     // bullets by this field since §93 and nothing could set it.
-    await screen.findByTestId('DocEditor.Block.Level')
-    await choose('DocEditor.Block.Level', '3')
+    await openBlockMenu(0)
+    await userEvent.click(await screen.findByTestId('DocEditor.Block.Level.3'))
+    await userEvent.keyboard('{Escape}')
     await userEvent.click(screen.getByTestId('DocEditor.Save'))
 
     await waitFor(() => expect(patch).toHaveBeenCalled())
@@ -428,8 +448,9 @@ describe('DocPageEditorPage — the payload-carrying block types', () => {
     const patch = vi.spyOn(api, 'patch').mockResolvedValue({ ...withTable, currentVersionNo: 4 } as never)
     renderEditor(withTable)
 
-    await screen.findByTestId('DocEditor.Block.Type')
-    await choose('DocEditor.Block.Type', 'Paragraph')
+    await openBlockMenu(0)
+    await userEvent.click(await screen.findByTestId('DocEditor.Block.Type.paragraph'))
+    await userEvent.keyboard('{Escape}')
     await userEvent.click(screen.getByTestId('DocEditor.Save'))
 
     // Every type-specific field is derived from the TYPE at submit, never from what the control

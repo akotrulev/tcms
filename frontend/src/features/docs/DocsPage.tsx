@@ -652,12 +652,24 @@ function PageView({
       data-testid="Docs.Content"
       className="rounded-lg border border-line"
     >
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      {/*
+        Rule 2: chrome is a strip ABOVE the document and a strip below it, never a row inside the
+        reading column. Edit / Unpublish / Archive / Delete used to sit between the title and the
+        first block — inside the document surface, in the middle of what somebody is reading
+        (renders audit 5.3). They join the identity strip here, which is already chrome and already
+        above the title.
+
+        The tested/not-tested signal stays exactly where it is, on the paragraph it is about: it is
+        not chrome, it is a statement about that block, and it is the best line on this screen.
+      */}
+      <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-line pb-3">
         <Identifier variant="strong">{page.key}</Identifier>
         <Identifier variant="muted">v{page.currentVersionNo}</Identifier>
         {page.status !== 'PUBLISHED' && (
           <Badge tone="plain">{docPageStatusLabel[page.status].toLowerCase()}</Badge>
         )}
+        <span className="flex-1" />
+        <PageActions page={page} projectId={projectId} onDelete={onDelete} />
       </div>
 
       <h1 className="m-0 mb-1.5 text-2xl leading-[1.25] font-[620] tracking-[-.02em] text-ink text-balance">
@@ -665,9 +677,6 @@ function PageView({
       </h1>
       <p className="m-0 text-[12.5px] text-ink-4">Updated {formatDateTime(page.updatedAt)}</p>
 
-      <div className="my-[18px] flex flex-wrap items-center gap-2 border-t border-line pt-3">
-        <PageActions page={page} projectId={projectId} onDelete={onDelete} />
-      </div>
 
       {blocks.length === 0 ? (
         <p className="m-0 text-[13px] text-ink-3" data-testid="Docs.Content.Empty">

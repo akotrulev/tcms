@@ -297,9 +297,17 @@ export function FeatureImportPage() {
         </div>
       )}
 
-      <div className="flex flex-col items-start gap-4 xl:flex-row">
+      {/*
+        Three columns from `lg`, not from `xl` — render C: *"files left, what will happen centre,
+        what it costs right"*. At `xl` the three panes only appeared at 1280 and above, so the
+        screen the audit walked read as one stacked column (renders audit 5.2) and the render's
+        whole point — that the cost sits BESIDE the plan it is the cost of — was lost to scrolling.
+        The two sides are 280 and 260 fixed, so from 1024 the centre still gets ~460px, which is
+        enough for the row list it holds.
+      */}
+      <div className="flex flex-col items-start gap-4 lg:flex-row">
         {/* ── The render's left `.side`: what was picked, and how it will be filed ───────── */}
-        <aside className="w-full shrink-0 rounded-lg border border-line bg-panel p-4 xl:w-[280px]">
+        <aside className="w-full shrink-0 rounded-lg border border-line bg-panel p-4 lg:w-[280px]">
           <section className="mb-5" data-testid="FeatureImport.FilesPanel">
             <h2 className={SECTION_HEADING}>
               Files
@@ -809,7 +817,7 @@ function ImportCost({ plan }: { plan: FeatureImportPlan }) {
   const { create, update, skip, refuse } = plan.totals;
 
   return (
-    <aside className="w-full shrink-0 rounded-lg border border-line bg-panel p-4 xl:w-[260px]">
+    <aside className="w-full shrink-0 rounded-lg border border-line bg-panel p-4 lg:w-[260px]">
       <section className="mb-5" data-testid="FeatureImport.Totals" aria-live="polite">
         <h2 className={SECTION_HEADING}>What this import does</h2>
         <CostRow
