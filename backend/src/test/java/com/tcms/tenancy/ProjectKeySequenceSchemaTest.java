@@ -177,6 +177,49 @@ class ProjectKeySequenceSchemaTest extends IntegrationTestBase {
                 .isNotEqualTo("0");
     }
 
+    @Test
+    @DisplayName("the seed function still seeds every block — all seven, not just the newest")
+    void theSeedFunctionStillSeedsEveryBlock() throws SQLException {
+        ProvisionCompanyResult result = provisioning.provision(ProvisionCompanyRequest.withFirstProject(
+                "pks-blocks", "Pks Blocks Ltd", "ops@pks-blocks.test", "Ops Person",
+                "PKSB", "Pks Blocks Product"));
+        UUID projectId = result.projectId().orElseThrow(
+                () -> new AssertionError("provisioning was asked for a first project and made none"));
+
+        // Each of these is a block of tcms_seed_project_defaults. V3 restated the whole function
+        // under CREATE OR REPLACE to add the workflow, and a block dropped in that restatement is
+        // invisible until somebody opens a screen that needs it — which is why this asserts all
+        // seven rather than the one the newest migration added. THIS TEST IS THE WHOLE SAFETY NET
+        // UNDER THE COST D-b ACCEPTED: seeding the workflow in this function rather than from a
+        // ProjectCreatedEvent buys a synchronous, race-free seed on every creation path, and pays
+        // for it by restating four blocks nobody was editing.
+        assertThat(countRows("classification_dimension", projectId)).isEqualTo(1);
+        assertThat(countRows("case_status", projectId)).isEqualTo(7);
+        assertThat(countRows("configuration", projectId)).isEqualTo(1);
+        assertThat(countRows("doc_space", projectId)).isEqualTo(1);
+        assertThat(countRows("project_key_sequence", projectId)).isEqualTo(1);
+        assertThat(countRows("issue_status", projectId)).isEqualTo(6);
+        assertThat(countRows("issue_type", projectId)).isEqualTo(6);
+    }
+
+    /**
+     * Rows one project holds in a table, read as the superuser.
+     *
+     * <p>The table name is interpolated because a table name cannot be a bind parameter, and the
+     * only values it ever takes are the seven literals above.
+     */
+    private long countRows(String table, UUID projectId) throws SQLException {
+        try (Connection connection = superuserConnection();
+                PreparedStatement statement = connection.prepareStatement(
+                        "SELECT count(*) FROM " + table + " WHERE project_id = CAST(? AS uuid)")) {
+            statement.setString(1, projectId.toString());
+            try (ResultSet rs = statement.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        }
+    }
+
     private static void activate(UUID companyId, UUID userId) throws SQLException {
         try (Connection connection = superuserConnection()) {
             try (PreparedStatement statement = connection.prepareStatement("""

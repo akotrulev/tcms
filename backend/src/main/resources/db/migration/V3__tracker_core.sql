@@ -403,3 +403,237 @@ BEGIN
     END IF;
 END $$;
 
+
+-- -----------------------------------------------------------------------------
+-- 5. THE SEEDED WORKFLOW — one more block in tcms_seed_project_defaults
+-- -----------------------------------------------------------------------------
+--
+-- WHY HERE AND NOT IN A ProjectCreatedEvent, which plan 009 M1 and review R5 both
+-- called for (plan 011 decision D-b):
+--
+--   * A Java event TYPE may not cross a module boundary in this codebase at all —
+--     CompanyScopedEvent's own header says so. Cross-module delivery is an
+--     OutboxEvents string plus a JSONB payload, so a shared ProjectCreatedEvent
+--     class cannot exist.
+--   * Outbox delivery is ASYNCHRONOUS and its floor is a minute:
+--     tcms.outbox.interval is PT1M and OutboxScheduler adds a PT1M initial delay.
+--     A workflow seeded that way leaves a brand-new project with no statuses for
+--     up to a minute — its first issue cannot be created, and story B1's "a
+--     sensible default is already there so I can start without configuring
+--     anything" is false for exactly that long.
+--
+-- This function is the mechanism that already solves this shape, and the
+-- precedent is not thin: it seeds `configuration` (an execution table) and
+-- `doc_space` (a documentation table) synchronously, in the creating
+-- transaction, and ALL THREE project-creation paths call it —
+-- ProjectCreateService, CompanyProvisioningService (twice), and seed-demo-data
+-- through them. A fourth creation path gets the workflow free by calling it.
+--
+-- THE COST, stated because it is real: the whole function is restated here, and a
+-- block omitted silently stops being seeded. ProjectKeySequenceSchemaTest is the
+-- check that a block went missing, and this migration extends it to the workflow.
+CREATE OR REPLACE FUNCTION tcms_seed_project_defaults(p_company_id UUID, p_project_id UUID)
+    RETURNS void
+    LANGUAGE plpgsql AS $$
+DECLARE
+    v_spec RECORD;
+BEGIN
+    PERFORM tcms_assert_company_context(p_company_id);
+
+    IF NOT EXISTS (SELECT 1 FROM project WHERE id = p_project_id) THEN
+        RAISE EXCEPTION 'project % is not visible in company %', p_project_id, p_company_id
+            USING ERRCODE = '23503';
+    END IF;
+
+    -- Feature is the one PROJECT-scoped dimension, and the only hierarchical and
+    -- unlocked one: two client products have different feature trees, and the
+    -- tree is meant to be edited (plan §6d). Seeded empty — inventing a client's
+    -- feature taxonomy for them is how a controlled vocabulary gets worked around.
+    INSERT INTO classification_dimension
+        (id, company_id, project_id, key, name, cardinality, controlled, hierarchical, locked, position)
+    SELECT gen_random_uuid(), p_company_id, p_project_id, 'feature', 'Feature',
+           'MULTI', true, true, false, 3
+     WHERE NOT EXISTS (
+        SELECT 1 FROM classification_dimension
+         WHERE company_id = p_company_id AND project_id = p_project_id AND key = 'feature');
+
+    -- The seven default execution statuses. `kind` is what lets reporting aggregate
+    -- a project's custom statuses without knowing their names, and counts_as_pass
+    -- is separate from kind because a project may add a "Passed with comment".
+    -- Colours match the frontend design tokens deliberately: status colour is
+    -- load-bearing data in a TCMS and is NOT brandable (§6u).
+    FOR v_spec IN
+        SELECT * FROM (VALUES
+            ('Passed',   'PASSED',   '#2e7d5b', true,  true,  0),
+            ('Failed',   'FAILED',   '#c0392b', true,  false, 1),
+            ('Blocked',  'BLOCKED',  '#b7791f', true,  false, 2),
+            ('Skipped',  'SKIPPED',  '#6b7280', true,  false, 3),
+            ('Retest',   'RETEST',   '#7c5cbf', false, false, 4),
+            ('Untested', 'UNTESTED', '#9ca3af', false, false, 5),
+            ('WIP',      'WIP',      '#2563eb', false, false, 6)
+        ) AS s(name, kind, color, is_final, counts_as_pass, position)
+    LOOP
+        INSERT INTO case_status
+            (id, company_id, project_id, name, kind, color, is_final, counts_as_pass, position)
+        SELECT gen_random_uuid(), p_company_id, p_project_id, v_spec.name, v_spec.kind,
+               v_spec.color, v_spec.is_final, v_spec.counts_as_pass, v_spec.position
+         WHERE NOT EXISTS (
+            SELECT 1 FROM case_status
+             WHERE company_id = p_company_id AND project_id = p_project_id AND name = v_spec.name);
+    END LOOP;
+
+    -- Every project gets a Default configuration so test_run.configuration_id can
+    -- stay NOT NULL all the way through the rollup read models — suite_run_summary
+    -- and plan_snapshot key on it, and a nullable PK column is not expressible.
+    INSERT INTO configuration (id, company_id, project_id, name, attributes, is_default)
+    SELECT gen_random_uuid(), p_company_id, p_project_id, 'Default', '{}'::jsonb, true
+     WHERE NOT EXISTS (
+        SELECT 1 FROM configuration WHERE project_id = p_project_id AND is_default);
+
+    -- V18. One documentation space, for the same structural reason as the
+    -- configuration above: doc_page.space_id is NOT NULL, so without this row the
+    -- project cannot hold a page at all.
+    --
+    -- It is NOT the "inventing the client's structure" mistake that keeps a
+    -- Default *suite* from being seeded here. A suite is a decision about how
+    -- somebody's tests are organised and appears in their tree; the space is a
+    -- container the API does not expose, has no name anybody reads, and holds
+    -- every page whatever its shape. The tree the client actually organises is
+    -- doc_page.parent_id, and this seeds none of that.
+    INSERT INTO doc_space (id, company_id, project_id, name)
+    SELECT gen_random_uuid(), p_company_id, p_project_id, 'Documentation'
+     WHERE NOT EXISTS (
+        SELECT 1 FROM doc_space WHERE project_id = p_project_id);
+
+    -- V2. The per-project issue-key counter. Structural, like the configuration
+    -- and the doc space above: without this row ProjectKeys.allocate matches
+    -- nothing and the first issue in the project cannot be numbered. Its absence
+    -- is an EMPTY RESULT rather than an error — an UPDATE ... RETURNING that
+    -- matches no row is not a failure — which is exactly why the row is created
+    -- here, once, rather than repaired by an INSERT ... ON CONFLICT on the hot
+    -- path of every issue creation forever.
+    INSERT INTO project_key_sequence (company_id, project_id, next_value)
+    VALUES (p_company_id, p_project_id, 1)
+    ON CONFLICT (company_id, project_id) DO NOTHING;
+
+    -- V3. The default workflow (D2, story B1).
+    --
+    -- SIX STATUSES, and the set is the one settings-workflow.html renders. A
+    -- brand-new project arrives with exactly this so nobody has to configure
+    -- anything before creating their first issue — which is B1's second
+    -- criterion, and the reason this is structural rather than "a default
+    -- somebody chose".
+    --
+    -- Blocked is IN_PROGRESS, not a fourth kind. Something blocked is started and
+    -- not done; a kind of its own would have to be given a meaning by every
+    -- percentage in the product, and the honest answer is that it has none.
+    FOR v_spec IN
+        SELECT * FROM (VALUES
+            ('Backlog',     'NOT_STARTED', 0),
+            ('Ready',       'NOT_STARTED', 1),
+            ('In Progress', 'IN_PROGRESS', 2),
+            ('In Review',   'IN_PROGRESS', 3),
+            ('Blocked',     'IN_PROGRESS', 4),
+            ('Done',        'DONE',        5)
+        ) AS s(name, kind, position)
+    LOOP
+        INSERT INTO issue_status (id, company_id, project_id, name, kind, "position")
+        SELECT gen_random_uuid(), p_company_id, p_project_id, v_spec.name, v_spec.kind, v_spec.position
+         WHERE NOT EXISTS (
+            SELECT 1 FROM issue_status
+             WHERE company_id = p_company_id AND project_id = p_project_id AND name = v_spec.name);
+    END LOOP;
+
+    -- The legal moves. AN ALLOW-LIST: every pair not inserted here is refused.
+    --
+    -- The shape is "anything may go anywhere except INTO Done, which only In
+    -- Review reaches" — settings-workflow.html's right-hand panel states exactly
+    -- that: from In Progress an issue may go to In Review, Blocked or Ready, and
+    -- "Not to Done — a review gate stands between them". Backlog is reachable
+    -- from everywhere so a mis-filed issue can be put back.
+    FOR v_spec IN
+        SELECT f.id AS from_id, t.id AS to_id
+          FROM issue_status f
+          JOIN issue_status t
+            ON t.company_id = f.company_id AND t.project_id = f.project_id AND t.id <> f.id
+         WHERE f.company_id = p_company_id AND f.project_id = p_project_id
+           AND (t.name <> 'Done' OR f.name = 'In Review')
+    LOOP
+        INSERT INTO issue_transition (company_id, project_id, from_status_id, to_status_id)
+        SELECT p_company_id, p_project_id, v_spec.from_id, v_spec.to_id
+         WHERE NOT EXISTS (
+            SELECT 1 FROM issue_transition
+             WHERE from_status_id = v_spec.from_id AND to_status_id = v_spec.to_id);
+    END LOOP;
+
+    -- SIX TYPES ACROSS THREE LEVELS, and note that TWO of them are named for a
+    -- task.
+    --
+    -- D29: the depth rule stands — a TASK-level issue needs a story-level parent —
+    -- but the catalogue seeds a STORY-level type called Task, so a solo or
+    -- internal project never needs an Epic and a Story before "a thing to do".
+    -- D12 amended: migrated work_item rows become the STORY-level one, so a user
+    -- who typed "task" still sees "task". Orphan TASK-level issues stay refused.
+    --
+    -- settings-general.html lists FIVE — Epic, Story, Task, Bug, Spike — and
+    -- story.html calls a story's children "Sub-tasks" while issue-new.html offers
+    -- "Add sub-task". Those cannot both be true with one Task type once D29 puts
+    -- Task at STORY level, so there are six rows and two of them render as `T`.
+    -- RECORDED AS A DISAGREEMENT WITH THE MOCKUP, resolved in the direction the
+    -- depth rule requires; the settings screen lists all six.
+    --
+    -- Spike is counts_toward_completion = false (D8). Epic is false because an
+    -- epic is what completion is computed FOR, never a member of the count.
+    FOR v_spec IN
+        SELECT * FROM (VALUES
+            ('Epic',     'EPIC',  false, 'E', 0),
+            ('Story',    'STORY', true,  'S', 1),
+            ('Task',     'STORY', true,  'T', 2),
+            ('Bug',      'STORY', true,  'B', 3),
+            ('Spike',    'STORY', false, '?', 4),
+            ('Sub-task', 'TASK',  true,  'T', 5)
+        ) AS s(name, level, counts, icon, position)
+    LOOP
+        INSERT INTO issue_type
+            (id, company_id, project_id, name, level, counts_toward_completion, icon_code, "position")
+        SELECT gen_random_uuid(), p_company_id, p_project_id, v_spec.name, v_spec.level,
+               v_spec.counts, v_spec.icon, v_spec.position
+         WHERE NOT EXISTS (
+            SELECT 1 FROM issue_type
+             WHERE company_id = p_company_id AND project_id = p_project_id AND name = v_spec.name);
+    END LOOP;
+END $$;
+
+
+-- The backfill, and it is a loop over COMPANY for V2's reason — read V2's
+-- section 1 before changing it. Flyway connects as tcms_owner, which holds NO
+-- BYPASSRLS, and `project` has carried FORCE ROW LEVEL SECURITY since V1, so
+--
+--     FOR r IN SELECT id, company_id FROM project LOOP
+--
+-- with app.current_company unset reads ZERO ROWS and reports success. `company`
+-- is on the ERD §0.1 exception list and carries no policy, so it can be walked;
+-- setting the GUC per company then makes that company's projects visible through
+-- the ordinary policy. set_config's third argument is transaction-local, and
+-- Flyway runs a migration in one transaction, so the GUC is gone when this file
+-- ends.
+--
+-- Reusing the function rather than restating its inserts is the point: ONE
+-- DEFINITION of what a seeded project contains, which is the rule
+-- ProjectCreateService's javadoc states and the reason it calls the function
+-- instead of inlining. It is idempotent, so a project that somehow already had
+-- statuses keeps them.
+DO $$
+DECLARE
+    c UUID;
+    p UUID;
+BEGIN
+    FOR c IN SELECT id FROM company LOOP
+        PERFORM set_config('app.current_company', c::text, true);
+        FOR p IN SELECT id FROM project WHERE company_id = c LOOP
+            PERFORM tcms_seed_project_defaults(c, p);
+        END LOOP;
+    END LOOP;
+    PERFORM set_config('app.current_company', '', true);
+END $$;
+
