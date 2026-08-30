@@ -237,6 +237,14 @@ export function CaseSearchPage() {
                   ? {
                       kind: 'no-filter-match',
                       title: 'No case matches',
+                      /*
+                        §7 asks this state to count what its filters hid, and `EmptyState` writes
+                        that sentence from `hidden`/`filters`. Neither is passed here and that is
+                        not an omission: this search spans every project the reader can open, and
+                        no endpoint serves a corpus total across them. A count invented from the
+                        current page would be a number about the wrong set — worse than the honest
+                        instruction below, which is what a cross-project text search can offer.
+                      */
                       body: 'Try fewer words, or a case key such as TC-412.',
                       onClearFilters: () => setParam('q', undefined),
                       testId: `${TestId}.NoMatch`,

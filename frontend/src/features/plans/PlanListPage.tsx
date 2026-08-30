@@ -133,11 +133,29 @@ export function PlanListPage() {
           testId="Plans.List"
           state={{ ...plans, refetch: () => void plans.refetch() }}
           isEmpty={(rows) => rows.length === 0}
-          empty={{
-            kind: 'no-records',
-            title: 'No test plans yet',
-            body: 'Create a plan to fix the scope and exit criteria for a release.',
-          }}
+          empty={
+            /*
+              §7: empty says what its filters hid and offers their removal in place. There is one
+              filter here — archived — and with it off an empty list is ambiguous between "this
+              project has no plans" and "every plan it has is archived". No count is offered
+              because none is knowable without a second query for a list nobody asked to see; the
+              offer is, which is the half that unsticks the reader.
+            */
+            showArchived
+              ? {
+                  kind: 'no-records',
+                  title: 'No test plans yet',
+                  body: 'Create a plan to fix the scope and exit criteria for a release.',
+                }
+              : {
+                  kind: 'no-filter-match',
+                  title: 'No test plans yet',
+                  body:
+                    'Archived plans are hidden. Create a plan to fix the scope and exit criteria '
+                    + 'for a release, or show the archived ones.',
+                  onClearFilters: () => setParams({ archived: 'true' }, { replace: true }),
+                }
+          }
         >
           {(rows) => <PlanTable rows={rows} projectId={projectId} />}
         </DataRegion>

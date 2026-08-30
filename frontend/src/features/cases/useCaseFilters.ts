@@ -46,6 +46,8 @@ export interface CaseFilterState {
   sort: string;
   /** True when any filter narrows the result — drives no-records vs no-filter-match. */
   hasActiveFilters: boolean;
+  /** How many filters narrow it, each value of a multi-filter counting once. See below. */
+  activeFilterCount: number;
   setFilter: (key: keyof CaseFilters, value: string | string[] | boolean | undefined) => void;
   setPage: (page: number) => void;
   setSize: (size: number) => void;
@@ -86,6 +88,20 @@ export function useCaseFilters(): CaseFilterState {
   const sort = params.get('sort') ?? DEFAULT_SORT;
 
   const hasActiveFilters = FILTER_PARAMS.some((key) => params.getAll(key).some(Boolean));
+
+  /**
+   * How many filters are narrowing the list, counting each value of a multi-filter separately.
+   *
+   * §7 asks the empty state to count what its filters hid — *"1 284 cases exist. Three filters are
+   * hiding all of them"* — and the renders audit found every empty state offering the removal
+   * without the count, so a reader could not tell an empty project from an over-filtered one. It
+   * lives here rather than in each screen because `CaseListPage`, `CaseSearchPage` and the strip
+   * itself all need the same number, and three spellings of it would disagree.
+   */
+  const activeFilterCount = FILTER_PARAMS.reduce(
+    (total, key) => total + params.getAll(key).filter(Boolean).length,
+    0,
+  );
 
   const setFilter = useCallback(
     (key: keyof CaseFilters, value: string | string[] | boolean | undefined) => {
@@ -169,5 +185,15 @@ export function useCaseFilters(): CaseFilterState {
     );
   }, [setParams]);
 
-  return { filters, sort, hasActiveFilters, setFilter, setPage, setSize, setSort, clearFilters };
+  return {
+    filters,
+    sort,
+    hasActiveFilters,
+    activeFilterCount,
+    setFilter,
+    setPage,
+    setSize,
+    setSort,
+    clearFilters,
+  };
 }

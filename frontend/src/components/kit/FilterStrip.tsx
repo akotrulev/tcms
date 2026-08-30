@@ -39,7 +39,15 @@ export interface FilterStripProps {
   applied: AppliedFilter[];
   /** `Showing 86 of 1 284` — or the plain count when nothing is applied. */
   summary?: ReactNode;
-  /** Omitted hides the control: there is nothing to clear. */
+  /**
+   * Omitted hides the control: there is nothing to clear.
+   *
+   * Gated on this and NOT on `applied.length`. Not every filter that narrows a list has a chip —
+   * a suite selected in the tree beside it, a release picked upstream, the search box itself — so
+   * "no chips" does not mean "nothing applied", and keying the escape hatch to the chips is how a
+   * reader ends up on an empty list with no way off it. The caller knows which of its filters are
+   * active; it passes `onClear` when any of them is.
+   */
   onClear?: () => void;
   className?: string;
   'data-testid'?: string;
@@ -74,7 +82,7 @@ export function FilterStrip({
         </Chip>
       ))}
       {summary && <span className="ml-auto tabular-nums text-ink-4">{summary}</span>}
-      {onClear && applied.length > 0 && (
+      {onClear && (
         <Button variant="ghost" size="sm" onClick={onClear} data-testid={`${testId}.Clear`}>
           Clear filters
         </Button>

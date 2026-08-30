@@ -3,7 +3,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { isAbort } from '../api/client';
 import { describeError } from '../lib/describeError';
 import { RegionErrorBoundary } from './ErrorBoundaries';
-import { formatTimeOfDay } from '../lib/format';
+import { formatTimeOfDay, plural } from '../lib/format';
 import { Identifier } from './Identifier';
 import { Banner } from './kit';
 import { Button, Skeleton } from './ui';
@@ -267,6 +267,20 @@ export interface EmptyStateProps {
   action?: ReactNode;
   /** Shown for `no-filter-match` so the user can escape a filter that found nothing. */
   onClearFilters?: () => void;
+  /**
+   * How many records exist behind the filters, and how many filters are hiding them.
+   *
+   * Design language §7: empty *"counts what its filters hid (1 284 cases exist. Three filters are
+   * hiding all of them) and offers their removal in place"*. The renders audit found every empty
+   * state in the product offering the removal and never the count — so a reader could not tell an
+   * empty project from an over-filtered one, which is the single question this state exists to
+   * answer. Both are optional: a screen that genuinely does not know the unfiltered total says
+   * nothing rather than guessing at one.
+   */
+  hidden?: number;
+  filters?: number;
+  /** The noun `hidden` counts. "case", "plan" — singular; it is inflected here. */
+  noun?: string;
   testId?: string;
 }
 
@@ -276,13 +290,24 @@ export function EmptyState({
   body,
   action,
   onClearFilters,
+  hidden,
+  filters,
+  noun = 'record',
   testId = 'EmptyState',
 }: EmptyStateProps) {
+  const count =
+    kind === 'no-filter-match' && hidden !== undefined && hidden > 0 && filters !== undefined
+      ? `${plural(hidden, noun)} exist. ${plural(filters, 'filter')} ${filters === 1 ? 'is' : 'are'} hiding all of them.`
+      : undefined;
+
   const copy =
     kind === 'no-filter-match'
       ? {
           title: title ?? 'No matches',
-          body: body ?? 'Nothing matches the current filters. Clear them to see everything again.',
+          body:
+            count
+            ?? body
+            ?? 'Nothing matches the current filters. Clear them to see everything again.',
         }
       : kind === 'by-design'
         ? { title: title ?? 'Nothing here', body: body ?? '' }

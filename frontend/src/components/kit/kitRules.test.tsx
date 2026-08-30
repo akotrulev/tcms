@@ -136,9 +136,16 @@ describe('the filter strip (rule 2, and §5\'s chip)', () => {
     expect(remove).toHaveBeenCalledOnce();
   });
 
-  it('offers no clear affordance when nothing is applied', () => {
+  it('offers no clear affordance when the caller says nothing is applied', () => {
     render(<FilterStrip applied={[]} summary="86 cases" data-testid="Cases.Filters" />);
     expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
+  });
+
+  it('offers it for a filter that has no chip of its own', () => {
+    // A suite chosen in the tree beside the strip narrows the list and draws no chip here. Keying
+    // the escape hatch to the chips would leave that reader on an empty list with no way off it.
+    render(<FilterStrip applied={[]} summary="0 cases" onClear={vi.fn()} data-testid="Cases.Filters" />);
+    expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument();
   });
 
   it('never renders a value the reader has not chosen', () => {

@@ -1,28 +1,57 @@
-import { Search, X } from 'lucide-react';
-import { Chip } from '../../components/kit';
-import { Field } from '../../components/kit/Field';
-import { Button, Input } from '../../components/ui';
-import { NativeSelect } from '../../components/ui/native-select';
+import { ChevronDown, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+
 import type { ClassificationDimension, Facet } from '../../api/types';
+import { FilterStrip, type AppliedFilter } from '../../components/kit';
+import { Button, Input } from '../../components/ui';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
+import { NativeSelect } from '../../components/ui/native-select';
+import { formatCount, plural } from '../../lib/format';
 import {
   automationLabels,
   healthLabels,
   lifecycleLabels,
   priorityLabels,
 } from '../../lib/labels';
-import { EM_DASH, formatCount, plural } from '../../lib/format';
 import type { CaseFilterState } from './useCaseFilters';
 
 /**
- * The filter bar sits **above** the data region, never inside it. That placement is the
- * whole reason a failed load leaves the user able to act: the rows can disappear, but the
- * search box they need in order to retry with a narrower query stays mounted and keeps its
- * value.
+ * The filter bar sits **above** the data region, never inside it. That placement is the whole
+ * reason a failed load leaves the user able to act: the rows can disappear, but the search box they
+ * need in order to retry with a narrower query stays mounted and keeps its value.
  *
- * Every filter here has a matching column in the grid, and vice versa — a status badge you
- * can't filter by status is a recurring miss, and so is a filter for something the grid
- * doesn't show.
+ * Every filter here has a matching column in the grid, and vice versa — a status badge you can't
+ * filter by status is a recurring miss, and so is a filter for something the grid doesn't show.
+ *
+ * ## One row, and it shows what was chosen — not what exists
+ *
+ * ~~Toggle chips rather than dropdowns: these are the filters people combine, and a chip row shows
+ * what's active without opening anything.~~ → **superseded, 2026-08-30 (renders audit 1.1).** The
+ * argument was right about wanting the active set visible and wrong about the cost. Rendering every
+ * *available* value as a toggle put four labelled chip groups on the screen — Health alone is
+ * eleven chips over two rows, wider than the table's own Health column — under three full-width
+ * selects, a tag field and an explanatory sentence: roughly **480px of chrome above the first data
+ * row**, where design language rule 2 asks for one row.
+ *
+ * The strip could not be one row because it scaled with the *vocabulary* rather than with the
+ * reader's choice. It also crossed §5's badge-vs-chip line in the other direction: the render's chip
+ * means "this filter is applied, click × to remove it", and the build's meant "this value exists,
+ * click to apply it".
+ *
+ * So choosing moved into a closed menu per facet, and the chips now show only the applied set —
+ * which is what `CaseSearchPage` beside it was already doing (audit 1.2: two idioms in one family).
+ *
+ * ## Rule 4 — nothing configured, nothing shown
+ *
+ * On a project with no cases and no suites this rendered three empty selects, four full chip groups
+ * with every value and no counts, a tag input and its sentence, and then `0 cases` and nothing else
+ * (audit 9.5). The suites panel beside it got this right in the same view. A filter over an empty
+ * corpus is not a narrower view, it is furniture.
  */
 
 const TestIdPrefix = 'Cases.Filters';
@@ -95,26 +124,121 @@ export function CaseFilterBar({
     setFilter(key, next.length ? next : undefined);
   };
 
+  const dimensionName = (dimension: ClassificationDimension | undefined, id: string) =>
+    dimension?.values.find((value) => value.id === id)?.name ?? id;
+
+  /**
+   * The applied set, derived from the filter state rather than from any vocabulary — which is the
+   * property that keeps this a strip. It grows with what the reader chose and nothing else.
+   */
+  const applied: AppliedFilter[] = [
+    ...MULTI_FILTERS.flatMap(({ key, label, labels }) =>
+      ((filters[key] as string[] | undefined) ?? []).map((value) => ({
+        key: `${key}:${value}`,
+        label: `${label} · ${labels[value] ?? value}`,
+        onRemove: () => toggleMulti(key, value),
+      })),
+    ),
+    ...(filters.featureId
+      ? [
+          {
+            key: `featureId:${filters.featureId}`,
+            label: `Feature · ${dimensionName(featureDimension, filters.featureId)}`,
+            onRemove: () => setFilter('featureId', undefined),
+          },
+        ]
+      : []),
+    ...(filters.testTypeId
+      ? [
+          {
+            key: `testTypeId:${filters.testTypeId}`,
+            label: `Type · ${dimensionName(typeDimension, filters.testTypeId)}`,
+            onRemove: () => setFilter('testTypeId', undefined),
+          },
+        ]
+      : []),
+    ...(filters.testLevelId
+      ? [
+          {
+            key: `testLevelId:${filters.testLevelId}`,
+            label: `Level · ${dimensionName(levelDimension, filters.testLevelId)}`,
+            onRemove: () => setFilter('testLevelId', undefined),
+          },
+        ]
+      : []),
+    ...(filters.tag ?? []).map((tag) => ({
+      key: `tag:${tag}`,
+      label: `Tag · ${tag}`,
+      onRemove: () =>
+        setFilter(
+          'tag',
+          (filters.tag ?? []).filter((value) => value !== tag),
+        ),
+    })),
+    ...(filters.unfiled
+      ? [
+          {
+            key: 'unfiled',
+            label: 'Not filed',
+            onRemove: () => setFilter('unfiled', undefined),
+          },
+        ]
+      : []),
+    /*
+      The owner filter has no control of its own — it arrives only from a dashboard by-owner
+      segment — so without this the user lands on a narrowed list with nothing saying whose cases
+      they are looking at, and "Clear filters" as the only clue that it is narrowed at all. A
+      filter the UI applies but never states is the same defect class as one it drops: both render
+      a plausible page that answers a different question than the heading claims.
+    */
+    ...(filters.ownerId
+      ? [
+          {
+            key: `ownerId:${filters.ownerId}`,
+            label: `Owner · ${ownerName ?? 'one owner'}`,
+            onRemove: () => setFilter('ownerId', undefined),
+          },
+        ]
+      : []),
+  ];
+
+  /*
+    Rule 4. `facets` empty AND no cases means there is nothing to narrow — not "the facets have not
+    loaded", which is `undefined` and falls through to the strip.
+  */
+  if (total === 0 && facets?.length === 0 && !hasActiveFilters) {
+    return (
+      <p className="mb-3 text-[12.5px] text-ink-4" data-testid={`${TestIdPrefix}.Nothing`}>
+        Nothing to filter yet — this project has no cases.
+      </p>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-3 mb-4" data-testid={TestIdPrefix}>
-      <div className="flex flex-col">
-        {/*
-          ~~`InputAdornment` slots~~ → the icons are positioned siblings, T16. MUI's adornment API
-          reserved room inside its own input wrapper; here the wrapper is a `relative` div and the
-          input carries the padding that keeps text clear of both icons.
-        */}
-        <div className="relative min-w-[240px] flex-1">
+    <FilterStrip
+      data-testid={TestIdPrefix}
+      applied={applied}
+      onClear={hasActiveFilters ? clearFilters : undefined}
+      summary={
+        total === undefined
+          ? undefined
+          : hasActiveFilters
+            ? `Showing ${formatCount(total)}`
+            : plural(total, 'case')
+      }
+      search={
+        <div className="relative w-[240px]">
           <Search
             aria-hidden
             className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-ink-4"
           />
           <Input
-            placeholder="Search titles, or paste a key like TC-42"
+            placeholder="Search titles, or a key like TC-42"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             data-testid={`${TestIdPrefix}.Search`}
             aria-label="Search test cases"
-            className="pr-9 pl-8"
+            className="h-8 pr-9 pl-8"
           />
           {search && (
             <Button
@@ -123,180 +247,144 @@ export function CaseFilterBar({
               onClick={() => setSearch('')}
               data-testid={`${TestIdPrefix}.ClearSearch`}
               aria-label="Clear search"
-              className="absolute top-1/2 right-1 size-7 -translate-y-1/2"
+              className="absolute top-1/2 right-1 size-6 -translate-y-1/2"
             >
               <X aria-hidden className="size-3.5" />
             </Button>
           )}
         </div>
+      }
+      pickers={
+        <>
+          {MULTI_FILTERS.map((filter) => (
+            <FacetMenu
+              key={filter.key}
+              label={filter.label}
+              labels={filter.labels}
+              selected={(filters[filter.key] as string[] | undefined) ?? []}
+              onToggle={(value) => toggleMulti(filter.key, value)}
+              count={(value) => facetCount(filter.key, value)}
+              testId={`${TestIdPrefix}.${filter.label}`}
+            />
+          ))}
+          <SelectFilter
+            label="Feature"
+            value={filters.featureId}
+            dimension={featureDimension}
+            onChange={(value) => setFilter('featureId', value)}
+            testId={`${TestIdPrefix}.Feature`}
+          />
+          <SelectFilter
+            label="Type"
+            value={filters.testTypeId}
+            dimension={typeDimension}
+            onChange={(value) => setFilter('testTypeId', value)}
+            testId={`${TestIdPrefix}.TestType`}
+          />
+          <SelectFilter
+            label="Level"
+            value={filters.testLevelId}
+            dimension={levelDimension}
+            onChange={(value) => setFilter('testLevelId', value)}
+            testId={`${TestIdPrefix}.TestLevel`}
+          />
+          <Input
+            id="tag"
+            value={tagDraft}
+            onChange={(event) => setTagDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return;
+              event.preventDefault();
+              const tag = tagDraft.trim();
+              if (!tag) return;
+              const current = filters.tag ?? [];
+              // Adding one already applied is a no-op rather than a duplicate parameter: the
+              // server ANDs, so `?tag=smoke&tag=smoke` narrows to the same rows twice.
+              if (!current.includes(tag)) setFilter('tag', [...current, tag]);
+              setTagDraft('');
+            }}
+            placeholder="Tag, then Enter"
+            aria-label="Filter by tag"
+            data-testid={`${TestIdPrefix}.TagInput`}
+            className="h-8 w-[150px]"
+          />
+          <Button
+            size="sm"
+            onClick={() => setFilter('unfiled', filters.unfiled ? undefined : true)}
+            aria-pressed={!!filters.unfiled}
+            // Disabled beside a suite filter rather than hidden (§31): the server ignores the
+            // pair, so a control that looked active and changed nothing would be the worse half
+            // of render-then-reject. The reason is on the tooltip, not inferred from the greying.
+            disabled={!!filters.suiteId}
+            title={
+              filters.suiteId
+                ? 'Clear the suite filter first — a case cannot be both in a folder and in none.'
+                : 'Only cases filed in no suite'
+            }
+            data-testid={`${TestIdPrefix}.Unfiled`}
+          >
+            Not filed
+          </Button>
+        </>
+      }
+    />
+  );
+}
 
-        <SelectFilter
-          label="Feature"
-          value={filters.featureId}
-          dimension={featureDimension}
-          onChange={(value) => setFilter('featureId', value)}
-          testId={`${TestIdPrefix}.Feature`}
-        />
-        <SelectFilter
-          label="Type"
-          value={filters.testTypeId}
-          dimension={typeDimension}
-          onChange={(value) => setFilter('testTypeId', value)}
-          testId={`${TestIdPrefix}.TestType`}
-        />
-        <SelectFilter
-          label="Level"
-          value={filters.testLevelId}
-          dimension={levelDimension}
-          onChange={(value) => setFilter('testLevelId', value)}
-          testId={`${TestIdPrefix}.TestLevel`}
-        />
-      </div>
-
-      {/* Toggle chips rather than dropdowns: these are the filters people combine, and a
-          chip row shows what's active without opening anything. */}
-      <div className="flex gap-4 flex-wrap items-start">
-        {MULTI_FILTERS.map((filter) => {
-          const selected = (filters[filter.key] as string[] | undefined) ?? [];
+/**
+ * One facet, chosen from a closed menu.
+ *
+ * A menu rather than `kit/MultiPicker`, which is the product's other multi-select: `MultiPicker`
+ * renders its own chips for what is selected, and here the applied set is already the strip's job —
+ * two chip rows for one choice is the thing this screen was being fixed for.
+ */
+function FacetMenu({
+  label,
+  labels,
+  selected,
+  onToggle,
+  count,
+  testId,
+}: {
+  label: string;
+  labels: Record<string, string>;
+  selected: string[];
+  onToggle: (value: string) => void;
+  count: (value: string) => number | undefined;
+  testId: string;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" data-testid={testId} aria-label={`Filter by ${label.toLowerCase()}`}>
+          {label}
+          {selected.length > 0 && (
+            <span className="tabular-nums text-ink-3">{formatCount(selected.length)}</span>
+          )}
+          <ChevronDown aria-hidden className="size-3.5 text-ink-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {Object.entries(labels).map(([value, text]) => {
+          const n = count(value);
           return (
-            <div key={filter.key}>
-              <span className="m-0 text-xs block text-ink-2 mb-1 font-semibold">
-                {filter.label}
-              </span>
-              <div className="flex gap-1 flex-wrap">
-                {Object.entries(filter.labels).map(([value, label]) => {
-                  const isSelected = selected.includes(value);
-                  const count = facetCount(filter.key, value);
-                  return (
-                    <Chip
-                      key={value}
-                      onClick={() => toggleMulti(filter.key, value)}
-                      selected={isSelected}
-                      aria-pressed={isSelected}
-                      data-testid={`${TestIdPrefix}.${filter.label}.${value}`}
-                    >
-                      {count === undefined ? label : `${label} ${formatCount(count)}`}
-                    </Chip>
-                  );
-                })}
-              </div>
-            </div>
+            <DropdownMenuCheckboxItem
+              key={value}
+              checked={selected.includes(value)}
+              // The menu stays open: choosing two statuses is one gesture, and a menu that closes
+              // on every pick turns it into two.
+              onSelect={(event) => {
+                event.preventDefault();
+                onToggle(value);
+              }}
+              data-testid={`${testId}.${value}`}
+            >
+              {n === undefined ? text : `${text} ${formatCount(n)}`}
+            </DropdownMenuCheckboxItem>
           );
         })}
-      </div>
-
-      {/*
-        Tags and the unfiled toggle (§96). Both are narrowing filters over things the grid shows,
-        which is this bar's own rule — the tags column has been on the grid since Phase 1 with no
-        way to filter by it, and an unfiled case appears under no node of the tree, so without the
-        toggle the only way to find one is to page through the project.
-
-        The tag input commits on Enter and renders as removable chips. There is no option list
-        because there is no vocabulary — see the editor's own tags control for why offering a
-        curated set is the thing that left `shared_step` empty.
-      */}
-      <div className="flex gap-3 items-center flex-wrap">
-        <Field
-          label="Tag"
-          htmlFor="tag"
-          help="All of these — a case must carry every one."
-        >
-        <Input
-          id="tag"
-          value={tagDraft}
-          onChange={(event) => setTagDraft(event.target.value)}
-          onKeyDown={(event) => {
-                    if (event.key !== 'Enter') return;
-                    event.preventDefault();
-                    const tag = tagDraft.trim();
-                    if (!tag) return;
-                    const current = filters.tag ?? [];
-                    // Adding one already applied is a no-op rather than a duplicate parameter: the
-                    // server ANDs, so `?tag=smoke&tag=smoke` narrows to the same rows twice.
-                    if (!current.includes(tag)) setFilter('tag', [...current, tag]);
-                    setTagDraft('');
-                  }}
-          placeholder="Add a tag and press Enter"
-          aria-label="Filter by tag"
-          data-testid={`${TestIdPrefix}.TagInput`}
-        />
-        </Field>
-        {(filters.tag ?? []).map((tag) => (
-          <Chip
-            key={tag}
-            // The chip's own body navigates nowhere — the filter is already applied, and the only
-            // act it offers is taking it off. `onRemove` is the affordance; `onClick` is required
-            // by the type and is deliberately a no-op rather than a second way to do the same
-            // thing.
-            onClick={() => {}}
-            onRemove={() =>
-              setFilter(
-                'tag',
-                (filters.tag ?? []).filter((value) => value !== tag),
-              )
-            }
-            data-testid={`${TestIdPrefix}.Tag.${tag}`}
-          >
-            {tag}
-          </Chip>
-        ))}
-        <Chip
-          onClick={() => setFilter('unfiled', filters.unfiled ? undefined : true)}
-          selected={!!filters.unfiled}
-          aria-pressed={!!filters.unfiled}
-          // Disabled beside a suite filter rather than hidden (§31): the server ignores the pair,
-          // so a chip that looked active and changed nothing would be the worse half of
-          // render-then-reject. The reason is on the tooltip, not inferred from the greying.
-          disabled={!!filters.suiteId}
-          title={
-            filters.suiteId
-              ? 'Clear the suite filter first — a case cannot be both in a folder and in none.'
-              : 'Only cases filed in no suite'
-          }
-          data-testid={`${TestIdPrefix}.Unfiled`}
-          className={filters.suiteId ? 'cursor-not-allowed' : 'cursor-pointer'}
-        >
-          Not filed
-        </Chip>
-      </div>
-
-      {/*
-        The owner filter has no control of its own — it arrives only from a dashboard by-owner
-        segment — so without this the user lands on a narrowed list with nothing saying whose
-        cases they are looking at, and "Clear filters" as the only clue that it is narrowed at
-        all. A filter the UI applies but never states is the same defect class as one it drops:
-        both render a plausible page that answers a different question than the heading claims.
-      */}
-      {filters.ownerId && (
-        <div>
-          <Chip
-            // As with the tag chips above: the body is a statement, `onRemove` is the act.
-            onClick={() => {}}
-            onRemove={() => setFilter('ownerId', undefined)}
-            data-testid={`${TestIdPrefix}.Owner`}
-          >
-            {`Owner: ${ownerName ?? 'one owner'}`}
-          </Chip>
-        </div>
-      )}
-
-      <div className="flex gap-3 items-center">
-        <p className="m-0 text-sm text-ink-2" data-testid={`${TestIdPrefix}.ResultCount`}>
-          {/*
-            An unknown count is rendered as absent, not as "Loading…". The `DataRegion` beside this
-            bar already owns loading and failed, and a bare text node claiming the page was still
-            working sat directly above that region's failure panel — the page saying it was working
-            and that it had failed, at the same moment, in the same column.
-          */}
-          {total === undefined ? EM_DASH : plural(total, 'case')}
-        </p>
-        {hasActiveFilters && (
-          <Button size="sm" onClick={clearFilters} data-testid={`${TestIdPrefix}.ClearAll`}>
-            Clear filters
-          </Button>
-        )}
-      </div>
-    </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -313,25 +401,29 @@ function SelectFilter({
   onChange: (value: string | undefined) => void;
   testId: string;
 }) {
+  // Rule 4 again, at the control's own scale: a project-scoped dimension nobody has configured
+  // renders an empty select whose only option is "any", which is a control that cannot do
+  // anything. That was one of the three dead selects on an empty project.
+  if (!dimension || dimension.values.length === 0) return null;
+
   return (
-    <div style={{ minWidth: 160 }}>
-      <NativeSelect
-        value={value ?? ''}
-        onChange={(event) => onChange(event.target.value || undefined)}
-        data-testid={testId}
-        aria-label={`Filter by ${label.toLowerCase()}`}
-      >
-        <option value="">{label}: any</option>
-        {(dimension?.values ?? []).map((option) => (
-          <option key={option.id} value={option.id}>
-            {/* Hierarchical dimensions are indented by depth so "Refunds" reads as a child
-                of "Payments" rather than as a peer. An `<option>` may hold text only, so the
-                indent is leading spaces rather than padding. */}
-            {'\u00a0'.repeat((option.path.split('.').length - 1) * 2)}
-            {option.name}
-          </option>
-        ))}
-      </NativeSelect>
-    </div>
+    <NativeSelect
+      value={value ?? ''}
+      onChange={(event) => onChange(event.target.value || undefined)}
+      data-testid={testId}
+      aria-label={`Filter by ${label.toLowerCase()}`}
+      className="h-8 w-[150px]"
+    >
+      <option value="">{label}: any</option>
+      {dimension.values.map((option) => (
+        <option key={option.id} value={option.id}>
+          {/* Hierarchical dimensions are indented by depth so "Refunds" reads as a child
+              of "Payments" rather than as a peer. An `<option>` may hold text only, so the
+              indent is leading spaces rather than padding. */}
+          {' '.repeat((option.path.split('.').length - 1) * 2)}
+          {option.name}
+        </option>
+      ))}
+    </NativeSelect>
   );
 }

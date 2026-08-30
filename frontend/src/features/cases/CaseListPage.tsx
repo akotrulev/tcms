@@ -38,7 +38,17 @@ export function CaseListPage() {
   const { projectId = '' } = useParams();
 
   const filterState = useCaseFilters();
-  const { filters, sort, hasActiveFilters, setFilter, setPage, setSize, setSort, clearFilters } = filterState;
+  const {
+    filters,
+    sort,
+    hasActiveFilters,
+    activeFilterCount,
+    setFilter,
+    setPage,
+    setSize,
+    setSort,
+    clearFilters,
+  } = filterState;
 
   const project = useProject(projectId);
   const suites = useSuites(projectId);
@@ -251,7 +261,15 @@ export function CaseListPage() {
                   ? {
                       kind: 'no-filter-match',
                       title: 'No cases match',
-                      body: 'Nothing in this project matches the current filters.',
+                      // No `body`: §7 asks this state to COUNT what the filters hid, and
+                      // `EmptyState` writes that sentence from `hidden`/`filters`. A hand-written
+                      // body here would win over the count and put the screen back where the
+                      // audit found it — the removal offered, the number never stated.
+                      // The project's own count is the unfiltered total — the cases query cannot
+                      // supply it, being the filtered one.
+                      hidden: project.data?.caseCount,
+                      filters: activeFilterCount,
+                      noun: 'case',
                       onClearFilters: clearFilters,
                     }
                   : {
