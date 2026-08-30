@@ -721,10 +721,32 @@ class ContractConventionTest {
             Map.entry("UserRef", List.of(com.tcms.api.UserRef.class)),
             Map.entry("VersionMarker",
                     List.of(com.tcms.execution.CaseHistoryView.MarkerView.class)),
-            Map.entry("WorkItem", List.of(com.tcms.work.WorkItemView.class)),
-            Map.entry("WorkItemInput", List.of(com.tcms.work.WorkItemWriteRequest.class)),
-            Map.entry("WorkItemStatusUpdate",
-                    List.of(com.tcms.work.WorkItemStatusUpdateRequest.class)));
+            // ---- 011's tracker block ----
+            //
+            // THE THREE WorkItem ENTRIES ARE GONE, and their absence is the first half of this
+            // block rather than housekeeping. T1 removed `WorkItem`, `WorkItemInput` and
+            // `WorkItemStatusUpdate` from the contract — POST and PATCH /work-items are replaced by
+            // POST /issues and POST /issues/{key}/transitions (D-a) — and left the pairings behind,
+            // so `pairedSchemasAndRecordsNameTheSameMembers` threw `Dangling $ref` before it
+            // compared anything at all. That is worse than a failure: the rule was not reporting a
+            // divergence, it was not running. The three records survive until T4 retires `work`,
+            // and they serve no schema in the meantime, which is exactly what no entry means.
+            //
+            // Three of the ten below are not name matches, for the reason the tracker block above
+            // gives: the contract names a shape for what a client reads (`IssueTypeRef`,
+            // `IssueStatusRef`, `IssueCompletion`) and this codebase names a record for what it is.
+            Map.entry("Issue", List.of(com.tcms.tracker.IssueView.class)),
+            Map.entry("IssueSummary", List.of(com.tcms.tracker.IssueSummaryView.class)),
+            Map.entry("IssueTypeRef", List.of(com.tcms.tracker.IssueTypeView.class)),
+            Map.entry("IssueStatusRef", List.of(com.tcms.tracker.IssueStatusView.class)),
+            Map.entry("IssueCompletion", List.of(com.tcms.tracker.CompletionView.class)),
+            Map.entry("IssueInput", List.of(com.tcms.tracker.IssueInput.class)),
+            Map.entry("IssueUpdate", List.of(com.tcms.tracker.IssueUpdate.class)),
+            Map.entry("IssueTransitionInput",
+                    List.of(com.tcms.tracker.IssueTransitionInput.class)),
+            Map.entry("ProjectWorkflow", List.of(com.tcms.tracker.WorkflowView.class)),
+            Map.entry("StatusRemovalInput",
+                    List.of(com.tcms.tracker.StatusRemovalInput.class)));
 
     /**
      * The owners this file cannot name as class literals, because they are package-private.
@@ -1277,6 +1299,18 @@ class ContractConventionTest {
             Map.entry("ExecutionBulkResult.skipped[]",
                     List.of(com.tcms.execution.ExecutionBulkAssignResult.SkippedRow.class)),
             Map.entry("Facet.values[]", List.of(com.tcms.repository.FacetView.Value.class)),
+            // 011 T3. The checklist is JSONB on `issue` rather than a table, because nothing joins
+            // to a criterion — so its shape exists only here and at the two records below, and this
+            // pairing is the only thing comparing them.
+            Map.entry("Issue.acceptanceCriteria[]",
+                    List.of(com.tcms.tracker.AcceptanceCriterion.class)),
+            // The UPDATE half carries no id: the list is written whole by one form in one request,
+            // so a stable id would be a promise the wire cannot keep. That is why it is a second
+            // record rather than the one above, and why the two are compared separately.
+            Map.entry("IssueUpdate.acceptanceCriteria[]",
+                    List.of(com.tcms.tracker.IssueUpdate.CriterionUpdate.class)),
+            Map.entry("ProjectWorkflow.transitions[]",
+                    List.of(com.tcms.tracker.WorkflowView.TransitionView.class)),
             Map.entry("GranteeList.grantees[]", List.of(com.tcms.identity.GranteeView.class)),
             Map.entry("PlanStatistics.byConfiguration[]",
                     List.of(com.tcms.execution.PlanStatisticsView.ConfigurationCountsView.class)),

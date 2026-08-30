@@ -132,11 +132,25 @@ class ModuleStructureTest {
                         it works under: it may see NEITHER `execution` nor `work`, and every fact \
                         it renders belongs to one of them — so the transactional outbox is not one \
                         mechanism among several here, it is the only one, and this is the slice \
-                        that gave `Outbox.record` its first product caller since §131 built it.""")
+                        that gave `Outbox.record` its first product caller since §131 built it. \
+                        011 M1 adds `tracker`, and it is the largest domain concept in the \
+                        product — epics, stories, tasks and the workflow they move through. Its \
+                        package comment states the constraint that shapes everything downstream of \
+                        it: it will NEVER be a foundation module, because \
+                        `ArchitectureRules.FOUNDATION_MODULES` asks for a module that holds no \
+                        domain concept and this one holds the biggest, so `time`, `billing` and \
+                        `reporting` reference an issue POLYMORPHICALLY and join \
+                        `tracker.IssueFactProjection`'s table rather than importing it. The price \
+                        is stated where it is paid: referential integrity between a time entry and \
+                        its issue lives in application code, which is why `issue` is soft-deleted. \
+                        `documentation` is deliberately absent from its allowedDependencies while \
+                        `issue_doc_link` mirrors that module's table — `work.BoardFacts`' \
+                        resolution, one class naming the foreign tables and nothing else in the \
+                        package doing so.""")
                 .containsExactly(
                         "api", "auth", "documentation", "execution", "identity", "integration",
                         "project", "provisioning", "reporting", "repository", "storage", "tenancy",
-                        "work");
+                        "tracker", "work");
     }
 
     @Test

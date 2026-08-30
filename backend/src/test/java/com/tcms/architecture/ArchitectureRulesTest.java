@@ -523,17 +523,6 @@ class ArchitectureRulesTest {
      * and the cache actually caching, none of which any response body reveals.
      */
     private static final Map<String, String> UNEXERCISED_BY_DECISION = Map.of(
-            "ProjectKeys.allocate",
-            "the per-project issue-key allocator, seeded by V2 (plan 010, module M0) BEFORE the "
-                    + "module that calls it. M0's whole job is to land the catalogue, the counter "
-                    + "and the two schema affordances so the eight modules after it build against "
-                    + "a foundation that already exists — so the first production caller is M1's "
-                    + "issue creation, and it arrives with the tracker. Leaving the method out "
-                    + "until then would mean writing it and its five container tests in the same "
-                    + "commit as the feature, which is the batching M0 exists to avoid. THIS ENTRY "
-                    + "IS TEMPORARY and M1 deletes it: a foundation piece with no caller is a "
-                    + "decision with an expiry date, unlike the five below, which are a fixture's "
-                    + "controls and never get one",
             "FakeTrackerAdapter.breakHost",
             "the only way to drive a tracker that is down. A real outage is not reproducible and "
                     + "the transport doubles (MockRestServiceServer) prove the ADAPTER, not what "

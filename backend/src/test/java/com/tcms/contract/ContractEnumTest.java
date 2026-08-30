@@ -99,8 +99,21 @@ class ContractEnumTest {
             Map.entry("EditAfterApproval", List.of("com.tcms.project.EditAfterApproval")),
             Map.entry("LifecycleStatus", List.of("com.tcms.repository.LifecycleStatus")),
             Map.entry("AutomationStatus", List.of("com.tcms.repository.AutomationStatus")),
+            // THREE owners since 011 M1, and the third is the same modulith property as the first
+            // two: `tracker` may not import `work` or `repository`, so the contract's one schema is
+            // served by three enums that have to stay identical to it and to each other. The count
+            // goes back to two when T4 retires `work`.
             Map.entry("Priority",
-                    List.of("com.tcms.repository.Priority", "com.tcms.work.Priority")),
+                    List.of("com.tcms.repository.Priority", "com.tcms.work.Priority",
+                            "com.tcms.tracker.Priority")),
+            // 011 M1. The depth rule is expressed in LEVELS and never in type names (scope §4), so
+            // this closed set is what a fourth story-level type is a ROW against rather than a code
+            // change — which is only true while the wire and IssueEdit agree about its members.
+            Map.entry("IssueLevel", List.of("com.tcms.tracker.IssueLevel")),
+            // What a status MEANS, so every percentage in the product can be computed without
+            // knowing what a project called its columns (D2). Deliberately NOT the same type as
+            // `project.StatusKind`, which is an EXECUTION status's kind and has different members.
+            Map.entry("IssueStatusKind", List.of("com.tcms.tracker.IssueStatusKind")),
             Map.entry("StepFormat",
                     List.of("com.tcms.repository.StepFormat", "com.tcms.execution.StepFormat")),
             // ONE owner, unlike its neighbour, and the asymmetry is real rather than an omission:
@@ -160,7 +173,13 @@ class ContractEnumTest {
             // oracle for what exists in a tracker the viewer cannot read.
             Map.entry("TrackerIssueAvailability",
                     List.of("com.tcms.integration.tracker.TrackerIssueAvailability")),
-            Map.entry("WorkItemStatus", List.of("com.tcms.work.WorkItemStatus")),
+            // WorkItemStatus IS GONE FROM THE CONTRACT and therefore from here (011 T1, D-c). It
+            // was a fixed five-member enum, and an issue's status is a per-project `issue_status`
+            // row — so a board card carrying both spellings would be the "two contradictory numbers
+            // on one screen" this repository has shipped once. `BoardCard.status` is an object,
+            // `{name, kind}`, for every card kind. The Java enum survives until T4 retires `work`,
+            // serving no schema in the meantime, which is exactly what no entry means — and the
+            // entry left behind was blocking this rule from comparing anything at all.
             Map.entry("NotificationChannelKind",
                     List.of("com.tcms.integration.NotificationChannelKind")),
             // Nested in the entity that holds it, like ReviewVerdict above; the contract's name
