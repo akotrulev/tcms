@@ -114,6 +114,12 @@ build's number wins) on **exactly two routes**:
 
 Scoped to those routes, not global, and not a user preference on top of the existing one.
 
+**Verified in the shipped build, 2026-08-30.** The renders audit measured `Nav.Rail` at **64px** on
+the runner and the case editor — the amended §9.2 number, not the 60px the renders draw — and found
+the collapse firing on all three of the patterns `AppShell.tsx` reads. This is the one place the
+spec was amended in the build's favour and the build matches the amendment; it does not need
+re-opening.
+
 ## 5. The component kit
 
 Nine components carry all forty-two screens. They are drawn in the renders and defined in
@@ -165,6 +171,36 @@ light surface; TCMS is deliberately low-chroma on a dark ground because it is re
 two checks that gate legibility — CVD separation and the normal-vision floor — pass, and those are
 the ones acted on above.
 
+### These numbers are per scheme — amended 2026-08-30
+
+~~The palette validates once.~~ → **superseded.** Everything above was derived for the **dark**
+palette. The light one was never put through the same check, and the 2026-08-30 renders audit (6.1)
+measured it failing on **two of three adjacent pairs**: `failed | blocked` at 12.6 and
+`blocked | skipped` at 13.0, against the floor of 15. In light mode the TR-1 bar drew
+`rgb(189,58,43)` beside `rgb(138,95,13)` — red beside brown, reading as one warm band.
+
+Three things follow, and they are the rule rather than the fix:
+
+1. **Every scheme is validated separately.** §1 and this section are written in dark-theme terms
+   throughout; read them as *"the dark palette"* wherever they say *"the palette"*.
+2. **A light palette has a second constraint the dark one does not.** These tokens are used as
+   **text** as well as fills — the run detail's legend colours its words with them — so a light
+   value must also clear 4.5:1 against `--color-surface-sunken`. That is what makes the light set
+   hard: the obvious brighter amber clears 15 ΔE and falls to 3.33:1. `--color-blocked` was
+   re-stepped to `#623c00` (18.9 / 15.9 ΔE, 8.26:1), and `--color-when` with it, because rule 5
+   makes `When` and `Blocked` one hue and that is a claim about meaning.
+3. **The check is computed, not read.** `frontend/src/app/statusPalette.test.ts` reads the
+   stylesheet and measures both schemes, so a third one cannot repeat the omission. It was verified
+   by breaking it — restoring `#8a5f0d` reddens exactly the two pairs named above.
+
+### One figure per panel stays carded — considered 2026-08-30
+
+The same audit's 6.4 (Low) asked for the dashboard's figures to lose their borders, reading rule 1
+as forbidding them. **Not applied.** Rule 1's subject is *the only thing on a screen*; seven figures
+are seven things, and the border is where one denominator stops and the next begins. The audit's own
+6.2 — two of those figures shipping with no legend — is evidence on that side. The reasoning is in
+`components/kit/FigurePanel.tsx`, where the next reader will be standing.
+
 ## 7. Six states, not five
 
 `DataRegion` owns loading / loaded / empty / failed / stale. This adds **refused**, and it is not an
@@ -197,6 +233,35 @@ field and links to it.
 
 Grouped by **job, not rail position**: ten screens are the same table with different columns, and a
 file per page would have drawn that skeleton ten times and let the ten drift.
+
+### Three renders the build disproved — amended 2026-08-30
+
+Plan 007 §4's rule: where the build disagrees with a render, the **spec** is amended. Three qualify,
+from the renders audit of that date.
+
+**Artifacts is a registrable catalogue, not a read-only sink.** ~~Render H draws Artifacts as an
+empty state whose copy reads *"artifacts arrive attached to an execution or an ingested report;
+there is nothing to upload here"*.~~ → **superseded (audit 1.11).** The backend has supported
+registration since M0 and the build ships a Register button, a scope select and registered
+documents. The render was drawn against a wrong mental model of the feature, and the audit calls
+this the clearest case in it of the build being right. Family H's entry is the build's.
+
+**The runner has three layouts, not two.** ~~*"Focus and Split are the two layouts."*~~ →
+**superseded (audit 3.4).** Focus, Split and **Grid** ship, Grid is used, and it is the only mode
+that can take a verdict on many cases without opening each. The render's note predates it.
+
+**The runner's duration is a field, not a live timer.** ~~The render shows a counter (`101 seconds ·
+Running`, *"Counting since you opened the case"*).~~ → **superseded (audit 3.4).** The build shows
+an optional box captioned *"Leave it empty if you did not time this run."* A counter that starts
+when a tab opens measures the tab, not the test — a tester who opened the case, went to a meeting
+and came back would record ninety minutes for a two-minute check — and a wrong duration recorded
+automatically is worse than an absent one recorded honestly.
+
+**And one control the render draws that this product cannot honestly offer.** The runner's top
+strip has no **Pause run**: the run lifecycle is `NOT_STARTED → IN_PROGRESS → COMPLETED → ABORTED`
+with no paused state, so the control would either lie or abort the run under a gentler word. What
+the strip does carry, from the same render, is the elapsed time — driven by the run's `startedAt`,
+never by when the tab opened, for the reason the timer above was rejected.
 
 ## 9. Open problems — unsolved, not oversights
 
