@@ -234,3 +234,24 @@ describe('ReportViewPage', () => {
     expect(screen.queryByTestId('Report.NoSections')).not.toBeInTheDocument()
   })
 })
+
+describe('the preview is the one light surface in a dark product', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('stamps the light scheme on the preview subtree, whatever the app is set to', async () => {
+    /*
+      Design language §9.1, and renders audit 2.5. The comment above this element claimed the
+      preview was "the one surface in the product that is not dark" while the code centred it on
+      `--field` — a THEME token, dark in the dark palette — so in dark mode it was as dark as
+      everything else. A PDF preview drawn dark misrepresents the file being downloaded.
+    */
+    answerReads(job())
+    vi.spyOn(client, 'fetchArtifactJson').mockResolvedValue(storedModel)
+    renderPage()
+
+    const preview = await screen.findByTestId('ReportView.Preview')
+    expect(preview).toHaveAttribute('data-color-scheme', 'light')
+  })
+})

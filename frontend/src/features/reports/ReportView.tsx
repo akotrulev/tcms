@@ -63,7 +63,16 @@ export function ReportView({ document }: { document: ReportDocument }) {
                   <TableCell rowHeader className="w-[260px] text-left align-top font-normal text-ink-2">
                     {entry.label}
                   </TableCell>
-                  <TableCell>{entry.value}</TableCell>
+                  {/*
+                    §3's measure, on the one cell that holds prose. Two of these entries are the
+                    report's scope sentences — "Everything a customer can reach from the storefront,
+                    on the two browsers that carry 94% of our traffic" — and a table cell that does
+                    not wrap forced this block to 1639px inside a 1366px region, so reading one
+                    sentence needed horizontal scrolling (renders audit 2.5). `whitespace-normal`
+                    because `kit/Table`'s cells deliberately do not wrap: that rule is right for a
+                    grid of values and wrong for a paragraph, and this is the paragraph.
+                  */}
+                  <TableCell className="max-w-[70ch] whitespace-normal">{entry.value}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

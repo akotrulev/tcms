@@ -188,16 +188,28 @@ function JobBody({
   }
 
   /*
-    THE ONE SURFACE IN THE PRODUCT THAT IS NOT DARK, and the recessed ground that says so.
+    THE ONE SURFACE IN THE PRODUCT THAT IS NOT DARK, and now actually not dark.
 
     007 D1 and design language §9.1: a PDF preview drawn dark misrepresents the file being
-    downloaded, so `ReportView` keeps its light surface and this task must not "fix" it. What the
-    port adds is the frame `renders/02-record-as-document.html` panel G draws around it — the
-    preview centred on `--field`, so the light page reads as a document in a viewer rather than as
-    a screen that forgot the theme.
+    downloaded. ~~So `ReportView` keeps its light surface and this task must not "fix" it.~~ →
+    **it did not have one.** This comment stated the intent and the code centred the preview on
+    `--field`, which is a THEME token — recessed in the light palette and dark in the dark one — so
+    in dark mode the preview was as dark as everything else and the sentence above it was false.
+    The 2026-08-30 renders audit measured it (2.5).
+
+    `data-color-scheme="light"` on this subtree is what makes it true. It works because `@theme
+    inline` emits `var(--…)` rather than copying values, so redeclaring the tokens on an ancestor
+    moves every utility below it — and because `index.css` now writes its light palette under
+    `:root, [data-color-scheme='light']`, so a nested element can ask for it. `app/colorScheme.tsx`
+    still owns the app's choice and still writes the attribute on the root; this is a local,
+    deliberate exception and the only one in the product.
   */
   return (
-    <div className="rounded-lg bg-field p-4 md:p-6">
+    <div
+      data-color-scheme="light"
+      data-testid={`${TestId}.Preview`}
+      className="rounded-lg bg-field p-4 text-ink md:p-6"
+    >
       <DataRegion
         testId={`${TestId}.Model`}
         state={{ ...model, refetch: () => void model.refetch() }}

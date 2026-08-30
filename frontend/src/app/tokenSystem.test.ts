@@ -51,9 +51,19 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const css = readFileSync(resolve(HERE, '../index.css'), 'utf8');
 
+/**
+ * The block a selector opens — allowing the selector to be one of several on the rule.
+ *
+ * `:root` is now written `:root,\n[data-color-scheme='light']` so a nested light island is
+ * expressible (the report preview, design language §9.1) without a second copy of the palette,
+ * which is the thing this file exists to prevent. So the search is "this selector, then the next
+ * `{`" rather than "this selector immediately followed by `{`".
+ */
 function cssBlock(selector: string): string {
-  const start = css.indexOf(`${selector} {`);
-  expect(start, `${selector} block not found in index.css`).toBeGreaterThan(-1);
+  const at = css.indexOf(selector);
+  expect(at, `${selector} block not found in index.css`).toBeGreaterThan(-1);
+  const start = css.indexOf('{', at);
+  expect(start, `${selector} is not a rule in index.css`).toBeGreaterThan(-1);
   return css.slice(start, css.indexOf('\n}', start));
 }
 

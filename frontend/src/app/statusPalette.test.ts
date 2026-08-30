@@ -60,7 +60,9 @@ function deltaE(a: string, b: string): number {
  * `tokenSystem.test.ts` already fails if a third declaration site appears.
  */
 function schemes(): Record<'light' | 'dark', Record<string, string>> {
-  const darkAt = CSS.indexOf("[data-color-scheme='dark']");
+  // The RULE, not the first mention: the light block's comment names the dark selector in prose,
+  // and splitting on that would put the dark palette in the light half and pass on the wrong data.
+  const darkAt = CSS.indexOf("[data-color-scheme='dark'] {");
   expect(darkAt, 'the dark palette block moved — update this test, do not delete it').toBeGreaterThan(
     0,
   );

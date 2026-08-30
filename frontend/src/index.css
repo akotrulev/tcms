@@ -105,7 +105,23 @@
  * `app/tokenSystem.test.ts` is what checks that every bridged name resolves to one declared here.
  */
 
-:root {
+/*
+ * `:root` AND `[data-color-scheme='light']`, one declaration site with two selectors.
+ *
+ * The second is what makes a LIGHT ISLAND inside a dark app possible, and there is exactly one:
+ * the report preview (design language §9.1 — *"the report preview is the one light surface in a
+ * dark product"*, because a PDF preview drawn dark misrepresents the file being downloaded).
+ * `:root` alone matches only `<html>`, so a nested element asking for light got nothing and the
+ * preview rendered in the app's own scheme, which is what the 2026-08-30 renders audit found (2.5).
+ *
+ * A second copy of the palette under its own selector would have been the other way to do it, and
+ * is precisely what `app/tokenSystem.test.ts` exists to prevent: two lists of hexes that agree
+ * today. One selector list, one list of values.
+ *
+ * `[data-color-scheme='dark']` below still wins on `<html>` — same specificity, later in the file.
+ */
+:root,
+[data-color-scheme='light'] {
   /*
    * ~~The light palette put pure white (`#ffffff`) on `--color-surface`, which `bg-panel` paints
    * across 49 files, over a `#eaeef3` ground, and hung the two lowest ink weights at `#8593a5`
