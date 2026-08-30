@@ -604,6 +604,11 @@ class ContractConventionTest {
             // case end under case:edit, because correcting a link's claim is one act and §173 is
             // the section that paid for letting one act acquire two spellings.
             Map.entry("LinkRelabelInput", List.of(com.tcms.documentation.LinkRelabelInput.class)),
+            // The refusal's "who to ask" (renders audit 7.1). The item is inline in the contract
+            // because it has exactly one field and naming it there would suggest it has a future;
+            // what keeps it honest is that the record has exactly one field too, and this pairing
+            // is what compares them.
+            Map.entry("GranteeList", List.of(com.tcms.identity.GranteeListView.class)),
             Map.entry("OrgChart", List.of(com.tcms.identity.OrgChartView.class)),
             Map.entry("OrgChartGap", List.of(com.tcms.identity.OrgChartGapView.class)),
             Map.entry("OrgChartAssignment",
@@ -1272,6 +1277,7 @@ class ContractConventionTest {
             Map.entry("ExecutionBulkResult.skipped[]",
                     List.of(com.tcms.execution.ExecutionBulkAssignResult.SkippedRow.class)),
             Map.entry("Facet.values[]", List.of(com.tcms.repository.FacetView.Value.class)),
+            Map.entry("GranteeList.grantees[]", List.of(com.tcms.identity.GranteeView.class)),
             Map.entry("PlanStatistics.byConfiguration[]",
                     List.of(com.tcms.execution.PlanStatisticsView.ConfigurationCountsView.class)),
             Map.entry("PlanStatistics.bySuite[]",
